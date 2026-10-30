@@ -5,9 +5,13 @@
    reference, nothing to send); its tooltip gives the reason. Never orange
    but disabled.
 
-   One colour treatment, not one shape:
-   - A filled button keeps its fill, turned neutral grey (--sr-disabled-fill),
-     its label grey (--sr-disabled-ink).
+   One colour treatment, not one shape. Since round 25 of PR #198 (GM r37,
+   option c) the two list rules read GM r33's token set (slava-restraint.css),
+   so a button looks the same disabled whatever the reason (following,
+   offline, a run, a hold):
+   - A filled button: the grey fill (--disabled-fill, white at 0.42) with a
+     dark label on it (--disabled-fill-label).
+   - A ghost or outline button: the grey label (--disabled-label).
    - A ghost or outline button stays unfilled: label, icon and outline in the
      same neutral grey (the outline at the edge's strength, so it never
      outshines a live button). The canvas toolbar's Run, Ask, Duplicate and
@@ -21,7 +25,9 @@
    button style (accent, danger, white or another solid fill) isn't listed
    here, and when a new button style gets a disabled look of its own outside
    this file. A control that keeps focus and its tooltip while refused uses
-   aria-disabled="true" and is covered the same way. !important: these
+   aria-disabled="true" and is covered the same way, except while it has
+   data-held-pending (useHeldLook: a notice button's first 150 ms held, which
+   keeps its own look so a fast try never flickers). !important: these
    styles live in many sheets with their own specificity (and some load with
    their studio's chunk); the disabled look wins over each of them, its
    hover included. PR #198's [data-offline-neutral] says the same for its
@@ -92,8 +98,11 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .cinema-shot-panel__reset,
+  .cinema-reference-upload__retry,
+  .cinema-upload__remove,
   .agent-roster__row
-):is(:disabled, [aria-disabled='true']),
+):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
   .cinema-shot-panel__action,
@@ -117,11 +126,14 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .cinema-shot-panel__reset,
+  .cinema-reference-upload__retry,
+  .cinema-upload__remove,
   .agent-roster__row
-):is(:disabled, [aria-disabled='true']):hover {
+):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
-  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
   box-shadow: none !important;
   opacity: 1 !important;
 }
@@ -246,7 +258,7 @@
   .moodboard-board-toast__action,
   .workspace-rail__item--primary,
   .proposal-bar__button--primary
-):is(:disabled, [aria-disabled='true']),
+):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .cinema-shot-panel__action--primary,
   .create-composer__generate,
@@ -275,13 +287,25 @@
   .moodboard-board-toast__action,
   .workspace-rail__item--primary,
   .proposal-bar__button--primary
-):is(:disabled, [aria-disabled='true']):hover {
-  background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
-  border-color: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
-  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
+  background: var(--disabled-fill, rgb(255 255 255 / 0.42)) !important;
+  border-color: var(--disabled-fill, rgb(255 255 255 / 0.42)) !important;
+  color: var(--disabled-fill-label, rgb(17 17 17 / 0.62)) !important;
   box-shadow: none !important;
   filter: none !important;
   opacity: 1 !important;
+}
+
+/* The notice's quiet choice (Use Codex’s, Use theirs) is a ghost button
+   that also has the filled class: after the filled rule, so it stays
+   unfilled, its label the ghost grey (GM r33, round 25). */
+:is(.canvas-undo-notice__action--quiet):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
+:is(.canvas-undo-notice__action--quiet):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
+  background: transparent !important;
+  /* Its own enabled edge, never brighter (GM r33): the quiet choice is
+     outlined at rest, so held it keeps that outline. */
+  border-color: rgb(255 255 255 / 0.28) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
 }
 
 /* A ghost control whose label is several lines of its own text (the Agents
@@ -289,9 +313,9 @@
    shared grey, whatever colour each line has enabled; an author's dot keeps
    its colour, since it says who is asking (GM, PR #204 round 1). List a new
    multi-line ghost control here, next to its entry in the ghost list above. */
-:is(.agent-roster__row):is(:disabled, [aria-disabled='true'])
+:is(.agent-roster__row):is(:disabled, [aria-disabled='true']:not([data-held-pending]))
   :not(.agent-notes-dot, .agent-notes-dot *) {
-  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
 }
 
 /* A text field the canvas lock makes read-only (Cinema's shot prompt): its

@@ -156,7 +156,7 @@ def _refused(name: str, arguments: dict, monkeypatch) -> str:
 
 def test_a_guessed_argument_name_gets_one_line_naming_the_real_one(monkeypatch):
     assert _refused("moodboard_get", {"id": "95660c6f4e7d"}, monkeypatch) == \
-        "moodboard_get takes board (required), not id. Call moodboard_get(board=...)."
+        "moodboard_get takes board (required), not id. Call `moodboard_get(board=...)`."
     message = _refused("describe_node", {"id": "nebula-moodboard"}, monkeypatch)
     assert message.startswith("describe_node takes definition_id (required), not id")
     assert "describe_node(definition_id=...)" in message
@@ -165,7 +165,7 @@ def test_a_guessed_argument_name_gets_one_line_naming_the_real_one(monkeypatch):
 def test_a_missing_argument_names_what_it_needs(monkeypatch):
     message = _refused("resolve_pin", {"pin_id": "pin_1"}, monkeypatch)
     assert message == "resolve_pin needs reply: it takes pin_id (required), reply (required). " \
-                      "Call resolve_pin(pin_id=..., reply=...)."
+                      "Call `resolve_pin(pin_id=..., reply=...)`."
 
 
 def test_an_unknown_argument_is_refused_even_beside_the_required_ones(monkeypatch):
@@ -206,7 +206,7 @@ def test_the_agent_sees_the_line_as_the_tool_result(monkeypatch):
         name="moodboard_get", arguments={"id": "abc"}))
     result = asyncio.run(handler(request)).root
     assert result.isError is True
-    assert result.content[0].text == "moodboard_get takes board (required), not id. Call moodboard_get(board=...)."
+    assert result.content[0].text == "moodboard_get takes board (required), not id. Call `moodboard_get(board=...)`."
 
 
 def test_right_arguments_still_reach_the_tool(monkeypatch):

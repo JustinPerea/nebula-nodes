@@ -11,38 +11,38 @@ describe("GM 3 and follow-up 4: an agent's clear dropped the person's editing", 
   const text = (node: string) => ({ node, setting: 'Text' });
   it('one setting', () => {
     expect(agentClearedLine([text('Hero prompt')], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved.");
   });
   it('two settings on one node', () => {
     expect(agentClearedLine([{ node: 'Hero', setting: 'Prompt' }, { node: 'Hero', setting: 'Seed' }], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Prompt” and “Seed” for “Hero”. Those changes weren't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Prompt” and “Seed” for “Hero”. Those changes weren’t saved.");
   });
   it('three settings on one node', () => {
     expect(agentClearedLine([{ node: 'Hero', setting: 'Prompt' }, { node: 'Hero', setting: 'Seed' },
       { node: 'Hero', setting: 'Steps' }], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Prompt”, “Seed” and “Steps” for “Hero”. Those changes weren't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Prompt”, “Seed” and “Steps” for “Hero”. Those changes weren’t saved.");
   });
   it('four settings on one node', () => {
     expect(agentClearedLine(['Prompt', 'Seed', 'Steps', 'Size'].map((setting) => ({ node: 'Hero', setting })), 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing 4 settings. Those changes weren't saved.");
+      .toBe("Codex cleared the canvas while you were editing 4 settings. Those changes weren’t saved.");
   });
   it('settings across nodes', () => {
     expect(agentClearedLine([text('A'), text('B')], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing 2 settings. Those changes weren't saved.");
+      .toBe("Codex cleared the canvas while you were editing 2 settings. Those changes weren’t saved.");
   });
   it('a rename draft counts as "Name"', () => {
     expect(agentClearedLine([{ node: 'Hero', setting: 'Name' }], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Name” for “Hero”. That change wasn't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Name” for “Hero”. That change wasn’t saved.");
     expect(agentClearedLine([{ node: 'Hero', setting: 'Name' }, { node: 'Hero', setting: 'Text' }], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Name” and “Text” for “Hero”. Those changes weren't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Name” and “Text” for “Hero”. Those changes weren’t saved.");
   });
   it('the agent unknown: "An agent"', () => {
     expect(agentClearedLine([text('Hero prompt')], null))
-      .toBe("An agent cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved.");
+      .toBe("An agent cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved.");
   });
   it('the same setting twice counts once', () => {
     expect(agentClearedLine([text('Hero prompt'), text('Hero prompt')], 'Codex'))
-      .toBe("Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved.");
+      .toBe("Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved.");
   });
   it('nothing named: no line', () => {
     expect(agentClearedLine([], 'Codex')).toBeNull();
@@ -53,23 +53,23 @@ describe('GM follow-up 2: the failed handoff, one line (round 21: non-breaking s
   it('one setting', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered)'))
-      .toBe("Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('several settings: the undo counting', () => {
     expect(handoffFailedLine([{ node: 'A', setting: 'Text' }, { node: 'B', setting: 'Text' }, { node: 'B', setting: 'Name' }],
       'Glass campaign', 'Claude Code', 'Glass campaign (recovered)'))
-      .toBe("Couldn't save 3 changes in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Couldn’t save 3 changes in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('one change it can\'t name', () => {
     expect(handoffFailedLine([{ node: null, setting: null }], 'Glass campaign', 'Claude Code', 'Glass campaign (recovered)'))
-      .toBe("Couldn't save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
+      .toBe("Couldn’t save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
   it('the agent unknown', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', null, 'Glass campaign (recovered)'))
-      .toBe("Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
+      .toBe("Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
         + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.');
   });
 });

@@ -13,6 +13,7 @@ import {
   type AgentNotesSurface,
 } from '../lib/agentNotes';
 import { failureMessage } from '../lib/errorCopy';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 
 /**
  * Updates for every surface, keyed `canvas:<projectId>` and `board:<boardId>`.
@@ -123,7 +124,10 @@ async function sendRead(
     if (keyFor(getState(), surface) !== key || typeof result.unread !== 'number') return;
     setState((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread: result.unread })) }));
   } catch (error) {
-    setState({ error: failureMessage(error, "Couldn't mark the notes read.") });
+    const line = failureMessage(error, "Couldn't mark the notes read.");
+    setState({ error: line });
+    // Refused only because this tab isn't connected as the person: gone on the promote (GM, #204 r3).
+    clearLineOnPromote(error, () => getState().error, line, () => setState({ error: null }));
     // (A board's list is read again by the corner when this error shows.)
     if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
@@ -268,8 +272,10 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     try {
       await dismissAgentNote(surface, id);
     } catch (error) {
+      const line = failureMessage(error, "Couldn't dismiss the note.");
+      clearLineOnPromote(error, () => get().error, line, () => set({ error: null }));
       set((state) => ({
-        error: failureMessage(error, "Couldn't dismiss the note."),
+        error: line,
         lists: withList(state.lists, key, (list) => {
           const notes = list.notes.map((n) => (n.id === id ? before : n));
           return { ...list, notes, unread: countUnread(notes) };

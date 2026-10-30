@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { ModalPortal } from '../ModalPortal';
 
 /** The one-time notice before Nebula starts any of the person's own agents.
@@ -27,7 +28,9 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     try {
       await onAccept();
     } catch (exc) {
-      setError(failureMessage(exc, "Couldn't save your answer."));
+      const line = failureMessage(exc, "Couldn't save your answer.");
+      setError(line);
+      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
       setBusy(false);
     }
   };

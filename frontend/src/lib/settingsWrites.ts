@@ -1,4 +1,5 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
+import { clearLineOnPromote } from './clearsOnPromote';
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
@@ -43,6 +44,15 @@ function fail(id: string, message: string, error?: unknown) {
   // banner already says why, so it gets no line of its own. The draft stays.
   if (isOfflineRefusal(error)) return;
   useSettingsDraftStore.setState((state) => ({ errors: { ...state.errors, [id]: message } }));
+  // GM, #204 r3: refused only because this tab isn't connected as the person
+  // (the banner says so): the row's line goes on the promote.
+  clearLineOnPromote(error, () => useSettingsDraftStore.getState().errors[id], message, () => {
+    useSettingsDraftStore.setState((state) => {
+      const errors = { ...state.errors };
+      delete errors[id];
+      return { errors };
+    });
+  });
 }
 
 function markSaved(id: string) {

@@ -233,7 +233,7 @@ class TestMergeShotResult:
         async def fake_emit_and_sync(event):
             emitted.append(event)
 
-        async def fake_broadcast():
+        async def fake_broadcast(**_kwargs):
             broadcasts.append(True)
 
         monkeypatch.setattr("main.execute_graph", fake_execute_graph)
@@ -279,7 +279,7 @@ class TestMergeShotResult:
         async def fake_execute_graph(**_kwargs):
             raise RuntimeError("executor exploded")
 
-        async def fake_broadcast():
+        async def fake_broadcast(**_kwargs):
             broadcasts.append(True)
 
         monkeypatch.setattr("main.execute_graph", fake_execute_graph)

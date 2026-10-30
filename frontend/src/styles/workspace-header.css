@@ -105,18 +105,78 @@ body.app-slava-restraint .editor-view__empty-message {
   flex: 1;
   color: var(--sr-ink-light);
 }
-body.app-slava-restraint .remotion-editor-view.remotion-editor-view { grid-template-rows: auto minmax(0, 1fr) 320px; }
-body.app-slava-restraint .commons-view.commons-view { grid-template-rows: auto auto auto minmax(0, 1fr); }
+/* The offline banner is a row of every studio's layout right under its top
+   header (GM, PR #198 r2; components/StudioOfflineRow.tsx): each grid names
+   it `offline`, a track that is 0 tall until the row opens, so it pushes the
+   content down instead of covering it. The video editor is a flex column,
+   where the row simply sits after the header. */
+body.app-slava-restraint .cinema-studio-view.cinema-studio-view {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "toolbar" "offline" "body";
+}
+/* Composition's toolbar is a row of its own under the offline row (GM, PR
+   #198 r3 a: the banner sits right under the top header, above the
+   toolbar, as on every other screen). */
+body.app-slava-restraint .remotion-editor-view.remotion-editor-view {
+  grid-template-rows: auto auto auto minmax(0, 1fr) 320px;
+  grid-template-areas: "header header" "offline offline" "toolbar toolbar" "player panel" "timeline panel";
+}
+body.app-slava-restraint .remotion-editor-view__toolbar {
+  grid-area: toolbar;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+body.app-slava-restraint .remotion-editor-view__empty-state.remotion-editor-view__empty-state { grid-row: 4 / -1; }
+body.app-slava-restraint .commons-view.commons-view {
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-areas: "toolbar toolbar toolbar" "offline offline offline" "messages messages messages"
+    "candidates candidates candidates" "filters main detail";
+}
 body.app-slava-restraint .character-studio-view.character-studio-view,
-body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view { grid-template-rows: auto minmax(0, 1fr); }
-body.app-slava-restraint .workspace-header .remotion-editor-toolbar,
-body.app-slava-restraint .workspace-header .remotion-editor-toolbar__group {
+body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "toolbar toolbar" "offline offline" "rail main";
+}
+body.app-slava-restraint .create-view.create-view {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "header" "offline" "stage" "composer";
+}
+/* The video editor is a flex column with a 10px gap (16px when empty): the
+   row cancels the gap above it, so it sits right under the header, and,
+   while open, the one below it, so the content starts 8px under the line,
+   both on the same spring as the row. Closed, it adds nothing. */
+body.app-slava-restraint .editor-view > .studio-offline-row {
+  margin-top: -10px;
+  margin-bottom: 0;
+  transition: grid-template-rows var(--workspace-dock-spring), margin-bottom var(--workspace-dock-spring);
+}
+body.app-slava-restraint .editor-view > .studio-offline-row[data-open='true'] { margin-bottom: -10px; }
+body.app-slava-restraint .editor-view--empty > .studio-offline-row { margin-top: -16px; }
+body.app-slava-restraint .editor-view--empty > .studio-offline-row[data-open='true'] { margin-bottom: -16px; }
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .editor-view > .studio-offline-row { transition: none; }
+}
+body.app-slava-restraint .create-view > .create-view__topbar { grid-area: header; }
+body.app-slava-restraint .create-view > .create-view__stage { grid-area: stage; }
+body.app-slava-restraint .create-view > .create-view__composer-area { grid-area: composer; }
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar,
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar__group {
   flex-wrap: wrap;
   min-width: 0;
   max-width: 100%;
 }
 @media (max-width: 760px) {
-  body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view { grid-template-rows: auto auto minmax(0, 1fr); }
+  body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "toolbar" "offline" "rail" "main";
+  }
 }
 @media (max-width: 700px) {
   body.app-slava-restraint .workspace-header__actions { justify-content: flex-start; }
@@ -137,4 +197,56 @@ body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--u
   position: absolute;
   top: 8px;
   right: var(--workspace-header-pad-x);
+}
+
+/* A studio that couldn't render (components/StudioBoundary.tsx): its header
+   and offline row stay (GM, PR #198 r3 b), and the line takes the body. */
+body.app-slava-restraint .studio-boundary {
+  position: fixed;
+  inset: 0;
+  z-index: var(--sr-layer-workspace, 50);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "header" "offline" "body";
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+}
+body.app-slava-restraint .studio-boundary > .studio-boundary__header { grid-area: header; }
+body.app-slava-restraint .studio-boundary__body {
+  grid-area: body;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+body.app-slava-restraint .studio-boundary__card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 420px;
+  text-align: center;
+}
+body.app-slava-restraint .studio-boundary__line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sr-ink);
+}
+body.app-slava-restraint .studio-boundary__back {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font: 500 13px/1.3 var(--sr-ui);
+  cursor: pointer;
+}
+body.app-slava-restraint .studio-boundary__back:hover {
+  background: var(--sr-surface-control-hover);
+  border-color: var(--sr-edge-strong);
+}
+body.app-slava-restraint .studio-boundary__back:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }

@@ -102,7 +102,7 @@ def test_the_estimate_route(client):
 
 
 @pytest.mark.parametrize("body, detail", [
-    ({"model": "gpt-vision"}, "No reader called 'gpt-vision'"),
+    ({"model": "gpt-vision"}, "No reader called gpt-vision"),
     ({"model": "gemini-4-argon", "imageIds": ["nope"]}, "No image nope"),
     ({"model": "gemini-4-argon", "thinkingLevel": "minimal"}, "thinking level"),
 ])

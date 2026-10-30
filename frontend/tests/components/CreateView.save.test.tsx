@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   saveToFolder: vi.fn(), revealInFinder: vi.fn(),
   ui: { createSessionId: 'test-session', settingsCache: { apiKeys: {} }, consumePendingPreset: () => null },
   graph: { nodes: [] as Node<NodeData>[], edges: [], runHistory: [], activeRuns: [],
-    createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false },
+    createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false, unsavedScenes: {} },
 }));
 
 vi.mock('../../src/store/uiStore', () => ({

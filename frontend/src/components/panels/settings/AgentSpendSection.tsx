@@ -9,6 +9,8 @@ import {
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
 import { failureMessage } from '../../../lib/errorCopy';
+import { formatSpentUsd } from '../../../lib/pricing';
+import { clearsOnPromote, isPersonRefusal } from '../../../lib/clearsOnPromote';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -28,21 +30,27 @@ function usd(value: number) {
   return value < 1 ? `$${value.toFixed(2)}` : `$${value}`;
 }
 
-/** What was spent, to the cent ("$3.40", "$0.00"). */
-function spentUsd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
+/** What was spent, to the cent ("$3.40", "$0.00"; "<$0.01" for less than half a cent). */
+const spentUsd = formatSpentUsd;
 
 /** What the outside agents and connected apps spent in the last 24 hours. The person's view only. */
 function useOutsideSpend() {
   const [view, setView] = useState<OutsideSpend | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the promote after a person-gate refusal, so the read runs again.
+  const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
-      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load the connected apps.")));
+      .catch((exc: unknown) => {
+        const line = failureMessage(exc, "Couldn't load the connected apps.");
+        setError(line);
+        // GM, #204 r3: refused only because this tab isn't connected as you:
+        // on the promote the line goes and the read runs again.
+        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); });
+      });
   }, []);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); }, [reload, attempt]);
   return { view, error, reload };
 }
 

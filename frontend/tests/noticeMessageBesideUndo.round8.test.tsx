@@ -23,7 +23,7 @@ const initialGraph = { ...useGraphStore.getState() };
 beforeEach(() => {
   const entry = { id: 'x' };
   useGraphStore.setState({ undoStack: [entry] as never, redoStack: [],
-    undoNotice: { id: 7, text: 'Codex changed the canvas', offer: 'undo', agentColor: '#F2C14E', entry } as never });
+    undoNotice: { id: 7, text: 'Codex changed the canvas.', offer: 'undo', agentColor: '#F2C14E', entry } as never });
 });
 afterEach(() => {
   cleanup();

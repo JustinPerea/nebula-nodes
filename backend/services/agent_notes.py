@@ -52,7 +52,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from services.agent_presence import AgentIdentity
-from services.agent_questions import closed_update_text, open_update_ids
+from services.agent_questions import MAX_QUESTIONS, closed_update_text, open_update_ids
+from services.canvas_proposals import MAX_OPEN_PER_AGENT
 from services.project_store import ProjectStore
 
 MAX_TEXT = 240
@@ -939,18 +940,23 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str,
-                          detail: Mapping[str, Any] | None = None, text: str | None = None) -> dict[str, Any] | None:
+                          detail: Mapping[str, Any] | None = None, text: str | None = None,
+                          share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the
         Update now reviews that one, and its ref says that one's ``detail``
         (``proposal_detail``) and, given ``text``, its words say that one's
         too (PR #202 review 1 LOW-1: the count and the words come from the
         same proposal). None when the update has left the list, or already
-        reviews that proposal with those words (nothing to say again)."""
+        reviews that proposal with those words (nothing to say again).
+
+        ``share`` (PR #204 round 3): what a shared asset Update stands for
+        (``asks``, ``firstSince``), read inside the write so a count taken
+        before another follow closed an ask never lands after it."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            ref = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            ref = _retargeted_ref(note.get("proposal"), proposal_id, _with_share(detail, share))
             words = clean_note_text(text) if text is not None else note.get("text")
             # PR #202 review 5 NIT-1: already on that proposal, as it is (another
             # follow moved it there first): no write, so no second "changed".
@@ -969,7 +975,8 @@ class AgentNotes:
 
     def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str,
                         detail: Mapping[str, Any] | None = None, text: str | None = None,
-                        closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
+                        closed: Callable[[str], bool] | None = None,
+                        share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
         """The undo of a node delete reopened the proposal (GM, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
@@ -991,7 +998,7 @@ class AgentNotes:
                     return None
             for key in ("resolvedAt", "resolvedBy", "outcome"):
                 note.pop(key, None)
-            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, _with_share(detail, share))
             if text is not None:
                 note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
@@ -1064,8 +1071,14 @@ MAX_PROPOSAL_SINCE = 2**53 - 1
 # A question set's ref (GM, 2026-10-29, the held needs-you count): how many
 # questions it asks, which its Update's line already says, and when it was
 # asked (ms, the set view's createdAt). A tab not connected as the person holds
-# no set views, so its Agents panel counts and orders from these.
-MAX_REF_QUESTIONS = 5
+# no set views, so its Agents panel counts and orders from these. The bound is
+# the set's own (PR #204 review 1 NIT-2: one constant, not a copy).
+MAX_REF_QUESTIONS = MAX_QUESTIONS
+# An asset Update one agent's open asks on one target share (PR #204 review 1
+# MEDIUM-1, GM 2026-10-30): ``asks``, how many of them it stands for, and
+# ``firstSince``, the oldest one's createdAt (ms). A held tab counts and orders
+# from these, so nothing moves on the promote. At most the agent's open cap.
+MAX_SHARED_ASKS = MAX_OPEN_PER_AGENT
 
 
 def questions_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -1083,7 +1096,8 @@ def questions_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    """The checked ``cover``, ``changes``, ``inbox`` and ``since`` of a proposal ref; anything else is dropped."""
+    """The checked ``cover``, ``changes``, ``inbox``, ``since``, ``asks`` and ``firstSince`` of a
+    proposal ref; anything else is dropped."""
     detail: dict[str, Any] = {}
     if not isinstance(raw, Mapping):
         return detail
@@ -1097,14 +1111,31 @@ def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
     since = raw.get("since")
     if isinstance(since, int) and not isinstance(since, bool) and 0 <= since <= MAX_PROPOSAL_SINCE:
         detail["since"] = since
+    asks = raw.get("asks")
+    if isinstance(asks, int) and not isinstance(asks, bool) and 1 <= asks <= MAX_SHARED_ASKS:
+        detail["asks"] = asks
+    first = raw.get("firstSince")
+    if isinstance(first, int) and not isinstance(first, bool) and 0 <= first <= MAX_PROPOSAL_SINCE:
+        detail["firstSince"] = first
     return detail
+
+
+_DETAIL_KEYS = ("cover", "changes", "inbox", "since", "asks", "firstSince")
+
+
+def _with_share(detail: Mapping[str, Any] | None,
+                share: Callable[[], Mapping[str, Any]] | None) -> Mapping[str, Any] | None:
+    """``detail`` with the share fields read now, inside the write (``retarget_proposal``)."""
+    if share is None:
+        return detail
+    return {**(detail or {}), **share()}
 
 
 def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None) -> dict[str, Any]:
     """The ref now about ``proposal_id``: the kind and target stay; the detail is the new proposal's
     (an older caller that passes none keeps none, rather than the closed one's)."""
     base = {key: value for key, value in (old if isinstance(old, Mapping) else {}).items()
-            if key not in ("cover", "changes", "inbox", "since")}
+            if key not in _DETAIL_KEYS}
     return {**base, "id": proposal_id[:64], **proposal_detail(detail)}
 
 

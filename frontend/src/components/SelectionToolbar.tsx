@@ -9,11 +9,11 @@ import {
   StickyNote,
   Trash2,
 } from 'lucide-react';
-import { useGraphStore } from '../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
@@ -38,6 +38,10 @@ export function SelectionToolbar() {
   // for “<project>” to open." while following; Copy, Download and the
   // node's Settings stay.
   const lock = useCanvasLock();
+  // A control this tab's own run also locks (#198's run lock): its reason
+  // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
+  // run, follow, offline; the Next step its node portals here reads the same).
+  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => lock.act(own, { run: running });
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -52,6 +56,9 @@ export function SelectionToolbar() {
 
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
   const ids = useMemo(() => selectedNodeIds(nodes), [nodes]);
+  // Every selected node a scene with a shot rendering: nothing to delete yet
+  // (GM, PR #198 r3 item 1). With others selected, Delete takes the rest.
+  const sceneHeld = useGraphStore((state) => sceneDeleteDisabledTitle(state, ids));
   const outputCount = useMemo(
     () => collectDownloadableOutputs(selectedNodes).length,
     [selectedNodes],
@@ -150,14 +157,14 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
         {runChip && (
-          <span className="selection-toolbar__paid" aria-hidden="true">{runChip}</span>
+          <span className="selection-toolbar__paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
         )}
       </button>
       <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
@@ -174,7 +181,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...lock.act({ disabled: isExecuting, title: isExecuting ? 'Wait for the active run to finish' : 'Duplicate selected nodes' })}
+        {...runLocked(isExecuting, { title: 'Duplicate selected nodes' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -183,7 +190,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...lock.act({ disabled: ids.length < 2 || isExecuting, title: 'Arrange selected nodes' })}
+        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -210,7 +217,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...lock.act({ disabled: isExecuting, title: isExecuting ? 'Wait for the active run to finish' : 'Delete selected nodes' })}
+        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

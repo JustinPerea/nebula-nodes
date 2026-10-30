@@ -299,7 +299,7 @@ def apply_look(img: Image.Image, look: dict[str, Any] | None) -> Image.Image:
         lut = load_cube_lut(lut_id)
         if lut is None:
             warnings.warn(
-                f"cinema.look: could not load LUT '{lut_id}', skipping LUT stage",
+                f"cinema.look: could not load LUT {lut_id}, skipping LUT stage",
                 stacklevel=2,
             )
         else:

@@ -10,6 +10,7 @@ import {
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
 import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import type { LeaveProps } from '../../lib/noticeLeave';
@@ -141,7 +142,9 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       after?.();
     } catch (err) {
       // A request's own line; never another error's message (round 3b).
-      setError(failureMessage(err, ''));
+      const line = failureMessage(err, '');
+      setError(line);
+      clearSetterOnPromote(err, setError, line, null); // GM, #204 r3
     } finally {
       setBusy(false);
       setReload((value) => value + 1);

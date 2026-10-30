@@ -21,6 +21,7 @@ import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
@@ -311,6 +312,16 @@ export function MoodboardStudioView() {
     setUploading(false);
   }, [key, epoch]);
 
+  // A load-failure notice ("Moodboard not found…") is hidden while Nebula is
+  // offline, and the board is checked again on reconnect (GM, PR #198 r2): a
+  // failed load is retried, and a not-found one reloaded unless the person
+  // has started a new board here since.
+  const shownLoadError = useOfflineHiddenNotice(loadError, () => {
+    if (!projectReady) return;
+    if (!loaded) patch({ loadError: null, revision: revision + 1 });
+    else if (!dirty && !isDraftId && moodboardEditorId) patch({ loaded: false, loadError: null, revision: revision + 1 });
+  });
+
   useEffect(() => {
     if (!projectReady || loaded) return;
     let cancelled = false;
@@ -545,7 +556,9 @@ export function MoodboardStudioView() {
       if (announced.current > (draftNow()?.version ?? 0)) void follow();
       return id;
     } catch (err) {
-      store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+      const failure = failureCopy(err, { heading: SAVE_BOARD });
+      store.failSave(key, attempt.id, failure);
+      store.clearOnPromote(key, err, failure); // GM, #204 r3
       return null;
     }
   }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps]);
@@ -813,10 +826,12 @@ export function MoodboardStudioView() {
       // The step names its own action (the edit request's heading is the
       // board save's), and the toolbar's Retry runs the same undo (or redo)
       // of this step again (GM, round 3: "Make Retry redo the failed action").
-      store.failSave(key, attempt.id, {
+      const failure = {
         ...failureCopy(err),
         heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
-      }, { retry: direction, step: step.id });
+      };
+      store.failSave(key, attempt.id, failure, { retry: direction, step: step.id });
+      store.clearOnPromote(key, err, failure); // GM, #204 r3
     }
   };
 
@@ -935,7 +950,11 @@ export function MoodboardStudioView() {
       if (isCurrent() && !useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId) moveDraft(kept);
       else rememberBrief(kept);
     } catch (err) {
-      if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't save your brief." }) });
+      if (isCurrent()) {
+        const failure = failureCopy(err, { heading: "Couldn't save your brief." });
+        patch({ saveError: failure });
+        useAssetStudioDraftStore.getState().clearOnPromote(key, err, failure); // GM, #204 r3
+      }
     }
   };
 
@@ -1081,15 +1100,15 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {loadError ? <div role="alert"><FailureLines failure={loadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
-      {loadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
+      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
   );
 
   const notices = (
     <>
-      {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={loadError} /></div>}
+      {shownLoadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn"><FailureLines failure={shownLoadError} /></div>}
       {/* A delete's failure shows here even while the last delete's Undo toast is up (round 3b). */}
       {deleting.deleteError && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>

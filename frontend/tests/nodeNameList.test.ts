@@ -31,13 +31,13 @@ describe('nodeNameList', () => {
 describe('the lines that name several nodes use it', () => {
   const on = (nodeId: string, node: string) => ({ nodeId, node, setting: 'Text' });
   it('the failed-save line', () => {
-    expect(changesNotSavedLine([on('n1', 'Text'), on('n2', 'Text')])).toBe("Couldn't save your changes to 2 “Text” nodes.");
+    expect(changesNotSavedLine([on('n1', 'Text'), on('n2', 'Text')])).toBe("Couldn’t save your changes to 2 “Text” nodes.");
     expect(changesNotSavedLine([on('n3', 'Brief'), on('n1', 'Text'), on('n2', 'Text')]))
-      .toBe("Couldn't save your changes to “Brief” and 2 “Text” nodes.");
+      .toBe("Couldn’t save your changes to “Brief” and 2 “Text” nodes.");
     expect(changesNotSavedLine([on('n1', 'Text'), on('n2', 'Text'), on('n3', 'Text'), on('n4', 'Brief')]))
-      .toBe("Couldn't save your changes to 4 nodes.");
+      .toBe("Couldn’t save your changes to 4 nodes.");
     expect(changesSavedAsCopyLine([on('n1', 'Text'), on('n2', 'Text')], 'Glass (recovered)'))
-      .toBe("Couldn't save your changes to 2 “Text” nodes. Your edits were saved as a copy, “Glass (recovered)”.");
+      .toBe("Couldn’t save your changes to 2 “Text” nodes. Your edits were saved as a copy, “Glass (recovered)”.");
   });
   it('the multi-delete toasts', () => {
     expect(deleteNoAnswerLine(['Text', 'Text'])).toBe(

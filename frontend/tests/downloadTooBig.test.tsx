@@ -43,8 +43,8 @@ describe('a download past the browser string cap', () => {
   it('"Download your edits" says it is too big to download in a browser', async () => {
     capTheFile();
     const error = await failure(() => saveEditsToFile(SNAPSHOT, 'Glass campaign'));
-    expect(failureMessage(error, "Couldn't download your edits."))
-      .toBe(`Couldn't download your edits. ${TOO_BIG}`);
+    expect(failureMessage(error, "Couldn’t download your edits."))
+      .toBe(`Couldn’t download your edits. ${TOO_BIG}`);
   });
 
   it('"Download a copy" says the same, under its own heading', async () => {
@@ -59,7 +59,7 @@ describe('a download past the browser string cap', () => {
     capTheFile('Maximum call stack size exceeded');
     const error = await failure(() => saveEditsToFile(SNAPSHOT, 'Glass campaign'));
     expect(error).toBeInstanceOf(RangeError);
-    expect(failureMessage(error, "Couldn't download your edits.")).not.toContain(TOO_BIG);
+    expect(failureMessage(error, "Couldn’t download your edits.")).not.toContain(TOO_BIG);
   });
 });
 
@@ -68,7 +68,7 @@ describe('the held edits screen after a download too big for the browser', () =>
     render(<UnsavedEditsNotice reason="Nebula couldn't keep these edits." downloadTooBig busy={false}
       onDownload={() => {}} onContinue={() => {}} />);
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain("Couldn't download your edits.");
+    expect(alert.textContent).toContain("Couldn’t download your edits.");
     expect(alert.textContent).toContain(TOO_BIG);
     expect(alert.textContent).not.toContain("Nebula couldn't keep these edits.");
     expect(screen.getByRole('button', { name: 'Download your edits' })).toBeTruthy();

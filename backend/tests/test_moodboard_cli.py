@@ -240,7 +240,7 @@ def test_board_in_the_open_project(app, tmp_path, canvas_project):
 
 
 def test_a_board_for_a_project_that_does_not_exist_is_refused(app, tmp_path, canvas_project):
-    with pytest.raises(NebulaAPIError, match="No project has the id 'nebula_nodes'"):
+    with pytest.raises(NebulaAPIError, match="No project has the id nebula_nodes"):
         boards.create_board(app.api, "Lost", [str(_png(tmp_path / "a.png"))], project="nebula_nodes")
 
 

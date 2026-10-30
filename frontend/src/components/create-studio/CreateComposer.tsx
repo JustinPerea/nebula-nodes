@@ -7,7 +7,8 @@ import { ParamPills } from './ParamPills';
 import { isCreateModel } from '../../lib/createModels';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { failureMessage } from '../../lib/errorCopy';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
+import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -48,7 +49,7 @@ export function CreateComposer({
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
-  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent;
+  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent && !lock.offline;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +79,9 @@ export function CreateComposer({
       onPromptChange(enhanced);
     } catch (err) {
       if (mounted.current && request === enhanceRequest.current && currentPrompt.current === original) {
-        setEnhanceError(failureMessage(err, "Couldn't enhance the prompt."));
+        const line = failureMessage(err, "Couldn't enhance the prompt.");
+        setEnhanceError(line);
+        clearSetterOnPromote(err, setEnhanceError, line, null); // GM, #204 r3
       }
     } finally {
       if (mounted.current && request === enhanceRequest.current) setEnhancing(false);
@@ -172,7 +175,7 @@ export function CreateComposer({
         <button
           type="button"
           className="create-composer__generate"
-          {...lock.act({ disabled: !canGenerate })}
+          {...lockedAction(lock, { disabled: !canGenerate }, { neutral: true, offlineTooltip: false })}
           onClick={(e) => { if (e.detail <= 1 && canGenerate && !refuseCanvasEdit()) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />

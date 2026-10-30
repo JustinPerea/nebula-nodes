@@ -398,12 +398,12 @@ describe('GM round 23: a replacement found with no agent saves the edits as a co
       .find((node) => node.id === 'n1')?.data.params.value).toBe('alpha typed');
     const notice = () => useGraphStore.getState().messageNotice ?? useGraphStore.getState().undoNotice;
     await vi.waitFor(() => expect(notice()?.text).toBe(
-      "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”."));
+      "Couldn’t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”."));
     expect(notice()?.copy).toEqual({ projectId: 'copy-1' });
     expect(valueOf('n1')).toBe('theirs');
   });
 
-  it('the copy failing: the line still names what wasn\'t saved', async () => {
+  it('the copy failing: the line still names what wasn’t saved', async () => {
     vi.mocked(projects.recoverProject).mockRejectedValue(new TypeError('Failed to fetch'));
     setProjectContext({ id: 'alpha', revision: 'rev-a', canvas: '4' });
     type('alpha typed');
@@ -411,7 +411,7 @@ describe('GM round 23: a replacement found with no agent saves the edits as a co
     await vi.waitFor(() => expect(vi.mocked(projects.recoverProject)).toHaveBeenCalled());
     await flush(); await flush();
     const notice = useGraphStore.getState().messageNotice ?? useGraphStore.getState().undoNotice;
-    expect(notice?.text).toBe("Couldn't save “Text” for “Hero prompt”.");
+    expect(notice?.text).toBe("Couldn’t save “Text” for “Hero prompt”.");
   });
 
   it('nothing cut off: no copy', async () => {

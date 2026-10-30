@@ -99,12 +99,14 @@ export function RemotionEditorView() {
 
   return (
     <div className="remotion-editor-view" data-current-frame={currentFrame}>
-      <WorkspaceHeader title="Composition" onBack={exitRemotionEditor} className="remotion-editor-view__header">
+      <WorkspaceHeader title="Composition" onBack={exitRemotionEditor} className="remotion-editor-view__header" />
+      {/* Its own row, under the offline row (GM, PR #198 r3 a). */}
+      <div className="remotion-editor-view__toolbar" role="toolbar" aria-label="Composition">
         <RemotionEditorToolbar remotionNodeId={targetNodeId} />
         <span className="remotion-editor-view__meta">
           {manifest.timeline.length} layer{manifest.timeline.length === 1 ? '' : 's'}
         </span>
-      </WorkspaceHeader>
+      </div>
       <div className="remotion-editor-view__player" data-testid="remotion-player-slot">
         <div className="remotion-editor-view__player-frame" ref={playerFrameRef}>
           <Player

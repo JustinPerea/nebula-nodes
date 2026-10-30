@@ -38,7 +38,9 @@ export interface HeldAsk {
   target: 'canvas' | AssetProposalKind | null;
   targetId: string | null;
   createdAt: number;
-  /** How many questions a set asks (1 for a proposal). */
+  /** How many questions a set asks; for a proposal, how many open asks its
+   * Update stands for (an asset Update one agent's asks on one target share:
+   * the ref's `asks`, PR #204 review 1 MEDIUM-1). */
   count: number;
 }
 
@@ -59,6 +61,8 @@ export interface WaitingProposal {
   createdAt: number;
   /** Known only from its Update: shown, not yet openable here. */
   held?: boolean;
+  /** How many asks it stands for: a held shared Update's `asks`; 1 when absent. */
+  count?: number;
 }
 
 export interface WaitingQuestions {
@@ -120,10 +124,15 @@ export function waitingByAgent(input: WaitingInput): Map<string, Waiting> {
       entry(ask.agent).questions.push({ id: ask.id, count: ask.count, createdAt: ask.createdAt, held: true });
     } else if (ask.target) {
       entry(ask.agent).proposals.push({ id: ask.id, target: ask.target, targetId: ask.targetId,
-        createdAt: ask.createdAt, held: true });
+        createdAt: ask.createdAt, held: true, ...(ask.count > 1 ? { count: ask.count } : {}) });
     }
   }
   return byAgent;
+}
+
+/** How many proposals wait: each view is one; a held shared Update is as many as it stands for. */
+export function proposalCount(waiting: Pick<Waiting, 'proposals'>): number {
+  return waiting.proposals.reduce((n, proposal) => n + (proposal.count ?? 1), 0);
 }
 
 /** How many questions an agent's open sets hold (a set of two reads "2 questions", as its Update does). */
@@ -137,7 +146,9 @@ const ASK_TARGETS = new Set(['canvas', 'project', 'moodboard', 'commons']);
  * The open project's unresolved ask Updates (a proposal's or a question
  * set's, written by Nebula for an agent) whose ask isn't among `held`'s
  * ids: the asks this tab knows only from their Updates. When: the ref's
- * `since` (the ask's createdAt, as the views say), else the Update's time.
+ * `firstSince` (a shared Update's oldest ask) or `since` (the ask's
+ * createdAt, as the views say), else the Update's time. How many: a shared
+ * Update's `asks`, a question set's `count`, else 1.
  */
 export function heldAsks(notes: readonly AgentNote[], holds: (id: string) => boolean): HeldAsk[] {
   const asks: HeldAsk[] = [];
@@ -152,8 +163,10 @@ export function heldAsks(notes: readonly AgentNote[], holds: (id: string) => boo
       const id = typeof op?.proposalId === 'string' ? op.proposalId : '';
       const target = typeof op?.target === 'string' && ASK_TARGETS.has(op.target) ? op.target as HeldAsk['target'] : null;
       if (!id || !target || holds(id)) continue;
+      // A shared asset Update stands for all its agent's open asks on that target,
+      // from the oldest one's time, as the connected tab counts and orders them (MEDIUM-1).
       asks.push({ agent, kind: 'proposal', id, target, targetId: typeof op?.targetId === 'string' ? op.targetId : null,
-        createdAt: note.proposal?.since ?? at, count: 1 });
+        createdAt: note.proposal?.firstSince ?? note.proposal?.since ?? at, count: note.proposal?.asks ?? 1 });
     } else if (note.about === 'question') {
       const id = note.questionsId ?? '';
       if (!id || holds(id)) continue;
@@ -165,7 +178,7 @@ export function heldAsks(notes: readonly AgentNote[], holds: (id: string) => boo
 }
 
 export function isWaiting(waiting: Waiting): boolean {
-  return questionCount(waiting) + waiting.proposals.length > 0;
+  return questionCount(waiting) + proposalCount(waiting) > 0;
 }
 
 /** How many agents need the person: the panel's Needs-you group. */

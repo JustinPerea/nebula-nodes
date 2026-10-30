@@ -589,12 +589,12 @@ def retired_message(definition_id: str) -> str | None:
     """Why a definition is gone and what to use instead, for error messages."""
     merged = folded_entry(definition_id)
     if merged is not None:
-        return f"'{definition_id}' is now part of '{merged['into']}' (provider: Krea). Use '{merged['into']}' instead."
+        return f"{definition_id} is now part of {merged['into']} (provider: Krea). Use {merged['into']} instead."
     retired = RETIRED.get(definition_id)
     if retired is None:
         return None
-    message = f"'{definition_id}' was retired ({retired['reason']}). Use '{retired['replacement']}' instead"
+    message = f"{definition_id} was retired ({retired['reason']}). Use {retired['replacement']} instead"
     alternatives = retired.get("alternatives")
     if alternatives:
-        message += " (or " + " or ".join(f"'{a}'" for a in alternatives) + ")"
+        message += " (or " + " or ".join(alternatives) + ")"
     return message + "."

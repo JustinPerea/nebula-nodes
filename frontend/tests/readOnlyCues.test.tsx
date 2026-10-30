@@ -301,10 +301,12 @@ describe('the banner (GM, round 15 item 1)', () => {
     expect(rule).toMatch(/position:\s*fixed/);
     expect(rule).toMatch(/top:\s*150px/);
     // No other rule sets its top (no toolbar-dependent offset), except the
-    // home screen's own place under its top bar (GM, round 17 C).
+    // home screen's own place under its top bar (GM, round 17 C); a studio
+    // has a row of its own layout instead (GM, PR #198 r2).
+    const own = new Set([".backend-connection[data-placement='home']"]);
     const others = [...css.matchAll(/([^{}]*\.backend-connection[^{}]*)\{([^}]*)\}/g)]
       .filter(([, selector]) => selector.trim().split(/\s*\n\s*/).at(-1) !== '.backend-connection')
-      .filter(([, selector]) => selector.trim() !== ".backend-connection[data-placement='home']");
+      .filter(([, selector]) => !own.has(selector.trim()));
     for (const [, selector, body] of others) expect(body, selector).not.toMatch(/(^|;|\s)top:/);
   });
 });

@@ -3,7 +3,7 @@ import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } fro
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
 import { StoredAssetPicker } from './StoredAssetPicker';
-import { useGraphStore } from '../../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -21,6 +21,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
@@ -151,6 +152,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
   const renderNodeId = renderNode?.id;
+  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  const sceneHeld = useGraphStore((s) => (renderNodeId ? sceneDeleteDisabledTitle(s, [renderNodeId]) : null));
+  // This tab's own run locks Run, Duplicate and Delete, and its line wins
+  // (PR #198 review 6, N2: as the selection toolbar and the context menu).
+  const runLocked = useGraphStore((s) => s.isExecuting);
+  const runStarting = useGraphStore((s) => s.runStarting);
   const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
@@ -1179,7 +1186,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
           const dynData = nodeData as unknown as DynamicNodeData;
           const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
           if (!hasDynamicParams) return null;
-          return dynData.dynamicParams.map((param) => renderParamSection(param, 'dynamic'));
+          // A provider setting's label is its key in sentence case (GM, PR
+          // #198 r1 item 7), as the agent's cursor names it; a node saved
+          // before that keeps a Title Case label in its data.
+          return dynData.dynamicParams.map((param) => renderParamSection({ ...param, label: universalSettingLabel(param.key) }, 'dynamic'));
         })()}
 
         <div className="inspector__section inspector__section--separated">
@@ -1197,7 +1207,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' })}
+            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1212,7 +1222,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' })}
+            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1227,7 +1237,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ title: 'Delete this node' })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

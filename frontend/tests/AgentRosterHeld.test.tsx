@@ -56,7 +56,7 @@ const { useAssetProposalsStore } = await import('../src/store/assetProposalsStor
 const { coverProposal } = await import('../src/test/assetProposalFixtures');
 const { buildRosterRows } = await import('../src/components/agent-notes/agentRosterModel');
 const { heldAsks, needsYouCount } = await import('../src/components/agent-notes/agentNeedsYou');
-const { sanitizeNotes } = await import('../src/lib/agentNotes');
+const { sanitizeNotes, MAX_REF_QUESTIONS, MAX_SHARED_ASKS } = await import('../src/lib/agentNotes');
 
 const CLAUDE = { id: 'ext:claude-code', name: 'Claude Code', color: '#3FC1A5', verified: false };
 const CODEX = { id: 'codex', name: 'Codex', color: '#5B9DFF', verified: true };
@@ -248,7 +248,7 @@ describe('GM, PR #204 round 1: a held row reads disabled', () => {
   const ink = (row: HTMLElement) => ['.agent-roster__name', '.agent-roster__count', '.agent-roster__line']
     .map((selector) => getComputedStyle(row.querySelector(selector)!).color);
   const dotInk = (row: HTMLElement) => getComputedStyle(row.querySelector('.agent-notes-dot')!).color;
-  const GREY = 'var(--sr-disabled-ink, rgba(255, 255, 255, 0.55))';
+  const GREY = 'var(--disabled-label, rgba(255, 255, 255, 0.55))';
 
   it('every line of a held row, the name included, takes the shared grey; the dot keeps its colour; promoted, its own inks come back', async () => {
     render(<AppAgentNotes />);
@@ -262,5 +262,107 @@ describe('GM, PR #204 round 1: a held row reads disabled', () => {
     promote();
     for (const row of rows(list)) expect(ink(row).some((value) => value === GREY)).toBe(false);
     expect(rows(list).map(dotInk)).toEqual(dotsHeld);
+  });
+});
+
+describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
+  // The reviewer's repro: Codex asks for cover A, Claude Code asks one question,
+  // then Codex asks for cover B. Codex's two asks share one Update, which names
+  // only the newest (B); the ref's `asks` and `firstSince` say what it stands for.
+  const A = T;
+  const Q = T + 1_500;
+  const B = T + 3_000;
+  const shared = (asks: number, firstSince: number, id = 'pa_b', since = B) => update('u_cover', CODEX, 'proposal', {
+    proposal: { id, kind: 'project', targetId: 'p1', cover: 'image', since, asks, firstSince },
+    actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: id, target: 'project', targetId: 'p1' } }] });
+  const question = update('u_q1', CLAUDE, 'question', { questions: { id: 'qs_1', count: 1, since: Q },
+    actions: [{ label: 'Answer', op: { kind: 'question.answer', questionId: 'qs_1' } }] });
+  const sync = (notes: unknown[]) => emit({ type: 'agentNotes', surface: 'canvas', op: 'sync', projectId: 'p1', notes,
+    unread: notes.length, at: 1 });
+  const changed = (note: unknown) => emit({ type: 'agentNotes', surface: 'canvas', op: 'changed', projectId: 'p1',
+    ids: ['u_cover'], note, at: 2 });
+  const cover = (id: string, createdAt: number) => ({ ...coverProposal({ id, agent: CODEX, createdAt,
+    target: { kind: 'project', id: 'p1', name: 'Followups' }, update: { id: 'u_cover', projectId: 'p1' } } as never), acceptKey: `k_${id}` });
+  const promoteBoth = () => {
+    emit({ type: 'questionsOpened', answerKey: 'k_q1', set: { ...SET, id: 'qs_1', createdAt: Q, update: { id: 'u_q1', projectId: 'p1' } } });
+    act(() => { useAssetProposalsStore.getState().sync([cover('pa_a', A), cover('pa_b', B)]); });
+  };
+  const summary = (list: HTMLElement) => looks(list).map((row) => `${row.name}: ${row.count}`);
+
+  it('held and promoted read the same: the full count, in the order of the oldest ask, with the same badge', async () => {
+    render(<AppAgentNotes />);
+    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    sync([shared(2, A), question]);
+    const list = await openList();
+    fireEvent.click(await rosterToggle(list));
+    const held = summary(list);
+    expect(held).toEqual(['Codex: 2 proposals', 'Claude Code: 1 question']);
+    const badge = chip().querySelector('.agent-notes-needs-badge')?.textContent;
+    expect(badge).toBe('2');
+    promoteBoth();
+    expect(summary(list)).toEqual(held);
+    expect(chip().querySelector('.agent-notes-needs-badge')?.textContent).toBe(badge);
+    expect(rows(list).map((row) => row.getAttribute('aria-disabled'))).toEqual([null, null]);
+  });
+
+  it('one of the two closing while the tab is held: the Update says one, and so does the row', async () => {
+    render(<AppAgentNotes />);
+    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    sync([shared(2, A), question]);
+    const list = await openList();
+    fireEvent.click(await rosterToggle(list));
+    // A withdrawn: the Update stays on B, now standing for one, from B's time.
+    changed(shared(1, B));
+    expect(summary(list)).toEqual(['Claude Code: 1 question', 'Codex: 1 proposal']);
+    emit({ type: 'questionsOpened', answerKey: 'k_q1', set: { ...SET, id: 'qs_1', createdAt: Q, update: { id: 'u_q1', projectId: 'p1' } } });
+    act(() => { useAssetProposalsStore.getState().sync([cover('pa_b', B)]); });
+    expect(summary(list)).toEqual(['Claude Code: 1 question', 'Codex: 1 proposal']);
+  });
+
+  it('an undo reopening the closed one: the Update counts it again, held as promoted', async () => {
+    render(<AppAgentNotes />);
+    act(() => { useAssetProposalsStore.setState({ awaitingSync: true }); });
+    sync([shared(1, B), question]);
+    const list = await openList();
+    fireEvent.click(await rosterToggle(list));
+    expect(summary(list)).toEqual(['Claude Code: 1 question', 'Codex: 1 proposal']);
+    changed(shared(2, A));
+    expect(summary(list)).toEqual(['Codex: 2 proposals', 'Claude Code: 1 question']);
+    promoteBoth();
+    expect(summary(list)).toEqual(['Codex: 2 proposals', 'Claude Code: 1 question']);
+  });
+
+  it('an Update with no share fields (an older backend) still counts one, from its own time', () => {
+    const [ask] = heldAsks(sanitizeNotes([update('u', CODEX, 'proposal', { proposal: { id: 'pa_x', kind: 'project', targetId: 'p1', since: B },
+      actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'pa_x', target: 'project', targetId: 'p1' } }] })]), () => false);
+    expect(ask).toMatchObject({ count: 1, createdAt: B });
+  });
+});
+
+describe('PR #204 review 1 NIT-1: the guards a mutant survived', () => {
+  it('heldAsks skips a proposal this tab holds even when no view of it is in the count (a closed view, its Update not yet resolved)', () => {
+    const notes = sanitizeNotes([UPDATES[0]]);
+    expect(heldAsks(notes, (id) => id === 'pa_cover')).toEqual([]);
+    expect(heldAsks(notes, () => false)).toHaveLength(1);
+    // The badge with the view gone (closing) but the tab still holding it: nothing waits.
+    expect(needsYouCount({ projectId: 'p1', questions: [], canvasProposals: [], assetProposals: [],
+      held: heldAsks(notes, (id) => id === 'pa_cover') })).toBe(0);
+  });
+
+  it('a question ref outside 1..MAX_REF_QUESTIONS reads as no count', () => {
+    const at = (count: unknown) => sanitizeNotes([update('u', CLAUDE, 'question', { questions: { id: 'qs_x', count, since: T },
+      actions: [] })])[0].questionsCount;
+    expect(at(MAX_REF_QUESTIONS)).toBe(MAX_REF_QUESTIONS);
+    expect(at(MAX_REF_QUESTIONS + 1)).toBeNull();
+    expect(at(0)).toBeNull();
+    expect(at(99)).toBeNull();
+  });
+
+  it('a shared ref outside 1..MAX_SHARED_ASKS reads as no count', () => {
+    const at = (asks: unknown) => sanitizeNotes([update('u', CODEX, 'proposal', { proposal: { id: 'pa', kind: 'project', targetId: 'p1', asks },
+      actions: [] })])[0].proposal?.asks;
+    expect(at(MAX_SHARED_ASKS)).toBe(MAX_SHARED_ASKS);
+    expect(at(MAX_SHARED_ASKS + 1)).toBeUndefined();
+    expect(at(0)).toBeUndefined();
   });
 });

@@ -115,7 +115,7 @@ describe('GM round 6, item 3: from Cinema the button says Generate', () => {
   it('“Shot 1” · Nano Banana · $0.07 above the free line, and "Generate for up to $0.50"', () => {
     const model = placeholderRunConfirm(nodes, edges, 'cine', range, { verb: 'Generate', names: { cine: 'Shot 1' } })!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
-    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.0047–0.43', '“Shot 1” · Nano Banana · $0.07']);
+    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.0047–$0.43', '“Shot 1” · Nano Banana · $0.07']);
     expect(model.freeLine).toBe('Plus 1 free node.');
     expect(model.totalLine).toBe('This run could cost up to $0.50 at list prices.');
     expect(model.runLabel).toBe('Generate for up to $0.50');

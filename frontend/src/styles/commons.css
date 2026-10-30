@@ -1248,6 +1248,6 @@ body.app-slava-restraint .commons-analysis-failure__details .error-details__raw 
 }
 
 .commons-fieldset:disabled :is(button, input, select, textarea):disabled {
-  opacity: var(--sr-disabled-opacity, 0.48);
+  opacity: var(--sr-disabled-opacity);
   cursor: not-allowed;
 }

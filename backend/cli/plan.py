@@ -146,7 +146,7 @@ def build_body(
     removals: list[str] = []
     for node_id in remove or []:
         if not node_id or node_id.startswith("+"):
-            raise BuildError(f"--remove takes an existing node id (n4), got '{node_id}'")
+            raise BuildError(f"--remove takes an existing node id (n4), got {node_id}")
         removals.append(node_id)
     unwires = [_wire(pair, "--unwire") for pair in unwire or []]
 

@@ -35,7 +35,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Mapping, NoReturn, Sequence
+from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -91,8 +91,10 @@ from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
+from services import scene_keys
 from services import output_thumbnail
 from services import refusal_copy
+from services import cinema_scene_spec
 from services.node_errors import NodeErrors
 from services import project_cover
 from services import graph_file_links, project_size
@@ -109,6 +111,7 @@ from services.port_contracts import (
     ContractEdge,
     ContractNode,
     cinema_output_ports,
+    input_takes_one,
     node_ports,
     validate_edge_contracts,
 )
@@ -486,7 +489,7 @@ def _paid_job_changed_person(button: str) -> str:
     return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
 
 
-def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -> HTTPException:
+def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, run_id: str | None = None) -> HTTPException:
     """409 for a paid start the guard refused, worded by the code it was
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
@@ -495,8 +498,9 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False) -
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
-        # (listed for GM, round 3b).
-        return HTTPException(status_code=409, detail=str(exc))
+        # (listed for GM, round 3b), and says what every reused-id refusal
+        # says (_stopped_id_refusal; PR #198 review 1, N1).
+        return HTTPException(status_code=409, detail=_stopped_id_refusal(run_id) if run_id else str(exc))
     if reason == "capacity":
         person = _paid_capacity_person(getattr(exc, "limit", None))
     elif reason == "changed":
@@ -544,9 +548,15 @@ def _graph_settling_specific(action: str) -> str:
             "Stop the run and wait for its terminal state first.")
 
 
+def _paid_start_refusal(action: str) -> HTTPException:
+    """409 ``code: "paid_start"``: a World Labs paid start is settling, so
+    nothing that takes the paid lifecycle fence goes on (CodedRefusal)."""
+    return _coded(_graph_paid_refusal(_graph_settling_specific(action), "active"), "paid_start")
+
+
 def _reject_graph_replacement_during_paid_start(action: str) -> None:
     if provider_start_guard.has_active():
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active")
+        raise _paid_start_refusal(action)
     nodes = list(cli_graph.nodes.values())
     canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
     node: str | None = None
@@ -610,7 +620,7 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     except ProviderStartConflictError as exc:
         # A start began since has_active() was read: the settling refusal, as
         # _paid_graph_mutation answers it.
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+        raise _paid_start_refusal(action) from exc
     except ProviderStartPersistenceError as exc:
         raise _paid_fence_unverifiable(action) from exc
     except (
@@ -672,7 +682,7 @@ def _paid_graph_mutation(action: str):
             _clear_bootstrap_error_after_real_write()
             yield
     except ProviderStartConflictError as exc:
-        raise _graph_paid_refusal(_graph_settling_specific(action), "active") from exc
+        raise _paid_start_refusal(action) from exc
     except ProviderStartPersistenceError as exc:
         raise _paid_fence_unverifiable(action) from exc
 
@@ -804,6 +814,10 @@ if _bootstrap_checkpoints:
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 # This backend process's id, new on every start (the socket's first graphSync).
 BACKEND_BOOT_ID = uuid4().hex
+# When it started, in microseconds since the epoch (PR #198 review 11, L-4):
+# a tab orders processes by it, so a late answer from a process that two
+# quick restarts replaced never takes the newer one's place.
+BACKEND_BOOT_STARTED_AT = _time_module.time_ns() // 1000
 
 
 _DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
@@ -886,6 +900,192 @@ async def project_size_refusal(request, exc: ProjectSizeRefusal):
     return JSONResponse(status_code=413, content=content)
 
 
+class CodedRefusal(HTTPException):
+    """A refusal whose answer carries fields beside ``detail`` (``fields``:
+    ``code`` and what goes with it), so a client picks its line by the cause,
+    never by the words (PR #198 review 5, GM question 3). ``detail`` is the
+    text it always was, for each audience (refusal_copy). The codes a scene
+    write (``PUT /api/graph/node/{id}``, the canvas's restore) can answer:
+
+    - ``rendering_shots``: the write would remove a shot a run is rendering;
+      ``rendering: {shotIds, shots, stoppable}`` (_RenderingSceneRefusal);
+    - ``paid_start``: a World Labs paid start is settling (_paid_start_refusal);
+    - ``approved_run``: an agent's edit to a run the person approved;
+    - ``workspace_moved``: another project is open (opened, made or deleted)
+      since the caller read it; ``project`` ({id, name} of the project open
+      now, null for the unfiled canvas) and ``switchedBy``
+      (_workspace_moved_refusal);
+    - ``canvas_replaced``: the same project is open, but its canvas was
+      cleared or replaced (an import) since, so node ids may name new nodes;
+      the same ``project`` and ``switchedBy`` (_canvas_replaced_refusal; PR
+      #198 review 6, M1: a clear is not a switch);
+    - ``params_outdated`` (the params-version gate's own answer);
+    - ``node_gone`` (404): the node isn't on the canvas; ``deletedBy`` names
+      who deleted it, or null (_scene_write_gone; fix round 12);
+    - ``unknown_definition`` (400): a node write named a definition the
+      registry doesn't have, or none; ``definitionId`` is the raw value sent
+      (``""`` for none) (_refuse_unknown_definition; fix round 14).
+
+    Raised where those helpers are used by other routes too: the fields are
+    additive."""
+
+    def __init__(self, status_code: int, detail: str, fields: Mapping[str, Any],
+                 headers: Mapping[str, str] | None = None) -> None:
+        super().__init__(status_code=status_code, detail=detail, headers=dict(headers) if headers else None)
+        self.fields = dict(fields)
+
+
+def _coded(exc: HTTPException, code: str, **fields: Any) -> CodedRefusal:
+    """``exc`` (status, detail and headers kept) with ``code`` and ``fields``."""
+    return CodedRefusal(exc.status_code, exc.detail, {"code": code, **fields}, headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(CodedRefusal)
+async def coded_refusal(_request: Request, exc: CodedRefusal) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, **exc.fields},
+                        headers=getattr(exc, "headers", None))
+
+
+# Who last replaced the live canvas (opened, made or deleted the open project;
+# cleared it; loaded a graph into it), and the canvas it left: a refused
+# write from a tab or agent still on the old canvas says who moved it
+# (``switchedBy``) when the canvas is still that one. In memory only: after a
+# restart, or once anything moves the canvas without noting it (filing the
+# unfiled canvas), it reads null.
+_last_canvas_change: dict[str, Any] = {}
+
+
+def _canvas_change_actor() -> dict[str, str]:
+    """Who is asking, as a saved record names them (actor_record): an agent
+    by its name (one that marks itself without a name is "An agent", as
+    _switch_actor reads it), the person as "You"."""
+    headers = current_request_headers()
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return actor_record(actor)
+
+
+def _note_canvas_change() -> None:
+    """Call right after a commit that replaced the live canvas, before any
+    await: the canvas it left (_graph_fence) and who asked. Never fails."""
+    # Scene reads aren't forgotten here (fix round 9, M-1): their scope
+    # names the project and its canvas epoch, which a clear or import moves.
+    try:
+        _last_canvas_change.clear()
+        _last_canvas_change.update(fence=_graph_fence(), by=_canvas_change_actor())
+    except Exception:  # noqa: BLE001 - a refusal then reads switchedBy null
+        _last_canvas_change.clear()
+
+
+def _workspace_moved_fields() -> dict[str, Any]:
+    """``project`` and ``switchedBy`` for a ``workspace_moved`` refusal."""
+    try:
+        view = project_store.projection()
+        project = {"id": view.project_id, "name": view.name} if view.project_id else None
+        switched_by = _last_canvas_change.get("by") if _last_canvas_change.get("fence") == _graph_fence() else None
+    except Exception:  # noqa: BLE001 - the refusal itself never fails over its extras
+        return {"project": None, "switchedBy": None}
+    return {"project": project, "switchedBy": copy.deepcopy(switched_by)}
+
+
+def _workspace_moved_refusal(exc: HTTPException) -> CodedRefusal:
+    return _coded(exc, "workspace_moved", **_workspace_moved_fields())
+
+
+def _canvas_replaced_refusal(exc: HTTPException) -> CodedRefusal:
+    """The open project's canvas was cleared or replaced since (its id epoch
+    moved), not another project opened: its own code, with the same fields."""
+    return _coded(exc, "canvas_replaced", **_workspace_moved_fields())
+
+
+def _scene_scope() -> str:
+    """Which canvas a scene read or write is on (services/scene_keys.py): the
+    live graph and, when known, its project and canvas epoch."""
+    token = scene_keys.graph_token(cli_graph)
+    try:
+        return f"{token}:{_workspace_context()['activeProjectId']}:{_canvas_revision()}"
+    except Exception:  # noqa: BLE001 - the graph alone still scopes it
+        return token
+
+
+def _agent_readers() -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    """The agent session behind this request, for services/scene_keys.py:
+    the keys its reads are kept under, and the keys its writes are checked
+    against, in order. None for the person and anonymous callers.
+
+    - A verified token: its chat session, or the token itself (fix round 9,
+      M-2), for both; never a name's reader.
+    - A name with the ``X-Nebula-Agent-Session`` the MCP server sends (one per
+      process): read under its session and under the name's newest session
+      read; a write checks its own session's read, else the newest session
+      read, else the name's session-less read.
+    - A name alone (the CLI, a plain PUT): read under the bare name; a write
+      checks its own read first, and the newest session read only when it
+      never read (fix round 11, review 10 L-1). So an MCP read still guards
+      a CLI write that never read, but never refreshes a CLI read: a CLI
+      write built on its own older read is refused, even after a fresh MCP
+      read (the agent runs ``nebula look`` and redoes it)."""
+    try:
+        actor = _canvas_change_actor()
+    except Exception:  # noqa: BLE001 - reads never fail over this
+        return None
+    if actor.get("kind") != "agent":
+        return None
+    name = str(actor.get("name") or "An agent")
+    headers = {str(k).lower(): v for k, v in (current_request_headers() or {}).items()}
+    auth = str(headers.get("authorization") or "")
+    if auth.startswith("Agent "):
+        token = auth[6:].strip()
+        try:
+            from commons.actors import agent_registry
+            record = agent_registry.lookup(token)
+        except Exception:  # noqa: BLE001 - the token alone still names the session
+            record = None
+        session = (record or {}).get("session") if isinstance(record, dict) else None
+        own = (f"chat:{session}",) if session else ("token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:20],)
+        return own, own
+    session = str(headers.get("x-nebula-agent-session") or "").strip()[:80]
+    bare, newest = f"name:{name}", f"newest:{name}"
+    if session:
+        own = f"name:{name}:{session}"
+        return (own, newest), (own, newest, bare)
+    return (bare,), (bare, newest)
+
+
+def _reader_agent() -> tuple[str, ...] | None:
+    """The keys this agent's reads (and its writes, as reads) are kept under
+    (``_agent_readers``)."""
+    readers = _agent_readers()
+    return readers[0] if readers else None
+
+
+def _writer_chain() -> tuple[str, ...] | None:
+    """The reads this agent's scene write is checked against, its own first
+    (``_agent_readers``)."""
+    readers = _agent_readers()
+    return readers[1] if readers else None
+
+
+def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
+    """PR #198 fix round 8, H2: a scene write built on a scene that changed
+    since (services/scene_keys.py). Nothing was saved; the answer carries the
+    scene Nebula has now, its key and who changed it last, so the writer can
+    put its change on top and send it again."""
+    # GM r12 answer 4, verbatim. The person's canvas never shows it (it
+    # merges, or asks with its own line), and no Agent log row or toast says
+    # an agent's refusal (it is the agent's to redo).
+    label = _quoted(_node_label(node_id))
+    exc = HTTPException(status_code=409, detail=(
+        f"{label} changed since you last read it, so nothing was changed. Read it again and redo your change."))
+    scene = copy.deepcopy((node.get("params") or {}).get("scene"))
+    key = scene_keys.node_scene_key(node)
+    scope = _scene_scope()
+    return _coded(exc, "scene_changed", scene=scene, sceneKey=key,
+                  sceneRev=scene_keys.revision(scope, node_id, key) if key else None,
+                  changedBy=scene_keys.writer(scope, node_id))
+
+
 def _workspace_context() -> dict[str, Any]:
     # Read on every canvas event: only these two fields, never a copy of every
     # project (ProjectStore.workspace).
@@ -928,11 +1128,11 @@ def _check_workspace_revision(revision: str | None = None) -> None:
         if not (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
                 and filed[1]["activeProjectId"] == current["activeProjectId"]
                 and filed[2] == canvas_undo_book.epoch(current["activeProjectId"])):
-            raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+            raise _workspace_moved_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
         expected_canvas = str(filed[0])
     canvas = _request_canvas_revision.get()
     if canvas is not None and canvas != expected_canvas:
-        raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+        raise _canvas_replaced_refusal(HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE))
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
@@ -1013,9 +1213,10 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
     if (revision, project_id) != fence[:2]:
-        raise refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+        raise _workspace_moved_refusal(refusal_copy.refusal(409, GRAPH_MOVED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas"))
     if epoch != fence[2]:
-        raise refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE, route="canvas")
+        raise _canvas_replaced_refusal(refusal_copy.refusal(409, GRAPH_RESTARTED_DETAIL, CANVAS_OUT_OF_DATE,
+                                                            route="canvas"))
 
 
 # A run writes back only to the canvas it registered on (round 11 of PR #114,
@@ -1263,7 +1464,9 @@ async def project_workspace_fence(request: Request, call_next):
             try:
                 _check_workspace_revision()
             except HTTPException as exc:
-                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+                # A CodedRefusal's fields too (workspace_moved, canvas_replaced: project, switchedBy).
+                return JSONResponse(status_code=exc.status_code,
+                                    content={"detail": exc.detail, **getattr(exc, "fields", {})})
             except ProjectStoreError as exc:
                 return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
         return await call_next(request)
@@ -1652,7 +1855,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
                 status_code=400, detail=f"nodes[{index}].id must be a bounded non-empty string"
             )
         if node_id in seen_node_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate node id '{node_id}'")
+            raise HTTPException(status_code=400, detail=f"duplicate node id {node_id}")
         seen_node_ids.add(node_id)
         if not isinstance(node.get("type"), str) or not node["type"]:
             raise HTTPException(status_code=400, detail=f"nodes[{index}].type must be a string")
@@ -1738,7 +1941,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
                 status_code=400, detail=f"edges[{index}].id must be a bounded non-empty string"
             )
         if edge_id in seen_edge_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate edge id '{edge_id}'")
+            raise HTTPException(status_code=400, detail=f"duplicate edge id {edge_id}")
         seen_edge_ids.add(edge_id)
         if not isinstance(edge.get("type"), str) or not edge["type"]:
             raise HTTPException(status_code=400, detail=f"edges[{index}].type must be a string")
@@ -1780,6 +1983,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
         reference_key="id",
         include_outputs=True,
         normalize_image_inputs=False,
+        strict_scenes=False,
     )
     _stage_graph_edges(candidate, ingress_edges, id_map, saved=True)
     return graph
@@ -2212,8 +2416,8 @@ def _validate_imported_outputs(
             raise ValueError(f"nodes[{node_index}] has an invalid output handle")
         if not handles_are_dynamic and handle not in declared_ports:
             raise ValueError(
-                f"nodes[{node_index}] output handle '{handle}' is not declared by "
-                f"definition '{definition_id}'"
+                f"nodes[{node_index}] output handle {handle} is not declared by "
+                f"definition {definition_id}"
             )
         if not isinstance(port, dict):
             raise ValueError(f"nodes[{node_index}].outputs.{handle} must be an object")
@@ -2225,8 +2429,8 @@ def _validate_imported_outputs(
         declared_type = declared_ports.get(handle)
         if not _imported_output_type_is_valid(actual_type, declared_type):
             raise ValueError(
-                f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
-                f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
+                f"nodes[{node_index}] output {handle} declares type {actual_type}, "
+                f"but definition {definition_id} outputs {declared_type or 'a known dynamic type'}"
             )
 
 
@@ -2467,6 +2671,17 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
+def _scene_writes_strict() -> bool:
+    """Whether this request's Cinema scene is refused when it can't be filled
+    in (services/cinema_scene_spec.py): an agent-authored write (an agent's
+    marker, the CLI, a script). The person's canvas tab, with or without
+    this launch's person token, gets its scene converted instead (PR #198
+    review 3, H1): a tab whose token predates a restart must never have the
+    person's typing refused. It picks words and shapes, never authority, so
+    it reads the request as refusal_copy does."""
+    return not refusal_copy.person_reads()
+
+
 def _person_only_refusal(detail: str) -> HTTPException | PersonGateError:
     """The 403 for a request refused only because it isn't the person's (who
     bills a node, a run the person approved, the agents' spending limits the
@@ -2690,10 +2905,10 @@ def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
         now = approvals.fingerprint(candidate.nodes, candidate.edges, approval.run_node_ids)
         changed = sorted(approvals.changed_nodes(approval.fingerprint, now), key=_node_order)
         if changed:
-            raise HTTPException(status_code=409, detail=(
+            raise CodedRefusal(409, (
                 f"{_listed(changed, 4)} {'is' if len(changed) == 1 else 'are'} in a run the person approved "
                 f"from {approval.agent_name}'s proposal {approval.proposal_id}, and it hasn't started yet. "
-                "Leave it until that run starts, or propose the change instead."))
+                "Leave it until that run starts, or propose the change instead."), {"code": "approved_run"})
 
 
 def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
@@ -3818,7 +4033,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # holding a create whose answer was lost releases it only when the
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it.
-        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID}))
+        await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
+                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
@@ -4939,10 +5155,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if found.definition_id is None:
         if len(found.named) > 1:
             line = node_lookup.shared_name_line(definition_id, found.named, node_registry.get_all())
-            raise HTTPException(status_code=404, detail=f"No node type '{definition_id}': {line}: "
+            raise HTTPException(status_code=404, detail=f"No node type {definition_id}: {line}: "
                                 f"{', '.join(found.named)}. Use one of those ids.")
         hint = ", ".join(_suggest_node_ids(definition_id, node_registry.get_all()))
-        raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
+        raise HTTPException(status_code=404, detail=f"No node type {definition_id}." + (
             f" Close matches: {hint}." if hint else " find_nodes lists them."))
     definition_id = found.definition_id
     definition = node_registry.get(definition_id)
@@ -5097,9 +5313,10 @@ async def health() -> dict:
     # for another version (desktop/frontend-build.mjs). Not a secret.
     # bootId: which backend process answers (round 16 of PR #114, M4). A tab
     # notes it from every health probe and socket hello, with or without a
-    # project open, and a new one means the backend restarted. Not a secret.
+    # project open, and a new one means the backend restarted. bootStartedAt
+    # orders processes (PR #198 review 11, L-4). Not secrets.
     return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
-            "bootId": BACKEND_BOOT_ID}
+            "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT}
 
 
 @app.get("/api/capabilities/worldlabs")
@@ -5166,23 +5383,35 @@ async def _show_agent(
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
     log: str | None = None,
+    words: Callable[[], tuple[str, str]] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
-    ``did`` (_did) is what the action was, for the Agents panel. ``log``: the
-    Agent log's words when they differ from the cursor's (``say``), e.g. a
+    ``did`` (_did) is what the action was, for the Agents panel. ``log`` is
+    the Agent log's line when it differs from the bubble's ``say`` (e.g. a
     field the card shows no label for, named there by its key while the
-    bubble leaves it out (GM - Design, round 16). Never fails the route that
-    called it: presence is decoration on top of an edit that already succeeded.
+    bubble leaves it out: GM - Design, round 16 of PR #195); an action with
+    neither is logged in the Agents panel's words ("Changed “Hero”"), so no
+    action is left out of the log (MCP-SETUP.md, PR #198 r1). ``words``
+    computes (say, log) inside the guard (_set_params_bubble). Never fails
+    the route that called it: presence is decoration on top of an edit that
+    already succeeded.
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
         return
     try:
-        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did)
-        logged = clean_say(log)
-        if logged and logged != event.get("say"):
-            event["log"] = logged
+        if words is not None:
+            try:
+                say, log = words()
+            except Exception:  # noqa: BLE001 - the action is still logged, in the panel's words
+                say, log = "", ""
+        if not say and not log and did is not None and did.get("verb"):
+            log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
+        # The event carries ``log`` only when it isn't the bubble's own words (PR #195).
+        if log is not None and clean_say(log) == clean_say(say):
+            log = None
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -5255,6 +5484,306 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
                     "run.skipped": "skipped"}
 
 
+# Which Cinema shots a live run is rendering (GM, PR #198 r2: a shot that is
+# rendering can't be removed; r3: nor can its scene be deleted): run id -> a
+# set of (node id, shot id), shot None when the run renders the whole scene.
+# A set, so a run that renders several scenes protects every one (review 3,
+# M1). A run counts while the registry holds it as running or cancelling
+# (_run_is_active), and from the start of its admission before that (L1:
+# _cinema_admission_scope). A whole-scene entry goes once the engine is done
+# with that scene (_scene_render_done, L2), so a downstream video's long
+# render doesn't hold the scene that fed it. A shot run's upstream scenes
+# stay until it ends, since each variation pass renders them again (review 4,
+# M2). An entry for a run that ended is dropped the next time anyone looks.
+_cinema_renders: OrderedDict[str, set[tuple[str, str | None]]] = OrderedDict()
+# Runs being admitted (noted, not registered yet): run id -> monotonic deadline.
+_cinema_admitting: dict[str, float] = {}
+_cinema_admission: ContextVar[list[str] | None] = ContextVar("cinema_admission", default=None)
+# A bound on an admission nobody closed (a route without the scope); a route
+# with it closes its own the moment it returns.
+CINEMA_ADMISSION_SECONDS = 600.0
+
+
+@contextmanager
+def _cinema_admission_scope() -> Iterator[None]:
+    """A run route's admission (PR #198 review 3, L1): a render it notes counts
+    as live from that moment, through validation and the spending check's
+    awaits, until the route returns. By then the run has registered (the
+    registry decides from there) or was refused (the render is dropped)."""
+    noted: list[str] = []
+    token = _cinema_admission.set(noted)
+    try:
+        yield
+    finally:
+        _cinema_admission.reset(token)
+        for run_id in noted:
+            _cinema_admitting.pop(run_id, None)
+
+
+def _admits_cinema_renders(route: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+    """Run ``route`` inside _cinema_admission_scope."""
+    @functools.wraps(route)
+    async def admitted(*args: Any, **kwargs: Any) -> Any:
+        with _cinema_admission_scope():
+            return await route(*args, **kwargs)
+    return admitted
+
+
+def _note_cinema_render(run_id: str, node_id: str, shot_id: str | None) -> None:
+    renders = _cinema_renders.pop(run_id, set())
+    renders.add((node_id, shot_id))
+    _cinema_renders[run_id] = renders
+    while len(_cinema_renders) > 512:
+        _cinema_renders.popitem(last=False)
+    noted = _cinema_admission.get()
+    if noted is not None and execution_runs.get(run_id) is None:
+        noted.append(run_id)
+        _cinema_admitting[run_id] = _time_module.monotonic() + CINEMA_ADMISSION_SECONDS
+
+
+def _note_scene_renders(run_id: str, nodes: Iterable[Any], *, shot: tuple[str, str] | None = None) -> None:
+    """The Cinema renders a run sets out to make: every scene among ``nodes``
+    whole, except ``shot``'s scene, of which a shot run renders only that
+    shot (review 3, L2)."""
+    for node in nodes:
+        if node.definition_id == "cinema-scene" and (shot is None or node.id != shot[0]):
+            _note_cinema_render(run_id, node.id, None)
+    if shot is not None:
+        _note_cinema_render(run_id, shot[0], shot[1])
+
+
+def _scene_render_done(run_id: str | None, node_id: str) -> None:
+    """The engine is done with a scene a run rendered whole (its node finished,
+    failed or was skipped, a cached one included): its shots are free again.
+    A shot run holds everything it noted until it ends: its own shot (its
+    result merges then) and its upstream scenes, which every variation pass
+    renders again (review 4, M2). A shot run is one that noted a shot."""
+    renders = _cinema_renders.get(run_id or "")
+    if renders is None or any(shot_id is not None for _node, shot_id in renders):
+        return
+    renders.discard((node_id, None))
+    if not renders:
+        _cinema_renders.pop(run_id or "", None)
+
+
+def _scene_event_done(event: Any, run_id: str | None) -> None:
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(node_id, str):
+        return
+    # A fan-out invokes a node once per item: only its last invocation is
+    # the scene's end, so a scene in one stays held until the run ends.
+    if isinstance(event, ExecutedEvent) and getattr(event, "variant", None) is None:
+        _scene_render_done(run_id, node_id)
+    elif isinstance(event, (ErrorEvent, SkippedEvent)):
+        _scene_render_done(run_id, node_id)
+
+
+def _render_state(run_id: str) -> str | None:
+    """"running" for a registered live run (its Stop works), "admitting" for
+    one being admitted, None for one that isn't live."""
+    if _run_is_active(run_id):
+        return "running"
+    if execution_runs.get(run_id) is not None:
+        return None
+    deadline = _cinema_admitting.get(run_id)
+    if deadline is not None and deadline > _time_module.monotonic():
+        return "admitting"
+    _cinema_admitting.pop(run_id, None)
+    return None
+
+
+def _rendering_runs(node_id: str) -> list[tuple[str, str | None, str]]:
+    """(run id, shot id or None for the whole scene, its _render_state) of
+    every live run rendering ``node_id``."""
+    found: list[tuple[str, str | None, str]] = []
+    for run_id, renders in list(_cinema_renders.items()):
+        state = _render_state(run_id)
+        if state is None:
+            _cinema_renders.pop(run_id, None)
+            continue
+        found.extend((run_id, shot_id, state) for rendered, shot_id in sorted(renders, key=str)
+                     if rendered == node_id)
+    return found
+
+
+def _rendering_shots(node_id: str, order: list[str]) -> tuple[list[str], list[str], bool]:
+    """The shots of ``node_id`` (in ``order``, its shot ids) a live run is
+    rendering, the runs, and whether any of them can be stopped (registered;
+    one still being admitted can only be waited for)."""
+    runs = _rendering_runs(node_id)
+    shots: list[str] = []
+    run_ids: list[str] = []
+    stoppable = False
+    for shot_id in order:
+        for run_id, rendered, state in runs:
+            if rendered is None or rendered == shot_id:
+                shots.append(shot_id)
+                if run_id not in run_ids:
+                    run_ids.append(run_id)
+                stoppable = stoppable or state == "running"
+                break
+    return shots, run_ids, stoppable
+
+
+def _shot_names(numbers: list[int]) -> tuple[str, bool]:
+    """“Shot 2”, “Shot 2” and “Shot 3”, or "4 shots" (GM, PR #198 r3), and
+    whether it is more than one."""
+    names = [f"\u201cShot {number}\u201d" for number in numbers]
+    if len(names) >= 4:
+        return f"{len(names)} shots", True
+    text = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return text, len(names) > 1
+
+
+def _scene_shot_ids(node: Mapping[str, Any]) -> list[str]:
+    scene = (node.get("params") or {}).get("scene")
+    shots = scene.get("shots") if isinstance(scene, dict) else None
+    return [shot["id"] for shot in shots if isinstance(shot, dict) and isinstance(shot.get("id"), str)] \
+        if isinstance(shots, list) else []
+
+
+def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool) -> str:
+    """The person's line for a write that would remove a rendering shot.
+    GM, PR #198 r3 item 3, an undo or redo: "Couldn’t undo. It would remove
+    “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
+    finish." when there's no Stop for it). Several shots, and a studio edit
+    that isn't an undo, are builder's forms on GM's pattern."""
+    what, several = _shot_names(numbers)
+    end = "Stop the run first." if stoppable else "Wait for it to finish."
+    if action in RESTORE_ACTIONS:
+        if len(numbers) >= 4:
+            return f"Couldn’t {action}. It would remove {what} that are still running. {end}"
+        return f"Couldn’t {action}. It would remove {what}, which {'are' if several else 'is'} still running. {end}"
+    return f"Couldn’t remove {what}. {'They' if several else 'It'}’{'re' if several else 's'} still running. {end}"
+
+
+def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current: Mapping[str, Any],
+                                     kept: set[str], *, action: str | None = None) -> None:
+    """409 when a write would remove a shot a live run is rendering, with
+    what to do: stop the run or wait for it. Agents read the shot, the run
+    and how to stop it; the person reads GM's line (``action``: the undo or
+    redo this write is)."""
+    removed = [shot_id for shot_id in current if shot_id not in kept]
+    if not removed:
+        return
+    shots, run_ids, stoppable = _rendering_shots(node_id, removed)
+    if not shots:
+        return
+    order = list(current)
+    shot_id = shots[0]
+    run_id = run_ids[0]
+    numbers = [order.index(shot) + 1 for shot in shots]
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    specific = (
+        f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
+        f"so it can’t be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
+        "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed.")
+    # Pinned to its shots (PR #198 review 5, GM question 3): the canvas puts
+    # back only ``shotIds`` and sends the rest of the save again.
+    raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(
+        specific, _removal_person_line(action, numbers, stoppable), route="canvas"),
+        {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
+
+
+class _RenderingSceneRefusal(CodedRefusal):
+    """A scene write or delete refused because a run is rendering some of its
+    shots, saying which (``code: "rendering_shots"``, ``rendering``: their
+    ids in scene order, their numbers as the rail shows them, and whether
+    any run rendering them can be stopped), so the canvas can word a
+    multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
+    put back only those shots of a refused save (review 5), without reading
+    it out of the line."""
+
+    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
+        super().__init__(status_code, detail, {"code": "rendering_shots", "rendering": rendering})
+        self.rendering = rendering
+
+
+def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
+    """409 for deleting a Cinema scene while one of its shots renders (GM,
+    PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn’t
+    delete “Scene”, node n4. “Shot 2” is still running, run <id>." The
+    person: "Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
+    first." ("Wait for it to finish." with no Stop); an undo or redo that
+    would delete it reads the undo line (_removal_person_line)."""
+    if node.get("definitionId") != "cinema-scene":
+        return
+    order = _scene_shot_ids(node)
+    shots, run_ids, stoppable = _rendering_shots(node_id, order)
+    if not shots:
+        return
+    numbers = [order.index(shot) + 1 for shot in shots]
+    what, several = _shot_names(numbers)
+    verb = "are" if several else "is"
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    runs = f"run {run_ids[0]}" if len(run_ids) == 1 else "runs " + ", ".join(run_ids[:-1]) + " and " + run_ids[-1]
+    specific = f"Couldn’t delete {name}, node {node_id}. {what} {verb} still running, {runs}."
+    if action in RESTORE_ACTIONS:
+        person = _removal_person_line(action, numbers, stoppable)
+    else:
+        end = "Stop the run first." if stoppable else "Wait for it to finish."
+        person = f"Couldn’t delete {name}. {what} {verb} still running. {end}"
+    # The Agent log says it too, under the agent's name (GM: "Agent log +
+    # agent refusal"); a no-op for the person's own request.
+    _log_agent_refusal(specific)
+    raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
+                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
+
+
+_agent_log_tasks: set[asyncio.Task[None]] = set()
+
+
+def _log_agent_refusal(line: str) -> None:
+    """Put a refusal an agent got in the Agent log (_say_agent_action), from
+    a sync check inside an async route; never fails the refusal itself."""
+    if refusal_copy.person_reads():
+        return
+    try:
+        task = asyncio.get_running_loop().create_task(_say_agent_action(line))
+    except RuntimeError:
+        return
+    _agent_log_tasks.add(task)
+    task.add_done_callback(_agent_log_tasks.discard)
+
+
+# A late result for a shot that wasn't there when it landed (only its port
+# kept it): (node id, shot id) -> {url, variations}. A shot an undo brings
+# back adopts it with the variations it came with (review 3, L3). In memory
+# and bounded: after a restart the adopted shot keeps the image alone.
+_late_shot_results: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
+
+
+def _note_late_shot(node_id: str, shot_id: str, url: str, variations: list[dict[str, Any]] | None) -> None:
+    _late_shot_results.pop((node_id, shot_id), None)
+    _late_shot_results[(node_id, shot_id)] = {"url": url, "variations": copy.deepcopy(variations)}
+    while len(_late_shot_results) > 256:
+        _late_shot_results.popitem(last=False)
+
+
+def _adopt_late_image(node_id: str, shot: dict[str, Any], newer: str) -> None:
+    """A returning shot takes the newer image its port holds, with a
+    variations list and selection that agree with it (in place): the late
+    batch it came from when known; else the variations it had, with the
+    image selected when it is one of them and nothing selected otherwise."""
+    shot["output"] = {"imageUrl": newer, "status": "done"}
+    late = _late_shot_results.pop((node_id, shot["id"]), None)
+    if late is not None and late.get("url") == newer and isinstance(late.get("variations"), list) and late["variations"]:
+        shot["variations"] = late["variations"]
+        urls = [variation.get("url") if isinstance(variation, dict) else None for variation in late["variations"]]
+        shot["selectedVariation"] = urls.index(newer) if newer in urls else 0
+        return
+    variations = shot.get("variations")
+    if not isinstance(variations, list):
+        shot.pop("variations", None)
+        shot.pop("selectedVariation", None)
+        return
+    urls = [variation.get("url") if isinstance(variation, dict) else None for variation in variations]
+    if newer in urls:
+        shot["selectedVariation"] = urls.index(newer)
+    else:
+        shot.pop("selectedVariation", None)
+
+
 def _note_run(run_id: str) -> None:
     """Who asked for a run, and when: the journal credits its node events to
     them, and an agent's undo (POST /api/graph/apply/undo) leaves a node
@@ -5269,7 +5798,8 @@ def _note_run(run_id: str) -> None:
 
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
     """The canvas nodes a run set out to run: while it is going they count as
-    run for an agent's undo, before the engine reaches them."""
+    run for an agent's undo, before the engine reaches them. The Cinema
+    renders it makes are noted on their own (_note_scene_renders)."""
     canvas_undo_book.run_nodes(run_id, [node.id for node in nodes])
 
 
@@ -5721,6 +6251,14 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     await _sweep_proposals()
     snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
     snapshot["providerHolds"] = _provider_holds_for_agents()
+    # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
+    # this agent has read these scenes now (services/scene_keys.py).
+    keys = scene_keys.keys_of(cli_graph.nodes)
+    scope = _scene_scope()
+    scene_keys.note_read(scope, _reader_agent(), keys)
+    if keys:  # only with a scene: the rest of the answer is as it was
+        snapshot["sceneKeys"] = keys
+        snapshot["sceneRevs"] = scene_keys.revisions_of(scope, keys)
     return snapshot
 
 
@@ -6212,7 +6750,8 @@ def _proposal_closed(proposal_id: str) -> bool:
 
 
 async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
-                         detail: Mapping[str, Any] | None = None, text: str | None = None) -> None:
+                         detail: Mapping[str, Any] | None = None, text: str | None = None,
+                         share: Callable[[], Mapping[str, Any]] | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
     proposal's ref carries its ``detail`` again (asset_proposals.update_detail), and its
     words are that proposal's (``text``, asset_proposals.update_text; review 1 LOW-1)."""
@@ -6220,7 +6759,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
         return
     try:
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
-                                         detail, text, _proposal_closed)
+                                         detail, text, _proposal_closed, share)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -6431,8 +6970,14 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal))
+        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
+                             _share_reader(proposal, proposal.update))
         _schedule_asset_expiry(proposal)
+    # MEDIUM-1: an ask reopened under an Update another open ask still holds
+    # leaves that Update on the other ask (reopen_proposal); it now stands for
+    # one more, so it says so.
+    for ref in {_ref_key(p.update): p.update for p in reopened_assets if p.update}.values():
+        await _refresh_asset_update(ref)
     if reopened_assets:
         try:
             await manager.broadcast_browser(_asset_proposal_open_message())
@@ -6754,7 +7299,7 @@ def _live_board_for_notes(moodboard_id: str) -> dict[str, Any] | JSONResponse:
     try:
         board = store.get(moodboard_id, laid_out=False)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if board is None:
         return _asset_not_found("moodboard", moodboard_id)
     return board
@@ -8182,7 +8727,7 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=asset_update_text(proposal),
             proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id,
-                      **asset_update_detail(proposal)})
+                      **asset_update_detail(proposal), **_asset_share_detail(_open_sharers(proposal))})
     except (NoteError, ProjectStoreError):
         return  # no project open: the Agent log line is the only notice, as before
     note = result["note"]
@@ -8203,6 +8748,60 @@ def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
     return one.agent.id == other.agent.id and one.kind == other.kind and one.target_id == other.target_id
 
 
+def _open_sharers(proposal: AssetProposal, ref: Mapping[str, Any] | None = None) -> list[AssetProposal]:
+    """The same agent's open asks on this proposal's target (given ``ref``, only those under that
+    Update): the asks one asset Update stands for."""
+    return [p for p in asset_proposals.open_list()
+            if isinstance(p, AssetProposal) and p.is_open and _same_asker(p, proposal)
+            and (ref is None or p.update == ref)]
+
+
+def _asset_share_detail(sharers: list[AssetProposal]) -> dict[str, Any]:
+    """PR #204 review 1 MEDIUM-1 (GM, 2026-10-30): what a shared asset Update stands for, so a
+    tab not connected as the person counts and orders it as the connected tab does and nothing
+    moves on the promote: ``asks``, how many open asks share it, and ``firstSince``, the oldest
+    one's createdAt (ms). Kept current wherever an ask joins or leaves it (post, the follow's
+    resolve or retarget, an undo's reopen). Its agent's own asks: nothing it didn't know."""
+    if not sharers:
+        return {}
+    return {"asks": len(sharers), "firstSince": int(min(p.created_at for p in sharers) * 1000)}
+
+
+def _share_reader(proposal: AssetProposal | None, ref: Mapping[str, Any] | None):
+    """The share fields as they are when the notes write runs, not when the caller looked (PR #204
+    round 3: a follow that closed an ask in between already wrote the smaller count). Given no
+    ``proposal``, every open ask under ``ref``."""
+    def read() -> dict[str, Any]:
+        if proposal is None:
+            return _asset_share_detail([p for p in asset_proposals.open_list()
+                                        if isinstance(p, AssetProposal) and p.is_open and p.update == ref])
+        return _asset_share_detail(_open_sharers(proposal, ref))
+    return read
+
+
+def _ref_key(ref: Mapping[str, Any]) -> tuple[str, str]:
+    return (str(ref.get("projectId") or ""), str(ref.get("id") or ""))
+
+
+async def _refresh_asset_update(ref: Mapping[str, Any]) -> None:
+    """The Update reviews the newest of the open asks under it, and its ref says how many share it
+    and the oldest one's time (MEDIUM-1). No write when it already does (retarget_proposal)."""
+    sharers = [p for p in asset_proposals.open_list()
+               if isinstance(p, AssetProposal) and p.is_open and p.update == ref]
+    if not sharers:
+        return
+    newest = max(sharers, key=lambda p: p.created_at)
+    try:
+        result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
+                                         asset_update_detail(newest), asset_update_text(newest),
+                                         _share_reader(None, ref))
+    except (NoteError, ProjectStoreError):
+        return
+    if result is not None and result["projectId"] == _open_project_id():
+        await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
+                                                    ids=[ref["id"]], note=result["note"]))
+
+
 async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
     """Closed proposals: each one's Update says how it ended, unless the same
     agent still has another proposal open on that target (the Update then
@@ -8217,7 +8816,8 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             if waiting:
                 newest = max(waiting, key=lambda p: p.created_at)
                 result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
-                                                 asset_update_detail(newest), asset_update_text(newest))
+                                                 asset_update_detail(newest), asset_update_text(newest),
+                                                 _share_reader(proposal, ref))
                 op, extra = "changed", {}
             else:
                 by = _RESOLVED_BY.get(proposal.status) or (
@@ -8661,7 +9261,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     except ValueError:
         board = None
     if board is None:
-        raise HTTPException(status_code=404, detail=f"No moodboard '{target_id[:40]}' (moodboard_list lists them)")
+        raise HTTPException(status_code=404, detail=f"No moodboard {target_id[:40]} (moodboard_list lists them)")
     if board.get("sendNotes") is True:
         raise HTTPException(status_code=409, detail=(
             f'Send notes to generators is already on for board "{board.get("name")}"; nothing to propose.'))
@@ -9343,12 +9943,35 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# A start refused because a Stop was recorded for its run id (review 17 L4):
+# worded by what this process knows about the id, never more. The registry
+# and the durable guard know only that a Stop was recorded.
+RUN_ID_STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
+RUN_ID_RAN = "run {id} already ran, so this id can’t start again. Start a new run with a new id."
+RUN_ID_STOP_RECORDED = "run {id} was stopped, so this id can’t start again. Start a new run with a new id."
+RUN_ID_STOPPED_BEFORE_START = "run {id} was cancelled before it started"
+
+
+def _stopped_id_refusal(run_id: str) -> str:
+    """Why a start under ``run_id`` is refused when a Stop was recorded for
+    it: the run registered here and was stopped, or ran and ended, or was
+    stopped while this process was admitting its start (it never started).
+    Anything else (a run from before a restart, a pruned record, a Stop for an
+    id never seen) says only that it was stopped."""
+    record = execution_runs.get(run_id)
+    if record is not None:
+        return (RUN_ID_STOPPED if record.status in {"cancelling", "cancelled"} else RUN_ID_RAN).format(id=run_id)
+    if execution_runs.stopped_before_start(run_id):
+        return RUN_ID_STOPPED_BEFORE_START.format(id=run_id)
+    return RUN_ID_STOP_RECORDED.format(id=run_id)
+
+
 def _assert_execution_admissible(run_id: str) -> None:
     """Honor both durable cross-process and local pre-admission Stop intents."""
     try:
         provider_start_guard.assert_run_admissible(run_id)
     except ProviderStartCancelledError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ProviderStartCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartPersistenceError as exc:
@@ -9361,7 +9984,7 @@ def _assert_execution_admissible(run_id: str) -> None:
     try:
         execution_runs.assert_admissible(run_id)
     except ExecutionCancelledBeforeStartError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -9490,7 +10113,7 @@ def _claim_fresh_paid_worldlabs_starts(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ProviderStartConflictError as exc:
         provider_recovery_store.release_reservations(run_id)
-        raise _start_refusal(exc) from exc
+        raise _start_refusal(exc, run_id=run_id) from exc
     except ProviderStartPersistenceError as exc:
         provider_recovery_store.release_reservations(run_id)
         raise RunSafetyStorageRefusal(
@@ -9907,6 +10530,7 @@ def _skip_reply(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
 
 @app.post("/api/execute")
 @graph_write
+@_admits_cinema_renders
 async def execute(request: ExecuteRequest) -> dict:
     _check_workspace_revision()
     _capture_execution_workspace()
@@ -9914,7 +10538,7 @@ async def execute(request: ExecuteRequest) -> dict:
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -9925,6 +10549,8 @@ async def execute(request: ExecuteRequest) -> dict:
     _note_run_nodes(run_id, nodes)
     requested_nodes, requested_edges = nodes, request.edges
     nodes, edges, skips, ready = await _skip_placeholders(run_id, nodes, request.edges)
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
+    _note_scene_renders(run_id, nodes)
     submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
@@ -10042,7 +10668,7 @@ async def execute(request: ExecuteRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
             run_coroutine.close()
@@ -10079,6 +10705,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
 @app.post("/api/execute-node")
 @graph_write
+@_admits_cinema_renders
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     _check_workspace_revision()
@@ -10087,7 +10714,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -10103,13 +10730,15 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     )
 
     if not sub_nodes:
-        raise _node_gone(request.target_node_id, f"Node '{request.target_node_id}' not found in graph")
+        raise _node_gone(request.target_node_id, f"Node {request.target_node_id} not found in graph")
     _note_run_nodes(run_id, sub_nodes)
     requested_nodes, requested_edges = sub_nodes, sub_edges
     # The person running a placeholder directly makes it theirs; an accepted
     # proposal's run (approval_id) is not running it directly.
     sub_nodes, sub_edges, skips, ready = await _skip_placeholders(
         run_id, sub_nodes, sub_edges, direct=request.target_node_id if request.approval_id is None else None)
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
+    _note_scene_renders(run_id, sub_nodes)
     refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
     if refused is not None:
         return refused
@@ -10202,7 +10831,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
@@ -10299,7 +10928,7 @@ async def get_execution_status(run_id: str) -> dict:
         # is tombstoned and can't start here, so it reads as cancelled.
         if execution_runs.tombstoned(run_id):
             return _tombstoned_answer(run_id)
-        raise refusal_copy.not_found(f"run '{run_id}' not found", "run", "runs")
+        raise refusal_copy.not_found(f"run {run_id} not found", "run", "runs")
     return {"runId": run_id, "status": record.status}
 
 
@@ -10611,15 +11240,21 @@ async def _merge_shot_variations(
             return canonical
         params = dict(node.get("params") or {})
         scene = params.get("scene")
+        found = False
         if isinstance(scene, dict):
             for shot in scene.get("shots") or []:
                 if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
                     shot["variations"] = variations
                     shot["selectedVariation"] = 0
                     shot["output"] = dict(canonical)
+                    found = True
                     break
             params["scene"] = scene
             node["params"] = params
+        if not found:
+            # Only its port keeps it: an undo that brings the shot back
+            # adopts it with this batch (_adopt_late_image).
+            _note_late_shot(node_id, shot_id, variations[0]["url"], variations)
         existing = dict(node.get("outputs") or {})
         existing[f"shot_{shot_id}"] = {"type": "Image", "value": variations[0]["url"]}
         node["outputs"] = existing
@@ -10638,7 +11273,7 @@ async def _promote_shot_variation(
         if node is None:
             raise _node_gone(node_id)
         if node.get("definitionId") != "cinema-scene":
-            raise HTTPException(status_code=400, detail=f"Node '{node_id}' is not a cinema-scene node")
+            raise HTTPException(status_code=400, detail=f"Node {node_id} is not a cinema-scene node")
 
         params = dict(node.get("params") or {})
         scene = params.get("scene")
@@ -10654,20 +11289,20 @@ async def _promote_shot_variation(
             None,
         )
         if target_shot is None:
-            raise refusal_copy.not_found(f"Shot '{shot_id}' not found in scene", "shot", "shots")
+            raise refusal_copy.not_found(f"Shot {shot_id} not found in scene", "shot", "shots")
 
         variations = target_shot.get("variations")
         if not isinstance(variations, list) or index >= len(variations):
             raise HTTPException(
                 status_code=400,
-                detail=f"Variation index {index} is not available for shot '{shot_id}'",
+                detail=f"Variation index {index} is not available for shot {shot_id}",
             )
         variation = variations[index]
         image_url = str(variation.get("url") or "") if isinstance(variation, dict) else ""
         if not image_url:
             raise HTTPException(
                 status_code=400,
-                detail=f"Variation index {index} for shot '{shot_id}' has no image URL",
+                detail=f"Variation index {index} for shot {shot_id} has no image URL",
             )
 
         # Replace the canonical output instead of retaining a hash or error from
@@ -10710,6 +11345,7 @@ async def promote_cinema_shot_variation(
 
 @app.post("/api/cinema/generate-shot")
 @graph_write
+@_admits_cinema_renders
 async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     """Regenerate ONLY the named shot of a cinema-scene node.
 
@@ -10723,7 +11359,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     run_id = request.run_id or f"cinema-shot-{uuid4().hex}"
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
-        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+        raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
     # This process saw the start begin (round 17, review 16 L1): a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
@@ -10734,9 +11370,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     target = next((n for n in nodes if n.id == request.node_id), None)
     if target is None:
-        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node {request.node_id} not found in graph")
     if target.definition_id != "cinema-scene":
-        raise HTTPException(status_code=400, detail=f"Node '{request.node_id}' is not a cinema-scene node")
+        raise HTTPException(status_code=400, detail=f"Node {request.node_id} is not a cinema-scene node")
 
     scene = (target.params or {}).get("scene")
     if not isinstance(scene, dict):
@@ -10748,7 +11384,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         None,
     )
     if shot is None:
-        raise refusal_copy.not_found(f"Shot '{request.shot_id}' not found in scene", "shot", "shots")
+        raise refusal_copy.not_found(f"Shot {request.shot_id} not found in scene", "shot", "shots")
 
     # Build a single-shot copy of the scene so the handler regenerates ONLY this
     # shot. The seed is applied per-pass via the shot's `_seedOverride` (which the
@@ -10760,7 +11396,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
-        raise _node_gone(request.node_id, f"Node '{request.node_id}' not found in graph")
+        raise _node_gone(request.node_id, f"Node {request.node_id} not found in graph")
     _note_run_nodes(run_id, sub_nodes)
     # A shot is the person's direct run of the scene (Q133, as /api/execute-node):
     # the placeholders feeding it run and turn normal, a paid one only with the
@@ -10771,6 +11407,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if request.node_id in skips:
         canvas_events.forget_run(run_id)
         return {"status": "skipped", "runId": run_id, **_skip_reply(skips)}
+    # The scenes it renders: what runs, not the placeholders it skips (#198 x #195).
+    _note_scene_renders(run_id, sub_nodes, shot=(request.node_id, request.shot_id))
     refused = await _refuse_unchosen_models(run_id, sub_nodes, sub_edges, api_keys, skips)
     if refused is not None:
         return refused
@@ -10914,7 +11552,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         terminal_fields=terminal_fields,
                         run_id=run_id,
                     )
-                await _broadcast_graph_sync()
+                # The shot's merge is this run's own write-back into the
+                # scene's params: run output, not anyone's edit (review 17 L2).
+                await _broadcast_graph_sync(run_params=run_id)
             finally:
                 await _release_paid_worldlabs_starts(run_id)
                 _settle_hold(run_id)
@@ -10940,7 +11580,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
             run_coroutine.close()
@@ -11064,7 +11704,7 @@ async def get_node(node_id: str) -> dict:
     found = node_lookup.resolve(node_id, all_nodes)
     if found.definition_id is None:
         suggestions = _suggest_node_ids(node_id, all_nodes)
-        head = f"Node '{node_id}' not found"
+        head = f"Node {node_id} not found"
         if len(found.named) > 1:
             head += f": {node_lookup.shared_name_line(node_id, found.named, all_nodes)}"
         if suggestions:
@@ -11150,14 +11790,19 @@ async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
     cleared: bool = False, run_params: str | None = None,
+    dropped_ports: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
 
+    `dropped_ports` (a replacement's lenient read: _stray_port_report) goes in
+    its ``canvas.replaced`` event as ``droppedPorts``.
+
     `run_params` (a run id) marks a run's own param write-back
     (_sync_params_to_cli_graph: a handler that enriches params, such as
-    video-edit). It carries ``runParams`` and no ``edit``: the canvas treats
-    those values as run output, not anyone's edit (round 17 of PR #114,
-    review 16 L3).
+    video-edit; a Cinema shot's merge into its scene; a World Labs recovery
+    checkpoint or start ambiguity). It carries ``runParams`` and no
+    ``edit``: the canvas treats those values as run output, not anyone's
+    edit (round 17 of PR #114, review 16 L3; review 17 L2).
 
     `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
     again at n1 in the same project, so a canvas treats it as a replacement
@@ -11208,6 +11853,11 @@ async def _broadcast_graph_sync(
             summary = f"{verb} project “{project_switch.get('projectName', '')}”"
             if project_switch.get("previousProjectName"):
                 summary += f" (was “{project_switch['previousProjectName']}”)"
+        if dropped_ports:
+            # Shot outputs no shot of the saved scene owns, and their wires,
+            # left out (PR #198 review 5, L3).
+            data["droppedPorts"] = [dict(record) for record in dropped_ports[:20]]
+            summary += f"; left out {len(dropped_ports)} shot output{'' if len(dropped_ports) == 1 else 's'} no shot owns"
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
@@ -11381,7 +12031,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         if not _run_canvas_moved(run_id, "start-ambiguity event"):
             await manager.broadcast(event)
         if run_id is not None:
-            await _broadcast_graph_sync()
+            # The run's own write-back (review 17 L2), as below.
+            await _broadcast_graph_sync(run_params=run_id)
         return
 
     if isinstance(event, ProviderRecoveryEvent):
@@ -11405,7 +12056,10 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         if not _run_canvas_moved(event.run_id or execution_run_id.get(), "recovery event"):
             await manager.broadcast(event)
         if changed or safety_hold_changed:
-            await _broadcast_graph_sync()
+            # The checkpoint is the run's own write-back into the node's
+            # params (resume_operation_id, existing_world_id): run output,
+            # not anyone's edit (review 17 L2).
+            await _broadcast_graph_sync(run_params=event.run_id or execution_run_id.get())
         return
 
     run_id = event.run_id or execution_run_id.get()
@@ -11441,6 +12095,8 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
+    # A scene the engine is done with is free again (review 3, L2).
+    _scene_event_done(event, run_id)
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
     if moved:
@@ -11892,8 +12548,19 @@ def _to_float(v: Any) -> float:
     return value
 
 
-def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
+def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes: bool = True,
+                   reserved_shot_ids: Iterable[str] = ()) -> dict[str, Any]:
     """Coerce param values to the types declared in the node definition.
+
+    A cinema-scene's ``scene`` is filled in here too (services/
+    cinema_scene_spec.py, PR #198 review 2 M2): every write path coerces,
+    so a scene without ``base`` never reaches the graph. ``strict_scenes``
+    only for an agent-authored write (_scene_writes_strict): what can't be
+    filled is refused with the field named (400). Every other path (a
+    saved project, an import, the person's own edits and undo) passes
+    False, and the scene is converted instead, never refused (review 3, H1).
+    ``reserved_shot_ids``: ids a converted shot must not be given (the
+    ``shot_<id>`` ports the node's outputs still hold; review 4, L1).
 
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
@@ -11902,6 +12569,11 @@ def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]
     canonical UI sentinel for "unset/random/inherit"; preserve that sentinel
     instead of attempting ``int("")`` or ``float("")``.
     """
+    try:
+        params = cinema_scene_spec.normalize_params(definition_id, params, strict=strict_scenes,
+                                                    reserved=reserved_shot_ids)
+    except cinema_scene_spec.SceneSpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     defn = node_registry.get(definition_id)
     if not defn:
         return dict(params)
@@ -12066,7 +12738,8 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _validate_params(definition_id, params)
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
-    params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    params = migrate_params(definition_id, _coerce_params(definition_id, params,
+                                                          strict_scenes=_scene_writes_strict()))
     if (not _is_person_request() and universal_ports.is_universal(str(definition_id))
             and universal_ports.model_of(str(definition_id), params)):
         # Anyone but the person (an agent, the unnamed CLI) gets the node
@@ -12109,6 +12782,25 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 @graph_write
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
+    # Fix round 9, L-3: a wire the canvas puts back (Keep mine's shot) into
+    # an input that takes one connection says so: when anything else is
+    # connected there now, nothing is added (409 ``input_taken``), so a
+    # put-back never adds a second connection to a single input or replaces
+    # one someone made since.
+    target_node = cli_graph.nodes.get(body.get("target")) if isinstance(body.get("target"), str) else None
+    # Fix round 10, N-1: only an input that takes one connection is "taken";
+    # one that takes several is held to its maxConnections as any connect is.
+    if body.get("onlyIfFree") is True and target_node is not None and input_takes_one(
+            str(target_node.get("definitionId") or ""), body.get("targetHandle"), target_node.get("params"),
+            node_registry.get_all()):
+        held = [edge for edge in cli_graph.edges
+                if edge.get("target") == body["target"] and edge.get("targetHandle") == body.get("targetHandle")
+                and (edge.get("source"), edge.get("sourceHandle")) != (body.get("source"), body.get("sourceHandle"))]
+        if held:
+            raise _coded(HTTPException(status_code=409, detail=(
+                f"Couldn’t connect to {_quoted(_node_label(body['target']))}, node {body['target']}. "
+                f"Its {body.get('targetHandle')} input is connected to something else now, so nothing was changed.")),
+                "input_taken")
     _validate_connect_handles(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -12186,7 +12878,8 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     _validate_params(definition_id, params)
     _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
-    params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    params = migrate_params(definition_id, _coerce_params(definition_id, params,
+                                                          strict_scenes=_scene_writes_strict()))
     _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
@@ -12410,7 +13103,13 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
 
 @app.get("/api/graph")
 async def get_graph() -> dict:
-    return cli_graph.get_state()
+    state = cli_graph.get_state()
+    # Fix round 8, H2: each Cinema scene's key, which a write sends back as
+    # ifSceneKey; an agent's read is noted (services/scene_keys.py).
+    keys = scene_keys.keys_of(cli_graph.nodes)
+    scope = _scene_scope()
+    scene_keys.note_read(scope, _reader_agent(), keys)
+    return {**state, "sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(scope, keys)} if keys else state
 
 
 _SHOT_MEDIA_FIELDS = ("output", "variations", "selectedVariation")
@@ -12469,12 +13168,28 @@ def _keep_removed_shot_media(graph: CLIGraph, node_id: str, shot_id: str, kept: 
         store.pop(next(iter(store)))
 
 
-def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any]) -> None:
+def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any], *,
+                         returning_media: bool = False, action: str | None = None) -> None:
     """Keep a Cinema scene's runtime media when a write sets its authoring.
 
     Shared by PUT /api/graph/node/{id} and POST /api/graph/restore. Changes
     ``params["scene"]`` in place, and drops the node's outputs and the wires
-    of shots the new scene no longer has (on ``graph``)."""
+    of shots the new scene no longer has (on ``graph``).
+
+    ``returning_media``: the write is an undo the server can trust with media
+    (the person's restore, or an inverse the server kept). A shot the scene
+    doesn't have now comes back with the media it carries, and its port, so
+    undoing a delete (an accepted proposal's, say) never drops an image a run
+    made (PR #198 review 1, M1). Anyone else's returning shot starts idle.
+    Review 2, M1: only a finished shot (``done`` or ``error``) keeps what it
+    carries; one the undo caught rendering comes back idle, never stuck on
+    "Generating…". Its ``shot_<id>`` port is never overwritten: a port still
+    there holds a newer result (a run that landed after the shot was removed),
+    and the shot takes that image as its own.
+
+    A shot that is rendering can't be removed (GM, PR #198 r2: "block it"):
+    the write is refused (409) so nobody's edit orphans a paid run. ``action``:
+    the undo or redo this write is, for the person's line."""
     if node.get("definitionId") != "cinema-scene" or "scene" not in params:
         return
     # Studio/Inspector PUTs carry authoring snapshots captured before
@@ -12495,6 +13210,7 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
         if isinstance(shot, dict) and isinstance(shot.get("id"), str)
     }
+    _refuse_removing_rendering_shots(node_id, node, current_shots, {shot["id"] for shot in shots}, action=action)
     authored_scene = copy.deepcopy(incoming_scene)
     incoming_ids = {shot["id"] for shot in authored_scene["shots"]}
     outputs_before = node.get("outputs") or {}
@@ -12512,9 +13228,39 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
         if kept:
             kept["authoring"] = _shot_authoring(canonical)
             _keep_removed_shot_media(graph, node_id, shot_id, kept)
+    # Merge of PR #198 into #200: a returning shot gets its media back two
+    # ways. A write the server can trust with media (``returning_media``,
+    # PR #198) brings back what it carries; any other write gets what the
+    # server kept when the shot was taken out (PR #200), when its prompt and
+    # settings match. Either way a newer image a run landed after the shot
+    # left (its live ``shot_<id>`` port) wins.
+    returned_ports: dict[str, Any] = {}
     restored_ports: dict[str, Any] = {}
     for shot in authored_scene["shots"]:
         canonical = current_shots.get(shot["id"])
+        kept = graph.removed_shot_media.pop((node_id, shot["id"]), None) if canonical is None else None
+        port = outputs_before.get(f"shot_{shot['id']}") if canonical is None else None
+        newer = port.get("value") if isinstance(port, dict) else None
+        newer = newer if isinstance(newer, str) and newer else None
+        if canonical is None and returning_media and isinstance(shot.get("output"), dict):
+            if newer:
+                # A run landed after the shot left: its image is the newest
+                # result, the port stays, and the shot shows that image.
+                _adopt_late_image(node_id, shot, newer)
+                continue
+            if shot["output"].get("status") in ("done", "error"):
+                # Back as the undo had it: its media, and its port when it has an image.
+                if not isinstance(shot.get("variations"), list):
+                    shot.pop("variations", None)
+                if not isinstance(shot.get("selectedVariation"), int):
+                    shot.pop("selectedVariation", None)
+                image = shot["output"].get("imageUrl")
+                if shot["output"].get("status") == "done" and isinstance(image, str) and image:
+                    returned_ports[f"shot_{shot['id']}"] = {"type": "Image", "value": image}
+                continue
+            # Caught mid-render (the canvas's optimistic mark): idle, as any
+            # returning shot that carries nothing finished, unless the
+            # server kept its media (below).
         for field in _SHOT_MEDIA_FIELDS:
             shot.pop(field, None)
             if canonical is not None and field in canonical:
@@ -12524,12 +13270,15 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
             # and settings match what was taken out (an Undo). A different
             # shot that reuses the id starts idle, and the kept link goes;
             # the generated files stay in the outputs folder either way.
-            kept = graph.removed_shot_media.pop((node_id, shot["id"]), None)
             if kept and kept.get("authoring") == _shot_authoring(shot):
                 for field in _SHOT_MEDIA_FIELDS:
                     if field in kept:
                         shot[field] = kept[field]
-                if "port" in kept:
+                if newer:
+                    # A run landed after the shot left (PR #198): the newer
+                    # image, and the live port stays.
+                    _adopt_late_image(node_id, shot, newer)
+                elif "port" in kept:
                     restored_ports[f"shot_{shot['id']}"] = kept["port"]
             shot.setdefault("output", {"status": "idle"})
     params["scene"] = authored_scene
@@ -12537,8 +13286,9 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     # generation/promotion routes retain their separate media contract.
     valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
     node["outputs"] = {
-        port: output for port, output in outputs_before.items()
-        if not port.startswith("shot_") or port in valid_ports
+        **{port: output for port, output in outputs_before.items()
+           if not port.startswith("shot_") or port in valid_ports},
+        **_normalize_outputs_for_storage(returned_ports),
     }
     node["outputs"].update(restored_ports)
     graph.edges = [edge for edge in graph.edges
@@ -12605,18 +13355,33 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
         if not node:
-            raise _node_gone(node_id)
+            raise _scene_write_gone(node_id)
         params_before = copy.deepcopy(node.get("params") or {})
 
         raw_params = body.get("params", {})
         params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
+        # Fix round 8, H2: a scene write built on a scene that changed since
+        # is refused (services/scene_keys.py): the writer's own ifSceneKey,
+        # else (an agent) the scene it last read.
+        scene_key_before = scene_keys.node_scene_key(node)
+        writing_agent = _reader_agent()
+        # A write whose scene is the one Nebula has changes nothing there,
+        # so it is never refused (fix round 9, L-2).
+        if scene_key_before is not None and "scene" in params and scene_keys.scene_key(params.get("scene")) != scene_key_before:
+            if_key = body.get("ifSceneKey")
+            expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), _writer_chain(), node_id)
+            if expected is not None and expected != scene_key_before:
+                raise _scene_changed_refusal(node_id, node)
         _validate_params(node.get("definitionId", ""), params)
         _refuse_agent_internal_params(params, node_id)
         _check_provider(str(node.get("definitionId") or ""), params, node_id)
         params = migrate_param_update(node.get("definitionId", ""), params_before,
-                                      _coerce_params(node.get("definitionId", ""), params))
+                                      _coerce_params(node.get("definitionId", ""), params,
+                                                     strict_scenes=_scene_writes_strict(),
+                                                     reserved_shot_ids=cinema_scene_spec.shot_port_ids(
+                                                         node.get("outputs"))))
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
@@ -12643,7 +13408,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     candidate.update_params(node_id, params)
                 except ValueError:
-                    raise _node_gone(node_id)
+                    raise _scene_write_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
                     candidate,
                     [candidate.nodes[node_id]],
@@ -12653,7 +13418,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 try:
                     cli_graph.update_params(node_id, params)
                 except ValueError:
-                    raise _node_gone(node_id)
+                    raise _scene_write_gone(node_id)
     # Journaled before any await, so it names the project the change was made
     # in (round 8 of PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
@@ -12668,32 +13433,74 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
         )
     updated = copy.deepcopy(cli_graph.nodes[node_id])
+    scene_key_after = scene_keys.node_scene_key(updated)
+    if scene_key_after is not None:
+        # The key the writer builds its next save on (H2), and who changed it.
+        updated["sceneKey"] = scene_key_after
+        # Fix round 9, H-1: its revision, above every scene before it.
+        updated["sceneRev"] = scene_keys.revision(_scene_scope(), node_id, scene_key_after)
+        scene_keys.note_write(_scene_scope(), node_id, _canvas_change_actor() if scene_key_after != scene_key_before else None,
+                              scene_key_after, writing_agent)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Updated {node_id} params")
-    # What changed, as the card names it (GM - Design, round 16): never the raw keys.
-    # The fields the agent sent (that changed, when any did), not ones a default filled in after.
+    if params:
+        publish_action(f"Updated {node_id} params")
+    # What changed, as the card names it (GM - Design, round 16 of PR #195):
+    # never the raw keys. The fields the agent sent that changed, when any
+    # did, not ones a default filled in after.
     sent = [str(key) for key in params]
     keys = [key for key in sent if key in set((changes or {}).get("keys") or [])] or sent
-    if keys:
-        say, log = _set_words(node_id, keys)
-        await _show_agent({"nodeId": node_id}, say=say, log=log, did=_did("Changed", node_id))
-    else:
-        await _show_agent({"nodeId": node_id}, say=f"Updated {_quoted(_node_label(node_id))}", did=_did("Changed", node_id))
+    # The bubble's words are worked out inside _show_agent's guard (PR #198
+    # review 1 N2): a failure there never turns this saved PUT into a 500.
+    # An empty change says nothing and logs nothing: the cursor only moves
+    # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
+    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
+                      did=_did("Changed", node_id) if keys else None)
     return updated
+
+
+def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
+    """The cursor bubble and the Agent log line for an agent's param change
+    (say, log): _set_words over the fields a card or a configured model
+    names. A universal node's provider param that nothing names (FAL's,
+    OpenRouter's, Nous's extra params: no Inspector control shows them) is
+    never named by its key; when the change is only those, the bubble says
+    nothing and the log counts them on the node: "Changed a setting on
+    “<node>”", "Changed 3 settings on “<node>”" (GM, PR #198 r1 item 7)."""
+    keys = [str(key) for key in keys]
+    node = cli_graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    unnamed: list[str] = []
+    if definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION and definition_id != "replicate-universal":
+        definition = node_registry.get(definition_id) or {}
+        known = {str(param.get("key")) for param in [*node_route.all_param_definitions(definition),
+                                                     *(node.get("dynamicParams") or [])]
+                 if isinstance(param, Mapping)}
+        unnamed = [key for key in keys if key not in known]
+    named = [key for key in keys if key not in unnamed]
+    if named:
+        return _set_words(node_id, named)
+    count = len(unnamed)
+    what = "a setting" if count == 1 else f"{count} settings"
+    return "", f"Changed {what} on {_quoted(_node_label(node_id))}"
 
 
 def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | None, key: str) -> str | None:
     """The label the node's card shows for the field ``key``: the definition's
     own param label (node_route.all_param_definitions, the list the
     Inspector draws from), else a configured model's own field (a universal
-    node's ``dynamicParams``). None for a field the card never shows (a
-    hidden one, or one no definition names)."""
+    node's ``dynamicParams``), else for a Replicate node a setting its picker
+    read, by its key in sentence case as the Inspector shows it
+    (universal_ports.setting_label; GM, PR #198 r1 item 7: "Set “Guidance
+    scale”"). None for a field the card never shows (a hidden one, or one no
+    definition names)."""
     for param in [*node_route.all_param_definitions(definition or {}),
                   *((node or {}).get("dynamicParams") or [])]:
         if not isinstance(param, Mapping) or param.get("key") != key:
             continue
         label = str(param.get("label") or "").strip()
         return None if param.get("hidden") or not label else label
+    if str((node or {}).get("definitionId") or "") == "replicate-universal" and not key.startswith("_"):
+        return universal_ports.setting_label(key)
     return None
 
 
@@ -12927,19 +13734,19 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         if node_id not in cli_graph.nodes:
             raise _node_gone(node_id)
         if not isinstance(raw_position, dict):
-            raise HTTPException(status_code=400, detail=f"Position for '{node_id}' must be an object")
+            raise HTTPException(status_code=400, detail=f"Position for {node_id} must be an object")
         try:
             x = float(raw_position["x"])
             y = float(raw_position["y"])
         except (KeyError, TypeError, ValueError):
             raise HTTPException(
                 status_code=400,
-                detail=f"Position for '{node_id}' requires numeric x and y",
+                detail=f"Position for {node_id} requires numeric x and y",
             )
         if not math.isfinite(x) or not math.isfinite(y):
             raise HTTPException(
                 status_code=400,
-                detail=f"Position for '{node_id}' requires finite x and y",
+                detail=f"Position for {node_id} requires finite x and y",
             )
         normalized[node_id] = {"x": x, "y": y}
 
@@ -13047,6 +13854,7 @@ async def clear_graph(force: bool = False) -> dict:
         # revision. The epoch moves once per clear.
         _forget_canvas_undo("the canvas was cleared since")
         cli_graph.clear()
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
@@ -13207,16 +14015,62 @@ def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
 def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
     """404 for a node that isn't on the canvas: GM's line for the person
     (approved round 3), the id for agents."""
-    return _node_refusal(404, specific or f"Node '{node_id}' not found", NODE_GONE_PERSON)
+    return _node_refusal(404, specific or f"Node {node_id} not found", NODE_GONE_PERSON)
 
 
-def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
-    """Refuse (409) to delete a node that still carries World Labs paid state.
+def _scene_write_gone(node_id: str) -> CodedRefusal:
+    """PR #198 fix round 12 (GM r20 answer 3): a node write to a node that
+    isn't on the canvas, coded ``node_gone`` with ``deletedBy``: who deleted
+    it when Nebula saw the delete (``{kind, name}``, as ``changedBy``), else
+    null. The person's canvas names them once and stops saving it."""
+    try:
+        deleted_by = scene_keys.deleted_by(_scene_scope(), node_id)
+    except Exception:  # noqa: BLE001 - the refusal itself never fails over its extras
+        deleted_by = None
+    return _coded(_node_gone(node_id), "node_gone", deletedBy=deleted_by)
+
+
+def _note_restored_scenes(node_ids: Iterable[str], keys_before: Mapping[str, str | None]) -> None:
+    """``_restore_graph``'s scenes whose authoring it changed: who wrote
+    them (``scene_keys.note_write``), and that the restoring agent knows
+    them now. Call right after the commit. Never fails."""
+    try:
+        scope = _scene_scope()
+        actor = _canvas_change_actor()
+        reader = _reader_agent()
+        for node_id in node_ids:
+            key = scene_keys.node_scene_key(cli_graph.nodes.get(node_id))
+            if key is not None and key != keys_before.get(node_id):
+                scene_keys.note_write(scope, node_id, actor, key, reader)
+    except Exception:  # noqa: BLE001 - changedBy then names the writer before
+        return
+
+
+def _note_scene_deletes(removed: Sequence[Mapping[str, Any]]) -> None:
+    """Who deleted each Cinema scene in ``removed`` (dicts with ``id`` and
+    ``definitionId``), for a save of it that comes after (_scene_write_gone).
+    Call right after the commit, before any await. Never fails."""
+    try:
+        scenes = [str(gone["id"]) for gone in removed if gone.get("definitionId") == "cinema-scene"]
+        if not scenes:
+            return
+        scope = _scene_scope()
+        actor = _canvas_change_actor()
+        for node_id in scenes:
+            scene_keys.note_delete(scope, node_id, actor)
+    except Exception:  # noqa: BLE001 - a later 404 then says deletedBy null
+        return
+
+
+def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | None = None) -> None:
+    """Refuse (409) to delete a node that still carries World Labs paid state,
+    or a Cinema scene one of whose shots is rendering (GM, PR #198 r3).
 
     Call inside _paid_graph_mutation so no paid start can land in between.
     The person reads _paid_state_person for the record that holds it; an
-    agent reads the node's id.
+    agent reads the node's id. ``action``: the undo or redo deleting it.
     """
+    _refuse_deleting_rendering_scene(node_id, node, action=action)
     try:
         active = provider_start_guard.has_active_node(node_id)
     except ValueError as exc:
@@ -13263,6 +14117,7 @@ async def delete_graph_node(node_id: str) -> dict:
             cli_graph.remove_node(node_id)
         except ValueError:
             raise _node_gone(node_id)
+        _note_scene_deletes([{"id": node_id, "definitionId": removed_definition}])
     entries = _remove_side_effects(
         [{"id": node_id, "name": label, "definitionId": removed_definition, "position": removed_position}],
         lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
@@ -13601,6 +14456,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             [candidate.nodes[node_id] for node_id in touched],
             source="agent-edit",
         )
+        _note_scene_deletes(removed)
 
     edit_link = _canvas_edit_link.set({"id": canvas_undo_book.new_id()})
     # Before any await: a request that lands while this one broadcasts is not part of this edit.
@@ -13904,7 +14760,7 @@ async def _restore_graph(
             node = candidate.nodes.get(node_id)
             if node is None:
                 continue
-            _ensure_node_deletable(node_id, node)
+            _ensure_node_deletable(node_id, node, action=action)
             removed.append({
                 "id": node_id,
                 "name": _node_label(node_id),
@@ -13916,8 +14772,15 @@ async def _restore_graph(
         for index, raw in enumerate(raw_nodes):
             node_id = raw["id"]
             current = candidate.nodes.get(node_id)
+            # An undo puts back what the canvas held: a scene is converted,
+            # never refused (PR #198 review 3, H1).
+            # A scene put back keeps a removed shot's late image (its port
+            # with no shot), as the live node had it, so undoing the shot's
+            # removal next takes that image (_adopt_late_image; review 5, L3).
             definition_id, params, position, outputs, label = _validated_ingress_node(
-                raw, index, include_outputs=current is None,
+                raw, index, include_outputs=current is None, strict_scenes=False,
+                reserved_shot_ids=cinema_scene_spec.shot_port_ids((current or {}).get("outputs")),
+                keep_unowned_shot_ports=True,
             )
             if node_id not in trusted:
                 _refuse_agent_internal_params(params, node_id)
@@ -13951,7 +14814,8 @@ async def _restore_graph(
                     kept = _kept_paper_source(params_before, params)
                     if kept is not None:
                         params["_paperSource"] = kept
-                _author_cinema_scene(candidate, node_id, current, params)
+                _author_cinema_scene(candidate, node_id, current, params,
+                                     returning_media=node_id in trusted or _is_person_request(), action=action)
                 _keep_recovery_checkpoint(current, params)
                 if node_id not in trusted:
                     billing.append((node_id, definition_id, params_before, params))
@@ -14019,11 +14883,17 @@ async def _restore_graph(
         # person's Cmd+Z never is refused (the check skips the person).
         _refuse_agent_growth_past_save_limit(candidate)
         touched = sorted(set(added) | set(changed))
+        scene_keys_before = {node_id: scene_keys.node_scene_key(cli_graph.nodes.get(node_id)) for node_id in touched}
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in touched],
             source="restore",
         )
+        _note_scene_deletes(removed)
+        # Review 11, L-1: a restore authors the scenes it puts back or sets
+        # like any write: a refusal after it names the restoring actor
+        # (changedBy), never the writer from before it.
+        _note_restored_scenes(touched, scene_keys_before)
     # A swapped id now holds another node, which never failed here. A node
     # put back under its own id keeps its error, as the canvas's undo does.
     for node_id in {gone["id"] for gone in removed} & set(added):
@@ -14438,21 +15308,21 @@ async def get_node_image_path(node_id: str) -> dict:
     """
     node = cli_graph.nodes.get(node_id)
     if not node:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
     url = _resolve_primary_image_url(node)
     if url is None:
         _raise_last_run_failed(node_id)
         raise HTTPException(
             status_code=400,
-            detail=f"No image file for node '{node_id}'",
+            detail=f"No image file for node {node_id}",
         )
 
     local_path = _url_to_output_path(url)
     if local_path is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Image for node '{node_id}' is not local (external URL)",
+            detail=f"Image for node {node_id} is not local (external URL)",
         )
     return {"path": str(local_path.resolve())}
 
@@ -14466,7 +15336,7 @@ def _preview_port(node_id: str, outputs: dict[str, Any], port: str | None) -> tu
         entry = outputs.get(port)
         if not isinstance(entry, dict):
             have = ", ".join(sorted(outputs)) or "none yet"
-            raise HTTPException(status_code=404, detail=f"{node_id} has no output '{port}' (outputs: {have}).")
+            raise HTTPException(status_code=404, detail=f"{node_id} has no output {port} (outputs: {have}).")
         return port, entry
     candidates = [(name, entry) for name, entry in outputs.items()
                   if isinstance(entry, dict) and entry.get("value") not in (None, "", [])]
@@ -14507,7 +15377,7 @@ async def preview_node_output(node_id: str, port: str | None = None, size: str =
     Only files in Nebula's outputs are read; external URLs are never fetched."""
     node = cli_graph.nodes.get(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
     if size not in output_preview.SIZES:
         raise HTTPException(status_code=400, detail=f"size must be one of {', '.join(output_preview.SIZES)}")
     name, entry = _preview_port(node_id, node.get("outputs") or {}, port)
@@ -14754,8 +15624,15 @@ def _refuse_unknown_definition(definition_id: Any) -> None:
     can't change when names do; the refusal names the node the text is the
     name of ("did you mean nebula-moodboard (Moodboard)?")."""
     if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
-        raise HTTPException(status_code=400,
-                            detail=node_lookup.unknown_definition(str(definition_id), node_registry.get_all()))
+        # GM #198 r23 answer 3: no value (missing, null, empty) is GM's own
+        # line for the person ("No node definition was given."); an agent's
+        # detail keeps the raw value (`unknown node definition ""`), and the
+        # answer the code and the raw value.
+        raw = definition_id if isinstance(definition_id, str) else "" if definition_id is None else str(definition_id)
+        specific = node_lookup.unknown_definition(raw, node_registry.get_all())
+        refused = (refusal_copy.refusal(400, specific, node_lookup.NO_DEFINITION, route="canvas") if not raw.strip()
+                   else HTTPException(status_code=400, detail=specific))
+        raise _coded(refused, "unknown_definition", definitionId=raw)
 
 
 def _validated_ingress_node(
@@ -14764,10 +15641,27 @@ def _validated_ingress_node(
     *,
     include_outputs: bool,
     normalize_image_inputs: bool = True,
+    strict_scenes: bool = True,
+    reserved_shot_ids: Iterable[str] = (),
+    port_report: dict[str, Any] | None = None,
+    keep_unowned_shot_ports: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, str | None]:
     """Validate one ingress node: (definitionId, params, position, outputs, custom label).
 
-    Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore."""
+    Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore.
+    A shot id made up for a scene's shot is never one a ``shot_<id>`` port
+    names: the node's own outputs, or ``reserved_shot_ids`` (the live node's,
+    for a restore; review 4, L1).
+
+    A scene read leniently with outputs (PR #198 review 5, L3): a port a
+    renumbered shot owned (its image is the port's value) moves to that
+    shot's new id (cinema_scene_spec.claim_stray_ports); ``port_report``
+    gets ``rekeyed`` ({old handle: new}) so the caller re-points its wires,
+    and ``dropped`` (the ``shot_<id>`` ports no shot owns, left out) so it
+    can say so. ``keep_unowned_shot_ports`` (a restore: the canvas putting
+    back a node it held) keeps such a port when it is an image instead: a
+    removed shot's late image, which a later undo that brings the shot back
+    takes (_adopt_late_image)."""
     definition_id = raw.get("definitionId")
     if not isinstance(definition_id, str) or not definition_id:
         raise HTTPException(
@@ -14786,7 +15680,8 @@ def _validated_ingress_node(
     definition_id, params, retired_label = migrate_node(definition_id, params)
     _refuse_unknown_definition(definition_id)
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = _coerce_params(definition_id, params, strict_scenes=strict_scenes, reserved_shot_ids=(
+        cinema_scene_spec.shot_port_ids(raw.get("outputs")) | set(reserved_shot_ids)))
     if definition_id == "image-input" and normalize_image_inputs:
         params = _normalize_image_input_params(params)
 
@@ -14819,6 +15714,24 @@ def _validated_ingress_node(
                 status_code=400,
                 detail=f"nodes[{index}].outputs must be an object",
             )
+        late_ports: dict[str, Any] = {}
+        if not strict_scenes and definition_id == "cinema-scene":
+            # Saved data is converted, never refused (review 3, H1): a port
+            # no shot of the scene owns any more (a removed shot's late
+            # image) is left out instead of failing the whole graph, and no
+            # converted shot took it over (reserved above; review 4, L1).
+            # A renumbered shot's own port moves to its new id first (L3).
+            claimed = cinema_scene_spec.claim_stray_ports(raw.get("params"), params, raw_outputs)
+            raw_outputs = cinema_scene_spec.rekeyed_outputs(raw_outputs, claimed)
+            owned = {f"shot_{shot_id}" for shot_id in cinema_scene_spec.scene_shot_ids(params)}
+            stray = [handle for handle in raw_outputs
+                     if isinstance(handle, str) and handle.startswith("shot_") and handle not in owned]
+            if keep_unowned_shot_ports:
+                late_ports = {handle: raw_outputs[handle] for handle in stray if _is_late_image_port(raw_outputs[handle])}
+            raw_outputs = {handle: port for handle, port in raw_outputs.items() if handle not in stray}
+            if port_report is not None:
+                port_report["rekeyed"] = claimed
+                port_report["dropped"] = [handle for handle in stray if handle not in late_ports]
         try:
             _validate_imported_outputs(
                 definition_id,
@@ -14827,6 +15740,8 @@ def _validated_ingress_node(
                 params=params,
             )
             outputs = _normalize_outputs_for_storage(raw_outputs)
+            if late_ports:
+                outputs.update(_normalize_outputs_for_storage(late_ports))
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
@@ -14843,8 +15758,16 @@ def _stage_graph_nodes(
     reference_key: str,
     include_outputs: bool,
     normalize_image_inputs: bool = True,
+    strict_scenes: bool = True,
+    port_reports: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, str]:
-    """Validate and add ingress nodes to a persistence-free candidate graph."""
+    """Validate and add ingress nodes to a persistence-free candidate graph.
+    ``strict_scenes`` only for an agent-authored write (a proposal, edit_canvas,
+    an agent's cluster); saved data (a project, a graph file, an import) is
+    converted instead (services/cinema_scene_spec.py, PR #198 review 3 H1).
+    ``port_reports`` gets, by new node id, each scene's re-keyed and dropped
+    shot ports (_validated_ingress_node) and its name, for
+    _stage_graph_edges and _stray_port_report."""
     id_map: dict[str, str] = {}
     for index, raw in enumerate(raw_nodes):
         reference = raw.get(reference_key)
@@ -14858,8 +15781,10 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"duplicate node reference '{reference}'",
             )
+        report: dict[str, Any] = {}
         definition_id, params, position, outputs, label = _validated_ingress_node(
             raw, index, include_outputs=include_outputs, normalize_image_inputs=normalize_image_inputs,
+            strict_scenes=strict_scenes, port_report=report,
         )
         try:
             new_id = candidate.add_node(
@@ -14875,8 +15800,148 @@ def _stage_graph_nodes(
             ) from exc
         if label:
             candidate.nodes[new_id]["label"] = label
+        if port_reports is not None and (report.get("rekeyed") or report.get("dropped")):
+            port_reports[new_id] = {**report, "name": _ingress_node_name(definition_id, label), "wires": {}}
         id_map[reference] = new_id
     return id_map
+
+
+def _ingress_node_name(definition_id: str, label: str | None) -> str:
+    """A staged node's name as its card shows it: its own label, else its
+    model's name (the node isn't on the canvas yet: _node_label can't)."""
+    return label or str((node_registry.get(definition_id) or {}).get("displayName") or definition_id)
+
+
+def _is_late_image_port(port: Any) -> bool:
+    """A ``shot_<id>`` port a restore may keep with no shot owning it: an
+    image a run left (CLIGraph keeps one for _adopt_late_image)."""
+    return (isinstance(port, dict) and port.get("type") == "Image"
+            and isinstance(port.get("value"), str) and bool(port["value"]))
+
+
+# What loading a file or opening a project dropped (PR #198 review 5, L3), in
+# GM's words (pr198 r8, verbatim): "Removed the connection to shot port <port>
+# on “Scene”, node n4. That shot no longer exists." and its plural; opening a
+# project (the load case) adds "while loading the project" before the period.
+# One line per node. They go in the answer's ``warnings`` (the canvas shows
+# "Opened." with them; agents read them in the import, load and open answers)
+# and the Agent log.
+STRAY_SHOT_CONNECTION = ("Removed the connection to shot port {port} on \u201c{node}\u201d, node {node_id}{loading}. "
+                         "That shot no longer exists.")
+STRAY_SHOT_CONNECTIONS_ONE_PORT = ("Removed {count} connections to shot port {port} on \u201c{node}\u201d, "
+                                   "node {node_id}{loading}. That shot no longer exists.")
+STRAY_SHOT_CONNECTIONS = ("Removed {count} connections to shot ports on {where}{loading}. "
+                          "Those shots no longer exist.")
+STRAY_SHOT_LOADING = " while loading the project"
+
+
+def stray_shot_line(node: str, node_id: str, ports: list[str], connections: int, *, loading: bool = False) -> str | None:
+    """GM's line for one node's connections from ``shot_<id>`` ports no shot
+    owns (``ports``, by handle; the line names the shot's id). None when no
+    connection was removed: a port with nothing connected changes nothing the
+    person sees, and stays in ``droppedPorts`` for agents."""
+    if connections <= 0:
+        return None
+    tail = STRAY_SHOT_LOADING if loading else ""
+    named = sorted({port[5:] if port.startswith("shot_") else port for port in ports})
+    if connections == 1:
+        return STRAY_SHOT_CONNECTION.format(port=named[0], node=node, node_id=node_id, loading=tail)
+    if len(named) == 1:
+        return STRAY_SHOT_CONNECTIONS_ONE_PORT.format(count=connections, port=named[0], node=node, node_id=node_id,
+                                                      loading=tail)
+    return STRAY_SHOT_CONNECTIONS.format(count=connections, where=f"\u201c{node}\u201d, node {node_id}", loading=tail)
+
+
+def quoted_overflow(names: list[str], cap: int = 3) -> str:
+    """GM's Agent log overflow (pr198 r8): "“A”, “B”, “C” and 4 more", with no
+    serial comma; up to ``cap`` names, all of them named."""
+    quoted = [f"\u201c{name}\u201d" for name in names]
+    if len(quoted) > cap:
+        return f"{', '.join(quoted[:cap])} and {len(quoted) - cap} more"
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
+def _note_stray_wire(port_reports: dict[str, dict[str, Any]] | None, source: str, handle: str, name: str) -> None:
+    """Count a saved wire left out because no shot owns its port."""
+    if port_reports is None:
+        return
+    report = port_reports.setdefault(source, {"rekeyed": {}, "dropped": [], "wires": {}, "name": name})
+    report.setdefault("wires", {})
+    report["wires"][handle] = report["wires"].get(handle, 0) + 1
+
+
+def _stray_nodes(port_reports: Mapping[str, Mapping[str, Any]]) -> list[tuple[str, str, list[str], list[tuple[str, bool, int]]]]:
+    """(node id, name, every handle left out, [(handle, was a port, connections)])
+    per node, in the order the nodes were staged."""
+    nodes = []
+    for node_id, report in port_reports.items():
+        wires = dict(report.get("wires") or {})
+        dropped = list(report.get("dropped") or [])
+        handles = [*dropped, *[handle for handle in wires if handle not in dropped]]
+        if handles:
+            nodes.append((node_id, str(report.get("name") or node_id), handles,
+                          [(handle, handle in dropped, int(wires.get(handle, 0))) for handle in handles]))
+    return nodes
+
+
+def _stray_port_report(port_reports: Mapping[str, Mapping[str, Any]], *, loading: bool = False
+                       ) -> tuple[list[str], list[dict[str, Any]]]:
+    """(warning lines, journal records {nodeId, handle, port, connections}):
+    every ``shot_<id>`` port, and every wire from one, a lenient read left
+    out (L3). A line per node that lost a connection (GM, pr198 r8); a record
+    per port or wire."""
+    lines: list[str] = []
+    records: list[dict[str, Any]] = []
+    for node_id, name, handles, parts in _stray_nodes(port_reports):
+        connected = [handle for handle, _port, connections in parts if connections > 0]
+        line = stray_shot_line(name, node_id, connected, sum(connections for _h, _p, connections in parts), loading=loading)
+        if line:
+            lines.append(line)
+        records.extend({"nodeId": node_id, "handle": handle, "port": port, "connections": connections}
+                       for handle, port, connections in parts)
+    return lines, records
+
+
+_STRAY_PORT_LOG_LINES = 5
+
+
+def _stray_log_lines(port_reports: Mapping[str, Mapping[str, Any]], *, loading: bool = False) -> list[str]:
+    """The Agent log's lines for what a load or open dropped: a node's line
+    each, up to five, then one line for the rest that names them in GM's
+    overflow form ("on “A”, “B”, “C” and 4 more")."""
+    nodes = [(node_id, name, [handle for handle, _port, connections in parts if connections > 0],
+              sum(connections for _h, _p, connections in parts))
+             for node_id, name, _handles, parts in _stray_nodes(port_reports)]
+    nodes = [node for node in nodes if node[3] > 0]
+    shown = nodes if len(nodes) <= _STRAY_PORT_LOG_LINES else nodes[:_STRAY_PORT_LOG_LINES]
+    said = [line for node_id, name, ports, count in shown
+            if (line := stray_shot_line(name, node_id, ports, count, loading=loading))]
+    rest = nodes[len(shown):]
+    if rest:
+        said.append(STRAY_SHOT_CONNECTIONS.format(
+            count=sum(count for *_rest, count in rest), where=quoted_overflow([name for _id, name, _ports, _count in rest]),
+            loading=STRAY_SHOT_LOADING if loading else ""))
+    return said
+
+
+async def _say_stray_ports(lines: list[str]) -> None:
+    """The Agent log's lines (_stray_log_lines) for what an agent's load or
+    open dropped (a no-op for the person's own request, who reads them in the
+    notice)."""
+    for line in lines:
+        await _say_agent_action(line)
+
+
+def _orphaned_shot_wire(graph: CLIGraph, source: str, source_handle: str) -> bool:
+    """A saved wire from a Cinema scene's ``shot_<id>`` port that no shot of
+    the scene owns (a removed shot's): saved data is converted, never refused
+    (review 3, H1), so it is left out with the port (review 4, L1), and said
+    (_note_stray_wire; review 5, L3). A renumbered shot's port was re-keyed
+    before this is asked, so its wires aren't."""
+    node = graph.nodes.get(source) or {}
+    if node.get("definitionId") != "cinema-scene" or not source_handle.startswith("shot_"):
+        return False
+    return source_handle[5:] not in cinema_scene_spec.scene_shot_ids(node.get("params"))
 
 
 def _stage_graph_edges(
@@ -14885,9 +15950,12 @@ def _stage_graph_edges(
     id_map: dict[str, str],
     *,
     saved: bool = False,
+    port_reports: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
     """Validate every endpoint/handle before adding any edge to live state.
-    ``saved``: the edges come from a saved graph (_validate_connect_handles)."""
+    ``saved``: the edges come from a saved graph (_validate_connect_handles).
+    ``port_reports`` (_stage_graph_nodes): a wire from a re-keyed port goes
+    to its new handle, and one left out is counted there."""
     edge_ids: list[str] = []
     seen: set[tuple[str, str, str, str]] = set()
     for index, raw in enumerate(raw_edges):
@@ -14912,10 +15980,16 @@ def _stage_graph_edges(
             )
         source = id_map[source_ref]
         target = id_map[target_ref]
+        source_handle = ((port_reports or {}).get(source) or {}).get("rekeyed", {}).get(source_handle, source_handle)
         signature = (source, source_handle, target, target_handle)
         if signature in seen:
             raise HTTPException(status_code=400, detail=f"duplicate edge at edges[{index}]")
         seen.add(signature)
+        if saved and _orphaned_shot_wire(candidate, source, source_handle):
+            _note_stray_wire(port_reports, source, source_handle,
+                             _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
+                                                candidate.nodes[source].get("label")))
+            continue
         _validate_connect_handles(
             source,
             source_handle,
@@ -14973,16 +16047,25 @@ async def import_graph(body: dict[str, Any]) -> dict:
     raw_nodes, raw_edges, warnings, folded = _migrate_ingress(raw_nodes, raw_edges, reference_key="id")
     if version is not None:
         upgrade_flat_nodes(raw_nodes, version)
+    # A graph file is saved data: its scenes are converted, never refused
+    # (PR #198 review 3, H1).
+    port_reports: dict[str, dict[str, Any]] = {}
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
         reference_key="id",
         include_outputs=True,
+        strict_scenes=False,
+        port_reports=port_reports,
     )
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
-    _stage_graph_edges(candidate, raw_edges, id_map, saved=True)
+    _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
+    # What the scenes' lenient read left out (PR #198 review 5, L3): said in
+    # the warnings, the canvas.replaced event and the Agent log.
+    stray_lines, stray_ports = _stray_port_report(port_reports)
+    warnings = [*warnings, *stray_lines]
     if body.get("refuseOverSaveLimit") is True:
         _refuse_graph_over_save_limit_on_its_own(candidate)
     # The person's Load graph opens a file of any size (Q118); anyone else's
@@ -14997,13 +16080,12 @@ async def import_graph(body: dict[str, Any]) -> dict:
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active():
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot replace the graph while a run is active. "
-                    "Stop the run and wait for its terminal state first."
-                ),
-            )
+            # The person reads the line Clear has (review 4, N2); agents keep
+            # the specific one.
+            raise refusal_copy.refusal(409, (
+                "Cannot replace the graph while a run is active. "
+                "Stop the run and wait for its terminal state first."
+            ), CLEAR_DURING_RUN_PERSON, route="canvas")
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
         # The canvas revision moves first, on disk too (round 20, M2: a crash
@@ -15022,11 +16104,14 @@ async def import_graph(body: dict[str, Any]) -> dict:
             raise
         _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again",
                             advance=False)
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         # Ids start again under this project: no node now is one a restore
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True,
+                                          **({"dropped_ports": stray_ports} if stray_ports else {}))
+    await _say_stray_ports(_stray_log_lines(port_reports))
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )
@@ -15039,7 +16124,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         "nodes": exported["nodes"],
         "edges": exported["edges"],
         # What loading changed that the person should know (a folded Krea
-        # node's dropped job-output connections).
+        # node's dropped job-output connections, a scene's shot output no
+        # shot owns and its connections).
         "warnings": warnings,
     }
 
@@ -15113,6 +16199,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             raw_nodes,
             reference_key="tempId",
             include_outputs=False,
+            strict_scenes=_scene_writes_strict(),
         )
         _refuse_agent_billing_change(
             (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
@@ -15342,7 +16429,9 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
                             ingress: _IngressVerdict | None = None,
-                            size_checked: bool = True) -> tuple[dict[str, Any], CLIGraph]:
+                            size_checked: bool = True,
+                            dropped_ports: list[dict[str, Any]] | None = None,
+                            stray_log: list[str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -15356,6 +16445,11 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     keeps the live canvas in the project it leaves), and it opens, so the
     canvas can pause saving it until the person trims it (Q118), instead of
     the project never opening again.
+    A scene's shot port a renumbered shot owned moves to its new id, with its
+    wires; a ``shot_<id>`` port no shot owns, and its wires, are left out,
+    each said in ``warnings`` and listed in ``dropped_ports`` (PR #198 review
+    5, L3; _stray_port_report), in GM's load-case line ("…while loading the
+    project."); ``stray_log`` gets the Agent log's lines (_stray_log_lines).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -15403,6 +16497,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                    "nodes": copy.deepcopy(nodes), "edges": copy.deepcopy(edges)})
     candidate = CLIGraph()
     known: set[str] = set()
+    port_reports: dict[str, dict[str, Any]] = {}
     for index, node in enumerate(nodes):
         node_id = node.get("id")
         if not isinstance(node_id, str) or not 0 < len(node_id) <= 256 or node_id in candidate.nodes:
@@ -15425,11 +16520,15 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail=f"nodes[{index}] requires a finite position")
         isolated = CLIGraph()
         if node_registry.get(migrate_node(definition_id, params)[0]) is not None:
+            reports: dict[str, dict[str, Any]] = {}
             staged = _stage_graph_nodes(isolated, [{
                 "id": node_id, "definitionId": definition_id, "params": params,
                 "outputs": outputs, "position": position, "label": data.get("label"),
-            }], reference_key="id", include_outputs=True, normalize_image_inputs=False)
+            }], reference_key="id", include_outputs=True, normalize_image_inputs=False,
+                strict_scenes=False, port_reports=reports)
             staged_node = isolated.nodes[staged[node_id]]
+            if staged[node_id] in reports:
+                port_reports[node_id] = reports[staged[node_id]]
             known.add(node_id)
         elif (historical or {}).get(node_id) == definition_id:
             if any(not isinstance(port, dict) or not isinstance(port.get("type"), str) for port in outputs.values()):
@@ -15438,7 +16537,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             if isinstance(data.get("label"), str) and data["label"].strip():
                 staged_node["label"] = " ".join(data["label"].split())[:MAX_NODE_LABEL_LENGTH]
         else:
-            raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition '{definition_id}'")
+            raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition {definition_id}")
         staged_node["id"] = node_id
         # An agent's placeholder (Q125 item 3) stays one across a save and a
         # reopen; a malformed flag loads as a normal node. Saves of the live
@@ -15463,6 +16562,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
 
     edge_ids: set[str] = set()
     signatures: set[tuple[str, str, str, str]] = set()
+    dropped_edges: set[int] = set()
     for index, edge in enumerate(edges):
         edge_id = edge.get("id")
         if not isinstance(edge_id, str) or not 0 < len(edge_id) <= 256 or edge_id in edge_ids:
@@ -15474,13 +16574,33 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         source, source_handle, target, target_handle = values
         if source not in candidate.nodes or target not in candidate.nodes:
             raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
+        rekeyed = (port_reports.get(source) or {}).get("rekeyed", {}).get(source_handle)
+        if rekeyed:
+            # The renumbered shot's port moved: its wire follows (L3).
+            source_handle = rekeyed
+            result["edges"][index]["sourceHandle"] = rekeyed
         signature = (source, source_handle, target, target_handle)
         if signature in signatures:
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
+        if _orphaned_shot_wire(candidate, source, source_handle):
+            dropped_edges.add(index)
+            _note_stray_wire(port_reports, source, source_handle,
+                             _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
+                                                candidate.nodes[source].get("label")))
+            continue
         if source in known and target in known:
             _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
+    if dropped_edges:
+        result["edges"] = [edge for index, edge in enumerate(result["edges"]) if index not in dropped_edges]
+    stray_lines, stray_records = _stray_port_report(port_reports, loading=True)
+    if warnings is not None:
+        warnings.extend(stray_lines)
+    if dropped_ports is not None:
+        dropped_ports.extend(stray_records)
+    if stray_log is not None:
+        stray_log.extend(_stray_log_lines(port_reports, loading=True))
     try:
         graph_nodes, graph_edges = candidate.to_execute_format()
         topological_sort([GraphNode.model_validate(node) for node in graph_nodes], [GraphEdge.model_validate(edge) for edge in graph_edges])
@@ -16125,6 +17245,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
     # In the step that made it, before any await (round 8 of PR #114); its
     # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
     _journal_project_change("project.created", project)
@@ -16203,8 +17324,11 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
         warnings: list[str] = []
+        dropped_ports: list[dict[str, Any]] = []
+        stray_log: list[str] = []
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
-                                                                 ingress=verdict, size_checked=False)
+                                                                 ingress=verdict, size_checked=False,
+                                                                 dropped_ports=dropped_ports, stray_log=stray_log)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         start = _begin_switch(catalog, actor, opening=project_id)
@@ -16212,12 +17336,15 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
+        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
-                                project_switch=_switch_notice(start, project, created=False))
+                                project_switch=_switch_notice(start, project, created=False),
+                                **({"dropped_ports": dropped_ports} if dropped_ports else {}))
+    await _say_stray_ports(stray_log)
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
-    # dropped job-output connections); the snapshot is saved migrated, so
-    # this is said once.
+    # dropped job-output connections, a scene's shot output no shot owns and
+    # its connections); the snapshot is saved migrated, so this is said once.
     return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
             "warnings": warnings,
             "paramsVersion": PARAMS_VERSION}
@@ -16663,6 +17790,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             node_removals.forget_project(None)
             _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None,
                                 advance=False)
+            _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
         else:
             project_store.commit(catalog)
         result = {
@@ -16799,6 +17927,14 @@ def _display_positions(
 
 
 @app.get("/api/graph/export")
+async def get_graph_export() -> dict:
+    """The canvas as the frontend draws it. An agent that reads it has read
+    its Cinema scenes (fix round 8, H2; services/scene_keys.py)."""
+    export = await export_graph_for_frontend()
+    scene_keys.note_read(_scene_scope(), _reader_agent(), export.get("sceneKeys") or {})
+    return export
+
+
 async def export_graph_for_frontend() -> dict:
     """Export CLI graph in React Flow format for the frontend canvas."""
     # Run normalization on every export so image-input nodes added or
@@ -16874,6 +18010,12 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
+        # Fix round 8, H2: each Cinema scene's key, which its next save sends
+        # back as ifSceneKey, and (round 9, H-1) its revision, so a canvas
+        # can tell a late sync from a newer one (services/scene_keys.py);
+        # none without a scene.
+        **({"sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(_scene_scope(), keys)}
+           if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
         # Agent edits that asked the canvas to lay out their new nodes once
         # drawn (services/canvas_arrange.py). A canvas that connects later
         # gets them too.
@@ -16892,6 +18034,7 @@ async def export_graph_for_frontend() -> dict:
 
 @app.post("/api/graph/run")
 @graph_write
+@_admits_cinema_renders
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
     """Run the CLI graph (or one node and what feeds it) and return the results.
 
@@ -16928,7 +18071,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             target,
         )
         if not sub_nodes:
-            raise HTTPException(status_code=404, detail=f"Node '{target}' not found in graph")
+            raise HTTPException(status_code=404, detail=f"Node {target} not found in graph")
     else:
         sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
@@ -16942,6 +18085,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # caller's own turn normal and run. Announced once the run is noted.
     sub_nodes, sub_edges, pending_skips, ready = await _skip_placeholders(run_id, sub_nodes, sub_edges,
                                                                           announce=False)
+    # Protected from here (PR #198 review 3, L1), through the spending check:
+    # the scenes that run, not the placeholders skipped.
+    _note_scene_renders(run_id, sub_nodes)
     _validate_cinema_base_models(sub_nodes)
     # The canvas Run's own pre-call check (/api/execute): a node that can't
     # run as set up (no key, a required input unwired) stops the run here,
@@ -17198,7 +18344,7 @@ _cli_runs = _CliRuns()
 async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: bool = False) -> dict[str, Any]:
     entry = _cli_runs.get(run_id)
     if entry is None:
-        raise HTTPException(status_code=404, detail=f"No run '{run_id}' (finished runs are kept for a while, then forgotten)")
+        raise HTTPException(status_code=404, detail=f"No run {run_id} (finished runs are kept for a while, then forgotten)")
     if "refused" in entry:
         return entry["refused"]
     task: asyncio.Task = entry["task"]
@@ -17361,7 +18507,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' got an empty array — provide at least one "
+                f"Input {port_id} got an empty array — provide at least one "
                 "image reference (URL, data: URI, or local image path)."
             ),
         )
@@ -17370,7 +18516,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' has {len(invalid)} invalid image reference(s): "
+                f"Input {port_id} has {len(invalid)} invalid image reference(s): "
                 f"{invalid!r}. Each item must be an http(s) URL, a data: URI, or a "
                 f"local image path ({'/'.join(_QUICK_IMAGE_SUFFIXES)})."
             ),
@@ -17391,7 +18537,7 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Input '{port_id}' references {len(missing)} local image file(s) "
+                f"Input {port_id} references {len(missing)} local image file(s) "
                 f"that do not exist: {missing!r}. Check the paths — downstream "
                 "nodes would otherwise receive a reference no model can load."
             ),
@@ -18055,7 +19201,7 @@ def _require_canvas_project(project_id: str | None) -> None:
             f"The project “{trashed.get('name') or project_id}” is in Recently deleted. Restore it first, "
             "or leave projectId out to save this as Global."))
     raise HTTPException(status_code=422, detail=(
-        f"No project has the id '{project_id}'. Use the id of a project from GET /api/projects "
+        f"No project has the id {project_id}. Use the id of a project from GET /api/projects "
         "(activeProjectId is the one open on the canvas), or leave projectId out to save this as Global."))
 
 
@@ -18141,7 +19287,7 @@ async def get_character(char_id: str) -> dict:
     try:
         char = store.get(char_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     if char is None:
         return _asset_not_found("character", char_id)
     return char
@@ -18164,7 +19310,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
         try:
             stored = store.get(char_id)
         except ValueError:
-            raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+            raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
         # Not live: the in_trash 404 the Studio offers Restore from, before
         # any check (a Studio sends the views it read, held links too).
         if stored is None:
@@ -18191,7 +19337,7 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
             "character": exc.character,
         })
     except ValueError:
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", character, edit={})
     return character
 
@@ -18204,7 +19350,7 @@ async def delete_character(char_id: str) -> dict:
     try:
         record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Character '{char_id}' not found", "character", "characters")
+        raise refusal_copy.not_found(f"Character {char_id} not found", "character", "characters")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
     return {"status": "trashed", "id": char_id, "trashed": record}
 
@@ -18266,7 +19412,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
         # image (services/moodboard_layout.file_aspect). Reading writes nothing.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
         return _asset_not_found("moodboard", moodboard_id)
     return _moodboard_out(moodboard)
@@ -18460,7 +19606,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         # saves an old board's layout) finds its image headers already read.
         moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
         # In Recently deleted: say so (and how to restore it), as GET does.
         return _asset_not_found("moodboard", moodboard_id)
@@ -18485,7 +19631,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
             if not analysis_is_current(moodboard, analysis):
                 analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         except (KeyError, ValueError):
-            raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+            raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", moodboard, edit=_UNTOUCHED_LAYOUT)
     await _say_agent_action(moodboard_actions.describe_write("analyzed", moodboard))
     return _moodboard_out(moodboard)
@@ -18513,9 +19659,9 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
     try:
         moodboard = _moodboard_store().get(moodboard_id, laid_out=False)  # nor does the dry run
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if moodboard is None:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
 
@@ -18532,9 +19678,9 @@ def _reader_board(moodboard_id: str) -> dict:
     try:
         board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
     except ValueError:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     if board is None:
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     return board
 
 
@@ -18709,7 +19855,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     try:
         record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Moodboard '{moodboard_id}' not found", "board", "boards")
+        raise refusal_copy.not_found(f"Moodboard {moodboard_id} not found", "board", "boards")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     await _say_agent_action(moodboard_actions.describe_write("deleted", record))
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
@@ -18754,14 +19900,14 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         live = store.get(asset_id)
     except ValueError:
-        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
     if live is None:
         record = _trashed_asset(kind, asset_id)
         if record is None:
-            raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+            raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
         return JSONResponse(status_code=409, content={
             "detail": refusal_copy.refusal_detail(
-                f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
+                f"{noun} {asset_id} is in Recently deleted. Restore it first "
                 f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
                 "then move it.",
                 f"That {_person_noun(kind)} is in Recently deleted. Restore it first, then move it."),
@@ -18772,10 +19918,10 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     try:
         before, after, moved = store.move(asset_id, target)
     except KeyError:  # deleted between the read and the move
-        raise _stored_asset_gone(kind, f"{noun} '{asset_id}' not found")
+        raise _stored_asset_gone(kind, f"{noun} {asset_id} not found")
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=(
-            f"{noun} '{asset_id}' can't move: {exc}. Nothing was changed.")) from exc
+            f"{noun} {asset_id} can't move: {exc}. Nothing was changed.")) from exc
     catalog = project_store.read()
     source = before.get("projectId") or None
     names = {"from": _scope_name(catalog, source), "to": _scope_name(catalog, target)}
@@ -18864,10 +20010,10 @@ def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
     noun = _person_noun(kind)
     if record is None:
         return JSONResponse(status_code=404, content={"detail": refusal_copy.refusal_detail(
-            f"{_asset_noun(kind)} '{asset_id}' not found", refusal_copy.gone(noun, f"{noun}s"))})
+            f"{_asset_noun(kind)} {asset_id} not found", refusal_copy.gone(noun, f"{noun}s"))})
     return JSONResponse(status_code=404, content={
         "detail": refusal_copy.refusal_detail(
-            f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+            f"{_asset_noun(kind)} {asset_id} is in Recently deleted. Restore it with "
             f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore).",
             f"That {noun} is in Recently deleted. Restore it, then try again."),
         "code": "in_trash",
@@ -18932,14 +20078,14 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except asset_trash.AlreadyLive:
         raise HTTPException(status_code=409, detail=(
-            f"{_asset_noun(kind)} '{item_id}' is already back; nothing to restore"))
+            f"{_asset_noun(kind)} {item_id} is already back; nothing to restore"))
     except KeyError:
         # Already restored (another tab, an agent, or a retry): nothing to do,
         # and the caller gets what it asked for.
         live = _stored_asset(kind, item_id)
         if live is not None:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
-        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     await _broadcast_stored_asset(kind, asset)
     if kind == "moodboard":
         await _say_agent_action(moodboard_actions.describe_write("restored", asset))
@@ -18963,7 +20109,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError:
-        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
+        raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
     if kind == "style":
         _journal_style("purged", record, style_id=item_id)  # before any await (round 8 of PR #114)
@@ -19160,7 +20306,7 @@ async def delete_preset(preset_id: str) -> dict:
     try:
         record = preset_store.delete(preset_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
-        raise refusal_copy.not_found(f"Style '{preset_id}' not found", "style", "styles")
+        raise refusal_copy.not_found(f"Style {preset_id} not found", "style", "styles")
     await _style_written("deleted", record, deleted=True)
     return {"status": "trashed", "id": preset_id, "trashed": record}
 

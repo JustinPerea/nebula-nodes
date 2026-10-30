@@ -70,7 +70,19 @@ export interface AgentNoteProposal {
   inbox?: true;
   /** PR #202 review 2 LOW-A: when the ask was made (its createdAt, ms), so a held tab orders as the promoted line does. */
   since?: number;
+  /** PR #204 review 1 MEDIUM-1: an asset Update one agent's open asks on one
+   * target share says how many (`asks`) and the oldest one's createdAt
+   * (`firstSince`), so a held tab counts and orders as the promoted one does. */
+  asks?: number;
+  firstSince?: number;
 }
+
+/** The backend's bounds for an Update's ref (backend agent_notes.MAX_REF_QUESTIONS,
+ * agent_questions.MAX_QUESTIONS; agent_notes.MAX_SHARED_ASKS,
+ * canvas_proposals.MAX_OPEN_PER_AGENT). One value each: a backend contract test
+ * (test_presence_followups_3_round3.py) reads these lines and fails when they drift. */
+export const MAX_REF_QUESTIONS = 5;
+export const MAX_SHARED_ASKS = 3;
 
 /** A whole number from a question set's ref, within [min, max]; else null. */
 function questionsField(raw: unknown, key: 'count' | 'since', min: number, max: number): number | null {
@@ -159,6 +171,12 @@ function sanitizeProposal(raw: unknown): AgentNoteProposal | null {
   }
   if (ref.inbox === true) out.inbox = true;
   if (typeof ref.since === 'number' && Number.isSafeInteger(ref.since) && ref.since >= 0) out.since = ref.since;
+  if (typeof ref.asks === 'number' && Number.isSafeInteger(ref.asks) && ref.asks >= 1 && ref.asks <= MAX_SHARED_ASKS) {
+    out.asks = ref.asks;
+  }
+  if (typeof ref.firstSince === 'number' && Number.isSafeInteger(ref.firstSince) && ref.firstSince >= 0) {
+    out.firstSince = ref.firstSince;
+  }
   return out;
 }
 
@@ -235,7 +253,7 @@ export function sanitizeNote(raw: unknown): AgentNote | null {
     outcome: typeof note.outcome === 'string' && note.outcome ? note.outcome.slice(0, 80) : null,
     questionsId: note.questions && typeof note.questions === 'object'
       ? str((note.questions as Record<string, unknown>).id) : null,
-    questionsCount: questionsField(note.questions, 'count', 1, 5),
+    questionsCount: questionsField(note.questions, 'count', 1, MAX_REF_QUESTIONS),
     questionsSince: questionsField(note.questions, 'since', 0, Number.MAX_SAFE_INTEGER),
     run: note.about === 'run' ? sanitizeRun(note.run) : null,
     proposal: note.about === 'proposal' ? sanitizeProposal(note.proposal) : null,

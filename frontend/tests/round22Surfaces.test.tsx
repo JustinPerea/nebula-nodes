@@ -231,6 +231,9 @@ describe('A: one source for the read-only state', () => {
     'components/panels/settings/ProvidersTab.tsx',
     'components/projects/ProjectHome.tsx',
     'components/projects/ProjectWorkspaceControls.tsx',
+    // PR #198's hook that hides a screen's load-failure notice offline: not a
+    // canvas edit, so the lock has nothing to add (the #195 merge).
+    'hooks/useOfflineHiddenNotice.ts',
     'lib/canvasLock.ts',
     'lib/useBackendOffline.ts',
   ]);

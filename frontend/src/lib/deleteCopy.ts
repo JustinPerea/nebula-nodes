@@ -7,7 +7,8 @@ import { nodeNameList } from './errorCopy';
  *   "Couldn't delete “<node>”. Nebula isn't answering. Make sure it's
  *    running, then try again."
  *   Several nodes: up to 3 names ("“A” and “B”", "“A”, “B” and “C”"); from
- *   4 up, "Couldn't delete <N> nodes."
+ *   4 up, "Couldn't delete <N> nodes." Named by errorCopy nodeNameList, so
+ *   same-titled nodes are grouped ("2 “Text” nodes", the PR #198 merge).
  * Other causes keep their reason under the old heading.
  */
 export const DELETE_NO_ANSWER_REASON = "Nebula isn't answering. Make sure it's running, then try again.";

@@ -316,7 +316,7 @@ describe('L-5: a save already sent when a no-agent replacement lands', () => {
     const snapshot = vi.mocked(projects.recoverProject).mock.calls[0][1] as { nodes: Array<{ id: string; data: { params: { value: unknown } } }> };
     expect(snapshot.nodes.find((node) => node.id === 'n1')?.data.params.value).toBe('sent before the gap');
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”."));
+      "Couldn’t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”."));
     expect(valueOf('n1')).toBe('theirs');
   });
 
@@ -380,7 +380,7 @@ describe('fix round 1, review L-4 and N-2: a recovered copy is always named by a
   const reconnect = (canvas: string, value: string) => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
     canvasRevision: canvas, empty: false, edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Other', params: { value }, state: 'idle', outputs: {} } }] });
-  const COPY_LINE = 'Couldn\'t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”.';
+  const COPY_LINE = 'Couldn’t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Glass campaign (recovered)”.';
   const holdPut = () => {
     let settle: (r: Response) => void = () => {};
     graphWrites.answer = (path, init) => (path === '/api/graph/node/n1' && init?.method === 'PUT'

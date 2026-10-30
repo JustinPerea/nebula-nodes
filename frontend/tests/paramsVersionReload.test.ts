@@ -23,9 +23,10 @@ vi.mock('../src/lib/paramsOutdated', async (original) => ({
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
+  restoreProject: vi.fn(),
 }));
 
-import { useProjectStore, resetProjectStoreForTests, subscribeProjectAutosave } from '../src/store/projectStore';
+import { projectRetryOffer, useProjectStore, resetProjectStoreForTests, subscribeProjectAutosave } from '../src/store/projectStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
@@ -122,13 +123,21 @@ describe('a backend at a newer params version', () => {
     expect(state.dirty).toBe(false);
   });
 
-  it('saves unsaved work once as a recovered copy at the tab\'s own version, then reloads once', async () => {
+  it('saves unsaved work once as a recovered copy at the tab\'s own version, then waits for [Reload Nebula] (GM r9)', async () => {
     editCanvas();
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     // A refusal and a second sync arrive while it is handled: no second copy or reload.
     reportParamsOutdated(NEXT);
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
-    await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    // GM r9 decision 1: never a reload by itself while edits are kept: the
+    // line and [Reload Nebula] wait for the person.
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
+      "Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”."));
+    expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula');
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(JSON.parse(window.sessionStorage.getItem('nebula:recoveredForUpdate') ?? 'null')).toEqual({ id: 'recovered', name: 'recovered' });
+    await useProjectStore.getState().retry();
+    expect(reloadPage).toHaveBeenCalledTimes(1);
     expect(projects.recoverProject).toHaveBeenCalledTimes(1);
     const [source, snapshot, , version] = vi.mocked(projects.recoverProject).mock.calls[0];
     expect(source).toBe('alpha');
@@ -137,7 +146,6 @@ describe('a backend at a newer params version', () => {
     expect(vi.mocked(projects.recoverProject).mock.invocationCallOrder[0])
       .toBeLessThan(vi.mocked(reloadPage).mock.invocationCallOrder[0]);
     expect(projects.saveProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().error).toContain('Your unsaved edits were saved as a recovered project.');
     // The edits are in the copy: the unsaved-changes prompt doesn't stop the reload.
     const leave = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);
@@ -149,7 +157,8 @@ describe('a backend at a newer params version', () => {
     editCanvas();
     noteParamsOutdated(new Response(JSON.stringify({ code: 'params_outdated', detail: 'Reload the tab',
       paramsVersion: NEXT }), { status: 409 }));
-    await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula'));
+    expect(reloadPage).not.toHaveBeenCalled();
     expect(projects.recoverProject).toHaveBeenCalledTimes(1);
     // Saves stopped: the pending autosave never runs.
     await vi.advanceTimersByTimeAsync(2000);
@@ -304,8 +313,9 @@ describe('review round 2', () => {
         throw new ExecutionStartRejectedError('Reload the tab', 409);
       });
       await useGraphStore.getState().executeGraph();
-      await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
-      expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(projects.recoverProject).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula'));
+      expect(reloadPage).not.toHaveBeenCalled();
       const [, snapshot] = vi.mocked(projects.recoverProject).mock.calls[0];
       expect(snapshot.nodes[0].data.params.value).toBe('Unsaved edit');
       expect(snapshot.runHistory).toEqual([]);
@@ -534,9 +544,87 @@ describe('a params stop that an Open moved past', () => {
     // The backend moves on again: a refused save reports it, and the tab stops.
     editCanvas('An edit on beta');
     reportParamsOutdated(NEXT);
-    await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
-    expect(projects.recoverProject).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(projects.recoverProject).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula'));
+    expect(reloadPage).not.toHaveBeenCalled();
     expect(vi.mocked(projects.recoverProject).mock.calls[1][0]).toBe('beta');
     expect(vi.mocked(projects.recoverProject).mock.calls[1][1].nodes[0].data.params.value).toBe('An edit on beta');
+  });
+});
+
+// PR #198 fix round 7 (GM r9 decision 1): back from the reload, the tab opens
+// the recovered copy with GM's notice; it never lands on Projects silently.
+describe('after a reload for an update', () => {
+  async function reloadedTab(listed: SavedProject[], trash: unknown[] = []) {
+    unsubscribe?.(); unsubscribe = null;
+    resetProjectStoreForTests();
+    useProjectStore.setState(initial, true);
+    setProjectContext(null);
+    window.sessionStorage.setItem('nebula:recoveredForUpdate', JSON.stringify({ id: 'recovered', name: 'alpha (recovered)' }));
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: listed, trash, activeProjectId: 'alpha',
+      workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    vi.mocked(projects.openProject).mockResolvedValue({ project: { ...project('recovered'), name: 'alpha (recovered)' },
+      workspaceRevision: 'rev-r', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    const said: string[] = [];
+    useGraphStore.setState({ notify: (text: string) => { said.push(text); } } as never);
+    await useProjectStore.getState().initialize();
+    return said;
+  }
+
+  it('opens the copy and says where the changes are', async () => {
+    const said = await reloadedTab([project(), { ...project('recovered'), name: 'alpha (recovered)' }]);
+    await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
+    await vi.waitFor(() => expect(said).toEqual([
+      "These are the changes Nebula couldn’t save before it updated. They’re in “alpha (recovered)”."]));
+    expect(useProjectStore.getState().activeProject?.id).toBe('recovered');
+    expect(window.sessionStorage.getItem('nebula:recoveredForUpdate')).toBeNull();
+  });
+
+  it('a copy deleted for good: GM r12\'s neutral notice, × only (the reload left the tab none of the edits)', async () => {
+    await reloadedTab([project()]);
+    expect(projects.openProject).not.toHaveBeenCalled();
+    const state = useProjectStore.getState();
+    expect(state.error).toBeNull();
+    expect(state.copyNotice).toEqual({ restore: null, line:
+      "Nebula couldn’t save some changes before it updated. They were kept in “alpha (recovered)”, which was permanently deleted, so they can’t be brought back." });
+    const listed = vi.mocked(projects.listProjects).mock.calls.length;
+    state.dismissCopyNotice();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+    // × only closes it: nothing is sent.
+    expect(projects.listProjects).toHaveBeenCalledTimes(listed);
+  });
+
+  it('a copy in Recently deleted: GM r12\'s neutral notice with Restore, which restores and opens it', async () => {
+    const trashed = { ...project('recovered'), name: 'alpha (recovered)', deletedAt: '2026-10-28T00:00:00Z', purgeAt: '2026-11-27T00:00:00Z' };
+    const said = await reloadedTab([project()], [trashed]);
+    const state = useProjectStore.getState();
+    expect(state.error).toBeNull();
+    expect(state.copyNotice).toEqual({ restore: { id: 'recovered', name: 'alpha (recovered)' }, line:
+      "Nebula couldn’t save some changes before it updated. They were kept in “alpha (recovered)”, which is in Recently deleted." });
+    vi.mocked(projects.restoreProject).mockResolvedValue({ ...project('recovered'), name: 'alpha (recovered)' } as never);
+    await state.restoreCopyNotice();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+    expect(projects.restoreProject).toHaveBeenCalledWith('recovered');
+    await vi.waitFor(() => expect(projects.openProject).toHaveBeenCalledWith('recovered', expect.anything()));
+    await vi.waitFor(() => expect(said).toEqual([
+      "These are the changes Nebula couldn’t save before it updated. They’re in “alpha (recovered)”."]));
+    expect(useProjectStore.getState().activeProject?.id).toBe('recovered');
+  });
+
+  it('a copy that won\'t open: the notice anyway, with the open\'s own retry', async () => {
+    vi.mocked(projects.openProject).mockReset();
+    const listed = [project(), { ...project('recovered'), name: 'alpha (recovered)' }];
+    unsubscribe?.(); unsubscribe = null;
+    resetProjectStoreForTests();
+    useProjectStore.setState(initial, true);
+    setProjectContext(null);
+    window.sessionStorage.setItem('nebula:recoveredForUpdate', JSON.stringify({ id: 'recovered', name: 'alpha (recovered)' }));
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: listed, activeProjectId: 'alpha',
+      workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
+    vi.mocked(projects.openProject).mockRejectedValue(new Error('boom'));
+    await useProjectStore.getState().initialize();
+    await vi.waitFor(() => expect(useProjectStore.getState().error).toMatch(
+      /^These are the changes Nebula couldn’t save before it updated\. They’re in “alpha \(recovered\)”\. ./));
+    expect(useProjectStore.getState().errorRetry).toMatchObject({ reopen: 'recovered' });
   });
 });

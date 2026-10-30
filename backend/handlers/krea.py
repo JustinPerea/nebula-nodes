@@ -403,7 +403,7 @@ KREA2_STRENGTH_RANGE = (0.0, 1.0)
 
 def _board_label(moodboard: dict[str, Any]) -> str:
     name = _clean_str(moodboard.get("name"))
-    return f"Board '{name}'" if name else "The board"
+    return f"Board “{name}”" if name else "The board"
 
 
 def _board_numbers(moodboard: dict[str, Any]) -> dict[str, int]:

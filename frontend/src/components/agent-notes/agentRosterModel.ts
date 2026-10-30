@@ -2,7 +2,7 @@ import type { QuestionSetView } from '../../lib/agentQuestions';
 import type { AssetProposalKind, AssetProposalView } from '../../lib/assetProposals';
 import type { ProposalView } from '../../lib/wsClient';
 import { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
-import { isWaiting, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
+import { isWaiting, proposalCount, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
 
 /**
  * The Agents panel's rows (Q125 item 2, Justin 2026-10-24: "Yes, all four, in
@@ -194,7 +194,7 @@ export function buildRosterRows(input: RosterInput): RosterRow[] {
 function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string | null): RosterRow {
   const { agent, status, cursor } = entry;
   // Questions, not sets: a set of two reads "2 questions", as its Update does.
-  const counts = { questions: questionCount(entry), proposals: entry.proposals.length };
+  const counts = { questions: questionCount(entry), proposals: proposalCount(entry) };
   const needsYou = isWaiting(entry);
   const statusText = status?.text ?? null;
   const action = cursor?.did?.verb ? actionLine(cursor.did, cursor.at, now, nodeLabel) : null;

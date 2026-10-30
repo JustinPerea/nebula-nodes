@@ -59,7 +59,7 @@ describe('a failed param edit', () => {
     edit('edited');
     expect(value()).toBe('edited');
     await vi.waitFor(() => expect(alerted()).toEqual(
-      ["Couldn't save “Text” for “Brief”. It's back to its last saved value."]));
+      ["Couldn’t save “Text” for “Brief”. It’s back to its last saved value."]));
     expect(value()).toBe('saved');
   });
 
@@ -67,7 +67,7 @@ describe('a failed param edit', () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'nope' }, 409));
     edit('edited');
     await vi.waitFor(() => expect(alerted()).toEqual(
-      ["Couldn't save “Text” for “Brief”. It's back to its last saved value."]));
+      ["Couldn’t save “Text” for “Brief”. It’s back to its last saved value."]));
     expect(value()).toBe('saved');
   });
 
@@ -90,7 +90,7 @@ describe('a failed param edit', () => {
     fetchMock.mockResolvedValueOnce(json({ ok: true }));
     edit('second'); // waits on the debounce
     fail(new TypeError('Failed to fetch'));
-    await vi.waitFor(() => expect(alerted()).toEqual(["Couldn't save “Text” for “Brief”."]));
+    await vi.waitFor(() => expect(alerted()).toEqual(["Couldn’t save “Text” for “Brief”."]));
     expect(value()).toBe('second');
   });
 

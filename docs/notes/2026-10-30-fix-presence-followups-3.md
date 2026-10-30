@@ -115,3 +115,167 @@ a held tab counts from Updates with the row action locked.
   boxes, order and words don't change.
 - Gates: tsc, lint, vitest (7,633), build, budget (422,896 bytes raw), and
   the full backend (11,933 passed).
+
+## Round 3 (review 1 on ffd33872; GM 2026-10-30, `gm-pr204-r2`)
+
+### MEDIUM-1: two asks that share one Update
+
+- One agent's open asset asks on one target share one Update, whose ref
+  named only the newest ask. A held tab read "Codex: 1 proposal", dated by
+  the newest; the promote read "2 proposals", dated by the oldest, and the
+  row moved.
+- The shared Update's ref now carries `asks` (how many open asks share it,
+  1 to `MAX_SHARED_ASKS`, which is `canvas_proposals.MAX_OPEN_PER_AGENT`) and
+  `firstSince` (the oldest one's createdAt in ms). `main._asset_share_detail`
+  computes both from the open sharers.
+- They're written where an ask joins or leaves the Update: the post (all the
+  agent's open asks on that target), the follow's retarget (the asks still
+  waiting), and an undo's reopen. `_refresh_asset_update` re-counts after
+  the reopen, because `reopen_proposal` leaves an Update another open ask
+  holds as it was.
+- `proposal_detail` checks both; `_retargeted_ref` drops them, so a caller
+  passing none never keeps a stale count. The tab's `sanitizeNote` checks
+  them too.
+- `heldAsks` uses `asks` as the proposal count and `firstSince` as the time.
+  `WaitingProposal.count` and `proposalCount` sum it, for the badge and the
+  rows alike.
+- MCP-SETUP documents both fields, which agents see too. `list_agents` is
+  unchanged: it counts from the books.
+
+### LOW-1: the Studio restore never overrides the person
+
+- Round 2 already took out the request, so the restore opens synchronously
+  once the project is ready.
+- New: a restore still waiting (no project yet) is dropped if the view
+  changes before it lands (another board, the canvas, any view).
+- Tests cover:
+  - no request is made;
+  - another board, or another view, opened before the restore lands wins;
+  - leaving after the restore stays left and forgets the board;
+  - a 500 from the board read never clears the record.
+
+### LOW-2 (GM): restore only on a reload
+
+- `navigationType()` reads `performance.getEntriesByType('navigation')`. The
+  tab's record restores only on `reload`.
+- `navigate` (a typed address, a bookmark, a fresh link), `back_forward`,
+  `prerender` or no entry all land where they point, and the tab forgets the
+  board.
+- A reconnect never navigates (the promote's hashchange, a socket coming
+  back, a project re-sync), so the Studio just stays. Its test covers that.
+- I read `back_forward` as not a reload: GM named reload and reconnect only.
+- The first Back press is left alone, per GM.
+
+### Stale "not connected" lines (GM, widened)
+
+- One mechanism, `lib/clearsOnPromote.ts`:
+  - `clearsOnPromote(clear)`;
+  - `clearLineOnPromote(error, current, line, clear)` for store lines;
+  - `clearSetterOnPromote(error, setLine, line, empty)` for component state.
+  It registers only a person-gate refusal (`code: person_required`). On the
+  promote (`notePersonPromoted`) every registered line goes in one sweep,
+  but only while it is still the line shown, so a newer line with another
+  reason stays.
+- Moved onto it: the canvas pins' refusal, the canvas and asset proposal
+  errors, and the person banner. They each had their own `onPersonPromoted`
+  listener.
+- Added for every surface of every person-gated backend function:
+  - the Updates list (mark read, dismiss, the corner's step failures);
+  - question answer and dismiss;
+  - Settings: rows through `settingsWrites.fail`, Connected apps, Personal
+    agents (load and changes), the personal-agent warning and the spend
+    view's load;
+  - the chat panel: the `person_required` transcript line, the turn's
+    authority notice, Codex ChatGPT sign-in, Clear's refusal;
+  - the model switch's toast (and any canvas toast that carries GM's
+    person line);
+  - the Projects screen line (cover pin, Delete for good, Empty);
+  - Create's Enhance;
+  - Recently deleted;
+  - Moodboard Studio's brief and save failures (`_refuse_override_change`).
+- Load errors (Personal agents, the spend view) also read again on the
+  promote. A Studio save failure puts the draft back to unsaved, so it saves.
+- Tooltips and locks that read the gate's live state needed nothing, since
+  they follow it: the held rows, the proposal bar, Send note.
+- `tests/clearsOnPromote.ratchet.test.ts` checks three things:
+  - Every backend function that calls `require_person` is in its table, with
+    the files that show its refusal, and each goes through the mechanism. A
+    new gated function fails until it's listed.
+  - Any file that recognises the refusal uses the mechanism or is a listed
+    classifier.
+  - No other `onPersonPromoted(` clears a line; the approval releases are
+    listed as not a line.
+- Found with no line to clear: `release_run_approval` (failures swallowed),
+  the asset-proposal relist, and the permission card.
+- "Couldn't mark the updates as read…" predates #204. The read route's gate
+  and the heading are both on deb5d6f5; the heading dates to a42ef37a
+  (2026-10-22).
+
+### NIT-1, NIT-2
+
+- Tests now kill the four surviving mutants:
+  - `heldAsks` without its `holds` skip;
+  - the question count bound;
+  - `followStudio`'s person-link guard;
+  - the no-op retarget ignoring the words.
+- `MAX_REF_QUESTIONS` is now `agent_questions.MAX_QUESTIONS`.
+- The frontend's `MAX_REF_QUESTIONS` and `MAX_SHARED_ASKS` are pinned to the
+  backend's by a backend contract test that reads `lib/agentNotes.ts`. The
+  same test checks that the backend source references the constants rather
+  than copying the numbers.
+
+### Round 3 verification
+
+- On c1788d1f:
+  - Backend: 8 of 11 new tests fail. The 3 that pass guard behaviour that
+    was already right: the NIT-1 words, the question bound, and no stale
+    share keys.
+  - Frontend: the reviewer's repro, the undo reopen and the share bound
+    fail (with the base given the two new constants, since the test file
+    imports them).
+  - The ratchet fails 3 of 4.
+  - Every navigation-type and person-move restore test fails.
+  - The mechanism's tests fail on import.
+- Mutations: 26 of 26 caught (8 backend, 18 frontend).
+- Live on 8795/5795: 15 of 15.
+  - The review's repro reads [Codex: 2 proposals, Claude Code: 1 question],
+    held and promoted, with the same boxes and badge.
+  - Withdrawing one while held reads 1 in both states.
+  - The stale line shows while held and is gone after the promote.
+  - A reload restores the Studio; a typed address lands on the canvas and
+    forgets the board.
+
+### Merge of main (#198, 38bb573a)
+
+Round 3 merges origin/main, which brings in #198.
+
+- The merge itself had one conflict, in `frontend/src/styles/disabled-buttons.css`.
+  - The roster row joins both of #198's ghost lists, with `:not([data-held-pending])` like the rest.
+  - My multi-line row rule comes after #198's quiet-choice rule and uses #198's `--disabled-label`.
+  - The dot is still excluded, so it keeps its colour.
+  - The result matches Review 24's trial resolution byte for byte.
+- Putting round 3 back on top hit four more conflicts, all in imports: `CreateComposer.tsx` (main added `lockedAction`), `AgentSpendSection.tsx` and `ConnectedApps.tsx` (main added `formatSpentUsd`), and `graphStore.ts` (main added `headedLine`, `isNamedLine` and `nodeNameList`). Each one keeps both sides.
+- `AgentRosterHeld`'s grey now reads `var(--disabled-label, …)`.
+- The ratchet passes on the merged tree, so #198 adds no `require_person` route that the mechanism doesn't cover.
+
+### The full backend run found a stale count (MEDIUM-1 follow-up)
+
+The first full backend run on the merged tree failed 9 tests.
+
+- 8 checked an asset Update's exact ref, written before the ref carried `asks` and `firstSince`. Each one now expects them with the right count: 2 where two asks share the Update, 1 after one closes.
+- 1 was a real bug: `test_a_move_onto_the_proposal_the_update_already_reviews_says_nothing`, from review 5's "three-one" race.
+  - The outer follow counted p1 and p2. Before its write ran, p2 closed and p2's own follow wrote the right count, `asks: 1`.
+  - The outer write then landed with the stale `asks: 2` and a second "changed".
+- The fix: `retarget_proposal` and `reopen_proposal` take a `share` reader (`main._share_reader`) and call it inside the notes write. The follow, the refresh and the undo reopen all pass one, so the last writer counts the asks as they are.
+- `ProposalBook.open_list` copies the book's items before filtering, because that reader now runs on the notes worker thread.
+- The race test now also checks `asks` and `firstSince`. Computing the share before the write, as before, brings back `(2, p2's time)`, so the mutant is caught (27 of 27 overall).
+
+### Gates on the merged tree
+
+- tsc and lint are clean.
+- vitest: 8,576 passed in 673 files.
+- build: 445,644 B raw (limit 512,000).
+- backend: 12,326 passed in a full isolated run, after the fix above.
+- Live: 15 of 15 on 8795/5795.
+  - An earlier live run, made while pytest was running, lost a puppeteer evaluate ("Promise was collected") at the start of part B.
+  - The idle re-run passed every check.

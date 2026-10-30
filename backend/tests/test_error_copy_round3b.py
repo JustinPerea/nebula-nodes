@@ -106,7 +106,7 @@ def test_a_start_held_for_an_unlock_names_the_unlock_button(isolated_paid_state)
     for headers in (AGENT, CLI, SCRIPT):
         agent = _claim_refusal(headers, [_world("world-new")])
         assert agent.detail == (f"Fresh paid {ENVIRONMENT} start is safety-locked after an ambiguous provider "
-                                "response for node 'world-old'; check Marble and explicitly unlock that hold")
+                                "response for node world-old; check Marble and explicitly unlock that hold")
 
 
 def test_a_start_already_in_flight_says_to_let_it_finish(isolated_paid_state):
@@ -116,7 +116,7 @@ def test_a_start_already_in_flight_says_to_let_it_finish(isolated_paid_state):
         person = _claim_refusal(PERSON, [_world("world-b")])
         assert person.detail == STARTING
         agent = _claim_refusal(AGENT, [_world("world-b")])
-        assert agent.detail == f"Fresh paid {ENVIRONMENT} start is already active for node 'world-a' in run 'running'"
+        assert agent.detail == f"Fresh paid {ENVIRONMENT} start is already active for node world-a in run running"
     finally:
         guard.release_run("running")
 
@@ -217,7 +217,7 @@ async def test_unlock_while_another_start_holds_the_lifecycle(isolated_paid_stat
     person = await _ack_refusal(PERSON, ENVIRONMENT, "world-node", "held")
     assert person.detail == STARTING
     agent = await _ack_refusal(AGENT, ENVIRONMENT, "world-node", "held")
-    assert agent.detail == "Fresh paid World Labs start is already active in run 'other-run'"
+    assert agent.detail == "Fresh paid World Labs start is already active in run other-run"
 
 
 # -- "Forget ID" (was "Checked Marble — forget") ---------------------------------------------------

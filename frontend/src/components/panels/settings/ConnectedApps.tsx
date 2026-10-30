@@ -10,6 +10,8 @@ import {
   type OutsideSpend,
 } from '../../../lib/api';
 import { failureMessage } from '../../../lib/errorCopy';
+import { formatSpentUsd } from '../../../lib/pricing';
+import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -171,7 +173,9 @@ export function ConnectedApps({ view, loadError, onChanged }: {
       await work();
       onChanged();
     } catch (exc) {
-      setError(failureMessage(exc, "Couldn't update the connected apps."));
+      const line = failureMessage(exc, "Couldn't update the connected apps.");
+      setError(line);
+      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
     } finally {
       setBusy(false);
     }
@@ -232,7 +236,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               </span>
               <span className="settings-pref__description">
                 {labelOf(app.client) ? `${labelOf(app.client)} · ` : ''}
-                ${app.spentUsd.toFixed(2)} in the last 24 h
+                {formatSpentUsd(app.spentUsd)} in the last 24 h
                 {app.kreaPlanRuns > 0 && `, ${app.kreaPlanRuns} Krea plan runs`}
               </span>
             </span>

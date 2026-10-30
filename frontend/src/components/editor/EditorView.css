@@ -149,6 +149,7 @@
 }
 
 .editor-transport__btn:disabled,
+.editor-transport__tool:disabled,
 .editor-transport__preset:disabled,
 .editor-transport__range:disabled {
   cursor: not-allowed;
@@ -432,8 +433,8 @@ body:not(.app-slava-restraint) .editor-transport__preset {
 }
 
 body:not(.app-slava-restraint) .editor-transport__btn:hover:not(:disabled),
-body:not(.app-slava-restraint) .editor-transport__tool:hover,
-body:not(.app-slava-restraint) .editor-transport__preset:hover {
+body:not(.app-slava-restraint) .editor-transport__tool:hover:not(:disabled),
+body:not(.app-slava-restraint) .editor-transport__preset:hover:not(:disabled) {
   color: rgba(255, 255, 255, 0.92);
   background: rgba(255, 255, 255, 0.06);
 }

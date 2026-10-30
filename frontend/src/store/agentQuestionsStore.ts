@@ -10,6 +10,7 @@ import {
   type QuestionSetView,
 } from '../lib/agentQuestions';
 import { failureMessage } from '../lib/errorCopy';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 
 /**
  * Questions agents asked the person (Q125 item 1), from the socket:
@@ -201,10 +202,11 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       try {
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't send the answers.") },
-        }));
+        const line = failureMessage(error, "Couldn't send the answers.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line,
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
       set((state) => ({ busy: without(state.busy, setId) }));
@@ -220,10 +222,11 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       try {
         await dismissQuestions(setId, entry.answerKey);
       } catch (error) {
-        set((state) => ({
-          busy: without(state.busy, setId),
-          errors: { ...state.errors, [setId]: failureMessage(error, "Couldn't dismiss the questions.") },
-        }));
+        const line = failureMessage(error, "Couldn't dismiss the questions.");
+        set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
+        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        clearLineOnPromote(error, () => get().errors[setId], line,
+          () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
       }
       set((state) => ({ busy: without(state.busy, setId) }));

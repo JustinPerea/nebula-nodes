@@ -39,6 +39,7 @@ import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
+import { clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
 import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
@@ -143,7 +144,27 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
+  /** Its only reason was this tab not being connected as the person: it goes
+   * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
+  personGate?: true;
 };
+
+/** The transcript without its lines that said only "this tab isn't connected as you" (GM, #204 r3);
+ * a message left with nothing to say goes too. */
+function withoutPersonGateLines(messages: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const kept: ChatMessage[] = [];
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.parts.some((part) => part.kind === 'system' && part.personGate)) {
+      kept.push(message);
+      continue;
+    }
+    changed = true;
+    const parts = message.parts.filter((part) => !(part.kind === 'system' && part.personGate));
+    if (parts.length) kept.push({ ...message, parts });
+  }
+  return changed ? kept : messages;
+}
 
 type ThoughtChunk = {
   kind: 'thought';
@@ -666,7 +687,9 @@ export function ChatPanel() {
       setCodexLoginState(state);
       setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
     } catch (err) {
-      setCodexLoginError(failureMessage(err, "Couldn't start the ChatGPT sign-in."));
+      const line = failureMessage(err, "Couldn't start the ChatGPT sign-in.");
+      setCodexLoginError(line);
+      clearSetterOnPromote(err, setCodexLoginError, line, null); // GM, #204 r3
     } finally {
       setCodexLoginBusy(false);
     }
@@ -695,7 +718,9 @@ export function ChatPanel() {
         }
       } catch (err) {
         if (cancelled) return;
-        setCodexLoginError(failureMessage(err, "Couldn't check the ChatGPT sign-in."));
+        const line = failureMessage(err, "Couldn't check the ChatGPT sign-in.");
+        setCodexLoginError(line);
+        clearSetterOnPromote(err, setCodexLoginError, line, null); // GM, #204 r3
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -1204,7 +1229,10 @@ export function ChatPanel() {
             // A person-only refusal says GM's line, by its code; the backend's
             // words, written for agents, go behind Details (Q116 a).
             const personRequired = event.code === PERSON_REQUIRED_CODE;
-            if (personRequired) reportPersonRequired();
+            if (personRequired) {
+              reportPersonRequired();
+              clearsOnPromote(() => setMessages((prev) => withoutPersonGateLines(prev)));
+            }
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
             if (event.code === 'personal_agent_warning_required') {
@@ -1223,7 +1251,7 @@ export function ChatPanel() {
                     : p,
                 ),
                 personRequired
-                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText }
+                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText, personGate: true }
                   : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
               ],
               streaming: false,
@@ -1527,7 +1555,10 @@ export function ChatPanel() {
       // A refusal also shows under Clear's heading.
       const outcome = await clearCanvasFromChat({
         onRefused: async (response) => {
-          setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
+          const refused = await requestError(CLEAR_CANVAS, response);
+          const line = failureMessage(refused, CLEAR_CANVAS);
+          setNotice(line);
+          clearSetterOnPromote(refused, setNotice, line, null); // GM, #204 r3
         },
       });
       said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
@@ -1549,7 +1580,14 @@ export function ChatPanel() {
     if (commonsEnabled) setAuthorizing(true);
     try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
     // The session line on its own (a FailureNotice with no heading, GM round 2).
-    catch (error) { setNotice(oneLine(failureCopy(error))); reportPersonRequired(); return; }
+    catch (error) {
+      // No person token for the turn: its only reason is this tab, so it goes on the promote (GM, #204 r3).
+      const line = oneLine(failureCopy(error));
+      setNotice(line);
+      reportPersonRequired();
+      clearsOnPromote(() => setNotice((now) => (now === line ? null : now)));
+      return;
+    }
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
     if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 

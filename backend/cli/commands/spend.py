@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from services import money
+
 from ..client import NebulaClient
 
 
 def _usd(value: Any) -> str:
-    return f"${value:.2f}" if isinstance(value, (int, float)) else "no limit"
+    """To the cent, as Settings shows it (services/money.py usd_spent, the
+    one formatter; review 2, L4). A non-zero amount that would round to
+    "$0.00" is "<$0.01": "$0" only ever means nothing (GM, PR #198 r1)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "no limit"
+    return money.usd_spent(value)
 
 
 def run(client: NebulaClient) -> None:

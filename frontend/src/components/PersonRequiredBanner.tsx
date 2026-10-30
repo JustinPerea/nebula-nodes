@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { currentPersonBannerLine, onPersonPromoted, onPersonRequired, personRequiredMessage, setPersonBannerLine,
+import { currentPersonBannerLine, onPersonRequired, personRequiredMessage, setPersonBannerLine,
   subscribePersonBanner } from '../lib/personSession';
+import { clearsOnPromote } from '../lib/clearsOnPromote';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
 
@@ -21,11 +22,18 @@ export function PersonRequiredBanner() {
   const message = useSyncExternalStore(subscribePersonBanner, currentPersonBannerLine);
 
   useEffect(() => {
-    const stopRequired = onPersonRequired(() => setPersonBannerLine(personRequiredMessage()));
     // The server promoted this tab as the person: nothing is locked any more.
-    const stopConnected = onPersonPromoted(() => setPersonBannerLine(null));
+    // Through the one mechanism (GM, #204 round 3), swept with every other
+    // line whose only reason was this tab.
+    let stopSweep = () => {};
+    const stopRequired = onPersonRequired(() => {
+      const line = personRequiredMessage();
+      setPersonBannerLine(line);
+      stopSweep();
+      stopSweep = clearsOnPromote(() => { if (currentPersonBannerLine() === line) setPersonBannerLine(null); });
+    });
     // No banner on screen, nothing for the dialog to defer to.
-    return () => { stopRequired(); stopConnected(); setPersonBannerLine(null); };
+    return () => { stopRequired(); stopSweep(); setPersonBannerLine(null); };
   }, []);
 
   // It leaves as it entered, a surface (fix round 7, GM r11 answer 2).

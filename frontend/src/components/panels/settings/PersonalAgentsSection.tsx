@@ -11,6 +11,7 @@ import {
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
 import { failureMessage } from '../../../lib/errorCopy';
+import { clearSetterOnPromote, clearsOnPromote, isPersonRefusal } from '../../../lib/clearsOnPromote';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -127,13 +128,21 @@ export function PersonalAgentsSection() {
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
 
+  // Bumped by the promote after a person-gate refusal, so the list loads again.
+  const [attempt, setAttempt] = useState(0);
   const load = useCallback(() => {
     fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
-      .catch((exc: unknown) => setError(failureMessage(exc, "Couldn't load your agents.")));
+      .catch((exc: unknown) => {
+        const line = failureMessage(exc, "Couldn't load your agents.");
+        setError(line);
+        // GM, #204 r3: refused only because this tab isn't connected as you:
+        // on the promote the line goes and the list loads.
+        if (isPersonRefusal(exc)) clearsOnPromote(() => { setError((now) => (now === line ? null : now)); setAttempt((n) => n + 1); });
+      });
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, attempt]);
 
   // Follow a download or sign-in while it runs.
   const following = (list?.agents ?? []).some(personalAgentBusy);
@@ -151,7 +160,9 @@ export function PersonalAgentsSection() {
       load();
       announceChange();
     } catch (exc) {
-      setError(failureMessage(exc, "Couldn't update your agents."));
+      const line = failureMessage(exc, "Couldn't update your agents.");
+      setError(line);
+      clearSetterOnPromote(exc, setError, line, null); // GM, #204 r3
     } finally {
       setBusy(false);
     }

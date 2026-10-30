@@ -45,6 +45,21 @@ function keptStudioBoard(): string | null {
   }
 }
 
+/**
+ * How this document was reached (PerformanceNavigationTiming.type): 'reload',
+ * 'navigate' (a typed address, a bookmark, a fresh link), 'back_forward' or
+ * 'prerender'. 'navigate' when the browser doesn't say.
+ */
+export function navigationType(): string {
+  try {
+    const entry = performance.getEntriesByType?.('navigation')?.[0] as PerformanceNavigationTiming | undefined;
+    if (entry && typeof entry.type === 'string') return entry.type;
+  } catch {
+    /* no Navigation Timing: treat it as a fresh navigation */
+  }
+  return 'navigate';
+}
+
 /** A hash that says nothing about where the person is: none, or a person link. */
 function neutralHash(hash: string): boolean {
   return !hash || hash === '#' || isPersonLinkHash(hash);
@@ -75,8 +90,19 @@ export function useMoodboardDeepLink(): void {
     // (a reload after the person link took the hash). It opens the way the
     // hash would: a board deleted meanwhile gets the Studio's own "Moodboard
     // not found", the same as a #moodboard/<id> link to it (GM, PR #204
-    // round 1: one behaviour for a missing board however reached).
-    if (!pending && neutralHash(window.location.hash)) pending = keptStudioBoard();
+    // round 1: one behaviour for a missing board however reached). Only on a
+    // reload (GM, PR #204 round 3): a typed address, a bookmark or a fresh
+    // link lands where it points, and the tab forgets the board. A reconnect
+    // that doesn't navigate never remounts this, so the Studio just stays.
+    let restoring = false;
+    if (!pending && neutralHash(window.location.hash) && navigationType() === 'reload') {
+      pending = keptStudioBoard();
+      restoring = pending !== null;
+    }
+    // The view when the restore was armed: if the person moves before it
+    // opens (another board, the canvas, any other view), their move wins
+    // (review 1 LOW-1). Opened at once once the project is ready, no request first.
+    const armedView = { mode: useUIStore.getState().viewMode, board: useUIStore.getState().moodboardEditorId };
 
     const openPending = () => {
       const project = useProjectStore.getState();
@@ -91,11 +117,19 @@ export function useMoodboardDeepLink(): void {
       }
       const id = pending;
       pending = null;
+      restoring = false;
       const ui = useUIStore.getState();
       if (ui.viewMode !== 'moodboard-editor' || ui.moodboardEditorId !== id) ui.enterMoodboardEditor(id);
     };
 
     const followStudio = () => {
+      if (pending && restoring) {
+        const ui = useUIStore.getState();
+        if (ui.viewMode !== armedView.mode || ui.moodboardEditorId !== armedView.board) {
+          pending = null;
+          restoring = false;
+        }
+      }
       if (pending) return; // a link not opened yet keeps its hash
       const ui = useUIStore.getState();
       const open = ui.viewMode === 'moodboard-editor' && ui.moodboardEditorId
@@ -114,6 +148,7 @@ export function useMoodboardDeepLink(): void {
       const id = moodboardIdFromHash(window.location.hash);
       if (id) {
         pending = id;
+        restoring = false;
         openPending();
         return;
       }

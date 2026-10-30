@@ -198,6 +198,9 @@ def test_a_move_onto_the_proposal_the_update_already_reviews_says_nothing(canvas
     assert canvas.client.delete(f"/api/canvas/proposals/{p3}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas)
     assert after["proposal"]["id"] == p1 and not after.get("resolvedAt") and book.get(p1).status == "open"
+    # PR #204 round 3: the outer move counted p1 and p2 before p2 closed; the count is read inside
+    # the write, so the Update stands for p1 alone, from p1's time, not the stale two.
+    assert (after["proposal"]["asks"], after["proposal"]["firstSince"]) == (1, int(book.get(p1).created_at * 1000))
     ops = [m.get("op") for m in canvas.sent if m.get("type") == "agentNotes" and note["id"] in (m.get("ids") or [])]
     assert ops == ["changed"], ops
 

@@ -590,7 +590,7 @@ def _refuse(pend, monkeypatch, refusal, node_id):
 
     if refusal == "precheck":
         monkeypatch.setattr(pend.main, "validate_graph", lambda *args, **kwargs: [ValidationErrorDetail(
-            node_id=node_id, port_id="text2", message="Required input port 'text2' is not connected")])
+            node_id=node_id, port_id="text2", message="Required input port text2 is not connected")])
     else:
         def over_the_limit(*args, **kwargs):
             raise HTTPException(status_code=403, detail="This run needs the person's OK")

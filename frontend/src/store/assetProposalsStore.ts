@@ -6,8 +6,9 @@ import {
   type AssetProposalStatus,
   type AssetProposalView,
 } from '../lib/assetProposals';
-import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
-import { onPersonPromoted, personGateHeld, subscribePersonGate } from '../lib/personSession';
+import { failureMessage } from '../lib/errorCopy';
+import { personGateHeld, subscribePersonGate } from '../lib/personSession';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 
 /** How long a closed proposal's strip fades before it goes. Matches asset-proposals.css. */
 export const ASSET_PROPOSAL_EXIT_MS = 220;
@@ -170,17 +171,6 @@ subscribePersonGate(() => {
   }
 });
 
-/** Review 17 LOW-1, as on the canvas bar (fix round 22): proposals whose
- * error is the person gate's refusal; the server promoting the tab clears them. */
-const personRefused = new Set<string>();
-onPersonPromoted(() => {
-  if (!personRefused.size) return;
-  const errors = { ...useAssetProposalsStore.getState().errors };
-  for (const id of personRefused) delete errors[id];
-  personRefused.clear();
-  useAssetProposalsStore.setState({ errors });
-});
-
 async function decide(id: string, verb: 'accept' | 'reject', reason?: string): Promise<void> {
   const store = useAssetProposalsStore;
   const entry = store.getState().proposals[id];
@@ -194,8 +184,11 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
     const message = failureMessage(error, `Couldn't ${verb} the proposal.`);
-    if ((error as { code?: unknown } | null)?.code === PERSON_REQUIRED_CODE) personRefused.add(id); else personRefused.delete(id);
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
+    // Review 17 LOW-1, through GM's #204 round 3 mechanism: the person gate's
+    // refusal goes when the server promotes the tab, while it is still this error.
+    clearLineOnPromote(error, () => store.getState().errors[id], message,
+      () => store.setState((state) => ({ errors: without(state.errors, id) })));
   }
 }
 

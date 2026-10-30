@@ -45,7 +45,7 @@ describe("GM round 5: the placeholder dialog's $0 lines", () => {
   it('Krea-plan rows plus priced rows: the total line and the button with only the priced amount', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', summaryOf({
       low: 0.0047, high: 0.43, lines: [line('i', 'Hero still', 0.0047, 0.43)], plan: ['Krea still'] }))!;
-    expect(model.rows.map((row) => row.price)).toEqual(['$0.0047–0.43', 'on your Krea plan']);
+    expect(model.rows.map((row) => row.price)).toEqual(['$0.0047–$0.43', 'on your Krea plan']);
     expect(model.totalLine).toBe('This run could cost up to $0.43 at list prices.');
     expect(model.runLabel).toBe('Run for up to $0.43');
   });
@@ -53,7 +53,7 @@ describe("GM round 5: the placeholder dialog's $0 lines", () => {
   it('unlisted rows plus priced rows: plain "Run", and "The listed prices total up to $0.43." for a range', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', summaryOf({
       low: 0.0047, high: 0.43, lines: [line('i', 'Hero still', 0.0047, 0.43)], unpriced: ['Krea still'] }))!;
-    expect(model.rows.map((row) => row.price)).toEqual(['$0.0047–0.43', 'price not listed']);
+    expect(model.rows.map((row) => row.price)).toEqual(['$0.0047–$0.43', 'price not listed']);
     expect(model.totalLine).toBe('The listed prices total up to $0.43.');
     expect(model.runLabel).toBe('Run');
   });
