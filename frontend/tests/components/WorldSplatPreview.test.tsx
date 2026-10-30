@@ -2,10 +2,16 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorldEnvironmentViewerProps } from '../../src/components/nodes/WorldEnvironmentViewer';
 
-vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
-  WorldEnvironmentViewer: ({
+// Each mount is one fetch of the file: Try again must remount (refetch).
+const mounts = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock('../../src/components/nodes/WorldEnvironmentViewer', async () => {
+  const { useEffect } = await import('react');
+  return { WorldEnvironmentViewer: function MockViewer({
     src, format, upAxis, forwardAxis, framing, navigationMode, onStatusChange, onFailure, quietFallback,
-  }: WorldEnvironmentViewerProps) => (
+  }: WorldEnvironmentViewerProps) {
+    useEffect(() => { mounts.count += 1; }, []);
+    return (
     <div
       data-testid="world-environment-viewer"
       data-src={src}
@@ -17,7 +23,7 @@ vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
       data-quiet={quietFallback ? 'true' : 'false'}
     >
       <button type="button" onClick={() => onStatusChange?.('ready')}>mock ready</button>
-      {(['missing', 'format', 'too-large'] as const).map((failure) => (
+      {(['missing', 'format', 'too-large', 'webgl', 'load', 'other'] as const).map((failure) => (
         <button
           key={failure}
           type="button"
@@ -27,8 +33,9 @@ vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
         </button>
       ))}
     </div>
-  ),
-}));
+    );
+  } };
+});
 
 vi.mock('../../src/lib/backend', () => ({
   backendAssetUrlSync: (value: string) => value,
@@ -36,8 +43,11 @@ vi.mock('../../src/lib/backend', () => ({
 
 import { RepresentationViewer } from '../../src/components/nodes/RepresentationViewer';
 import {
-  IDOL_SPLAT_GONE_LINE, SPLAT_DAMAGED_LINE, SPLAT_ORBIT_HINT, SPLAT_TOO_LARGE_LINE,
+  IDOL_SPLAT_GONE_LINE, SPLAT_DAMAGED_LINE, SPLAT_GONE_LINE, SPLAT_LOAD_LINE, SPLAT_NO_WEBGL_LINE, SPLAT_ORBIT_HINT,
+  SPLAT_TOO_LARGE_LINE,
 } from '../../src/components/nodes/WorldSplatPreview';
+
+const EXPLORE = 'Explore “Idol object” in 3D';
 
 /** A World v2 value the way the Idol handler writes it (handlers/speridlabs_idol.py world_value). */
 const idolWorld = {
@@ -72,9 +82,9 @@ describe('World v2 splat preview', () => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
     // The button's chunk is deferred (lib/deferredChunks.ts): its placeholder
     // (disabled, same name) shows until the chunk arrives.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Explore in 3D: Idol object' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE }))
       .toHaveAttribute('data-splat-format', 'ply'));
-    const open = screen.getByRole('button', { name: 'Explore in 3D: Idol object' });
+    const open = screen.getByRole('button', { name: EXPLORE });
     expect(open).toBeEnabled();
     expect(screen.queryByTestId('world-environment-viewer')).not.toBeInTheDocument();
 
@@ -109,7 +119,7 @@ describe('World v2 splat preview', () => {
 
   it('reads like the World v1 card: kind, name, maker, Explore and "Splat · PLY"', async () => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Explore in 3D: Idol object' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
     const card = screen.getByRole('region');
     expect(card).toHaveTextContent('World');
     expect(card).toHaveTextContent('Idol object');
@@ -120,31 +130,98 @@ describe('World v2 splat preview', () => {
 
   it.each([
     ['format', SPLAT_DAMAGED_LINE, true],
+    ['other', SPLAT_DAMAGED_LINE, true],
     ['too-large', SPLAT_TOO_LARGE_LINE, true],
     ['missing', IDOL_SPLAT_GONE_LINE, false],
-  ] as const)('a %s failure shows its line in the status, hides the help, and offers a download only if the file exists', async (
+    ['webgl', SPLAT_NO_WEBGL_LINE, true],
+    ['load', SPLAT_LOAD_LINE, false],
+  ] as const)('a %s failure: its line alone, centred in the stage; status empty, no reset; a download only where GM keeps one', async (
     failure, line, downloadable,
   ) => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Explore in 3D: Idol object' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Explore in 3D: Idol object' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
     const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
     await screen.findByTestId('world-environment-viewer');
     expect(screen.getByTestId('world-environment-viewer')).toHaveAttribute('data-quiet', 'true');
     fireEvent.click(screen.getByRole('button', { name: `mock ${failure}` }));
-    const status = within(dialog).getByRole('status');
-    expect(status).toHaveTextContent(line);
-    expect(status).toHaveAttribute('data-splat-failure', failure);
+    const stage = dialog.querySelector('.world-modal__stage') as HTMLElement;
+    const message = within(stage).getByRole('alert');
+    expect(message).toHaveClass('world-modal__failure');
+    expect(message).toHaveAttribute('data-splat-failure', failure);
+    expect(message.querySelector('p')).toHaveTextContent(new RegExp(`^${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    // The specific line replaces the generic one, never both (GM r2).
+    expect(dialog).not.toHaveTextContent('Interactive preview unavailable');
+    expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
     expect(dialog).not.toHaveTextContent(SPLAT_ORBIT_HINT);
-    expect(dialog).not.toHaveAttribute('aria-describedby');
-    expect(within(dialog).getByRole('button', { name: 'Reset camera' })).toBeDisabled();
+    expect(dialog).toHaveAttribute('aria-describedby', message.querySelector('p')!.id);
+    expect(within(dialog).queryByRole('button', { name: 'Reset camera' })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Download splat' }) !== null).toBe(downloadable);
+    expect(within(dialog).queryByRole('button', { name: 'Try again' }) !== null).toBe(failure === 'load');
+  });
+
+  it('names another node\'s gone splat without Idol (GM r3, k)', async () => {
+    const other = { ...idolWorld, session: { ...idolWorld.session, model: 'other-model' } };
+    render(<RepresentationViewer type="World" value={other} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
+    const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+    fireEvent.click(await screen.findByRole('button', { name: 'mock missing' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(SPLAT_GONE_LINE);
+    expect(dialog).not.toHaveTextContent(IDOL_SPLAT_GONE_LINE);
+  });
+
+  it('Try again fetches the splat again and recovers, focus kept in the dialog', async () => {
+    render(<RepresentationViewer type="World" value={idolWorld} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
+    const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+    await screen.findByTestId('world-environment-viewer');
+    const before = mounts.count;
+    fireEvent.click(screen.getByRole('button', { name: 'mock load' }));
+    const retry = within(dialog).getByRole('button', { name: 'Try again' });
+    retry.focus();
+    fireEvent.click(retry);
+    // A new viewer (a new fetch), back to loading, with nothing left of the failure.
+    await waitFor(() => expect(mounts.count).toBe(before + 1));
+    expect(dialog).toHaveFocus();
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/^Loading$/);
+    fireEvent.click(screen.getByRole('button', { name: 'mock ready' }));
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/^262,144 Gaussians · PLY$/);
+    expect(within(dialog).getByRole('button', { name: 'Reset camera' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Download splat' })).toBeInTheDocument();
+  });
+
+  it('names nothing but the download button itself in its footer (GM r3: no "Splat download" label)', async () => {
+    render(<RepresentationViewer type="World" value={idolWorld} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
+    const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+    expect(within(dialog).queryByRole('group', { name: 'Splat download' })).not.toBeInTheDocument();
+    expect(dialog.querySelector('[aria-label="Splat download"]')).toBeNull();
+  });
+
+  it('Tab from the dialog itself goes to the first control, Shift+Tab to the last (review MEDIUM 1)', async () => {
+    render(<RepresentationViewer type="World" value={idolWorld} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
+    const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+    await screen.findByTestId('world-environment-viewer');
+    const close = within(dialog).getByRole('button', { name: 'Close 3D viewer' });
+    const download = within(dialog).getByRole('button', { name: 'Download splat' });
+    dialog.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(download).toHaveFocus();
+    dialog.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(close).toHaveFocus();
   });
 
   it('keeps Tab inside the dialog, including from outside it', async () => {
     render(<><button type="button">behind</button><RepresentationViewer type="World" value={idolWorld} /></>);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Explore in 3D: Idol object' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Explore in 3D: Idol object' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
     const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
     await screen.findByTestId('world-environment-viewer');
     const close = within(dialog).getByRole('button', { name: 'Close 3D viewer' });
@@ -159,6 +236,22 @@ describe('World v2 splat preview', () => {
     screen.getByRole('button', { name: 'behind' }).focus();
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(close).toHaveFocus();
+  });
+
+  it.each([
+    ['a collider', { colliderMesh: { id: 'collider', uri: '/api/outputs/run/collider.glb', mediaType: 'model/gltf-binary' } }],
+    ['a panorama', { panorama: { id: 'pano', uri: '/api/outputs/run/pano.png', mediaType: 'image/png' } }],
+  ])('keeps the full summary for a splat with %s, the maker spelled as the maker does (review LOW 4, M4)', async (
+    _name, extra,
+  ) => {
+    const richer = { ...idolWorld, assets: { ...idolWorld.assets, ...extra } };
+    render(<RepresentationViewer type="World" value={richer} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+    const card = screen.getByRole('region');
+    expect(card).toHaveTextContent('World · contract v2');
+    expect(card).toHaveTextContent('Representations');
+    expect(card).toHaveTextContent('Speridlabs');
+    expect(card).not.toHaveTextContent(/speridlabs/);
   });
 
   it('shows no button for a World v2 value without a safe splat', async () => {

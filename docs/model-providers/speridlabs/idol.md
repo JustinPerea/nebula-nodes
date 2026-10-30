@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: speridlabs
 status: active
-verified: 2026-10-29
+verified: 2026-10-30
 stale_after_days: 14
 ---
 
@@ -29,25 +29,44 @@ Read 2026-10-29 (GET requests that run nothing):
 - [Hub Space API](https://huggingface.co/api/spaces/speridlabs/idol):
   `runtime.stage` RUNNING on `zero-a10g`
 - [Querying Gradio apps with curl](https://www.gradio.app/guides/querying-gradio-apps-with-curl)
-- [ZeroGPU docs](https://huggingface.co/docs/hub/spaces-zerogpu): quotas and
-  overage billing
-- `spaces` 0.51.3 `spaces/zero/client.py`: the quota error texts
+- [ZeroGPU docs](https://huggingface.co/docs/hub/spaces-zerogpu): quotas,
+  GPU sizes and overage billing
+- `spaces` 0.51.3 (the package every ZeroGPU Space runs) `spaces/zero/client.py`
+  (the quota error texts, `get_duration_seconds`) and `spaces/zero/configs.json`
+  (each GPU's `duration_factor`)
+- `huggingface_hub` `utils/_http.py` `hf_raise_for_status`: how the Hub says a
+  repo is missing
+- [gradio-app/gradio PR #11700](https://github.com/gradio-app/gradio/pull/11700),
+  `gradio_client` 1.11.1+ and Hugging Face's MCP server: the
+  `X-HF-Authorization` header
 
 ## Node
 
 | Node ID | Category | Inputs | Outputs | Route | Key |
 |---|---|---|---|---|---|
-| `speridlabs-idol` | `3d-gen` | `image` (Image, required) | `world` (World v2) | `hf-space`, maker, Space `speridlabs/idol` | none; `HF_TOKEN` optional |
+| `speridlabs-idol` | `3d-gen` | `image` (Image, required) | `world` (World v2) | `hf-space`, maker, Space `speridlabs/idol` | `HF_TOKEN` (required) |
 
 Handler: `backend/handlers/speridlabs_idol.py`, through the `hf-space` route
 client (`backend/execution/route_clients.py` `run_hf_space`).
 
-The route is keyless (`keys: []`, `optionalKeys: ["HF_TOKEN"]`, see
-[PROVIDER-ROUTES.md](../../PROVIDER-ROUTES.md#keyless-routes)): Auto runs it
-with no key, and the token, when set, only changes whose ZeroGPU time a run
-uses. `HF_TOKEN` is not in `envKeyName`, so the node reads as free
-(`node_readiness.instance_access` returns `free` without the token and `key`
-with it).
+The route needs the person's Hugging Face token (`keys: ["HF_TOKEN"]`, GM
+PR #203 r4; see [Why a token is required](#why-a-token-is-required)).
+Readiness, Auto, `describe_node`, `nebula info` and `nebula keys` treat Idol as
+keyed. Without the token the route carries its own line
+(`missingKeyLine`, [PROVIDER-ROUTES.md](../../PROVIDER-ROUTES.md#a-routes-own-missing-key-line)):
+"You can run Idol after you add your Hugging Face token in Settings." Run on
+the node is disabled with it as the reason (the selection toolbar, the
+Inspector and the context menu, `lib/runKeyLock.ts`), and agent and CLI runs
+are refused with it before any request (`node_route.route_unavailable_line`
+in the engine's preflight). The handler's anonymous branch still works, as a
+backstop and for a switch back.
+
+Switching back to keyless, if the first live run shows the Space asks for
+120 s: in the route, `keys: []` and `optionalKeys: ["HF_TOKEN"]`, drop
+`missingKeyLine`, and empty `envKeyName` and `directKeyName` (TS and the JSON
+mirror), then regenerate the route tables. The keyless rules and their tests
+are still in place (`test_route_agent_surfaces.py` `_keyless_idol`,
+`test_speridlabs_idol.py` `keyless_idol`).
 
 ## Request contract
 
@@ -62,10 +81,16 @@ A run is:
 1. `GET https://huggingface.co/api/spaces/speridlabs/idol`: the stage. A
    sleeping or building Space is woken with one `GET /gradio_api/info` and
    polled for up to 180 s; a paused, stopped or failed one stops the run
-   before any call; a 404 says the Space is gone.
+   before any call. The Space reads as missing by `huggingface_hub`'s rule: a
+   404, an `X-Error-Code: RepoNotFound` (Hugging Face answers that for a
+   deleted Space and for a private or gated one the caller can't see), or a
+   401 whose `X-Error-Message` isn't "Invalid credentials in Authorization
+   header". With a token, that bad-credentials 401, or a 403, is the token
+   refused.
 2. `GET /gradio_api/info`: the signature. Inputs, outputs and the two enums
-   must match the pinned fixture exactly, or the run stops with "The Idol Space
-   changed how it's called".
+   must match the pinned fixture exactly, or the run stops with "Idol changed
+   on Hugging Face, and this version of Nebula can’t run it. Update Nebula,
+   then try again." (the agent text: "The Idol Space's API changed (…)").
 3. The image: Nebula reads it itself (`load_media`, which fetches a public
    HTTPS URL through `fetch_public_media` and refuses loopback and private
    hosts), then uploads the bytes with `POST /gradio_api/upload` (multipart
@@ -77,8 +102,12 @@ A run is:
    Heartbeats (every 15 s) move the progress bar slowly; it never claims done.
 5. The `.ply` from `/gradio_api/file=...` on the Space's own host (the path
    URL-quoted; an `http://` result URL falls back to HTTPS), streamed into
-   the run folder as a `.part` with a 128 MiB cap, checked by
-   `services/splat_ply.validate_splat_ply`, then renamed into place as
+   the run folder as a `.part`. The PLY header is checked as soon as
+   `end_header` arrives (or after 64 KiB): a file that isn't a splat PLY, more
+   than 2,000,000 Gaussians or a declared size over 128 MiB stops the
+   download there. A Content-Length that disagrees with the header's size, or
+   a body that runs past it, stops it too. The whole file is then checked by
+   `services/splat_ply.validate_splat_ply` and renamed into place as
    `idol-seed{seed}-{gaussians}-{8 hex}.ply`, so two nodes with the same
    settings never share a file.
 
@@ -123,41 +152,108 @@ rot_0..3), 68 bytes a Gaussian. 262,144 Gaussians is 17.8 MB; 1,048,576 is
 ## Price
 
 `model_pricing.json` prices the route at $0 a run, sourced from the ZeroGPU
-docs: ZeroGPU Spaces are free to all users. Each run uses the caller's daily
-ZeroGPU time: without a token, Hugging Face's small anonymous allowance; with
-one, the account's own (5 minutes on a free account, 40 on PRO and Team, 60 on
-Enterprise). Each Idol call reserves 120 s of GPU (`spaces.GPU(duration=120)`
-in `app.py`), and ZeroGPU checks the reserved duration against the quota, so
-the anonymous allowance may fit about one run a day. The first live run
-should confirm it; if anonymous runs can never fit 120 s, readiness must say a
-token is needed (GM, waiting on Justin's live test). **PRO, Team and Enterprise accounts can go past
-the daily quota on prepaid Hugging Face credits, at $1 per 10 GPU-minutes.**
-That charge is on the person's own Hugging Face account; Nebula can't see it
-and doesn't count it. The real GPU time per run isn't published or measured.
+docs: "ZeroGPU Spaces are available to use for free to all users." Each run
+uses the person's own daily ZeroGPU time through their token. The docs' tiers
+(read 2026-10-30):
+
+| Account | Daily GPU quota | Queue priority |
+|---|---|---|
+| Unauthenticated | 2 minutes | Low |
+| Free account | 5 minutes | Medium |
+| PRO account | 40 minutes (extensible) | Highest |
+| Team organization member | 40 minutes (extensible) | Highest |
+| Enterprise organization member | 60 minutes (extensible) | Highest |
+
+The unauthenticated row is the docs' figure for visitors; Nebula's backend
+calls from a server, and whether that row applies to server-side calls isn't
+documented.
+
+**PRO, Team and Enterprise accounts can go past the daily quota on prepaid
+Hugging Face credits** ("at the rate of $1 per 10 minutes of GPU time. Once
+your daily quota is exhausted, any additional GPU usage is automatically
+billed against your credit balance"). That charge is on the person's own
+Hugging Face account; Nebula can't see it and doesn't count it. `describe_node`
+tells agents so (`billing` on the route, `main.HF_SPACE_BILLING_NOTE`).
 Agents' spend gate admits the run at $0, like other free nodes; whether an
 agent may run it on a PRO token that can bill past the quota is open
-(TODO(Justin)).
+(TODO(Justin), Q141).
+
+## Why a token is required
+
+The Space asks for 120 s a call (`app.py` `gpu = spaces.GPU(duration=120)` on
+its one `/run` function), and
+`spaces` 0.51.3 scales that by the GPU it runs on before asking ZeroGPU:
+
+```python
+# spaces/zero/client.py
+def get_duration_seconds(duration, gpu_size):
+    zerogpu_config = config.get_config()
+    gpu_size = gpu_size if gpu_size is not None else default_gpu_size()
+    duration_seconds = duration.seconds if duration is not None else DEFAULT_SCHEDULE_DURATION
+    if gpu_size != 'xlarge':
+        duration_seconds *= zerogpu_config['duration_factor']
+    return duration_seconds
+```
+
+```json
+// spaces/zero/configs.json
+{"model": "NVIDIA H200", ..., "duration_factor": 1.0},
+{"model": "NVIDIA RTX PRO 6000 Blackwell Server Edition", ..., "duration_factor": 1.5}
+```
+
+`get_config()` picks the entry whose `model` matches the GPU the driver
+reports (H200 when nothing matches). The ZeroGPU docs now say the default
+size is "Half NVIDIA RTX Pro 6000 Blackwell", so a call most likely asks for
+120 × 1.5 = **180 s**, more than the unauthenticated 2 minutes. ZeroGPU
+refuses an ask larger than the tier's maximum ("The requested GPU duration
+(180s) is larger than the maximum allowed"), so without a token Idol likely
+can't run at all.
+
+Runs a day, if each run is charged its whole reservation (the docs don't say
+whether ZeroGPU charges the reserved or the used seconds, so shorter runs may
+leave room for more):
+
+| Account | Quota | Blackwell, 180 s | H200, 120 s |
+|---|---|---|---|
+| Unauthenticated | 120 s | 0 (refused) | 1 |
+| Free | 300 s | 1 | 2 |
+| PRO or Team | 2,400 s | 13 | 20 |
+| Enterprise | 3,600 s | 20 | 30 |
+
+**To be confirmed on the first live run**: ZeroGPU's quota and duration
+errors name the seconds requested. If the live run shows 120 s, switching
+back to keyless is the one-line route change in [Node](#node).
 
 ## Errors
 
-The card's lines are GM's (PR #203 r1), with curly apostrophes.
+The card's lines are GM's (PR #203 r1 to r4), with curly apostrophes.
 
 | Situation | The card's line |
 |---|---|
+| No token in Settings (refused before any request) | "You can run Idol after you add your Hugging Face token in Settings." |
 | No image | "Idol needs an image. Connect one, then run it again." |
-| Anonymous quota used up | "Idol’s free allowance is used up for now. Try again later, or add your Hugging Face token in Settings to use your own." |
+| Anonymous quota used up (a run that slips through without a token) | "Idol’s free allowance is used up for now. Try again later, or add your Hugging Face token in Settings to use your own." |
 | The person's quota used up | "Your Hugging Face GPU allowance is used up for now. Try again later, or raise it on your Hugging Face account." |
 | No GPU free in the queue | "Hugging Face had no free GPU for Idol. Try again in a few minutes." |
 | The Space's own GPU limit | "Idol has reached its own limit on Hugging Face for now. Try again later." |
-| A token was sent but didn't reach the Space | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
-| 120 s is more than the allowance per run, no token | "Idol needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
+| A token was sent but didn't apply (no IP token reached the Space, or the quota text is the IP-only one) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
+| The run's ask (120 s, or 180 s on Blackwell) is more than the allowance per run, no token | "Idol needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
 | The same with a token | "Idol needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again." |
 | Space sleeping or building past 180 s | "Idol is still starting on Hugging Face. Try again in a few minutes." |
 | Space paused, stopped or failed | "Idol isn’t running on Hugging Face right now. Try again later." |
-| Space deleted | "Idol is no longer on Hugging Face, so it can’t run. Use another 3D node instead." |
+| Space missing (deleted, private or gated; with or without a token) | "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead." |
 | Signature changed | "Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again." |
-| Token refused (401 or 403 from the Hub or the Space) | "Hugging Face didn’t accept your token. Check it in Settings." |
-| Token with a character a header can't carry | "Your Hugging Face token has a character a token can’t have. Paste it again in Settings." |
+| Token refused (with a token, a 401 or 403 from the Hub, `/gradio_api/info`, the upload, `/call/run` or its stream) | "Hugging Face didn’t accept your token. Check it in Settings." |
+| Token with a character tokens can't have (leading and trailing spaces and line breaks are trimmed first) | "This token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it in Settings." (the Settings field: "…then paste it here.") |
+| The image was empty | "The image Idol got is empty. Check the node that makes it, then run Idol again." |
+| The model couldn't make an object | "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why." |
+| The Space stopped with no message | "Idol stopped without saying why. Try again in a minute." |
+| The upload was refused | "Idol couldn’t use this image. Try another one, or open Details to see why." |
+| `/call/run` was refused | "Idol turned down this run. Open Details to see why, then try again." |
+| The stream ended or failed before a result | "Idol stopped before sending a result. Try again in a minute." |
+| The `.ply` download failed | "Nebula couldn’t download the object from Idol. Try again in a minute." |
+| No connection | "Nebula couldn’t reach Idol. Check your internet connection, then try again." |
+| A Gaussians or input type value the Space doesn't list | "Idol doesn’t take this Gaussians value. Pick one from the list." / "Idol doesn’t take this input type. Pick one from the list." |
 | No answer in time | "Idol took too long to answer. Try again in a few minutes." |
 | Not a readable splat | "Idol sent back a file Nebula can’t read as a splat. Try again." |
 | Splat over 128 MiB | "This splat is too large for Nebula to keep. Lower Gaussians in the node’s settings, then run it again." |
@@ -172,20 +268,32 @@ How the ZeroGPU texts are told apart (`zerogpu_kind`, from `spaces` 0.51.3
   mock; the first live run should confirm the texts.
 - **The person's own quota**: "exceeded your … quota", "runs limit" or "too
   many ZeroGPU credits". Without a token this is the free allowance line.
+- **A token that didn't apply**: with a token sent, the IP-only quota texts
+  ("authenticate with a Hugging Face token", or the bare "exceeded your
+  ZeroGPU quota" with no free or Pro label) mean ZeroGPU fell back to
+  IP-based quotas: the token-not-applied line.
 - **No IP token reached the Space**: `spaces` adds "Try re-running outside of
   examples" only on the branch where no `X-IP-Token` arrived. With that
-  marker, "reached its GPU limit" or "No GPU was available" is the token-not-
-  applied line when Nebula sent a token, and the Space's own limit when it
-  didn't.
+  marker, "No GPU was available" is the token-not-applied line when Nebula
+  sent a token, and the Space's own limit when it didn't.
 - **Busy**: "No GPU was available" without that marker: the queue timed out.
-- **The Space's own limit**: "reached its GPU limit" without the marker.
+- **"reached its GPU limit"** (with or without the marker): the Space's own
+  limit without a token, token-not-applied with one.
 
 ## Token handling
 
 The token goes only to `huggingface.co` and `speridlabs-idol.hf.space` over
-HTTPS (`token_allowed`, `TOKEN_HOSTS`), as a Bearer header, never in a URL.
-Not any `*.hf.space`: anyone can make a Space, so a result URL on another
-Space never gets it. A token with a character outside printable ASCII is
+HTTPS (`token_allowed`, `TOKEN_HOSTS`), never in a URL: `Authorization:
+Bearer` to the Hub, and `X-HF-Authorization: Bearer` to every Space request
+(info, upload, call, stream and the file download), as `gradio_client`
+1.11.1+ and Hugging Face's MCP server send it. Gradio PR #11700 says Hugging
+Face's Space proxy reads that header for the caller's ZeroGPU quota and
+strips it, so the token shouldn't reach Speridlabs' container; plain
+`Authorization` would. To be confirmed on the first live run (a
+token-not-applied error would say it didn't arrive). Not any `*.hf.space`:
+anyone can make a Space, so a result URL on another Space never gets it.
+Settings, the settings check and the handler trim leading and trailing spaces
+and line breaks; a token with any other character outside printable ASCII is
 refused before any request. Which token scope Settings asks for, and whether
 it says the token goes to Speridlabs' Space, are open (TODO(Justin)). Provider text is
 scrubbed of it before it reaches an error, connection errors keep only their
@@ -201,7 +309,9 @@ finish there and use that person's GPU time.
 ## What isn't covered
 
 - No live run. The first real run should be a person's, on their own token,
-  at 65,536 Gaussians.
+  at 65,536 Gaussians. It should confirm the seconds the Space asks for (120
+  or 180), that `X-HF-Authorization` carries the token's quota, and the
+  ZeroGPU error texts.
 - The Space is the maker's demo, not a service with an uptime promise; a
   change to its signature stops the node until Nebula is updated.
 - World Labs Export takes only Marble's World v1, so it can't export an Idol

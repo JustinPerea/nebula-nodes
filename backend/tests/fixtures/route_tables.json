@@ -14633,8 +14633,7 @@
      "id": "hf-space",
      "provider": "speridlabs",
      "maker": true,
-     "keys": [],
-     "optionalKeys": [
+     "keys": [
       "HF_TOKEN"
      ],
      "handler": "hf-space",

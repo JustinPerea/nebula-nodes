@@ -397,8 +397,8 @@ body.app-slava-restraint .param-pills__note { color: var(--sr-ink-light); font-s
 
 body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta); }
 
-/* A keyless route with its optional key set (Idol's Hugging Face token): the
-   Settings row's green dot and "Connected" (settings.css .settings-row__dot--ok). */
+/* A Space route's Hugging Face token set (Idol's), or a keyless route's
+   optional key: the Settings row's green dot and "Connected" (settings.css .settings-row__dot--ok). */
 .provider-switcher__key--connected {
   display: inline-flex;
   align-items: center;

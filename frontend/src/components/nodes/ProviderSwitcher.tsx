@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
-import { routeSwitch } from '../../lib/directRoute';
+import { KEY_NAMES, routeSwitch } from '../../lib/directRoute';
 import { applyFix, applyProviderPick, providerSwitchState, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
 import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
@@ -71,12 +71,20 @@ function openSetup(target: ProviderSetupTarget | undefined) {
   if (target) useUIStore.getState().openProviderSetup(target);
 }
 
+/** "Speridlabs key" for most rows; a row whose key is another provider's
+ * (Idol's Hugging Face token) names that key. */
+function missingKeyName(row: ProviderRow): string {
+  const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
+  const named = key && Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key] : undefined;
+  return named && named[0] !== row.label ? `${named[0]} ${named[1]}` : `${row.label} key`;
+}
+
 function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNode {
   if (row.keyState === 'set') return <span className="provider-switcher__key">Key set</span>;
   if (row.keyState === 'signed-in') return <span className="provider-switcher__key">Signed in</span>;
   if (row.keyState === 'connected') {
-    // A keyless route with its optional key set (Idol's Hugging Face token):
-    // the usual green dot and "Connected" (GM, PR #203 r1).
+    // A Space route's Hugging Face token is set (Idol's): the usual green
+    // dot and "Connected" (GM, PR #203 r1 and r4).
     return (
       <span className="provider-switcher__key provider-switcher__key--connected">
         <span className="provider-switcher__dot" aria-hidden="true" />Connected
@@ -87,7 +95,7 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
     const text = row.keyState === 'missing' ? 'Add key →' : 'Sign in';
     return (
       <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup"
-        aria-label={row.keyState === 'missing' ? `Add a ${row.label} key in Settings` : 'Sign in to Krea in Settings'}
+        aria-label={row.keyState === 'missing' ? `Add a ${missingKeyName(row)} in Settings` : 'Sign in to Krea in Settings'}
         onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
         {text}
       </button>

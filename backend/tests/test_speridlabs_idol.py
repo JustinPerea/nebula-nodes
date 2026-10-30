@@ -32,6 +32,9 @@ TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
 CHANGED = ("Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again.")
 STARTING = "Idol is still starting on Hugging Face. Try again in a few minutes."
 TOKEN_LINE = "Hugging Face didn’t accept your token. Check it in Settings."
+NEEDS_TOKEN = "You can run Idol after you add your Hugging Face token in Settings."
+MISSING_LINE = "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead."
+SIGNED_IN = {"HF_TOKEN": TOKEN}
 UPLOADED_IMAGE = {"path": UPLOADED, "orig_name": "input.png", "meta": {"_type": "gradio.FileData"}}
 
 
@@ -55,12 +58,24 @@ def image(value: Any = IMAGE) -> dict[str, PortValueDict]:
 
 
 async def run_node(params: dict[str, Any] | None = None, inputs=None, keys: dict[str, str] | None = None):
-    """The registry's handler for the node (multi_route over its route table)."""
+    """The registry's handler for the node (multi_route over its route table),
+    with the token its route needs unless ``keys`` says otherwise."""
     defaults = {p["key"]: p.get("default") for p in node_route.all_param_definitions(registry()["speridlabs-idol"])
                 if p["key"] != "_provider"}
     saved = {**defaults, "_provider": "auto", **(params or {})}
     return await registry_handler("speridlabs-idol")(node(**saved), image() if inputs is None else inputs,
-                                                     dict(keys or {}))
+                                                     dict(SIGNED_IN if keys is None else keys))
+
+
+def keyless_idol() -> dict[str, Any]:
+    """Idol's definition switched back to keyless, as it would be if the
+    first live run shows ZeroGPU asks 120 s, not 180 s (idol.md)."""
+    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
+    route.pop("missingKeyLine")
+    definition["envKeyName"], definition["directKeyName"] = [], []
+    return definition
 
 
 async def run_direct(inputs=None, keys=None, **params: Any):
@@ -122,14 +137,12 @@ def test_a_changed_signature_is_refused_with_its_own_line(change, detail):
 
 
 @pytest.mark.asyncio
-async def test_an_anonymous_run_sends_the_schema_body_and_returns_a_world_v2_splat(monkeypatch, capsys):
+async def test_a_run_sends_the_schema_body_and_returns_a_world_v2_splat(monkeypatch, capsys):
     hosts = idol_hosts(monkeypatch, stream=sse(("heartbeat", "null"), complete(seed=42)), ply=splat_ply(64))
     out = await run_node()
     body = hosts.json("POST", re.escape(f"{API}/call/run"))
     validate(run_schema(), body)
     assert body == {"data": [UPLOADED_IMAGE, "Synthetic", 50, 3.0, 3.0, 42, False, "262,144"]}
-    # No token anywhere: an anonymous run sends no Authorization header.
-    assert all("authorization" not in r.headers for r in hosts.requests)
     # A public URL is read by Nebula (load_media) and uploaded as input.png:
     # neither the URL nor its file name reaches the Space.
     [upload] = hosts.sent("POST", re.escape(f"{API}/upload"))
@@ -154,6 +167,47 @@ async def test_an_anonymous_run_sends_the_schema_body_and_returns_a_world_v2_spl
     assert path.read_bytes() == splat_ply(64)
     assert splat["asset"]["byteLength"] == path.stat().st_size
     assert not list(path.parent.glob("*.part"))
+    assert "signed_in=True" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_without_a_token_the_route_refuses_before_any_request(monkeypatch):
+    """GM PR #203 r4: each run asks 180 s on Blackwell, past the 120 s a day
+    an anonymous caller gets, so a run without the token is never sent."""
+    from execution.missing_credential import MissingCredentialError
+
+    hosts = idol_hosts(monkeypatch)
+    for keys in ({}, {"HF_TOKEN": ""}):
+        with pytest.raises(MissingCredentialError) as excinfo:
+            await run_node(keys=keys)
+        assert person_line(excinfo.value) == NEEDS_TOKEN
+        # Agents read the same line (route_unavailable's message).
+        assert str(excinfo.value) == NEEDS_TOKEN
+    assert hosts.requests == []
+
+
+def test_the_engines_preflight_refuses_an_idol_run_without_a_token_with_gms_line():
+    """Agent and CLI runs (MCP run tools, nebula run, apply and run) all go
+    through the engine's pre-run check: refused before anything is sent."""
+    from execution.engine import validate_graph
+    from models.graph import GraphEdge
+
+    nodes = [GraphNode(id="img", definitionId="image-input", params={"filePath": IMAGE}),
+             GraphNode(id="n1", definitionId="speridlabs-idol", params={"_provider": "auto"})]
+    edges = [GraphEdge(id="e1", source="img", sourceHandle="image", target="n1", targetHandle="image")]
+    errors = [e for e in validate_graph(nodes, edges, {}) if e.node_id == "n1"]
+    assert [(e.message, e.person) for e in errors] == [(NEEDS_TOKEN, NEEDS_TOKEN)]
+    assert not [e for e in validate_graph(nodes, edges, SIGNED_IN) if e.node_id == "n1"]
+
+
+@pytest.mark.asyncio
+async def test_the_handler_still_runs_without_a_token_as_a_backstop(monkeypatch, capsys):
+    """A run that slips past the route (or a keyless route, if the first live
+    run shows 120 s) sends no token header at all."""
+    hosts = idol_hosts(monkeypatch)
+    world_of(await run_direct())
+    assert hosts.sent("POST", re.escape(f"{API}/call/run"))
+    assert all("authorization" not in r.headers and "x-hf-authorization" not in r.headers for r in hosts.requests)
     assert "signed_in=False" in capsys.readouterr().err
 
 
@@ -162,14 +216,27 @@ async def test_a_signed_in_run_sends_the_token_only_to_hugging_face_and_never_pr
     hosts = idol_hosts(monkeypatch)
     out = await run_node(keys={"HF_TOKEN": TOKEN})
     assert hosts.requests
+    spaces = 0
     for request in hosts.requests:
         host = request.url.host
         if host == "example.com":
             # The image is fetched without credentials (fetch_public_media).
-            assert "authorization" not in request.headers
+            assert "authorization" not in request.headers and "x-hf-authorization" not in request.headers
             continue
         assert request.url.scheme == "https" and host in ("huggingface.co", "speridlabs-idol.hf.space"), host
-        assert request.headers.get("authorization") == f"Bearer {TOKEN}"
+        if host == "huggingface.co":
+            # The Hub reads Authorization.
+            assert request.headers.get("authorization") == f"Bearer {TOKEN}"
+            assert "x-hf-authorization" not in request.headers
+        else:
+            # The Space gets X-HF-Authorization, which Hugging Face's proxy
+            # reads and strips (gradio PR #11700): never Authorization, which
+            # would reach Speridlabs' container.
+            spaces += 1
+            assert request.headers.get("x-hf-authorization") == f"Bearer {TOKEN}"
+            assert "authorization" not in request.headers
+    # info, upload, call, stream and the file download all carry it.
+    assert spaces == 5
     printed = capsys.readouterr()
     assert TOKEN not in printed.out + printed.err
     assert "signed_in=True" in printed.err
@@ -185,9 +252,12 @@ def test_the_token_is_never_sent_to_any_other_host():
                 "https://xsperidlabs-idol.hf.space/x", "https://speridlabs-idol.hf.space.evil.com/x",
                 "https://api.huggingface.co/x", "https://speridlabs-idol.hf.space@evil.com/x"):
         assert idol._headers(url, TOKEN) == {}, url
-    for url in (HUB, f"{API}/call/run", RESULT_URL, "https://huggingface.co./api/whoami-v2",
-                "https://SPERIDLABS-IDOL.hf.space/gradio_api/info"):
+    for url in (HUB, "https://huggingface.co./api/whoami-v2", "https://HuggingFace.co/api/spaces/x"):
         assert idol._headers(url, TOKEN) == {"Authorization": f"Bearer {TOKEN}"}, url
+    for url in (f"{API}/call/run", RESULT_URL, "https://SPERIDLABS-IDOL.hf.space/gradio_api/info",
+                "https://speridlabs-idol.hf.space./gradio_api/upload"):
+        assert idol._headers(url, TOKEN) == {"X-HF-Authorization": f"Bearer {TOKEN}"}, url
+    assert idol._headers(HUB, None) == {} and idol._headers(f"{API}/info", "") == {}
     assert idol.TOKEN_HOSTS == {"huggingface.co", "speridlabs-idol.hf.space"}
 
 
@@ -257,22 +327,72 @@ async def test_progress_creeps_on_heartbeats_and_ends_at_one(monkeypatch):
 # -- readiness, price, key ----------------------------------------------------------
 
 
-def test_the_node_runs_without_a_key_and_uses_the_token_when_set():
+@pytest.mark.parametrize("provider", ["auto", "hf-space"])
+def test_the_node_needs_the_token_and_says_so_in_gms_words(provider):
     definition = registry()["speridlabs-idol"]
-    assert definition["envKeyName"] == []
+    assert definition["envKeyName"] == ["HF_TOKEN"]
+    assert definition["routes"][0]["keys"] == ["HF_TOKEN"] and "optionalKeys" not in definition["routes"][0]
+    assert node_route.routes_problems(definition) == []
+    params = {"_provider": provider}
+    anonymous = node_route.select_route(definition, params, {})
+    assert (anonymous.kind, list(anonymous.missing)) == (node_route.UNSET, ["HF_TOKEN"])
+    unavailable = node_route.route_unavailable(definition, params, {})
+    assert unavailable is not None and unavailable["message"] == NEEDS_TOKEN
+    assert node_route.route_unavailable_line(definition, params, {}) == NEEDS_TOKEN
+    signed_in = node_route.select_route(definition, params, SIGNED_IN)
+    assert (signed_in.route_id, signed_in.key) == ("hf-space", "HF_TOKEN")
+    assert node_route.route_unavailable(definition, params, SIGNED_IN) is None
+    assert node_readiness.instance_access(definition, params, SIGNED_IN) == node_readiness.KEY
+    assert node_readiness.instance_access(definition, params, {}) != node_readiness.FREE
+
+
+def test_a_routes_own_missing_key_line_applies_only_to_a_missing_key_alone():
+    """missingKeyLine replaces the generic line only when the key is the one
+    thing missing, and on Auto only when every route Auto could take has one."""
+    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    unset = node_route.Route(node_route.UNSET, None, None, None, None, ("HF_TOKEN",))
+    assert node_route.missing_key_line_for(definition, unset) == NEEDS_TOKEN
+    # Something else stops the route too: its own line doesn't hide that.
+    blocked = unset._replace(route_id="hf-space", block=node_route.DirectBlock("unsupported", "mode"))
+    assert node_route.missing_key_line_for(definition, blocked) is None
+    assert node_route.missing_key_line_for(definition, unset._replace(missing=())) is None
+    # A second route with no line of its own: Auto with no key keeps the
+    # generic "add a key or choose another provider".
+    other = {**definition["routes"][0], "id": "fal", "provider": "fal", "keys": ["FAL_KEY"], "handler": "fal"}
+    other.pop("missingKeyLine")
+    definition["routes"].append(other)
+    assert node_route.missing_key_line_for(definition, unset) is None
+    assert node_route.missing_key_line_for(definition, unset._replace(route_id="hf-space")) == NEEDS_TOKEN
+    assert node_route.missing_key_line_for(definition, unset._replace(route_id="fal")) is None
+
+
+def test_switching_back_to_keyless_is_the_routes_own_change():
+    """If the first live run shows 120 s, the route goes back to keyless."""
+    definition = keyless_idol()
     assert node_route.routes_problems(definition) == []
     params = {"_provider": "auto"}
-    anonymous = node_route.select_route(definition, params, {})
-    assert (anonymous.route_id, anonymous.key) == ("hf-space", None)
-    signed_in = node_route.select_route(definition, params, {"HF_TOKEN": TOKEN})
-    assert signed_in.key == "HF_TOKEN"
+    assert node_route.select_route(definition, params, {}).key is None
     assert node_route.route_unavailable(definition, params, {}) is None
     assert node_readiness.instance_access(definition, params, {}) == node_readiness.FREE
-    assert node_readiness.instance_access(definition, params, {"HF_TOKEN": TOKEN}) == node_readiness.KEY
+    assert node_readiness.instance_access(definition, params, SIGNED_IN) == node_readiness.KEY
+
+
+def test_the_space_route_rules_are_validated():
+    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    route = definition["routes"][0]
+    # Only a maker's Space may name the maker beside the Hugging Face token.
+    route["handler"] = "fal"
+    assert any("provider must be 'huggingface'" in p for p in node_route.routes_problems(definition))
+    route["handler"] = "hf-space"
+    route["missingKeyLine"] = " "
+    assert any("missingKeyLine must be a sentence" in p for p in node_route.routes_problems(definition))
+    keyless = keyless_idol()
+    keyless["routes"][0]["missingKeyLine"] = NEEDS_TOKEN
+    assert any("missingKeyLine needs keys" in p for p in node_route.routes_problems(keyless))
 
 
 def test_a_keyless_route_is_validated():
-    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    definition = keyless_idol()
     route = definition["routes"][0]
     route["keys"] = ["HF_TOKEN"]
     assert any("optionalKeys" in p for p in node_route.routes_problems(definition))
@@ -365,7 +485,7 @@ async def test_a_zerogpu_refusal_says_what_happened(monkeypatch, message, signed
 
 
 @pytest.mark.parametrize("message, kind", [
-    (OWN_FREE, "quota"), (OWN_PRO, "quota"), (ANON_IP, "quota"), (RUNS_LIMIT, "quota"), (CREDITS, "quota"),
+    (OWN_FREE, "quota"), (OWN_PRO, "quota"), (RUNS_LIMIT, "quota"), (CREDITS, "quota"),
     (QUEUE_FULL, "busy"), (QUEUE_PRO, "busy"), (NO_GPU, "busy"), (DURATION, "duration"),
     ("CUDA out of memory", None), ("Please upload an image first.", None),
     # The duration refusal needs both halves of its own text.
@@ -376,6 +496,34 @@ async def test_a_zerogpu_refusal_says_what_happened(monkeypatch, message, signed
 def test_zerogpu_kinds_read_the_spaces_package_texts(message, kind):
     assert idol.zerogpu_kind(message, signed_in=True) == kind
     assert idol.zerogpu_kind(message, signed_in=False) == kind
+
+
+# spaces' texts for an IP with no account behind it (meta.auth None): the
+# bare "your ZeroGPU quota" label, and the API call's suffix. Sent with a
+# token, either means the token didn't apply (PR #203 r2 review, MEDIUM 2).
+ANON_RUNS = ("You have exceeded your ZeroGPU runs limit. "
+             "Authenticate with a Hugging Face token for more quota - https://huggingface.co/settings/tokens")
+ANON_BARE = "You have exceeded your ZeroGPU quota (180s requested vs. 120s left). Try again in 23:59:00."
+
+
+@pytest.mark.parametrize("message", [ANON_IP, ANON_RUNS, ANON_BARE])
+def test_an_ip_only_quota_text_reads_as_a_token_that_didnt_apply_when_one_was_sent(message):
+    assert idol.zerogpu_kind(message, signed_in=False) == "quota"
+    assert idol.zerogpu_kind(message, signed_in=True) == "token-not-applied"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [ANON_IP, ANON_RUNS, ANON_BARE])
+async def test_a_signed_in_run_that_hit_the_ip_quota_says_the_token_didnt_apply(monkeypatch, message):
+    idol_hosts(monkeypatch, stream=sse(("error", json.dumps(message))))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct(keys=SIGNED_IN)
+    assert person_line(excinfo.value) == NOT_APPLIED_LINE
+
+
+def test_an_accounts_own_quota_is_never_read_as_ip_only():
+    for message in (OWN_FREE, OWN_PRO, CREDITS):
+        assert idol.zerogpu_kind(message, signed_in=True) == "quota", message
 
 
 @pytest.mark.parametrize("message", [SPACE_LIMIT, QUEUE_NO_IP])
@@ -390,7 +538,7 @@ async def test_a_space_error_that_echoes_the_token_is_scrubbed(monkeypatch):
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct(keys={"HF_TOKEN": TOKEN})
     assert TOKEN not in str(excinfo.value) and "***" in str(excinfo.value)
-    assert person_line(excinfo.value) == "Idol couldn’t make this object. Details has its message."
+    assert person_line(excinfo.value) == "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why."
 
 
 @pytest.mark.asyncio
@@ -398,8 +546,9 @@ async def test_a_space_error_that_echoes_the_token_is_scrubbed(monkeypatch):
     ("null", "Idol stopped without saying why. Try again in a minute."),
     ("", "Idol stopped without saying why. Try again in a minute."),
     (json.dumps({"error": None}), "Idol stopped without saying why. Try again in a minute."),
-    (json.dumps("Please upload an image first."), "Idol got no image. Connect one, then run it again."),
-    (json.dumps({"error": "CUDA out of memory"}), "Idol couldn’t make this object. Details has its message."),
+    (json.dumps("Please upload an image first."),
+     "The image Idol got is empty. Check the node that makes it, then run Idol again."),
+    (json.dumps({"error": "CUDA out of memory"}), "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why."),
 ])
 async def test_other_space_errors_get_their_own_lines(monkeypatch, data, line):
     stream = b"event: error\ndata: " + data.encode() + b"\n\n" if data else b"event: error\ndata:\n\n"
@@ -416,7 +565,7 @@ async def test_a_stream_that_ends_without_a_result_says_so(monkeypatch):
     idol_hosts(monkeypatch, stream=sse(("heartbeat", "null")))
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct()
-    assert person_line(excinfo.value) == "Idol stopped without a result. Try again in a minute."
+    assert person_line(excinfo.value) == "Idol stopped before sending a result. Try again in a minute."
 
 
 @pytest.mark.asyncio
@@ -476,12 +625,22 @@ async def test_a_space_that_is_down_says_so_before_any_call(monkeypatch, stage):
 
 
 @pytest.mark.asyncio
-async def test_a_space_that_is_gone_says_so(monkeypatch):
-    idol_hosts(monkeypatch, stage=httpx.Response(404, json={"error": "not found"}))
+@pytest.mark.parametrize("keys", [None, SIGNED_IN])
+@pytest.mark.parametrize("answer", [
+    httpx.Response(404, json={"error": "not found"}),
+    # huggingface_hub's rule: RepoNotFound, or any 401 but a bad token's, is
+    # a missing repo (or a private or gated one the caller can't see).
+    httpx.Response(401, json={"error": "Repository not found"},
+                   headers={"x-error-code": "RepoNotFound", "x-error-message": "Repository not found"}),
+    httpx.Response(401, json={"error": "Repository not found"}),
+    httpx.Response(403, json={"error": "gated"}, headers={"x-error-code": "RepoNotFound"}),
+])
+async def test_a_space_hugging_face_says_is_missing_says_so(monkeypatch, keys, answer):
+    hosts = idol_hosts(monkeypatch, stage=answer)
     with pytest.raises(idol.IdolSpaceError) as excinfo:
-        await run_direct()
-    assert person_line(excinfo.value) == ("Idol is no longer on Hugging Face, so it can’t run. "
-                                          "Use another 3D node instead.")
+        await run_direct(keys=keys)
+    assert person_line(excinfo.value) == MISSING_LINE
+    assert not hosts.sent("GET", re.escape(f"{API}/info")) and not hosts.sent("POST", r".*")
 
 
 @pytest.mark.asyncio
@@ -516,7 +675,8 @@ async def test_an_info_read_that_fails_says_why(monkeypatch, status, keys, line)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [401, 403])
 async def test_a_token_the_hub_refuses_stops_at_the_stage_check(monkeypatch, status):
-    hosts = idol_hosts(monkeypatch, stage=httpx.Response(status, json={"error": "Invalid credentials in Authorization header"}))
+    bad = "Invalid credentials in Authorization header"
+    hosts = idol_hosts(monkeypatch, stage=httpx.Response(status, json={"error": bad}, headers={"x-error-message": bad}))
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct(keys={"HF_TOKEN": TOKEN})
     assert person_line(excinfo.value) == TOKEN_LINE
@@ -526,8 +686,17 @@ async def test_a_token_the_hub_refuses_stops_at_the_stage_check(monkeypatch, sta
 
 
 @pytest.mark.asyncio
-async def test_an_anonymous_401_from_the_hub_is_only_skipped(monkeypatch):
-    hosts = idol_hosts(monkeypatch, stage=httpx.Response(401, json={"error": "no"}))
+async def test_an_anonymous_hub_answer_with_the_bad_token_message_is_only_skipped(monkeypatch):
+    # No token was sent, so it can't be about one, and it isn't RepoNotFound.
+    hosts = idol_hosts(monkeypatch, stage=httpx.Response(
+        401, json={"error": "no"}, headers={"x-error-message": "Invalid credentials in Authorization header"}))
+    await run_direct()
+    assert hosts.sent("POST", re.escape(f"{API}/call/run"))
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_403_from_the_hub_is_only_skipped(monkeypatch):
+    hosts = idol_hosts(monkeypatch, stage=httpx.Response(403, json={"error": "no"}))
     await run_direct()
     assert hosts.sent("POST", re.escape(f"{API}/call/run"))
 
@@ -537,7 +706,8 @@ async def test_an_anonymous_401_from_the_hub_is_only_skipped(monkeypatch):
     (401, TOKEN_LINE),
     (503, STARTING),
     (422, CHANGED),
-    (500, "Idol didn’t take the run. Details has its message."),
+    (403, TOKEN_LINE),
+    (500, "Idol turned down this run. Open Details to see why, then try again."),
 ])
 async def test_a_refused_call_says_why(monkeypatch, status, line):
     # The Space echoing the token back never puts it in Nebula's error.
@@ -559,8 +729,12 @@ async def test_a_call_without_an_event_id_is_a_signature_error(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status, keys, line", [
     (401, {"HF_TOKEN": TOKEN}, TOKEN_LINE),
+    (403, {"HF_TOKEN": TOKEN}, TOKEN_LINE),
+    # Without a token, a 401 or 403 isn't about one (review L7, M09).
+    (401, None, "Idol couldn’t use this image. Try another one, or open Details to see why."),
+    (403, None, "Idol couldn’t use this image. Try another one, or open Details to see why."),
     (502, None, STARTING),
-    (413, None, "Idol didn’t take the image. Details has its message."),
+    (413, None, "Idol couldn’t use this image. Try another one, or open Details to see why."),
 ])
 async def test_a_refused_upload_says_why(monkeypatch, status, keys, line):
     hosts = idol_hosts(monkeypatch, upload=httpx.Response(status, text="no"))
@@ -598,7 +772,8 @@ async def test_a_value_the_space_doesnt_take_stops_before_any_request(monkeypatc
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ply, detail", [
-    (splat_ply(64)[:-10], "header describes"),
+    # Shorter than its header says: Content-Length disagrees, cut at once.
+    (splat_ply(64)[:-10], "Content-Length is"),
     (splat_ply(8, fmt="ascii"), "binary little-endian"),
     (splat_ply(8, properties=["x", "y", "z", "opacity"]), "missing"),
     (b"<html>queue full</html>", "ply"),
@@ -657,7 +832,9 @@ async def test_a_ply_that_streams_past_the_cap_is_cut_off(monkeypatch):
     ])
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct()
-    assert f"passed Nebula's {len(splat_ply(64)) - 1:,}-byte limit" in str(excinfo.value)
+    # The header declares one byte more than the cap: refused from it.
+    assert (f"declares {len(splat_ply(64)):,} bytes, above Nebula's {len(splat_ply(64)) - 1:,}-byte limit"
+            in str(excinfo.value))
     assert person_line(excinfo.value) == TOO_LARGE_LINE
 
 
@@ -718,7 +895,7 @@ async def test_a_connection_error_names_only_its_type(monkeypatch):
         await run_direct(inputs=image(source), keys={"HF_TOKEN": TOKEN})
     assert "ConnectError" in str(excinfo.value)
     assert TOKEN not in str(excinfo.value)
-    assert person_line(excinfo.value) == "Nebula couldn’t reach Idol. Check the connection and try again."
+    assert person_line(excinfo.value) == "Nebula couldn’t reach Idol. Check your internet connection, then try again."
 
 
 @pytest.mark.asyncio
@@ -930,14 +1107,16 @@ def test_the_bounds_are_the_pinned_spaces_and_the_nodes():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bad_token", ["hf_abc’def", "hf_abc\ndef", "hf_été", "hf_abc\x00def"])
-async def test_a_token_a_header_cant_carry_gets_a_clear_line_and_sends_nothing(monkeypatch, bad_token):
+@pytest.mark.parametrize("bad_token", ["hf_abc’def", "hf_abc\ndef", "hf_été", "hf_abc\x00def", "hf_abc def",
+                                       "hf_abc\tdef"])
+async def test_a_token_with_a_character_tokens_cant_have_gets_gms_line_and_sends_nothing(monkeypatch, bad_token):
     hosts = idol_hosts(monkeypatch)
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct(keys={"HF_TOKEN": bad_token})
     assert not isinstance(excinfo.value, UnicodeError)
-    assert person_line(excinfo.value) == ("Your Hugging Face token has a character a token can’t have. "
-                                          "Paste it again in Settings.")
+    # GM PR #203 r2: the card's version says Settings; the field's says "here".
+    assert person_line(excinfo.value) == ("This token has a character Hugging Face tokens can’t have. "
+                                          "Copy it again from Hugging Face, then paste it in Settings.")
     assert bad_token not in str(excinfo.value)
     assert hosts.requests == []
 
@@ -1005,19 +1184,20 @@ def test_the_mode_values_are_the_routes_value_map_read_backwards():
     assert idol.MODE_VALUES == {label: value for value, label in route["valueMap"]["mode"].items()}
 
 
-def test_an_anonymous_run_names_hugging_face_as_the_provider_it_called():
+def test_a_run_names_hugging_face_as_the_provider_it_called():
     """Review LOW 11: the card's "Details shows what … said" named nobody on
     an anonymous run, and "Hugging Face" on a signed-in one."""
     from execution.provider_status import called_provider
 
-    assert called_provider("speridlabs-idol", {"_provider": "auto"}, {}) == "Hugging Face"
     assert called_provider("speridlabs-idol", {"_provider": "auto"}, {"HF_TOKEN": TOKEN}) == "Hugging Face"
+    # Without the token the route can't start, so it called nobody.
+    assert called_provider("speridlabs-idol", {"_provider": "auto"}, {}) is None
     # Not every keyless-looking None: a node that calls no provider still has none.
     assert called_provider("text-input", {}, {}) is None
 
 
 def test_a_keyless_route_cant_bill_a_plan():
-    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    definition = keyless_idol()
     route = definition["routes"][0]
     # On a Krea route, so only the keyless rule can refuse it.
     route["provider"], route["plan"] = "krea", "optional"
@@ -1032,3 +1212,210 @@ def test_optional_keys_must_be_a_list_of_key_names(bad):
     problems = node_route.routes_problems(definition)
     assert any("optionalKeys must be a list of key names" in p for p in problems), problems
 
+
+
+# -- PR #203 round 3 -----------------------------------------------------------------
+
+
+def _ply_routes(answer):
+    return [
+        *space_routes(),
+        ("POST", re.escape(f"{API}/call/run"), httpx.Response(200, json={"event_id": "ev1"})),
+        ("GET", re.escape(f"{API}/call/run/ev1"), httpx.Response(200, content=sse(complete()))),
+        ("GET", re.escape(f"{API}/file=") + ".*", answer),
+    ]
+
+
+def _streamed(body: bytes, *, step: int = 1024, headers: dict[str, str] | None = None, served: list[int] | None = None):
+    """A streamed file answer; ``served`` counts the bytes the fake handed over."""
+    def answer(_request):
+        async def chunks():
+            for start in range(0, len(body), step):
+                if served is not None:
+                    served.append(len(body[start:start + step]))
+                yield body[start:start + step]
+
+        return httpx.Response(200, content=chunks(), headers=headers or {})
+    return answer
+
+
+@pytest.mark.asyncio
+async def test_a_download_that_isnt_a_ply_is_cut_off_after_its_first_bytes(monkeypatch):
+    """Review L5: the header is checked from the stream's first 64 KiB, not
+    after the whole file (up to 128 MiB) has come."""
+    served: list[int] = []
+    body = b"<html>" + b"x" * (8 * 1024 * 1024)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(body, step=4096, served=served)))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert person_line(excinfo.value) == "Idol sent back a file Nebula can’t read as a splat. Try again."
+    assert sum(served) <= 64 * 1024 + 4096
+
+
+@pytest.mark.asyncio
+async def test_a_header_declaring_too_many_bytes_is_refused_before_the_rest(monkeypatch):
+    monkeypatch.setattr(idol, "MAX_PLY_BYTES", 2000)
+    served: list[int] = []
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(splat_ply(64), step=512, served=served)))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert "declares" in str(excinfo.value) and person_line(excinfo.value) == TOO_LARGE_LINE
+    assert sum(served) < len(splat_ply(64))
+
+
+@pytest.mark.asyncio
+async def test_a_header_declaring_too_many_gaussians_reads_as_too_large(monkeypatch):
+    monkeypatch.setattr(idol, "SPLAT_PLY_MAX_POINTS", 10)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(splat_ply(64))))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert "64 Gaussians" in str(excinfo.value) and person_line(excinfo.value) == TOO_LARGE_LINE
+
+
+@pytest.mark.asyncio
+async def test_a_content_length_that_disagrees_with_the_header_is_refused(monkeypatch):
+    body = splat_ply(64)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(body, headers={"content-length": str(len(body) + 50)})))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert f"Content-Length is {len(body) + 50:,} bytes" in str(excinfo.value)
+    assert person_line(excinfo.value) == "Idol sent back a file Nebula can’t read as a splat. Try again."
+
+
+@pytest.mark.asyncio
+async def test_a_stream_past_the_size_its_header_declares_is_cut_off(monkeypatch):
+    served: list[int] = []
+    body = splat_ply(64) + b"\0" * 20000
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(body, step=1024, served=served)))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert "runs past" in str(excinfo.value)
+    assert sum(served) <= len(splat_ply(64)) + 1024
+
+
+@pytest.mark.asyncio
+async def test_a_headerless_stream_past_the_cap_is_too_large(monkeypatch):
+    # No end_header within the cap: refused as too large once past it.
+    monkeypatch.setattr(idol, "MAX_PLY_BYTES", 3000)
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, _ply_routes(_streamed(b"ply\n" + b"c" * 10000, step=500)))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert "passed Nebula's 3,000-byte limit" in str(excinfo.value)
+    assert person_line(excinfo.value) == TOO_LARGE_LINE
+
+
+@pytest.mark.asyncio
+async def test_a_content_length_exactly_at_the_cap_is_kept(monkeypatch):
+    """Review L7, M14: the cap is "over", not "at"."""
+    monkeypatch.setattr(idol, "MAX_PLY_BYTES", len(splat_ply(64)))
+    idol_hosts(monkeypatch, ply=splat_ply(64))
+    world = world_of(await run_direct())
+    assert world["assets"]["splats"][0]["asset"]["byteLength"] == len(splat_ply(64))
+
+
+@pytest.mark.asyncio
+async def test_a_result_on_another_space_is_refused_and_never_fetched(monkeypatch):
+    """Review L7, M10: only Idol's own host, not any *.hf.space."""
+    other = "https://someone-else.hf.space/gradio_api/file=/tmp/x.ply"
+    hosts = idol_hosts(monkeypatch, stream=sse(complete(url=other)))
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct(keys=SIGNED_IN)
+    assert "another host" in str(excinfo.value)
+    assert not [r for r in hosts.requests if r.url.host == "someone-else.hf.space"]
+
+
+@pytest.mark.asyncio
+async def test_a_redirect_from_the_space_is_not_followed(monkeypatch):
+    """Review L7, M16: a 3xx from the Space never takes the token elsewhere."""
+    public_dns(monkeypatch)
+    hosts = FakeHosts(monkeypatch, [
+        *space_routes(info=None)[:2],
+        ("GET", re.escape(f"{API}/info"), httpx.Response(302, headers={"location": "https://evil.example.com/info"})),
+        ("GET", r"https://evil\.example\.com/.*", httpx.Response(200, json=INFO)),
+    ])
+    with pytest.raises(idol.IdolSpaceError):
+        await run_direct(keys=SIGNED_IN)
+    assert not [r for r in hosts.requests if r.url.host == "evil.example.com"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("padded", [f"  {TOKEN}  ", f"{TOKEN}\n", f"\t{TOKEN}\r\n"])
+async def test_a_token_padded_with_spaces_or_a_line_break_still_runs(monkeypatch, padded):
+    """Review L7, M24, and GM r2: trimmed without a word."""
+    hosts = idol_hosts(monkeypatch)
+    world_of(await run_node(keys={"HF_TOKEN": padded}))
+    sent = {r.headers.get("x-hf-authorization") or r.headers.get("authorization")
+            for r in hosts.requests if r.url.host != "example.com"}
+    assert sent == {f"Bearer {TOKEN}"}
+
+
+def test_a_padded_result_url_is_refused():
+    """Review N10: urlsplit and httpx read a leading space differently."""
+    for url in (f" {RESULT_URL}", f"{RESULT_URL} ", f"\n{RESULT_URL}"):
+        with pytest.raises(idol.IdolSpaceError) as excinfo:
+            idol._result_url({"url": url, "path": None})
+        assert "spaces around it" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_a_negative_zero_guidance_is_sent_as_zero(monkeypatch):
+    """Review N10: -0.0 is in range, but the Space should get 0.0."""
+    hosts = idol_hosts(monkeypatch)
+    await run_direct(cfg_scale=-0.0)
+    sent = hosts.sent("POST", re.escape(f"{API}/call/run"))[0].content
+    assert b"-0.0" not in sent and json.loads(sent)["data"][3] == 0.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params, line", [
+    ({"gaussians": "2,097,152"}, "Idol doesn’t take this Gaussians value. Pick one from the list."),
+    ({"mode": "Cartoon"}, "Idol doesn’t take this input type. Pick one from the list."),
+])
+async def test_a_value_the_space_doesnt_take_names_only_its_field(monkeypatch, params, line):
+    hosts = idol_hosts(monkeypatch)
+    with pytest.raises(ValueError) as excinfo:
+        await run_direct(**params)
+    assert person_line(excinfo.value) == line
+    assert hosts.requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_a_result_stream_that_refuses_the_token_says_so(monkeypatch, status):
+    """Review L4: the stream, like upload and call/run, maps 401 and 403."""
+    public_dns(monkeypatch)
+    FakeHosts(monkeypatch, [
+        *space_routes(),
+        ("POST", re.escape(f"{API}/call/run"), httpx.Response(200, json={"event_id": "ev1"})),
+        ("GET", re.escape(f"{API}/call/run/ev1"), httpx.Response(status, text="no")),
+    ])
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct(keys=SIGNED_IN)
+    assert person_line(excinfo.value) == TOKEN_LINE
+    with pytest.raises(idol.IdolSpaceError) as excinfo:
+        await run_direct()
+    assert person_line(excinfo.value) == "Idol stopped before sending a result. Try again in a minute."
+
+
+def test_the_hugging_face_settings_check_trims_the_token():
+    from services.settings import PROVIDER_CHECKS
+
+    check = PROVIDER_CHECKS["Hugging Face"]
+    assert check.auth_headers(f" {TOKEN}\n") == {"Authorization": f"Bearer {TOKEN}"}
+
+
+def test_describe_node_tells_agents_who_can_bill_past_the_allowance():
+    from main import HF_SPACE_BILLING_NOTE, _describe_routes
+
+    out = _describe_routes(registry()["speridlabs-idol"], SIGNED_IN, lambda _route: [])
+    [row] = out["routes"]
+    assert row["billing"] == HF_SPACE_BILLING_NOTE
+    assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
+    assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
+    assert row["keys"] == ["HF_TOKEN"] and row["keySet"] is True

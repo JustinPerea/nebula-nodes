@@ -97,6 +97,12 @@ The server exposes these tools for building and running (see
   and list prices by the params that set them (`price.byInputSize` and
   `multiplyBy` on a price read from the input file, `price.unconfirmed` when
   the vendor's page doesn't state it exactly; a route has `priceBy`).
+  A route on a maker's Hugging Face Space (Idol) has `billing`: it runs on
+  the person's own ZeroGPU allowance through their `HF_TOKEN`, Nebula prices
+  it at $0, and on a PRO, Team or Enterprise token Hugging Face can bill GPU
+  time past the daily quota from the person's prepaid credits ($1 per 10
+  minutes). Idol without `HF_TOKEN` is refused before any request: "You can
+  run Idol after you add your Hugging Face token in Settings."
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers

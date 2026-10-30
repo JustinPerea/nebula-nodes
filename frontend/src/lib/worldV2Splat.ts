@@ -12,11 +12,17 @@ export function previewSplat(world: WorldValueV2): WorldSplatRepresentation | nu
 const PROVIDER_NAMES: Readonly<Record<string, string>> = { speridlabs: 'Speridlabs', worldlabs: 'World Labs' };
 const MODEL_NAMES: Readonly<Record<string, string>> = { idol: 'Idol' };
 
+/** A World v2 session's provider as the maker spells it ("Speridlabs"),
+ * the id itself for one Nebula doesn't know, or null. */
+export function worldProviderName(provider: string | undefined | null): string | null {
+  return provider ? PROVIDER_NAMES[provider] ?? provider : null;
+}
+
 /** "Idol · Speridlabs": the model and maker as their makers spell them
  * (GM: "Speridlabs" on the card, never the id). */
 export function splatSourceLine(world: WorldValueV2): string {
   const model = world.session.model ? MODEL_NAMES[world.session.model] ?? world.session.model : null;
-  const provider = world.session.provider ? PROVIDER_NAMES[world.session.provider] ?? world.session.provider : null;
+  const provider = worldProviderName(world.session.provider);
   return [model, provider].filter(Boolean).join(' · ') || '3D splat';
 }
 

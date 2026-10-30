@@ -853,7 +853,6 @@ _WRAPPER_EXCLUSIONS = {
     ("handlers/openrouter_media.py", "_download"): "httpx transport error on a result download",
     ("handlers/openrouter_media.py", "generate_video"): "httpx transport error while polling",
     ("handlers/replicate_model.py", "upload_file"): "httpx transport error on a file upload",
-    ("handlers/speridlabs_idol.py", "_download_ply"): "Nebula's own PLY preflight refused the file, not an answer",
     ("handlers/speridlabs_idol.py", "run_idol"): "httpx transport error: the Idol Space never answered",
     ("handlers/replicate_model.py", "_save_output"): "httpx transport error on a result download",
     ("handlers/replicate_model.py", "run_model"): "httpx transport error: Replicate never answered",

@@ -14,13 +14,17 @@ and returns ``[Model3D file (.ply), seed, html]``. The Gradio queue protocol
 ``/gradio_api/upload`` (multipart ``files``), which answers with the
 server-side paths, the call the Gradio client makes.
 
-Who pays: nobody bills Nebula. Without a token the Space runs on Hugging
-Face's anonymous ZeroGPU allowance; with the person's ``HF_TOKEN`` it uses
-their own (free 5, PRO 40 minutes a day; past that, a PRO account can be billed
-$1 per 10 GPU-minutes, https://huggingface.co/docs/hub/spaces-zerogpu). The
-token is sent only to huggingface.co and the Space's own host
-(speridlabs-idol.hf.space) over HTTPS, and never appears in a log line or an
-error.
+Who pays: nobody bills Nebula. The run uses the person's own ZeroGPU time
+through their ``HF_TOKEN`` (free 5, PRO 40 minutes a day; past that, a PRO
+account can be billed $1 per 10 GPU-minutes,
+https://huggingface.co/docs/hub/spaces-zerogpu). The route needs the token
+(GM, PR #203 r4): the Space asks for 120 s, which ``spaces`` 0.51.3 turns into
+180 s on ZeroGPU's Blackwell cards, more than the 2-minute anonymous
+allowance. The engine refuses a run without it before anything is sent; the
+anonymous branch here stays as a backstop and for a switch back to keyless.
+The token is sent only to huggingface.co (``Authorization``) and the Space's
+own host (``X-HF-Authorization``) over HTTPS, and never appears in a log line
+or an error.
 
 The ZeroGPU errors the Space can answer with are read from ``spaces`` 0.51.3
 ``spaces/zero/client.py`` ``schedule()`` (the package every ZeroGPU Space
@@ -47,7 +51,15 @@ import httpx
 from execution.person_line import as_person_line, with_api_status, with_person_line, with_provider_line
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
-from services.splat_ply import SPLAT_PLY_MAX_BYTES, SplatPlyError, SplatPlyHeader, validate_splat_ply
+from services.splat_ply import (
+    SPLAT_PLY_MAX_BYTES,
+    SPLAT_PLY_MAX_HEADER_BYTES,
+    SPLAT_PLY_MAX_POINTS,
+    SplatPlyError,
+    SplatPlyHeader,
+    parse_splat_ply_header,
+    validate_splat_ply,
+)
 
 SPACE_ID = "speridlabs/idol"
 SPACE_URL = "https://speridlabs-idol.hf.space"
@@ -112,7 +124,8 @@ class IdolSpaceError(RuntimeError):
 
 # The only hosts the person's token goes to: the Hub (stage check) and this
 # Space's own domain. Not any *.hf.space: anyone can make a Space.
-TOKEN_HOSTS = frozenset({"huggingface.co", SPACE_HOST})
+HUB_HOST = "huggingface.co"
+TOKEN_HOSTS = frozenset({HUB_HOST, SPACE_HOST})
 
 
 def token_allowed(url: str) -> bool:
@@ -123,7 +136,20 @@ def token_allowed(url: str) -> bool:
 
 
 def _headers(url: str, token: str | None) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"} if token and token_allowed(url) else {}
+    """The token's header for this URL, or none.
+
+    The Hub reads ``Authorization``. The Space's own host gets
+    ``X-HF-Authorization`` instead, as gradio_client (1.11.1+) and Hugging
+    Face's MCP server send it: Hugging Face's Space proxy uses it for the
+    caller's ZeroGPU quota and strips it, so the token stops at the proxy and
+    never reaches Speridlabs' container (gradio-app/gradio PR #11700). Plain
+    ``Authorization`` would be passed through to the Space's code."""
+    if not token or not token_allowed(url):
+        return {}
+    host = (urlsplit(url).hostname or "").lower().rstrip(".")
+    if host == HUB_HOST:
+        return {"Authorization": f"Bearer {token}"}
+    return {"X-HF-Authorization": f"Bearer {token}"}
 
 
 def _scrub(text: str, token: str | None) -> str:
@@ -193,6 +219,12 @@ def duration_error(*, detail: str, signed_in: bool) -> IdolSpaceError:
 # allowed" is the Space's per-run ask (app.py duration=120) over the tier's cap.
 _OWN_QUOTA = re.compile(r"exceeded your .*quota|runs limit|too many zerogpu credits")
 _NO_IP_TOKEN = "re-running outside of examples"
+# spaces' quota texts for an X-IP-Token with no account behind it ("Falling
+# back to IP-based quotas", meta.auth is None): the bare label "your ZeroGPU
+# quota" (an account's says "your free ZeroGPU quota" or "your Pro ZeroGPU
+# quota") and, on an API call, this suffix. With HF_TOKEN sent, either means
+# the token didn't apply (PR #203 review, spaces 0.51.3 zero/client.py).
+_IP_ONLY_QUOTA = ("authenticate with a hugging face token", "exceeded your zerogpu quota")
 
 
 def zerogpu_kind(message: str, *, signed_in: bool) -> str | None:
@@ -201,6 +233,8 @@ def zerogpu_kind(message: str, *, signed_in: bool) -> str | None:
     lowered = message.lower()
     if "requested gpu duration" in lowered and "larger than the maximum allowed" in lowered:
         return "duration"
+    if signed_in and any(text in lowered for text in _IP_ONLY_QUOTA):
+        return "token-not-applied"
     if _OWN_QUOTA.search(lowered):
         return "quota"
     no_ip_token = "reached its gpu limit" in lowered or (
@@ -227,11 +261,12 @@ def classify_space_error(message: Any, *, signed_in: bool, token: str | None = N
     if kind == "duration":
         return duration_error(detail=text, signed_in=signed_in)
     if "upload an image" in text.lower():
-        return with_person_line(IdolSpaceError("The Idol Space got no image"),
-                                "Idol got no image. Connect one, then run it again.")
+        return with_person_line(IdolSpaceError("The Idol Space got no image (it said: upload an image)"),
+                                "The image Idol got is empty. Check the node that makes it, then run Idol again.")
     if text:
         error = IdolSpaceError(f"The Idol Space returned an error: {text}")
-        return with_provider_line(error, "Idol couldn’t make this object. Details has its message.")
+        return with_provider_line(
+            error, "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why.")
     return with_person_line(
         IdolSpaceError("The Idol Space stopped the run without saying why (Gradio error event with no message)"),
         "Idol stopped without saying why. Try again in a minute.")
@@ -288,13 +323,52 @@ def token_refused(*, status: int = 401) -> IdolSpaceError:
                             "Hugging Face didn’t accept your token. Check it in Settings.")
 
 
-def token_unusable() -> IdolSpaceError:
-    # Nothing was sent: httpx can't put a non-ASCII or control character in
-    # a header (a pasted smart quote or line break).
+def token_bad_character() -> IdolSpaceError:
+    # Nothing was sent. Leading and trailing spaces and line breaks are
+    # trimmed first (a paste often carries them); what's left must be
+    # printable ASCII with no space, as every Hugging Face token is.
     return with_person_line(
-        IdolSpaceError("The HF_TOKEN in Settings has a character an HTTP header can't carry "
-                       "(not printable ASCII), so Nebula sent nothing"),
-        "Your Hugging Face token has a character a token can’t have. Paste it again in Settings.")
+        IdolSpaceError("The HF_TOKEN in Settings has a character Hugging Face tokens never have "
+                       "(a space, a control character or non-ASCII), so Nebula sent nothing"),
+        "This token has a character Hugging Face tokens can’t have. "
+        "Copy it again from Hugging Face, then paste it in Settings.")
+
+
+def clean_token(raw: Any) -> str | None:
+    """The token as Nebula sends it: trimmed of leading and trailing spaces
+    and line breaks, or None when nothing is left. Raises
+    ``token_bad_character`` for any other character a token can't have."""
+    if not isinstance(raw, str):
+        return None
+    token = raw.strip()
+    if not token:
+        return None
+    if not (token.isascii() and token.isprintable()) or any(ch.isspace() for ch in token):
+        raise token_bad_character()
+    return token
+
+
+def space_missing_error(*, status: int, code: str | None) -> IdolSpaceError:
+    # Hugging Face answers the same for a deleted Space and a private or
+    # gated one the caller can't see.
+    return with_person_line(
+        IdolSpaceError(f"Hugging Face reports the Idol Space (speridlabs/idol) missing: deleted, private "
+                       f"or gated (Hub API answered {status}, {code or 'no error code'})"),
+        "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead.")
+
+
+# huggingface_hub's own rule (utils/_http.py hf_raise_for_status): the Hub
+# says RepoNotFound for a missing repo, and for a private or gated one the
+# caller can't see; any 401 on a repo API but a bad token's is that too.
+_BAD_TOKEN_MESSAGE = "Invalid credentials in Authorization header"
+
+
+def hub_says_missing(response: httpx.Response) -> bool:
+    if response.status_code == 404:
+        return True
+    if response.headers.get("x-error-code") == "RepoNotFound":
+        return True
+    return response.status_code == 401 and response.headers.get("x-error-message") != _BAD_TOKEN_MESSAGE
 
 
 def _number_text(value: float) -> str:
@@ -325,7 +399,8 @@ def checked_params(params: Mapping[str, Any]) -> dict[str, float]:
             raise error from None
         if not math.isfinite(value) or not low <= value <= high or (whole and not value.is_integer()):
             raise error
-        checked[key] = int(value) if whole else value
+        # + 0.0 turns -0.0 into 0.0, so the Space never gets "-0.0".
+        checked[key] = int(value) if whole else value + 0.0
     return checked
 
 
@@ -343,9 +418,8 @@ async def wait_until_running(client: httpx.AsyncClient, token: str | None) -> No
         except httpx.HTTPError as exc:
             _log(f"stage check skipped: {type(exc).__name__}")
             return
-        if response.status_code == 404:
-            raise with_person_line(IdolSpaceError("The Idol Space (speridlabs/idol) no longer exists on Hugging Face"),
-                                   "Idol is no longer on Hugging Face, so it can’t run. Use another 3D node instead.")
+        if hub_says_missing(response):
+            raise space_missing_error(status=response.status_code, code=response.headers.get("x-error-code"))
         if response.status_code in (401, 403) and token:
             # The Hub refuses a bad or revoked token even on a public Space.
             raise token_refused(status=response.status_code)
@@ -425,14 +499,14 @@ async def _read_image(value: str) -> tuple[bytes, str]:
 
 
 def _upload_error(response: httpx.Response, token: str | None) -> IdolSpaceError:
-    if response.status_code == 401 and token:
-        return token_refused()
+    if response.status_code in (401, 403) and token:
+        return token_refused(status=response.status_code)
     if response.status_code in (502, 503, 504):
         return space_starting_error(stage=f"answering {response.status_code}")
     return with_provider_line(with_api_status(
         IdolSpaceError(f"The Idol Space refused the image upload ({response.status_code}): "
                        f"{_scrub(response.text, token)}"), response.status_code),
-        "Idol didn’t take the image. Details has its message.")
+        "Idol couldn’t use this image. Try another one, or open Details to see why.")
 
 
 async def sse_events(response: httpx.Response) -> AsyncIterator[tuple[str, str]]:
@@ -457,8 +531,8 @@ async def _call_run(client: httpx.AsyncClient, payload: list[Any], token: str | 
                     emit: Emit | None, node_id: str) -> list[Any]:
     url = f"{GRADIO_API}/call/run"
     response = await client.post(url, headers=_headers(url, token), json={"data": payload})
-    if response.status_code == 401 and token:
-        raise token_refused()
+    if response.status_code in (401, 403) and token:
+        raise token_refused(status=response.status_code)
     if response.status_code in (502, 503, 504):
         raise space_starting_error(stage=f"answering {response.status_code}")
     if response.status_code == 422:
@@ -466,7 +540,7 @@ async def _call_run(client: httpx.AsyncClient, payload: list[Any], token: str | 
     if response.status_code != 200:
         raise with_provider_line(with_api_status(
             IdolSpaceError(f"The Idol Space refused the run ({response.status_code}): {_scrub(response.text, token)}"),
-            response.status_code), "Idol didn’t take the run. Details has its message.")
+            response.status_code), "Idol turned down this run. Open Details to see why, then try again.")
     try:
         event_id = str(response.json()["event_id"])
     except (ValueError, KeyError, TypeError):
@@ -476,10 +550,12 @@ async def _call_run(client: httpx.AsyncClient, payload: list[Any], token: str | 
     async with client.stream("GET", stream_url, headers=_headers(stream_url, token)) as stream:
         if stream.status_code != 200:
             await stream.aread()
+            if stream.status_code in (401, 403) and token:
+                raise token_refused(status=stream.status_code)
             raise with_provider_line(
                 with_api_status(IdolSpaceError(f"The Idol Space's result stream answered {stream.status_code}"),
                                 stream.status_code),
-                "Idol didn’t send its result. Try again in a minute.")
+                "Idol stopped before sending a result. Try again in a minute.")
         async for event, data in sse_events(stream):
             if event == "complete":
                 try:
@@ -502,7 +578,7 @@ async def _call_run(client: httpx.AsyncClient, payload: list[Any], token: str | 
                 # No real progress from the Space: a slow creep that never claims done.
                 await emit(ProgressEvent(node_id=node_id, value=min(0.9, 0.1 + 0.02 * beats)))
     raise with_person_line(IdolSpaceError("The Idol Space's result stream ended without a result"),
-                           "Idol stopped without a result. Try again in a minute.")
+                           "Idol stopped before sending a result. Try again in a minute.")
 
 
 def _file_url(path: str) -> str:
@@ -516,6 +592,9 @@ def _result_url(file_data: Any) -> str:
         raise signature_error(detail="its first output isn't a file")
     url = file_data.get("url")
     path = file_data.get("path")
+    if isinstance(url, str) and url and url != url.strip():
+        # urlsplit and httpx read a padded URL differently; never guess.
+        raise signature_error(detail="its result file URL has spaces around it")
     if isinstance(url, str) and url:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
@@ -536,8 +615,41 @@ def _result_url(file_data: Any) -> str:
     raise signature_error(detail="its result file has no path")
 
 
+def _too_large(*, what: str) -> IdolSpaceError:
+    # ``what`` is Nebula's own measure of the file, never the Space's words.
+    return with_person_line(
+        IdolSpaceError(f"The Idol Space's .ply {what}"),
+        "This splat is too large for Nebula to keep. Lower Gaussians in the node’s settings, then run it again.")
+
+
+def _unreadable(*, detail: str) -> IdolSpaceError:
+    # The reason (Nebula's own words) stays behind Details.
+    return with_provider_line(IdolSpaceError(f"The Idol Space returned a .ply Nebula can't read: {detail}"),
+                              "Idol sent back a file Nebula can’t read as a splat. Try again.")
+
+
+def _checked_header(prefix: bytes) -> SplatPlyHeader:
+    """The PLY header from the download's first bytes, checked against
+    Nebula's limits before the rest of the file comes."""
+    try:
+        # Parsed without the point cap, so too many Gaussians reads as too
+        # large (the person can lower Gaussians), not as a damaged file.
+        header = parse_splat_ply_header(prefix, max_points=sys.maxsize)
+    except SplatPlyError as exc:
+        raise _unreadable(detail=str(exc)) from None
+    if header.vertex_count > SPLAT_PLY_MAX_POINTS:
+        raise _too_large(what=f"declares {header.vertex_count:,} Gaussians, above Nebula's "
+                         f"{SPLAT_PLY_MAX_POINTS:,} limit")
+    if header.expected_bytes > MAX_PLY_BYTES:
+        raise _too_large(what=f"declares {header.expected_bytes:,} bytes, above Nebula's {MAX_PLY_BYTES:,}-byte limit")
+    return header
+
+
 async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
                         destination: Path) -> SplatPlyHeader:
+    """Stream the result to ``.part``: the header is checked from the first
+    bytes (up to 64 KiB), and the stream is cut as soon as it is refused,
+    passes the size the header declares, or disagrees with Content-Length."""
     partial = destination.with_name(destination.name + ".part")
     received = 0
     try:
@@ -547,28 +659,36 @@ async def _download_ply(client: httpx.AsyncClient, url: str, token: str | None,
                     # no API status: a download of a result file, not the Space's API
                     IdolSpaceError(f"The Idol Space's .ply download answered {response.status_code}"),
                     "Nebula couldn’t download the object from Idol. Try again in a minute.")
-            declared = response.headers.get("content-length")
-            if declared and declared.isdigit() and int(declared) > MAX_PLY_BYTES:
-                raise with_person_line(
-                    IdolSpaceError(f"The Idol Space's .ply is {int(declared):,} bytes, above Nebula's "
-                                   f"{MAX_PLY_BYTES:,}-byte limit"),
-                    "This splat is too large for Nebula to keep. "
-                    "Lower Gaussians in the node’s settings, then run it again.")
+            raw_declared = response.headers.get("content-length")
+            declared = int(raw_declared) if raw_declared and raw_declared.isdigit() else None
+            if declared is not None and declared > MAX_PLY_BYTES:
+                raise _too_large(what=f"is {declared:,} bytes, above Nebula's {MAX_PLY_BYTES:,}-byte limit")
+            header: SplatPlyHeader | None = None
+            prefix = bytearray()
             with partial.open("wb") as handle:
                 async for chunk in response.aiter_bytes():
                     received += len(chunk)
-                    if received > MAX_PLY_BYTES:
-                        raise with_person_line(
-                            IdolSpaceError(f"The Idol Space's .ply passed Nebula's {MAX_PLY_BYTES:,}-byte limit"),
-                            "This splat is too large for Nebula to keep. "
-                    "Lower Gaussians in the node’s settings, then run it again.")
+                    if header is None:
+                        prefix += chunk
+                        if b"end_header\n" in prefix or len(prefix) >= SPLAT_PLY_MAX_HEADER_BYTES:
+                            header = _checked_header(bytes(prefix))
+                            if declared is not None and declared != header.expected_bytes:
+                                raise _unreadable(detail=f"Content-Length is {declared:,} bytes, but its header "
+                                                  f"declares {header.expected_bytes:,}")
+                            prefix = bytearray()
+                    limit = header.expected_bytes if header is not None else MAX_PLY_BYTES
+                    if received > limit:
+                        if header is None:
+                            raise _too_large(what=f"passed Nebula's {MAX_PLY_BYTES:,}-byte limit")
+                        raise _unreadable(detail=f"it runs past the {header.expected_bytes:,} bytes its header declares")
                     handle.write(chunk)
+        if header is None:
+            # The whole file came before a complete header did.
+            _checked_header(bytes(prefix))
         try:
             header = validate_splat_ply(partial)
         except SplatPlyError as exc:
-            # The preflight's reason (Nebula's own words) stays behind Details.
-            raise with_provider_line(IdolSpaceError(f"The Idol Space returned a .ply Nebula can't read: {exc}"),
-                                     "Idol sent back a file Nebula can’t read as a splat. Try again.") from None
+            raise _unreadable(detail=str(exc)) from None
         partial.replace(destination)
         return header
     finally:
@@ -634,18 +754,19 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
         image.value if image is not None else None)
     if not image_value:
         raise as_person_line(ValueError("Idol needs an image. Connect one, then run it again."))
-    raw_token = api_keys.get(TOKEN_KEY)
-    # TODO(Justin): an agent's run on a PRO, Team or Enterprise token can be
-    # billed by Hugging Face past the daily quota; the spend gate admits it at
-    # $0 today (PR #203 review). Decide whether agents may run it on a token.
-    token = raw_token.strip() if isinstance(raw_token, str) and raw_token.strip() else None
-    if token is not None and not (token.isascii() and token.isprintable()):
-        raise token_unusable()
+    # TODO(Justin, Q141): an agent's run on a PRO, Team or Enterprise token
+    # can be billed by Hugging Face past the daily quota ($1 per 10 GPU
+    # minutes, https://huggingface.co/docs/hub/spaces-zerogpu); the spend
+    # gate admits it at $0 today, and describe_node tells agents so.
+    # Settings and the settings check trim too; this is the backstop.
+    token = clean_token(api_keys.get(TOKEN_KEY))
     params = dict(node.params)
     mode = str(params.get("mode") or MODES[0])
     gaussians_label = str(params.get("gaussians") or "262,144")
-    if mode not in MODES or gaussians_label not in GAUSSIANS:
-        raise as_person_line(ValueError("Idol doesn’t take this Input type or Gaussians value. Pick one from the list."))
+    if gaussians_label not in GAUSSIANS:
+        raise as_person_line(ValueError("Idol doesn’t take this Gaussians value. Pick one from the list."))
+    if mode not in MODES:
+        raise as_person_line(ValueError("Idol doesn’t take this input type. Pick one from the list."))
     numbers = checked_params(params)
     steps, cfg, rescale_t, seed = numbers["steps"], numbers["cfg_scale"], numbers["rescale_t"], numbers["seed"]
 
@@ -677,7 +798,7 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
         # only ever in a header, never in a URL, so the type name is enough.
         raise with_provider_line(
             IdolSpaceError(f"Nebula couldn't reach the Idol Space ({type(exc).__name__})"),
-            "Nebula couldn’t reach Idol. Check the connection and try again.") from None
+            "Nebula couldn’t reach Idol. Check your internet connection, then try again.") from None
     except asyncio.CancelledError:
         # Closing the stream (the context managers above) ends Nebula's wait.
         # Gradio's /call API has no documented cancel, so a job the Space has

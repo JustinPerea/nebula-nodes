@@ -32,6 +32,15 @@ vi.mock('@react-three/fiber', async () => {
     }
     return viewerHarness.threeState;
   };
+  const getters = new WeakMap<object, () => unknown>();
+  const stableGet = (state: object): (() => unknown) => {
+    let get = getters.get(state);
+    if (!get) {
+      get = () => ({ ...state, size: { width: 800, height: 600 } });
+      getters.set(state, get);
+    }
+    return get;
+  };
 
   return {
     Canvas: ({
@@ -63,11 +72,12 @@ vi.mock('@react-three/fiber', async () => {
     },
     // The viewer reads `useThree((state) => state.get)` for the object framing's
     // camera and stage size; without a selector, the state itself.
+    // R3F's `get` is one function for the store's life; a new one per call
+    // re-ran the scene's load effect on every render, a 'ready' loop that
+    // failed the camera test under load (PR #203 round 3).
     useThree: (selector?: (state: unknown) => unknown) => {
       const state = getThreeState();
-      return selector
-        ? selector({ ...state, get: () => ({ ...state, size: { width: 800, height: 600 } }) })
-        : state;
+      return selector ? selector({ ...state, get: stableGet(state) }) : state;
     },
   };
 });
@@ -121,6 +131,13 @@ vi.mock('three/addons/controls/OrbitControls.js', async () => {
   };
 });
 
+// Spied, not replaced: every Spark dispose must go through it, so Spark's
+// "Worker terminate" rejections that follow are marked handled.
+vi.mock('../../src/lib/sparkDispose', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/sparkDispose')>();
+  return { ...actual, disposeSparkQuietly: vi.fn(actual.disposeSparkQuietly) };
+});
+
 vi.mock('../../src/lib/worldSplat', () => ({
   fetchWorldSplatBytes: viewerHarness.fetchWorldSplatBytes,
   WorldSplatFormatError: class MockWorldSplatFormatError extends Error {},
@@ -129,7 +146,10 @@ vi.mock('../../src/lib/worldSplat', () => ({
 
 import { WorldEnvironmentViewer } from '../../src/components/nodes/WorldEnvironmentViewer';
 import { RequestFailedError } from '../../src/lib/errorCopy';
-import { OBJECT_ORBIT_MAX_DISTANCE_FACTOR, OBJECT_VIEW_MARGIN } from '../../src/lib/worldNavigation';
+import { disposeSparkQuietly } from '../../src/lib/sparkDispose';
+import {
+  OBJECT_ORBIT_MAX_DISTANCE_FACTOR, OBJECT_ORBIT_MIN_RADIUS_FACTOR, OBJECT_VIEW_MARGIN,
+} from '../../src/lib/worldNavigation';
 
 describe('WorldEnvironmentViewer', () => {
   beforeEach(() => {
@@ -296,6 +316,8 @@ describe('WorldEnvironmentViewer', () => {
     });
 
     await waitFor(() => expect(mesh.dispose).toHaveBeenCalledTimes(2));
+    // Both disposes are the quiet one (PR #203 r2 review, NIT-1).
+    expect(vi.mocked(disposeSparkQuietly).mock.calls.filter(([target]) => target === mesh)).toHaveLength(2);
     expect(onStatusChange).not.toHaveBeenCalledWith('ready');
   });
 
@@ -347,8 +369,42 @@ describe('WorldEnvironmentViewer', () => {
     // an environment's scale.
     const look = camera.getWorldDirection(new Vector3());
     expect(look.dot(direction)).toBeCloseTo(-1, 2);
-    const controls = viewerHarness.controls.at(-1) as { maxDistance: number };
+    const controls = viewerHarness.controls.at(-1) as { maxDistance: number; minDistance: number };
     expect(controls.maxDistance).toBeCloseTo(distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR, 1);
+    // It zooms in to a fifth of its radius, and the clip planes come from it.
+    expect(controls.minDistance).toBeCloseTo(0.4 * OBJECT_ORBIT_MIN_RADIUS_FACTOR, 2);
+    expect(camera.near).toBeLessThan(controls.minDistance);
+    expect(camera.far).toBeGreaterThanOrEqual(controls.maxDistance + 2 * 0.4);
+  });
+
+  it('opens a 1 mm object at the same share of the stage, zoomable, with clip planes at its scale (review LOW 2)', async () => {
+    viewerHarness.renderScene = true;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    viewerHarness.splatCount = 64;
+    viewerHarness.getSplat.mockImplementation((index: number) => {
+      const theta = (index / 64) * Math.PI * 2 * 7;
+      const z = (index / 63) * 2 - 1;
+      const ring = Math.sqrt(1 - z * z);
+      return { center: new Vector3(Math.cos(theta) * ring * 0.0005, Math.sin(theta) * ring * 0.0005, z * 0.0005),
+        scales: new Vector3(1e-5, 1e-5, 1e-5), opacity: 1 };
+    });
+    const onStatusChange = vi.fn();
+    render(
+      <WorldEnvironmentViewer src="/api/outputs/run/tiny.ply" format="ply" label="Tiny" navigationMode="orbit"
+        resetToken={0} upAxis="-y" forwardAxis="x" framing="object" onStatusChange={onStatusChange} />,
+    );
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('ready'));
+    const camera = viewerHarness.threeState?.camera as PerspectiveCamera;
+    await waitFor(() => expect(camera.position.length()).toBeGreaterThan(0.0005));
+    const distance = camera.position.length();
+    // The same framing as the 0.4 sphere above, to within 2%, a million times smaller.
+    expect(distance / ((0.0005 / Math.sin((29 * Math.PI) / 180)) * OBJECT_VIEW_MARGIN)).toBeCloseTo(1, 1);
+    const controls = viewerHarness.controls.at(-1) as { minDistance: number; maxDistance: number };
+    // Orbit's old 0.01 floor pushed the camera 7x back; the near plane hid it.
+    expect(controls.minDistance).toBeLessThan(distance);
+    expect(camera.near).toBeLessThan(distance - 0.0005);
   });
 
   it('reports a splat whose file is gone (404) as missing, another failed request as other', async () => {
@@ -366,12 +422,57 @@ describe('WorldEnvironmentViewer', () => {
     await waitFor(() => expect(onFailure).toHaveBeenCalledWith('missing'));
     unmount();
 
-    viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(new RequestFailedError("Couldn't load the world.", 500));
+    // Any other answer, or a dropped connection, didn't load: worth trying again (GM r3).
+    for (const error of [new RequestFailedError("Couldn't load the world.", 500), new TypeError('Failed to fetch')]) {
+      viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(error);
+      const onLoad = vi.fn();
+      const view = render(
+        <WorldEnvironmentViewer src="/api/outputs/run/broken.ply" format="ply" label="Idol object"
+          navigationMode="orbit" resetToken={0} framing="object" onFailure={onLoad} quietFallback />,
+      );
+      await waitFor(() => expect(onLoad).toHaveBeenCalledWith('load'));
+      view.unmount();
+    }
+    // The file came and passed the check, but Spark couldn't read it: damaged.
+    viewerHarness.meshInitializations.push(Promise.reject(new Error('bad splat data')));
     const onOther = vi.fn();
     render(
-      <WorldEnvironmentViewer src="/api/outputs/run/broken.ply" format="ply" label="Idol object"
+      <WorldEnvironmentViewer src="/api/outputs/run/odd.ply" format="ply" label="Idol object"
         navigationMode="orbit" resetToken={0} framing="object" onFailure={onOther} quietFallback />,
     );
     await waitFor(() => expect(onOther).toHaveBeenCalledWith('other'));
+  });
+
+  it('says no WebGL 2 as its own failure, with nothing on screen when quiet (GM r2, r3)', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const onFailure = vi.fn();
+    const { container } = render(
+      <WorldEnvironmentViewer src="/api/outputs/run/idol.ply" format="ply" label="Idol object"
+        navigationMode="orbit" resetToken={0} framing="object" onFailure={onFailure} quietFallback />,
+    );
+    await waitFor(() => expect(onFailure).toHaveBeenCalledWith('webgl'));
+    expect(container).not.toHaveTextContent(/Interactive preview unavailable|./);
+    expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('fetches again on a remount (the dialog\'s Try again) and recovers', async () => {
+    viewerHarness.renderScene = true;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      getExtension: vi.fn().mockReturnValue(null),
+    } as unknown as WebGL2RenderingContext);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(new RequestFailedError("Couldn't load the world.", 503));
+    const onFailure = vi.fn();
+    const onStatusChange = vi.fn();
+    const props = { src: '/api/outputs/run/idol.ply', format: 'ply' as const, label: 'Idol object',
+      navigationMode: 'orbit' as const, resetToken: 0, framing: 'object' as const, onFailure, onStatusChange,
+      quietFallback: true };
+    const { rerender } = render(<WorldEnvironmentViewer key="0" {...props} />);
+    await waitFor(() => expect(onFailure).toHaveBeenCalledWith('load'));
+    expect(viewerHarness.fetchWorldSplatBytes).toHaveBeenCalledTimes(1);
+    rerender(<WorldEnvironmentViewer key="1" {...props} />);
+    await waitFor(() => expect(onStatusChange).toHaveBeenLastCalledWith('ready'));
+    expect(viewerHarness.fetchWorldSplatBytes.mock.calls.length).toBeGreaterThan(1);
+    expect(screen.getByRole('application', { name: 'Idol object, interactive 3D object' })).toBeInTheDocument();
   });
 });

@@ -204,9 +204,12 @@ state rather than ad hoc property access.
 The registry covers World v1/v2, camera pose/path, spatial context, depth
 map/sequence, point cloud, sensor rig/stream, and spatial session. It is reused
 by standard nodes, dynamic nodes, and Create Studio output rendering. World v1
-keeps the dedicated lazy interactive Marble/SPZ preview. World v2 renders its
-summary card plus, when it has a splat at a local `/api/outputs/` URL, an
-**Explore in 3D** button (see [World v2 splat preview](#world-v2-splat-preview)).
+keeps the dedicated lazy interactive Marble/SPZ preview. A World v2 whose only
+representation is a splat (Idol's) reads like the World v1 card: kind, name,
+provider, **Explore in 3D** and the splat's format. A richer World v2 (a point
+cloud, depth, panorama or collider too) renders its summary card listing them,
+with **Explore in 3D** when it has a splat at a local `/api/outputs/` URL (see
+[World v2 splat preview](#world-v2-splat-preview)).
 The other types render bounded summary cards and local download links; this is
 not a claim that Nebula has interactive renderers or authoring nodes for every
 representation.
@@ -220,8 +223,24 @@ so the first-load budget is unchanged. `lib/worldV2Splat.ts` `previewSplat`
 picks the value's SPZ first, else its PLY. The viewer
 (`WorldEnvironmentViewer`) takes the splat's `format`, turns the value's
 `upAxis` to Three's +Y (`worldTransform.upAxisToThreeRotation`: -Y up is 180
-degrees about X), and with `framing="object"` puts the reset camera on the
-`forwardAxis` side at 2.4 times the bounding radius, looking at the centre.
+degrees about X), and with `framing="object"` frames it as an object
+(`lib/worldNavigation.ts` `objectFraming`): the reset camera looks at the
+centre from the `forwardAxis` side turned 30° (`OBJECT_VIEW_YAW_DEGREES`) and
+raised 15° (`OBJECT_VIEW_PITCH_DEGREES`), at the distance where the bounding
+sphere fits the narrower half of the view with a 1.3 margin (radius /
+sin(fov/2) × `OBJECT_VIEW_MARGIN`). The radius is the 98th-percentile
+distance of the sampled centres from the trimmed box's centre, so floaters
+don't push the camera back. Orbit only: no Fly and no auto-rotate, zoom out
+to 4 times the framing distance, zoom in to 0.2 of the radius.
+
+The extremes (PR #203 round 3): the radius is never smaller than the
+splats' own size, 3 times the 98th-percentile Gaussian scale
+(`sampleWorldSplatExtents`), so one Gaussian or a splat whose centres all
+sit at one point opens outside it. A radius with nothing to measure falls
+back to 0.5. The camera's near plane is 0.05 of the closest zoom and its far
+plane is past the farthest zoom plus the object, so a 1 mm object and a
+10 km one both open framed and can zoom without clipping. Environments keep
+their own minimum orbit distance (0.01).
 
 Every PLY passes a bounded preflight before Spark sees a byte, in the browser
 (`lib/splatPly.ts`) and in the backend (`services/splat_ply.py`), with the
@@ -258,7 +277,9 @@ main-thread leak; the time is inside Spark's load after the fetch. This was
 only seen on SwiftShader and isn't explained yet. Nebula doesn't convert
 Idol's PLYs to SPZ for now: the rule was to convert if a 262,144-Gaussian
 load took over about 5 s, and here one did only as the third splat opened on
-SwiftShader. Check that on a real GPU before deciding.
+SwiftShader. On a real GPU (headless Chrome on ANGLE Metal, Apple M5 Max,
+PR #203 round 2) the backpack opened in 0.74-0.94 s and the 262,144-Gaussian
+ball in 0.32 s, so no conversion for now.
 
 The same check found that every World viewer in a production build failed with
 "FullScreenQuad is not a constructor", on main too: Spark constructs

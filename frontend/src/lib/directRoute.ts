@@ -34,8 +34,8 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   BYTEPLUS_API_KEY: 'bytedance',
   // Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
   BFL_API_KEY: 'bfl',
-  // A Hugging Face access token: optional on a keyless Space route
-  // (RouteSpec.optionalKeys), never needed.
+  // A Hugging Face access token, for a maker's Space route (handler
+  // hf-space): Idol's needs it; a keyless one lists it in optionalKeys.
   HF_TOKEN: 'huggingface',
 };
 
@@ -150,7 +150,7 @@ export interface NodeRoute {
   missing?: string[];
 }
 
-type ApiKeys = Readonly<Record<string, string | undefined>>;
+export type ApiKeys = Readonly<Record<string, string | undefined>>;
 
 function keyList(value: unknown): string[] {
   return (Array.isArray(value) ? value : [value]).filter((key): key is string => typeof key === 'string' && Boolean(key));
@@ -1111,6 +1111,18 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
  * text (node_route.route_unavailable), which names the keys.
  * `keyless` are routes that would take the run but have no key set: a
  * `hidden` stop with no alternative names them. */
+/** The route's own line for a run stopped only by a missing key
+ * (RouteSpec.missingKeyLine: Idol without a Hugging Face token), or null.
+ * Auto with no key set names no route: then every route must have one.
+ * node_route.missing_key_line_for is the same. */
+export function routeMissingKeyLine(definition: ModelNodeDefinition, route: NodeRoute): string | null {
+  if (!route.missing?.length || route.block) return null;
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  const candidates = spec ? [spec] : routesOf(definition).filter((candidate) => candidate.plan !== 'only');
+  const lines = candidates.map((candidate) => candidate.missingKeyLine ?? '');
+  return lines.length && lines.every(Boolean) ? lines[0] : null;
+}
+
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
   params: Record<string, unknown> = {}): string {
   const name = definition.displayName || 'This node';
@@ -1128,6 +1140,9 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
     return `${name} can't run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`;
   }
   const missing = route.missing ?? [];
+  // The route's own words (Idol's token), the backend's too.
+  const own = routeMissingKeyLine(definition, route);
+  if (own) return own;
   if (spec) {
     const phrase = missing.length ? keyPhrase(missing) : null;
     const needed = phrase ? `your ${phrase}` : 'a provider key';

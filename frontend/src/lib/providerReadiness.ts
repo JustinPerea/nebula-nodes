@@ -145,8 +145,8 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
       detail: `Calls a ${route.provider} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
   }
-  const keyless = keylessReadiness(def, params, cache, health);
-  if (keyless) return keyless;
+  const space = spaceReadiness(def, params, cache, health);
+  if (space) return space;
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',
     detail: 'This node has no API-key requirement. Its inputs and local tools may still need setup.' };
@@ -169,10 +169,13 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
 }
 
-/** A keyless route (RouteSpec.optionalKeys: Idol on its Hugging Face Space)
- * runs without a key; its optional key, when set, is checked like any other
- * (node_readiness.instance_access: free without it, key with it). */
-function keylessReadiness(
+/** A maker's Hugging Face Space route (handler hf-space: Idol). Keyed (Idol's
+ * needs HF_TOKEN, GM PR #203 r4): without the token it says so in GM's words,
+ * and with it only "Runs on your own Hugging Face allowance." (GM r3: the
+ * specific line replaces the generic one, never both). A keyless Space route
+ * (RouteSpec.optionalKeys) runs without a key and uses its optional key when
+ * set (node_readiness.instance_access). */
+function spaceReadiness(
   def: ModelNodeDefinition,
   params: Record<string, unknown>,
   cache: CredentialReadiness,
@@ -180,23 +183,31 @@ function keylessReadiness(
 ): ModelReadiness | null {
   if (!def.routes?.length) return null;
   const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
-  const spec = route.routeId ? routeById(def, route.routeId) : undefined;
-  if (!spec || !isKeylessRoute(spec)) return null;
-  const optional = spec.optionalKeys?.[0];
-  const name = optional ? PROVIDER_KEY_LABELS[optional] ?? optional : null;
+  // Auto with no key names no route: a one-route node's is that one.
+  const spec = route.routeId ? routeById(def, route.routeId) : def.routes.length === 1 ? def.routes[0] : undefined;
+  if (!spec || (spec.handler !== 'hf-space' && !isKeylessRoute(spec))) return null;
+  const keyless = isKeylessRoute(spec);
+  const tokenKey = (keyless ? spec.optionalKeys?.[0] : spec.keys[0]) ?? null;
+  const name = tokenKey ? PROVIDER_KEY_LABELS[tokenKey] ?? tokenKey : null;
+  const connectionLabel = name ? `${name} token` : undefined;
   if (route.key) {
     const ready = keyReadiness(route.key, cache, health);
-    return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[route.key] ?? route.key} token`,
-      detail: `Runs on your own ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance. ${ready.detail}` };
+    return { ...ready, connectionLabel, detail: `Runs on your own ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.` };
   }
-  // GM (PR #203 r1): "shared" dropped until a live run confirms the numbers.
+  if (!keyless && tokenKey) {
+    if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
+    return {
+      label: `Needs a ${name} token`, tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
+      detail: `Add your ${name} token in Settings to run ${def.displayName}. A free ${name} account gives a run or two a day.`,
+    };
+  }
   return {
-    label: 'No key needed', tone: 'neutral',
-    ...(optional ? { setupTarget: { kind: 'api-key', key: optional } as const, connectionLabel: `${name} token`,
+    label: 'Free daily allowance', tone: 'neutral',
+    ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const, connectionLabel,
       connectionNote: 'Optional' } : {}),
     detail: name
-      ? `Runs without a key on a small free daily allowance. Add your ${name} token in Settings to use your own.`
-      : 'Runs without a key.',
+      ? `Runs on a small free daily allowance. Add your ${name} token in Settings to use your own.`
+      : 'Runs on a small free daily allowance.',
   };
 }
 

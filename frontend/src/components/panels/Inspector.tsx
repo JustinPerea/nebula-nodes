@@ -21,6 +21,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { routeKeyLockReason } from '../../lib/runKeyLock';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
@@ -157,6 +158,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+  // A node that can't run without its key (Idol's Hugging Face token): Run
+  // is disabled with its line as the reason (GM, PR #203 r4).
+  const keyLock = useMemo(() => (settingsCache.loaded
+    ? routeKeyLockReason(definition, nodeParams, settingsCache.apiKeys) : null),
+  [definition, nodeParams, settingsCache.loaded, settingsCache.apiKeys]);
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
   // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
@@ -1197,8 +1203,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' })}
-            onClick={() => executeNode(renderNode.id)}
+            {...lock.act({ disabled: Boolean(keyLock), title: keyLock ?? 'Run this node and its dependencies' })}
+            onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
           >
             <Play
               className="inspector__action-icon"

@@ -1,6 +1,6 @@
 # Speridlabs (Idol) in Nebula Nodes
 
-> **Structural integration verified 2026-10-29.** Nebula implements the Idol
+> **Structural integration verified 2026-10-30.** Nebula implements the Idol
 > Space's Gradio API with mocked tests. No Idol run was started for this
 > pass, so this isn't a live result.
 
@@ -24,24 +24,33 @@ Settings, as the Space names them:
 | Steps | 10-100 | 50 |
 | Guidance scale | 0-10 | 3 |
 | Time shift | 1-6 | 3 |
-| Seed | any whole number | 42 |
+| Seed | 0 to 2,147,483,647 | 42 |
 
 Nebula reuses a result for the same image, settings and seed, so change the
 seed for a different object.
 
 ## Keys and cost
 
-Idol needs no key. It runs on Hugging Face ZeroGPU, which
-[Hugging Face offers free](https://huggingface.co/docs/hub/spaces-zerogpu),
-so Nebula shows $0 a run.
-
-Without a key, runs share Hugging Face's small free allowance for people
-without an account. Each Idol run reserves 120 seconds of GPU time, so that
-allowance may fit only about one run a day; the first live run will confirm
-it. Add your Hugging Face token in **Settings → Providers → Hugging Face** to
-use your own daily time instead: 5 minutes on a free account, 40 on PRO or
-Team, 60 on Enterprise. Create one at
+Idol needs your Hugging Face token. Add it in **Settings → Providers →
+Hugging Face**; create one at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+Until it's set, Run on an Idol node is disabled: "You can run Idol after you
+add your Hugging Face token in Settings."
+
+It runs on Hugging Face ZeroGPU, which
+[Hugging Face offers free](https://huggingface.co/docs/hub/spaces-zerogpu),
+so Nebula shows $0 a run. Each run uses your own daily GPU time: 5 minutes on
+a free account, 40 on PRO or Team, 60 on Enterprise. Visitors without an
+account get a small free daily allowance (2 minutes, by Hugging Face's
+table, which may not apply to calls from a server like Nebula's).
+
+Why the token: the Space asks for 120 seconds of GPU a run, and on
+ZeroGPU's Blackwell cards Hugging Face's `spaces` package counts that as
+180 seconds (`duration_factor` 1.5), more than the 2 minutes without an
+account. If every run used all 180 seconds, a free account would get 1 run a
+day and PRO 13 (on H200 cards, at 120 seconds: 2 and 20). The first live run
+will confirm the number: the quota error names the seconds asked for. If it's
+120, Idol can go back to running without a token.
 
 **On a PRO, Team or Enterprise account, Hugging Face can bill you** for GPU
 time past your daily quota, from your prepaid credits at $1 per 10 minutes.
@@ -66,8 +75,8 @@ doesn't take an Idol splat.
 ## When it doesn't run
 
 The Space is Speridlabs' demo on Hugging Face. It may be asleep (Nebula wakes
-it and waits up to 3 minutes), paused, or busy. If the shared allowance is
-used up, add your token or try later. The card says which of these it is. If Speridlabs change the Space's API,
+it and waits up to 3 minutes), paused, or busy. If your daily allowance is
+used up, try later. The card says which of these it is. If Speridlabs change the Space's API,
 the node stops with a line saying so until Nebula is updated.
 
 Details: [model-providers/speridlabs/idol.md](../model-providers/speridlabs/idol.md).

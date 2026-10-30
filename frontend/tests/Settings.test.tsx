@@ -443,15 +443,43 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { OPENAI_API_KEY: 'fixture-new' } }]]);
   });
 
-  it('names the Hugging Face credential a token, with GM\'s optional note (PR #203 r1)', async () => {
+  it('names the Hugging Face credential a token, with GM\'s note (PR #203 r1 and r4)', async () => {
     await renderSettings({ apiKeys: {} });
     const hf = row('Hugging Face');
-    expect(hf).toHaveTextContent('Optional. Gives Idol your own daily GPU time.');
+    expect(hf).toHaveTextContent('Needed to run Idol.');
+    expect(hf).not.toHaveTextContent('Optional');
     fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face key' }));
     expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
     expect(screen.queryByLabelText('Hugging Face API key')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show Hugging Face token' })).toBeInTheDocument();
   });
+
+  it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (GM, PR #203 r2)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+    await renderSettings({ apiKeys: {} });
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+    const input = await screen.findByLabelText('Hugging Face token');
+    fireEvent.change(input, { target: { value: '  hf_fixture0123\r\n' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByText('Hugging Face key saved. Checking it now.');
+    expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { HF_TOKEN: 'hf_fixture0123' } }]]);
+    expect(document.querySelector('.settings-row__error')).toBeNull();
+  });
+
+  it.each(['hf_abc def', 'hf_abc’def', 'hf_été', 'hf_abc\tdef'])(
+    'refuses a Hugging Face token with a character tokens can\'t have, by the field (%j)', async (bad) => {
+      await renderSettings({ apiKeys: {} });
+      fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+      const input = await screen.findByLabelText('Hugging Face token');
+      fireEvent.change(input, { target: { value: bad } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(document.querySelector('.settings-row__error')).toHaveTextContent(
+        'This token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it here.'));
+      expect(document.querySelector('.settings-row__error')).toHaveAttribute('role', 'alert');
+      expect(updateSettingsMock).not.toHaveBeenCalled();
+      // The text stays in the field to fix.
+      expect(screen.getByLabelText('Hugging Face token')).toHaveValue(bad);
+    });
 
   it('removes a Hugging Face token by its name', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa' } });

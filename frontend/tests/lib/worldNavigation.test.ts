@@ -3,6 +3,7 @@ import { Euler, Matrix4, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
   OBJECT_ORBIT_MAX_DISTANCE_FACTOR,
+  OBJECT_ORBIT_MIN_RADIUS_FACTOR,
   OBJECT_VIEW_MARGIN,
   objectBoundingSphere,
   objectFraming,
@@ -11,6 +12,7 @@ import {
   placeWorldCamera,
   robustWorldSceneBounds,
   sampleWorldSplatCenters,
+  sampleWorldSplatExtents,
   syncWorldFlyAngles,
   worldCameraPose,
   worldFlyGestureScale,
@@ -172,5 +174,88 @@ describe('object framing (a World v2 object splat: Idol)', () => {
     expect(objectBoundingSphere([]).radius).toBe(0.5);
     // A degenerate fov or aspect still gives a finite distance.
     expect(Number.isFinite(objectFraming(shell, [1, 0, 0], { fovDegrees: Number.NaN, aspect: 0 }).distance)).toBe(true);
+  });
+});
+
+describe('object framing at the extremes (PR #203 r2 review, LOW 1 to 3)', () => {
+  const shellOf = (radius: number, center = { x: 0, y: 0, z: 0 }) => Array.from({ length: 200 }, (_, index) => {
+    const z = (index / 199) * 2 - 1;
+    const ring = Math.sqrt(1 - z * z);
+    const theta = index * 2.399963;
+    return { x: center.x + Math.cos(theta) * ring * radius, y: center.y + Math.sin(theta) * ring * radius,
+      z: center.z + z * radius };
+  });
+  const options = { fovDegrees: 58, aspect: 4 / 3 };
+  /** The camera is outside the object's sphere, and orbit can zoom out. */
+  const outside = (framed: ReturnType<typeof objectFraming>) => {
+    expect(framed.distance).toBeGreaterThan(framed.radius * 2);
+    expect(framed.orbitMaxDistance).toBeGreaterThan(framed.distance);
+    expect(framed.orbitMinDistance).toBeLessThan(framed.distance);
+    expect(framed.near).toBeLessThan(framed.orbitMinDistance);
+    expect(framed.far).toBeGreaterThanOrEqual(framed.orbitMaxDistance + 2 * framed.radius);
+  };
+
+  it('sizes one Gaussian by its own scale, not a 1 cm floor', () => {
+    const one = objectFraming([{ x: 0.2, y: -0.1, z: 0.3 }], [1, 0, 0], { ...options, extents: [0.08] });
+    // About 3 sigma of its largest scale.
+    expect(one.radius).toBeCloseTo(0.24, 6);
+    expect(one.center).toEqual([0.2, -0.1, 0.3]);
+    outside(one);
+  });
+
+  it('sizes a splat whose centers are all equal by its Gaussians, and never opens inside it', () => {
+    const same = Array.from({ length: 500 }, () => ({ x: 1, y: 1, z: 1 }));
+    const extents = Array.from({ length: 500 }, (_, index) => 0.01 + (index % 10) * 0.004);
+    const framed = objectFraming(same, [1, 0, 0], { ...options, extents });
+    // The 98th percentile of the largest scales (0.046), times 3.
+    expect(framed.radius).toBeCloseTo(0.046 * 3, 2);
+    outside(framed);
+    // With no sizes at all, the empty object's radius, not a point.
+    expect(objectFraming(same, [1, 0, 0], options).radius).toBe(0.5);
+  });
+
+  it('leaves an ordinary object to its centers: its Gaussians are far smaller', () => {
+    const shell = shellOf(0.5);
+    const extents = shell.map(() => 0.01);
+    expect(objectFraming(shell, [1, 0, 0], { ...options, extents }).radius)
+      .toBeCloseTo(objectFraming(shell, [1, 0, 0], options).radius, 9);
+  });
+
+  it('frames a 1 mm object the way it frames a 1 m one, zoomable to a fifth of its radius', () => {
+    const metre = objectFraming(shellOf(0.5), [1, 0, 0], options);
+    const millimetre = objectFraming(shellOf(0.0005), [1, 0, 0], options);
+    expect(millimetre.distance / metre.distance).toBeCloseTo(0.001, 6);
+    expect(millimetre.orbitMinDistance).toBeCloseTo(millimetre.radius * OBJECT_ORBIT_MIN_RADIUS_FACTOR, 12);
+    outside(millimetre);
+    // worldCameraPose takes the object's clip planes, not an environment's 5 mm near plane.
+    const pose = worldCameraPose({ center: millimetre.center, radius: 0.25, clipRadius: 3,
+      resetPosition: millimetre.resetPosition, resetTarget: millimetre.resetTarget,
+      near: millimetre.near, far: millimetre.far });
+    expect(pose.near).toBe(millimetre.near);
+    expect(pose.near).toBeLessThan(millimetre.distance - millimetre.radius);
+  });
+
+  it('keeps a 10 km object inside the far plane from the farthest zoom', () => {
+    const big = objectFraming(shellOf(5_000, { x: 2e5, y: 0, z: 0 }), [1, 0, 0], options);
+    outside(big);
+    expect(big.far).toBeGreaterThan(1_000);
+    const pose = worldCameraPose({ center: big.center, radius: big.radius, clipRadius: big.radius,
+      resetPosition: big.resetPosition, resetTarget: big.resetTarget, near: big.near, far: big.far });
+    expect(pose.far).toBeGreaterThanOrEqual(big.orbitMaxDistance + 2 * big.radius);
+  });
+
+  it('reads each Gaussian\'s largest scale in world units, with the centers\' cut', () => {
+    const matrix = new Matrix4().makeScale(2, 2, 2);
+    const splats = {
+      getNumSplats: () => 3,
+      getSplat: (index: number) => ({
+        center: new Vector3(index, 0, 0),
+        opacity: index === 1 ? 0 : 1,
+        scales: new Vector3(0.01, 0.03 * (index + 1), 0.02),
+      }),
+    };
+    expect(sampleWorldSplatExtents(splats, matrix)).toEqual([0.06, 0.18]);
+    expect(sampleWorldSplatExtents({ ...splats, getSplat: (index) => ({ center: new Vector3(index, 0, 0), opacity: 1 }) },
+      matrix)).toEqual([]);
   });
 });

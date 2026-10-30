@@ -13,14 +13,26 @@ const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
 
 afterEach(() => cleanup());
 
-describe('ProviderReadinessBadge on Idol (GM, PR #203 r1)', () => {
-  it('reads "Hugging Face token Optional · No key needed" with the note muted, and GM\'s detail', () => {
+describe('ProviderReadinessBadge on Idol (GM, PR #203 r3 and r4)', () => {
+  it('reads "Hugging Face token · Needs a Hugging Face token" without the token, with GM\'s detail', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: {} } });
+    const { container } = render(<ProviderReadinessBadge definition={IDOL} />);
+    expect(container.querySelector('.provider-readiness')).toHaveClass('provider-readiness--warning');
+    const label = screen.getByText('Needs a Hugging Face token').closest('.provider-readiness__label');
+    expect(label).toHaveTextContent(/^Hugging Face token · Needs a Hugging Face token$/);
+    expect(label).toHaveAttribute('title',
+      'Add your Hugging Face token in Settings to run Idol. A free Hugging Face account gives a run or two a day.');
+    // No "Optional" any more (GM r4).
+    expect(container.querySelector('.provider-readiness__note')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Connection settings for Idol' })).toHaveTextContent('Set up');
+  });
+
+  it('shows only "Runs on your own Hugging Face allowance." with the token (r3: never the generic line too)', () => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
+      apiKeys: { HF_TOKEN: 'hf_fixture' } } });
     render(<ProviderReadinessBadge definition={IDOL} />);
-    const note = screen.getByText('Optional');
-    expect(note).toHaveClass('provider-readiness__note');
-    expect(note.closest('.provider-readiness__route')).toHaveTextContent(/^Hugging Face token Optional ·$/);
-    expect(screen.getByText('No key needed').closest('.provider-readiness__label')).toHaveAttribute('title',
-      'Runs without a key on a small free daily allowance. Add your Hugging Face token in Settings to use your own.');
+    const label = screen.getByText('Configured · not checked').closest('.provider-readiness__label');
+    expect(label).toHaveTextContent(/^Hugging Face token · Configured · not checked$/);
+    expect(label).toHaveAttribute('title', 'Runs on your own Hugging Face allowance.');
   });
 });

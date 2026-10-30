@@ -4500,9 +4500,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   },
 
   // Speridlabs' Idol: one image to a 3D Gaussian splat. Its maker runs it on
-  // a free Hugging Face Space (ZeroGPU), so its one route is keyless: it runs
-  // anonymously, or on the person's own quota with an optional HF_TOKEN
-  // (RouteSpec.optionalKeys; never in envKeyName). Speridlabs' own Platform
+  // a free Hugging Face Space (ZeroGPU). Its one route needs HF_TOKEN: each
+  // run asks ZeroGPU for 120 s, which spaces 0.51.3 multiplies by 1.5 on the
+  // Blackwell GPUs ZeroGPU runs on, so 180 s, past the 120 s a day an
+  // anonymous caller gets (docs/model-providers/speridlabs/idol.md). If the
+  // first live run shows 120 s, the route goes back to keyless (keys: [],
+  // optionalKeys: ['HF_TOKEN'], envKeyName and directKeyName []). Speridlabs' own Platform
   // API isn't open yet (speridlabs.com/platform, 2026-10-29); it becomes
   // routes[0] when it is. Params are the Space's /run inputs
   // (https://speridlabs-idol.hf.space/gradio_api/info, read 2026-10-29),
@@ -4511,11 +4514,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     id: 'speridlabs-idol',
     displayName: 'Idol',
     description: 'Speridlabs Idol: one image to a 3D object as a Gaussian splat (.ply), shown as a World. '
-      + "Runs free on Speridlabs' Hugging Face Space; a Hugging Face token is optional.",
+      + "Runs on Speridlabs' Hugging Face Space with your Hugging Face token, free within your Hugging Face allowance.",
     category: '3d-gen',
     apiProvider: 'speridlabs',
     apiEndpoint: 'speridlabs/idol',
-    envKeyName: [],
+    envKeyName: ['HF_TOKEN'],
+    directKeyName: ['HF_TOKEN'],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
@@ -4608,8 +4612,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         id: 'hf-space',
         provider: 'speridlabs',
         maker: true,
-        keys: [],
-        optionalKeys: ['HF_TOKEN'],
+        keys: ['HF_TOKEN'],
         handler: 'hf-space',
         endpoint: 'speridlabs/idol',
         valueMap: {
@@ -4618,7 +4621,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
           },
         },
-        note: 'Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own.',
+        note: 'Free with a Hugging Face token. A free account gives a run or two a day.',
+        missingKeyLine: 'You can run Idol after you add your Hugging Face token in Settings.',
       },
     ],
   },

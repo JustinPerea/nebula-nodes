@@ -32,10 +32,10 @@ export interface SwitchContext {
   wired?: ReadonlyMap<string, number>;
 }
 
-/** A keyless route (RouteSpec.optionalKeys, e.g. Idol on a Hugging Face
- * Space) has no third state (GM, PR #203 r1): its cell is empty ('none')
- * without its optional key, and reads "Connected" ('connected') with it. The
- * row's note says how to add one. */
+/** 'connected': a Space route's Hugging Face token is set (Idol's, GM PR #203
+ * r4), the green dot and "Connected". A keyless route (RouteSpec.optionalKeys)
+ * has no third state: its cell is empty ('none') without its optional key,
+ * and reads "Connected" with it. */
 export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in' | 'connected' | 'none';
 
 export interface ProviderRow {
@@ -220,7 +220,10 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
       rows.push({
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
-        keyState: keyless ? (keyed ? 'connected' : 'none') : keyed ? 'set' : 'missing',
+        // A Space route's token (Idol's): the green dot and "Connected" once
+        // set, "Add key →" while missing (GM, PR #203 r4).
+        keyState: keyless ? (keyed ? 'connected' : 'none')
+          : keyed ? (spec.handler === 'hf-space' ? 'connected' : 'set') : 'missing',
         setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,

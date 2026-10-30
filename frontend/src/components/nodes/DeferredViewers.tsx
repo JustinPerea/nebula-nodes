@@ -93,7 +93,7 @@ function WorldSplatPreviewFallback({ world, compact = false }: WorldSplatPreview
       type="button"
       className={`world-splat-preview__open nodrag nowheel${compact ? ' world-splat-preview__open--compact' : ''}`}
       disabled
-      aria-label={`Explore in 3D: ${world.displayName}`}
+      aria-label={`Explore “${world.displayName}” in 3D`}
       data-deferred-fallback="world-splat"
     >
       <span className="world-splat-preview__glyph" aria-hidden="true" />

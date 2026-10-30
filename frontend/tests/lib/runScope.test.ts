@@ -107,7 +107,7 @@ describe('run cost', () => {
   });
 
   it('shows a sourced $0 run as "$0", not "~$0" (Idol on its free Space, GM PR #203 r1)', () => {
-    const shipped = { pricing: shippedTable as unknown as PricingTable, apiKeys: {} };
+    const shipped = { pricing: shippedTable as unknown as PricingTable, apiKeys: { HF_TOKEN: 'fixture-hf' } };
     const summary = summarizeRunScope([priced('i', 'speridlabs-idol', {}, 'Idol')], [], { kind: 'graph' }, shipped);
     expect(summary.cost?.low).toBe(0);
     expect(summary.cost?.high).toBe(0);

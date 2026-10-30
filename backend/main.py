@@ -4798,7 +4798,7 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
 
 PROVIDER_CHOICE_NOTE = (
     "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
-    "whose key is set, in this order. A run never moves to another route by itself: when the "
+    "whose key is set, or a keyless route (optionalKeys, which needs none), in this order. A run never moves to another route by itself: when the "
     "chosen route can't take a setting, or its key isn't set, the run stops and says which "
     "routes could. Each route's params list what that provider offers, as the card shows it "
     "there: a setting it doesn't offer is absent (`hides` names it) or has `onlyWhen`. That "
@@ -4808,6 +4808,15 @@ PROVIDER_CHOICE_NOTE = (
     "says the same fix in its message. Which route runs decides whose key pays, so it's the "
     "person's call: propose a _provider change with propose_change; direct edits of _provider "
     "are refused."
+)
+
+
+# https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
+# credits". TODO(Justin, Q141): whether agents may run a Space on a PRO token.
+HF_SPACE_BILLING_NOTE = (
+    "Runs on the person's own Hugging Face ZeroGPU allowance (HF_TOKEN). Nebula prices it at $0, but past "
+    "the daily quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 "
+    "minutes of GPU time (https://huggingface.co/docs/hub/spaces-zerogpu)."
 )
 
 
@@ -4867,6 +4876,9 @@ def _describe_routes(
             # bill a PRO account for past its free minutes).
             row["optionalKeys"] = [{"key": key, "set": bool(api_keys.get(key))}
                                    for key in node_route.keys(spec.get("optionalKeys"))]
+        if spec.get("handler") == "hf-space":
+            # Agents spend the person's allowance: say who can bill past it.
+            row["billing"] = HF_SPACE_BILLING_NOTE
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
@@ -9138,6 +9150,9 @@ async def update_settings(body: dict[str, Any]) -> dict:
     if "apiKeys" in body and accepts_keys:
         current_keys = current.get("apiKeys", {})
         for k, v in body["apiKeys"].items():
+            # A pasted Hugging Face token's leading and trailing spaces and
+            # line breaks go (GM, PR #203 r2); Settings trims the same.
+            v = v.strip() if k == "HF_TOKEN" else v
             if v and not v.startswith("***"):
                 current_keys[k] = v
         current["apiKeys"] = current_keys
@@ -9217,7 +9232,7 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             detail=f"unknown provider: {provider}",
         )
 
-    update_injected_keys(provider, key)
+    update_injected_keys(provider, key.strip() if provider == "HF_TOKEN" else key)
     return {"status": "updated"}
 
 

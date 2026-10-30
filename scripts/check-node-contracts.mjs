@@ -82,7 +82,7 @@ const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea',
   'hf-space']);
 const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'optionalKeys', 'plan', 'handler', 'endpoint', 'endpointWhen',
-  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note']);
+  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note', 'missingKeyLine']);
 const ROUTE_RULES = new Set(['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size', 'ports']);
 const BILLING_PARAMS = ['_provider', '_kreaAuth'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
@@ -230,8 +230,17 @@ function validateRoutes(nodes, source) {
       if (route.plan !== 'only' && !keys?.length && optional === undefined) {
         errors.push(`${at} needs keys (only a plan-only or keyless route runs without one)`);
       }
-      if (keys?.length && keyProviders[keys[0]] !== route.provider) {
+      // A maker's Hugging Face Space (handler hf-space) names the maker as its
+      // provider; its key is the Hugging Face token (node_route.routes_problems).
+      if (keys?.length && keyProviders[keys[0]] !== route.provider
+        && !(route.handler === 'hf-space' && keys[0] === 'HF_TOKEN')) {
         errors.push(`${at}.provider must be '${keyProviders[keys[0]]}', who bills ${keys[0]}`);
+      }
+      if (route.missingKeyLine !== undefined) {
+        if (typeof route.missingKeyLine !== 'string' || !route.missingKeyLine.trim()) {
+          errors.push(`${at}.missingKeyLine must be a sentence`);
+        }
+        if (!keys?.length) errors.push(`${at}.missingKeyLine needs keys to be missing`);
       }
       if (!ROUTE_HANDLERS.has(route.handler)) errors.push(`${at}.handler must be one of ${[...ROUTE_HANDLERS].join(', ')}`);
       if (![undefined, true].includes(route.maker)) errors.push(`${at}.maker must be true or left out`);

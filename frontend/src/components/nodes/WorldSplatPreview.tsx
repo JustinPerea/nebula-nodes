@@ -22,19 +22,31 @@ const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
 );
 
-/** GM's lines (PR #203 r1) for a splat the viewer can't show, in place of the status. */
+/** GM's lines (PR #203 r1 to r3) for a splat the viewer can't show, centred
+ * in the stage in place of the splat (never beside a generic one). */
 export const SPLAT_DAMAGED_LINE = 'Nebula can’t open this splat. Download it to try a desktop 3D viewer.';
 export const SPLAT_TOO_LARGE_LINE = 'This splat is too large to open in the browser. '
   + 'Download it to open in a desktop 3D viewer.';
 export const IDOL_SPLAT_GONE_LINE = 'This splat’s file is gone. Run Idol again to make a new one.';
-/** The same for a splat another node made: there is no Idol to run. */
-const SPLAT_GONE_LINE = 'This splat’s file is gone.';
+/** The same for a splat another node made (GM r3, k). */
+export const SPLAT_GONE_LINE = 'This splat’s file is gone. Run the node that made it again.';
+export const SPLAT_NO_WEBGL_LINE = 'This browser can’t show 3D previews. '
+  + 'Download the splat to open it in a desktop 3D viewer.';
+export const SPLAT_LOAD_LINE = 'Nebula couldn’t load this splat. Try again in a moment.';
 export const SPLAT_ORBIT_HINT = 'Drag to orbit. Two-finger drag to pan. Pinch or scroll to zoom.';
 
 function failureLine(failure: WorldViewerFailure, world: WorldValueV2): string {
   if (failure === 'too-large') return SPLAT_TOO_LARGE_LINE;
   if (failure === 'missing') return world.session.model === 'idol' ? IDOL_SPLAT_GONE_LINE : SPLAT_GONE_LINE;
+  if (failure === 'webgl') return SPLAT_NO_WEBGL_LINE;
+  if (failure === 'load') return SPLAT_LOAD_LINE;
+  // 'format' or 'other': the file loaded but won't parse.
   return SPLAT_DAMAGED_LINE;
+}
+
+/** A file that is gone, or didn't load, has nothing to download (GM r2, r3). */
+function failureKeepsDownload(failure: WorldViewerFailure): boolean {
+  return failure !== 'missing' && failure !== 'load';
 }
 
 export interface WorldSplatPreviewProps {
@@ -54,12 +66,15 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
   const [status, setStatus] = useState<WorldViewerStatus>('loading');
   const [failure, setFailure] = useState<WorldViewerFailure | null>(null);
   const [resetToken, setResetToken] = useState(0);
+  // Try again remounts the viewer, which fetches the file again.
+  const [attempt, setAttempt] = useState(0);
   const [download, setDownload] = useState<{ status: 'downloading' | 'error'; message?: string } | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const downloadRef = useRef<AbortController | null>(null);
   const titleId = useId();
   const helpId = useId();
+  const failureId = useId();
 
   const close = useCallback(() => {
     downloadRef.current?.abort();
@@ -104,13 +119,21 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
 
   const gaussians = gaussianCountText(splat.pointCount);
   const failed = status === 'error';
+  const failureKind: WorldViewerFailure = failure ?? 'other';
+  // GM r2: the toolbar's status slot stays empty while the stage says why.
   const statusText = failed
-    ? failureLine(failure ?? 'other', world)
+    ? ''
     : status === 'ready'
       ? [gaussians, splat.format.toUpperCase()].filter(Boolean).join(' · ')
       : 'Loading';
-  // A file that is gone (404) can't be downloaded either.
-  const canDownload = !(failed && failure === 'missing');
+  const canDownload = !failed || failureKeepsDownload(failureKind);
+  const retry = () => {
+    // The button goes away as the viewer reloads: keep focus in the dialog.
+    dialogRef.current?.focus({ preventScroll: true });
+    setStatus('loading');
+    setFailure(null);
+    setAttempt((count) => count + 1);
+  };
 
   return (
     <>
@@ -124,7 +147,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
           setOpen(true);
         }}
         onMouseDown={(event) => event.stopPropagation()}
-        aria-label={`Explore in 3D: ${world.displayName}`}
+        aria-label={`Explore “${world.displayName}” in 3D`}
         data-splat-format={splat.format}
       >
         <Orbit size={14} strokeWidth={1.7} aria-hidden="true" />
@@ -145,7 +168,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
-              aria-describedby={failed ? undefined : helpId}
+              aria-describedby={failed ? failureId : helpId}
               tabIndex={-1}
               onClick={(event) => event.stopPropagation()}
               data-testid="world-splat-dialog"
@@ -170,21 +193,22 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
               </header>
 
               <div className="world-modal__toolbar" role="group" aria-label="3D viewer controls">
-                <button
-                  type="button"
-                  className="world-modal__icon-button world-modal__camera-reset"
-                  onClick={() => setResetToken((token) => token + 1)}
-                  aria-label="Reset camera"
-                  title="Reset camera"
-                  disabled={failed}
-                >
-                  <RotateCcw size={15} strokeWidth={1.7} aria-hidden="true" />
-                </button>
+                {/* Nothing to reset without a splat (GM r2). */}
+                {!failed && (
+                  <button
+                    type="button"
+                    className="world-modal__icon-button world-modal__camera-reset"
+                    onClick={() => setResetToken((token) => token + 1)}
+                    aria-label="Reset camera"
+                    title="Reset camera"
+                  >
+                    <RotateCcw size={15} strokeWidth={1.7} aria-hidden="true" />
+                  </button>
+                )}
                 <span
                   className={`world-modal__status world-modal__status--${status}`}
                   role="status"
                   aria-live="polite"
-                  data-splat-failure={failed ? failure ?? 'other' : undefined}
                 >
                   {statusText}
                 </span>
@@ -200,7 +224,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
                   )}
                 >
                   <LazyWorldEnvironmentViewer
-                    key={`${world.id}:${splat.id}`}
+                    key={`${world.id}:${splat.id}:${attempt}`}
                     src={splat.asset.uri}
                     label={world.displayName}
                     navigationMode="orbit"
@@ -216,11 +240,19 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
                   />
                 </Suspense>
                 {!failed && <p id={helpId} className="world-modal__help">{SPLAT_ORBIT_HINT}</p>}
+                {failed && (
+                  <div className="world-modal__failure" role="alert" data-splat-failure={failureKind}>
+                    <p id={failureId}>{failureLine(failureKind, world)}</p>
+                    {failureKind === 'load' && (
+                      <button type="button" className="world-modal__button" onClick={retry}>Try again</button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {canDownload && (
                 <footer className="world-modal__footer">
-                  <div className="world-modal__downloads" role="group" aria-label="Splat download">
+                  <div className="world-modal__downloads">
                     <button
                       type="button"
                       className="world-modal__button"

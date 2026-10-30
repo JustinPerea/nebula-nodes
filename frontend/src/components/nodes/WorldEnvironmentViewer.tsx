@@ -24,6 +24,7 @@ import {
   placeWorldCamera,
   robustWorldSceneBounds,
   sampleWorldSplatCenters,
+  sampleWorldSplatExtents,
   syncWorldFlyAngles,
   worldFlyGestureScale,
   worldFlySpeedMetersPerSecond,
@@ -49,10 +50,23 @@ export const WORLD_PLY_TOO_LARGE_LINE = 'This splat is too large to open in the 
 
 export type WorldNavigationMode = 'orbit' | 'fly';
 export type WorldViewerStatus = 'loading' | 'ready' | 'error';
-/** Why the viewer couldn't show the splat: its file failed the format check,
- * is past the size caps, is gone (404), or anything else (no WebGL 2, a
- * network failure, Spark throwing). */
-export type WorldViewerFailure = 'format' | 'too-large' | 'missing' | 'other';
+/** Why the viewer couldn't show the splat (GM, PR #203 r3, each its own
+ * line): its file failed the format check ('format'), is past the size caps
+ * ('too-large'), is gone (404, 'missing'), the browser has no WebGL 2
+ * ('webgl'), the file didn't load (any other HTTP error or a dropped
+ * connection, 'load': worth trying again), or it loaded but Spark couldn't
+ * read or draw it ('other'). */
+export type WorldViewerFailure = 'format' | 'too-large' | 'missing' | 'webgl' | 'load' | 'other';
+
+/** The failure for an error thrown while the file was fetched and checked. */
+function fetchFailure(error: unknown): WorldViewerFailure {
+  if (error instanceof WorldSplatTooLargeError) return 'too-large';
+  if (error instanceof WorldSplatFormatError) return 'format';
+  if (error instanceof RequestFailedError) return error.status === 404 ? 'missing' : 'load';
+  // fetchUrl's ConnectionLostError, or a body cut off mid-stream.
+  return error instanceof TypeError || (error instanceof DOMException && error.name === 'NetworkError')
+    ? 'load' : 'other';
+}
 
 export interface WorldEnvironmentViewerProps {
   src: string;
@@ -78,8 +92,8 @@ export interface WorldEnvironmentViewerProps {
   onStatusChange?: (status: WorldViewerStatus) => void;
   /** Called with the reason when the status turns to 'error'. */
   onFailure?: (failure: WorldViewerFailure) => void;
-  /** The fallback shows its heading only: the dialog says the reason in its
-   * own status line (the World v2 splat preview). */
+  /** The fallback shows nothing: the dialog says the reason in its own
+   * words, centred in its stage (the World v2 splat preview, GM PR #203 r2). */
   quietFallback?: boolean;
 }
 
@@ -209,12 +223,14 @@ function WorldSplatScene({
     let currentMesh: SplatMesh | null = null;
 
     const load = async () => {
+      let fetched = false;
       try {
         const fileBytes = await fetchWorldSplatBytes(src, {
           signal: controller.signal,
           variant: splatVariant,
           format,
         });
+        fetched = true;
         if (cancelled) return;
 
         const mesh = new SplatMesh({
@@ -239,7 +255,7 @@ function WorldSplatScene({
           // File-byte initialization can finish after the effect cleanup. Dispose
           // again so any late-created PackedSplats/GPU resources are terminally released.
           mesh.removeFromParent();
-          mesh.dispose();
+          disposeSparkQuietly(mesh);
           return;
         }
 
@@ -260,10 +276,14 @@ function WorldSplatScene({
           const fov = (camera as PerspectiveCamera).fov;
           const framed = objectFraming(sampledCenters, forwardInThree(upAxis ?? 'y', forwardAxis ?? 'z'), {
             fovDegrees: fov, aspect: size.height > 0 ? size.width / size.height : 1,
+            extents: mesh.packedSplats ? sampleWorldSplatExtents(mesh.packedSplats, mesh.matrixWorld) : [],
           });
           bounds.resetPosition = framed.resetPosition;
           bounds.resetTarget = framed.resetTarget;
           bounds.orbitMaxDistance = framed.orbitMaxDistance;
+          bounds.orbitMinDistance = framed.orbitMinDistance;
+          bounds.near = framed.near;
+          bounds.far = framed.far;
         }
         setLoadedSplat({ src, mesh });
         onReady(bounds);
@@ -273,10 +293,8 @@ function WorldSplatScene({
           // Error copy round 3e (GM): the format check's own text ("not a
           // valid supported SPZ file (invalid NGSP magic)") stays in the
           // console above; the card reads a written line.
-          const failure: WorldViewerFailure = error instanceof WorldSplatTooLargeError ? 'too-large'
-            : error instanceof WorldSplatFormatError ? 'format'
-              : error instanceof RequestFailedError && error.status === 404 ? 'missing'
-                : 'other';
+          // Past the fetch, the bytes passed the check: Spark couldn't read or draw them.
+          const failure: WorldViewerFailure = fetched ? 'other' : fetchFailure(error);
           onError(
             error instanceof WorldSplatTooLargeError ? (format === 'ply' ? WORLD_PLY_TOO_LARGE_LINE : error.message)
               : error instanceof WorldSplatFormatError
@@ -309,12 +327,15 @@ function WorldSplatScene({
   );
 }
 
+const ENVIRONMENT_ORBIT_MIN_DISTANCE = 0.01;
+
 function syncOrbitControls(
   controls: OrbitControls,
   bounds: WorldSceneBounds | null,
   target: Vector3,
 ): void {
   controls.maxDistance = bounds ? bounds.orbitMaxDistance ?? worldOrbitMaxDistance(bounds.radius) : 1_000;
+  controls.minDistance = bounds?.orbitMinDistance ?? ENVIRONMENT_ORBIT_MIN_DISTANCE;
   controls.target = target;
   controls.update();
 }
@@ -401,7 +422,7 @@ function OrbitNavigation({
     next.enableDamping = true;
     next.dampingFactor = 0.08;
     next.screenSpacePanning = true;
-    next.minDistance = 0.01;
+    next.minDistance = ENVIRONMENT_ORBIT_MIN_DISTANCE;
     next.target = target;
     return next;
   }, [gl, perspectiveCamera, target]);
@@ -597,12 +618,15 @@ function ViewerFallback({
   detail?: string;
   quiet?: boolean;
 }) {
+  // The dialog says why in its own line (GM, PR #203 r2: the specific line
+  // replaces "Interactive preview unavailable", never both).
+  if (quiet) return <div className="world-environment-viewer__fallback" aria-hidden="true" />;
   return (
     <div className="world-environment-viewer__fallback" role="img" aria-label={`${label}. Interactive 3D preview unavailable.`}>
       {thumbnail && <img src={thumbnail} alt="" loading="lazy" />}
       <div className="world-environment-viewer__fallback-copy">
         <strong>Interactive preview unavailable</strong>
-        {!quiet && <span>{detail ?? 'Use the panorama or downloaded splat in a compatible 3D viewer.'}</span>}
+        <span>{detail ?? 'Use the panorama or downloaded splat in a compatible 3D viewer.'}</span>
       </div>
     </div>
   );
@@ -659,7 +683,7 @@ export function WorldEnvironmentViewer({
 
   useEffect(() => {
     onStatusChange?.(supported ? 'loading' : 'error');
-    if (!supported) onFailure?.('other');
+    if (!supported) onFailure?.('webgl');
   }, [onFailure, onStatusChange, src, supported]);
 
   const fallback = (

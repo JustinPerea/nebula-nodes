@@ -17,7 +17,7 @@ import type { PortDataType, PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
 import { WorldPreview, WorldSplatPreview } from './DeferredViewers';
-import { previewSplat, splatAssetLabel, splatSourceLine } from '../../lib/worldV2Splat';
+import { previewSplat, splatAssetLabel, splatSourceLine, worldProviderName } from '../../lib/worldV2Splat';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {
@@ -409,7 +409,7 @@ function worldV2Summary(value: WorldValueV2, options: ViewerOptions): ReactNode 
         { label: 'Representations', value: formatNumber(representations, 0) },
         { label: 'Splats', value: formatNumber(value.assets.splats.length, 0) },
         { label: 'Session', value: value.session.source },
-        { label: 'Provider', value: value.session.provider ?? 'Provider-neutral' },
+        { label: 'Provider', value: worldProviderName(value.session.provider) ?? 'Provider-neutral' },
       ]}
       chips={[
         ...(value.assets.pointCloud ? ['Point cloud'] : []),

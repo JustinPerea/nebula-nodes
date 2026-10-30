@@ -309,7 +309,8 @@ class NebulaClient:
         """Call GET /api/graph/node/{id}/splat-summary (a World output's PLY
         splats as numbers). Raises RuntimeError with a message for stderr."""
         try:
-            return self.api.request("GET", f"/api/graph/node/{node_id}/splat-summary", timeout=30,
+            # Quoted whole: a "/" or "?" in the id never reaches another route.
+            return self.api.request("GET", f"/api/graph/node/{quote(node_id, safe='')}/splat-summary", timeout=30,
                                     params={"port": port} if port else None, headers=self._identity_headers())
         except NebulaAPIError as exc:
             if exc.kind == "connect":

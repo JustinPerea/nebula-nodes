@@ -122,7 +122,7 @@ def format_node_detail(node: dict[str, Any]) -> str:
     if routes:
         # A route-table node (services/node_route.py): one line per provider
         # route, in Auto order, and how to pick one.
-        lines.append("ROUTES (_provider; auto takes the first with its key set):")
+        lines.append("ROUTES (_provider; auto takes the first with its key set, or a keyless one):")
         for route in routes:
             keys = " or ".join(str(k) for k in route.get("keys") or []) or (
                 f"none (optional {' or '.join(str(k) for k in route['optionalKeys'])})"
@@ -262,6 +262,10 @@ def _option_condition(only: dict[str, list[Any]], param_when: dict[str, list[Any
     return "; ".join(conds)
 
 
+def _nodes(count: int) -> str:
+    return f"{count} node" if count == 1 else f"{count} nodes"
+
+
 def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
     """Format which provider keys are set (nebula keys output).
 
@@ -298,13 +302,14 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
         preview = ", ".join(users[:3])
         if len(users) > 3:
             preview += ", ..."
-        uses = f"{len(users)} nodes ({preview})" if users else "no node uses it"
+        uses = f"{_nodes(len(users))} ({preview})" if users else "no node uses it"
         if configured_map.get(key_name) is True:
             configured.append(f"  {key_name:<25}{'set':<10}{uses}")
         elif count or not optional_names:
-            missing.append(f"  {key_name:<25}{'':10}{count} nodes unavailable")
+            missing.append(f"  {key_name:<25}{'':10}{_nodes(count)} unavailable")
         else:
-            missing.append(f"  {key_name:<25}{'':10}optional: {len(optional_names)} nodes run without it ({preview})")
+            missing.append(f"  {key_name:<25}{'':10}optional: {_nodes(len(optional_names))} "
+                           f"{'runs' if len(optional_names) == 1 else 'run'} without it ({preview})")
 
     lines: list[str] = []
     if configured:

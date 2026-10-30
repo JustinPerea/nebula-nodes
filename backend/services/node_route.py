@@ -49,10 +49,10 @@ KEY_PROVIDERS: dict[str, str] = {
     "BYTEPLUS_API_KEY": "bytedance",
     # Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
     "BFL_API_KEY": "bfl",
-    # A Hugging Face access token. No route needs it: a Space route lists it
-    # in ``optionalKeys`` and runs anonymously without it. Set, it gives the
-    # run the person's own ZeroGPU quota, which Hugging Face may bill them
-    # for past the free minutes (https://huggingface.co/docs/hub/spaces-zerogpu).
+    # A Hugging Face access token, for a maker's Space route (handler
+    # hf-space: Idol's needs it; a keyless one lists it in ``optionalKeys``).
+    # It gives the run the person's own ZeroGPU quota, which Hugging Face may
+    # bill PRO accounts for past it (https://huggingface.co/docs/hub/spaces-zerogpu).
     "HF_TOKEN": "huggingface",
 }
 
@@ -1549,6 +1549,18 @@ def _hidden_fix_sentence(definition: Mapping[str, Any], param: str) -> str:
     return f"Set {label} back to {_option_label(spec, default)}, or switch provider."
 
 
+def missing_key_line_for(definition: Mapping[str, Any], route: Route) -> str | None:
+    """The route's own line for a run stopped only by a missing key
+    (RouteSpec.missingKeyLine: Idol without a Hugging Face token), or None.
+    Auto with no key set names no route: then every route must have one."""
+    if not route.missing or route.block is not None:
+        return None
+    spec = route_by_id(definition, route.route_id) if route.route_id else None
+    candidates = [spec] if spec is not None else [r for r in routes_of(definition) if r.get("plan") != "only"]
+    lines = [str(r.get("missingKeyLine") or "") for r in candidates]
+    return lines[0] if lines and all(lines) else None
+
+
 def route_unavailable_message(
     definition: Mapping[str, Any], route: Route, alternatives: Iterable[str] = (),
     keyless: Iterable[str] = (),
@@ -1577,6 +1589,10 @@ def route_unavailable_message(
                else "Change that setting, or switch provider.")
         return f"{name} can't run on {provider_label(spec.get('provider'))}: {_why(spec, block)}. {fix}{also}"
     needed = _or_list(route.missing) if route.missing else "a provider key"
+    own = missing_key_line_for(definition, route)
+    if own:
+        # The route's own words (Idol's token): agents and the card read the same.
+        return own
     if spec is not None:
         return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
                 f"Add it in Settings > Providers or choose another provider.{also}")
@@ -1763,6 +1779,9 @@ def route_unavailable_line(
         fix = _fix_person(definition, spec, block, params)
         return f"{name} can't run on {provider_label(spec.get('provider'))}{why}. {fix}{also}"
     phrase = key_phrase(route.missing) if route.missing else None
+    own = missing_key_line_for(definition, route)
+    if own:
+        return own
     if spec is not None:
         needed = f"your {phrase}" if phrase else "a provider key"
         return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
@@ -1943,7 +1962,7 @@ def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any,
 # The clients a route can name (execution/route_clients.py ROUTE_CLIENTS).
 ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea", "hf-space")
 _ROUTE_FIELDS = {"id", "provider", "maker", "keys", "optionalKeys", "plan", "handler", "endpoint", "endpointWhen",
-                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note"}
+                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note", "missingKeyLine"}
 _ROUTE_RULE_KEYS = set(_RULE_KEYS) | {"ports"}
 
 
@@ -2010,8 +2029,17 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
                 problems.append(f"{where} a keyless route can't bill a plan")
         if plan != "only" and not route_keys and optional is None:
             problems.append(f"{where} needs keys (only a plan-only or keyless route runs without one)")
-        if route_keys and KEY_PROVIDERS.get(route_keys[0]) != route.get("provider"):
+        # A maker's Hugging Face Space (handler hf-space) names the maker as
+        # its provider; its key is the Hugging Face token, which meters it.
+        space_token = route.get("handler") == "hf-space" and route_keys[:1] == ["HF_TOKEN"]
+        if route_keys and KEY_PROVIDERS.get(route_keys[0]) != route.get("provider") and not space_token:
             problems.append(f"{where}.provider must be {KEY_PROVIDERS.get(route_keys[0])!r}, who bills {route_keys[0]}")
+        missing_line = route.get("missingKeyLine")
+        if missing_line is not None:
+            if not isinstance(missing_line, str) or not missing_line.strip():
+                problems.append(f"{where}.missingKeyLine must be a sentence")
+            if not route_keys:
+                problems.append(f"{where}.missingKeyLine needs keys to be missing")
         if route.get("handler") not in ROUTE_HANDLERS:
             problems.append(f"{where}.handler must be one of {', '.join(ROUTE_HANDLERS)}")
         if route.get("maker") not in (None, True):

@@ -11745,20 +11745,31 @@
       ]
     },
     {
-      "name": "Idol: Auto with no key runs on its Hugging Face Space",
+      "name": "Idol: Auto with no key can't run, in the route's own words",
       "nodeId": "speridlabs-idol",
       "params": {},
       "apiKeys": {},
       "expected": {
-        "kind": "direct",
+        "kind": "unset",
         "provider": "speridlabs",
         "key": null,
-        "routeId": "hf-space",
+        "routeId": null,
         "block": null,
-        "missing": []
+        "missing": [
+          "HF_TOKEN"
+        ]
       },
-      "unavailable": null,
-      "unavailableLine": null,
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "HF_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "fixes": [],
+        "message": "You can run Idol after you add your Hugging Face token in Settings."
+      },
+      "unavailableLine": "You can run Idol after you add your Hugging Face token in Settings.",
       "paramKeys": [
         "cfg_scale",
         "gaussians",
@@ -11785,6 +11796,43 @@
       },
       "unavailable": null,
       "unavailableLine": null,
+      "paramKeys": [
+        "cfg_scale",
+        "gaussians",
+        "mode",
+        "rescale_t",
+        "seed",
+        "steps"
+      ]
+    },
+    {
+      "name": "Idol: its Hugging Face Space picked with no key can't run, in the route's own words",
+      "nodeId": "speridlabs-idol",
+      "params": {
+        "_provider": "hf-space"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": [
+          "HF_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": "hf-space",
+        "missing": [
+          "HF_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "fixes": [],
+        "message": "You can run Idol after you add your Hugging Face token in Settings."
+      },
+      "unavailableLine": "You can run Idol after you add your Hugging Face token in Settings.",
       "paramKeys": [
         "cfg_scale",
         "gaussians",

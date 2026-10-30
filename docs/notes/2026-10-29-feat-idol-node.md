@@ -222,3 +222,132 @@ any Hugging Face host, no Run.
   anonymous run can fit 120 s at all (if not, readiness must say a token is
   needed, per GM).
 
+
+## Round 3 (2026-10-30): review fixes, GM's r3 copy, and the token requirement (r4)
+
+Built from the round 3 brief, the three round 2 reviews and GM's rulings
+(gm-pr203-r2, r3, r4), copy verbatim.
+
+### The token is required now (GM r4)
+
+The Space asks for 120 s a call, and `spaces` 0.51.3 multiplies that by the
+GPU's `duration_factor` (1.5 on "NVIDIA RTX PRO 6000 Blackwell Server
+Edition", 1.0 on H200). The ZeroGPU docs now name half a Blackwell as the
+default size, so a run most likely asks for 180 s, more than the 2-minute
+unauthenticated allowance. The source lines and the runs-a-day table are in
+`docs/model-providers/speridlabs/idol.md` ("Why a token is required"), to be
+confirmed by the first live run's error text.
+
+- The route is keyed: `keys: ["HF_TOKEN"]`, `envKeyName` and
+  `directKeyName` `["HF_TOKEN"]`, and a new route field `missingKeyLine`
+  carrying GM's lock reason. `node_route.missing_key_line_for` and
+  `directRoute.routeMissingKeyLine` use it only when the key is the one
+  thing missing, and on Auto only when every route has one.
+- Run is disabled without the token on the selection toolbar, the Inspector
+  and the context menu (`lib/runKeyLock.ts`), once Settings have loaded.
+  Agent and CLI runs get the same line from the engine's preflight before any
+  request (a test counts zero HTTP requests).
+- The handler's anonymous branch stays as a backstop; its duration line
+  still shows if a run slips through.
+- Switching back to keyless, if the live run shows 120 s, is the route's own
+  change (idol.md lists it); the keyless rules keep their tests through
+  `keyless_idol()` and `_keyless_idol()`.
+- The `hf-space` handler is exempt from "a route's provider is its key's
+  provider" (Speridlabs bills nothing; the key is the person's Hugging Face
+  token), in both `routes_problems` and `check-node-contracts.mjs`.
+- Desktop credential lists are unchanged (`HF_TOKEN` was already there).
+
+### What changed, by item
+
+1. **M1**: `X-HF-Authorization` to every Space request, `Authorization` only
+   to huggingface.co (`_headers`).
+2. **M2**: with a token, the IP-only quota texts map to token-not-applied.
+3. **L3**: the Space reads as missing by `huggingface_hub`'s rule (404,
+   RepoNotFound, or a 401 without the bad-credentials message), with GM's
+   one line for anonymous and signed-in runs.
+4. **L4**: with a token, a 401 or 403 from the Hub, info, upload, call or
+   stream is the token refused.
+5. **L5**: the PLY header is checked as it arrives; too many Gaussians or a
+   declared size over the cap is "too large", a Content-Length that
+   disagrees or a body past the header's size is "can't read". round3d2's
+   `_download_ply` exclusion is gone (no longer needed).
+6. **L6, L7 (docs)**: 120 s, or 180 s on Blackwell, with sources; the
+   unauthenticated "2 minutes | Low" row is back, noting it may not apply to
+   server-side calls; no derived run count is stated as fact.
+7. **Token trimming** in Settings (`saveKey`), PUT `/api/settings` and
+   `credentials_update`, the settings check and the handler; GM's two
+   character lines (the field's "paste it here", the card's "paste it in
+   Settings").
+8. **N9, N10**: the CLI quotes the node id; -0.0 is sent as 0.0; a padded
+   result URL is refused.
+9. **Agents' billing note**: `describe_node` adds `billing` on Space routes
+   (the ZeroGPU docs' $1 per 10 minutes past the quota on PRO, Team and
+   Enterprise; Nebula prices it at $0). The spend gate is unchanged
+   (TODO(Justin), Q141).
+10. **Dialog**: the focus trap treats the dialog itself as outside (Tab goes
+    to the first control, Shift+Tab to the last); every failure line is
+    centred in the stage in the neutral colour, the toolbar status is empty,
+    there is no reset; no download for a gone or a load failure; GM's No
+    WebGL2 line; a load failure gets "Nebula couldn’t load this splat. Try
+    again in a moment." and Try again, which remounts the viewer and keeps
+    focus in the dialog; another node's gone splat gets GM's line k. The
+    late-cancel path disposes quietly.
+11. **Framing at the extremes**: the radius is at least 3 times the
+    98th-percentile Gaussian scale, so one Gaussian or a splat whose centres
+    are all equal opens outside it; orbit zooms in to 0.2 of the radius;
+    near and far follow the object's scale (1 mm and 10 km both frame).
+12. **Copy**: "Speridlabs" on the full World v2 summary; readiness with a
+    token shows only "Runs on your own Hugging Face allowance."; "Explore
+    “{name}” in 3D"; no "Splat download" label; GM's lines 4a-k; "open
+    Details to see why".
+13. **Docs**: spatial-foundation (framing, the v1-style card, real-GPU
+    timing), idol.md (step 2's quote, the GPU-limit rule, the token-refused
+    row), the user guide (seed range, "small free daily allowance", no "any
+    seed works"), PROVIDER-ROUTES, MCP-SETUP, the pricing notes.
+
+### Decisions and corrections
+
+- **M21 stays an equivalent mutant**: dropping `math.isfinite` changes
+  nothing, because NaN fails `low <= value <= high` and so does infinity.
+- **The focus trap fix covers the World v1 dialog too**: both use
+  `hooks/useDialogFocusTrap.ts`.
+- **Round 2's notes overclaimed**: "every card line in the idol.md table"
+  wasn't all GM's; the token-unusable line was mine. GM's r2 character lines
+  replace it now.
+- **A base flake fixed**: the WorldEnvironmentViewer test's R3F mock made a
+  new `get` per call, which re-ran the load effect on each render and failed
+  the camera test under load. The mock's `get` is stable now, as R3F's is.
+- **The backend trims `HF_TOKEN` on save** (PUT `/api/settings` and the
+  desktop `credentials_update`), so a token saved by an agent's settings
+  write or an older client is clean too, not only the Settings field's.
+- **The billing note is facts, not a gate**: it says who can bill and how
+  much; whether an agent may run Idol on a PRO token stays Justin's
+  (TODO(Justin), Q141).
+- **`fetchFailure` is module-private** (react-refresh lint: a component file
+  exports only components and types).
+
+### Live check (isolated, 2026-10-30)
+
+Backend 8793 (temp HOME, settings, state and output; outbound HTTP to a dead
+proxy) and Vite 5793, headless Chrome on the real GPU (ANGLE Metal, Apple M5
+Max), 8000-8010, 5173 and every Hugging Face host blocked (the 8000 canary
+was blocked). No request reached a Hugging Face host and Run was never
+clicked. The token phase used a fake token saved through PUT
+`/api/settings` with spaces and a line break around it; settings.json held
+it trimmed.
+
+- Without a token: the Settings row reads "Hugging Face / Needed to run
+  Idol." with "Add key"; readiness reads "Hugging Face token · Needs a
+  Hugging Face token" (warning) with GM's detail; the selection toolbar's
+  and the context menu's Run are disabled with GM's lock reason; the
+  switcher row shows GM's note and "Add key →".
+- With the token: readiness shows only "Runs on your own Hugging Face
+  allowance."; Run is enabled; the switcher shows "Connected".
+- One Gaussian opens outside it (47% of the stage height), 4,096 Gaussians
+  at one centre fill 63%, and the 1 mm and 10 km objects frame like the
+  1 m one (75%, the same as the synthetic ball).
+- Gone, damaged, a 500, and no WebGL 2 each show their own line, centred
+  (0 px off) in the neutral colour, with an empty status and no reset;
+  download only for damaged and no WebGL 2. Try again on the 500 loaded
+  the splat in 1.4 s, with focus still in the dialog.
+- 0 page errors.

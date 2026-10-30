@@ -52,10 +52,14 @@ export function useDialogFocusTrap(
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      // The dialog itself holds focus while a button it disabled or removed
+      // can't (a download, Try again): Tab goes to the first control and
+      // Shift+Tab to the last, as from outside (PR #203 r2 review, MEDIUM 1).
+      const outside = !dialog.contains(active) || active === dialog;
+      if (event.shiftKey && (active === first || outside)) {
         event.preventDefault();
         last.focus({ preventScroll: true });
-      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+      } else if (!event.shiftKey && (active === last || outside)) {
         event.preventDefault();
         first.focus({ preventScroll: true });
       }

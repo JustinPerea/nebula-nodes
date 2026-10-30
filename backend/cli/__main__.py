@@ -440,7 +440,7 @@ def build_parser() -> argparse.ArgumentParser:
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
 
     splat_p = sub.add_parser(
-        "splat", help="Print a World output's Gaussian splat as numbers: count, bounding box, size, seed (Idol)")
+        "splat", help="Print a World output's Gaussian splat as numbers: count, bounding box, axes, size, seed (Idol)")
     splat_p.add_argument("node_ref", help="Node reference (e.g. n5)")
     splat_p.add_argument("--port", default=None, help="The World output to read, when the node has several")
 

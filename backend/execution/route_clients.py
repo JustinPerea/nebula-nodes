@@ -673,9 +673,9 @@ HF_SPACE_HANDLERS: dict[str, str] = {"speridlabs/idol": "handlers.speridlabs_ido
 
 async def run_hf_space(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
                        route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
-    """A keyless route (node_route.is_keyless) on the maker's own Space. The
-    person's HF_TOKEN, when set, gives the run their own ZeroGPU quota; the
-    handler sends it only to Hugging Face."""
+    """A route on the maker's own Space. The person's HF_TOKEN gives the run
+    their own ZeroGPU quota (Idol's route needs it; a keyless one uses it
+    when set); the handler sends it only to Hugging Face."""
     import importlib
 
     definition = _definition(node)

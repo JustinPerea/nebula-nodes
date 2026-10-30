@@ -81,10 +81,28 @@ function labelFor(key: string) {
   return PROVIDER_KEY_SPECS[key]?.label ?? key;
 }
 
+// GM (PR #203 r2): a Hugging Face token is printable ASCII with no space.
+// Leading and trailing spaces and line breaks are trimmed without a word
+// (saveKey's trim); any other stray character is refused by the field. The
+// backend's settings check and the Idol handler trim and refuse the same.
+export const HF_TOKEN_CHARACTER_LINE = 'This token has a character Hugging Face tokens can’t have. '
+  + 'Copy it again from Hugging Face, then paste it here.';
+
+/** The field's line for a trimmed key Settings can't store as it is, or null. */
+export function keyCharacterLine(key: string, value: string): string | null {
+  if (key !== 'HF_TOKEN') return null;
+  return /^[\x21-\x7e]+$/.test(value) ? null : HF_TOKEN_CHARACTER_LINE;
+}
+
 /** Save one provider key, then check it (read-only; nothing is generated). */
 export function saveKey(key: string, raw: string): Promise<boolean> {
   const value = raw.trim();
   if (!value) return Promise.resolve(false);
+  const refused = keyCharacterLine(key, value);
+  if (refused) {
+    fail(key, refused);
+    return Promise.resolve(false);
+  }
   setPending(key, true);
   return enqueue(async () => {
     const wasConfigured = !!useSettingsDraftStore.getState().saved?.apiKeys[key]?.trim();

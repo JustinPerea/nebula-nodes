@@ -1141,10 +1141,13 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     here) and, per route, `params` exactly as the card shows them on that
     provider (values cut, ranges narrowed, `onlyWhen`; a setting it doesn't
     offer is absent and named in `hides`), `price`, `priceUnconfirmed`,
-    `note` and `block`. A route with no key (`keys` [], e.g. Idol's free
-    Hugging Face Space) has `optionalKeys` ([{key, set}]): it runs without
-    them, and one that is set is used, so the run is on that person's own
-    account and quota. A route never receives a setting it doesn't offer;
+    `note` and `block`. A keyless route (`keys` []) has `optionalKeys`
+    ([{key, set}]): it runs without them, and one that is set is used, so the
+    run is on that person's own account and quota. A maker's Hugging Face
+    Space route (Idol's, which needs HF_TOKEN) has `billing`: the run uses
+    the person's own ZeroGPU allowance, and past its daily quota Hugging Face
+    bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
+    GPU-minutes, though Nebula prices it at $0. A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
     null = clear: plain param edits) on a propose_change cost entry; a run

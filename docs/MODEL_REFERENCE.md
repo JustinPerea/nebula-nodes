@@ -5646,18 +5646,18 @@ No settings.
 |---|---|
 | **ID** | `speridlabs-idol` |
 | **Provider** | speridlabs |
-| **API Key** | — |
+| **API Key** | HF_TOKEN |
 | **Endpoint** | `speridlabs/idol` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
 | **Outputs** | World (World) |
-| **Audited** | 2026-10-29 |
+| **Audited** | 2026-10-30 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `hf-space` | Speridlabs | none (optional HF_TOKEN) | `speridlabs/idol` | maker; Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own. |
+| `hf-space` | Speridlabs | HF_TOKEN | `speridlabs/idol` | maker; Free with a Hugging Face token. A free account gives a run or two a day. |
 
 **Speridlabs (`hf-space`) settings**
 

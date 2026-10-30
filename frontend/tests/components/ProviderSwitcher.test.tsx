@@ -117,19 +117,22 @@ describe('ProviderSwitcher rows', () => {
   });
 });
 
-describe('ProviderSwitcher on a keyless route (Idol, GM PR #203 r1)', () => {
+describe('ProviderSwitcher on Idol\'s keyed Space route (GM PR #203 r1 and r4)', () => {
   const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
   const renderIdol = () => render(<ProviderSwitcher definition={IDOL} params={{}} variant="inspector" onPick={vi.fn()} />);
 
-  it('leaves the key cell empty without the token: no third state, no "Add key"', () => {
+  it('shows the standard "Add key →" without the token, naming the Hugging Face token, and GM\'s row note', () => {
     withKeys({});
+    const open = vi.spyOn(useUIStore.getState(), 'openProviderSetup');
+    useUIStore.setState({ openProviderSetup: open });
     renderIdol();
     const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
-    // The cell keeps its column but says nothing.
-    expect(space.querySelector('.provider-switcher__key')).toBeEmptyDOMElement();
-    expect(within(space).queryByText(/Add key|Optional|Connected/)).toBeNull();
-    expect(row(/^Speridlabs/)).toHaveTextContent(
-      'Free. Runs on Hugging Face with a small daily allowance. Add your Hugging Face token to use your own.');
+    const add = within(space).getByRole('menuitem', { name: 'Add a Hugging Face token in Settings' });
+    expect(add).toHaveTextContent('Add key →');
+    expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
+    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token. A free account gives a run or two a day.');
+    fireEvent.click(add);
+    expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'HF_TOKEN' });
   });
 
   it('shows the green dot and "Connected" with the token', () => {

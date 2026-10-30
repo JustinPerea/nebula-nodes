@@ -325,43 +325,75 @@ def test_route_docs_describe_pr5_behaviour():
         assert "Hidden settings" in text and "Model Jam (speed)" in text, doc
 
 
-# -- a keyless route (Idol): agents and the CLI see its optional key ---------------
+# -- Idol: a keyed Space route (GM PR #203 r4); the keyless rules stay -----------
 
 
-def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set(monkeypatch):
+def _keyless_idol() -> dict:
+    """Idol switched back to keyless, as it would be if the first live run
+    shows ZeroGPU asks 120 s (docs/model-providers/speridlabs/idol.md)."""
+    definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
+    route.pop("missingKeyLine")
+    definition["envKeyName"], definition["directKeyName"] = [], []
+    return definition
+
+
+def test_describe_node_shows_idols_token_billing_and_whether_it_is_set(monkeypatch):
     for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True)):
         monkeypatch.setattr(main, "load_settings", lambda keys=keys: {"apiKeys": keys})
         body = TestClient(main.app).get("/api/agent/nodes/speridlabs-idol").json()
         [route] = body["routes"]
-        assert route["keys"] == [] and route["keySet"] is False
-        assert route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
-    # A keyed route has no optionalKeys field.
-    assert all("optionalKeys" not in route for route in TestClient(main.app).get(
+        assert route["keys"] == ["HF_TOKEN"] and route["keySet"] is is_set
+        assert "optionalKeys" not in route
+        assert route["billing"] == main.HF_SPACE_BILLING_NOTE
+    # Only a Space route carries the billing note.
+    assert all("billing" not in route for route in TestClient(main.app).get(
         "/api/agent/nodes/flux-3-image-klein").json()["routes"])
 
 
-def test_find_nodes_and_start_here_list_idol_as_free(real_nodes):
+def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set():
+    for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True)):
+        [route] = main._describe_routes(_keyless_idol(), keys, lambda _route: [])["routes"]
+        assert route["keys"] == [] and route["keySet"] is False
+        assert route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
+
+
+def test_find_nodes_lists_idol_as_ready_and_free_only_with_its_token(real_nodes, monkeypatch):
+    # No token: not ready, so a ready-only search leaves it out.
     body = real_nodes.get("/api/agent/nodes", params={"query": "idol"}).json()
+    assert all(node["id"] != "speridlabs-idol" for node in body["nodes"])
+    body = real_nodes.get("/api/agent/nodes", params={"query": "idol", "ready_only": "false"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
-    assert row["price"] == "free" and row["runsWith"] == "free"
-    start = real_nodes.get("/api/agent/start", headers={"X-Nebula-Agent": "Codex"}).json()
-    by_category = start["nodes"]["byCategory"]
-    assert by_category["3d-gen"]["speridlabs-idol"] == "free"
-    assert "speridlabs-idol" not in json.dumps(start["nodes"].get("runsWith") or {})
+    # No route can start, so no list price, as on every keyed node.
+    assert row["price"] is None and not row["runsWith"] and row["missing"]
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": "hf_x"}})
+    body = TestClient(main.app).get("/api/agent/nodes", params={"query": "idol"}).json()
+    row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
+    assert row["price"] == "free" and row["runsWith"]
 
 
-def test_nebula_info_says_idol_needs_no_key_and_names_the_optional_one():
+def test_nebula_info_names_idols_token_and_a_keyless_routes_optional_one():
     text = format_node_detail(REGISTRY["speridlabs-idol"])
-    assert "Key: none (optional HF_TOKEN)" in text
+    assert "Key: HF_TOKEN" in text
     route_line = next(line for line in text.splitlines() if line.strip().startswith("hf-space"))
-    assert "none (optional HF_TOKEN)" in route_line
+    assert "HF_TOKEN" in route_line and "optional" not in route_line
+    assert "or a keyless one" in text
+    keyless = format_node_detail(_keyless_idol())
+    assert "Key: none (optional HF_TOKEN)" in keyless
+    assert "none (optional HF_TOKEN)" in next(line for line in keyless.splitlines()
+                                              if line.strip().startswith("hf-space"))
 
 
-def test_nebula_keys_counts_a_keyless_routes_optional_key():
+def test_nebula_keys_counts_idols_token_and_a_keyless_routes_optional_one():
     from cli.formatter import format_keys
 
     idol = REGISTRY["speridlabs-idol"]
     set_text = format_keys({"configured": {"HF_TOKEN": True}}, [idol])
-    assert "HF_TOKEN" in set_text and "1 nodes (Idol)" in set_text and "no node uses it" not in set_text
+    assert "HF_TOKEN" in set_text and "1 node (Idol)" in set_text and "1 nodes" not in set_text
     unset_text = format_keys({"configured": {"HF_TOKEN": False}}, [idol])
-    assert "optional: 1 nodes run without it (Idol)" in unset_text and "unavailable" not in unset_text
+    assert "1 node unavailable" in unset_text and "optional" not in unset_text
+    keyless_text = format_keys({"configured": {"HF_TOKEN": False}}, [_keyless_idol()])
+    assert "optional: 1 node runs without it (Idol)" in keyless_text and "unavailable" not in keyless_text
+    two = format_keys({"configured": {"HF_TOKEN": False}}, [idol, {**idol, "id": "idol-2", "displayName": "Idol 2"}])
+    assert "2 nodes unavailable" in two

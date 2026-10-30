@@ -7,6 +7,7 @@ import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
 import '../styles/panels.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { nodesKeyLockReason } from '../lib/runKeyLock';
 
 /** How close the menu may come to the window's edges. */
 const MENU_EDGE = 8;
@@ -16,6 +17,8 @@ interface MenuItem {
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
+  /** The tooltip, e.g. why Run is disabled. */
+  title?: string;
   action: () => void;
 }
 
@@ -34,6 +37,8 @@ export function ContextMenu() {
   // here edits, so each is disabled and looks it, with "Wait for “<project>”
   // to open." while following.
   const lock = useCanvasLock();
+  const graphNodes = useGraphStore((s) => s.nodes);
+  const settingsCache = useUIStore((s) => s.settingsCache);
   const menuRef = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
@@ -106,11 +111,15 @@ export function ContextMenu() {
     );
   }
 
+  // A node that can't run without its key (Idol's Hugging Face token).
+  const keyLock = nodesKeyLockReason(graphNodes, [nodeId], settingsCache);
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting || runStarting,
+      disabled: isExecuting || runStarting || Boolean(keyLock),
+      title: keyLock ?? undefined,
       action: () => {
+        if (keyLock) return;
         executeNode(nodeId);
         hideContextMenu();
       },
@@ -156,7 +165,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled })}
+          {...lock.act({ disabled: item.disabled, title: item.title })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

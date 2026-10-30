@@ -24,6 +24,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
+import { nodesKeyLockReason } from '../lib/runKeyLock';
 
 
 export function SelectionToolbar() {
@@ -60,6 +61,11 @@ export function SelectionToolbar() {
   // several run as an explicit cluster.
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
+  // A node that can't run without its key (Idol's Hugging Face token):
+  // Run is disabled with its line as the reason (GM, PR #203 r4).
+  const keyLock = useMemo(() => nodesKeyLockReason(nodes, ids, { loaded: settingsLoaded, apiKeys }),
+    [nodes, ids, settingsLoaded, apiKeys]);
   const sizes = useInputSizeStore((s) => s.sizes);
   const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
@@ -106,6 +112,7 @@ export function SelectionToolbar() {
   }
 
   function runSelection() {
+    if (keyLock) return;
     if (ids.length === 1) {
       // Use the established target-node path so the backend derives the
       // authoritative target-plus-ancestors closure from the full graph.
@@ -150,7 +157,8 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...lock.act({ disabled: isExecuting || runStarting, title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        {...lock.act({ disabled: isExecuting || runStarting || Boolean(keyLock),
+          title: keyLock ?? `Run selected nodes. ${describeRunScope(runScope)}` })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >

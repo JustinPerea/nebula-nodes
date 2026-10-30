@@ -16317,7 +16317,7 @@
               "price": 0
             }
           ],
-          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. Each run uses the caller's daily ZeroGPU time: without a token, the small anonymous allowance; with the person's HF_TOKEN, the account's own (free 5 minutes, PRO and Team 40, Enterprise 60). Each Idol call reserves 120 s of GPU (app.py spaces.GPU(duration=120)), and ZeroGPU checks the reserved duration against the quota, so the anonymous allowance may fit about one run a day; to be confirmed on the first live run. Past that allowance a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. The GPU seconds a run really uses are not published or measured.",
+          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. The route needs the person's HF_TOKEN, and each run uses that account's daily ZeroGPU time (free 5 minutes, PRO and Team 40, Enterprise 60; the docs give unauthenticated visitors 2 minutes, which may not apply to server-side calls). Each call asks for 120 s of GPU (app.py spaces.GPU(duration=120)); spaces 0.51.3 multiplies that by the GPU's duration_factor (spaces/zero/configs.json: 1.0 on H200, 1.5 on RTX PRO 6000 Blackwell), so a run reserves 120 s, or 180 s on Blackwell, the docs' default ZeroGPU size. Which one the Space asks for, and how many runs a day fit, is to be confirmed on the first live run. Past the daily quota a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes; that charge is the person's own and Nebula can't see it. The GPU seconds a run really uses are not published or measured.",
           "sources": [
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
@@ -16325,14 +16325,22 @@
             },
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
-              "quote": "Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest"
+              "quote": "Unauthenticated | 2 minutes | Low; Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest; Team organization member | 40 minutes (extensible) | Highest; Enterprise organization member | 60 minutes (extensible) | Highest"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "large (default) | Half NVIDIA RTX Pro 6000 Blackwell | 48GB | 1×"
+            },
+            {
+              "url": "https://huggingface.co/spaces/speridlabs/idol/blob/main/app.py",
+              "quote": "gpu = spaces.GPU(duration=120)"
             },
             {
               "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
               "quote": "PRO, Team, and Enterprise users can continue using ZeroGPU Spaces beyond their included daily quota by consuming pre-paid credits at the rate of $1 per 10 minutes of GPU time."
             }
           ],
-          "checked": "2026-10-29"
+          "checked": "2026-10-30"
         }
       }
     },

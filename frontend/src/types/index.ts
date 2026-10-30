@@ -236,6 +236,12 @@ export interface RouteSpec {
    *  key, and uses the first of these that is set (the person's own quota).
    *  `keys` is then [], and these stay out of `envKeyName`. */
   optionalKeys?: string[];
+  /** A keyed route whose run can't start without its key, in the person's
+   *  words (Idol: "You can run Idol after you add your Hugging Face token in
+   *  Settings."). Without the key, Run is disabled with this as its reason,
+   *  the engine and the router refuse agent and CLI runs with it before
+   *  anything is sent. */
+  missingKeyLine?: string;
   /** A Krea route that can bill the signed-in plan: 'optional' when
    *  `_kreaAuth` is 'mcp', 'only' always. */
   plan?: 'optional' | 'only';
