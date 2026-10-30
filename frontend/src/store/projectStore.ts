@@ -22,7 +22,7 @@ import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import type { CutOffSave } from '../lib/savingCutOff';
 import type { HandoffPending } from './graphStore';
-import { setFollowingSwitch } from '../lib/canvasFollow';
+import { followingSwitch as followingNow, setFollowingSwitch } from '../lib/canvasFollow';
 import { onPersonInput } from '../lib/personInput';
 import { isOwnEcho, sameValue, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -51,6 +51,9 @@ import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
  * RESTORED_LIST_UNSAVED). `error`: the last save's failure, shown with it. */
 export interface KeptEdits {
   sourceId: string; sourceName: string; lead: string | null; saving: boolean; error: string | null;
+  /** Review 14 (kept-hold LOW-1): [Discard edits] is on its way. Save and
+   * Discard share one busy state: each waits while either runs. */
+  discarding?: boolean;
 }
 
 /** The kept line as the notice shows it. */
@@ -887,6 +890,10 @@ subscribeKeptCanvas(() => {
   if (isCanvasKept()) return;
   keptRecovery = null;
   if (useProjectStore.getState().keptEdits) useProjectStore.setState({ keptEdits: null });
+  // GM r22 (2): the kept update line goes with kept mode, whatever ended it
+  // (Save and Discard then handle the update themselves; any other end
+  // leaves it to the next listing or sync, as before).
+  if (isKeptUpdateLine(useProjectStore.getState().error)) useProjectStore.setState({ error: null, errorRetry: null });
 });
 
 /** Set while [Save as a project] or [Discard edits] replaces the kept canvas
@@ -910,10 +917,86 @@ export const DISCARDED_KEPT_EDITS = 'Discarded the kept edits.';
 
 /** What blocks [Save as a project] and [Discard edits] (GM r19, 4: each
  * names its own blocker): a run, then offline. Null when neither. */
-export function keptExitBlocker(): 'run' | 'offline' | null {
+export function keptExitBlocker(): 'run' | 'following' | 'offline' | null {
   if (!useGraphStore.getState().canSwitchProject({ exceptSaves: true })) return 'run';
+  // Review 14 (lock-order NIT-3): kept, then the run, following and offline,
+  // as every control kept leaves on takes them.
+  if (followingNow()) return 'following';
   if (isBackendOffline()) return 'offline';
   return null;
+}
+
+/** GM r21 (5): the saved copy of the kept canvas that [Discard edits]
+ * opens: the project it was, else the copy the restore filed of the canvas
+ * (the live canvas saved as its own project, "Recovered canvas" or "<name>
+ * (recovered)"), when the restored list holds it. Null when neither exists
+ * (the canvas couldn't be saved at the limit): Projects home. */
+export function keptDiscardTarget(kept: Pick<KeptEdits, 'sourceId'>, list: Pick<ProjectList, 'projects' | 'catalogRestore'>): string | null {
+  const listed = (id: string | null | undefined) => typeof id === 'string' && list.projects.some((project) => project.id === id);
+  if (listed(kept.sourceId)) return kept.sourceId;
+  const restore = list.catalogRestore;
+  const copy = restore?.recoveredCanvas?.id;
+  // The restore's copy is of the canvas that was open: this one, unless it
+  // names another project as the one it was.
+  if (listed(copy) && (!restore?.openProjectMissing || restore.openProjectMissing === kept.sourceId)) return copy!;
+  return null;
+}
+
+/**
+ * Review 14 of PR #199 (HIGH-1): the copy gave the nodes added while kept
+ * backend ids (`renumbered`), and the tab loaded it, so every id it holds is
+ * the copy's: the canvas and its wires come from the copy, kept Undo ended
+ * with kept mode, and the open cleared the panels. What the person had
+ * selected (and the Inspector's node) is selected again by its new id.
+ */
+function adoptRenumberedSelection(renumbered: Record<string, string>, selected: string[], inspected: string | null): void {
+  const graph = useGraphStore.getState();
+  const present = new Set(graph.nodes.map((node) => node.id));
+  const adopt = (id: string) => { const next = renumbered[id] ?? id; return present.has(next) ? next : null; };
+  const reselect = new Set(selected.map(adopt).filter((id): id is string => id !== null));
+  if (reselect.size > 0) {
+    useGraphStore.setState({ nodes: graph.nodes.map((node) => (reselect.has(node.id) === Boolean(node.selected)
+      ? node : { ...node, selected: reselect.has(node.id) })) });
+  }
+  const inspect = inspected ? adopt(inspected) : null;
+  if (inspect && useUIStore.getState().selectedNodeId !== inspect) useUIStore.getState().selectNode(inspect);
+}
+
+/** The wires the copy's rules left out, said after the saved toast (each
+ * with the server's own line for why). */
+export function droppedWiresLine(wires: readonly api.DroppedWire[]): string {
+  const lead = wires.length === 1 ? 'One connection wasn’t saved with it.' : `${wires.length} connections weren’t saved with it.`;
+  const reasons = [...new Set(wires.map((wire) => wire.line?.trim()).filter((line): line is string => Boolean(line)))];
+  return sentences(lead, ...reasons);
+}
+
+/** GM r22 (2): an update seen while kept, handled when kept mode ends. */
+let keptUpdate: { version: number | null } | null = null;
+
+/** Review 14 (kept-hold LOW-4): why the open that would leave kept mode
+ * failed, when activate's own catch kept it to itself (a 5xx, no answer). */
+let leavingFailure: string | null = null;
+/** Set while Discard's open runs (its failure goes to the kept line). */
+let discardOpening = false;
+
+/** The kept canvas is about to go for good (Save filed it, or Discard was
+ * chosen) while Nebula was updated: no copy of it is made, the canvas goes,
+ * and the update is handled as for any tab (it reloads, or says how). */
+function leaveKeptForUpdate(version: number | null, copy?: { id: string; name: string }): void {
+  keptUpdate = null;
+  stopKeepingEdits();
+  if (copy) rememberCopyForUpdate(copy);
+  releaseLoadedProject();
+  useProjectStore.setState({ dirty: false, saveStatus: 'saved', saveError: null, error: null, errorRetry: null,
+    ...(copy ? { editsRecoveredAs: copy } : {}) });
+  void handleParamsVersionChange(version);
+}
+
+/** The update a listing read while kept says, if any. */
+function listedUpdate(list: Pick<ProjectList, 'paramsVersion'>): { version: number | null } | null {
+  if (keptUpdate) return keptUpdate;
+  const version = backendParamsVersion(list.paramsVersion);
+  return version !== GRAPH_PARAMS_VERSION ? { version } : null;
 }
 
 /**
@@ -927,7 +1010,13 @@ export function keptExitBlocker(): 'run' | 'offline' | null {
  */
 async function discardKeptEdits(): Promise<void> {
   const kept = useProjectStore.getState().keptEdits;
-  if (!kept || kept.saving || !isCanvasKept() || keptExitBlocker()) return;
+  if (!kept || kept.saving || kept.discarding || !isCanvasKept() || keptExitBlocker()) return;
+  // One busy state for both buttons (review 14, kept-hold LOW-1).
+  useProjectStore.setState({ keptEdits: { ...kept, discarding: true, error: null } });
+  const settle = (error: string | null) => {
+    const current = useProjectStore.getState().keptEdits;
+    if (current && isCanvasKept()) useProjectStore.setState({ keptEdits: { ...current, discarding: false, error } });
+  };
   let list: ProjectList | null = null;
   try {
     listingGeneration += 1;
@@ -935,14 +1024,16 @@ async function discardKeptEdits(): Promise<void> {
     useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       workspaceRevision: list.workspaceRevision });
   } catch (error) {
-    const current = useProjectStore.getState().keptEdits;
-    if (current) useProjectStore.setState({ keptEdits: { ...current, error: isOfflineRefusal(error) ? null
-      : failureMessage(error, "Couldn't discard the kept edits.") } });
+    settle(isOfflineRefusal(error) ? null : failureMessage(error, "Couldn't discard the kept edits."));
     return;
   }
   if (!isCanvasKept()) return;
-  const saved = list.projects.some((project) => project.id === kept.sourceId);
-  if (!saved) {
+  // GM r22 (2): Nebula was updated meanwhile. The person chose to drop the
+  // edits, so the tab leaves kept mode and reloads (no open in this bundle).
+  const update = listedUpdate(list);
+  if (update) { leaveKeptForUpdate(update.version); return; }
+  const target = keptDiscardTarget(kept, list);
+  if (!target) {
     // Kept mode first (its param pushes go with it), then the canvas.
     stopKeepingEdits();
     releaseLoadedProject();
@@ -953,22 +1044,31 @@ async function discardKeptEdits(): Promise<void> {
     void relistProjects();
     return;
   }
+  // Review 14 (kept-hold MEDIUM-3): the canvas is being dropped, so a save
+  // pause it carried (over the save limit) holds nothing: activate skips
+  // the held-edits screen while leavingKept.
   leavingKept = true;
+  discardOpening = true;
+  leavingFailure = null;
   let opened = false;
   try {
-    opened = await activate(() => api.openProject(kept.sourceId, useProjectStore.getState().workspaceRevision),
-      { action: 'open', id: kept.sourceId });
-  } finally { leavingKept = false; }
+    opened = await activate(() => api.openProject(target, useProjectStore.getState().workspaceRevision),
+      { action: 'open', id: target });
+  } finally { leavingKept = false; discardOpening = false; }
   if (opened && !isCanvasKept()) {
     useProjectStore.setState({ dirty: false, saveStatus: 'saved', saveError: null });
     showNotice(DISCARDED_KEPT_EDITS, 'info');
     return;
   }
-  // Not opened: the canvas stays kept, and the line says why.
+  // The open found the update (activate saw another params version).
+  if (keptUpdate && isCanvasKept()) { leaveKeptForUpdate(keptUpdate.version); return; }
+  // Not opened: the canvas stays kept, and the line says why (the open's
+  // own reason, review 14 LOW-4).
   const after = useProjectStore.getState();
   if (after.keptEdits && isCanvasKept()) {
-    useProjectStore.setState({ keptEdits: { ...after.keptEdits, error: after.error ?? "Couldn't discard the kept edits." },
-      error: null, errorRetry: null });
+    const reason = leavingFailure ?? after.error ?? "Couldn't discard the kept edits.";
+    leavingFailure = null;
+    useProjectStore.setState({ keptEdits: { ...after.keptEdits, discarding: false, error: reason }, error: null, errorRetry: null });
   }
 }
 
@@ -982,10 +1082,11 @@ async function discardKeptEdits(): Promise<void> {
  */
 async function saveKeptEdits(): Promise<void> {
   const kept = useProjectStore.getState().keptEdits;
-  if (!kept || kept.saving || !isCanvasKept()) return;
+  if (!kept || kept.saving || kept.discarding || !isCanvasKept()) return;
   // GM r19, 4 (review 13, LOW-3): a run holds it, as its button says, so
-  // the copy isn't made only for its open to be refused.
-  if (keptExitBlocker() === 'run') return;
+  // the copy isn't made only for its open to be refused; so do following
+  // and offline, in that order (review 14, kept-hold NIT-1), as Discard.
+  if (keptExitBlocker()) return;
   const snapshot = captureProjectSnapshot();
   const fingerprint = JSON.stringify(snapshot);
   if (projectSizeBytes(snapshot) > PROJECT_SAVE_LIMIT_BYTES) {
@@ -1000,11 +1101,24 @@ async function saveKeptEdits(): Promise<void> {
   setKeptCanvasSaving(true);
   useProjectStore.setState({ keptEdits: { ...kept, saving: true, error: null } });
   let copy: { id: string; name: string };
+  let renumbered: Record<string, string> = {};
+  let droppedWires: api.DroppedWire[] = [];
   try {
     const saved = await api.recoverProject(kept.sourceId, snapshot, recoveryId, canvasParamsVersion, kept.sourceName);
     copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : `${kept.sourceName} (recovered)` };
+    renumbered = saved?.renumbered ?? {};
+    droppedWires = saved?.droppedWires ?? [];
   } catch (error) {
     setKeptCanvasSaving(false);
+    // Review 14 (kept-hold MEDIUM-2): the list is at its project limit. The
+    // canvas stays kept, and the line says the limit in numbers (GM r22),
+    // never the backend's own words.
+    if (error instanceof RequestFailedError && error.status === 413 && error.storageLimit === 'projects') {
+      const line = await keptLimitLine();
+      const current = useProjectStore.getState().keptEdits;
+      if (current) useProjectStore.setState({ keptEdits: { ...current, saving: false, error: line } });
+      return;
+    }
     if (refusedForGood(error) && !isOfflineRefusal(error)) {
       stopKeepingEdits();
       const recovery = pendingRecoveryOf(kept.sourceId, snapshot);
@@ -1026,19 +1140,31 @@ async function saveKeptEdits(): Promise<void> {
   lastSaved = lastSeen = fingerprint;
   // The open is checked against the list as it is now (the tab's own
   // revision went with the restore).
+  let update: { version: number | null } | null = keptUpdate;
   try {
     listingGeneration += 1;
     const list = await api.listProjects();
     useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       workspaceRevision: list.workspaceRevision });
+    update = listedUpdate(list);
   } catch { /* The open says it if the revision is stale. */ }
+  // GM r22 (2): Nebula was updated while kept. The copy is filed, so the
+  // tab reloads by itself and opens it after (openCopyAfterUpdate); when it
+  // can't reload, the update's own line says so.
+  if (update) { leaveKeptForUpdate(update.version, copy); return; }
+  // What the person had selected, to select again by the copy's ids.
+  const selectedBefore = useGraphStore.getState().nodes.filter((node) => node.selected).map((node) => node.id);
+  const inspectedBefore = useUIStore.getState().selectedNodeId;
   leavingKept = true;
   try { await useProjectStore.getState().open(copy.id); } finally { leavingKept = false; }
+  if (keptUpdate && isCanvasKept()) { leaveKeptForUpdate(keptUpdate.version, copy); return; }
   stopKeepingEdits();
   const after = useProjectStore.getState();
   if (after.screen === 'workspace' && after.activeProject?.id === copy.id) {
     useProjectStore.setState({ dirty: false, saveStatus: 'saved', saveError: null });
-    showNotice(editsRecoveredToast(copy.name), 'info');
+    adoptRenumberedSelection(renumbered, selectedBefore, inspectedBefore);
+    showNotice(droppedWires.length > 0 ? sentences(editsRecoveredToast(copy.name), droppedWiresLine(droppedWires))
+      : editsRecoveredToast(copy.name), 'info');
     return;
   }
   // Saved, but it didn't open: Projects home says where the edits went.
@@ -1078,6 +1204,9 @@ export function resetProjectStoreForTests(): void {
   syncedSaved = undefined;
   savedFromUnder = null;
   keptRecovery = null;
+  keptUpdate = null;
+  leavingFailure = null;
+  discardOpening = false;
   releaseKeptCanvas();
   dismissedRestores.clear();
   dismissedHeldNotes.clear();
@@ -1202,8 +1331,39 @@ async function openCopyAfterUpdate(): Promise<void> {
 }
 
 const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
-/** The update's line while the canvas is kept: nothing reloads by itself. */
-export const KEPT_UPDATE_LINE = `${PARAMS_UPDATED} Save the kept edits as a project or discard them, then reload the tab to use the update.`;
+/** GM r22 (2), verbatim: the update's line while the canvas is kept. Save
+ * as a project and Discard edits each reload the tab when done. */
+export const KEPT_UPDATE_LINE = `${PARAMS_UPDATED} Save the kept edits as a project or discard them, and the tab reloads to use the update.`;
+/** The same, when the tab can't reload by itself (it already reloaded once
+ * for this version, or the versions need a rebuild or a restart): the
+ * person reloads (GM r22, 2: "then reload the tab", for that path only). */
+export const KEPT_UPDATE_RELOAD_LINE = `${PARAMS_UPDATED} Save the kept edits as a project or discard them, then reload the tab to use the update.`;
+/** Whether `line` is the kept update line (either form): the kept notice
+ * shows it, since the workspace has no other place for the store's error. */
+export const isKeptUpdateLine = (line: string | null | undefined): line is string => line === KEPT_UPDATE_LINE || line === KEPT_UPDATE_RELOAD_LINE;
+/** The kept update line for `backendVersion`: whether the tab can reload by itself. */
+export function keptUpdateLine(backendVersion: number | null): string {
+  const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
+  return newer && reloadDueFor(backendVersion) === 'reload' ? KEPT_UPDATE_LINE : KEPT_UPDATE_RELOAD_LINE;
+}
+
+/** GM r22 on PR #199 (review 14, kept-hold MEDIUM-2), verbatim with the
+ * real numbers: [Save as a project] at or past the project limit. */
+export function keptProjectLimitLine(count: number, limit: number): string {
+  if (count > limit) return `You have ${count} projects, over the limit of ${limit}. Delete ${count - limit + 1}, then save it as a project.`;
+  return `You’ve reached the limit of ${limit} projects. Delete one, then save it as a project.`;
+}
+/** The limit line from the list as it is now (its own limit and count). */
+async function keptLimitLine(): Promise<string> {
+  try {
+    listingGeneration += 1;
+    const list = await api.listProjects();
+    useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
+      workspaceRevision: list.workspaceRevision });
+  } catch { /* The numbers this tab has. */ }
+  const state = useProjectStore.getState();
+  return keptProjectLimitLine(state.projects.length, state.projectLimit);
+}
 /** The backend runs another params version than this bundle (graphSync, the
  * project listing or a 409 params_outdated said so). The tab's values may be
  * from before a one-time upgrade, and the backend refuses its saves and runs,
@@ -1216,7 +1376,8 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
   // in this tab), so it waits for [Save as a project] or [Discard edits];
   // the next listing or sync after that handles the update.
   if (isCanvasKept()) {
-    useProjectStore.setState({ error: KEPT_UPDATE_LINE, errorRetry: null });
+    keptUpdate = { version: backendVersion };
+    useProjectStore.setState({ error: keptUpdateLine(backendVersion), errorRetry: null });
     return Promise.resolve();
   }
   if (paramsVersionChange) return paramsVersionChange;
@@ -1441,7 +1602,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // #178's screen instead of being dropped, and the open or create runs
     // once the person has chosen (loadAfterHeldEdits).
     const context = getProjectContext();
-    if (useProjectStore.getState().savePaused && useProjectStore.getState().dirty && context) {
+    if (useProjectStore.getState().savePaused && useProjectStore.getState().dirty && context && !leavingKept) {
       holdOverLimitEdits(context.id, captureProjectSnapshot(), true);
       // One action waits behind the screen: the latest the person asked for.
       if (retry.action === 'open') { heldEditsReopen = retry.id; heldEditsCreate = undefined; }
@@ -1479,6 +1640,12 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     if (result.warnings?.length) showNotice(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`, 'info');
     return true;
   } catch (error) {
+    // Leaving kept mode (Discard's open): the canvas stays kept, and the
+    // kept line says the open's own reason (review 14, kept-hold LOW-4).
+    if (discardOpening && isCanvasKept()) {
+      leavingFailure = isOfflineRefusal(error) ? null : failureMessage(error, "Couldn't discard the kept edits.");
+      return false;
+    }
     // A lost activation reply can follow a successful server commit. Re-read
     // on Retry instead of sending a second create/open or saving under an old
     // identity. Definite validation rejections retain the current workspace.

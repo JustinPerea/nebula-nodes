@@ -112,8 +112,14 @@ refused (409 `canvas_kept_in_tab`). Still allowed: reads, renaming a project,
 moving a project that isn't open to Recently deleted, and restoring one from
 Recently deleted. Tell the person, and try again after they save those edits
 as a project or discard them. Discarding is theirs alone: you have no way to
-do it. If their tab's connection drops, this holds for about 10 seconds more
-in case the tab comes back.
+do it (it opens the canvas's saved copy, the project it showed or one like
+“Recovered canvas”, or Projects when there is none). If their tab's
+connection drops, this holds for about 10 seconds more in case the tab comes
+back, for each tab on its own; after a Nebula restart it holds for about 15
+seconds, until the tab is back. Nodes they added while kept get Nebula's ids
+(`nN`) when they save: after the copy opens, read the canvas again and use
+the ids you see. Connections Nebula's rules refuse are left out of the copy
+and listed in the `project.created` event (`droppedWires`).
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to

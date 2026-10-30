@@ -240,6 +240,9 @@ class ProjectLimitError(ProjectStoreError):
     def __init__(self, message: str, limit: str) -> None:
         super().__init__(message)
         self.limit = limit
+        # How many projects the list holds, when the route that refused says
+        # (the answer's ``projectCount``); None otherwise.
+        self.project_count: int | None = None
 
 
 def now() -> str:

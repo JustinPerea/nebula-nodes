@@ -462,7 +462,13 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
         lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
     if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
         # GM r19 on PR #199, 6a: only unread project records may be missing.
-        if restore.get("damagedRecordsUnread") is False:
+        from services.catalog_recovery import restore_said_more
+
+        # GM r22 on PR #199, 1: "no project is missing" only when nothing
+        # else is said (the person's rule), never beside a left-out project.
+        if restore.get("damagedRecordsUnread") is False and restore_said_more(restore):
+            lines.append("  Damaged file not read whole, after its project records: every record in it was read")
+        elif restore.get("damagedRecordsUnread") is False:
             lines.append("  Damaged file not read whole, after its projects: no project is missing")
         else:
             lines.append("  Damaged file not read whole: changes after the copy may be missing")

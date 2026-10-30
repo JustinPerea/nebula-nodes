@@ -8,9 +8,11 @@
  * While kept, nothing is sent and nothing is put back: the person can keep
  * typing (param edits stay on the canvas only) and, GM r18 (Q3), use the tab
  * as a scratch canvas: move, delete, duplicate, Arrange, Clear canvas, and
- * Undo and Redo over those steps only (graphStore's KeptStep). Every edit
- * that needs Nebula (a run, an add, a connection, agents) is refused with a
- * pulse of the kept line, and [Save as a project] files the canvas as it is
+ * Undo and Redo over those steps only (graphStore's KeptStep); GM r19 and
+ * r21 add typing, renames, added nodes and connections (checked here by the
+ * server's own rules: lib/keptWires). Every edit that needs Nebula (a run,
+ * a character or moodboard, a note, agents) is refused with a pulse of the
+ * kept line, and [Save as a project] files the canvas as it is
  * at the click (projectStore.saveKeptEdits). While that save is on its way,
  * every edit is refused too, so nothing done after the click is lost when
  * the saved project opens.
@@ -62,7 +64,7 @@ export function useKeptCanvas(): boolean {
 // the canvas (Projects, another project, a new one, Load, Import) name both
 // ways out, since discarding the kept edits unlocks them too.
 export type KeptAction = 'run' | 'note' | 'ask' | 'settings'
-  | 'add-node' | 'next-step' | 'rewrite' | 'load' | 'import' | 'proposal' | 'unlock' | 'forget'
+  | 'add-node' | 'add-character' | 'add-moodboard' | 'test-character' | 'next-step' | 'rewrite' | 'load' | 'import' | 'proposal' | 'unlock' | 'forget'
   | 'home' | 'open' | 'create'
   | 'edit-video' | 'generate' | 'scene' | 'other';
 const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
@@ -72,6 +74,11 @@ const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   settings: 'You can change settings after you save it as a project.',
   // The builder's, in GM's form (GM r18, Q1: the pattern stays).
   'add-node': 'You can add nodes after you save it as a project.',
+  // GM r22, 4, verbatim: the asset adds (they point at server assets) and
+  // the character test panel, each in its own verb.
+  'add-character': 'You can add characters after you save it as a project.',
+  'add-moodboard': 'You can add moodboards after you save it as a project.',
+  'test-character': 'You can test characters after you save it as a project.',
   'next-step': 'You can add a next step after you save it as a project.',
   rewrite: 'You can rewrite the prompt after you save it as a project.',
   // GM r20: a route that replaces the canvas names both ways out, each

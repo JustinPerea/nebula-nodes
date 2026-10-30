@@ -1319,3 +1319,34 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     open_name = _record_name(open_missing, salvages, trash) if open_missing else None
     return Reconciled(result, added, updated, list(not_added.values()), active_from, open_missing,
                       reverted, came_back, back_in_trash, kept_deleted, open_name, rekeyed, side_behind)
+
+
+def restore_said_more(record: Any) -> bool:
+    """Whether a catalog restore's record has anything to say besides "no
+    project is missing": the frontend's ``saidAtFirst``
+    (components/projects/catalogRestoreCopy.ts), as the restore found it, so
+    agents' notes (main._catalog_restore_note, cli.formatter) say "no project
+    is missing" only under the person's rule (GM r22 on PR #199, 1): projects
+    added back, left out (at the limit or not), reverted (not the live
+    canvas's or a deleted one's), back after a delete or in Recently deleted
+    again, or a canvas filed or waiting on the limit."""
+    from collections.abc import Mapping
+
+    if not isinstance(record, Mapping):
+        return False
+
+    def rows(key: str) -> list[Any]:
+        value = record.get(key)
+        return value if isinstance(value, list) else []
+
+    def total(key: str) -> int:
+        value = record.get(f"{key}Count")
+        count = value if isinstance(value, int) and not isinstance(value, bool) else 0
+        return max(count, len(rows(key)))
+
+    reverted_out = sum(1 for row in rows("reverted")
+                       if isinstance(row, Mapping) and (row.get("liveCanvas") or row.get("trashed")))
+    return (total("addedBack") > 0 or total("notAddedBack") > 0 or total("reverted") - reverted_out > 0
+            or total("cameBack") > 0 or total("backInTrash") > 0
+            or bool(record.get("recoveredCanvas")) or bool(record.get("canvasNotFiled"))
+            or bool(rows("alsoFiled")) or bool(rows("agentCopies")))

@@ -223,7 +223,24 @@ export const pinProjectCover = (id: string, url: string | null) =>
 /** `sourceName`: the project's name as this tab knew it, for a copy whose
  * project is no longer listed (a restore took it away: GM r15 on PR #199,
  * Q11), so the copy is "<name> (recovered)", not "Deleted project". */
+/** A wire the recover route's rules left out of the copy (PR #199 round 16:
+ * a kept tab's wires are checked there by the server's own rules), by the
+ * copy's ids, with the person's line for why. */
+export interface DroppedWire { source: string; sourceHandle?: string | null; target: string; targetHandle?: string | null; line?: string }
+/** The copy, with what the route changed on the way in (PR #199 round 16):
+ * `renumbered` maps each tab-local node id to the backend id the copy gave
+ * it, and `droppedWires` the wires its rules refused. */
+export type RecoveredProject = SavedProject & { renumbered?: Record<string, string>; droppedWires?: DroppedWire[] };
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
   sourceName?: string) =>
-  request<ProjectActivation>("Couldn't recover the project.", '/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion,
-    ...(sourceName ? { sourceName } : {}) })).then((result) => result.project);
+  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
+    json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}) }))
+    .then((result): RecoveredProject => {
+      const renumbered = result.renumbered && typeof result.renumbered === 'object' && !Array.isArray(result.renumbered)
+        ? Object.fromEntries(Object.entries(result.renumbered as Record<string, unknown>)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : undefined;
+      const droppedWires = Array.isArray(result.droppedWires)
+        ? (result.droppedWires as unknown[]).filter((wire): wire is DroppedWire => Boolean(wire) && typeof wire === 'object'
+          && typeof (wire as DroppedWire).source === 'string' && typeof (wire as DroppedWire).target === 'string') : undefined;
+      return { ...result.project, ...(renumbered ? { renumbered } : {}), ...(droppedWires?.length ? { droppedWires } : {}) };
+    });

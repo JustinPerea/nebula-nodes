@@ -91,5 +91,9 @@ def test_q5_a_restore_at_the_limit_records_the_readable_records_it_left_out(app,
     assert sorted(p["name"] for p in body["projects"]) == ["Alpha", "Beta", "Gamma"]
     assert restore["notAddedBackLimitCount"] == 2 and restore["projectLimit"] == 3
     assert sorted(row["name"] for row in restore["notAddedBack"] if row["reason"] == "limit") == ["Delta", "Epsilon"]
-    assert "weren't added back because the project list is at its limit of 3 projects" in restore["note"]
+    # Epsilon was open: the canvas's line owns it (GM r21 on PR #199, 4), so
+    # the left-out line names only Delta, as the person's notice does.
+    assert restore["openProjectMissing"] == next(row["id"] for row in restore["notAddedBack"] if row["name"] == "Epsilon")
+    assert "\"Delta\" wasn't added back because the project list is at its limit of 3 projects" in restore["note"]
+    assert "Epsilon" not in restore["note"]
     assert json.dumps(restore["note"]).count("could not be added back") == 0

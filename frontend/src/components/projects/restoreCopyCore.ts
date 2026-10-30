@@ -40,3 +40,7 @@ export function agentClosedLine(agent: string | null | undefined, action: 'clear
 /** The button the notice shows when something is in Recently deleted. */
 export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
 
+/** The restore notice's line when the rest of its copy couldn't load
+ * (review 14 of PR #199, lock-order LOW-3): never a blank notice. The first
+ * sentence of GM's RESTORED_LIST_RELOAD, true of every restore. */
+export const RESTORE_COPY_FALLBACK = 'Nebula restored its project list.';

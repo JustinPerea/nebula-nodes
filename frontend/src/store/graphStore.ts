@@ -137,6 +137,7 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
+import { checkKeptWire } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
@@ -525,7 +526,10 @@ export type KeptStep =
   | { kind: 'move'; from: Record<string, { x: number; y: number }>; to: Record<string, { x: number; y: number }> }
   // GM r19 (5): typing and a rename, as normal Undo takes them (one step per
   // node while the typing runs, maybePushUndo's 500 ms).
-  | { kind: 'data'; nodeId: string; from: KeptNodeFields; to: KeptNodeFields };
+  | { kind: 'data'; nodeId: string; from: KeptNodeFields; to: KeptNodeFields }
+  // GM r21 (3): a connection drawn while kept (with the wires it replaced,
+  // and the node a wire-drop added with it).
+  | { kind: 'wire'; nodes: Node<NodeData>[]; added: Edge[]; removed: { item: Edge; index: number }[] };
 
 /** The fields a kept typing or rename step puts back. */
 export interface KeptNodeFields { params?: Record<string, unknown>; label?: string }
@@ -11675,7 +11679,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const replacedIds = new Set(edgesToReplace.map((edge) => edge.id));
     set((state) => ({ edges: [...state.edges.filter((edge) => !replacedIds.has(edge.id)), newEdge] }));
 
-    if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
+    // While kept (GM r21, 3) the wire is this tab's own: [Save as a project]
+    // files it with the canvas (keptRecordWire checked it by the server's rules).
+    if (!isCanvasKept() && CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
       // The wires it replaces go first; all are held from now (sendWire).
       let sent: Promise<unknown> | undefined;
       for (const edge of edgesToReplace) {
@@ -14590,6 +14596,18 @@ function applyKeptStep(step: KeptStep, direction: 'do' | 'undo'): void {
             useUIStore.getState().settingsCache) } : {}) } };
       }) };
     }
+    if (step.kind === 'wire') {
+      const nodeIds = new Set(step.nodes.map((node) => node.id));
+      const addedIds = new Set(step.added.map((edge) => edge.id));
+      if (direction === 'undo') {
+        const edges = state.edges.filter((edge) => !addedIds.has(edge.id) && !nodeIds.has(edge.source) && !nodeIds.has(edge.target));
+        return { nodes: state.nodes.filter((node) => !nodeIds.has(node.id)), edges: insertKept(edges, step.removed) };
+      }
+      const removedIds = new Set(step.removed.map(({ item }) => item.id));
+      const nodes = insertKept(state.nodes, step.nodes.map((item, index) => ({ item: { ...item, selected: false }, index: state.nodes.length + index })));
+      const edges = state.edges.filter((edge) => !removedIds.has(edge.id));
+      return { nodes, edges: insertKept(edges, step.added.map((item, index) => ({ item, index: edges.length + index }))) };
+    }
     const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
     const edgeIds = new Set((step.kind === 'remove' ? step.edges.map((entry) => entry.item) : step.edges).map((edge) => edge.id));
     const adding = (step.kind === 'remove') === (direction === 'undo');
@@ -14620,6 +14638,12 @@ function applyKeptStep(step: KeptStep, direction: 'do' | 'undo'): void {
 function currentKeptStep(step: KeptStep, action: 'undo' | 'redo'): KeptStep {
   const { nodes, edges } = useGraphStore.getState();
   if (step.kind === 'move' || step.kind === 'data') return step;
+  if (step.kind === 'wire') {
+    // An undo takes the added node off as it is now (typing since goes with it).
+    if (action !== 'undo' || step.nodes.length === 0) return step;
+    const ids = new Set(step.nodes.map((node) => node.id));
+    return { ...step, nodes: nodes.filter((node) => ids.has(node.id)) };
+  }
   const removing = (step.kind === 'remove') === (action === 'redo');
   if (!removing) return step;
   const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
@@ -14744,6 +14768,19 @@ function keptRename(nodeId: string, label: string): void {
   useGraphStore.getState().updateNodeData(nodeId, { label: next });
 }
 
+/** A new kept node's params: the definition's defaults, as an add's. */
+function keptNewNodeParams(definitionId: string): Record<string, unknown> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (isDynamicDefinition(definitionId)) {
+    const params: Record<string, unknown> = {};
+    for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
+    return params;
+  }
+  const params = buildDefaultParams(definition);
+  Object.assign(params, withNewKreaMode(definition, {}, useUIStore.getState().settingsCache.kreaConnectionMode));
+  return params;
+}
+
 /** Adding a node while kept (GM r19, 5: a full scratch canvas, whose empty
  * state says "drag a node from the library to begin"): the node is this
  * tab's own (a local id, as a duplicate's), sent nowhere until [Save as a
@@ -14751,15 +14788,7 @@ function keptRename(nodeId: string, label: string): void {
 function keptAddNode(definitionId: string, position: { x: number; y: number }): Promise<string | null> {
   const definition = NODE_DEFINITIONS[definitionId];
   if (!definition || useGraphStore.getState().isImportingGraph) return Promise.resolve(null);
-  let params: Record<string, unknown>;
-  if (isDynamicDefinition(definitionId)) {
-    params = {};
-    for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
-  } else {
-    params = buildDefaultParams(definition);
-    Object.assign(params, withNewKreaMode(definition, {}, useUIStore.getState().settingsCache.kreaConnectionMode));
-  }
-  const node = newCanvasNode(uuidv4(), definitionId, params, position);
+  const node = newCanvasNode(uuidv4(), definitionId, keptNewNodeParams(definitionId), position);
   useGraphStore.setState((state) => ({ nodes: [...state.nodes, node] }));
   pushKeptStep({ kind: 'add', nodes: [node], edges: [] }, null);
   return Promise.resolve(node.id);
@@ -14775,6 +14804,64 @@ function keptRecordAdd(run: () => void): void {
   const nodes = after.nodes.filter((node) => !nodeIds.has(node.id));
   const edges = after.edges.filter((edge) => !edgeIds.has(edge.id));
   if (nodes.length > 0 || edges.length > 0) pushKeptStep({ kind: 'add', nodes, edges }, null);
+}
+
+/** A connection drawn while kept (GM r21, 3), with the wires it replaces
+ * and (a wire-drop's) the node added with it: checked by the server's rules
+ * first (lib/keptWires; a refused one is never drawn, and says why), then
+ * drawn on this tab only as one kept step. Nothing is sent. */
+let keptWireDepth = 0;
+function keptRecordWire(connection: Connection, run: () => void, added: Node<NodeData> | null = null): boolean {
+  const before = useGraphStore.getState();
+  // The mask painter's auto-wire runs inside the outer one: one step for
+  // both, held to the same rules (a refused one is quietly left off).
+  if (keptWireDepth > 0) {
+    const nested = checkKeptWire(connection, before.nodes, before.edges);
+    if (!nested.ok || nested.duplicate) return false;
+    run();
+    return true;
+  }
+  const nodes = added ? [...before.nodes, added] : before.nodes;
+  const check = checkKeptWire(connection, nodes, before.edges);
+  if (!check.ok) {
+    if (check.line) useGraphStore.setState((state) => noticeLine(state, headedLine("Couldn't make that connection.", check.line)));
+    return false;
+  }
+  if (check.duplicate && !added) return true;
+  const edgeIds = new Set(before.edges.map((edge) => edge.id));
+  keptWireDepth += 1;
+  try {
+    withSavedHistoryUntouched(() => {
+      if (added) useGraphStore.setState((state) => ({ nodes: [...state.nodes, added] }));
+      run();
+    });
+  } finally { keptWireDepth -= 1; }
+  const after = useGraphStore.getState();
+  const afterIds = new Set(after.edges.map((edge) => edge.id));
+  const step: KeptStep = {
+    kind: 'wire',
+    nodes: added ? after.nodes.filter((node) => node.id === added.id) : [],
+    added: after.edges.filter((edge) => !edgeIds.has(edge.id)),
+    removed: before.edges.flatMap((item, index) => (afterIds.has(item.id) ? [] : [{ item, index }])),
+  };
+  if (step.nodes.length > 0 || step.added.length > 0 || step.removed.length > 0) pushKeptStep(step, null);
+  return true;
+}
+
+/** The wire-drop popup's add-and-connect while kept: the new node (a local
+ * id, as a library add) and its wire, as one kept step. */
+function keptAddNodeAndConnect(definitionId: string, position: { x: number; y: number },
+  connect: { source: string; sourceHandle: string; target: string; targetHandle: string; newNodeIs: 'source' | 'target' }): Promise<string | null> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (!definition || useGraphStore.getState().isImportingGraph) return Promise.resolve(null);
+  const params = keptNewNodeParams(definitionId);
+  const node = newCanvasNode(uuidv4(), definitionId, params, position);
+  const connection: Connection = {
+    source: connect.newNodeIs === 'source' ? node.id : connect.source, sourceHandle: connect.sourceHandle,
+    target: connect.newNodeIs === 'target' ? node.id : connect.target, targetHandle: connect.targetHandle,
+  };
+  const drawn = keptRecordWire(connection, () => useGraphStore.getState().onConnect(connection, { skipUndo: true }), node);
+  return Promise.resolve(drawn ? node.id : null);
 }
 
 /** Runs a tab-only Arrange (its positions are never sent while kept:
@@ -15038,6 +15125,12 @@ subscribeBackendConnection(() => {
       () => ungated.updateNodeData(nodeId as string, data as Partial<NodeData>)),
     renameNode: (nodeId, label) => keptRename(nodeId as string, label as string),
     addNode: (definitionId, position) => keptAddNode(definitionId as string, position as { x: number; y: number }),
+    // GM r21 (3): connections, and the wire-drop popup's add-and-connect.
+    onConnect: (connection, options) => {
+      keptRecordWire(connection as Connection, () => ungated.onConnect(connection as Connection, options as { skipUndo?: boolean }));
+    },
+    addNodeAndConnect: (definitionId, position, connect) => keptAddNodeAndConnect(definitionId as string,
+      position as { x: number; y: number }, connect as Parameters<typeof keptAddNodeAndConnect>[2]),
   };
   for (const [name, gate] of Object.entries(EDIT_GATES) as [keyof GraphState, EditGate][]) {
     const action = ungated[name] as unknown as (...args: unknown[]) => unknown;

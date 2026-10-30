@@ -161,9 +161,13 @@ describe('GM r17, Q2: every control names its own kept line', () => {
     expect(calls.length).toBeGreaterThan(40);
     for (const { path, call } of calls) {
       // SelectionToolbar's runLocked(running, own) passes its own LockOwn, whose `kept` tsc requires.
-      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|'[a-z-]+')|^lock\.act\(own, \{ run: running \}\)$/);
+      // AssetsPanel's AssetItem passes each add's own (GM r22, 4: keptAdd, below).
+      expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|keptAdd|'[a-z-]+')|^lock\.act\(own, \{ run: running \}\)$/);
       expect(call, path).not.toMatch(/kept: 'other'/);
     }
+    const assets = readFileSync(join(root, 'panels/AssetsPanel.tsx'), 'utf8');
+    expect(assets).toContain('keptAdd="add-character"');
+    expect(assets).toContain('keptAdd="add-moodboard"');
   });
   it('every command palette command that acts has its own line', async () => {
     const source = readFileSync(join(root, 'CommandPalette.tsx'), 'utf8');
@@ -262,8 +266,8 @@ describe('the keyboard shortcuts while kept', () => {
     await each('run (⌘Enter)', () => store.executeGraph());
     await each('paste (⌘V)', () => store.pasteClipboard({ view: null }));
     // GM r19 (5): an add is the kept tab's own (a local node, a kept step):
-    // see keptScratchCanvas.fix15. A wire still needs Nebula.
-    await each('connect', () => store.onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'text' }));
+    // see keptScratchCanvas.fix15; so is a wire since GM r21 (3), held to
+    // the server's rules (keptCanvas.fix16.store).
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(useGraphStore.getState().isExecuting).toBe(false);
     expect(useGraphStore.getState().nodes.map(({ id, position }) => ({ id, position })))

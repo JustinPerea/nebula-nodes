@@ -218,12 +218,16 @@ describe('review 11, HIGH-1 and GM r15, Q11: a restore while the person types', 
     useGraphStore.getState().renameNode('n1', 'New name');
     expect(useGraphStore.getState().nodes[0].data.label).toBe('New name');
     expect(pulses).toBe(0);
-    // A wire needs Nebula: refused, with a pulse.
+    // GM r21 (3): a wire is the kept tab's own too, by the server's rules:
+    // a text input has no input, so this one is refused and never drawn
+    // (keptCanvas.fix16.store has the rest). Nothing is sent either way.
     const edges = useGraphStore.getState().edges.length;
     useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: added!, targetHandle: 'text' });
     expect(useGraphStore.getState().edges.length).toBe(edges);
-    expect(pulses).toBeGreaterThan(0);
     expect(graphWrites.sent).toEqual([]);
+    // Any other edit is refused, with a pulse.
+    useGraphStore.getState().clearGraph();
+    expect(pulses).toBeGreaterThan(0);
     stop();
   });
 

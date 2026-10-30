@@ -164,7 +164,11 @@ def no_kept_grace_between_tests():
 
     def clear() -> None:
         manager = getattr(sys.modules.get("main"), "manager", None)
-        if manager is not None and hasattr(manager, "kept_grace_until"):
+        if manager is not None and hasattr(manager, "clear_kept"):
+            # The graces and the state dir's kept marker (a later test's
+            # startup would start a restart's grace from it).
+            manager.clear_kept()
+        elif manager is not None and hasattr(manager, "kept_grace_until"):
             manager.kept_grace_until = None
 
     clear()

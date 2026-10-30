@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
-import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, OPEN_RECENTLY_DELETED, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, OPEN_RECENTLY_DELETED, RESTORE_COPY_FALLBACK, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
-import { useRestoreCopy, type RestoreCopy } from './restoreCopyLoader';
+import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
 import { CrabMark } from '../brand/CrabMark';
@@ -461,9 +461,12 @@ const noop = () => {};
  * L8). × closes it, and focus follows the notice stack's rule (PR #200 GM
  * r16; review 13 of PR #199, MEDIUM-1): the notice now in its place, else
  * "Recent projects". */
-function CatalogRestoreNotice({ copy, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
+function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
   /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
   copy: RestoreCopy | null;
+  /** Its chunk failed to load (it is tried again at the next focus or
+   * reconnect): the notice says RESTORE_COPY_FALLBACK meanwhile. */
+  copyFailed?: boolean;
   restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
   /** GM r9: held canvases that couldn't be read, merged in as one more line. */
   heldUnreadable?: { count: number | null } | null;
@@ -480,7 +483,11 @@ function CatalogRestoreNotice({ copy, restore, current, heldUnreadable = null, o
     // A polite live region rather than role="status": the page keeps one
     // status per notice it shows (the loading line, the saved-file line),
     // and this empty region stays in the page the whole time.
-    <div ref={attached} className={notice ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
+    <div ref={attached} className={notice || (ready && restore && copyFailed) ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
+      {!notice && ready && restore && copyFailed && <>
+        <span className="project-home__restore-text" data-restore-fallback="">{RESTORE_COPY_FALLBACK}</span>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+      </>}
       {notice && <>
         {/* GM r3's B layout: more than one outcome, one per line (no bullets). */}
         {notice.lines
@@ -644,7 +651,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // The waiting line, unless the restore notice already says the limit.
   // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its
   // notices has something to say, not with the entry chunk.
-  const copy = useRestoreCopy(Boolean(catalogRestore || canvasNotFiled || canvasHeldUnreadable || canvasSaved));
+  const { copy, failed: copyFailed } = useRestoreCopyState(Boolean(catalogRestore || canvasNotFiled || canvasHeldUnreadable || canvasSaved));
   const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled && copy
     && copy.catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
   const showWaiting = Boolean(canvasNotFiled && copy) && !restoreSaysLimit;
@@ -704,7 +711,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             (useNoticeStackFocus; review 13 of PR #199, MEDIUM-1). */}
         <div ref={stack} className="project-home__notice-area">
         {/* The same element with or without a restore: its live region stays in the page. */}
-        <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} restore={catalogRestore} current={current}
+        <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} copyFailed={copyFailed} restore={catalogRestore} current={current}
           onDismiss={onDismissCatalogRestore} heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} /></div>
         {showWaiting && canvasNotFiled && copy && <div {...track('waiting')}><CanvasWaitingNotice copy={copy} waiting={canvasNotFiled} trashCount={trash.length}
           onOpenRecentlyDeleted={() => openTrash()} /></div>}

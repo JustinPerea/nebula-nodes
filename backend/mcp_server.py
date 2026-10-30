@@ -416,11 +416,15 @@ def start_here(ctx: Context | None = None) -> str:
     `note` says frees room, or, with `roomNow`, that the next listing saves
     it; don't free it yourself; and while the person's tab keeps edits
     Nebula couldn't save after a restore (and for about 10 s after its
-    connection drops), every canvas change, run and project switch is
+    connection drops, each tab on its own, or about 15 s after a Nebula
+    restart until it is back), every canvas change, run and project switch is
     refused with "(409, canvas_kept_in_tab)", while renaming a project,
     trashing one that isn't open and restoring from Recently deleted still
     work: tell them, and try again after they save those edits as a project
-    or discard them, which only they can do):
+    or discard them, which only they can do; nodes they added while kept
+    get Nebula's `nN` ids at that save, so read the canvas again then, and
+    connections Nebula's rules refuse are left out and listed in the
+    `project.created` event's `droppedWires`):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1452,7 +1456,11 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     name damaged: changes after the copy may then be missing without a
     row), `damagedRecordsUnread` true when it also held project records
     Nebula couldn't read (false when the damage came only after its
-    projects group closed; absent on older restores), and `damagedFile` where the damaged file is kept. Every row says
+    projects group closed; absent on older restores: `note` then says "no
+    project is missing" only when it says nothing else, as the person's
+    notice does), and `damagedFile` where the damaged file is kept. The
+    open project is said once: when `note` says the open canvas was saved
+    or waits on the limit, its left-out row isn't named again. Every row says
     `current`: false once it no longer holds (that project was restored,
     deleted or deleted for good since), and `note` leaves those out, as the
     person's notice does. Project ids from before it may be stale; ask the

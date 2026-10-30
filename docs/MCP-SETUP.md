@@ -3300,14 +3300,36 @@ Nebula process restores the same folder. The restore:
    answer. MCP tools add "(409,
    canvas_kept_in_tab)" and the CLI "(canvas_kept_in_tab)". It ends when
    the person saves those edits as a project (the tab then opens the saved
-   project) or discards them; Discard is the person's alone, and agents
-   have no way to discard the person's edits. When the tab's socket closes while
-   it still keeps edits (a network blip, a backend restart, or the tab
-   closed), kept mode holds for about 10 seconds more, so a tab that
-   reconnects and says it again carries on with no gap; after that it
-   ends. A tab that said it no longer keeps edits before closing ends it at
-   once. Only the person's own tab can start, carry on or end it (its socket
-   says so after its hello with the person token); an agent's socket can't.
+   project) or discards them. Discard is the person's alone, and agents
+   have no way to discard the person's edits: it opens whatever saved copy
+   of that canvas exists (the project it showed, when that is still in the
+   list, else the canvas's own saved copy, such as “Recovered canvas”), and
+   goes to Projects only when none exists (for example when the canvas
+   couldn't be saved at the project limit). Save as a project files the
+   tab's canvas as a new project: nodes the person added or duplicated
+   while kept get Nebula's own ids then (`n12`, `n13`, …, numbered on past
+   the project's), so you never see the tab's local ids; after the copy
+   opens, read it (look_at_canvas, `nebula look`) and use the ids you see.
+   Connections the person drew while kept arrive only in that save; one
+   Nebula's rules refuse (a missing node or port, a type the input can't
+   take, an input past its connection limit, a duplicate, a loop) is left
+   out of the copy and said, never the whole save refused: the
+   `project.created` event carries `droppedWires` (`{id, source,
+   sourceHandle, target, targetHandle, kind}` by the copy's ids, `kind`
+   `missing`, `duplicate`, `contract` or `loop`) and `droppedWireCount`.
+   When the tab's socket closes while it still keeps edits (a network blip,
+   a reload, or the tab closed), kept mode holds for that tab for about 10
+   seconds more, so a tab that reconnects and says it again carries on with
+   no gap; after that it ends. Each closed tab holds its own: one tab saying
+   it no longer keeps edits never ends another's. A tab that said it no
+   longer keeps edits before closing holds nothing. Nebula also remembers,
+   in its state folder, how many tabs kept edits, so a Nebula restart can't
+   let your changes through before the tab is back: when Nebula starts, kept
+   mode holds for each of them for about 15 seconds (the 10, plus the tab's
+   3-second reconnect and its hello); a tab that comes back and says it
+   carries on, one that never does ends when its time runs out. Only the
+   person's own tab can start, carry on or end it (its socket says so after
+   its hello with the person token); an agent's socket can't.
    The person's own open, create, clear and load always
    hold it, whatever its size: such a canvas is saved over the save limit and
    opens with saving paused. A person request that reaches the refusal gets
@@ -3409,7 +3431,10 @@ damagedRecordsUnread?, notAddedBackLimitCount?, projectLimit?, note}`:
   (`projectLimit` is the limit), and `note` says so on its own line
   (`"Delta" and "Epsilon" weren't added back because the project list is
   at its limit of 500 projects. They're still in the damaged file, which
-  was kept.`), as the person's notice does;
+  was kept.`), as the person's notice does. As there, the open project
+  is said once: when the note says the open canvas was saved as its own
+  project or waits on the limit (`openProjectMissing` is that project),
+  the left-out line names, and counts, only the others;
 - `reverted` rows (`{id, name, trashed, liveCanvas?, by?}`) went back to the
   copy's version because their newer record couldn't be read whole, or
   (`by: "dates"`) because the older copy's dates were later; `liveCanvas`
@@ -3445,7 +3470,11 @@ damagedRecordsUnread?, notAddedBackLimitCount?, projectLimit?, note}`:
   before the damage. Damage only after the `projects` group closed (a cut
   `trash` group, junk at the end) is not read whole, but lost no project:
   false; lost Recently deleted entries are logged, not in the notice. Read
-  whole: false.
+  whole: false. With false, `note` says "no project is missing" only when it
+  says nothing else about projects, as the person's notice says "No projects
+  were missing."; beside a project added back, left out, reverted or back,
+  or a canvas saved or waiting, it says the damage came after the project
+  records, so every record in it was read.
 
 A restore while Nebula runs reaches open canvases at once: a `graphSync`
 carrying the restore notice's id (`catalogRestore`) and a `projectsChanged`

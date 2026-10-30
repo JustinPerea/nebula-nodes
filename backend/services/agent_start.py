@@ -455,7 +455,11 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
     part = {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
             "copyAt": view.get("copyAt"), "damagedFile": view.get("damagedFile"), "addedBack": rows("addedBack"),
             "addedBackCount": count("addedBack"), "notAddedBackCount": count("notAddedBack"),
-            "damagedReadWhole": view.get("damagedReadWhole")}
+            "damagedReadWhole": view.get("damagedReadWhole"),
+            # PR #199 round 16: the CLI's context line reads it, as `nebula
+            # projects` does (without it, "may be missing" showed beside a
+            # note saying every record was read).
+            "damagedRecordsUnread": view.get("damagedRecordsUnread")}
     for key in ("reverted", "cameBack", "backInTrash"):
         if count(key):
             part[key], part[f"{key}Count"] = rows(key), count(key)
