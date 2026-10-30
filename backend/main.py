@@ -8232,6 +8232,14 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
         if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], **extra))
+        # PR #202 review 4 LOW-1: the ask the Update moved to can close while
+        # the move is written (the agent withdrawing both at once, the
+        # person's accept or reject, expiry). Its own follow ran first and its
+        # resolve found the Update still on this one (resolve_proposal's
+        # proposal_id), so it is followed again now that the Update reviews
+        # it: resolved with its outcome, or moved to a still-open ask.
+        if op == "changed" and not newest.is_open:
+            await _follow_asset_updates([newest])
 
 
 async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, Any] | None = None) -> str | None:

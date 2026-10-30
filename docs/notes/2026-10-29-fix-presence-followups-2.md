@@ -796,3 +796,60 @@ Shots: `fu2e-cover-strip-{held,promoted}-1440.png`.
 
 Gates: tsc and lint clean; vitest 7,620 passed (605 files); backend
 11,921 passed (isolated); build budget 422,344 bytes raw.
+
+# PR #202 round 6 (review 4, on 984921f8)
+
+Review 4 found no HIGH or MEDIUM issues. This round fixes LOW-1 (a
+regression from round 3's id guard) and NIT-1. NIT-2 (the person link
+closing Moodboard Studio) predates this PR and goes to GM.
+
+Before this round, at GM's request, I looked at the Updates corner in the
+fu2e shot pair:
+- The peek change between those shots was the corner's own card queue
+  (about 4 s per card), not the promote. The harness's `quiet()` waited
+  for the wrong class.
+- The only change promote makes is the needs-you badge. A held tab holds no
+  proposal or question views, so it counts 0. This predates #202 (#193 and
+  #200) and goes to a follow-up, with GM ruling on the held rows in the
+  Agents panel.
+- I retook the shots with the corner quiet: `fu2f-cover-strip-*`.
+
+- **LOW-1: the ask an Update moves to can close while the move is
+  written.**
+  - The case: Claude Code's P1 and P2 share one Update. P2 is withdrawn,
+    and while `_follow_asset_updates` moves the Update to P1, P1 closes too:
+    a parallel withdraw, the person's accept or reject, or expiry.
+  - P1's own follow runs first. Its resolve is refused, because the Update
+    still reviews P2 (round 3's `proposal_id` guard). So the Update was
+    left open on a closed ask, still with Review and a held placeholder,
+    until the next list, connect or switch.
+  - The fix: after a move, if the ask it moved to is no longer open, the
+    follow runs again for that ask. The Update now reviews it, so its
+    resolve matches and the Update gets that ask's outcome. If another of
+    the agent's asks is still open, the Update moves there instead.
+  - The guard is unchanged; a mutation that loosens it fails 7 tests.
+- **NIT-1:** the narrow settle test now has an unrelated open ask (Codex's,
+  on the same cover, under its own Update). With it, `_shares_update` as
+  "any open ask anywhere" fails.
+
+Tests (`tests/test_presence_followups_2e_settle.py`):
+- each close kind (withdrawn, accepted, rejected, expired) landing during
+  the move, with the exact outcome and no list run in between;
+- two parallel withdraws over HTTP, which is the route MCP's withdraw takes.
+
+On 984921f8 all 5 new tests fail; NIT-1's test passes there because it
+pins code that was already right.
+
+Mutations: 5 of 5 killed.
+- No follow of the target.
+- Following the withdrawn ask instead of the target.
+- Following only after a resolve.
+- `_shares_update` as "any open ask".
+- The round 3 guard loosened.
+
+Live: not replayed. The race needs the move's write held while the other
+close and its follow run, and a live backend has no deterministic way to
+hold it there. The in-process tests drive that exact order.
+
+Gates: tsc and lint clean; vitest 7,620 passed; backend 11,926 passed
+(isolated); build budget 422,344 bytes raw.

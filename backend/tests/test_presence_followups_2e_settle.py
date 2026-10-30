@@ -7,6 +7,8 @@ Update still reviews (an undo's reopen may have taken it over meanwhile).
 """
 from __future__ import annotations
 
+import pytest
+
 from tests.conftest import PERSON
 from tests.test_undo_restores_deletes import (  # noqa: F401 - api and canvas are fixtures
     CLAUDE,
@@ -24,9 +26,10 @@ from tests.test_undo_restores_deletes import (  # noqa: F401 - api and canvas ar
 # Claude Code has two cover asks on one project sharing one Update. Never, in
 # either race, an open proposal under an Update that says "Withdrawn by …".
 
-def _note(canvas) -> dict:
+def _note(canvas, author: str = "Claude Code") -> dict:
     catalog = canvas.main.project_store.read()
-    (note,) = [n for n in catalog["projects"][canvas.project_id].get("agentNotes") or [] if n.get("about") == "proposal"]
+    (note,) = [n for n in catalog["projects"][canvas.project_id].get("agentNotes") or []
+               if n.get("about") == "proposal" and n["author"]["name"] == author]
     return note
 
 
@@ -92,8 +95,15 @@ def test_an_undos_reopen_inside_the_settles_resolve_keeps_its_update(canvas, mon
 
 def test_the_settle_still_closes_an_update_nothing_open_shares(canvas, monkeypatch):
     """The guard is narrow: a closed ask with no other open ask under its
-    Update is still resolved by the settle (a missed follow, a restart)."""
+    Update is still resolved by the settle (a missed follow, a restart),
+    whatever other asks are open elsewhere (review 4 NIT-1: another agent's
+    ask on the same cover, under its own Update)."""
     book, _c, p1 = _cover_setup(canvas, monkeypatch)
+    canvas.graph.add_node("nano-banana", {}, outputs={"image": {"type": "Image", "value": "/api/outputs/b.png"}})
+    other = canvas.client.post("/api/asset-proposals", headers={"X-Nebula-Agent": "Codex"}, json={
+        "kind": "project", "id": canvas.project_id, "change": {"cover": "/api/outputs/b.png"}, "note": "B"})
+    assert other.status_code in (200, 201), other.text
+    assert book.get(other.json()["proposal"]["id"]).is_open
     follow = canvas.main._follow_asset_updates
 
     async def no_follow(proposals):
@@ -105,3 +115,85 @@ def test_the_settle_still_closes_an_update_nothing_open_shares(canvas, monkeypat
     monkeypatch.setattr(canvas.main, "_follow_asset_updates", follow)
     assert canvas.client.get("/api/canvas/agent-notes", headers=PERSON).status_code == 200
     assert _note(canvas)["outcome"] == "Withdrawn by Claude Code"
+
+
+# -- review 4 LOW-1: the ask the Update moves to closes while it moves ----------
+#
+# Claude Code's P1 and P2 share one Update. P2 is withdrawn; while its follow
+# moves the Update to P1, P1 closes too, and P1's own follow runs first: its
+# resolve is refused (the Update still reviews P2). The move then lands on a
+# closed ask. The Update must still end resolved with P1's outcome, at once,
+# not at the next list, connect or switch.
+
+def _close_during_the_move(canvas, monkeypatch, close_p1):
+    import asyncio
+
+    book, _c, p1 = _cover_setup(canvas, monkeypatch)
+    p2 = _second_cover(canvas)
+    main = canvas.main
+    notes = main.agent_notes
+    real = notes.retarget_proposal
+    follow = main._follow_asset_updates
+    seen: dict = {}
+
+    async def recording_follow(proposals):
+        seen.setdefault("loop", asyncio.get_running_loop())
+        return await follow(proposals)
+
+    def slow_retarget(*args, **kwargs):
+        if "closed" not in seen:
+            seen["closed"] = close_p1(book, p1, seen["loop"], follow)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(main, "_follow_asset_updates", recording_follow)
+    monkeypatch.setattr(notes, "retarget_proposal", slow_retarget)
+    lists = []
+    real_list = notes.canvas_list
+    monkeypatch.setattr(notes, "canvas_list", lambda *a, **k: lists.append(1) or real_list(*a, **k))
+    assert canvas.client.delete(f"/api/canvas/proposals/{p2}", headers=CLAUDE).status_code == 200
+    assert seen["closed"]
+    return book, p1, lists
+
+
+def _book_close(status):
+    """P1 closes in the book (the person's accept or reject, expiry) and its
+    follow runs on the app's loop before the move is written."""
+    def close(book, p1, loop, follow):
+        import asyncio
+
+        book.close(p1, status, reason="review 4")
+        asyncio.run_coroutine_threadsafe(follow([book.get(p1)]), loop).result(timeout=20)
+        return True
+    return close
+
+
+def _parallel_withdraw(canvas):
+    """The agent's second withdraw, a parallel call (two MCP tool calls at
+    once both reach DELETE /api/canvas/proposals/<id>): it closes P1 and runs
+    P1's follow before the first call's move is written."""
+    def close(book, p1, loop, follow):
+        return canvas.client.delete(f"/api/canvas/proposals/{p1}", headers=CLAUDE).status_code == 200
+    return close
+
+_OUTCOMES = {"withdrawn": "Withdrawn by Claude Code", "accepted": "Accepted: the cover changed",
+             "rejected": "You kept your cover", "expired": "Expired"}
+
+
+@pytest.mark.parametrize("status", ["withdrawn", "accepted", "rejected", "expired"])
+def test_the_update_resolves_when_its_new_ask_closes_during_the_move(canvas, monkeypatch, status):
+    book, p1, lists = _close_during_the_move(canvas, monkeypatch, _book_close(status))
+    note = _note(canvas)
+    assert book.get(p1).status == status
+    assert note["proposal"]["id"] == p1
+    assert note.get("resolvedAt"), "both asks closed, the Update still open with Review"
+    assert note["outcome"] == _OUTCOMES[status] == canvas.main.asset_outcome_line(book.get(p1))
+    assert not lists, "resolved by the follow itself, not by a later list"
+
+
+def test_two_parallel_withdraws_resolve_the_shared_update(canvas, monkeypatch):
+    book, p1, lists = _close_during_the_move(canvas, monkeypatch, _parallel_withdraw(canvas))
+    note = _note(canvas)
+    assert book.get(p1).status == "withdrawn"
+    assert note["proposal"]["id"] == p1 and note.get("resolvedAt")
+    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert not lists
