@@ -1,7 +1,8 @@
 import type { QuestionSetView } from '../../lib/agentQuestions';
 import type { AssetProposalKind, AssetProposalView } from '../../lib/assetProposals';
 import type { ProposalView } from '../../lib/wsClient';
-import { isWaiting, questionCount, waitingByAgent, type WaitingProposal } from './agentNeedsYou';
+import { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { isWaiting, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
 
 /**
  * The Agents panel's rows (Q125 item 2, Justin 2026-10-24: "Yes, all four, in
@@ -83,6 +84,8 @@ export interface RosterInput {
   questions: QuestionSetView[];
   canvasProposals: ProposalView[];
   assetProposals: AssetProposalView[];
+  /** The asks this tab knows only from their Updates (agentNeedsYou heldAsks). */
+  held?: HeldAsk[];
   /** A node's name on the canvas now (its label, else its type's name), or null when it isn't there. */
   nodeLabel: (nodeId: string) => string | null;
 }
@@ -94,9 +97,9 @@ export interface RosterCounts {
 
 /** What a Needs-you row opens: the oldest open item by creation time. */
 export type RosterNext =
-  | { kind: 'questions'; setId: string; createdAt: number }
+  | { kind: 'questions'; setId: string; createdAt: number; held?: boolean }
   | { kind: 'proposal'; proposalId: string; target: 'canvas' | AssetProposalKind; targetId: string | null;
-    createdAt: number };
+    createdAt: number; held?: boolean };
 
 export interface RosterRow {
   agent: RosterAgent;
@@ -113,6 +116,10 @@ export interface RosterRow {
   next: RosterNext | null;
   /** GM's tooltip; null when the row is not a button. */
   tooltip: string | null;
+  /** GM, 2026-10-29: why the row can't open its ask yet (this tab isn't
+   * connected as the person, so it knows the ask only from its Update): the
+   * row's action is locked, with this as its tooltip; null when it opens. */
+  locked: string | null;
   ariaLabel: string | null;
   /** Needs you: since when it waits (oldest item). Working: last activity. */
   sortAt: number;
@@ -142,7 +149,7 @@ interface Gathered {
   agent: RosterAgent;
   status: RosterStatus | null;
   cursor: RosterCursor | null;
-  questions: QuestionSetView[];
+  questions: WaitingQuestions[];
   proposals: WaitingProposal[];
 }
 
@@ -197,19 +204,21 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
 
   if (needsYou) {
     const items: RosterNext[] = [
-      ...entry.questions.map((set): RosterNext => ({ kind: 'questions', setId: set.id, createdAt: set.createdAt })),
+      ...entry.questions.map((set): RosterNext => ({ kind: 'questions', setId: set.id, createdAt: set.createdAt,
+        ...(set.held ? { held: true } : {}) })),
       ...entry.proposals.map((p): RosterNext => ({ kind: 'proposal', proposalId: p.id, target: p.target,
-        targetId: p.targetId, createdAt: p.createdAt })),
+        targetId: p.targetId, createdAt: p.createdAt, ...(p.held ? { held: true } : {}) })),
     ].sort((a, b) => a.createdAt - b.createdAt);
     const next = items[0];
-    const tooltip = counts.questions > 0 && counts.proposals > 0
-      ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL;
+    const locked = next.held ? (next.kind === 'questions' ? HELD_QUESTIONS_LINE : HELD_PROPOSAL_LINE) : null;
+    const tooltip = locked ?? (counts.questions > 0 && counts.proposals > 0
+      ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL);
     const counted = countLine(counts);
     return {
       agent, group: 'needsYou', counts, countLine: counted, statusText,
       // GM: "A blocked agent 'looking at' a node tells the person nothing."
       line: statusText ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
-      flyTo, next, tooltip, ariaLabel: `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
+      flyTo, next, tooltip, locked, ariaLabel: `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
     };
   }
 
@@ -217,7 +226,7 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
   const lastActive = Math.max(status?.at ?? -Infinity, cursor?.at ?? -Infinity);
   return {
     agent, group: 'working', counts, countLine: '', statusText, line, flyTo, next: null,
-    tooltip: flyTo ? SHOW_ON_CANVAS : null,
+    tooltip: flyTo ? SHOW_ON_CANVAS : null, locked: null,
     ariaLabel: flyTo ? `${who}${line ? `, ${line}` : ''}. ${SHOW_ON_CANVAS}` : null,
     sortAt: lastActive,
   };

@@ -32,7 +32,7 @@ import { AgentNotesList, type AgentNotesListSection } from './AgentNotesList';
 import { AuthorDot, type AgentNotesAdapter } from './AgentNoteParts';
 import { UPDATES_SLOT_EVENT } from './UpdatesSlot';
 import type { RosterNext } from './agentRosterModel';
-import { answerableQuestions, needsYouCount, openViews } from './agentNeedsYou';
+import { answerableQuestions, heldAsks, needsYouCount, openViews } from './agentNeedsYou';
 import { LeaveBusyContext } from './leaveBusy';
 import { askBeforeLeavingCommons } from '../../lib/commonsUnsaved';
 import { unreadRingColor } from '../../lib/unreadRing';
@@ -57,12 +57,15 @@ function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
   const sets = useAgentQuestionsStore((s) => s.sets);
   const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
   const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  const notes = useAgentNotesStore((s) => selectCanvasList(s).notes);
   return useMemo(() => (enabled ? needsYouCount({
     projectId,
     questions: answerableQuestions(sets),
     canvasProposals: openViews(canvasProposals),
     assetProposals: openViews(assetProposals),
-  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals]);
+    // GM, 2026-10-29: what this tab knows only from Updates counts too, so a promote changes nothing here.
+    held: heldAsks(notes ?? [], (id) => Boolean(sets[id]?.answerKey) || id in canvasProposals || id in assetProposals),
+  }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals, notes]);
 }
 
 /** The chip's name (GM's review of PR #193): the unread count, then how many agents need the person. */

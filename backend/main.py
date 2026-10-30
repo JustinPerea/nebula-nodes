@@ -6402,7 +6402,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
             })
         except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
             pass
-        await _reopen_update(proposal.update, proposal.id)
+        await _reopen_update(proposal.update, proposal.id, {"since": int(proposal.created_at * 1000)})
         _schedule_canvas_expiry(proposal)
 
     reopened_assets: list[AssetProposal] = []
@@ -7906,7 +7906,9 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
     try:
         result = await asyncio.to_thread(
             agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
-            text=question_update_text(question_set), questions={"id": question_set.id},
+            text=question_update_text(question_set),
+            questions={"id": question_set.id, "count": len(question_set.spec.questions),
+                       "since": int(question_set.created_at * 1000)},
             refs=list(question_set.spec.node_ids), project_id=question_set.project_id, save_set=save_set)
     except (NoteError, ProjectStoreError):
         question_set.update = None  # never committed: no later save may keep it
@@ -8221,7 +8223,8 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id)
+                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id,
+                                                 closed=_proposal_closed)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
             continue
@@ -8405,7 +8408,7 @@ async def _settle_proposal_updates() -> None:
             # over meanwhile (reopen_proposal; PR #202 review 3 LOW-2).
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"},
-                                             proposal_id=str(ref.get("id") or ""))
+                                             proposal_id=str(ref.get("id") or ""), closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is not None:
@@ -8468,7 +8471,9 @@ async def _post_canvas_update(proposal: Proposal) -> None:
         result = await asyncio.to_thread(
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=canvas_update_text(proposal), project_id=proposal.project_id,
-            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id})
+            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id,
+                      # When it was asked (the view's createdAt), as asset refs say (GM 2026-10-29).
+                      "since": int(proposal.created_at * 1000)})
     except (NoteError, ProjectStoreError):
         return
     note = result["note"]
@@ -8508,7 +8513,8 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
                                              outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id)
+                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id,
+                                             closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:

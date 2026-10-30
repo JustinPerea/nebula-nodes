@@ -6,7 +6,8 @@ import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
-import { answerableQuestions, openViews } from './agentNeedsYou';
+import { selectCanvasList, useAgentNotesStore } from '../../store/agentNotesStore';
+import { answerableQuestions, heldAsks, openViews } from './agentNeedsYou';
 import {
   AGENTS_HEADING,
   buildRosterRows,
@@ -52,6 +53,7 @@ export function AgentRoster({
   const sets = useAgentQuestionsStore((s) => s.sets);
   const canvasProposals = useCanvasProposalsStore((s) => s.proposals);
   const assetProposals = useAssetProposalsStore((s) => s.proposals);
+  const notes = useAgentNotesStore((s) => selectCanvasList(s).notes);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -110,9 +112,10 @@ export function AgentRoster({
       questions: answerableQuestions(sets),
       canvasProposals: openViews(canvasProposals),
       assetProposals: openViews(assetProposals),
+      held: heldAsks(notes ?? [], (id) => Boolean(sets[id]?.answerKey) || id in canvasProposals || id in assetProposals),
       nodeLabel: (id) => byId.get(id) || null,
     });
-  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, named, labels]);
+  }, [projectId, now, statuses, cursors, sets, canvasProposals, assetProposals, notes, named, labels]);
 
   // Opened with no agents around: the panel isn't there, so it isn't open.
   useLayoutEffect(() => {
@@ -204,11 +207,15 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   // A Working agent with no place on the canvas: a plain row, no tooltip.
   if (!row.tooltip || !row.ariaLabel) return <div className="agent-roster__row agent-roster__row--static">{content}</div>;
   const click = (event: MouseEvent<HTMLButtonElement>) => {
+    // GM, 2026-10-29: known only from its Update, the ask can't open here yet; the tooltip says why.
+    if (row.locked) return;
     if (row.next) onOpen(row.next, event.currentTarget);
     else if (row.flyTo) onFlyTo(row.flyTo, row.agent.color, event.currentTarget);
   };
   return (
+    // aria-disabled, not disabled: it keeps its focus and its tooltip (the shared disabled look, disabled-buttons.css).
     <button type="button" className="agent-roster__row" data-group={row.group} title={row.tooltip}
+      aria-disabled={row.locked ? true : undefined}
       aria-label={row.ariaLabel} aria-describedby={needsYou && row.line ? lineId : undefined} onClick={click}>
       {content}
     </button>

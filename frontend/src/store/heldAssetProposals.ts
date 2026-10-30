@@ -25,6 +25,8 @@ export interface HeldProposal {
 }
 
 export const HELD_PROPOSAL_LINE = 'You can review this when this tab is connected as you.';
+/** GM, 2026-10-29: a question set's held action (the Agents panel's Needs-you row), worded as the line above. */
+export const HELD_QUESTIONS_LINE = 'You can answer this when this tab is connected as you.';
 
 const NO_NOTES: readonly AgentNote[] = [];
 

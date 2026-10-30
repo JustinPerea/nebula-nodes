@@ -139,6 +139,13 @@ function writeStored(credential: PersonCredential): void {
 
 let memoryCredential: PersonCredential | null = null;
 
+/** Whether an address's hash (`#…`) is a person link, before it is taken in. */
+export function isPersonLinkHash(hash: string): boolean {
+  if (!hash || hash === '#') return false;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  return LINK_KEYS.some((key) => params.has(key));
+}
+
 /** Move a person link out of the address bar. Returns its credential, if valid. */
 function consumeLink(): PersonCredential | null | undefined {
   if (typeof window === 'undefined' || !window.location.hash) return undefined;

@@ -91,7 +91,8 @@
   .prompt-dialog__destructive,
   .workspace-header__back,
   .inspector__action-button,
-  .proposal-bar__button
+  .proposal-bar__button,
+  .agent-roster__row
 ):is(:disabled, [aria-disabled='true']),
 :is(
   .selection-toolbar__button,
@@ -115,7 +116,8 @@
   .prompt-dialog__destructive,
   .workspace-header__back,
   .inspector__action-button,
-  .proposal-bar__button
+  .proposal-bar__button,
+  .agent-roster__row
 ):is(:disabled, [aria-disabled='true']):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;

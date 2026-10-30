@@ -90,7 +90,9 @@ def test_an_mcp_proposal_posts_one_update_with_review(canvas, monkeypatch):
     assert note["source"] == "nebula" and note["about"] == "proposal"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["author"]["color"] == view["agent"]["color"]
-    assert note["proposal"] == {"id": view["id"], "kind": "canvas", "targetId": canvas.project_id}
+    # GM 2026-10-29: when it was asked, as an asset ask's ref says (the held needs-you rows order by it).
+    assert note["proposal"] == {"id": view["id"], "kind": "canvas", "targetId": canvas.project_id,
+                                "since": view["createdAt"]}
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "canvas",
                              "targetId": canvas.project_id}
     # Template words only: the agent's note is the bar's, not the Update's.

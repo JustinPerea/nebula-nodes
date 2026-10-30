@@ -1642,7 +1642,8 @@ only runs nodes). Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
-`proposal: {id, kind: "canvas", targetId: <project id>}`). Its one
+`proposal: {id, kind: "canvas", targetId: <project id>, since}`, `since`
+being when it was asked, ms, as its `createdAt`). Its one
 **Review** action (`proposal.review`, `target: "canvas"`) takes the person
 to the canvas from any screen, with that proposal shown in the bar and its
 ghosts in view. Every proposal gets its own Update, on the list of the
@@ -1865,7 +1866,9 @@ a proposal instead, and what it noticed is an Update.
   is `{questions: {id, status, questions, answers, ...}}`.
 - **The person answers:** the set posts one Update from the agent ("Claude
   Code has 2 questions.", with Answer, and Show on canvas when it names
-  nodes). Answer opens the form in the Updates corner. They may skip any
+  nodes). Its ref is `questions: {id, count, since}`: how many questions
+  (as the line says) and when the set was asked (ms, as its `createdAt`),
+  never the questions. Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
   none. When it closes, its line goes past tense ("Claude Code asked 2
   questions." / "asked a question.", on the stored Update, so `list_notes`
@@ -1937,7 +1940,13 @@ the Updates corner lists the agents working in the open project in two
 groups: **Needs you** (an agent with open questions or proposals there,
 longest wait first) and **Working** (everyone else around, most recent
 first). Clicking a Working row shows its node on the canvas; clicking a
-Needs-you row opens its oldest question set or proposal.
+Needs-you row opens its oldest question set or proposal. A tab that isn't
+connected as the person gets only your asks' Updates, so it counts Needs
+you from them (each ask's `since` orders it, and a question set's `count`
+says how many): the same rows and the same badge as once it is connected,
+with the row's action locked until then. What you read here is unchanged:
+`GET /api/canvas/agents` and its MCP and CLI reads count from Nebula's own
+open sets and proposals, whatever any tab holds.
 
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with

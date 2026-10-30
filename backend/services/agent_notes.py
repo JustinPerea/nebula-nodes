@@ -860,7 +860,7 @@ class AgentNotes:
         project's record in the same commit (main._post_question_update), so
         a set is never kept without its Update nor an Update without its set."""
         clean_author = _clean_author(author)
-        ref = {"id": str(questions["id"])[:64]}
+        ref = {"id": str(questions["id"])[:64], **questions_detail(questions)}
         actions = _clean_actions([{"label": "Answer", "op": {"kind": "question.answer", "questionId": ref["id"]}}])
         asked = _ref_list(refs)
         _check_ref_count(asked)
@@ -944,12 +944,19 @@ class AgentNotes:
         Update now reviews that one, and its ref says that one's ``detail``
         (``proposal_detail``) and, given ``text``, its words say that one's
         too (PR #202 review 1 LOW-1: the count and the words come from the
-        same proposal). None when the update has left the list."""
+        same proposal). None when the update has left the list, or already
+        reviews that proposal with those words (nothing to say again)."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            ref = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            words = clean_note_text(text) if text is not None else note.get("text")
+            # PR #202 review 5 NIT-1: already on that proposal, as it is (another
+            # follow moved it there first): no write, so no second "changed".
+            if note.get("proposal") == ref and note.get("text") == words:
+                return None
+            note["proposal"] = ref
             if text is not None:
                 note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
@@ -999,21 +1006,32 @@ class AgentNotes:
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
 
     def resolve_proposal(self, project_id: str, note_id: str, *, outcome: str,
-                         by: Mapping[str, Any], proposal_id: str | None = None) -> dict[str, Any] | None:
+                         by: Mapping[str, Any], proposal_id: str | None = None,
+                         closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
         """The proposal closed (accepted, rejected, withdrawn, expired or no
         longer fits): the Update says how in one short line (``outcome``) and
         is read, so no stale Review stays. None when it has left the list,
         or (given ``proposal_id``) when it no longer reviews that proposal:
-        an undo reopened another in the meantime (PR #202 review 2 LOW-C)."""
-        return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id)
+        an undo reopened another in the meantime (PR #202 review 2 LOW-C).
+
+        Given ``closed``, it is asked again inside the write, as
+        ``reopen_proposal`` asks it: an undo can reopen the very proposal
+        this resolve is for between the caller's check and this write, and
+        its reopen then found the Update not yet resolved and left it
+        (review 5 LOW-1). A proposal open again keeps its Update."""
+        return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id, closed=closed)
 
     def _resolve(self, project_id: str, note_id: str, *, outcome: str, by: Mapping[str, Any],
-                 retext: Callable[[str], str] | None = None, proposal_id: str | None = None) -> dict[str, Any] | None:
+                 retext: Callable[[str], str] | None = None, proposal_id: str | None = None,
+                 closed: Callable[[str], bool] | None = None) -> dict[str, Any] | None:
         def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
-            if proposal_id is not None and (note.get("proposal") or {}).get("id") != proposal_id[:64]:
+            current = str((note.get("proposal") or {}).get("id") or "")
+            if proposal_id is not None and current != proposal_id[:64]:
+                return None
+            if closed is not None and current and not closed(current):
                 return None
             now = _iso(self._clock())
             note["resolvedAt"] = now
@@ -1041,6 +1059,27 @@ PROPOSAL_COVER_KINDS = ("automatic", "image")
 MAX_PROPOSAL_CHANGES = 999
 # A ref's ``since``: the ask's createdAt in ms, a whole number a browser holds exactly.
 MAX_PROPOSAL_SINCE = 2**53 - 1
+
+
+# A question set's ref (GM, 2026-10-29, the held needs-you count): how many
+# questions it asks, which its Update's line already says, and when it was
+# asked (ms, the set view's createdAt). A tab not connected as the person holds
+# no set views, so its Agents panel counts and orders from these.
+MAX_REF_QUESTIONS = 5
+
+
+def questions_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The checked ``count`` and ``since`` of a question set's ref; anything else is dropped."""
+    detail: dict[str, Any] = {}
+    if not isinstance(raw, Mapping):
+        return detail
+    count = raw.get("count")
+    if isinstance(count, int) and not isinstance(count, bool) and 1 <= count <= MAX_REF_QUESTIONS:
+        detail["count"] = count
+    since = raw.get("since")
+    if isinstance(since, int) and not isinstance(since, bool) and 0 <= since <= MAX_PROPOSAL_SINCE:
+        detail["since"] = since
+    return detail
 
 
 def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
