@@ -446,7 +446,6 @@ body:not(.app-slava-restraint) .agent-log__hide:focus-visible {
   max-width: calc(100vw - 2 * var(--page-gutter));
   box-sizing: border-box;
   padding: 6px 6px 6px 12px;
-  white-space: nowrap;
   animation: agent-log-in 420ms var(--agent-log-spring) both;
 }
 

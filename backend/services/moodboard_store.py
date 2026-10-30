@@ -111,7 +111,7 @@ def _read_for_write(path: Path, moodboard_id: str) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
+        raise KeyError(f"Moodboard {moodboard_id} not found") from None
     return _migrated(json.loads(text), layout_board=True)
 
 
@@ -833,7 +833,7 @@ class MoodboardStore:
         _refuse_layout_fields(fields)
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+            raise KeyError(f"Moodboard {moodboard_id} not found")
         with _board_lock(moodboard_id):
             return self._update(path, by=by, base_version=base_version, fields=fields)
 
@@ -872,7 +872,7 @@ class MoodboardStore:
         moodboard_edits.parse_ops(ops)  # a bad batch is refused before the board is read
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+            raise KeyError(f"Moodboard {moodboard_id} not found")
         with _board_lock(moodboard_id):
             moodboard = _read_for_write(path, moodboard_id)
             _check_base_version(moodboard, base_version)
@@ -904,9 +904,9 @@ class MoodboardStore:
         try:
             path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         except ValueError:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
+            raise KeyError(f"Moodboard {moodboard_id} not found") from None
         if path is None:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+            raise KeyError(f"Moodboard {moodboard_id} not found")
         with _board_lock(moodboard_id):
             return self._keep_brief_override(path, by=by)
 
@@ -938,7 +938,7 @@ class MoodboardStore:
         root = _moodboard_root()
         path = _find_moodboard_file(root, moodboard_id)
         if path is None:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+            raise KeyError(f"Moodboard {moodboard_id} not found")
         target = projectId or None
         _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
         # Two live copies (a re-home that skipped a collision leaves one in an
@@ -963,7 +963,7 @@ class MoodboardStore:
         root = _moodboard_root()
         path = _find_moodboard_file(root, moodboard_id)
         if path is None:
-            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+            raise KeyError(f"Moodboard {moodboard_id} not found")
         return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
 
     # -- Recently deleted --------------------------------------------------

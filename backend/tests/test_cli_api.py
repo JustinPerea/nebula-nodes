@@ -398,7 +398,7 @@ class TestGraphEndpoints:
         """`nebula create` used to store a node of any type it was given."""
         resp = client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         assert resp.status_code == 400
-        assert resp.json()["detail"].startswith("unknown node definition 'node-a'")
+        assert resp.json()["detail"].startswith("unknown node definition node-a")
         assert client.get("/api/graph").json()["nodes"] == []
 
     def test_update_unknown_node_404(self, client):
@@ -1708,6 +1708,9 @@ class TestCinemaScenePersistsScene:
         "aspectRatio": "1:1",
         "shots": [{"id": "s1", "prompt": "x"}],
     }
+    # Every write fills a scene's missing fields (PR #198 fix round 2, M2):
+    # this one only lacks the version.
+    _STORED = {"version": 1, **_SCENE}
 
     def test_create_cinema_scene_node_with_scene_returns_200(self, client):
         resp = client.post(
@@ -1719,7 +1722,7 @@ class TestCinemaScenePersistsScene:
         node = resp.json()
         short_id = node["id"]
         try:
-            assert node["params"]["scene"] == self._SCENE
+            assert node["params"]["scene"] == self._STORED
         finally:
             client.delete(f"/api/graph/node/{short_id}")
 
@@ -1746,7 +1749,7 @@ class TestCinemaScenePersistsScene:
             # An authoring PUT seeds new shot runtime as idle; imported media
             # uses the separate graph-import contract.
             assert node["params"]["scene"] == {
-                **self._SCENE,
+                **self._STORED,
                 "shots": [{**shot, "output": {"status": "idle"}}
                           for shot in self._SCENE["shots"]],
             }
@@ -1780,7 +1783,7 @@ class TestCinemaScenePersistsScene:
         exported = client.get("/api/graph/export").json()
         node = next(node for node in exported["nodes"] if node["id"] == scene_id)
         assert node["type"] == "cinemaSceneNode"
-        assert node["data"]["params"]["scene"] == scene
+        assert node["data"]["params"]["scene"] == {"version": 1, **scene}
         assert node["data"]["outputs"] == outputs
         assert node["data"]["dynamicOutputPorts"] == [
             {"id": "shot_opening", "label": "Shot 1", "dataType": "Image", "required": False},
@@ -1800,7 +1803,7 @@ class TestCinemaScenePersistsScene:
         assert len(graph["edges"]) == 2
         assert next(edge for edge in graph["edges"] if edge["id"] == saved_edge["id"]) == saved_edge
         restored_node = next(node for node in graph["nodes"] if node["id"] == scene_id)
-        assert restored_node["data"]["params"]["scene"] == scene
+        assert restored_node["data"]["params"]["scene"] == {"version": 1, **scene}
         assert restored_node["data"]["outputs"] == outputs
 
         for handle, target_handle in [("shot_removed", "images"), ("shot_opening", "prompt")]:
@@ -1810,15 +1813,27 @@ class TestCinemaScenePersistsScene:
             assert rejected.status_code == 400, rejected.text
         assert len(client.get("/api/graph/export").json()["edges"]) == 2
 
-    @pytest.mark.parametrize("handle, output_type", [("shot_removed", "Image"), ("shot_s1", "Video")])
-    def test_import_rejects_fabricated_shot_outputs_and_types(self, client, handle, output_type):
+    def test_import_rejects_a_shot_output_of_the_wrong_type(self, client):
         response = client.post("/api/graph/import", json={
             "nodes": [{"id": "scene", "definitionId": "cinema-scene", "params": {"scene": self._SCENE},
-                       "outputs": {handle: {"type": output_type, "value": "https://example.test/asset"}}}],
+                       "outputs": {"shot_s1": {"type": "Video", "value": "https://example.test/asset"}}}],
             "edges": [],
         })
         assert response.status_code == 400, response.text
         assert client.get("/api/graph").json()["nodes"] == []
+
+    def test_import_drops_a_shot_output_no_shot_owns(self, client):
+        """PR #198 review 4, L1: a port no shot owns (a removed shot's late
+        image, or a made-up one) is dropped on a lenient import, with any wire
+        from it, instead of refusing the file; its value never lands."""
+        response = client.post("/api/graph/import", json={
+            "nodes": [{"id": "scene", "definitionId": "cinema-scene", "params": {"scene": self._SCENE},
+                       "outputs": {"shot_removed": {"type": "Image", "value": "https://example.test/asset"}}}],
+            "edges": [],
+        })
+        assert response.status_code == 200, response.text
+        node = client.get("/api/graph/export").json()["nodes"][0]
+        assert "shot_removed" not in (node["data"].get("outputs") or {})
 
     def test_saved_zip_restore_accepts_the_scene_generated_output_and_wire(self, client):
         import io

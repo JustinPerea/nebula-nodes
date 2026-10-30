@@ -447,5 +447,8 @@ def test_the_first_ws_message_carries_this_processes_boot_id(canvas):
             first = json.loads(socket.receive_text())
         assert first["type"] == "graphSync"
         assert isinstance(first.get("bootId"), str) and first["bootId"]
+        # PR #198 fix round 12 (review 11, L-4): and when it started, so a tab
+        # orders processes whatever order their messages arrive in.
+        assert first.get("bootStartedAt") == canvas.main.BACKEND_BOOT_STARTED_AT
         seen.append(first["bootId"])
     assert seen[0] == seen[1] == canvas.main.BACKEND_BOOT_ID

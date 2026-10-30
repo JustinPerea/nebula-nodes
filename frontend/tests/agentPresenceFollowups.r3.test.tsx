@@ -162,7 +162,7 @@ describe('M-3: an image-only button dims its thumbnail disabled; the selected on
   });
 
   it('the variation is no ghost button any more (that rule dropped its selected outline)', () => {
-    const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]\),/.exec(read('styles/disabled-buttons.css'))?.[1] ?? '';
+    const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(read('styles/disabled-buttons.css'))?.[1] ?? '';
     expect(unfilled).not.toMatch(/\.cinema-shot-panel__variation\b/);
   });
 });

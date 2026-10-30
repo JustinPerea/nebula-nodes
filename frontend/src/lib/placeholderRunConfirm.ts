@@ -51,7 +51,7 @@ export interface PlaceholderRunRow {
    * "Model: not chosen" for a required one with nothing chosen (round 12,
    * item 2 and addendum b); else null. Several are joined with " · ". */
   setting: string | null;
-  /** "$0.04", "$0.0047–0.43", "price not listed", "price depends on its
+  /** "$0.04", "$0.0047–$0.43", "price not listed", "price depends on its
    * input" or "on your Krea plan" (GM, rounds 4 and 6). */
   price: string;
   /** The agent whose placeholder it is, or was until it finished it while

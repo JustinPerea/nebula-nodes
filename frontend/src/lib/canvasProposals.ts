@@ -3,7 +3,7 @@ import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
-import { formatUsd, formatUsdRange } from './pricing';
+import { formatChipEstimate } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
@@ -254,14 +254,13 @@ export function proposalSummary(view: ProposalView): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** "~$0.07", "$0.0047–0.43", "$0.07+" when part of the run has no list price. */
+/** The proposal card's chip, as the Run chip writes it (lib/pricing
+ * formatChipEstimate): "~$0.07", "Up to $0.43", "$0.07 + unpriced" when part
+ * of the run has no known price. The card has no tooltip for it. */
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;
-  const exact = formatUsd(estimate.low) === formatUsd(estimate.high);
-  const amount = exact ? formatUsd(estimate.high) : formatUsdRange(estimate.low, estimate.high);
-  if (estimate.open) return `${amount}+`;
-  return exact ? `~${amount}` : amount;
+  return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
 
 /** A proposal whose whole run waits on agents' placeholders: its run skips

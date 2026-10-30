@@ -8,22 +8,11 @@ import { CinemaSharedControls } from './CinemaSharedControls';
 import { CinemaShotsRail } from './CinemaShotsRail';
 import { CinemaShotPanel } from './CinemaShotPanel';
 import { cinemaConnectedInputs, type CinemaConnectedInput } from '../../lib/cinemaInputs';
+import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import { isModalDialogOpen } from '../../lib/canvasShortcutScope';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import '../../styles/cinema-studio.css';
 
-/** A minimal valid scene for a node that has none yet (e.g. dragged from the
- *  library before the Studio seeded it). License guard (spec §10): the default
- *  base must be commercial-OK — never FLUX.1-dev. Mirrors graphStore's
- *  createDefaultScene so the editor and store agree on the empty shape. */
-function emptyScene(): CinemaSceneSpec {
-  return {
-    version: 1,
-    base: { model: 'seedream-4-5' },
-    aspectRatio: '16:9',
-    shots: [],
-  };
-}
 
 /** Full-screen Cinema Studio host. Mounted by App.tsx when uiStore
  *  .cinemaEditorNodeId is set — mirrors RemotionEditorView's mount pattern.
@@ -66,8 +55,12 @@ export function CinemaStudioView() {
     if (cinemaNodeId) useUIStore.getState().setCinemaSelectedShot(cinemaNodeId, shotId);
   };
 
-  const scene: CinemaSceneSpec =
-    (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
+  // A node with no scene yet (dragged from the library before the Studio
+  // seeded it), or one saved without its base or aspect, reads through the
+  // defaults a new scene has (lib/cinemaScene; PR #198 review 2, M2). License
+  // guard (spec §10): the default base is commercial-OK, never FLUX.1-dev.
+  const rawScene = (node?.data as { params?: { scene?: unknown } } | undefined)?.params?.scene;
+  const scene: CinemaSceneSpec = useMemo(() => normalizeCinemaScene(rawScene), [rawScene]);
 
   // Derive a valid effective selection during render: keep the stored id when it
   // still refers to a real shot, otherwise fall back to the first shot (or null).

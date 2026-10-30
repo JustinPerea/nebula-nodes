@@ -1,6 +1,7 @@
 import { Play, X } from 'lucide-react';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/canvasProposals.css';
 import { useLeave } from '../../lib/noticeLeave';
 
@@ -18,6 +19,7 @@ export function DeferredRunNotice() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
+  const lock = useCanvasLock();
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(deferredRun);
   if (!leave.shown) return null;
@@ -31,7 +33,8 @@ export function DeferredRunNotice() {
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          disabled={isExecuting || runStarting}
+          // Review 7, L5: canvasLock's order (run, then following, then offline).
+          {...lock.act({}, { run: isExecuting || runStarting })}
           onClick={() => void runDeferred()}
         >
           <Play size={13} aria-hidden="true" />

@@ -426,7 +426,7 @@ async def handle_cinema_scene(
         try:
             if base_handler is None:
                 raise ValueError(
-                    f"No handler registered for base model '{base_model}'"
+                    f"No handler registered for base model {base_model}"
                 )
 
             shot_prompt = str(shot.get("prompt") or "")

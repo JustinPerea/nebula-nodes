@@ -414,7 +414,7 @@ describe('round 18 (review 17)', () => {
       nebula().holdAnswers = false;
       while (nebula().releaseAnswer()) await settle();
       await tick(6000);
-      expect(lines().some((line) => String(line).startsWith("Couldn't undo that."))).toBe(true);
+      expect(lines().some((line) => String(line).startsWith("Couldn’t undo that."))).toBe(true);
       expect(ids()).toEqual(['n1']);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       sameAsNebula();

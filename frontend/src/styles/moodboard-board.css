@@ -442,10 +442,10 @@ html body .moodboard-board-panel .moodboard-def__row {
   min-width: 0;
 }
 
+/* GM, #198 r8: a toast wraps (up to 3 lines) and never cuts a sentence. */
 .moodboard-board-toast__line {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .moodboard-board-toast__line--skipped {

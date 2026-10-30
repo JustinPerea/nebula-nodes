@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { useGraphStore } from '../store/graphStore';
+import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
@@ -16,6 +16,10 @@ interface MenuItem {
   shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
+  /** Why it is disabled, when that isn't offline. */
+  title?: string;
+  /** This tab's run locks it now: the run's line wins (lib/canvasLock). */
+  run?: boolean;
   action: () => void;
 }
 
@@ -27,6 +31,8 @@ export function ContextMenu() {
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  const sceneHeld = useGraphStore((s) => (nodeId ? sceneDeleteDisabledTitle(s, [nodeId]) : null));
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
   // Offline is read-only (round 15 of PR #114), and so is following an
@@ -109,7 +115,8 @@ export function ContextMenu() {
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      disabled: isExecuting || runStarting,
+      // The run lock's line wins (M2): run, follow, offline.
+      run: isExecuting || runStarting,
       action: () => {
         executeNode(nodeId);
         hideContextMenu();
@@ -127,6 +134,7 @@ export function ContextMenu() {
     {
       label: 'Duplicate',
       shortcut: 'Ctrl+D',
+      run: isExecuting,
       action: () => {
         duplicateNode(nodeId);
         hideContextMenu();
@@ -136,6 +144,9 @@ export function ContextMenu() {
       label: 'Delete',
       shortcut: 'Del',
       danger: true,
+      run: isExecuting,
+      disabled: sceneHeld !== null,
+      title: sceneHeld ?? undefined,
       action: () => {
         // A World Labs hold refuses, with its notice; otherwise it deletes at
         // once and says "Deleted the node." with Undo (GM, 2026-10-23).
@@ -156,7 +167,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled })}
+          {...lock.act({ disabled: item.disabled, title: item.title }, { run: item.run })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

@@ -163,7 +163,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     await tick(6000);
     expect(puts('n2')).toEqual(['1']);
     expect(nebula().valueOf('n2')).toBe('n2');
-    expect(lines()).toEqual(["Couldn't save “Text” for “n2”."]);
+    expect(lines()).toEqual(["Couldn’t save “Text” for “n2”."]);
   });
 
   it('typing still in its debounce when the restart shows another canvas is named too', async () => {
@@ -176,7 +176,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     await settle();
     await tick(6000);
     expect(puts('n2')).toEqual([]);
-    expect(lines()).toEqual(["Couldn't save “Text” for “n2”."]);
+    expect(lines()).toEqual(["Couldn’t save “Text” for “n2”."]);
   });
 
   it('L4P: in the same boot, a missed agent clear that re-added the same ids reads as a replacement', async () => {

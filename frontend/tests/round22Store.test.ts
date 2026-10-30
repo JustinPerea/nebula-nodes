@@ -2,12 +2,12 @@
  * Round 22 of PR #195: review 21's store findings and GM's round-22 rulings.
  * - GM (review 21 G-a): Undo on an agent's clear line puts the canvas back
  *   "as last saved": what Nebula had saved before the clear, never the
- *   typing the line says wasn't saved.
+ *   typing the line says wasn’t saved.
  * - L-c: a rename draft folded into an agent's switch is handed off once;
  *   a later switch carries no phantom `pendingLabels`.
  * - L-d: Cinema's "Send to motion" is refused while following (the bar
  *   pulses, nothing is sent) and offline.
- * - GM 4a: the Agent log says "Couldn't delete “<node>”, node <id>. Nebula
+ * - GM 4a: the Agent log says "Couldn’t delete “<node>”, node <id>. Nebula
  *   returned HTTP <status>."
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -176,7 +176,7 @@ describe('GM (review 21 G-a): Undo on the agent-clear line restores the canvas a
     type('alpha typed');
     agentClear();
     await vi.waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe(
-      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved."));
+      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved."));
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(restoreBodies().length).toBeGreaterThan(0));
     expect(restoredValue(restoreBodies()[0], 'n1')).toBe('alpha');
@@ -191,7 +191,7 @@ describe('GM (review 21 G-a): Undo on the agent-clear line restores the canvas a
     await flush();
     for (const release of graphWrites.hanging.splice(0)) release();
     await vi.waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe(
-      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn't saved."));
+      "Codex cleared the canvas while you were editing “Text” for “Hero prompt”. That change wasn’t saved."));
     graphWrites.answer = null;
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(restoreBodies().length).toBeGreaterThan(0));
@@ -269,12 +269,12 @@ describe("L-d: Cinema's Send to motion", () => {
 });
 
 describe('GM round 22 (4a): the Agent log line for a delete answered with a 500', () => {
-  it('"Couldn\'t delete “Hero prompt”, node n1. Nebula returned HTTP 500."', async () => {
+  it('"Couldn’t delete “Hero prompt”, node n1. Nebula returned HTTP 500."', async () => {
     useAgentLogStore.getState().clear();
     graphWrites.answer = (_path, init) => Promise.resolve(init?.method === 'DELETE' ? answer(500, { detail: 'boom' }) : answer());
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     await vi.waitFor(() => expect(useAgentLogStore.getState().entries.map((entry) => entry.message))
-      .toContain("Couldn't delete “Hero prompt”, node n1. Nebula returned HTTP 500."));
+      .toContain("Couldn’t delete “Hero prompt”, node n1. Nebula returned HTTP 500."));
     expect(useAgentLogStore.getState().entries.some((entry) => entry.message.startsWith('Delete of'))).toBe(false);
   });
 });

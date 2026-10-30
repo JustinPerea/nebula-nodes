@@ -230,7 +230,9 @@ describe('LOW-2: a swatch × gives its own reason, offline and following', () =>
     expect(button()).toBeDisabled();
     expect(button()).toHaveAttribute('title', 'You can remove swatches when Nebula reconnects.');
     // The shared grey covers it (styles/disabled-buttons.css, the ghost list).
-    const ghost = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]\),/.exec(css('styles/disabled-buttons.css'))?.[1] ?? '';
+    // PR #198 round 25 (GM r37 option c): the lists' state passes over a
+    // notice button's first 150 ms held (useHeldLook's data-held-pending).
+    const ghost = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(css('styles/disabled-buttons.css'))?.[1] ?? '';
     expect(ghost.split(',').map((item) => item.trim())).toContain('.inspector__palette-remove');
   });
 

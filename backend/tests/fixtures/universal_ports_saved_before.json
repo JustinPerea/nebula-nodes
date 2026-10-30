@@ -306,7 +306,7 @@
   [
    "n5",
    "messages",
-   "Required input port 'messages' is not connected"
+   "Required input port messages is not connected"
   ]
  ]
 }

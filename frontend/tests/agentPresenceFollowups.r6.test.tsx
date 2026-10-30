@@ -174,7 +174,8 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
 
   it('the CSS: the picker is in the shared ghost grey, its hover off while locked; the lock mark takes the pointer away', () => {
     const disabled = css('styles/disabled-buttons.css');
-    const lists = [...disabled.matchAll(/:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]\)/g)].map((m) => m[1].split(',').map((s) => s.trim()));
+    // PR #198 round 25 (GM r37 option c): the state passes over a held notice button's first 150 ms.
+    const lists = [...disabled.matchAll(/:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\](?::not\(\[data-held-pending\]\))?\)/g)].map((m) => m[1].split(',').map((s) => s.trim()));
     expect(lists.filter((list) => list.includes('.inspector__file-button')).length).toBeGreaterThanOrEqual(2);
     expect(css('styles/slava-restraint.css')).toMatch(/\.inspector__file-button:hover:not\(\[aria-disabled='true'\]\)/);
     expect(css('styles/slava-restraint.css')).not.toMatch(/\.inspector__file-button:hover\s*[,{]/);

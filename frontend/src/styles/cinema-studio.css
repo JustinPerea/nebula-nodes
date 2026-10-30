@@ -932,7 +932,9 @@ body.app-slava-restraint .cinema-reference-upload__actions {
   grid-row: 1 / span 2;
 }
 
-body.app-slava-restraint .cinema-reference-upload__actions button {
+body.app-slava-restraint .cinema-reference-upload__actions button,
+body.app-slava-restraint .cinema-reference-upload__retry,
+body.app-slava-restraint .cinema-upload__remove {
   background: none;
   border: 1px solid var(--sr-edge);
   border-radius: 2px;
@@ -957,4 +959,42 @@ body.app-slava-restraint .cinema-reference-upload__actions .cinema-upload__remov
 body.app-slava-restraint .cinema-reference-upload__actions button:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
+}
+
+/* The fieldset that locks a group of Cinema settings offline (GM - Design,
+   PR #198 round 5): no box of its own, so the group lays out as before, and
+   one level of dimming, on the controls themselves (as Commons and Settings). */
+.cinema-offline-lock {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.cinema-offline-lock[data-offline-disabled] {
+  opacity: 1;
+}
+
+.cinema-offline-lock:disabled :is(button, input, select, textarea):disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: not-allowed;
+}
+
+/* GM's merge check (PR #200 r2): every Cinema control Nebula's being offline
+   locks looks locked, not live. Round 25 (review 23 MEDIUM-1, GM r37
+   option c): the buttons take the app's one disabled look from the shared
+   rule (styles/disabled-buttons.css), the same offline as following: the
+   orange Generate shot the grey fill with its dark label, the rest the grey
+   label. Only the text fields have their look here: the label grey, the
+   outline the disabled edge (never brighter than enabled), no fill.
+   Checkboxes, swatches and sliders keep the fieldset's dimming above. */
+body.app-slava-restraint .cinema-studio-view textarea[data-offline-disabled],
+body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(select, textarea, input[type="text"], input[type="number"]) {
+  opacity: 1 !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
 }

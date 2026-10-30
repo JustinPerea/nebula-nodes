@@ -15,9 +15,10 @@ import {
   type OnConnectStart,
   type Viewport,
   type Node,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useGraphStore } from '../store/graphStore';
+import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -474,13 +475,20 @@ export function Canvas() {
   // anything, so its wires stay too; one notice per press. Otherwise it
   // deletes at once, and the store says "Deleted the node." with Undo: undo
   // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
-  // Never behind an open modal dialog (review 8, M-1): the Delete key is the
-  // canvas's own (onKeyDown below), and this refuses any delete that would
-  // still reach React Flow while one is open.
-  const onBeforeDelete = useCallback(async ({ nodes: doomed }: { nodes: { id: string }[] }) => (
-    !isModalDialogOpen()
-    && (doomed.length === 0 || useGraphStore.getState().allowCanvasDelete(doomed.map((node) => node.id)))
-  ), []);
+  // A Cinema scene with a shot rendering stays, and so do its wires: the
+  // store keeps it out of the delete and says so (GM, PR #198 r3 item 1).
+  // Never behind an open modal dialog (review 8 of PR #195, M-1): the Delete
+  // key is the canvas's own (onKeyDown below), and this refuses any delete
+  // that would still reach React Flow while one is open.
+  const onBeforeDelete = useCallback(async ({ nodes: doomed, edges }: { nodes: Node[]; edges: Edge[] }) => {
+    if (isModalDialogOpen()) return false;
+    if (doomed.length === 0) return true;
+    const state = useGraphStore.getState();
+    if (!state.allowCanvasDelete(doomed.map((node) => node.id))) return false;
+    // Deleted nodes' wires go with each node's own DELETE; React Flow
+    // removes only wires between nodes that stay (PR #198 round 5).
+    return { nodes: doomed, edges: wiresDeletedWith(doomed.map((node) => node.id), edges) };
+  }, []);
   const flowStore = useStoreApi();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
@@ -681,8 +689,19 @@ export function Canvas() {
       // stays (as onBeforeDelete had it), and "Deleted the node." with Undo
       // still shows.
       if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {
-        if (event.repeat || isExecuting) return;
+        if (event.repeat) return;
         if (event.target instanceof Element && event.target.closest('.nokey')) return;
+        // While this tab runs something nothing is deleted, and the store
+        // says why the selection stays (PR #198 review 4, M1: the lock was
+        // silent; wires alone too, round 5 N1).
+        if (isExecuting) {
+          const graph = useGraphStore.getState();
+          if (graph.nodes.some((node) => node.selected) || graph.edges.some((edge) => edge.selected)) {
+            event.preventDefault();
+            graph.deleteSelected();
+          }
+          return;
+        }
         const doomedNodes = reactFlow.getNodes().filter((node) => node.selected).map((node) => node.id);
         const doomedEdges = reactFlow.getEdges().filter((edge) => edge.selected).map((edge) => edge.id);
         if (doomedNodes.length === 0 && doomedEdges.length === 0) return;

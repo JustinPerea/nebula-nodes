@@ -24,7 +24,8 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: {
 const api = vi.hoisted(() => ({ lookupStoredAsset: vi.fn() }));
 vi.mock('../src/lib/api', async (importOriginal) => ({ ...await importOriginal<object>(), lookupStoredAsset: api.lookupStoredAsset }));
 
-import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from '../src/components/canvasTypes';
+import { CANVAS_CARDS, CANVAS_EDGE_TYPES } from '../src/components/canvasTypes';
+import { withNodeCardBoundary } from '../src/components/nodes/withNodeCardBoundary';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useStoredAssetsStore } from '../src/store/storedAssetsStore';
@@ -61,8 +62,11 @@ function counting(Component: ComponentType<NodeProps>): ComponentType<NodeProps>
   }
   return isMemo ? memo(Counted) : Counted;
 }
+// Each counted card inside its boundary, as CANVAS_NODE_TYPES draws it
+// (PR #198 review 3, L4): the count stays the card's own.
 const COUNTED_TYPES: NodeTypes = Object.fromEntries(
-  Object.entries(CANVAS_NODE_TYPES).map(([type, Component]) => [type, counting(Component as ComponentType<NodeProps>)]),
+  Object.entries(CANVAS_CARDS).map(([type, Component]) => [type,
+    withNodeCardBoundary(counting(Component as ComponentType<NodeProps>))]),
 );
 
 /** The canvas's controlled React Flow, as Canvas.tsx wires it. */

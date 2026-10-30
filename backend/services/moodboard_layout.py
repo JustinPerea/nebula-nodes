@@ -300,7 +300,7 @@ def normalize_placements(raw: Any, *, label: str, aspect: float, frame_ids: Iter
         elif not isinstance(pid, str) or not _ID_RE.fullmatch(pid):
             raise ValueError(f"{where}.id must be 1 to 64 letters, digits, - or _")
         elif pid in taken:
-            raise ValueError(f"{where}.id {pid!r} is already a card on this board")
+            raise ValueError(f"{where}.id {pid} is already a card on this board")
         taken.add(pid)
         x = _coordinate(item.get("x"), f"{where}.x")
         y = _coordinate(item.get("y"), f"{where}.y")
@@ -624,9 +624,9 @@ def check_readings(readings: Any) -> None:
         raise ValueError("readings must be an object keyed by image id")
     for image_id, reading in readings.items():
         if not isinstance(reading, dict):
-            raise ValueError(f"readings[{image_id!r}] must be an object")
+            raise ValueError(f"readings[{image_id}] must be an object")
         if len(json.dumps(reading, ensure_ascii=False).encode("utf-8")) > READING_BYTES:
-            raise ValueError(f"readings[{image_id!r}] is larger than {READING_BYTES} bytes")
+            raise ValueError(f"readings[{image_id}] is larger than {READING_BYTES} bytes")
 
 
 def check_image_placements(images: Any, frame_ids: set[str]) -> None:

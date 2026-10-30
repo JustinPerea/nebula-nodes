@@ -186,7 +186,7 @@ describe("the person's switch waits for the saves on their way", () => {
     type('Typed');
     await useProjectStore.getState().open('beta');
     expect(useProjectStore.getState().activeProject?.id).toBe('beta');
-    expect(lines()).toEqual(["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
+    expect(lines()).toEqual(["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
   });
 
   it('a save that never answers holds it for 15 s at most', async () => {
@@ -199,7 +199,7 @@ describe("the person's switch waits for the saves on their way", () => {
     await vi.advanceTimersByTimeAsync(1_500);
     await opening;
     expect(useProjectStore.getState().activeProject?.id).toBe('beta');
-    expect(lines()).toEqual(["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
+    expect(lines()).toEqual(["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched."]);
     expect(lines().some((line) => String(line).includes(STALE_CANVAS_DETAIL))).toBe(false);
   });
 });
@@ -248,7 +248,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+      "Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
       + 'Your edits were saved as a copy, “recovered”.'));
   });
 
@@ -259,7 +259,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens({ kind: 'anonymous' });
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
+      "Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when an agent switched projects. "
       + 'Your edits were saved as a copy, “recovered”.'));
   });
 
@@ -272,7 +272,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
+      "Couldn’t save your last change in “Glass\u00a0campaign” when Claude Code switched projects. "
       + 'Your edits were saved as a copy, “recovered”.'));
   });
 

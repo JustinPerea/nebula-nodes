@@ -80,7 +80,7 @@ function running(id: string): RunRecord {
 }
 
 describe('A: the bottom Stop\'s dots sit in its icon slot', () => {
-  it('the Stop icon is wrapped in a 14px slot, and the dots hang off that slot, not the button', () => {
+  it('the Stop icon is wrapped in a slot (16px since GM r18, G4), and the dots hang off that slot, not the button', () => {
     useGraphStore.setState({ isExecuting: true, isCancelling: false, nodes: [], edges: [] });
     render(<Toolbar />);
     const stop = screen.getByRole('button', { name: 'Stop' });
@@ -89,7 +89,7 @@ describe('A: the bottom Stop\'s dots sit in its icon slot', () => {
     expect(slot).toHaveAttribute('aria-hidden', 'true');
     expect(slot!.querySelector('.toolbar__icon')).not.toBeNull();
     const styles = css('styles/slava-restraint.css');
-    expect(rule(styles, 'body.app-slava-restraint .toolbar__icon-slot')).toMatch(/width:\s*14px/);
+    expect(rule(styles, 'body.app-slava-restraint .toolbar__icon-slot')).toMatch(/width:\s*16px/);
     expect(rule(styles, 'body.app-slava-restraint .toolbar__icon-slot')).toMatch(/position:\s*relative/);
     expect(styles).toContain('.toolbar__button--executing .toolbar__icon-slot::before');
     expect(styles).not.toMatch(/\.toolbar__button--executing::before/);
@@ -123,7 +123,8 @@ describe('C: on the home screen the offline banner sits under the top bar', () =
 
   it('App passes the home placement on the home screen', () => {
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
-    expect(app).toMatch(/<BackendConnectionStatus placement=\{isHome \? 'home' : 'workspace'\} \/>/);
+    // GM, PR #198 r1: every screen but the canvas and home is a studio (tests/pr198Fix1Ui.test.tsx).
+    expect(app).toMatch(/<BackendConnectionStatus placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\} \/>/);
   });
 });
 
@@ -197,7 +198,8 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
 
   it('the lines, exactly', () => {
     expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.");
-    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You saved this reference's accents in another window while Nebula was offline, so your changes here weren't saved.");
+    // GM r18: "changed", like the labels line.
+    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another window while Nebula was offline, so your changes here weren’t saved.");
   });
 });
 

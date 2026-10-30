@@ -151,7 +151,7 @@ class ProviderStartGuard:
                 held_key, active_run = next(iter(active_leases.items()))
                 raise ProviderStartConflictError(
                     f"Fresh paid {held_key[0]} start is already active for node "
-                    f"'{held_key[1]}' in run '{active_run}'",
+                    f"{held_key[1]} in run {active_run}",
                     reason="busy",
                 )
             try:
@@ -180,7 +180,7 @@ class ProviderStartGuard:
                             raise ProviderStartConflictError(
                                 f"Fresh paid {key[0]} start is safety-locked after an "
                                 "ambiguous provider response for node "
-                                f"'{blocking_hold['nodeId']}'; check Marble and "
+                                f"{blocking_hold['nodeId']}; check Marble and "
                                 "explicitly unlock that hold",
                                 reason="ambiguity",
                             )
@@ -329,7 +329,7 @@ class ProviderStartGuard:
     def _assert_run_admissible_locked(self, run_id: str) -> None:
         if run_id in self._cancelled_runs or self._cancel_filter_contains(run_id):
             raise ProviderStartCancelledError(
-                f"run '{run_id}' was cancelled before it started"
+                f"run {run_id} was cancelled before it started"
             )
         if len(self._cancelled_runs) >= self._max_records:
             raise ProviderStartCancellationCapacityError(
@@ -862,7 +862,7 @@ class ProviderStartGuard:
         if self._lifecycle_fd is not None:
             held_run = self._lifecycle_run_id or "unknown"
             raise ProviderStartConflictError(
-                f"Fresh paid World Labs start is already active in run '{held_run}'",
+                f"Fresh paid World Labs start is already active in run {held_run}",
                 reason="busy",
             )
         path = self._path

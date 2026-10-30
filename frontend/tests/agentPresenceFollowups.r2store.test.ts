@@ -332,7 +332,7 @@ describe('L-3 and N-5: recovered copies', () => {
     await vi.waitFor(() => expect(vi.mocked(projects.recoverProject)).toHaveBeenCalledTimes(1), { timeout: 3000 });
     await vi.waitFor(() => expect(notices().some((notice) => notice.copy === 'copy-1')).toBe(true));
     settle(answer(200));
-    await vi.waitFor(() => expect(notices().filter((notice) => /Couldn't save/.test(notice.text))).toEqual([]));
+    await vi.waitFor(() => expect(notices().filter((notice) => /Couldn[’']t save/.test(notice.text))).toEqual([]));
   });
 
   it('a save released as unanswered that is then refused keeps its line', async () => {

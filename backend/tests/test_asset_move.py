@@ -183,7 +183,7 @@ def test_refusals(env, kind):
 
     unknown_target = _move(env, kind, asset["id"], "nebula_nodes")
     assert unknown_target.status_code == 422
-    assert unknown_target.json()["detail"].startswith("No project has the id 'nebula_nodes'. Use the id of a project")
+    assert unknown_target.json()["detail"].startswith("No project has the id nebula_nodes. Use the id of a project")
     trashed_target = _move(env, kind, asset["id"], gone)
     assert trashed_target.status_code == 422
     assert trashed_target.json()["detail"].startswith("The project “Gone” is in Recently deleted. Restore it first")
@@ -336,11 +336,11 @@ def test_cli_move_refusals_say_what_to_do(env, capsys):
     board = env.create("moodboard", None)
 
     assert "no project is open on the canvas" in _cli_error(env, ["moodboard", "move", board["id"], "--to", "current"], capsys)
-    assert "2 projects are named 'Twin'" in _cli_error(env, ["moodboard", "move", board["id"], "--to", "twin"], capsys)
-    assert "no project 'Nowhere'" in _cli_error(env, ["moodboard", "move", board["id"], "--to", "Nowhere"], capsys)
+    assert "2 projects are named “Twin”" in _cli_error(env, ["moodboard", "move", board["id"], "--to", "twin"], capsys)
+    assert "no project “Nowhere”" in _cli_error(env, ["moodboard", "move", board["id"], "--to", "Nowhere"], capsys)
     err = _cli_error(env, ["moodboard", "move", board["id"], "--to", "Old shoot"], capsys)
     assert "is in Recently deleted. Restore it first" in err and gone in err
-    assert "no board 'Missing'" in _cli_error(env, ["moodboard", "move", "Missing", "--to", "global"], capsys)
+    assert "no board “Missing”" in _cli_error(env, ["moodboard", "move", "Missing", "--to", "global"], capsys)
 
     env.client.delete(f"/api/moodboards/{board['id']}")
     err = _cli_error(env, ["moodboard", "move", board["id"], "--to", "global"], capsys)
@@ -362,7 +362,7 @@ def test_cli_character_move(env, capsys):
     data = json.loads(_cli(env, ["character", "move", hero["id"], "--to", "global", "--json"], capsys))
     assert (data["status"], data["from"], data["to"]) == ("moved", shoot_b, None)
     assert data["asset"]["projectId"] is None
-    assert "no Character 'Nobody'" in _cli_error(env, ["character", "move", "Nobody", "--to", "global"], capsys)
+    assert "no Character “Nobody”" in _cli_error(env, ["character", "move", "Nobody", "--to", "global"], capsys)
 
 
 def test_cli_on_a_nebula_without_move_says_so(env, capsys, monkeypatch):

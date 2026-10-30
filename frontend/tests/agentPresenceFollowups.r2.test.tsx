@@ -159,7 +159,7 @@ describe('L-4: the selected chip and variation use the shared selected style; di
   // Fix round 3 (review 3 M-3): the variation, an image-only button, left the
   // unfilled rule for its own (its thumbnail dims; agentPresenceFollowups.r3).
   it('disabled: the chip is in the shared unfilled rule, the variation in the image rule; the checked switch turns the grey fill', () => {
-    const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]\),/.exec(shared)?.[1] ?? '';
+    const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(shared)?.[1] ?? '';
     expect(unfilled).toMatch(/\.cinema-shared-controls__chip\b/);
     expect(shared).toMatch(/:is\(\.cinema-shot-panel__variation\):is\(:disabled, \[aria-disabled='true'\]\) img/);
     const switches = cssRules(shared).filter(({ selector }) => /\.settings-switch:checked/.test(selector) && /:disabled/.test(selector));

@@ -16,10 +16,14 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
   const enterRemotionEditor = useUIStore((s) => s.enterRemotionEditor);
   const params = (data as RemotionNodeData).params;
   const manifest = params?.manifest;
-  const layers = manifest?.timeline ?? [];
+  // Read through a guard (PR #198 review 3, L4): a damaged manifest still
+  // draws its card.
+  const layers = (Array.isArray(manifest?.timeline) ? manifest.timeline : [])
+    .filter((layer) => Boolean(layer) && typeof layer === 'object');
   const layerCount = layers.length;
+  const frame = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
   const totalFrames = layers.reduce(
-    (max, l) => Math.max(max, l.time.startFrame + l.time.durationInFrames),
+    (max, l) => Math.max(max, frame(l.time?.startFrame) + frame(l.time?.durationInFrames)),
     0,
   );
 

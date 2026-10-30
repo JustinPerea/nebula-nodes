@@ -34,10 +34,10 @@ def find_character(api: NebulaAPI, ref: str, headers: dict[str, str] | None = No
         candidates.extend(_list(api, "project", project_id, headers))
     matches = [item for item in candidates if str(item.get("name", "")).casefold() == ref.casefold()]
     if not matches:
-        raise MoodboardError(f"no Character '{ref}' (Character Studio lists them; use its id or exact name)")
+        raise MoodboardError(f"no Character “{ref}” (Character Studio lists them; use its id or exact name)")
     if len(matches) > 1:
         ids = ", ".join(str(item.get("id")) for item in matches)
-        raise MoodboardError(f"{len(matches)} Characters are named '{ref}' ({ids}); use the id")
+        raise MoodboardError(f"{len(matches)} Characters are named “{ref}” ({ids}); use the id")
     return matches[0]
 
 

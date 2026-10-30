@@ -296,12 +296,12 @@ class CharacterStore:
         root = _char_root()
         path = _find_char_file(root, char_id)
         if path is None:
-            raise KeyError(f"Character '{char_id}' not found")
+            raise KeyError(f"Character {char_id} not found")
 
         try:
             char = json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:  # moved to Recently deleted after it was found
-            raise KeyError(f"Character '{char_id}' not found") from None
+            raise KeyError(f"Character {char_id} not found") from None
         if base_version is not None and int(char.get("version", 1)) != base_version:
             raise CharacterVersionConflict(char)
 
@@ -337,7 +337,7 @@ class CharacterStore:
         root = _char_root()
         path = _find_char_file(root, char_id)
         if path is None:
-            raise KeyError(f"Character '{char_id}' not found")
+            raise KeyError(f"Character {char_id} not found")
         target = projectId or None
         _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
         # Two live copies (a re-home that skipped a collision leaves one in an
@@ -366,7 +366,7 @@ class CharacterStore:
         root = _char_root()
         path = _find_char_file(root, char_id)
         if path is None:
-            raise KeyError(f"Character '{char_id}' not found")
+            raise KeyError(f"Character {char_id} not found")
         return asset_trash.move_to_trash(root, path, kind="character", deleted_by=deleted_by)
 
     # ------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { CrabMarkAnimated } from './CrabMarkAnimated';
 import { HelixMark } from './HelixMark';
 import { MARK_MODES, MARK_MODE_KEYS, type MarkMode } from './crabModes';
 import { useUIStore } from '../../store/uiStore';
+import { StudioOfflineRow } from '../StudioOfflineRow';
 import './BrandShowcase.css';
 
 /**
@@ -150,6 +151,8 @@ export function BrandShowcaseView() {
           <X size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </header>
+      {/* The offline banner is a row under this bar, as under a studio's header. */}
+      <StudioOfflineRow />
 
       <main className="nn-bs__scroll">
         {/* Section 1 — live hero */}

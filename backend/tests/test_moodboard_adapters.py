@@ -700,7 +700,7 @@ def test_a_text_wire_into_krea2_moodboard_is_flagged_with_where_the_id_goes(sour
     hand or from Krea's Moodboard node's Moodboard ID output) into Krea 2's
     old Any port. The run names the port and where the id goes now."""
     assert _edge_issues(source, handle) == [
-        f"Incompatible port types: source '{handle}' on node 'a' outputs Text, but target 'moodboard' on node 'k' "
+        f"Incompatible port types: source '{handle}' on node a outputs Text, but target 'moodboard' on node k "
         f"accepts Moodboard. {HINT}"]
 
 

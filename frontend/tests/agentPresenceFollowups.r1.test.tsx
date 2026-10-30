@@ -235,7 +235,8 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
     expect(generateShot).toHaveAttribute('title', 'You can generate when Nebula reconnects.');
     const locked: Array<[HTMLElement, string]> = [
       [button(panel, 'Generate 2'), 'You can generate when Nebula reconnects.'],
-      [button(panel, 'Send to motion'), 'You can send to motion when Nebula reconnects.'],
+      // GM, PR #200 r2 item 4 (the merge with #198): "send it to motion".
+      [button(panel, 'Send to motion'), 'You can send it to motion when Nebula reconnects.'],
       [button(rail, '+ Add shot'), 'You can add shots when Nebula reconnects.'],
       [rail.querySelector('[aria-label="Move Shot 2 earlier"]') as HTMLElement, 'You can reorder shots when Nebula reconnects.'],
       [button(toolbar, 'Generate all'), 'You can generate when Nebula reconnects.'],
@@ -248,7 +249,9 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
     const prompt = panel.querySelector('.cinema-shot-panel__prompt') as HTMLTextAreaElement;
     expect(prompt.readOnly).toBe(true);
     expect(prompt).toHaveAttribute('data-offline-disabled');
-    expect(prompt).toHaveAttribute('title', 'You can edit the prompt when Nebula reconnects.');
+    // GM, PR #200 r2 item 4 (the merge with #198): a text field has no
+    // tooltip offline; it goes read-only and the banner says why.
+    expect(prompt).not.toHaveAttribute('title');
     // Dragging a shot to reorder it is off too.
     expect(rail.querySelector('.cinema-shots-rail__shot')).toHaveAttribute('draggable', 'false');
   });
@@ -275,14 +278,17 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
 
 describe('GM answer 6: one disabled colour treatment', () => {
   const rules = cssRules(read('styles/disabled-buttons.css'));
-  const filled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--sr-disabled-fill/.test(body));
+  // PR #198 round 25 (GM r37 option c): the filled rule takes GM r33's grey fill.
+  const filled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--disabled-fill[,)]/.test(body));
   const unfilled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*transparent/.test(body));
 
   it('a filled button keeps a fill, turned neutral grey; ghost and outline stay unfilled; no extra opacity', () => {
     expect(filled, 'the filled rule').toBeDefined();
     expect(unfilled, 'the unfilled rule').toBeDefined();
+    // GM r37 option c: a dark label on the grey fill; the grey label on a ghost.
+    expect(filled!.body).toMatch(/color:\s*var\(--disabled-fill-label[^;]*!important/);
+    expect(unfilled!.body).toMatch(/color:\s*var\(--disabled-label[^;]*!important/);
     for (const rule of [filled!, unfilled!]) {
-      expect(rule.body).toMatch(/color:\s*var\(--sr-disabled-ink[^;]*!important/);
       expect(rule.body).toMatch(/opacity:\s*1\s*!important/);
       expect(rule.body).not.toMatch(/--sr-accent|--sr-danger|--sr-error|#ff5a1f/i);
     }
@@ -336,7 +342,7 @@ describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas orde
       { nodeId: 'n1', node: 'Text', setting: 'Text', order: 0 },
       { nodeId: 'n2', node: 'Text', setting: 'Text', order: 1 },
     ]);
-    expect(line).toBe('Couldn\'t save your changes to 2 “Text” nodes and “Brief”.');
+    expect(line).toBe('Couldn’t save your changes to 2 “Text” nodes and “Brief”.');
   });
 
   const row = (nodeId: string, label: string): PlaceholderRunRow => ({ nodeId, name: `“${label}”`, model: null, modelKey: 'm',

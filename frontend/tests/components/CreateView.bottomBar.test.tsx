@@ -39,7 +39,7 @@ vi.mock('../../src/store/uiStore', () => ({
 vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   const store = create<FakeGraph>(() => ({
-    nodes: [], edges: [], runHistory: [], createLaunchingIds: [], createCancelledLaunchIds: [], activeRuns: [],
+    nodes: [], edges: [], runHistory: [], createLaunchingIds: [], createCancelledLaunchIds: [], unsavedScenes: {}, activeRuns: [],
     authorGenerationCluster: (...args) => mocks.author(...args),
     executeClusterConcurrent: async (ids, origin) => {
       mocks.execute(ids, origin);

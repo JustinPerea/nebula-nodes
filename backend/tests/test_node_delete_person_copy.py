@@ -3,7 +3,7 @@
 Review of error-copy round 2: the canvas alert read "Couldn't delete the node.
 Cannot delete n3: it has unresolved World Labs paid state. Check Marble, then
 resolve its exact recovery/ambiguity record first." and "Couldn't delete the
-node. Node 'n3' not found": an internal id and technical words (GM: never ids
+node. Node n3 not found": an internal id and technical words (GM: never ids
 in what the person reads). GM's split for refusals (error-copy round 2):
 "People get the written line and agents keep the specific detail." The
 person's canvas is a browser page (Origin or Sec-Fetch-Site) with no agent
@@ -120,7 +120,7 @@ def test_a_node_already_gone_says_written_copy_to_the_canvas(api):
     assert canvas.json()["detail"] == GONE_PERSON
     agent = api.client.delete("/api/graph/node/n9", headers=AGENT)
     assert agent.status_code == 404
-    assert agent.json()["detail"] == "Node 'n9' not found"
+    assert agent.json()["detail"] == "Node n9 not found"
 
 
 def test_the_canvas_undo_that_would_remove_a_node_with_paid_state_says_written_copy(api, monkeypatch):

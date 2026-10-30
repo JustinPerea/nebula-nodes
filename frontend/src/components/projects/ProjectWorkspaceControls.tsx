@@ -19,6 +19,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const pausedBytes = useProjectStore((state) => state.savePaused?.bytes ?? null);
   const panelOpen = useProjectStore((state) => state.sizePanelOpen);
   const nodeCount = useGraphStore((state) => state.nodes.length);
+  const scenesUnsaved = useGraphStore((state) => Object.keys(state.unsavedScenes).length > 0);
   // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
   // banner says it); a retry couldn't reach Nebula anyway.
   const offline = useBackendOffline();
@@ -68,7 +69,11 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
     if (save && name && name !== project.name) void useProjectStore.getState().rename(project.id, name);
     setDraft(null);
   };
-  const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
+  // Review 9, M-3 (GM r14: the bar follows the card): a scene card with
+  // edits Nebula doesn't have makes the bar say "Unsaved changes" too.
+  // It wins over the project's own "Saving…", which would read as safe.
+  const label = status === 'error' ? 'Save failed' : scenesUnsaved ? 'Unsaved changes'
+    : status === 'saving' ? 'Saving…' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div ref={bar} className={`project-workspace-controls${following ? ' project-workspace-controls--following' : ''}`}
       // GM round 22 (B): while following, the whole bar names the project
@@ -127,7 +132,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         // (short: the button is the retry), never another action's.
         ? <button type="button" className="project-workspace-controls__retry" title={saveError ? shortLine(saveError) : 'Retry saving'}
             onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
-        : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
+        : <span className={`project-workspace-controls__status${status === 'saved' && !scenesUnsaved ? ' project-workspace-controls__status--settled' : ''}`}
             role="status">{label}</span>}
       {/* While following, the save state and the count (the canvas that is going) give their room to the
           opening line, which takes the whole slot at the locked width (GM round 22, B). */}

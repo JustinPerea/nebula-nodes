@@ -394,7 +394,7 @@ describe('workspace-independent graph file actions', () => {
         await act(async () => { requestGraphLoad(); });
         await waitFor(() => expect(useGraphStore.getState().nodes[0].id).toBe('n8'));
         await waitFor(() => expect(lines()).toEqual(
-          ["Couldn't save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]));
+          ["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]));
       });
     });
   });

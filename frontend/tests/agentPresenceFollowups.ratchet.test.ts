@@ -294,16 +294,25 @@ const IMPORT_DEPTH = 2;
  * module that does name the store counts (review 3 LOW-6). */
 function reachOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen: Set<string>, depth = 0, ownNames = true): Set<string> {
   const names = new Set<string>();
+  // The file's own definitions it names are followed from a worklist, not by
+  // recursion (the merge of PR #198: a long chain of local helpers in a
+  // module it reaches overflowed the stack). Same names, same `seen`.
+  const queue: ts.Node[] = [node];
+  let root = node;
   const visit = (current: ts.Node) => {
     // Nested JSX is an element of its own, checked on its own (a render prop
     // that returns <Row onClick={…}/> is that row's, not the outer's).
-    if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
+    if (current !== root && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
     if (ts.isIdentifier(current)) {
       const name = current.text;
-      const local = scope.locals.get(name);
+      const local = localsAt(current, scope);
       if (local && isReference(current)) {
-        const key = `${scope.file}#${name}`;
-        if (!seen.has(key)) { seen.add(key); for (const inner of local) for (const reached of reachOf(inner, scope, resolve, seen, depth, ownNames)) names.add(reached); }
+        // Each definition once (fix round 25: by the definition, since two
+        // functions' same-named locals are two things now).
+        for (const definition of local) {
+          const key = `${scope.file}#${name}@${definition.pos}`;
+          if (!seen.has(key)) { seen.add(key); queue.push(definition); }
+        }
         return;
       }
       const imported = scope.imports.get(name);
@@ -326,9 +335,75 @@ function reachOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen
     if (ownNames && ts.isElementAccessExpression(current) && ts.isStringLiteralLike(current.argumentExpression)) names.add(current.argumentExpression.text);
     ts.forEachChild(current, visit);
   };
-  visit(node);
+  for (let at = 0; at < queue.length; at += 1) { root = queue[at]; visit(root); }
   return names;
 }
+
+/** Where a file definition is in scope (scopeOf's `locals` entry): the
+ * block, loop or catch of a `const`/`let`, the function of a `var`, the
+ * block of a function declaration; null for an assignment (`a.b = f`),
+ * which counts wherever `a` is named. */
+function declaredIn(definition: ts.Node): ts.Node | null {
+  if (ts.isFunctionDeclaration(definition)) return definition.parent;
+  let up: ts.Node | undefined = definition.parent;
+  if (up && ts.isBinaryExpression(up)) return null;
+  while (up && (ts.isBindingElement(up) || ts.isObjectBindingPattern(up) || ts.isArrayBindingPattern(up))) up = up.parent;
+  if (!up || !ts.isVariableDeclaration(up)) return null;
+  const list = up.parent;
+  if (!ts.isVariableDeclarationList(list)) return list;
+  const blockScoped = (list.flags & ts.NodeFlags.BlockScoped) !== 0;
+  for (let at: ts.Node | undefined = list.parent; at; at = at.parent) {
+    if (blockScoped ? (ts.isBlock(at) || ts.isSourceFile(at) || ts.isModuleBlock(at) || ts.isCaseBlock(at) || ts.isForStatement(at)
+      || ts.isForInStatement(at) || ts.isForOfStatement(at)) : (ts.isFunctionLike(at) || ts.isSourceFile(at))) return at;
+  }
+  return null;
+}
+
+/** Fix round 25 of PR #198 (review 23 NIT-4): the file's definitions of the
+ * name `id` reads that are in scope where it is read, the nearest only. The
+ * merge's two CONTROL_AT entries came from names shared across functions:
+ * StopLine's `track` param took SceneStopLines' `track` local, and
+ * projectStore's `const opened = get()` took another function's
+ * `const opened = useProjectStore.getState()` (the whole store). A
+ * parameter hides the file's same-named locals; a name with no definition
+ * in scope is an import when it is one, else every definition, as before. */
+function visibleLocals(id: ts.Identifier, scope: Scope): ts.Node[] | undefined {
+  const all = scope.locals.get(id.text);
+  if (!all) return undefined;
+  const depthOf = new Map<ts.Node, number>();
+  let param = Infinity;
+  let depth = 0;
+  for (let up: ts.Node | undefined = id.parent; up; up = up.parent, depth += 1) {
+    depthOf.set(up, depth);
+    if (param === Infinity && ts.isFunctionLike(up) && up.parameters.some((parameter) => bindingNames(parameter.name).includes(id.text))) param = depth;
+  }
+  let nearest = Infinity;
+  const kept: ts.Node[] = [];
+  const assigned: ts.Node[] = [];
+  for (const definition of all) {
+    const container = declaredIn(definition);
+    if (container === null) { assigned.push(definition); continue; }
+    const at = depthOf.get(container);
+    if (at === undefined || at > nearest) continue;
+    if (at < nearest) { nearest = at; kept.length = 0; }
+    kept.push(definition);
+  }
+  if (param !== Infinity && param <= nearest) return assigned;
+  if (kept.length > 0) return [...kept, ...assigned];
+  return scope.imports.has(id.text) ? undefined : all;
+}
+
+/** The definitions a name has where it is read (visibleLocals) for a
+ * reference, the file's for anything else; none when a parameter hides
+ * them, so a name a parent hands down is a parameter's (boundByParam). */
+function localsAt(id: ts.Node, scope: Scope): ts.Node[] | undefined {
+  if (!ts.isIdentifier(id) || !isReference(id)) return ts.isIdentifier(id) ? scope.locals.get(id.text) : undefined;
+  const visible = visibleLocals(id, scope);
+  return visible && visible.length > 0 ? visible : undefined;
+}
+
+const bindingNames = (name: ts.BindingName): string[] => ts.isIdentifier(name) ? [name.text]
+  : name.elements.flatMap((element) => ts.isOmittedExpression(element) ? [] : bindingNames(element.name));
 
 /** A value that is the canvas lock: a call of its hook, a local read from
  * one, or a prop named for it. */
@@ -339,7 +414,7 @@ function isLockValue(expression: ts.Node, scope: Scope, seen: Set<string> = new 
     && ts.isIdentifier(expression.expression) && (isLockValue(expression.expression, scope, seen)
       || (/^props$/.test(expression.expression.text) && boundByParam(expression.expression)));
   if (!ts.isIdentifier(expression)) return false;
-  const definitions = scope.locals.get(expression.text);
+  const definitions = localsAt(expression, scope);
   if (!definitions) return LOCK_PROPS.test(expression.text) && !scope.imports.has(expression.text) && boundByParam(expression);
   const key = expression.text;
   if (seen.has(key)) return false;
@@ -422,7 +497,7 @@ function lockCoverage(expression: ts.Node, scope: Scope, seen: Set<string> = new
   }
   if (!ts.isIdentifier(expression)) return 0;
   const key = expression.text;
-  const definitions = scope.locals.get(key);
+  const definitions = localsAt(expression, scope);
   if (!definitions) return DISABLED_PROPS.test(key) && !scope.imports.has(key) && boundByParam(expression) ? LOCKED : 0;
   if (seen.has(key)) return 0;
   seen.add(key);
@@ -446,10 +521,59 @@ function isActSpread(expression: ts.Node, scope: Scope, seen: Set<string> = new 
   if (ts.isParenthesizedExpression(expression)) return isActSpread(expression.expression, scope, seen);
   if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)
     && expression.expression.name.text === 'act' && isLockValue(expression.expression.expression, scope)) return true;
+  // PR #198's forms, since the merge: `lockedAction(lock, …)` (lib/canvasLock,
+  // lock.act with the offline verb), and a local helper whose body is one
+  // (`const runLocked = (…) => lock.act(own, { run })`).
+  if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
+    const callee = expression.expression.text;
+    // Fix round 25 (review 23 NIT-4): the canvasLock export by its own name
+    // (no alias), whose body the "lockedAction keeps act's lock" test reads.
+    const imported = scope.imports.get(callee);
+    if (callee === 'lockedAction' && imported?.imported === 'lockedAction' && /\/canvasLock$/.test(imported.specifier)
+      && expression.arguments.length > 0 && isLockValue(expression.arguments[0], scope)) return true;
+    if (seen.has(callee)) return false;
+    seen.add(callee);
+    const helpers = localsAt(expression.expression, scope) ?? [];
+    return helpers.length > 0 && helpers.every((helper) => (ts.isArrowFunction(helper) || ts.isFunctionExpression(helper))
+      && ts.isExpression(helper.body) && isActSpread(helper.body, scope, seen));
+  }
+  // An `act` prop a parent hands down, spread on the control. Fix round 25
+  // (review 23 NIT-4): trusted only when the component is a file-local,
+  // unexported function, every place in the file names it is a JSX use, and
+  // each of those passes `act` as a lock spread (`act={lock.act()}`).
+  if (ts.isIdentifier(expression) && expression.text === 'act' && boundByParam(expression)) return actHandedDown(expression, scope, seen);
   if (!ts.isIdentifier(expression) || seen.has(expression.text)) return false;
   seen.add(expression.text);
-  const definitions = scope.locals.get(expression.text) ?? [];
+  const definitions = localsAt(expression, scope) ?? [];
   return definitions.length > 0 && definitions.every((definition) => !ts.isBindingElement(definition) && isActSpread(definition, scope, seen));
+}
+
+/** Whether the `act` param `id` reads is a lock spread at every call site:
+ * see isActSpread. */
+function actHandedDown(id: ts.Identifier, scope: Scope, seen: Set<string>): boolean {
+  let component: ts.Node | null = null;
+  for (let up: ts.Node | undefined = id.parent; up; up = up.parent) if (ts.isFunctionLike(up)) component = up;
+  if (!component || !ts.isFunctionDeclaration(component) || !component.name) return false;
+  if (component.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) || scope.defaultExport === component) return false;
+  const name = component.name.text;
+  if (seen.has(`<${name}>`)) return false;
+  seen.add(`<${name}>`);
+  const uses: ts.JsxAttributes[] = [];
+  let stray = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && node.text === name && node !== component!.name) {
+      const parent = node.parent;
+      if (parent && (ts.isJsxOpeningElement(parent) || ts.isJsxSelfClosingElement(parent)) && parent.tagName === node) uses.push(parent.attributes);
+      else if (!(parent && ts.isJsxClosingElement(parent))) stray = true;
+    }
+    if (ts.isExportSpecifier(node) && (node.propertyName ?? node.name).getText(scope.root) === name) stray = true;
+    ts.forEachChild(node, visit);
+  };
+  visit(scope.root);
+  return !stray && uses.length > 0 && uses.every((attributes) => attributes.properties.some((attribute) =>
+    ts.isJsxAttribute(attribute) && attribute.name.getText(scope.root) === 'act' && !!attribute.initializer
+    && ts.isJsxExpression(attribute.initializer) && !!attribute.initializer.expression
+    && isActSpread(attribute.initializer.expression, scope, seen)));
 }
 
 /** Which locked states a spread covers: `{...lock.act(…)}` (or a local made
@@ -478,7 +602,7 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
   const key = expression.text;
   if (seen.has(key)) return 0;
   seen.add(key);
-  return (scope.locals.get(key) ?? []).reduce((mask, definition) =>
+  return (localsAt(expression, scope) ?? []).reduce((mask, definition) =>
     mask | (ts.isBindingElement(definition) ? 0 : spreadCoverage(definition, scope, component, seen, readOnlyApplies)), 0);
 }
 
@@ -538,6 +662,9 @@ function lockAttribute(attribute: ts.JsxAttributeLike, scope: Scope, tag = '', a
   if (name === 'disabled') return disables ? lockCoverage(value.expression, scope) : 0;
   if (name === 'readOnly' && readOnlyApplies) return lockCoverage(value.expression, scope);
   if (component && /^(lock|canvasLock)$/.test(name)) return isLockValue(value.expression, scope) ? LOCKED : 0;
+  // PR #198's notices hand the lock's props down as `act` (SceneClashNotice,
+  // SceneStopLines): the child spreads them on its buttons.
+  if (component && name === 'act') return isActSpread(value.expression, scope) ? LOCKED : 0;
   if (component && name === 'locked') return lockCoverage(value.expression, scope);
   return 0;
 }
@@ -624,7 +751,7 @@ function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scop
     }
     if (!ts.isIdentifier(expression) || seen.has(expression.text)) return 0;
     seen.add(expression.text);
-    return (scope.locals.get(expression.text) ?? []).reduce((mask, definition) =>
+    return (localsAt(expression, scope) ?? []).reduce((mask, definition) =>
       mask | (ts.isBindingElement(definition) ? 0 : fromObject(definition, seen)), 0);
   };
   return attributes.reduce((mask, attribute) => {
@@ -689,7 +816,7 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
     // A one-line helper of the file: `const guard = () => refuseCanvasEdit()`.
     if (seen.has(`call:${name}`)) return 0;
     seen.add(`call:${name}`);
-    const helpers = scope.locals.get(name) ?? [];
+    const helpers = localsAt(condition.expression, scope) ?? [];
     const masks = helpers.map((helper) => {
       if (!(ts.isArrowFunction(helper) || ts.isFunctionExpression(helper) || ts.isFunctionDeclaration(helper)) || !helper.body) return 0;
       if (!ts.isBlock(helper.body)) return again(helper.body);
@@ -708,7 +835,7 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
     // A local made of a guard: `const r = refuse…()`, `const { locked } = canvasLockNow()`.
     if (seen.has(condition.text)) return 0;
     seen.add(condition.text);
-    const definitions = scope.locals.get(condition.text) ?? [];
+    const definitions = localsAt(condition, scope) ?? [];
     const masks = definitions.map((definition) => {
       if (ts.isBindingElement(definition)) {
         const declared = definition.parent?.parent;
@@ -829,6 +956,9 @@ function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefine
     if (current !== node && (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current))) return;
     let inner = -1; // -1: not a gated call; else the coverage of what it calls
     if (ts.isIdentifier(current)) {
+      // Every same-named definition, not only the one in scope (localsAt):
+      // more definitions only lower the coverage (`all & …`), so this stays
+      // the stricter reading (and scoping here made G's walk far slower).
       const local = scope.locals.get(current.text);
       const imported = scope.imports.get(current.text);
       if (local && isReference(current)) {
@@ -879,7 +1009,7 @@ function handsCallback(attribute: ts.JsxAttribute, scope: Scope): boolean {
     if (found || ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current)) return;
     if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) { found = true; return; }
     if (ts.isIdentifier(current) && isReference(current)) {
-      const local = scope.locals.get(current.text);
+      const local = localsAt(current, scope);
       if (local?.some((node) => ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node))) { found = true; return; }
       if (GATED.has(current.text) || (scope.imports.get(current.text)?.specifier.startsWith('.') && /^[a-z]/.test(current.text))) { found = true; return; }
     }
@@ -1037,7 +1167,9 @@ const allowed = (line: string) => {
   return hits.split(', ').every((hit) => CONTROL_ALLOWLIST[`${file}: ${hit}`]);
 };
 
-// Parsing every source file is slow under load: a generous limit.
+// Parsing every source file is slow under load: a generous limit (300 s
+// since the merge with PR #198: more files, and G alone took 110 s at a load
+// average of 50; the full suite at 68 passed 120 s).
 describe('L-4: every file that reaches a gated action reads the canvas lock', { timeout: 120_000 }, () => {
   const files = walk(SRC, /\.tsx?$/).filter((path) => !path.endsWith('store/graphStore.ts'))
     .map((path) => ({ path, file: relative(SRC, path), source: readFileSync(path, 'utf8') }));
@@ -1424,6 +1556,64 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
 
   // EditNode's Open Editor (review 1 L-5) left the list in fix round 2
   // (review 2 L-6): it opens its own editor, read-only, and writes nothing.
+  // Fix round 25 of PR #198 (review 23 NIT-4): the merge trusted any `act`
+  // param and `lockedAction` by name. Now an `act` counts only where every
+  // use of its file-local component hands it a lock spread, and
+  // `lockedAction` only as canvasLock's own export, whose body keeps act's lock.
+  it('review 23 NIT-4: an `act` prop counts only where every use hands it the lock; lockedAction only as canvasLock\'s', () => {
+    const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
+    const child = 'function Child({ act }) { return <button {...act} onClick={run}>R</button>; }\n';
+    const quiet: Record<string, string> = {
+      handed: `${head}${child}export const A = () => <><Child act={lock.act()} /><Child act={lock.act({ disabled: true })} /></>;`,
+      locked_action: `import { lockedAction } from '../lib/canvasLock';\n${head}export const A = () => <button {...lockedAction(lock)} onClick={run}>R</button>;`,
+      locked_action_handed: `import { lockedAction } from '../lib/canvasLock';\n${head}${child}export const A = () => <Child act={lockedAction(lock, {}, { run: true })} />;`,
+    };
+    for (const [form, source] of Object.entries(quiet)) expect(unlockedControls(source, 'probe.tsx'), form).toEqual([]);
+    const caught: Record<string, string> = {
+      one_use_unlocked: `${head}${child}export const A = () => <><Child act={lock.act()} /><Child act={{}} /></>;`,
+      one_use_without: `${head}${child}export const A = () => <><Child act={lock.act()} /><Child /></>;`,
+      no_use: `${head}${child}export const A = () => null;`,
+      exported: `${head}export ${child}export const A = () => <Child act={lock.act()} />;`,
+      exported_by_name: `${head}${child}export { Child };\nexport const A = () => <Child act={lock.act()} />;`,
+      passed_as_value: `${head}${child}export const B = Child;\nexport const A = () => <Child act={lock.act()} />;`,
+      aliased: `import { offlineAction as lockedAction } from '../lib/canvasLock';\n${head}export const A = () => <button {...lockedAction(lock)} onClick={run}>R</button>;`,
+      other_module: `import { lockedAction } from '../lib/fakeLock';\n${head}export const A = () => <button {...lockedAction(lock)} onClick={run}>R</button>;`,
+      not_a_lock: `import { lockedAction } from '../lib/canvasLock';\n${head}export const A = () => <button {...lockedAction(other)} onClick={run}>R</button>;`,
+    };
+    for (const [form, source] of Object.entries(caught)) expect(unlockedControls(source, 'probe.tsx'), form).toHaveLength(1);
+  });
+
+  // Fix round 25 (review 23 NIT-4): the two CONTROL_AT entries the merge
+  // added are gone; G reads a name where it is in scope (visibleLocals).
+  it('review 23 NIT-4: a name is the definition in scope where it is read; a parameter hides the file\'s same-named locals', () => {
+    const head = 'const lock = useCanvasLock();\n';
+    const gated = 'useGraphStore.getState().executeGraph';
+    const quiet: Record<string, string> = {
+      other_function: `${head}function later() { const go = ${gated}; go(); }\nexport const A = () => { const go = () => {}; return <button onClick={go}>R</button>; };`,
+      param_hides: `${head}function Row({ go }) { return <button onClick={go}>R</button>; }\nfunction useGo() { const go = ${gated}; return go; }\nexport const A = () => <Row go={() => {}} />;`,
+      inner_block: `${head}export const A = () => { { const go = ${gated}; go(); } const go = () => {}; return <button onClick={go}>R</button>; };`,
+    };
+    for (const [form, source] of Object.entries(quiet)) expect(unlockedControls(source, 'probe.tsx'), form).toEqual([]);
+    const caught: Record<string, string> = {
+      local: `${head}export const A = () => { const go = ${gated}; return <button onClick={go}>R</button>; };`,
+      module_level: `${head}const go = ${gated};\nexport const A = () => <button onClick={go}>R</button>;`,
+      nearer_block: `${head}export const A = () => { const go = () => {}; { const go = ${gated}; return <button onClick={go}>R</button>; } };`,
+      var_hoisted: `${head}export function A({ x }) { if (x) { var go = ${gated}; } return <button onClick={go}>R</button>; }`,
+      destructured: `${head}export const A = () => { const { go } = { go: ${gated} }; return <button onClick={go}>R</button>; };`,
+      assigned: `${head}const tools = {};\nfunction setUp() { tools.go = ${gated}; }\nexport const A = () => <button onClick={tools.go}>R</button>;`,
+      out_of_scope_kept: `${head}function later() { const go = ${gated}; }\nexport const A = () => <button onClick={go}>R</button>;`,
+    };
+    for (const [form, source] of Object.entries(caught)) expect(unlockedControls(source, 'probe.tsx'), form).toHaveLength(1);
+  });
+
+  it('lockedAction keeps act\'s lock: it starts from lock.act and never writes disabled or aria-disabled (review 23 NIT-4)', () => {
+    const source = readFileSync(join(SRC, 'lib/canvasLock.ts'), 'utf8');
+    const body = /export function lockedAction\([\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
+    expect(body).toMatch(/const props[^=]*= lock\.act\(own, options\);/);
+    expect(body).toMatch(/return props;\n\}\n$/);
+    expect(body).not.toMatch(/\bdisabled\b|aria-disabled|delete |Object\.assign|\.\.\./);
+  });
+
   it('review 23\'s two misses read the lock now', () => {
     for (const file of ['components/editor/EditorView.tsx', 'components/panels/ChatPanel.tsx', 'components/video-editor/useRemotionKeyboard.ts']) {
       expect(readFileSync(join(SRC, file), 'utf8'), file).toMatch(READS_LOCK);
@@ -1715,13 +1905,24 @@ const SWEEP_LATER = new Set([
   'styles/slava-restraint.css: editor-transport__btn',
   'styles/slava-restraint.css: editor-transport__range',
   'styles/world-preview.css: world-modal__button',
+  // PR #198's own, kept through the merge with #200 and listed for the same
+  // sweep: the canvas notice's held and locked buttons (GM r33's token set,
+  // canvasProposals.css; its filled look differs from this file's, a GM
+  // call), the Cinema fieldset's dimming for checkboxes, swatches and
+  // sliders (round 5), and the editor's clip presets (GM r18, beside
+  // editor-transport__btn above).
+  'styles/canvasProposals.css: canvas-undo-notice button',
+  'styles/cinema-studio.css: cinema-offline-lock button',
+  'styles/slava-restraint.css: editor-transport__preset',
 ]);
 
 describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey whatever the reason', { timeout: 120_000 }, () => {
   const shared = readFileSync(join(SRC, SHARED), 'utf8');
   const rules = cssRules(shared);
   // The two list rules (fix round 3 added smaller ones for no-label buttons beside them).
-  const filledRule = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--sr-disabled-fill/.test(body)
+  // Round 25 of PR #198 (GM r37, option c): the list rules read GM r33's
+  // token set, the filled one the grey fill (--disabled-fill).
+  const filledRule = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--disabled-fill[,)]/.test(body)
     && /\.create-composer__generate\b/.test(selector));
   const unfilledRule = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*transparent/.test(body)
     && /\.selection-toolbar__button\b/.test(selector));
@@ -1737,10 +1938,14 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
       expect(rule.selector).toMatch(/:disabled/);
       expect(rule.selector).toMatch(/\[aria-disabled=['"]?true/);
       expect(rule.body).toMatch(/opacity:\s*1\s*!important/);
-      expect(rule.body).toMatch(/color:\s*var\(--sr-disabled-ink/);
+      // A notice button's first ~150 ms held (useHeldLook) keeps its own look.
+      expect(rule.selector).toMatch(/\[aria-disabled=['"]?true['"]?\]:not\(\[data-held-pending\]\)/);
     }
+    // GM r37 option c: GM r33's tokens, by kind of button.
+    expect(filledRule!.body).toMatch(/color:\s*var\(--disabled-fill-label[,)]/);
+    expect(unfilledRule!.body).toMatch(/color:\s*var\(--disabled-label[,)]/);
     // The unfilled rule comes first: a filled style wins for a button that has both classes.
-    expect(shared.indexOf('background: transparent !important')).toBeLessThan(shared.indexOf('background: var(--sr-disabled-fill'));
+    expect(shared.indexOf('background: transparent !important')).toBeLessThan(shared.indexOf('background: var(--disabled-fill,'));
   });
 
   it('it is loaded app-wide (App.tsx imports it, after the shared styles)', () => {
@@ -1825,6 +2030,35 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(gone, 'swept: drop these from SWEEP_LATER').toEqual([]);
   });
 
+  // PR #198 round 25 (review 23 MEDIUM-1, GM r37 option c): one look for
+  // every reason. Cinema's offline rule painted its buttons with !important
+  // (transparent, the 0.06 edge) over this file's look, so Generate shot read
+  // one way offline and another following, and the checks above missed it:
+  // it keys on the lock's mark ([data-offline-disabled]) and a fieldset's
+  // :disabled descendants, through a bare `button`. No other sheet may paint
+  // (background, colour, border colour, with !important) a disabled, held or
+  // lock-marked button: a bare `button` or a class this file covers.
+  it('no other sheet overrides the shared look for any reason (offline, following, a hold): no !important paint on a disabled or lock-marked button', () => {
+    const LOCKED = /:disabled|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
+    const PAINT = /(?:^|;)\s*(?:background(?:-color)?|color|border-color)\s*:[^;]*!important/;
+    const found: string[] = [];
+    for (const path of walk(SRC, /\.css$/)) {
+      const file = relative(SRC, path);
+      if (file === SHARED) continue;
+      for (const { selector, body } of cssRules(readFileSync(path, 'utf8'))) {
+        if (!PAINT.test(body)) continue;
+        for (const one of selectorsOf(selector)) {
+          const state = one.replace(/:not\([^)]*\)/g, '');
+          if (!LOCKED.test(state) || /:not\(\.app-slava-restraint\)/.test(one)) continue;
+          const subject = state.split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
+          const className = subjectClass(state);
+          if (/^button\b/.test(subject) || (className && covered(className))) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
+        }
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
   // Fix round 2 of PR #200 (review 2 M-1, GM 2026-10-28 answers 2 and 3):
   // one shared grey, so every listed control's enabled look is brighter than
   // it: its label contrast above the grey's, and its disabled outline never
@@ -1876,7 +2110,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
       const own = shared.filter(({ selector }) => /^:is\([^)]*\):is\(:disabled/.test(selector) && new RegExp(`\\.${name}(?:\\s[^,)]*)?[,)]`).test(selector.slice(0, selector.indexOf('):is(:disabled') + 1)));
       expect(own.length, `${name}: a disabled rule`).toBeGreaterThan(0);
       // Never a fill brighter than its resting look, and the edge no brighter than enabled.
-      for (const { body } of own) expect(body, name).not.toMatch(/background:\s*var\(--sr-disabled-fill/);
+      for (const { body } of own) expect(body, name).not.toMatch(/background:\s*var\(--(?:sr-)?disabled-fill[,)]/);
       if (image) {
         const img = shared.find(({ selector }) => selector.includes(name) && /:disabled/.test(selector) && /\simg$/.test(selector.trim()));
         expect(img, `${name}: its image dims`).toBeDefined();
@@ -2037,18 +2271,21 @@ const OUTLINE_DROP = 1.25;
  * shows the state (GM r2 answer 6, "Generate shot's contrast: no change; its
  * fill shows the state"). Each still turns from its fill to the grey fill,
  * which the test checks is dimmer. */
-const FILL_SHOWS_STATE: Record<string, string> = {
-  'create-composer__generate': 'white on the accent (2.9:1): GM r2 answer 6',
-  // Fix round 3: in the filled rule now (GM r1 answer 2: a filled button keeps its fill, grey).
-  'proposal-bar__button--primary': "white on the agent's colour: its fill shows the state (GM r4 answer 3)",
-};
+// Round 25 of PR #198 (GM r37 option c): the grey fill's dark label is
+// dimmer than every enabled filled label, white on the accent (2.9:1) and on
+// the agent's colour included, so none needs this any more (Generate and
+// Accept left it; the test below keeps the list true).
+const FILL_SHOWS_STATE: Record<string, string> = {};
 
 function disabledLooks() {
   const tokens = cssTokens();
   const shared = readFileSync(join(SRC, SHARED), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const lists = [...shared.matchAll(/:is\(([^)]*)\):is\(:disabled[^{]*\{([^}]*)\}/g)].map((m) => ({ classes: [...m[1].matchAll(/\.([\w-]+)/g)].map((c) => c[1]), body: m[2] }));
-  const ink = parseColor(resolveVar('var(--sr-disabled-ink)', tokens))!;
-  const greyFill = parseColor(resolveVar('var(--sr-disabled-fill)', tokens))!;
+  // GM r37 option c: a filled button's label is the dark one on the grey
+  // fill, a ghost button's the grey label (GM r33's token set).
+  const ghostInk = parseColor(resolveVar('var(--disabled-label)', tokens))!;
+  const fillInk = parseColor(resolveVar('var(--disabled-fill-label)', tokens))!;
+  const greyFill = parseColor(resolveVar('var(--disabled-fill)', tokens))!;
   const greyEdge = parseColor(resolveVar('var(--sr-disabled-edge)', tokens))!;
   const rows: Array<{ className: string; enabled: { label: number; edge: number }; disabled: { label: number; edge: number }; problem: string | null }> = [];
   const seen = new Set<string>();
@@ -2069,7 +2306,8 @@ function disabledLooks() {
     return [...found];
   };
   for (const { classes, body } of lists) {
-    const filled = /var\(--sr-disabled-fill/.test(/background:[^;]*/.exec(body)?.[0] ?? '');
+    const filled = /var\(--disabled-fill[,)]/.test(/background:[^;]*/.exec(body)?.[0] ?? '');
+    const ink = filled ? fillInk : ghostInk;
     const noLabel = (name: string) => Object.keys(NO_LABEL).some((key) => name === key || name.startsWith(`${key}--`));
     for (const className of classes.filter((name) => !noLabel(name) || NO_LABEL[name]).flatMap((name) => [name, ...(noLabel(name) ? [] : modifiers(name))])) {
       if (seen.has(`${filled}${className}`)) continue;

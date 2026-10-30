@@ -165,6 +165,115 @@ describe('following an agent’s project switch', () => {
     expect(useProjectStore.getState().error).toContain('another window');
   });
 
+  it('PR #198 fix round 12 (GM r20 answer 3): a scene save refused because another window switched project: only the outdated-workspace banner says it', async () => {
+    const notify = vi.fn();
+    useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
+      id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
+      data: { definitionId: 'cinema-scene', label: 'Opening', outputs: {},
+        params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } },
+    }] as never });
+    const realFetch = globalThis.fetch;
+    const puts: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (init?.method === 'PUT' && String(url).includes('/api/graph/node/n1')) {
+        puts.push(String(url));
+        return new Response(JSON.stringify({ detail: 'This canvas is out of date. Open the current project before editing or running it.',
+          code: 'workspace_moved', project: { id: 'p2', name: 'Agent sketches' }, switchedBy: { kind: 'person', name: 'You' } }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as never;
+    try {
+      useGraphStore.getState().updateScene('n1', (scene: { shots: { id: string; prompt: string }[] }) => ({ ...scene,
+        shots: scene.shots.map((shot) => ({ ...shot, prompt: 'typed' })) }) as never);
+      await vi.waitFor(() => expect(puts).toHaveLength(1));
+      await new Promise((done) => setTimeout(done, 50));
+      socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      expect(useProjectStore.getState().error).toContain('another window');
+      // The scene adds nothing of its own: no toast, no line beside one, no mark.
+      expect(notify).not.toHaveBeenCalled();
+      expect(useGraphStore.getState().undoNotice).toBeNull();
+      expect(useGraphStore.getState().messageNotice).toBeNull();
+      expect(useGraphStore.getState().unsavedScenes).toEqual({});
+      expect(puts).toHaveLength(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('PR #198 fix round 13 (review 12, M-1): another window switches while a scene edit is unsaved, though the autosave already sent it: the edits are kept as a recovered copy', async () => {
+    const notify = vi.fn();
+    useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
+      id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
+      data: { definitionId: 'cinema-scene', label: 'Street', outputs: {},
+        params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a quiet street' }] } } },
+    }] as never });
+    await useProjectStore.getState().flush();
+    const realFetch = globalThis.fetch;
+    const puts: string[] = [];
+    // The scene's own save fails (saving down), so Nebula never has the text.
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (init?.method === 'PUT' && String(url).includes('/api/graph/node/n1')) {
+        puts.push(String(url));
+        return new Response(JSON.stringify({ detail: 'Internal Server Error' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as never;
+    try {
+      useGraphStore.getState().updateScene('n1', (scene: { shots: { id: string; prompt: string }[] }) => ({ ...scene,
+        shots: scene.shots.map((shot) => ({ ...shot, prompt: 'typed before a switch elsewhere' })) }) as never);
+      await vi.waitFor(() => expect(puts.length).toBeGreaterThanOrEqual(1));
+      // The project autosave already sent a snapshot with the card's text.
+      await useProjectStore.getState().flush();
+      const sent = saveProject.mock.calls.at(-1)?.[1];
+      expect(JSON.stringify(sent)).toContain('typed before a switch elsewhere');
+      socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      expect(useProjectStore.getState().error)
+        .toBe('The active project changed in another window. Try again to save your unsaved edits as a recovered project.');
+      expect(useProjectStore.getState().dirty).toBe(true);
+      // Try again keeps them as a recovered copy, with the typed text.
+      vi.mocked(api.recoverProject).mockClear();
+      vi.mocked(api.recoverProject).mockResolvedValueOnce({ project: saved(summary('p3', 'Loop (recovered)')), workspaceRevision: 'r2' } as never);
+      await useProjectStore.getState().retry();
+      expect(api.recoverProject).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(vi.mocked(api.recoverProject).mock.calls[0][1])).toContain('typed before a switch elsewhere');
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('PR #198 fix round 14 (GM r22 Q2): once Try again has saved them, a neutral notice with [Open] takes the banner’s place and names the copy', async () => {
+    useGraphStore.setState({ notify: vi.fn(), undoNotice: null, messageNotice: null });
+    setPrompt('typed before a switch elsewhere');
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState().error)
+      .toBe('The active project changed in another window. Try again to save your unsaved edits as a recovered project.');
+    const copy = summary('p3', 'Loop (recovered)');
+    vi.mocked(api.recoverProject).mockClear();
+    vi.mocked(api.recoverProject).mockResolvedValueOnce(saved(copy) as never);
+    vi.mocked(api.listProjects).mockResolvedValue({
+      projects: [sketches, loop, copy], trash: [], activeProjectId: 'p2', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+    } as never);
+    await useProjectStore.getState().retry();
+    expect(api.recoverProject).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState()).toMatchObject({ error: null, copyNotice: {
+      line: 'Your latest edits were saved as their own project, “Loop (recovered)”.', restore: null, open: { id: 'p3', name: 'Loop (recovered)' } } });
+    // [Open] opens that project, and the notice goes.
+    vi.mocked(api.openProject).mockResolvedValueOnce({ project: saved(copy), workspaceRevision: 'r3', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    await useProjectStore.getState().openCopyNotice();
+    expect(api.openProject).toHaveBeenLastCalledWith('p3', expect.anything());
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+  });
+
+  it('PR #198 fix round 14 (GM r22 Q2): with nothing unsaved, Try again only reloads: no saved-as notice', async () => {
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    expect(useProjectStore.getState().error).toBe('The active project changed in another window. Reload projects to continue.');
+    vi.mocked(api.recoverProject).mockClear();
+    await useProjectStore.getState().retry();
+    expect(api.recoverProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().copyNotice).toBeNull();
+  });
+
   it('doesn’t follow a switch away from some other project or revision', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
       projectSwitch: { ...agentSwitch, previousRevision: 'r0' } } as never);

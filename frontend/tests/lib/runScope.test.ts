@@ -93,7 +93,7 @@ describe('run cost', () => {
   it('shows a range when a setting only resolves at run time, and marks costs left out', () => {
     const summary = summarizeRunScope([priced('e', 'gpt-image-2-edit')], [], { kind: 'graph' }, context);
     expect(summary.cost?.plus).toEqual(['input images']);
-    expect(runChipLabel(summary)).toBe('$0.01–0.20+');
+    expect(runChipLabel(summary)).toBe('$0.01–0.20 + unpriced');
     expect(describeRunScope(summary)).toContain('Not included: input images');
   });
 
@@ -102,7 +102,7 @@ describe('run cost', () => {
       [priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'Writer')], [], { kind: 'graph' }, context,
     );
     expect(summary.cost?.unpriced).toEqual(['Writer']);
-    expect(runChipLabel(summary)).toBe('$0.05+');
+    expect(runChipLabel(summary)).toBe('$0.05 + unpriced');
     expect(describeRunScope(summary)).toContain('No list price for Writer');
   });
 
@@ -177,7 +177,7 @@ describe('run cost', () => {
     expect(shouldConfirmRunCost(summarizeRunScope([priced('c', 'claude-chat')], [], { kind: 'graph' }), 0)).toBe(false);
     const message = runCostConfirmMessage(summary);
     expect(message).toContain('could cost up to $0.20 at list prices');
-    expect(message).toContain('• Retouch: $0.01–0.20');
+    expect(message).toContain('• Retouch: $0.01–$0.20');
     expect(message).toContain('Not included: input images.');
   });
 });
@@ -407,7 +407,8 @@ describe('a run priced from its input file (cases shared with the backend)', () 
       { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 } } });
     expect(summary.cost!.sizeRefs).toEqual([]);
     expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1], nodeId: 'up' }]);
-    expect(runChipLabel(summary)).toBe('~$0.004');
+    // GM, PR #198 r1: a chip never shows a sub-cent figure; the detail lines do.
+    expect(runChipLabel(summary)).toBe('<$0.01');
   });
 
   it('never measures an input made in the same run', () => {
