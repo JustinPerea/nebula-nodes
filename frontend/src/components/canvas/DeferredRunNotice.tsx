@@ -23,7 +23,7 @@ export function DeferredRunNotice() {
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
   // GM, PR #203 r8 item 3: locked while what it runs needs a key that isn't
-  // set (Idol without a Hugging Face token), focusable, its line as the
+  // set (a keyed route's missing key), focusable, its line as the
   // reason; runDeferred refuses the same way.
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -41,14 +41,14 @@ export function DeferredRunNotice() {
   return (
     <div className="proposal-bar proposal-bar--notice" role="status" {...leave.props}>
       <p className="proposal-bar__summary">
-        Added {shown.agentName}&apos;s nodes. Run them when the current run finishes.
+        Added <span className="agent-name">{shown.agentName}</span>&apos;s nodes. Run them when the current run finishes.
       </p>
       <div className="proposal-bar__actions">
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          // Review 7, L5: canvasLock's order (run, then following, then
-          // offline), then the missing key (withKeyLock, PR #203 round 6).
+          // The missing key first (withKeyLock, GM PR #203 r11 item 3),
+          // then canvasLock's order (review 7, L5: run, following, offline).
           {...runProps}
           onClick={() => { if (!runKeyLocked) void runDeferred(); }}
         >

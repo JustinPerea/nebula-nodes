@@ -792,6 +792,39 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     }
   });
 
+  // GM, PR #203 r10 and r13 item 2 (round 6 review, NIT-2): the list is
+  // opened by the person, so it draws over the proposal bar and keeps its
+  // room; the arrival card, which nobody opened, still stops above the
+  // notice stack (the bar in it).
+  it('the list keeps its room over the notice stack; the arrival card stops above it', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const widths = cardWidths();
+    const stack = document.createElement('div');
+    stack.dataset.testFixture = 'true';
+    stack.className = 'notice-region__stack';
+    stack.getBoundingClientRect = () => ({ left: 0, right: 1280, top: 500, bottom: 760, width: 1280, height: 260, x: 0, y: 500, toJSON: () => ({}) }) as DOMRect;
+    document.body.appendChild(stack);
+    try {
+      on('moodboard-editor');
+      slot({ left: 1154, right: 1266, top: 8, bottom: 40 });
+      render(<AppAgentNotes />);
+      sync([]);
+      emit({ type: 'agentNotes', surface: 'canvas', op: 'added', projectId: 'p1', note: note('an_2'), unread: 1, at: 2, removed: [] });
+      await vi.waitFor(() => expect(document.querySelector('.agent-note-card')).not.toBeNull());
+      const card = document.querySelector<HTMLElement>('.agent-note-card')!;
+      await vi.waitFor(() => expect(card.style.getPropertyValue('--an-max-h')).not.toBe(''));
+      const cardRoom = parseFloat(card.style.getPropertyValue('--an-max-h'));
+      expect(cardRoom).toBeLessThanOrEqual(500 - 48);
+      fireEvent.click(chip());
+      const list = screen.getByRole('dialog', { name: 'Updates' });
+      await vi.waitFor(() => expect(list.style.getPropertyValue('--an-max-h')).not.toBe(''));
+      expect(parseFloat(list.style.getPropertyValue('--an-max-h'))).toBeGreaterThan(500 - 48);
+    } finally {
+      widths.mockRestore();
+      stack.remove();
+    }
+  });
+
   it('writes the header line it drops from, so the docked chat starts below it; clears it on the canvas', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     const root = document.documentElement;

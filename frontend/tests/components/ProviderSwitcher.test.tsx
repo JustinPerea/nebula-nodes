@@ -117,40 +117,36 @@ describe('ProviderSwitcher rows', () => {
   });
 });
 
-describe('ProviderSwitcher on Idol\'s keyed Space route (GM PR #203 r1 and r4)', () => {
+describe('ProviderSwitcher on Idol\'s keyless Space route (GM PR #203 r1, r4 and r12)', () => {
   const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
   const renderIdol = () => render(<ProviderSwitcher definition={IDOL} params={{}} variant="inspector" onPick={vi.fn()} />);
 
-  it('shows the standard "Add key →" without the token, naming the Hugging Face token, and GM\'s row note', () => {
+  it('without the token: "Auto · free", "Free on Hugging Face." and no "Add key →" (GM r12 item 2)', () => {
     withKeys({});
-    const open = vi.spyOn(useUIStore.getState(), 'openProviderSetup');
-    useUIStore.setState({ openProviderSetup: open });
     renderIdol();
     const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
-    const add = within(space).getByRole('menuitem', { name: 'Add key for Hugging Face in Settings' });
-    expect(add).toHaveTextContent('Add key →');
+    expect(within(space).queryByRole('menuitem', { name: /Add key/ })).toBeNull();
     expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
-    expect(row(/^Speridlabs/)).toHaveTextContent('Free with a Hugging Face token.');
-    fireEvent.click(add);
-    expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'HF_TOKEN' });
+    expect(row(/^Speridlabs/)).toHaveTextContent('Free on Hugging Face.');
+    expect(row(/^Auto/)).toHaveTextContent(/^Auto · free/);
   });
 
-  it('names the lock reason on the card chip, never prefixed with "Can\'t run" (GM r6 item 2)', () => {
+  it('names no lock on the card chip without the token: nothing stops the run', () => {
     withKeys({});
     render(<ProviderSwitcher definition={IDOL} params={{}} variant="chip" onPick={vi.fn()} />);
     const chip = screen.getByRole('button', { name: /^Provider for Idol:/ });
-    expect(chip).toHaveAccessibleName(
-      'Provider for Idol: Auto. You can run Idol after you add your Hugging Face token in Settings.');
-    expect(chip.getAttribute('aria-label')).not.toMatch(/can't run/i);
+    expect(chip.getAttribute('aria-label')).not.toMatch(/can't run|You can run|token/i);
   });
 
-  it('shows the green dot and "Connected" with the token', () => {
+  it('with the token: the green dot and "Connected", "Uses your Hugging Face allowance." and plain "Auto"', () => {
     withKeys({ HF_TOKEN: KEY });
     renderIdol();
     const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
     const cell = space.querySelector('.provider-switcher__key--connected');
     expect(cell).toHaveTextContent(/^Connected$/);
     expect(cell?.querySelector('.provider-switcher__dot')).toHaveAttribute('aria-hidden', 'true');
+    expect(row(/^Speridlabs/)).toHaveTextContent('Uses your Hugging Face allowance.');
+    expect(row(/^Auto/)).not.toHaveTextContent(/free/);
   });
 });
 

@@ -101,6 +101,29 @@ describe('the command palette is a modal dialog', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
+  // GM, PR #203 r13 item 1 (round 6 review, stacking LOW-1): the page behind
+  // the palette is inert and aria-hidden, the canvas with it, so a control
+  // there can't be focused or pressed; on close it is back, and focus goes
+  // back to the control that opened it.
+  it('makes the page behind it inert and aria-hidden, and puts it back on close', async () => {
+    const page = document.body.firstElementChild as HTMLElement;
+    const opener = document.createElement('button');
+    opener.textContent = 'Opener';
+    page.append(opener);
+    opener.focus();
+    const palette = await openPalette();
+    const portal = palette.closest('.modal-portal')!;
+    expect(page).toHaveAttribute('inert', '');
+    expect(page).toHaveAttribute('aria-hidden', 'true');
+    expect(portal).not.toHaveAttribute('inert');
+    act(() => { fireEvent.keyDown(document, { key: 'k', metaKey: true }); });
+    await settle();
+    expect(document.querySelector('.command-palette')).toBeNull();
+    expect(page).not.toHaveAttribute('inert');
+    expect(page).not.toHaveAttribute('aria-hidden');
+    expect(opener).toHaveFocus();
+  });
+
   it('Tab stays inside', async () => {
     await openPalette();
     const input = screen.getByPlaceholderText('Search commands and nodes…');

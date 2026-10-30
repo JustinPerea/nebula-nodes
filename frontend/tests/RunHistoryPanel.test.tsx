@@ -13,6 +13,7 @@ import {
   type RunRecord,
 } from '../src/lib/runHistory';
 import { noticeSpy } from './helpers/noticeSpy';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -49,6 +50,10 @@ describe('RunHistoryPanel replay actions', () => {
     vi.restoreAllMocks();
   });
 
+  // The key-lock tests run on a keyed route: Idol made keyed for the test
+  // (tests/helpers/keyedSpace.ts); Idol is keyless from PR #203 round 7.
+  keyIdolInEachTest();
+
   it('routes complete and failed records to the correct exact-replay actions', () => {
     const rerunHistoryRecord = vi.fn(async () => undefined);
     const retryFailedRun = vi.fn(async () => undefined);
@@ -69,7 +74,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
   });
 
-  it("locks Rerun and Retry while the replay would run Idol without its token, focusable (GM, PR #203 r8 item 3)", () => {
+  it("locks Rerun and Retry while the replay would run a keyed route without its key, focusable (GM, PR #203 r8 item 3)", () => {
     const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
     const idol = (run: RunRecord): RunRecord => ({ ...run, snapshot: {
       nodes: [{ id: 'img', definitionId: 'image-input', params: { filePath: '/x.png' }, outputs: {} },
@@ -124,23 +129,34 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerun).toHaveAccessibleDescription(LINE);
   });
 
-  // Merge of #198 (round 6): one helper decides both reasons. While a run
-  // goes, the run's lock leads; the missing token comes back once it ends.
-  it('a run going leads the missing token; when it ends the token line is the reason', () => {
+  // GM, PR #203 r11 item 3: a reason only the person can fix comes first,
+  // or the person waits out the run only to be refused. While a run goes,
+  // the missing key still leads; offline and following too.
+  it('the missing key leads a run going, following and offline; once the key is added the run\'s line is the reason', () => {
     const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
     const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
       nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
     useGraphStore.setState({ runHistory: [run], isExecuting: true });
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    resetBackendConnectionForTests();
     render(<RunHistoryPanel />);
     const going = screen.getByRole('button', { name: 'Rerun Full graph' });
-    expect(going).toHaveAttribute('title', 'You can rerun it when the run finishes.');
-    expect(going).not.toHaveAttribute('data-key-locked');
-    act(() => useGraphStore.setState({ isExecuting: false }));
-    const ended = screen.getByRole('button', { name: 'Rerun Full graph' });
-    expect(ended).toHaveAttribute('aria-disabled', 'true');
-    expect(ended).toHaveAttribute('data-key-locked');
-    expect(ended).toHaveAccessibleDescription(LINE);
+    expect(going).toHaveAttribute('title', LINE);
+    expect(going).toHaveAttribute('data-key-locked', '');
+    expect(going).toHaveAttribute('aria-disabled', 'true');
+    expect(going).not.toBeDisabled();
+    act(() => noteBackendConnection('offline'));
+    const offline = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(offline).toHaveAttribute('title', LINE);
+    expect(offline).not.toHaveAttribute('data-offline-disabled');
+    act(() => noteBackendConnection('online'));
+    resetBackendConnectionForTests();
+    // The key added: the run's own line is the reason now.
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
+    const keyed = screen.getByRole('button', { name: 'Rerun Full graph' });
+    expect(keyed).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(keyed).not.toHaveAttribute('data-key-locked');
+    expect(keyed).toBeDisabled();
   });
 
   it('disables every replay while another run is active', () => {

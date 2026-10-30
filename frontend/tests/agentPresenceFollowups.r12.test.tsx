@@ -20,6 +20,9 @@ vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOri
 const { HIDDEN_TEXT_CODE, HIDDEN_TEXT_COPY, MAX_PIN_TEXT, fitNote, noteLength, pinDisplayText } = await import('../src/lib/canvasPins');
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
+// The app draws its notices in the notice region, which stays usable beside
+// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const css = (file: string) => readFileSync(join(__dirname, '../src', file), 'utf8');
@@ -63,7 +66,7 @@ describe('GM r18 Q1: too much hidden text', () => {
   it('the composer shows a neutral status toast over the open dialog, with the typed note still in the field', async () => {
     api.createPin.mockRejectedValue(hidden());
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     const field = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     fireEvent.change(field, { target: { value: NOTE } });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send note' })); });

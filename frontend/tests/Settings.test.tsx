@@ -443,15 +443,30 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { OPENAI_API_KEY: 'fixture-new' } }]]);
   });
 
-  it('names the Hugging Face credential a token, with GM\'s note (PR #203 r1 and r4)', async () => {
+  it('names the Hugging Face credential a token, optional, with GM\'s r12 helper and r11 lines in order (PR #203 round 7)', async () => {
     await renderSettings({ apiKeys: {} });
     const hf = row('Hugging Face');
-    expect(hf).toHaveTextContent('Needed to run Idol.');
-    expect(hf).not.toHaveTextContent('Optional');
+    expect(hf).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
+    expect(hf).not.toHaveTextContent('Needed to run Idol.');
     fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face key' }));
     expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
     expect(screen.queryByLabelText('Hugging Face API key')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show Hugging Face token' })).toBeInTheDocument();
+    // GM r11 item 1: the instruction, the link (opening outside Nebula), then the r3 caveat.
+    const link = screen.getByRole('link', { name: /^Open Hugging Face tokens/ });
+    expect(link).toHaveAttribute('href', 'https://huggingface.co/settings/tokens');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    const text = row('Hugging Face').textContent ?? '';
+    const order = [
+      'Create a fine-grained token in your Hugging Face settings and give it no repository access. Nebula uses it only for Idol’s GPU time on Hugging Face.',
+      'Open Hugging Face tokens',
+      'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses your prepaid Hugging Face credits.',
+    ].map((line) => text.indexOf(line));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // One link to the token page, not a second "Key page" beside it.
+    expect(within(row('Hugging Face')).queryByRole('link', { name: 'Key page ↗' })).toBeNull();
   });
 
   it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (GM, PR #203 r2)', async () => {

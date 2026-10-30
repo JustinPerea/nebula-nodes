@@ -872,6 +872,77 @@
           "endpoint": "fixture/keyless"
         }
       ]
+    },
+    "routes-keyed-space": {
+      "id": "routes-keyed-space",
+      "displayName": "Fixture Keyed Space",
+      "category": "3d-gen",
+      "apiProvider": "speridlabs",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "HF_TOKEN"
+      ],
+      "directKeyName": [
+        "HF_TOKEN"
+      ],
+      "inputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "world",
+          "label": "World",
+          "dataType": "World",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "hf-space",
+              "value": "hf-space"
+            }
+          ],
+          "hidden": true
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "seed",
+          "label": "Seed",
+          "type": "integer",
+          "required": false,
+          "default": 42
+        }
+      ],
+      "routes": [
+        {
+          "id": "hf-space",
+          "provider": "speridlabs",
+          "maker": true,
+          "keys": [
+            "HF_TOKEN"
+          ],
+          "handler": "hf-space",
+          "endpoint": "speridlabs/idol",
+          "missingKeyLine": "You can run Fixture Keyed Space after you add your Hugging Face token in Settings."
+        }
+      ]
     }
   },
   "cases": [
@@ -11745,8 +11816,8 @@
       ]
     },
     {
-      "name": "Idol: Auto with no key can't run, in the route's own words",
-      "nodeId": "speridlabs-idol",
+      "name": "A keyed Space route: Auto with no key can't run, in the route's own words",
+      "nodeId": "routes-keyed-space",
       "params": {},
       "apiKeys": {},
       "expected": {
@@ -11767,9 +11838,54 @@
         "block": null,
         "alternatives": [],
         "fixes": [],
-        "message": "You can run Idol after you add your Hugging Face token in Settings."
+        "message": "You can run Fixture Keyed Space after you add your Hugging Face token in Settings."
       },
-      "unavailableLine": "You can run Idol after you add your Hugging Face token in Settings.",
+      "unavailableLine": "You can run Fixture Keyed Space after you add your Hugging Face token in Settings."
+    },
+    {
+      "name": "A keyed Space route picked with no key can't run, in the route's own words",
+      "nodeId": "routes-keyed-space",
+      "params": {
+        "_provider": "hf-space"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": [
+          "HF_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": "hf-space",
+        "missing": [
+          "HF_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "fixes": [],
+        "message": "You can run Fixture Keyed Space after you add your Hugging Face token in Settings."
+      },
+      "unavailableLine": "You can run Fixture Keyed Space after you add your Hugging Face token in Settings."
+    },
+    {
+      "name": "Idol: Auto with no key runs on the Space anonymously (keyless)",
+      "nodeId": "speridlabs-idol",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "direct",
+        "provider": "speridlabs",
+        "key": null,
+        "routeId": "hf-space",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "cfg_scale",
         "gaussians",
@@ -11806,33 +11922,22 @@
       ]
     },
     {
-      "name": "Idol: its Hugging Face Space picked with no key can't run, in the route's own words",
+      "name": "Idol: its Hugging Face Space picked with no key runs anonymously (keyless)",
       "nodeId": "speridlabs-idol",
       "params": {
         "_provider": "hf-space"
       },
       "apiKeys": {},
       "expected": {
-        "kind": "unset",
+        "kind": "direct",
         "provider": "speridlabs",
         "key": null,
         "routeId": "hf-space",
         "block": null,
-        "missing": [
-          "HF_TOKEN"
-        ]
+        "missing": []
       },
-      "unavailable": {
-        "routeId": "hf-space",
-        "missing": [
-          "HF_TOKEN"
-        ],
-        "block": null,
-        "alternatives": [],
-        "fixes": [],
-        "message": "You can run Idol after you add your Hugging Face token in Settings."
-      },
-      "unavailableLine": "You can run Idol after you add your Hugging Face token in Settings.",
+      "unavailable": null,
+      "unavailableLine": null,
       "paramKeys": [
         "cfg_scale",
         "gaussians",

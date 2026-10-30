@@ -350,8 +350,8 @@ body.app-slava-restraint .settings-switch:checked:is(:disabled, [aria-disabled='
   border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
-/* A Run locked by a missing key (lib/runKeyLock.ts keyLockedProps; Idol
-   without a Hugging Face token, GM PR #203 r6): aria-disabled, so it keeps
+/* A Run locked by a missing key (lib/runKeyLock.ts keyLockedProps; a keyed
+   route without its key, GM PR #203 r6): aria-disabled, so it keeps
    its focus and its tooltip, in each surface's disabled look above, with one
    cursor on every surface, the canvas lock's (App.css). */
 [data-key-locked] {

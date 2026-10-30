@@ -793,6 +793,15 @@ def decide(
     def refuse(reason: str) -> Decision:
         return decision(f"Needs the person's approval: {reason} {how_to_ask}")
 
+    # A run that may bill the person's own provider account (a keyless route
+    # run with its optional key: Idol with HF_TOKEN set) always needs a
+    # proposal, limits or not. Its list price stays $0, so it never counts
+    # toward a budget; the person's own Run is their consent, and Accept
+    # makes the run theirs.
+    may_bill = may_bill_nodes(items, definitions, api_keys)
+    if may_bill:
+        return refuse(may_bill_reason(may_bill, labels, definitions, definition_of))
+
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
     usd_limited = (threshold is not None
@@ -851,6 +860,38 @@ def decide(
                           f"{_runs(used.plan_runs)} of {budget._its()} {budget.plan_runs}-run Krea plan limit"
                           f"{budget.window} set in Nebula Settings.")
     return decision(None)
+
+
+# Who a may-bill run can bill, by the route's handler (RouteSpec
+# mayBillWithKey). Agent-facing, so plain facts:
+# https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with credits".
+MAY_BILL_WHO = {
+    "hf-space": ("can bill the person's Hugging Face account: with their Hugging Face token set, a PRO, Team or "
+                 "Enterprise account's prepaid credits are billed past its daily ZeroGPU allowance ($1 per 10 "
+                 "GPU-minutes), a cost Nebula can't see or limit."),
+}
+MAY_BILL_GENERIC = "can bill the person's own provider account past its free allowance, a cost Nebula can't see or limit."
+
+
+def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Mapping[str, Any]],
+                   api_keys: Mapping[str, Any]) -> list[str]:
+    """The ids of the run's nodes that may bill the person's own provider
+    account (node_route.may_bill), in run order."""
+    return [str(item["id"]) for item in items
+            if node_route.may_bill(definitions.get(str(item.get("definitionId") or "")),
+                                   item.get("params") or {}, api_keys)]
+
+
+def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapping[str, Mapping[str, Any]],
+                    definition_of: Mapping[str, str]) -> str:
+    """Why an agent can't start a run with these may-bill nodes itself."""
+    handlers = {str(route.get("handler") or "")
+                for node_id in ids
+                for route in node_route.routes_of(definitions.get(definition_of.get(node_id, "")) or {})
+                if route.get("mayBillWithKey")}
+    who = MAY_BILL_WHO[next(iter(handlers))] if len(handlers) == 1 and next(iter(handlers)) in MAY_BILL_WHO \
+        else MAY_BILL_GENERIC
+    return f"{_names(ids, labels)} {who} An agent can't start it itself, at any spending limit."
 
 
 def propose_hint(run_ids: list[str]) -> str:

@@ -61,7 +61,7 @@ export function RunHistoryPanel() {
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
   // GM, PR #203 r8 item 3: a replay that would run a node that can't start
-  // without its key (Idol without a Hugging Face token) is locked as the
+  // without its key (a keyed route's missing key) is locked as the
   // other Runs are (aria-disabled, focusable, its line as the reason). The
   // store's refusal stays behind it.
   // Read again only when a record, the keys or the canvas's placeholders
@@ -283,8 +283,8 @@ export function RunHistoryPanel() {
                           else void rerunHistoryRecord(r.id);
                         }}
                         // L6 (GM r9 answer 3): one order, as the toolbar's:
-                        // the run, then following, then offline (lib/canvasLock),
-                        // then the missing key (withKeyLock, PR #203 round 6).
+                        // the missing key first (withKeyLock, GM PR #203 r11
+                        // item 3), then the run, following, offline (lib/canvasLock).
                         // Offline, its own verb (PR #200 review 3 LOW-1; GM
                         // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
                         {...withKeyLock(lockedAction(lock, { title: recoveryReplayReady

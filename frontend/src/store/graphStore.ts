@@ -10258,7 +10258,7 @@ function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
   // refuses on the route it knows instead.
   const { settingsCache } = useUIStore.getState();
   // GM, PR #203 r6 item 1: a run with a node that can't start without its
-  // key (Idol without a Hugging Face token) sends nothing, on every path
+  // key (a keyed route's missing key) sends nothing, on every path
   // (Cmd+Enter, the palette's Run graph, a replay, a node's Run): a neutral
   // one-line notice, the canvas's line for the whole graph, else the node's.
   if (refuseKeyLockedRun(nodes, edges, scope, settingsCache)) return true;

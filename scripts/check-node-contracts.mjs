@@ -82,7 +82,7 @@ const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea',
   'hf-space']);
 const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'optionalKeys', 'plan', 'handler', 'endpoint', 'endpointWhen',
-  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note', 'missingKeyLine']);
+  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note', 'missingKeyLine', 'mayBillWithKey']);
 const ROUTE_RULES = new Set(['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size', 'ports']);
 const BILLING_PARAMS = ['_provider', '_kreaAuth'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
@@ -235,6 +235,14 @@ function validateRoutes(nodes, source) {
       if (keys?.length && keyProviders[keys[0]] !== route.provider
         && !(route.handler === 'hf-space' && keys[0] === 'HF_TOKEN')) {
         errors.push(`${at}.provider must be '${keyProviders[keys[0]]}', who bills ${keys[0]}`);
+      }
+      // A keyless route whose run with one of its optional keys can bill the
+      // key owner's account (node_route.routes_problems, RouteSpec.mayBillWithKey).
+      if (route.mayBillWithKey !== undefined) {
+        if (route.mayBillWithKey !== true) errors.push(`${at}.mayBillWithKey must be true when present`);
+        if (!Array.isArray(route.optionalKeys) || !route.optionalKeys.length) {
+          errors.push(`${at}.mayBillWithKey needs optionalKeys: it says a run with one of them may bill`);
+        }
       }
       if (route.missingKeyLine !== undefined) {
         if (typeof route.missingKeyLine !== 'string' || !route.missingKeyLine.trim()) {

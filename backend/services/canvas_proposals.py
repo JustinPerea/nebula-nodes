@@ -513,6 +513,18 @@ def cost_for(
                         "unavailable": str(why.get("message") or ""),
                         **({"fixes": list(why["fixes"])} if why.get("fixes") else {})}
             routed = str(route.provider or "") or None
+            # A route that is free unless the person's own key is set, and
+            # then may bill their account (RouteSpec mayBillWithKey: Idol on
+            # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
+            billing = node_route.key_billing(definition, params, api_keys)
+            if billing:
+                # Named by who it runs on and may bill: a Space's host.
+                spec = node_route.route_by_id(definition, route.route_id) or {}
+                host = (node_route.PROVIDER_LABELS["huggingface"] if spec.get("handler") == "hf-space"
+                        else node_route.PROVIDER_LABELS.get(routed or "", routed or "provider"))
+                word = "may cost" if billing == "mayCost" else "free"
+                return {"kind": billing, "provider": routed, "label": f"{word} · {host}",
+                        "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
         else:
             choice = node_route.provider_choice(params)
             spec = (node_route.route_by_id(definition, choice) if choice != node_route.AUTO
@@ -572,6 +584,11 @@ def summarize_cost(
     ([{ref, nodeId, name, missing}], main._not_ready_nodes), read when the
     proposal was made."""
     paid = sum(1 for entry in entries if entry.get("kind") == "paid")
+    # Runs that may bill the person's own account (a mayBillWithKey route
+    # with their key set: Idol with an HF token), counted apart from paid
+    # (GM, PR #203 r11 item 2: "2 paid · 1 may cost"), with their names for
+    # the bar's own clause ("Runs 2 paid models and Idol").
+    may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
     summary_estimate = None
     if estimate and estimate.get("high") is not None:
@@ -584,12 +601,19 @@ def summarize_cost(
             "plan": list(estimate.get("plan") or []),
             "plus": list(estimate.get("plus") or []),
         }
+        if estimate.get("sourcedZero"):
+            # Every priced part is a sourced $0, not an estimate that rounds
+            # to it (GM, PR #203 r11 item 4): the card writes "$0".
+            summary_estimate["sourcedZero"] = True
         if estimate.get("awaitingInput"):
             # Priced from their input's size, which isn't known until it exists.
             summary_estimate["awaitingInput"] = list(estimate["awaitingInput"])
     return {
         "paidRuns": paid,
-        "freeRuns": len(entries) - paid,
+        "mayCostRuns": len(may_cost),
+        "mayCost": [{"name": name, "account": account} for name, account in dict.fromkeys(
+            (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)],
+        "freeRuns": len(entries) - paid - len(may_cost),
         "estimate": summary_estimate,
         "upTo": up_to,
         "providers": providers,

@@ -4,9 +4,12 @@ import { useUIStore } from '../../store/uiStore';
 import './onboarding.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { hideBehind, inNoticeAboveDialogs } from '../../lib/modalFocus';
+import { inNoticeAboveDialogs } from '../../lib/modalFocus';
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Where focus goes on close when nothing opened the tour (it opens itself). */
+const helpButton = () => document.querySelector<HTMLElement>(ONBOARDING_HELP_SELECTOR);
 
 function available(element: HTMLElement): boolean {
   const style = window.getComputedStyle(element);
@@ -39,13 +42,13 @@ export function OnboardingOverlay() {
     const overlay = overlayRef.current;
     const card = cardRef.current;
     if (!active || !overlay || !card) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // Let the card's own scroll region reveal its focused control at high zoom.
     const focusCard = () => (card.querySelector<HTMLElement>('[data-onboarding-primary]') ?? card).focus();
-    // Move focus before hiding the opener's subtree from assistive technology.
+    // Focus into the dialog. ModalPortal (a child, so its layout effect ran
+    // first) has made the page behind inert and noted the opener for close.
     focusCard();
-    // The page behind, the proposal bar with it (review r5 MEDIUM-1).
-    const restore = hideBehind(overlay);
+    // The page behind, the proposal bar with it, is inert while it is open:
+    // ModalPortal does that for every modal dialog (PR #203 round 7).
     const containFocus = (event: FocusEvent) => {
       // A modal dialog opened over the tour keeps its own focus.
       if (keyBlockedByModal(overlay)) return;
@@ -71,15 +74,9 @@ export function OnboardingOverlay() {
     return () => {
       document.removeEventListener('focusin', containFocus);
       document.removeEventListener('keydown', containUnfocusedKey, true);
-      restore();
-      // Back to whatever opened the tour, never to the proposal bar (GM r10
-      // item 2: seeing the bar again is the cue).
-      if (opener && opener !== document.body && opener !== document.documentElement && available(opener)) {
-        opener.focus({ preventScroll: true });
-        if (document.activeElement === opener) return;
-      }
-      const help = document.querySelector<HTMLElement>(ONBOARDING_HELP_SELECTOR);
-      if (help && available(help)) help.focus({ preventScroll: true });
+      // Back to whatever opened the tour, else the help button, never to the
+      // proposal bar (GM r10 item 2: seeing the bar again is the cue).
+      // ModalPortal does it once the page behind is usable again.
     };
   }, [active, finish]);
 
@@ -152,7 +149,7 @@ export function OnboardingOverlay() {
   const cardStyle = placement ? { top: placement.top, left: placement.left } : undefined;
 
   return (
-    <ModalPortal>
+    <ModalPortal fallbackFocus={helpButton}>
     <div
       className={`onboarding${step > 0 ? ' onboarding--tour' : ''}`}
       ref={overlayRef}

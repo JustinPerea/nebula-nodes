@@ -1121,7 +1121,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
     mode, with no list price. A row that runs free on someone's own allowance
     has `billing`, saying who can still be billed past it (Idol on a
-    Hugging Face PRO, Team or Enterprise account). With ready_only=false,
+    Hugging Face PRO, Team or Enterprise account): with that key set, propose
+    the run (propose_change) instead of running it. With ready_only=false,
     nodes that can't run here are included with `missing` saying what to set up.
     """
     # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
@@ -1154,10 +1155,13 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     `note` and `block`. A keyless route (`keys` []) has `optionalKeys`
     ([{key, set}]): it runs without them, and one that is set is used, so the
     run is on that person's own account and quota. A maker's Hugging Face
-    Space route (Idol's, which needs HF_TOKEN) has `billing`: the run uses
+    Space route (Idol's, keyless with an optional HF_TOKEN) has `billing`:
+    without the token it runs free on Hugging Face's shared GPUs; with it, on
     the person's own ZeroGPU allowance, and past its daily quota Hugging Face
     bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
-    GPU-minutes, though Nebula prices it at $0. A route never receives a setting it doesn't offer;
+    GPU-minutes, though Nebula prices it at $0. So with the token set an agent
+    can't run it (run tools refuse it): propose it with propose_change.
+    A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
     null = clear: plain param edits) on a propose_change cost entry; a run
@@ -1637,7 +1641,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A node priced
+    usually send the same nodes as propose_change with `run`. A node that
+    can bill the person's own provider account is refused at any limit (Idol
+    with HF_TOKEN set: a Hugging Face PRO, Team or Enterprise account's
+    prepaid credits past its daily allowance): propose it. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this

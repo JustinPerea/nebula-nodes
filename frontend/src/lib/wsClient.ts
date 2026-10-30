@@ -177,6 +177,9 @@ export interface ProposalEstimate {
   unpriced: string[];
   plan: string[];
   plus: string[];
+  /** Every priced part is a sourced $0 (model_pricing.estimate_run), not an
+   * estimate that rounds to zero: the card writes "$0" (GM, PR #203 r11 item 4). */
+  sourcedZero?: true;
 }
 
 export interface ProposalPort {
@@ -228,6 +231,12 @@ export interface ProposalView {
   run: string[];
   cost: {
     paidRuns: number;
+    /** Runs that may bill the person's own account (a mayBillWithKey route
+     * with their key set: Idol with a Hugging Face token), never counted as
+     * paid (GM, PR #203 r11 item 2), and who they are. Absent from a backend
+     * before round 7 of PR #203. */
+    mayCostRuns?: number;
+    mayCost?: Array<{ name: string; account: string }>;
     freeRuns: number;
     estimate: ProposalEstimate | null;
     upTo: boolean;

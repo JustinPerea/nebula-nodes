@@ -898,6 +898,10 @@ def estimate_run(
     plus: list[str] = []
     unavailable: dict[str, str] = {}
     awaiting: list[str] = []
+    # Every priced node's own row is a sourced $0, so the total is exact, not
+    # an estimate that rounds to zero (zero runs of a paid node): GM, PR #203
+    # r11 item 4, "$0" against "~$0".
+    sourced_zero = True
     for item in items:
         node_id = str(item["id"])
         definition = definitions.get(str(item.get("definitionId") or "")) or {}
@@ -951,6 +955,8 @@ def estimate_run(
         line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
                 "model": str(definition.get("id") or item.get("definitionId") or "")}
         priced[node_id] = line
+        if estimate["high"] != 0:
+            sourced_zero = False
         low += line["low"]
         high += line["high"]
         if estimate.get("plus") and estimate["plus"] not in plus:
@@ -966,6 +972,7 @@ def estimate_run(
         "plus": plus,
         "unavailable": unavailable,
         "awaitingInput": awaiting,
+        "sourcedZero": bool(priced) and sourced_zero,
     }
 
 

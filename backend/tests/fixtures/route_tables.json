@@ -13000,6 +13000,31 @@
     ]
    }
   },
+  "routes-keyed-space": {
+   "routes": [
+    {
+     "id": "hf-space",
+     "provider": "speridlabs",
+     "maker": true,
+     "keys": [
+      "HF_TOKEN"
+     ],
+     "handler": "hf-space",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "seed"
+   ],
+   "routeParams": {
+    "hf-space": [
+     {
+      "key": "seed"
+     }
+    ]
+   }
+  },
   "routes-keyless": {
    "routes": [
     {
@@ -14633,7 +14658,8 @@
      "id": "hf-space",
      "provider": "speridlabs",
      "maker": true,
-     "keys": [
+     "keys": [],
+     "optionalKeys": [
       "HF_TOKEN"
      ],
      "handler": "hf-space",

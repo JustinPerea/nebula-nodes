@@ -3,10 +3,12 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { keyPhrase, routeMissingKeyLine, selectRoute, type ApiKeys } from './directRoute';
 import { nodesThatRun, type RunScope } from './runScope';
+import { FOLLOWING_MARK } from './canvasLock';
+import { OFFLINE_MARK, OFFLINE_NEUTRAL } from './useBackendOffline';
 
 /**
  * A route that can't run without its key says so in its own words
- * (RouteSpec.missingKeyLine; Idol without a Hugging Face token, GM PR #203
+ * (RouteSpec.missingKeyLine: a keyed route without its key, GM PR #203
  * r4): Run is locked with that line as its reason, so a sure-to-fail run is
  * never sent. The backend refuses agent and CLI runs with the same line
  * (node_route.route_unavailable_line). Until Settings load, nothing locks.
@@ -114,7 +116,7 @@ export function runKeyLockLine(
 }
 
 /** runKeyLockLine's rule with the node's own line for every scope ("You can
- * run Idol after you add your Hugging Face token in Settings."): a Run
+ * run X after you add your Hugging Face token in Settings."): a Run
  * History replay and the deferred "Run now" say which node needs the key
  * (GM, PR #203 r8 item 3). */
 export function runKeyLockNodeLine(
@@ -162,19 +164,33 @@ export function keyLockedProps(reason: string | null, reasonId: string): KeyLock
   return { 'aria-disabled': true, 'aria-describedby': reasonId, [KEY_LOCK_MARK]: '' };
 }
 
+/** The marks the canvas lock puts on a control it holds (lib/canvasLock):
+ * a press on one pulses the project bar or the offline banner. A key-locked
+ * control drops them, so the press and the tooltip name the same reason
+ * (PR #198 M2). */
+const CANVAS_LOCK_MARKS = [FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL] as const;
+
 /**
  * One order for a control that the canvas lock and the key lock can both
- * hold (PR #203 round 6, on PR #198's run lock): the canvas lock's reasons
- * first, in its own order (this tab's run, then following, then offline:
- * lib/canvasLock `act`), then the control's own disabled reason, then the
- * missing key, as the control's own title comes last there. A control one
- * of those holds is natively disabled with that line alone; only a control
- * nothing else holds is key-locked (aria-disabled, focusable, the key line
- * as its title and description).
+ * hold. The rule (GM, PR #203 r11 item 3): a reason only the person can fix
+ * comes before reasons that clear by themselves, or the person waits out the
+ * run only to be refused. So the missing key comes first, then the run in
+ * progress, then following, then offline (lib/canvasLock `act`, in its own
+ * order), then the control's own disabled state and title.
+ *
+ * A control with a missing key is key-locked whatever else holds it:
+ * `aria-disabled`, never natively disabled, so it keeps its focus and
+ * tooltip; the key line is its title and description, and the canvas lock's
+ * marks are dropped. Its click handler refuses while key-locked. Without a
+ * missing key the control comes back as the canvas lock gave it. Every Run
+ * surface spreads its props through this (the ratchet,
+ * agentPresenceFollowups.ratchet.test.ts, checks it).
  */
 export function withKeyLock<T extends { disabled: boolean; title?: string | undefined }>(
   props: T, reason: string | null | undefined, reasonId: string,
 ): T & KeyLockedProps {
-  if (props.disabled || !reason) return props;
-  return { ...props, title: reason, ...keyLockedProps(reason, reasonId) };
+  if (!reason) return props;
+  const rest: Record<string, unknown> = { ...props };
+  for (const mark of CANVAS_LOCK_MARKS) delete rest[mark];
+  return { ...(rest as T), disabled: false, title: reason, ...keyLockedProps(reason, reasonId) };
 }

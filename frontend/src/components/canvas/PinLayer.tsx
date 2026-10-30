@@ -151,7 +151,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
           </p>
           {resolved && pin.reply && (
             <p className="canvas-pin__reply">
-              <span className="canvas-pin__agent">{pin.reply.agent.name}</span>
+              <span className="canvas-pin__agent agent-name">{pin.reply.agent.name}</span>
               <span>{pinDisplayText(pin.reply.text, { multiline: false })}</span>
             </p>
           )}

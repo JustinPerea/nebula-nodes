@@ -9,7 +9,7 @@ import { canKeyLock, runKeyLockNodeLine, type LockSettings } from './runKeyLock'
  * Rerun or Retry sends (each saved node at its saved settings, an agent's
  * placeholder still marked as the live canvas has it), over what that replay
  * would run (a node's replay with what feeds it, a whole-canvas replay
- * without agents' placeholders), with the keys set now. "You can run Idol
+ * without agents' placeholders), with the keys set now. "You can run X
  * after you add your Hugging Face token in Settings." The replay's store path
  * refuses the same way as a backstop. Null when it can run.
  *

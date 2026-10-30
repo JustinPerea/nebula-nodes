@@ -36,6 +36,11 @@ import { Toolbar } from '../src/components/panels/Toolbar';
 import { buildCommands } from '../src/lib/commandPalette';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
+
+// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -68,7 +73,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('the canvas with an Idol node and no Hugging Face token', () => {
+describe('the canvas with a keyed Space node (Idol\'s keyed shape) and its key missing', () => {
   it("locks the toolbar's Run with the canvas line, focusable, read out as its scope line", () => {
     setup({});
     const executeGraph = vi.fn(async () => undefined);

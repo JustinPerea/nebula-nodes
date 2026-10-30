@@ -252,6 +252,40 @@ describe('World v2 splat preview', () => {
     }
   });
 
+  // GM, PR #203 r13 item 1: the 3D viewer isolates the page behind it (the
+  // proposal bar's slot with it) and keeps the notices usable; on close the
+  // page is back and focus returns to "Explore in 3D".
+  it('isolates the page and the proposal bar behind it, notices usable; on close both are back and focus returns', async () => {
+    const region = document.createElement('div');
+    region.setAttribute('data-notice-region', '');
+    region.innerHTML = '<div data-notice-slot="proposal"><button type="button">Accept</button></div>'
+      + '<div data-notice-slot="notice"><button type="button">Undo</button></div>';
+    document.body.append(region);
+    try {
+      const { container } = render(<RepresentationViewer type="World" value={idolWorld} />);
+      await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
+      const explore = screen.getByRole('button', { name: EXPLORE });
+      explore.focus();
+      fireEvent.click(explore);
+      const dialog = await screen.findByRole('dialog', { name: 'Idol object' });
+      const page = container.parentElement === document.body ? container : container.closest('body > *')!;
+      expect(page).toHaveAttribute('inert', '');
+      expect(page).toHaveAttribute('aria-hidden', 'true');
+      const slot = region.querySelector('[data-notice-slot="proposal"]')!;
+      expect(slot).toHaveAttribute('inert', '');
+      expect(slot).toHaveAttribute('aria-hidden', 'true');
+      expect(region.querySelector('[data-notice-slot="notice"] button')!.closest('[inert], [aria-hidden="true"]')).toBeNull();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Close 3D viewer' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(page).not.toHaveAttribute('inert');
+      expect(slot).not.toHaveAttribute('inert');
+      expect(slot).not.toHaveAttribute('aria-hidden');
+      expect(screen.getByRole('button', { name: EXPLORE })).toHaveFocus();
+    } finally {
+      region.remove();
+    }
+  });
+
   it('keeps Tab inside the dialog, including from outside it', async () => {
     render(<><button type="button">behind</button><RepresentationViewer type="World" value={idolWorld} /></>);
     await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
@@ -266,8 +300,14 @@ describe('World v2 splat preview', () => {
     expect(close).toHaveFocus();
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     expect(download).toHaveFocus();
-    // Focus that fell out (a button that disabled itself) comes back in on Tab.
-    screen.getByRole('button', { name: 'behind' }).focus();
+    // The page behind is inert while the viewer is open (ModalPortal, GM PR
+    // #203 r13 item 1): focus can't land there. Focus that fell out anyway
+    // (a button that disabled itself) comes back in on Tab.
+    const behind = screen.getByText('behind');
+    expect(behind.closest('[inert]')).not.toBeNull();
+    expect(behind.closest('[aria-hidden="true"]')).not.toBeNull();
+    // (jsdom doesn't refuse focus on an inert element; a browser does.)
+    behind.focus();
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(close).toHaveFocus();
   });

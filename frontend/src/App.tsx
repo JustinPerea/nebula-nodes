@@ -55,6 +55,7 @@ import './styles/layouts.css';
 import './styles/slava-restraint.css';
 // GM r24 item 2: one disabled look for every button, whatever the reason.
 import './styles/disabled-buttons.css';
+import './styles/agent-name.css';
 
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load

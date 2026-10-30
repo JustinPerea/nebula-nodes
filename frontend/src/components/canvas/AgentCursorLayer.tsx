@@ -182,7 +182,7 @@ function AgentCursorView({ cursor, zoom }: { cursor: AgentCursor; zoom: number }
           <path d="M1.5 1.5 L1.5 17.5 L6 13.3 L9.1 20.1 L11.9 18.9 L8.9 12.3 L14.7 12.1 Z" />
         </svg>
         <div className="agent-cursor__label">
-          <span className="agent-cursor__name">{cursor.name}</span>
+          <span className="agent-cursor__name agent-name">{cursor.name}</span>
           {showSay && !idle && (
             <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>{cursor.say}</span>
           )}

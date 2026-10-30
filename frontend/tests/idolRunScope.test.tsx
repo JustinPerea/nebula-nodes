@@ -35,6 +35,11 @@ vi.mock('@xyflow/react', async (importOriginal) => {
 import { Toolbar } from '../src/components/panels/Toolbar';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
+
+// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };

@@ -69,7 +69,7 @@ export function SelectionToolbar() {
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
-  // A node that can't run without its key (Idol's Hugging Face token), the
+  // A node that can't run without its key (a keyed route's missing key), the
   // selection's or one feeding it: Run is locked with its line as the reason
   // (GM, PR #203 r4), aria-disabled so it keeps its focus and tooltip, and the
   // scope line it reads out is that line (r6 item 3).
@@ -85,8 +85,8 @@ export function SelectionToolbar() {
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
-  // The run lock's line first (run, following, offline), then the missing
-  // key (withKeyLock: one order for both, PR #203 round 6 on PR #198).
+  // The missing key first, then the run lock's line (run, following,
+  // offline): withKeyLock, one order for every Run (GM, PR #203 r11 item 3).
   const runProps = withKeyLock(runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` }),
     keyLock, runScopeId);
   const runKeyLocked = runProps['data-key-locked'] !== undefined;

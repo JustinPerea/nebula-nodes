@@ -35,7 +35,7 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   // Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
   BFL_API_KEY: 'bfl',
   // A Hugging Face access token, for a maker's Space route (handler
-  // hf-space): Idol's needs it; a keyless one lists it in optionalKeys.
+  // hf-space): a keyed one needs it; a keyless one (Idol's) lists it in optionalKeys.
   HF_TOKEN: 'huggingface',
 };
 
@@ -846,6 +846,34 @@ export function selectRoute(
   return { kind: 'unset', provider: definition.apiProvider, key: null };
 }
 
+/**
+ * How a run on a `mayBillWithKey` route is counted (GM, PR #203 r11 item 2
+ * and r12): "mayCost" with one of its optional keys set (it may bill the
+ * person's own account past its free allowance: Idol with a Hugging Face
+ * token), "free" without one. Null for any other route or node, counted as
+ * before. Never "paid": such a route has no list price beyond its sourced
+ * $0. node_route.key_billing is the twin.
+ */
+export function keyBilling(
+  definition: ModelNodeDefinition | undefined,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): 'free' | 'mayCost' | null {
+  if (!definition || !hasRoutes(definition)) return null;
+  const route = selectRoute(definition, params, apiKeys);
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  if (!spec || spec.mayBillWithKey !== true) return null;
+  return route.key && keyList(spec.optionalKeys).includes(route.key) ? 'mayCost' : 'free';
+}
+
+/** The account a may-cost run can bill, by the key it runs on ("Hugging
+ * Face"), for the chip's sentence and the bar's clause. */
+export function mayCostAccount(definition: ModelNodeDefinition | undefined): string {
+  const spec = definition?.routes?.find((route) => route.mayBillWithKey === true);
+  const key = keyList(spec?.optionalKeys)[0];
+  return (key && Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key][0] : null) ?? providerLabel(spec?.provider);
+}
+
 /** The key under model_pricing.json `routes` that prices this route
  * (model_pricing.route_price_key): the route's `pricing` or id on a
  * route-table node, the provider on every other node. */
@@ -1112,7 +1140,7 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
  * `keyless` are routes that would take the run but have no key set: a
  * `hidden` stop with no alternative names them. */
 /** The route's own line for a run stopped only by a missing key
- * (RouteSpec.missingKeyLine: Idol without a Hugging Face token), or null.
+ * (RouteSpec.missingKeyLine: a keyed route without its key), or null.
  * Auto with no key set names no route: then every route must have one.
  * node_route.missing_key_line_for is the same. */
 export function routeMissingKeyLine(definition: ModelNodeDefinition, route: NodeRoute): string | null {

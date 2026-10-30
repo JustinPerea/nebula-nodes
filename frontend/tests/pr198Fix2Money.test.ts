@@ -62,17 +62,27 @@ const CHIPS: [number, number, boolean, string, string | undefined][] = [
   [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
 ];
 
-/** The run chip and the proposal card write a closed $0 run as "$0": every
- * priced line is exactly 0 (Idol on its free Space), so it isn't an estimate
- * (GM, PR #203 r1). The shared formatter keeps "~$0". */
-const runChip = (low: number, high: number, open: boolean, chip: string) =>
-  (!open && low === 0 && high === 0 ? '$0' : chip);
+/** The run chip and the proposal card decide "$0" by source, not value (GM,
+ * PR #203 r11 item 4; round 6 review NIT-1): only a sourced $0 (every priced
+ * row is exactly 0, `sourcedZero`) reads "$0", with "This costs nothing to
+ * run."; a closed estimate that rounds to zero keeps the formatter's "~$0". */
+const runChip = (_low: number, _high: number, _open: boolean, chip: string) => chip;
 
 describe('the chips and their tooltips (GM asks 1 and 2)', () => {
   it.each(CHIPS)('%s–%s open=%s: "%s", titled "%s"', (low, high, open, chip, title) => {
     expect(runChipLabel(summary(low, high, open))).toBe(runChip(low, high, open, chip));
     expect(formatChipEstimate(low, high, open)).toBe(chip);
     expect(runChipTitle(summary(low, high, open))).toBe(title);
+  });
+
+  it('a sourced $0 reads "$0", titled "This costs nothing to run.", on the chip and the card; open, the reasons still say what is unpriced', () => {
+    const sourced = { paid: [{}], cost: { low: 0, high: 0, lines: [{}], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
+    expect(runChipLabel(sourced)).toBe('$0');
+    expect(runChipTitle(sourced)).toBe('This costs nothing to run.');
+    expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: false, sourcedZero: true } } } as never)).toBe('$0');
+    const open = { ...sourced, cost: { ...sourced.cost, unpriced: ['Kling'] } } as unknown as RunScopeSummary;
+    expect(runChipLabel(open)).toBe('$0 + unpriced');
+    expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: true, sourcedZero: true } } } as never)).toBe('$0 + unpriced');
   });
 
   it('the proposal card shows the same chip', () => {

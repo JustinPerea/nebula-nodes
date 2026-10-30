@@ -915,11 +915,20 @@ def _minutes(seconds: Any) -> str:
 def _cost_line(cost: dict[str, Any]) -> str:
     paid = int(cost.get("paidRuns") or 0)
     free = int(cost.get("freeRuns") or 0)
+    may = int(cost.get("mayCostRuns") or 0)
     up_to = "up to " if cost.get("upTo") else ""
+    # A run on the person's own key that may bill their account past its
+    # free allowance (Idol with an HF token): never counted as paid.
+    may_cost = (f"{may} that may bill the person's own account ({', '.join(str(row.get('name')) for row in cost.get('mayCost') or [])})"
+                if may else "")
     if paid == 0:
+        if may:
+            return f"{up_to}{may} run{'s' if may != 1 else ''}: {may_cost}" + (f" and {free} free" if free else "")
         return f"{up_to}{free} free run{'s' if free != 1 else ''} (runs locally)"
     providers = ", ".join(cost.get("providers") or [])
     line = f"{up_to}{paid} paid run{'s' if paid != 1 else ''}" + (f" ({providers})" if providers else "")
+    if may:
+        line += f", {may_cost}"
     if free:
         line += f" and {free} free"
     estimate = cost.get("estimate")

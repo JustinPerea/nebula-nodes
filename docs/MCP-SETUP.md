@@ -84,9 +84,10 @@ The server exposes these tools for building and running (see
   `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
   Video QC nodes) calls a provider in another mode. A row that runs free on
   someone's own allowance has `billing`, saying who can still be billed past
-  it (Idol: Hugging Face bills a PRO, Team or Enterprise account's prepaid
-  credits past the daily ZeroGPU quota); `nebula nodes` prints it as a
-  `BILLING:` line under the table. Every word of `query`
+  it (Idol: with the person's `HF_TOKEN` set, Hugging Face bills a PRO,
+  Team or Enterprise account's prepaid credits past the daily ZeroGPU
+  quota, so with it set an agent proposes the run instead of running it);
+  `nebula nodes` prints it as a `BILLING:` line under the table. Every word of `query`
   must be in the id, name or description. Its CLI twin is `nebula nodes`
   (and `nebula find`), on the same route: by default the node types that
   run here, by category, each with `runsWith` and its price, then one line
@@ -101,12 +102,17 @@ The server exposes these tools for building and running (see
   and list prices by the params that set them (`price.byInputSize` and
   `multiplyBy` on a price read from the input file, `price.unconfirmed` when
   the vendor's page doesn't state it exactly; a route has `priceBy`).
-  A route on a maker's Hugging Face Space (Idol) has `billing`: it runs on
-  the person's own ZeroGPU allowance through their `HF_TOKEN`, Nebula prices
-  it at $0, and on a PRO, Team or Enterprise token Hugging Face can bill GPU
-  time past the daily quota from the person's prepaid credits ($1 per 10
-  minutes). Idol without `HF_TOKEN` is refused before any request: "You can
-  run Idol after you add your Hugging Face token in Settings."
+  A route on a maker's Hugging Face Space (Idol) has `billing`. Idol is
+  keyless: without `HF_TOKEN` it runs free on Hugging Face's shared GPUs,
+  and an agent runs it like any free node. With `HF_TOKEN` set it runs on
+  the person's own ZeroGPU allowance, Nebula still prices it at $0, but on a
+  PRO, Team or Enterprise token Hugging Face can bill GPU time past the
+  daily quota from the person's prepaid credits ($1 per 10 minutes). So
+  with the token set, every agent run route (`run_nodes`, `nebula run`,
+  `nebula quick`, the HTTP run routes, a Cinema shot) refuses a run that
+  includes Idol, at any spending limit, and says to propose it:
+  `propose_change` with `run` (`nebula propose --run <node>`). The person's
+  own Run, and an accepted proposal, run it as usual.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers

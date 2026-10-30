@@ -42,8 +42,8 @@ function acceptedGraph(view: ProposalView, values: ProposalPersonValues | undefi
 
 /**
  * GM, PR #203 r6 item 1, and review r4 LOW-1/LOW-2: Accept is locked while
- * the run it starts would run a node that can't start without its key (Idol
- * without a Hugging Face token): "You can accept this after you add your
+ * the run it starts would run a node that can't start without its key (a
+ * keyed route's missing key): "You can accept this after you add your
  * Hugging Face token in Settings." Read from the run itself, as Accept runs
  * it (canvasProposalsStore runNodes: one node with what feeds it, several as
  * a cluster with their ancestors), on the canvas as Accept leaves it, and

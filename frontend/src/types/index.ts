@@ -237,11 +237,17 @@ export interface RouteSpec {
    *  `keys` is then [], and these stay out of `envKeyName`. */
   optionalKeys?: string[];
   /** A keyed route whose run can't start without its key, in the person's
-   *  words (Idol: "You can run Idol after you add your Hugging Face token in
-   *  Settings."). Without the key, Run is disabled with this as its reason,
+   *  words ("You can run X after you add your Hugging Face token in
+   *  Settings."; Idol's in PR #203 rounds 4 to 6). Without the key, Run is disabled with this as its reason,
    *  the engine and the router refuse agent and CLI runs with it before
    *  anything is sent. */
   missingKeyLine?: string;
+  /** A keyless route whose run, with one of its `optionalKeys` set, can bill
+   *  the key owner's own account past a free allowance (Idol: a Hugging Face
+   *  PRO, Team or Enterprise account's prepaid credits). Its price stays the
+   *  sourced one; the chips say "may cost", and an agent must propose such a
+   *  run (lib/mayBill.ts, backend agent_spend.may_bill_nodes). */
+  mayBillWithKey?: true;
   /** A Krea route that can bill the signed-in plan: 'optional' when
    *  `_kreaAuth` is 'mcp', 'only' always. */
   plan?: 'optional' | 'only';

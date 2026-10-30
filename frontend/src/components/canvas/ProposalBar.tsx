@@ -3,15 +3,17 @@ import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
   PROPOSAL_GATE_COPY,
+  acceptCountChip,
   acceptLabel,
   countdown,
   ghostBoxes,
-  notReadyLine,
+  notReadyBarLines,
   proposalChanges,
+  proposalMayCostSentence,
   proposalSummary,
 } from '../../lib/canvasProposals';
 import { useProposalAcceptLock, useProposalNotReady } from '../../hooks/useProposalReadiness';
-import { keyLockedProps } from '../../lib/runKeyLock';
+import { withKeyLock } from '../../lib/runKeyLock';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
@@ -109,12 +111,14 @@ export function ProposalBar() {
   const currentId = live?.view.id ?? null;
   const position = live ? open.indexOf(live) : 0;
   // GM, PR #203 r6 item 1: a proposal whose run can't start without a key
-  // (Idol without a Hugging Face token) can't be accepted yet: Accept is
-  // locked with GM's line, as Run is (keyLockedProps). The backend still
-  // refuses the run if one is sent.
+  // (a keyed route's missing key) can't be accepted yet: Accept is locked
+  // with the Accept line, as Run is (withKeyLock). The backend still refuses
+  // the run if one is sent.
   const notReady = useProposalNotReady(current);
   const acceptLock = useProposalAcceptLock(current);
   const acceptLockId = useId();
+  const countChip = current ? acceptCountChip(current.view) : null;
+  const mayCostTitle = current ? proposalMayCostSentence(current.view) : null;
   const [noteRef, noteClamped] = useClamped(current?.view.note);
 
   useEffect(() => {
@@ -156,7 +160,8 @@ export function ProposalBar() {
   const settled = () => !guarding.current;
   const changes = current ? proposalChanges(current.view, current.values) : [];
   const hasChangeLines = changes.some((group) => group.lines.length > 0);
-  const moreNotReady = notReady.length > READINESS_LINES;
+  const notReadyLines = notReadyBarLines(notReady, acceptLock);
+  const moreNotReady = notReadyLines.length > READINESS_LINES;
   const hasDetails = hasChangeLines || noteClamped || moreNotReady;
   const detailsLabel = hasChangeLines
     ? (detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes')
@@ -198,7 +203,7 @@ export function ProposalBar() {
         <div className="proposal-bar__main">
           <div className="proposal-bar__who">
             <span className="proposal-bar__dot" aria-hidden="true" />
-            <span className="proposal-bar__agent">{current.view.agent.name}</span>
+            <span className="proposal-bar__agent agent-name">{current.view.agent.name}</span>
             <span className="proposal-bar__proposes">proposes</span>
             {open.length > 1 && (
               <span className="proposal-bar__pager">
@@ -222,19 +227,19 @@ export function ProposalBar() {
           </div>
           <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
           <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
-          {notReady.length > 0 && (
+          {notReadyLines.length > 0 && (
             // Accept stays as the Run button does for a node without its
             // key: the run is refused at that node, before anything is spent.
             <ul className="proposal-bar__readiness" aria-label="Can't run here">
-              {notReady.slice(0, READINESS_LINES).map((row) => (
-                <li key={row.ref} className="proposal-bar__not-ready">
+              {notReadyLines.slice(0, READINESS_LINES).map((line) => (
+                <li key={line.key} className="proposal-bar__not-ready">
                   <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
-                  {notReadyLine(row)}
+                  {line.text}
                 </li>
               ))}
               {moreNotReady && (
                 <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
-                  and {notReady.length - READINESS_LINES} more in the details
+                  and {notReadyLines.length - READINESS_LINES} more in the details
                 </li>
               )}
             </ul>
@@ -267,8 +272,8 @@ export function ProposalBar() {
               {moreNotReady && (
                 <section className="proposal-bar__group">
                   <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
-                  {notReady.map((row) => (
-                    <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
+                  {notReadyLines.map((line) => (
+                    <p key={line.key} className="proposal-bar__line">{line.text}</p>
                   ))}
                 </section>
               )}
@@ -327,15 +332,23 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : acceptLock ?? undefined })}
-            {...keyLockedProps(acceptLock, acceptLockId)}
+            // The missing key first, then the canvas lock, then the gate
+            // (withKeyLock, GM PR #203 r11 item 3), as on every Run surface.
+            {...withKeyLock(lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
+              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined }), acceptLock, acceptLockId)}
             onClick={() => {
               if (acceptLock) return;
               if (settled()) void accept(current.view.id);
             }}
           >
             {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
+            {pending[current.view.id] !== 'accept' && countChip && (
+              // GM, PR #203 r11 item 2: the count beside "Accept and run",
+              // "2 paid · 1 may cost", as the Run chip counts it. The space
+              // keeps the button's name "Accept and run 1 paid"; a flex
+              // container draws no space-only text.
+              <>{' '}<span className="proposal-bar__count" title={mayCostTitle ?? undefined}>{countChip}</span></>
+            )}
           </button>
           {acceptLock && <span id={acceptLockId} className="toolbar__sr-only">{acceptLock}</span>}
         </div>

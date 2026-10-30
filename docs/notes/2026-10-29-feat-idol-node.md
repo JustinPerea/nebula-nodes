@@ -751,3 +751,162 @@ it was settled:
 - When the notices outgrow the room, the stack scrolls from the top (the
   bar first), so the newest notice at the bottom can be out of view until
   scrolled. That needs 10+ notices at once.
+
+## Round 7 (2026-10-30): Idol back to keyless, agents ask first with a token, GM's r11 to r13
+
+One live call with no token (approved by Justin) ran: every request 200,
+27.6 s, a valid 65,536-Gaussian splat, the Space on `zero-a10g` and
+`app.py` still at `duration=120`. The token-required state (rounds 4 to 6)
+rested on the 180 s inference, so the route went back to keyless, the
+original decision. idol.md's "What the live call showed" lists what it
+didn't settle: 120 or 180 s, the pool a call with no X-IP-Token draws on,
+the refusal texts, and whether a fine-grained token with no permissions
+applies the person's quota.
+
+### Keyless (brief section 0, GM r12)
+
+- The route: `keys: []`, `optionalKeys: ["HF_TOKEN"]`, no `missingKeyLine`,
+  empty `envKeyName` and `directKeyName`, in nodeDefinitions.ts and the JSON
+  mirror. Route tables and MODEL_REFERENCE regenerated.
+- Every no-token lock and refusal is gone: Run on every surface, the
+  canvas's Run, Accept, Run History, `nebula quick` and the engine's
+  preflight. No auth header goes out without a token.
+- The key-lock machinery stays for keyed routes (`lib/runKeyLock`,
+  `withKeyLock`, the history and proposal locks, the backend's
+  `route_unavailable_line`). No shipped node has a `missingKeyLine` now, so
+  its tests run on Idol's keyed shape made for the test
+  (`frontend/tests/helpers/keyedSpace.ts`, `keyIdolInEachTest`).
+- GM r12's copy, verbatim: readiness ("Hugging Face · Free" / "Hugging Face
+  token · Saved"), the switcher and its Auto row, the Settings helper, the
+  node description, the user guide's line and the no-token allowance-out
+  line (the quota and the Space-limit refusals alike). No run counts and no
+  allowance numbers in any copy. The refusal texts are re-ruled once one is
+  seen live; nothing forces one.
+- r1's error mapping is kept. That a server-side call carries no X-IP-Token
+  and may draw on the Space's own pool is written as an inference.
+
+### Agents ask first with a token (brief section 1)
+
+- `RouteSpec.mayBillWithKey` (validated by the route checks: true only on a
+  keyless route with `optionalKeys`). `node_route.may_bill` is true with
+  one of its optional keys set; `agent_spend.decide` refuses an agent's run
+  that includes such a node at any limit and says to propose it. The
+  person's run passes. The price stays the sourced $0; spend tracking never
+  counts it.
+- Every agent route goes through `_require_spend_approval`, so execute,
+  execute-node, graph/run (`nebula run`, MCP `run_nodes`) and quick are
+  covered (`test_idol_may_bill.py`). Agent-facing text:
+  `HF_SPACE_BILLING_NOTE`, describe_node, find_nodes, start_here, `nebula
+  info`/`nodes`, SKILL.md, MCP-SETUP.md.
+
+### GM r11: the money copy
+
+- `node_route.key_billing` / `directRoute.keyBilling`: "mayCost" with the
+  token, "free" without, None for any other route. The proposal's cost has
+  `mayCostRuns` and `mayCost` [{name, account}]; `freeRuns` no longer
+  counts them. `RunScopeSummary.mayCost` on the canvas side.
+- Chips: "1 may cost" alone, "2 paid · 1 may cost" beside paid nodes with no
+  list price. A priced chip keeps its amount and its tooltip ends with
+  "Idol can use your Hugging Face credits." (a question for GM below).
+  Without a token nothing is added, like any free node.
+- Accept reads "Accept and run" with a count chip ("1 paid", "2 paid · 1
+  may cost"). The bar's cost line: "Runs Idol · may use your Hugging Face
+  credits", "Runs 2 paid models (google) and Idol · ~$0.40 · Idol may use
+  your Hugging Face credits".
+- The estimate line leaves Idol out (`main._estimate_proposal_run`): Idol
+  alone has no estimate, so the bar shows only "expires in 8:01".
+- "$0" by source, not value: `estimate_run` and the canvas's run scope say
+  `sourcedZero` when every priced row is 0; its tooltip is "This costs
+  nothing to run.". An estimate that rounds to zero keeps "~$0".
+- The bar's inline lock line for a keyed route is the Accept line ("You can
+  accept this after you add your Hugging Face token in Settings."),
+  `notReadyBarLines`. The brief calls it moot for Idol; it is built for
+  keyed routes since the machinery stays.
+- Agent names never wrap: one `.agent-name` class (styles/agent-name.css)
+  on every place a name is drawn, inline spans in sentences included.
+  `tests/agentNameNoWrap.test.ts` lists them.
+
+### One lock order (GM r11 item 3, review r6 LOW-1, LOW-2)
+
+- `withKeyLock` now leads: a missing key comes first, then canvasLock's
+  run, following, offline, then the control's own state. It strips the
+  canvas-lock marks, so a key-locked control has no following or offline
+  look, and it is focusable (aria-disabled).
+- The toolbar's Run and Accept go through it too. The ratchet accepts
+  `withKeyLock` only from `lib/runKeyLock` (anchored path).
+- `tests/keyLockOrder.test.tsx` pins the order on the selection toolbar,
+  the Inspector, the context menu, the deferred-run notice and the
+  toolbar's Run, each running, following and offline, key missing and set
+  (the Inspector's run lock, mutant M13, included). Accept and Run History
+  have theirs in `ProposalBar.test.tsx` and `RunHistoryPanel.test.tsx`.
+
+### Modals (GM r13, review r6 item 6)
+
+- `ModalPortal` isolates the page behind any `aria-modal` dialog it holds
+  (inert plus aria-hidden on every sibling, the canvas included), watching
+  with a MutationObserver, and restores it on close. Notices stay reachable.
+- Focus goes back to the opener, or to a `fallbackFocus` the dialog names.
+  Out of scope but needed: the dialog's own cleanup runs before the
+  portal's, while the page is still inert, so the onboarding tour's and
+  ResultComparison's own focus return couldn't land. Both moved into
+  ModalPortal, which quiets one focusin so the dialog's trap doesn't pull
+  focus back.
+
+### Stacking (GM r13, review r6 NITs)
+
+- NIT-1: the Agent log's room was taken twice (the region cleared it and
+  `body.agent-log-reserved .proposal-bar` shifted the bar again), so the bar
+  sat 62 px off its stack at 1024. The bar rule is gone.
+- NIT-2: the Updates list draws over the bar (it doesn't stop above the
+  stack) and keeps its room; the arrival card still stops above it.
+- The Agent log's layer follows its state: the collapsed chip and the
+  "hidden" notice are ambient (8), under the bar; the expanded log is 11,
+  over it. A test for each.
+- NIT-4: a crowded stack is capped below the offline banner
+  (`offlineBannerLine`, re-measured when the connection changes).
+- NIT-5: `tests/runHistoryLockMemo.test.tsx` pins the lock map's deps at the
+  panel: a drag reads nothing again, a placeholder reads it once more.
+
+### Tests renamed (review r6 NIT-2)
+
+- Tests that pin the keyed machinery say so ("a keyed Space route without
+  its key (Idol's keyed shape)"); no test named "keyless" runs on a keyed
+  route.
+
+### Questions for GM
+
+- A priced chip with Idol keeps its amount and says "may cost" only in the
+  tooltip, not "~$0.40 · 1 may cost".
+- The mixed cost line puts the amount before Idol's clause.
+- The bar's actions wrap to a second row only when the who line and the
+  buttons can't share one.
+- `.agent-name` caps a very long custom name at 16em with an ellipsis.
+- With no token, the Settings caveat (r11, unchanged per r12) still says
+  "Idol runs on your Hugging Face allowance", where a run with no token uses
+  the shared GPUs. And the saved row's manage view keeps the shared "Key
+  page ↗" link that the edit view dropped.
+- No shipped node has a sourced $0 except Idol, which the money copy now
+  leaves out, so "$0" with "This costs nothing to run." can't show today.
+  The rule stays for the next node priced at $0; the shot is staged.
+
+### Found in the live check
+
+- At 1024 the bar's text column collapsed to one character ("pro / poses"):
+  `overflow-wrap: anywhere` on the column made every line's min-content a
+  character wide, so the actions never wrapped. The "who" line is
+  `white-space: nowrap` now, so the column is never narrower than it and
+  the actions take their own row when both can't fit
+  (`agentNameNoWrap.test.ts` pins the three rules).
+- At 1024 the collapsed Agent log chip (z 8) and the bar (z 9) don't meet:
+  the bar ends at x 618, the chip starts at 668. Nothing to move.
+
+### Tests changed by the isolation
+
+- ModalPortal now isolates the page behind the pin composer too. Five pin
+  tests found its status line by role while it rendered inline (no notice
+  region in the test), so behind the dialog; they mount NoticeRegion as the
+  app does, where the line stays reachable.
+- Two tests read the old "Accept & run (1 paid)"; they read "Accept and
+  run" and the count chip.
+- The helper `useKeyedIdol` became `keyIdolInEachTest` (the hooks lint rule read the
+  `use` prefix as a React hook).

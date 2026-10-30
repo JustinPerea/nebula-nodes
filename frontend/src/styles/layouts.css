@@ -267,21 +267,16 @@ body.agent-log-reserved .chat-panel {
 
 /* The rest of the canvas keeps clear of the log's column too (Q38: it shows
  * with the chat closed now). The minimap (canvas.css: right 16, bottom 84)
- * sits above the log; the proposal bar and the project-switch toast, centred
- * at the foot, stay left of it: narrower first, and below 420 px of room
- * shifted left so Accept is never under the log. */
+ * sits above the log; the project-switch toast, centred at the foot, stays
+ * left of it. The proposal bar needs no rule here: the notice region it sits
+ * in already ends left of the log (noticeRegion.css --agent-log-clearance),
+ * and a second shift put the bar 62 px off its own stack at 1024 (PR #203
+ * round 6 review, NIT-1). */
 body.agent-log-reserved .canvas-navigation.react-flow__panel {
   bottom: calc(
     var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm)
     + var(--agent-log-h) + var(--stack-gap-sm)
   );
-}
-
-body.agent-log-reserved .proposal-bar {
-  --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
-  --proposal-bar-w: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
-  width: var(--proposal-bar-w);
-  translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
 }
 
 body.agent-log-reserved .project-switch-toast {

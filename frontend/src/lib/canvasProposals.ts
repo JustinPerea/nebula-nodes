@@ -4,6 +4,7 @@ import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
 import { formatChipEstimate } from './pricing';
+import { mayCostSentence } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
@@ -201,19 +202,46 @@ export function stillNotReady(
   view: ProposalView,
   cache: CredentialReadiness,
   nodeFor: (row: ProposalNotReady) => { definition: ModelNodeDefinition | undefined; params: Record<string, unknown> } | null,
-): ProposalNotReady[] {
-  return (view.cost.notReady ?? []).filter((row) => {
-    if (!cache.loaded) return true;
+): Array<ProposalNotReady & { routeKeyLine?: true }> {
+  return (view.cost.notReady ?? []).flatMap((row) => {
     const node = nodeFor(row);
+    // A route's own missing-key line (RouteSpec.missingKeyLine, a keyed
+    // route: "You can run X after you add your Hugging Face token in
+    // Settings."): Accept is locked for it, so the bar says the Accept line
+    // in its place (notReadyBarLines).
+    const routeKeyLine = Boolean(node?.definition?.routes?.some((route) => route.missingKeyLine && route.missingKeyLine === row.missing));
+    const kept = routeKeyLine ? [{ ...row, routeKeyLine: true as const }] : [row];
+    if (!cache.loaded) return kept;
     // A missing key, in either wording: find_nodes' "needs <key>", or a
-    // route's own line (RouteSpec.missingKeyLine: Idol's "You can run Idol
-    // after you add your Hugging Face token in Settings."). PR #203 round 6:
-    // with the token added, Idol's line stayed beside an unlocked Accept.
-    const keyRow = row.missing.startsWith('needs ')
-      || Boolean(node?.definition?.routes?.some((route) => route.missingKeyLine && route.missingKeyLine === row.missing));
-    if (!keyRow) return true;
-    return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing';
+    // route's own line. PR #203 round 6: with the key added, the line stayed
+    // beside an unlocked Accept.
+    if (!row.missing.startsWith('needs ') && !routeKeyLine) return kept;
+    return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing' ? kept : [];
   });
+}
+
+/**
+ * The bar's not-ready lines (GM, PR #203 r11 item 5): inside the bar the
+ * control is Accept, so while Accept is key-locked, a row in a route's own
+ * missing-key words says the Accept line instead ("You can accept this after
+ * you add your Hugging Face token in Settings."), once. Every other row keeps
+ * its own line (notReadyLine).
+ */
+export function notReadyBarLines(
+  rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
+  acceptLock: string | null,
+): Array<{ key: string; text: string }> {
+  const lines: Array<{ key: string; text: string }> = [];
+  let said = false;
+  for (const row of rows) {
+    if (row.routeKeyLine && acceptLock) {
+      if (!said) lines.push({ key: row.ref, text: acceptLock });
+      said = true;
+      continue;
+    }
+    lines.push({ key: row.ref, text: notReadyLine(row) });
+  }
+  return lines;
 }
 
 /** The person's line ("GPT Image 2 needs your OpenAI API key. Add it in
@@ -240,11 +268,21 @@ export function proposalSummary(view: ProposalView): string {
   if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
   if (view.run.length) {
     const { paidRuns, freeRuns, upTo, providers } = view.cost;
+    // GM, PR #203 r11 item 2: a run that may bill the person's own account
+    // gets its own clause, and "paid model" counts only list-priced ones:
+    // "Runs Idol · may use your Hugging Face credits", "Runs 2 paid models
+    // and Idol · Idol may use your Hugging Face credits".
+    const mayCost = mayCostRows(view);
+    const mayNames = joinNames(mayCost.map((row) => row.name));
     if (paidRuns > 0) {
       const who = providers.length ? ` (${providers.join(', ')})` : '';
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
+      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}${mayNames ? ` and ${mayNames}` : ''}`);
       const amount = proposalEstimateLabel(view);
       if (amount) parts.push(amount);
+      if (mayNames) parts.push(mayCostClauses(mayCost, true));
+    } else if (mayNames) {
+      // A named node takes no "up to" (GM: "Runs Idol").
+      parts.push(`runs ${mayNames}`, mayCostClauses(mayCost, false));
     } else if (runsNothing(view)) {
       // Its whole run waits on agents' placeholders, which it skips (GM - Design,
       // round 4, verbatim), counting the placeholders themselves (review 4, M2).
@@ -267,10 +305,9 @@ export function proposalSummary(view: ProposalView): string {
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;
-  // A sourced $0 (a Hugging Face Space on the person's allowance) is exact,
-  // not an estimate (GM, PR #203 r1): "$0", where the chip's own free label
-  // is "~$0".
-  if (!estimate.open && estimate.low === 0 && estimate.high === 0) return '$0';
+  // GM, PR #203 r11 item 4, by source: a sourced $0 (every priced row is 0)
+  // is exact, "$0"; an estimate that rounds to zero is "~$0".
+  if (!estimate.open && estimate.sourcedZero) return '$0';
   return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
 
@@ -279,7 +316,28 @@ export function proposalEstimateLabel(view: ProposalView): string | null {
  * no run for it (canvasProposalsStore.accept; review 5, L1). */
 export function runsNothing(view: ProposalView): boolean {
   const { paidRuns, freeRuns, pendingSkipped } = view.cost;
-  return view.run.length > 0 && paidRuns === 0 && freeRuns === 0 && Boolean(pendingSkipped && pendingSkipped.count > 0);
+  return view.run.length > 0 && paidRuns === 0 && (view.cost.mayCostRuns ?? 0) === 0 && freeRuns === 0
+    && Boolean(pendingSkipped && pendingSkipped.count > 0);
+}
+
+/** The run's may-cost nodes, each with the account it may bill (backend
+ * canvas_proposals.summarize_cost). */
+function mayCostRows(view: ProposalView): Array<{ name: string; account: string }> {
+  return (view.cost.mayCostRuns ?? 0) > 0 ? (view.cost.mayCost ?? []) : [];
+}
+
+function joinNames(names: string[]): string {
+  const unique = [...new Set(names.filter(Boolean))];
+  return unique.length <= 1 ? (unique[0] ?? '') : `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`;
+}
+
+/** "may use your Hugging Face credits", or with paid models beside it, named:
+ * "Idol may use your Hugging Face credits". */
+function mayCostClauses(rows: Array<{ name: string; account: string }>, named: boolean): string {
+  const byAccount = new Map<string, string[]>();
+  for (const { name, account } of rows) byAccount.set(account, [...(byAccount.get(account) ?? []), name]);
+  return [...byAccount].map(([account, names]) => (named || byAccount.size > 1 ? `${joinNames(names)} ` : '')
+    + `may use your ${account} credits`).join(' · ');
 }
 
 /** The primary button's words. "Accept" when accepting runs nothing (GM -
@@ -288,7 +346,25 @@ export function runsNothing(view: ProposalView): boolean {
  * agent finishes. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
-  return view.cost.paidRuns > 0 ? `Accept & run (${view.cost.paidRuns} paid)` : 'Accept & run';
+  return 'Accept and run';
+}
+
+/** The count chip's tooltip when part of the run may bill the person's own
+ * account: "Idol can use your Hugging Face credits." (GM, PR #203 r11 item
+ * 2, as the Run chip's last sentence). Null otherwise. */
+export function proposalMayCostSentence(view: ProposalView): string | null {
+  return mayCostSentence(mayCostRows(view));
+}
+
+/** The count chip beside "Accept and run" (GM, PR #203 r11 item 2): "1
+ * paid", "2 paid · 1 may cost", "1 may cost" (a run that may bill the
+ * person's own account, never counted as paid). Null when its run is free
+ * or Accept runs nothing. */
+export function acceptCountChip(view: ProposalView): string | null {
+  if (view.run.length === 0 || runsNothing(view)) return null;
+  const paid = view.cost.paidRuns;
+  const may = view.cost.mayCostRuns ?? 0;
+  return [paid > 0 ? `${paid} paid` : '', may > 0 ? `${may} may cost` : ''].filter(Boolean).join(' · ') || null;
 }
 
 /** "3:05" until the proposal expires. */

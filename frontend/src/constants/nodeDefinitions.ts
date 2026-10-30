@@ -4500,29 +4500,27 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   },
 
   // Speridlabs' Idol: one image to a 3D Gaussian splat. Its maker runs it on
-  // a free Hugging Face Space (ZeroGPU). Its one route needs HF_TOKEN: each
-  // run asks ZeroGPU for 120 s, which spaces 0.51.3 multiplies by 1.5 on the
-  // Blackwell GPUs ZeroGPU runs on, so 180 s, past the 120 s a day an
-  // anonymous caller gets (docs/model-providers/speridlabs/idol.md). If the
-  // first live run shows 120 s, the route can go back to keyless: the route
-  // keys, the JSON mirror and the generated tables, the copy (which needs new
-  // keyless copy ruled first) and the tests that pin the keyed state change
-  // with it (docs/model-providers/speridlabs/idol.md lists each). Speridlabs' own Platform
-  // API isn't open yet (speridlabs.com/platform, 2026-10-29); it becomes
+  // a free Hugging Face Space (ZeroGPU). Its one route is keyless: the first
+  // live call (2026-10-30) ran with no token in 27.6 s. HF_TOKEN is optional
+  // and gives the run the person's own ZeroGPU allowance; with it set, a run
+  // may bill a PRO, Team or Enterprise account's prepaid credits past that
+  // allowance (mayBillWithKey), so agents propose it instead of running it
+  // (docs/model-providers/speridlabs/idol.md). Speridlabs' own Platform API
+  // isn't open yet (speridlabs.com/platform, 2026-10-29); it becomes
   // routes[0] when it is. Params are the Space's /run inputs
   // (https://speridlabs-idol.hf.space/gradio_api/info, read 2026-10-29),
   // minus Random seed: the run cache would replay a random-seed run.
   'speridlabs-idol': {
     id: 'speridlabs-idol',
     displayName: 'Idol',
-    // GM, PR #203 r6 item 5, word for word.
-    description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs on Hugging Face '
-      + 'with your token and is free within your Hugging Face allowance.',
+    // GM, PR #203 r12 item 4, word for word.
+    description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. '
+      + 'Add your Hugging Face token to use your own allowance.',
     category: '3d-gen',
     apiProvider: 'speridlabs',
     apiEndpoint: 'speridlabs/idol',
-    envKeyName: ['HF_TOKEN'],
-    directKeyName: ['HF_TOKEN'],
+    envKeyName: [],
+    directKeyName: [],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
@@ -4615,7 +4613,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         id: 'hf-space',
         provider: 'speridlabs',
         maker: true,
-        keys: ['HF_TOKEN'],
+        keys: [],
+        optionalKeys: ['HF_TOKEN'],
+        mayBillWithKey: true,
         handler: 'hf-space',
         endpoint: 'speridlabs/idol',
         valueMap: {
@@ -4624,8 +4624,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
           },
         },
-        note: 'Free with a Hugging Face token.',
-        missingKeyLine: 'You can run Idol after you add your Hugging Face token in Settings.',
       },
     ],
   },

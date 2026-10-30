@@ -31,6 +31,11 @@ import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { ContextMenu } from '../src/components/ContextMenu';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
+
+// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
@@ -84,7 +89,7 @@ const surfaces = [
   }],
 ] as const;
 
-describe('Idol without a Hugging Face token: Run is locked', () => {
+describe('a keyed Space route without its key (Idol\'s keyed shape): Run is locked', () => {
   for (const [where, mount] of surfaces) {
     it(`${where}: locked with GM's reason, focusable, and a click or key sends nothing`, () => {
       setup({});

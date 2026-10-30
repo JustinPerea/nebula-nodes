@@ -63,7 +63,7 @@ describe('ProposalLayer', () => {
     expect(ghost.style.transform).toBe('translate(400px, 10px) scale(1)');
     expect(getByText('Nano Banana')).toBeTruthy();
     expect(getByText('paid · google')).toBeTruthy();
-    expect(getByText(/proposed by Codex/)).toBeTruthy();
+    expect(container.querySelector('.proposal-ghost__by')!.textContent).toBe('proposed by Codex');
     // Objects are not shown as param lines.
     expect(container.textContent).toContain('16:9');
     expect(container.textContent).not.toContain('nested');

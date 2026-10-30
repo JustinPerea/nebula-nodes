@@ -106,11 +106,18 @@ const BELOW = [
   '.toolbar',
   '.canvas-navigation',
 ].join(', ');
+/** What the list and the questions form stop above: BELOW less the notice
+ * stack. The person opened them, so they draw over the proposal bar (layer
+ * 46 against its 9) and keep their room (GM, PR #203 r10 and r13 item 2:
+ * nothing opened stops at the bar's top edge). The notices in the stack
+ * still draw over them (their own layer). The arrival card, which the person
+ * didn't open, still stops above the stack. */
+const BELOW_OPENED = BELOW.split(', ').filter((selector) => selector !== '.notice-region__stack').join(', ');
 /** Never squeeze the list shorter than this; it scrolls inside. */
 const MIN_ROOM = 160;
 
-function obstacles(): Box[] {
-  return [...document.querySelectorAll(BELOW)]
+function obstacles(selectors: string = BELOW): Box[] {
+  return [...document.querySelectorAll(selectors)]
     .map((el) => el.getBoundingClientRect())
     .filter((r) => r.width > 0 && r.height > 0)
     .map((r) => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }));
@@ -256,6 +263,7 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
     // starts below this line (layouts.css), so it never sits under the chip.
     setDropLine(dropTop);
     const below = obstacles();
+    const belowOpened = obstacles(BELOW_OPENED);
     for (const el of [card, list, form]) {
       if (!el) continue;
       el.style.setProperty('--an-drop-top', `${dropTop}px`);
@@ -266,7 +274,7 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
       const elRight = Math.max(right, cornerRight(chat, viewport, box, right, gap));
       el.style.setProperty('--an-right', `${elRight}px`);
       const left = viewport.width - elRight - box.width;
-      const room = roomBelow({ left, right: left + box.width, top: dropTop }, below, viewport.height, gap);
+      const room = roomBelow({ left, right: left + box.width, top: dropTop }, el === card ? below : belowOpened, viewport.height, gap);
       el.style.setProperty('--an-max-h', `${Math.max(MIN_ROOM, room)}px`);
     }
     return;
@@ -287,6 +295,7 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   else chip.style.setProperty('--an-chip-top', `${chipTop}px`);
   const dropTop = chipTop + size.height + gap;
   const below = obstacles();
+  const belowOpened = obstacles(BELOW_OPENED);
   for (const el of [card, list, form]) {
     if (!el) continue;
     if (chipTop === homeTop) el.style.removeProperty('--an-drop-top');
@@ -294,9 +303,10 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
     const box = { top: dropTop, height: el.offsetHeight, width: el.offsetWidth };
     const right = cornerRight(chat, viewport, box, gutter);
     el.style.setProperty('--an-right', `${right}px`);
-    // Stop above the proposal bar, the Agent log, the launcher and the toolbar.
+    // Stop above the Agent log, the launcher and the toolbar; the card also
+    // above the notice stack and the proposal bar (BELOW_OPENED).
     const left = viewport.width - right - box.width;
-    const room = roomBelow({ left, right: left + box.width, top: dropTop }, below, viewport.height, gap);
+    const room = roomBelow({ left, right: left + box.width, top: dropTop }, el === card ? below : belowOpened, viewport.height, gap);
     el.style.setProperty('--an-max-h', `${Math.max(MIN_ROOM, room)}px`);
   }
 }

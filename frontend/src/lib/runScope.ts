@@ -2,7 +2,10 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { envKeyNames, hasRoutes, isDefaultTitle, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import {
+  envKeyNames, hasRoutes, isDefaultTitle, keyBilling, keyPhrase, mayCostAccount, nameOnRoute, routePriceKey, routeUnavailable,
+  selectRoute, withWiredBlockers,
+} from './directRoute';
 import { namesSeveral, nodeNameList } from './errorCopy';
 import { usesKreaAccount } from './kreaConnection';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
@@ -64,6 +67,10 @@ export interface RunCost {
    * needs each node's own (two nodes can share a name): the placeholder
    * dialog's rows (lib/placeholderRunConfirm.ts). */
   ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; unavailable?: Record<string, string> };
+  /** Every priced line is a sourced $0 (its row's price is 0), so the total
+   * is exact, not an estimate that rounds to zero (GM, PR #203 r11 item 4:
+   * "$0" against "~$0"). Present only when true. */
+  sourcedZero?: true;
 }
 
 export interface RunScopeSummary {
@@ -71,6 +78,12 @@ export interface RunScopeSummary {
   total: number;
   /** Display names of nodes that call an external (paid) provider. */
   paid: string[];
+  /** Nodes on a route that may bill the person's own account because their
+   * key is set (directRoute.keyBilling "mayCost": Idol with a Hugging Face
+   * token), never in `paid` or `cost` (GM, PR #203 r11 item 2: "2 paid · 1
+   * may cost"), with the account. Present only when there are some; the same
+   * route with no key is free and adds nothing (r12). */
+  mayCost?: Array<{ name: string; account: string }>;
   /** Present once the price table has loaded. */
   cost?: RunCost;
   /** Paid nodes behind a gate (downstream of a conditional port, such as Jev
@@ -322,6 +335,8 @@ export function summarizeRunScope(
   const { included, pendingSkipped, pendingIncluded } = scopeOf(nodes, edges, scope);
 
   const paid: string[] = [];
+  const mayCost: NonNullable<RunScopeSummary['mayCost']> = [];
+  let zeroRows = true;
   const pricing = costContext?.pricing;
   const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [] };
   const cost: RunCost = {
@@ -350,6 +365,13 @@ export function summarizeRunScope(
       ? selectRoute(definition, withWiredBlockers(definition, params, ports), costContext.apiKeys).provider : null;
     if (provider) routes[node.id] = provider;
     const name = definition.providerVia ? (node.data?.label || definition.displayName || node.id) : runNodeName(node, provider);
+    // Free unless the person's key is set, and then it may bill their own
+    // account: never paid, never priced (GM, PR #203 r11 item 2, r12).
+    const billing = keyBilling(definition, withWiredBlockers(definition, params, ports), costContext?.apiKeys ?? {});
+    if (billing) {
+      if (billing === 'mayCost') mayCost.push({ name, account: mayCostAccount(definition) });
+      continue;
+    }
     if (definition.providerVia?.kind === 'model') {
       const nested = cinemaSceneBase(params, definition);
       if (nested && NODE_DEFINITIONS[nested.model]) {
@@ -442,13 +464,16 @@ export function summarizeRunScope(
     // A cinema scene's base model runs once per shot.
     const runs: [number, number] = [fewest * calls, most * calls];
     const line = { name, low: estimate.low * runs[0], high: estimate.high * runs[1], runs, nodeId: node.id };
+    if (estimate.high !== 0) zeroRows = false;
     cost.lines.push(line);
     cost.low += line.low;
     cost.high += line.high;
     if (estimate.plus && !cost.plus.includes(estimate.plus)) cost.plus.push(estimate.plus);
     if (estimate.plus) because(name, { kind: 'leftOut', plus: estimate.plus });
   }
+  if (pricing && cost.lines.length > 0 && zeroRows) cost.sourcedZero = true;
   const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
+  if (mayCost.length) summary.mayCost = mayCost;
   if (costContext) summary.routes = routes;
   if (gated.length) summary.gated = gated;
   if (pendingSkipped) summary.pendingSkipped = pendingSkipped;
@@ -476,14 +501,38 @@ export function repeatRun(summary: RunScopeSummary, passes: number): RunScopeSum
 /** The Run chip: "~$0.04", "$0.04–0.43", "$0.04 + unpriced" when part of
  * the run has no known price (GM, PR #198 r6), "<$0.01" for a non-zero
  * amount under a cent (r1: "$0" only ever means free), "N paid" when none
- * of it has a list price. Null when nothing is paid. */
-export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
-  if (paid.length === 0) return null;
-  if (!cost || cost.lines.length === 0) return `${paid.length} paid`;
-  // A sourced $0 (Idol on its free Space) is exact, not an estimate (GM, PR
-  // #203 r1): "$0", where the chip's own free label is "~$0".
-  if (!costOpen(cost) && cost.low === 0 && cost.high === 0) return '$0';
+ * of it has a list price. Null when nothing is paid or may cost.
+ * GM, PR #203 r11 item 2: a run that may bill the person's own account
+ * (summary.mayCost) is counted apart, "1 may cost" alone and "2 paid · 1 may
+ * cost" beside paid nodes with no list price; beside a priced part the chip
+ * keeps its amount and the tooltip says it (runChipTitle). */
+export function runChipLabel({ paid, cost, mayCost }: RunScopeSummary): string | null {
+  const may = mayCost?.length ? `${mayCost.length} may cost` : null;
+  if (paid.length === 0) return may;
+  if (!cost || cost.lines.length === 0) return may ? `${paid.length} paid · ${may}` : `${paid.length} paid`;
+  // GM, PR #203 r11 item 4, by source: a sourced $0 (every priced row is
+  // 0) is exact, "$0"; an estimate that rounds to zero is "~$0".
+  if (!costOpen(cost) && cost.sourcedZero) return '$0';
   return formatChipEstimate(cost.low, cost.high, costOpen(cost));
+}
+
+/** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
+export const SOURCED_ZERO_TITLE = 'This costs nothing to run.';
+
+/** "Idol can use your Hugging Face credits.": the may-cost sentence, last in
+ * the chip's tooltip (GM, PR #203 r11 item 2), one per account. */
+export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | null {
+  if (!mayCost?.length) return null;
+  const byAccount = new Map<string, string[]>();
+  for (const { name, account } of mayCost) {
+    const names = byAccount.get(account) ?? [];
+    if (!names.includes(name)) names.push(name);
+    byAccount.set(account, names);
+  }
+  return [...byAccount].map(([account, names]) => {
+    const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${who} can use your ${account} credits.`;
+  }).join(' ');
 }
 
 /** One sentence per reason (GM r7 item 3): the nodes sharing it named
@@ -527,9 +576,17 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
  * title has the details). An open chip leads with the priced part, then a
  * sentence per reason, no colons (GM, PR #198 r7 item 3): "The priced part
  * of this run costs up to $0.43. “Brief” has no listed price." */
-export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
+export function runChipTitle(summary: RunScopeSummary): string | undefined {
+  // The may-cost sentence comes last (GM, PR #203 r11 item 2); alone, it is
+  // the whole tooltip.
+  const title = paidChipTitle(summary);
+  return [title, mayCostSentence(summary.mayCost)].filter(Boolean).join('\n') || undefined;
+}
+
+function paidChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
   if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
   const open = costOpen(cost);
+  if (!open && cost.sourcedZero) return SOURCED_ZERO_TITLE;
   const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
   // A free priced part has no line of its own (GM r8: "$0 is a price, not
   // unpriced"): the reasons start the tooltip.
@@ -570,12 +627,15 @@ function runsLabel([low, high]: [number, number]): string {
 
 /** "Runs 2 nodes · 1 calls a paid provider: GPT Image 2.5", then the
  * estimate per node when the price table has loaded. */
-export function describeRunScope({ total, paid, cost, gated, pendingIncluded }: RunScopeSummary): string {
+export function describeRunScope(summary: RunScopeSummary): string {
+  const { total, paid, cost, gated, pendingIncluded } = summary;
   const nodes = `${total} ${total === 1 ? 'node' : 'nodes'}`;
   // GM - Design, 2026-10-25: the run counts the placeholders it runs and says so.
   const included = pendingIncludedLine(pendingIncluded)?.replace(/\.$/, '');
-  if (paid.length === 0) return [`Runs ${nodes} · no paid providers`, included].filter(Boolean).join('. ');
+  const may = mayCostSentence(summary.mayCost)?.replace(/\.$/, '');
+  if (paid.length === 0) return [`Runs ${nodes} · no paid providers`, may, included].filter(Boolean).join('. ');
   const parts = [`Runs ${nodes} · ${paid.length} ${paid.length === 1 ? 'calls a paid provider' : 'call paid providers'}: ${nameList(paid)}`];
+  if (may) parts.push(may);
   if (cost && cost.lines.length > 0) {
     const total = formatUsdRange(cost.low, cost.high);
     const detail = cost.lines.map((line) => `${line.name} ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);

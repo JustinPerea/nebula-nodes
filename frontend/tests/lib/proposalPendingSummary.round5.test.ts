@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptLabel, proposalSummary } from '../../src/lib/canvasProposals';
+import { acceptCountChip, acceptLabel, proposalSummary } from '../../src/lib/canvasProposals';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 /**
@@ -31,8 +31,9 @@ describe('a proposal whose run waits on placeholders (round 5)', () => {
     expect(acceptLabel(view({ pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } }))).toBe('Accept');
   });
 
-  it('keeps "Accept & run" when something still runs', () => {
-    expect(acceptLabel(view({ freeRuns: 1, pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } }))).toBe('Accept & run');
-    expect(acceptLabel(view({ paidRuns: 1 }))).toBe('Accept & run (1 paid)');
+  it('keeps "Accept and run" when something still runs (GM, PR #203 r11 item 2: the count is its own chip)', () => {
+    expect(acceptLabel(view({ freeRuns: 1, pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } }))).toBe('Accept and run');
+    expect(acceptLabel(view({ paidRuns: 1 }))).toBe('Accept and run');
+    expect(acceptCountChip(view({ paidRuns: 1 }))).toBe('1 paid');
   });
 });

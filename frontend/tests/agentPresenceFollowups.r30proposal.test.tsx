@@ -75,7 +75,7 @@ afterEach(() => {
   useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false } });
 });
 
-const acceptButton = () => screen.getByRole('button', { name: 'Accept & run (1 paid)' }) as HTMLButtonElement;
+const acceptButton = () => screen.getByRole('button', { name: 'Accept and run 1 paid' }) as HTMLButtonElement;
 const rejectButton = () => screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
 const ACCEPT_HELD = 'You can accept proposals when this tab is connected as you.';
 const REJECT_HELD = 'You can reject proposals when this tab is connected as you.';

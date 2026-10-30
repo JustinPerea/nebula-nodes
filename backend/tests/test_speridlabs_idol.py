@@ -70,13 +70,28 @@ async def run_node(params: dict[str, Any] | None = None, inputs=None, keys: dict
 
 
 def keyless_idol() -> dict[str, Any]:
-    """Idol's definition switched back to keyless, as it would be if the
-    first live run shows ZeroGPU asks 120 s, not 180 s (idol.md)."""
+    """Idol's definition, keyless (PR #203 round 7: the first live call ran
+    with no token). Built from the registry either way, so the keyless rules'
+    tests never depended on which state the registry was in."""
     definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
     route = definition["routes"][0]
     route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
     route.pop("missingKeyLine", None)
     definition["envKeyName"], definition["directKeyName"] = [], []
+    return definition
+
+
+def keyed_idol() -> dict[str, Any]:
+    """Idol as a keyed Space route with its own missing-key line, as it was
+    in PR #203 rounds 4 to 6: the shape a keyed route takes (missingKeyLine,
+    the keyed readiness), kept for the generic rules' tests."""
+    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"] = ["HF_TOKEN"]
+    route.pop("optionalKeys", None)
+    route.pop("mayBillWithKey", None)
+    route["missingKeyLine"] = NEEDS_TOKEN
+    definition["envKeyName"], definition["directKeyName"] = ["HF_TOKEN"], ["HF_TOKEN"]
     return definition
 
 
@@ -173,27 +188,40 @@ async def test_a_run_sends_the_schema_body_and_returns_a_world_v2_splat(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_without_a_token_the_route_refuses_before_any_request(monkeypatch):
-    """GM PR #203 r4: each run asks 180 s on Blackwell, past the 120 s a day
-    an anonymous caller gets, so a run without the token is never sent."""
-    from execution.missing_credential import MissingCredentialError
+async def test_without_a_token_the_node_runs_anonymously_with_no_auth_header(monkeypatch, capsys):
+    """PR #203 round 7: the first live call ran with no token (every request
+    200, 27.6 s, a valid splat), so the route is keyless. A run without the
+    token goes out through the route with no token header at all, as the
+    live call did."""
+    for keys in ({}, {"HF_TOKEN": ""}, {"HF_TOKEN": "  "}):
+        hosts = idol_hosts(monkeypatch)
+        world_of(await run_node(keys=keys))
+        assert hosts.sent("POST", re.escape(f"{API}/call/run"))
+        assert all("authorization" not in r.headers and "x-hf-authorization" not in r.headers
+                   for r in hosts.requests)
+        assert "signed_in=False" in capsys.readouterr().err
 
-    hosts = idol_hosts(monkeypatch)
-    for keys in ({}, {"HF_TOKEN": ""}):
-        with pytest.raises(MissingCredentialError) as excinfo:
-            await run_node(keys=keys)
-        assert person_line(excinfo.value) == NEEDS_TOKEN
-        # Agents read the same line (route_unavailable's message).
-        assert str(excinfo.value) == NEEDS_TOKEN
-    assert hosts.requests == []
 
-
-def test_the_engines_preflight_refuses_an_idol_run_without_a_token_with_gms_line():
+def test_the_engines_preflight_passes_idol_with_or_without_a_token():
     """Agent and CLI runs (MCP run tools, nebula run, apply and run) all go
-    through the engine's pre-run check: refused before anything is sent."""
+    through the engine's pre-run check. Keyless (round 7), Idol passes it
+    either way; a keyed route's own line still refuses there (the keyed half)."""
     from execution.engine import validate_graph
     from models.graph import GraphEdge
 
+    nodes = [GraphNode(id="img", definitionId="image-input", params={"filePath": IMAGE}),
+             GraphNode(id="n1", definitionId="speridlabs-idol", params={"_provider": "auto"})]
+    edges = [GraphEdge(id="e1", source="img", sourceHandle="image", target="n1", targetHandle="image")]
+    for keys in ({}, SIGNED_IN):
+        assert not [e for e in validate_graph(nodes, edges, keys) if e.node_id == "n1"]
+
+
+def test_the_engines_preflight_refuses_a_keyed_route_without_its_key_in_its_own_words(monkeypatch):
+    from execution import engine
+    from execution.engine import validate_graph
+    from models.graph import GraphEdge
+
+    monkeypatch.setattr(engine, "_REGISTRY_NODE_DEFS", {**registry(), "speridlabs-idol": keyed_idol()})
     nodes = [GraphNode(id="img", definitionId="image-input", params={"filePath": IMAGE}),
              GraphNode(id="n1", definitionId="speridlabs-idol", params={"_provider": "auto"})]
     edges = [GraphEdge(id="e1", source="img", sourceHandle="image", target="n1", targetHandle="image")]
@@ -330,28 +358,54 @@ async def test_progress_creeps_on_heartbeats_and_ends_at_one(monkeypatch):
 
 
 @pytest.mark.parametrize("provider", ["auto", "hf-space"])
-def test_the_node_needs_the_token_and_says_so_in_gms_words(provider):
+def test_the_node_is_keyless_with_an_optional_token_that_may_bill(provider):
+    """Round 7, idol.md "Switching back to keyless" step 1: keys [],
+    optionalKeys HF_TOKEN, no missingKeyLine, empty envKeyName and
+    directKeyName. With the token, a run may bill the person's own Hugging
+    Face account (mayBillWithKey); without it, nothing can."""
     definition = registry()["speridlabs-idol"]
-    assert definition["envKeyName"] == ["HF_TOKEN"]
-    assert definition["routes"][0]["keys"] == ["HF_TOKEN"] and "optionalKeys" not in definition["routes"][0]
+    route = definition["routes"][0]
+    assert definition["envKeyName"] == [] and definition["directKeyName"] == []
+    assert route["keys"] == [] and route["optionalKeys"] == ["HF_TOKEN"] and route["mayBillWithKey"] is True
+    assert "missingKeyLine" not in route and "note" not in route
     assert node_route.routes_problems(definition) == []
     params = {"_provider": provider}
     anonymous = node_route.select_route(definition, params, {})
-    assert (anonymous.kind, list(anonymous.missing)) == (node_route.UNSET, ["HF_TOKEN"])
-    unavailable = node_route.route_unavailable(definition, params, {})
-    assert unavailable is not None and unavailable["message"] == NEEDS_TOKEN
-    assert node_route.route_unavailable_line(definition, params, {}) == NEEDS_TOKEN
+    assert (anonymous.route_id, anonymous.key, anonymous.missing) == ("hf-space", None, ())
+    assert node_route.route_unavailable(definition, params, {}) is None
     signed_in = node_route.select_route(definition, params, SIGNED_IN)
     assert (signed_in.route_id, signed_in.key) == ("hf-space", "HF_TOKEN")
-    assert node_route.route_unavailable(definition, params, SIGNED_IN) is None
     assert node_readiness.instance_access(definition, params, SIGNED_IN) == node_readiness.KEY
-    assert node_readiness.instance_access(definition, params, {}) != node_readiness.FREE
+    assert node_readiness.instance_access(definition, params, {}) == node_readiness.FREE
+    assert node_route.may_bill(definition, params, SIGNED_IN) is True
+    for keys in ({}, {"HF_TOKEN": ""}):
+        assert node_route.may_bill(definition, params, keys) is False
+
+
+def test_may_bill_needs_the_flag_and_the_optional_key():
+    definition = keyless_idol()
+    params = {"_provider": "auto"}
+    definition["routes"][0].pop("mayBillWithKey")
+    assert node_route.may_bill(definition, params, SIGNED_IN) is False
+    assert node_route.may_bill(keyed_idol(), params, SIGNED_IN) is False
+    assert node_route.may_bill(None, params, SIGNED_IN) is False
+    assert node_route.may_bill(registry()["text-input"], {}, SIGNED_IN) is False
+
+
+def test_the_may_bill_flag_is_validated():
+    definition = keyless_idol()
+    route = definition["routes"][0]
+    route["mayBillWithKey"] = "yes"
+    assert any("mayBillWithKey must be true" in p for p in node_route.routes_problems(definition))
+    keyed = keyed_idol()
+    keyed["routes"][0]["mayBillWithKey"] = True
+    assert any("mayBillWithKey needs optionalKeys" in p for p in node_route.routes_problems(keyed))
 
 
 def test_a_routes_own_missing_key_line_applies_only_to_a_missing_key_alone():
     """missingKeyLine replaces the generic line only when the key is the one
     thing missing, and on Auto only when every route Auto could take has one."""
-    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    definition = keyed_idol()
     unset = node_route.Route(node_route.UNSET, None, None, None, None, ("HF_TOKEN",))
     assert node_route.missing_key_line_for(definition, unset) == NEEDS_TOKEN
     # Something else stops the route too: its own line doesn't hide that.
@@ -380,7 +434,7 @@ def test_switching_back_to_keyless_is_the_routes_own_change():
 
 
 def test_the_space_route_rules_are_validated():
-    definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
+    definition = keyed_idol()
     route = definition["routes"][0]
     # Only a maker's Space may name the maker beside the Hugging Face token.
     route["handler"] = "fal"
@@ -446,12 +500,13 @@ NO_GPU = "No GPU was available"
 DURATION = ("The requested GPU duration (120s) is larger than the maximum allowed"
             "Subscribe to Hugging Face PRO to allow GPU tasks up to 40 min - https://huggingface.co/subscribe/pro?from=ZeroGPU")
 
-ANON_QUOTA_LINE = ("Idol’s free allowance is used up for now. Try again later, "
-                   "or add your Hugging Face token in Settings to use your own.")
+# GM, PR #203 r12 item 6: the anonymous quota and Space-limit refusals share one line.
+ANON_QUOTA_LINE = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
+                   "or add your Hugging Face token in Settings to use your own allowance.")
 OWN_QUOTA_LINE = ("Your Hugging Face GPU allowance is used up for now. Try again later, "
                   "or raise it on your Hugging Face account.")
 BUSY_LINE = "Hugging Face had no free GPU for Idol. Try again in a few minutes."
-SPACE_LIMIT_LINE = "Idol has reached its own limit on Hugging Face for now. Try again later."
+SPACE_LIMIT_LINE = ANON_QUOTA_LINE
 NOT_APPLIED_LINE = ("Idol ran without your Hugging Face token and hit the free allowance. "
                     "Check your token in Settings, then try again.")
 DURATION_ANON_LINE = ("Idol needs more GPU time per run than the free allowance gives. "
@@ -1226,8 +1281,8 @@ def test_a_run_names_hugging_face_as_the_provider_it_called():
     from execution.provider_status import called_provider
 
     assert called_provider("speridlabs-idol", {"_provider": "auto"}, {"HF_TOKEN": TOKEN}) == "Hugging Face"
-    # Without the token the route can't start, so it called nobody.
-    assert called_provider("speridlabs-idol", {"_provider": "auto"}, {}) is None
+    # Keyless (round 7): an anonymous run calls the Space too.
+    assert called_provider("speridlabs-idol", {"_provider": "auto"}, {}) == "Hugging Face"
     # Not every keyless-looking None: a node that calls no provider still has none.
     assert called_provider("text-input", {}, {}) is None
 
@@ -1449,12 +1504,15 @@ def test_the_hugging_face_settings_check_trims_the_token():
 def test_describe_node_tells_agents_who_can_bill_past_the_allowance():
     from main import HF_SPACE_BILLING_NOTE, _describe_routes
 
-    out = _describe_routes(registry()["speridlabs-idol"], SIGNED_IN, lambda _route: [])
-    [row] = out["routes"]
-    assert row["billing"] == HF_SPACE_BILLING_NOTE
-    assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
-    assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
-    assert row["keys"] == ["HF_TOKEN"] and row["keySet"] is True
+    for keys, is_set in (({}, False), (SIGNED_IN, True)):
+        out = _describe_routes(registry()["speridlabs-idol"], keys, lambda _route: [])
+        [row] = out["routes"]
+        assert row["billing"] == HF_SPACE_BILLING_NOTE
+        assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
+        assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
+        # Round 7: keyless, and with the token set an agent proposes it.
+        assert "Runs free without a token" in row["billing"] and "propose it instead (propose_change)" in row["billing"]
+        assert row["keys"] == [] and row["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
 
 
 # -- round 4 -------------------------------------------------------------------
@@ -1475,21 +1533,23 @@ def _quick_idol(pend, monkeypatch, keys, *, headers):
     return response, called
 
 
-def test_quick_without_a_token_is_refused_before_the_spend_check(pend, monkeypatch):
-    """`nebula quick` / /api/quick says what every other run path says, in the
-    refusal shape the other quick refusals use, before anything is priced."""
+def test_quick_runs_idol_without_a_token_for_agents_and_the_person(pend, monkeypatch):
+    """Round 7: keyless, so `nebula quick` / /api/quick runs Idol with no
+    token for anyone, with no proposal: nothing can bill."""
     from tests.conftest import PERSON
     from tests.test_canvas_proposals import CLAUDE
 
     for headers in (CLAUDE, PERSON):
         for keys in ({}, {"HF_TOKEN": ""}):
             response, called = _quick_idol(pend, monkeypatch, keys, headers=headers)
-            assert response.status_code == 400, response.text
-            assert response.json()["detail"] == f"Nothing ran, so nothing was spent. {IDOL_KEY_LINE}"
-            assert called == [] and pend.priced == []
+            assert response.status_code == 200, response.text
+            assert called == [1]
 
 
 def test_quick_with_a_token_reaches_the_run(pend, monkeypatch):
+    """Past the route's own checks. The pend fixture stubs the spend gate;
+    tests/test_idol_may_bill.py runs the real one, which sends an agent's
+    run with the token to a proposal."""
     from tests.test_canvas_proposals import CLAUDE
 
     response, called = _quick_idol(pend, monkeypatch, {"HF_TOKEN": TOKEN}, headers=CLAUDE)

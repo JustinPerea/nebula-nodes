@@ -23,6 +23,12 @@ export interface ProviderKeySpec {
   /** What to know before getting this key (where it's sold, setup it needs).
    *  Shown under the key field and in the saved row. */
   caveat?: string;
+  /** How to make the key, said first under the key field (Hugging Face: the
+   *  token kind), with `keyLink` after it and the caveat last. */
+  instruction?: string;
+  /** A link of its own under the key field, opening `url` outside Nebula
+   *  ("Open Hugging Face tokens"); the field's foot then names no page. */
+  keyLink?: string;
 }
 
 export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
@@ -63,20 +69,24 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // shared by the organization. docs/api-guides/bfl.md.
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
     brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API' },
-  // Needed to run the Idol node on Speridlabs' Hugging Face Space (GM, PR #203
-  // r4): each run asks ZeroGPU for 120 s (Space app.py duration=120), which
-  // spaces 0.51.3 multiplies by 1.5 on the Blackwell GPUs ZeroGPU runs on, so
-  // 180 s, past the 120 s a day a caller without a token gets (to confirm on
-  // the first live run). A token gives runs the person's own quota (free 5
-  // minutes, PRO 40 minutes a day). The caveat's PRO sentence is Hugging
-  // Face's own, https://huggingface.co/docs/hub/spaces-zerogpu, "Extending
-  // quota with credits": "PRO, Team, and Enterprise users can continue using
-  // ZeroGPU Spaces beyond their included daily quota by consuming pre-paid
-  // credits at the rate of $1 per 10 minutes of GPU time."
+  // Optional for the Idol node on Speridlabs' Hugging Face Space: it runs
+  // without a token (the first live call, PR #203 round 7), and a token gives
+  // its runs the person's own ZeroGPU allowance. Copy: GM, PR #203 r12 item 3
+  // (the helper) and r11 item 1 (the instruction, the link and the caveat, in
+  // that order). The token kind is a product decision: fine-grained, with no
+  // repository access. Hugging Face's docs don't say a token with no
+  // permissions counts toward ZeroGPU quota; unconfirmed until the live run
+  // with a token made this way. The caveat's PRO sentence is Hugging Face's
+  // own, https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
+  // credits": "PRO, Team, and Enterprise users can continue using ZeroGPU
+  // Spaces beyond their included daily quota by consuming pre-paid credits at
+  // the rate of $1 per 10 minutes of GPU time."
   { key: 'HF_TOKEN', label: 'Hugging Face', credential: 'token', placeholder: 'hf_...',
     url: 'https://huggingface.co/settings/tokens',
-    brand: ['Idol'], note: 'Needed to run Idol.',
-    // Pending a product decision: which token scope Settings asks for.
+    brand: ['Idol'], note: 'Optional. Gives Idol your own Hugging Face allowance.',
+    instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
+      + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
+    keyLink: 'Open Hugging Face tokens',
     caveat: 'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses '
       + 'your prepaid Hugging Face credits.' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
@@ -98,7 +108,7 @@ const NODES = Object.values(NODE_DEFINITIONS);
 
 /** Nodes that can run with this key (alone or as one of their routes), or
  * use it when set (a keyless route's optionalKeys, such as Idol's Hugging Face
- * token if it goes back to keyless). */
+ * token). */
 export function nodesForKey(key: string) {
   return NODES.filter((node) => {
     const keys = Array.isArray(node.envKeyName) ? node.envKeyName : [node.envKeyName];

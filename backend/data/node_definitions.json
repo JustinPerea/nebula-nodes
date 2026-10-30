@@ -24059,16 +24059,12 @@
   "speridlabs-idol": {
     "id": "speridlabs-idol",
     "displayName": "Idol",
-    "description": "Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs on Hugging Face with your token and is free within your Hugging Face allowance.",
+    "description": "Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. Add your Hugging Face token to use your own allowance.",
     "category": "3d-gen",
     "apiProvider": "speridlabs",
     "apiEndpoint": "speridlabs/idol",
-    "envKeyName": [
-      "HF_TOKEN"
-    ],
-    "directKeyName": [
-      "HF_TOKEN"
-    ],
+    "envKeyName": [],
+    "directKeyName": [],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24198,9 +24194,11 @@
         "id": "hf-space",
         "provider": "speridlabs",
         "maker": true,
-        "keys": [
+        "keys": [],
+        "optionalKeys": [
           "HF_TOKEN"
         ],
+        "mayBillWithKey": true,
         "handler": "hf-space",
         "endpoint": "speridlabs/idol",
         "valueMap": {
@@ -24215,9 +24213,7 @@
             "524288": "524,288",
             "1048576": "1,048,576"
           }
-        },
-        "note": "Free with a Hugging Face token.",
-        "missingKeyLine": "You can run Idol after you add your Hugging Face token in Settings."
+        }
       }
     ]
   },

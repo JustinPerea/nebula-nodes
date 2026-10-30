@@ -12,7 +12,7 @@ import { useUIStore } from '../store/uiStore';
  * A node the proposal adds is checked at the values Accept will write; a
  * canvas node at its params with the proposed changes applied.
  */
-export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalNotReady[] {
+export function useProposalNotReady(entry: ProposalEntry | undefined): Array<ProposalNotReady & { routeKeyLine?: true }> {
   const cache = useUIStore((s) => s.settingsCache);
   // Only the canvas nodes the rows name, as text, so a drag elsewhere
   // doesn't re-render the ghosts.

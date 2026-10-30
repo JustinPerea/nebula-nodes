@@ -119,6 +119,15 @@ export function hideBehind(own: Element): () => void {
   };
 }
 
+/** Whether focus can go back to this control on a dialog's close: on the
+ * page, enabled, not inside an inert, hidden or aria-hidden part, and drawn. */
+export function canTakeFocus(element: HTMLElement): boolean {
+  if (!element.isConnected || element.matches(':disabled')
+    || element.closest('[inert], [hidden], [aria-hidden="true"]')) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
 /** Where focus goes in a dialog that gets it back: its field (a prompt's
  * text, a palette's search), else its first control, else itself. */
 export function dialogStart(dialog: Element | null): HTMLElement | null {

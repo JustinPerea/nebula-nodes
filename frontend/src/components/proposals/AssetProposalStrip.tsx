@@ -198,7 +198,7 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
       style={{ '--agent-color': view.agent.color } as CSSProperties}>
       <div className="asset-proposal__who">
         <span className="asset-proposal__dot" aria-hidden="true" />
-        <span className="asset-proposal__agent">{view.agent.name}</span>
+        <span className="asset-proposal__agent agent-name">{view.agent.name}</span>
         <span className="asset-proposal__asks">{said}</span>
       </div>
       {view.note && <p className="asset-proposal__note">{view.note}</p>}
@@ -242,7 +242,7 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
       style={{ '--agent-color': held.agentColor } as CSSProperties}>
       <div className="asset-proposal__who">
         <span className="asset-proposal__dot" aria-hidden="true" />
-        <span className="asset-proposal__agent">{held.agentName}</span>
+        <span className="asset-proposal__agent agent-name">{held.agentName}</span>
         <span className="asset-proposal__asks">{held.header}</span>
       </div>
       <p className="asset-proposal__held-line">{HELD_PROPOSAL_LINE}</p>

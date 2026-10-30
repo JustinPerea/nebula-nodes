@@ -5,7 +5,7 @@ import { ResultDetails, ResultMetadata } from './ResultDetails';
 import '../../styles/result-comparison.css';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
-import { hideBehind, inNoticeAboveDialogs } from '../../lib/modalFocus';
+import { inNoticeAboveDialogs } from '../../lib/modalFocus';
 
 export interface ComparisonResult {
   key: string;
@@ -21,6 +21,9 @@ interface ResultComparisonProps {
 }
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, video[controls], [tabindex]:not([tabindex="-1"])';
+
+/** Where focus goes on close when the control that opened it is gone. */
+const comparisonFallback = () => document.querySelector<HTMLElement>('[data-result-comparison-fallback]');
 
 function available(element: HTMLElement): boolean {
   const style = window.getComputedStyle(element);
@@ -46,13 +49,13 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     const overlay = overlayRef.current;
     const panel = panelRef.current;
     if (!overlay || !panel) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const hadScrollLock = document.body.classList.contains('result-comparison-open');
     const focusClose = () => panel.querySelector<HTMLButtonElement>('.result-comparison__close')?.focus();
-    // Move focus before hiding the opener's subtree from assistive technology.
+    // Focus into the dialog. ModalPortal (a child, so its layout effect ran
+    // first) has made the page behind inert and noted the opener for close.
     focusClose();
-    // The page behind, the proposal bar with it (review r5 MEDIUM-1).
-    const restore = hideBehind(overlay);
+    // The page behind, the proposal bar with it, is inert while it is open:
+    // ModalPortal does that for every modal dialog (PR #203 round 7).
     const containFocus = (event: FocusEvent) => {
       // A modal dialog opened over the comparison keeps its own focus.
       if (keyBlockedByModal(panel)) return;
@@ -89,19 +92,14 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     return () => {
       document.removeEventListener('focusin', containFocus);
       document.removeEventListener('keydown', containKey, true);
-      restore();
       if (!hadScrollLock) document.body.classList.remove('result-comparison-open');
-      if (opener && opener !== document.body && available(opener)) {
-        opener.focus({ preventScroll: true });
-        if (document.activeElement === opener) return;
-      }
-      const fallback = document.querySelector<HTMLElement>('[data-result-comparison-fallback]');
-      if (fallback && available(fallback)) fallback.focus({ preventScroll: true });
+      // Focus goes back to the opener, else the gallery's stable control:
+      // ModalPortal does it once the page behind is usable again.
     };
   }, []);
 
   return (
-    <ModalPortal>
+    <ModalPortal fallbackFocus={comparisonFallback}>
     <div
       ref={overlayRef}
       className="result-comparison"

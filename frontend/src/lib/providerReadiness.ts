@@ -169,12 +169,14 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
 }
 
-/** A maker's Hugging Face Space route (handler hf-space: Idol). Keyed (Idol's
- * needs HF_TOKEN, GM PR #203 r4): without the token it says so in GM's words,
- * and with it only "Runs on your own Hugging Face allowance." (GM r3: the
- * specific line replaces the generic one, never both). A keyless Space route
- * (RouteSpec.optionalKeys) runs without a key and uses its optional key when
- * set (node_readiness.instance_access). */
+/** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
+ * (PR #203 round 7: the first live call ran with no token), in GM's r12
+ * words: without the token "Hugging Face · Free" and that it can be busy;
+ * with it "Hugging Face token · Saved" (the shared key vocabulary: "Saved"
+ * until a check runs, "Connected" after one passes, "Not connected" after
+ * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
+ * (one with `keys`, as Idol's was in rounds 4 to 6) says what is needed
+ * (GM r5 item 1). The specific line replaces the generic one, never both (GM r3). */
 function spaceReadiness(
   def: ModelNodeDefinition,
   params: Record<string, unknown>,
@@ -192,7 +194,15 @@ function spaceReadiness(
   const connectionLabel = name ? `${name} token` : undefined;
   if (route.key) {
     const ready = keyReadiness(route.key, cache, health);
-    return { ...ready, connectionLabel, detail: `Runs on your own ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.` };
+    const target: ProviderSetupTarget = { kind: 'api-key', key: route.key };
+    const checked = checkedReadiness(PROVIDER_KEY_LABELS[route.key] ?? route.key, target, health);
+    const allowance = `${def.displayName} uses your ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.`;
+    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance };
+    if (checked?.tone === 'warning' && checked.label !== 'Check unavailable' && checked.label !== 'Check rate limited') {
+      return { ...checked, label: 'Not connected', connectionLabel };
+    }
+    if (ready.label === 'Checking connection') return { ...ready, connectionLabel };
+    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance };
   }
   if (!keyless && tokenKey) {
     if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
@@ -203,17 +213,15 @@ function spaceReadiness(
       detail: `Add your ${name} token in Settings to run ${def.displayName}.`,
     };
   }
-  // A keyless Space route: no node has one today (Idol needs its token, GM
-  // PR #203 r4), so these lines are never shown. TODO: re-rule with the
-  // design reviewer using the first live run's numbers before the keyless
-  // route ships.
+  // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
+  // without a token: whose pool an anonymous call uses isn't known.
   return {
-    label: 'Free daily allowance', tone: 'neutral',
-    ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const, connectionLabel,
-      connectionNote: 'Optional' } : {}),
+    label: 'Free', tone: 'neutral',
+    ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const } : {}),
+    ...(name ? { connectionLabel: name } : {}),
     detail: name
-      ? `Runs on a small free daily allowance. Add your ${name} token in Settings to use your own.`
-      : 'Runs on a small free daily allowance.',
+      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add your ${name} token in Settings to use your own allowance.`
+      : `${def.displayName} runs free on shared GPUs, which can be busy.`,
   };
 }
 

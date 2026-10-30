@@ -119,6 +119,9 @@ function modalRoots(): Array<{ file: string; root: string | null }> {
   for (const path of tsxFiles(join(SRC, 'components'))) {
     const source = readFileSync(path, 'utf8');
     const file = relative(SRC, path);
+    // The portal itself holds no dialog: it reads `aria-modal` to isolate
+    // the page behind the one it carries (PR #203 round 7).
+    if (file === join('components', 'ModalPortal.tsx')) continue;
     const names = classNames(source);
     const lines = source.split('\n');
     lines.forEach((text, index) => {
@@ -176,12 +179,31 @@ describe('the proposal bar between what the person opened and the lasting chrome
   // GM r10, by name: context menus, Settings, popovers, the model picker, the viewer and the palette; GM r9: the drag layer.
   it.each([
     'context-menu', 'connection-popup', 'panel--settings', 'panel', 'chat-panel', 'panel--library', 'node-inspector-popover',
-    'agent-log', 'provider-switcher__popover', 'final-export__popover', 'chat-model-picker__dialog', 'slava-library-drag-preview',
+    'provider-switcher__popover', 'final-export__popover', 'chat-model-picker__dialog', 'slava-library-drag-preview',
     'toolbar--actions-open', 'command-palette', 'world-modal-overlay', 'mesh-modal-overlay', 'agent-notes-panel',
   ])('.%s (the person opened it) draws above the bar', (root) => {
     const layers = layersOf(root);
     expect(layers.length).toBeGreaterThan(0);
     for (const layer of layers) expect(layer).toBeGreaterThan(proposal);
+  });
+
+  // GM, PR #203 r13 item 3: the Agent log's layer follows its state, not its
+  // name. Collapsed (the default chip) it is lasting chrome, under the bar;
+  // expanded, the person opened it, over the bar; collapsed again, under.
+  it('the Agent log: collapsed (and its "hidden" notice) under the bar, expanded over it, and back under when collapsed', () => {
+    document.body.className = 'app-slava-restraint';
+    const log = document.createElement('div');
+    log.className = 'agent-log';
+    const hidden = document.createElement('div');
+    hidden.className = 'agent-log-hidden-notice';
+    document.body.append(log, hidden);
+    expect(layerOf(log)).toBe(ambient);
+    expect(layerOf(hidden)).toBe(ambient);
+    log.classList.add('agent-log--open');
+    expect(layerOf(log)).toBeGreaterThan(proposal);
+    expect(layerOf(log)).toBe(resolve('var(--sr-layer-agent-log)'));
+    log.classList.remove('agent-log--open');
+    expect(layerOf(log)).toBe(ambient);
   });
 
   it('Settings at its own layer, not stopped at the bar: no rule caps it by the notice region', () => {

@@ -1,9 +1,10 @@
 """Idol without a Hugging Face token, by run plan (GM, PR #203 r8 items 1-2).
 
-One rule for every scope: a run is refused for the missing token only when
-the nodes that run would run include a real Idol. An agent's placeholder Idol
-that a canvas run skips never refuses it (the backend validates after
-_skip_placeholders, as the canvas's lock reads lib/runScope nodesThatRun).
+Round 7: Idol is keyless (the first live call ran with no token), so no
+run is refused for the missing token any more. A canvas run still skips an
+agent's placeholder Idol and runs the rest (the backend validates after
+_skip_placeholders, as the canvas reads lib/runScope nodesThatRun), and a
+real Idol in it runs.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from tests.conftest import PERSON
 from tests.test_canvas_proposals import CLAUDE, CODEX, KEY, _key, api  # noqa: F401 - fixture
 from tests.test_pending_nodes import _apply, _execute_body, pend  # noqa: F401 - fixture
 
-IDOL_LINE = "You can run Idol after you add your Hugging Face token in Settings."
+IDOL_LINE = "You can run Idol after you add your Hugging Face token in Settings."  # the keyed line, gone
 
 
 def _no_keys(pend, monkeypatch) -> None:
@@ -56,15 +57,14 @@ def test_a_canvas_run_skips_a_placeholder_idol_and_runs_the_rest(pend, monkeypat
     assert not any(IDOL_LINE in str(error.get("message")) for error in _errors(pend))
 
 
-def test_a_canvas_run_with_a_real_idol_is_refused_with_its_line(pend, monkeypatch):
+def test_a_canvas_run_with_a_real_idol_runs_without_a_token(pend, monkeypatch):
     _no_keys(pend, monkeypatch)
     image = pend.graph.add_node("image-input", {"filePath": "/x.png"})
     idol = pend.graph.add_node("speridlabs-idol", {})
     pend.graph.connect(image, "image", idol, "image")
-    pend.graph.add_node("text-input", {"value": "the person's"})
+    text = pend.graph.add_node("text-input", {"value": "the person's"})
     response = pend.client.post("/api/execute", headers=PERSON, json={**_execute_body(pend), "runId": "r2"})
     assert response.status_code == 200, response.text
-    assert response.json().get("status") != "started"
-    assert pend.ran == []
-    refused = [error["message"] for error in _errors(pend) if error.get("nodeId") == idol]
-    assert refused == [IDOL_LINE], _errors(pend)
+    assert response.json().get("status") == "started"
+    assert [error for error in _errors(pend) if error.get("nodeId") == idol] == []
+    assert sorted(pend.ran[0]) == sorted([image, idol, text])

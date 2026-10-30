@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import routeCases from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { isKeylessRoute, routeMissingKeyLine, routeUnavailable, selectRoute } from '../../src/lib/directRoute';
-import { nodesForKey, PROVIDER_KEY_SPECS, unlockSummary } from '../../src/lib/providerCatalog';
+import { isKeylessRoute, keyBilling, routeMissingKeyLine, routeUnavailable, selectRoute } from '../../src/lib/directRoute';
+import { nodesForKey, PROVIDER_KEY_SPECS } from '../../src/lib/providerCatalog';
 import { modelReadiness, type ProviderHealthState } from '../../src/lib/providerReadiness';
 import { providerSwitchState } from '../../src/lib/providerSwitch';
 import { nodesKeyLockReason, routeKeyLockReason } from '../../src/lib/runKeyLock';
@@ -11,92 +11,76 @@ import { previewSplat } from '../../src/lib/worldV2Splat';
 import type { ModelNodeDefinition } from '../../src/types';
 import type { WorldValueV2 } from '../../src/types/spatial';
 import { worldV2Fixture } from '../fixtures/spatialValues';
+import { KEYED_LINE, keyIdolInEachTest } from '../helpers/keyedSpace';
 
 const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
 const KEYLESS = (routeCases as unknown as { definitions: Record<string, ModelNodeDefinition> }).definitions['routes-keyless'];
 const TOKEN = 'fixture-only';
 const HEALTH: ProviderHealthState = { providers: {}, checkedAt: null, loading: false, error: null };
 
-const NEEDS_TOKEN = 'You can run Idol after you add your Hugging Face token in Settings.';
-
-describe('the Idol node needs a Hugging Face token (GM, PR #203 r4)', () => {
-  it('is one maker route on the Space, keyed on the token', () => {
-    expect(IDOL.envKeyName).toEqual(['HF_TOKEN']);
-    expect(IDOL.directKeyName).toEqual(['HF_TOKEN']);
-    expect(IDOL.routes?.map((route) => [route.id, route.provider, route.maker, route.keys, route.optionalKeys]))
-      .toEqual([['hf-space', 'speridlabs', true, ['HF_TOKEN'], undefined]]);
-    expect(isKeylessRoute(IDOL.routes![0])).toBe(false);
-    expect(IDOL.routes![0].missingKeyLine).toBe(NEEDS_TOKEN);
+describe('the Idol node runs free without a token, and on the person\'s allowance with one (PR #203 round 7, GM r12)', () => {
+  it('is one keyless maker route on the Space, the token optional, may bill with it', () => {
+    expect(IDOL.envKeyName).toEqual([]);
+    expect(IDOL.directKeyName).toEqual([]);
+    expect(IDOL.routes?.map((route) => [route.id, route.provider, route.maker, route.keys, route.optionalKeys, route.mayBillWithKey]))
+      .toEqual([['hf-space', 'speridlabs', true, [], ['HF_TOKEN'], true]]);
+    expect(isKeylessRoute(IDOL.routes![0])).toBe(true);
+    expect(IDOL.routes![0].missingKeyLine).toBeUndefined();
     expect(IDOL.outputPorts.map((port) => [port.id, port.dataType])).toEqual([['world', 'World']]);
     expect(IDOL.inputPorts.map((port) => [port.id, port.dataType, port.required])).toEqual([['image', 'Image', true]]);
-    // Every "without a key" and "no key needed" is gone (GM r4).
-    expect(IDOL.description).not.toMatch(/without a (key|token)|no key needed|optional/i);
+    // GM r12 item 4, word for word.
+    expect(IDOL.description).toBe('Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs '
+      + 'free on Hugging Face. Add your Hugging Face token to use your own allowance.');
   });
 
-  it('routes like the backend: refused in GM\'s words without a token, on the token with one', () => {
+  it('routes like the backend: anonymous without a token, on the token with one, never locked', () => {
     for (const params of [{}, { _provider: 'auto' }, { _provider: 'hf-space' }]) {
-      expect(selectRoute(IDOL, params, {})).toMatchObject({ kind: 'unset', missing: ['HF_TOKEN'] });
-      expect(routeUnavailable(IDOL, params, {})?.message).toBe(NEEDS_TOKEN);
-      expect(routeKeyLockReason(IDOL, params, {})).toBe(NEEDS_TOKEN);
+      expect(selectRoute(IDOL, params, {})).toMatchObject({ kind: 'direct', routeId: 'hf-space', key: null });
+      expect(routeUnavailable(IDOL, params, {})).toBeNull();
+      expect(routeKeyLockReason(IDOL, params, {})).toBeNull();
+      expect(keyBilling(IDOL, params, {})).toBe('free');
+      expect(keyBilling(IDOL, params, { HF_TOKEN: TOKEN })).toBe('mayCost');
     }
     expect(selectRoute(IDOL, {}, { HF_TOKEN: TOKEN })).toMatchObject({ routeId: 'hf-space', key: 'HF_TOKEN' });
-    expect(routeUnavailable(IDOL, {}, { HF_TOKEN: TOKEN })).toBeNull();
-    expect(routeKeyLockReason(IDOL, {}, { HF_TOKEN: TOKEN })).toBeNull();
+    // The whitespace-only token is no token (the backend's is_set).
+    expect(keyBilling(IDOL, {}, { HF_TOKEN: '   ' })).toBe('free');
+    // A node without the flag is counted as before.
+    expect(keyBilling(NODE_DEFINITIONS['flux-3-image-klein'], {}, {})).toBeNull();
   });
 
-  it('locks Run only for a node whose route has its own line, and only once Settings load', () => {
-    const nodes = [
-      { id: 'a', data: { definitionId: 'speridlabs-idol', params: {} } },
-      { id: 'b', data: { definitionId: 'flux-3-image-klein', params: {} } },
-    ];
-    expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: {} })).toBe(NEEDS_TOKEN);
-    expect(nodesKeyLockReason(nodes, ['b', 'a'], { loaded: true, apiKeys: {} })).toBe(NEEDS_TOKEN);
-    // Another node with no key keeps its own refusal at run time, unlocked.
-    expect(nodesKeyLockReason(nodes, ['b'], { loaded: true, apiKeys: {} })).toBeNull();
-    expect(nodesKeyLockReason(nodes, ['a'], { loaded: false, apiKeys: {} })).toBeNull();
+  it('locks no Run for Idol, with or without the token', () => {
+    const nodes = [{ id: 'a', data: { definitionId: 'speridlabs-idol', params: {} } }];
+    expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: {} })).toBeNull();
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
   });
 
-  it('uses the route\'s own line only for a missing key alone, and on Auto only when every route has one', () => {
-    const unset = { kind: 'unset' as const, provider: null, key: null, routeId: null, missing: ['HF_TOKEN'] };
-    expect(routeMissingKeyLine(IDOL, unset)).toBe(NEEDS_TOKEN);
-    // Something else stops the route too: its own line doesn't hide that.
-    expect(routeMissingKeyLine(IDOL, { ...unset, routeId: 'hf-space', block: { reason: 'unsupported', param: 'mode', on: null } }))
-      .toBeNull();
-    expect(routeMissingKeyLine(IDOL, { ...unset, missing: [] })).toBeNull();
-    // A second route with no line of its own: Auto with no key keeps the
-    // generic "add a key or choose another provider".
-    const twoRoutes: ModelNodeDefinition = { ...IDOL, routes: [IDOL.routes![0],
-      { ...IDOL.routes![0], missingKeyLine: undefined, id: 'fal', provider: 'fal', keys: ['FAL_KEY'], handler: 'fal' }] };
-    expect(routeMissingKeyLine(twoRoutes, unset)).toBeNull();
-    expect(routeMissingKeyLine(twoRoutes, { ...unset, routeId: 'hf-space' })).toBe(NEEDS_TOKEN);
-    expect(routeMissingKeyLine(twoRoutes, { ...unset, routeId: 'fal' })).toBeNull();
-  });
-
-  it('reads in GM\'s words without the token, and only "Runs on your own Hugging Face allowance." with it', () => {
+  it('reads "Hugging Face · Free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
-    expect(anonymous).toEqual({ label: 'Needed', tone: 'warning',
-      setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Add your Hugging Face token in Settings to run Idol.' });
+    expect(anonymous).toEqual({ label: 'Free', tone: 'neutral',
+      setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',
+      detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add your Hugging Face token in Settings '
+        + 'to use your own allowance.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
-    // GM r3: the specific line replaces the generic one, never both; the
-    // label waits for the wording batch.
-    expect(signedIn).toEqual({ label: 'Configured · not checked', tone: 'neutral',
+    expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Runs on your own Hugging Face allowance.' });
-    expect(modelReadiness(IDOL, {}, { apiKeys: {}, loaded: false }, HEALTH).label).toBe('Connection not loaded');
+      detail: 'Idol uses your Hugging Face allowance.' });
+    // No allowance numbers and no run counts anywhere (GM r12).
+    for (const line of [anonymous?.detail, signedIn?.detail]) expect(line).not.toMatch(/\d/);
   });
 
-  it('switcher: "Add key →" without the token, the green "Connected" with it, and GM\'s row note', () => {
+  it('switcher: "Free on Hugging Face." and "Auto · free" without the token; "Uses your Hugging Face allowance." and "Auto" with it', () => {
     const anonymous = providerSwitchState(IDOL, {}, { apiKeys: {}, kreaSignedIn: false });
-    expect(anonymous.rows.map((row) => [row.id, row.keyState])).toEqual([
-      ['auto', null], ['hf-space', 'missing'],
+    expect(anonymous.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
+      ['auto', 'Auto · free', null], ['hf-space', 'Speridlabs', 'none'],
     ]);
-    expect(anonymous.rows[1].label).toBe('Speridlabs');
-    expect(anonymous.rows[1].info).toBe('Free with a Hugging Face token.');
+    expect(anonymous.rows[1].info).toBe('Free on Hugging Face.');
     expect(anonymous.rows[1].setup).toEqual({ kind: 'api-key', key: 'HF_TOKEN' });
+    expect(anonymous.blocked).toBe(false);
     const signedIn = providerSwitchState(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, kreaSignedIn: false });
-    expect(signedIn.rows[1].keyState).toBe('connected');
+    expect(signedIn.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
+      ['auto', 'Auto', null], ['hf-space', 'Speridlabs', 'connected'],
+    ]);
+    expect(signedIn.rows[1].info).toBe('Uses your Hugging Face allowance.');
   });
 
   it('switcher: a keyed route beside a keyless one still needs its key', () => {
@@ -108,18 +92,53 @@ describe('the Idol node needs a Hugging Face token (GM, PR #203 r4)', () => {
     expect(state.alternatives.map((alternative) => alternative.routeId)).toEqual(['hf-space']);
   });
 
-  it('a keyless Space route still reads as its free allowance', () => {
-    const keyless = modelReadiness(KEYLESS, { _provider: 'hf-space' }, { apiKeys: {}, loaded: true }, HEALTH);
-    expect(keyless).toMatchObject({ label: 'Free daily allowance', tone: 'neutral', connectionNote: 'Optional' });
-    expect(routeKeyLockReason(KEYLESS, { _provider: 'hf-space' }, {})).toBeNull();
-  });
-
-  it('Settings lists Idol under the Hugging Face token, as needed', () => {
+  it('Settings lists Idol under the Hugging Face token, as optional, with GM\'s r11 lines and r12 helper', () => {
     expect(nodesForKey('HF_TOKEN').map((node) => node.id)).toEqual(['speridlabs-idol']);
-    expect(unlockSummary(PROVIDER_KEY_SPECS.HF_TOKEN, 'add')).toBe('Needed to run Idol.');
     expect(PROVIDER_KEY_SPECS.HF_TOKEN).toMatchObject({ label: 'Hugging Face', credential: 'token',
+      note: 'Optional. Gives Idol your own Hugging Face allowance.',
+      instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
+        + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
+      keyLink: 'Open Hugging Face tokens', url: 'https://huggingface.co/settings/tokens',
       caveat: 'Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses '
         + 'your prepaid Hugging Face credits.' });
+  });
+});
+
+describe('the keyed-route machinery that stays for other nodes (on Idol made keyed for the test)', () => {
+  keyIdolInEachTest();
+
+  it('locks Run in the route\'s own words only for a node whose route has a line, and only once Settings load', () => {
+    const keyed = NODE_DEFINITIONS['speridlabs-idol'];
+    for (const params of [{}, { _provider: 'auto' }, { _provider: 'hf-space' }]) {
+      expect(selectRoute(keyed, params, {})).toMatchObject({ kind: 'unset', missing: ['HF_TOKEN'] });
+      expect(routeUnavailable(keyed, params, {})?.message).toBe(KEYED_LINE);
+      expect(routeKeyLockReason(keyed, params, {})).toBe(KEYED_LINE);
+    }
+    const nodes = [
+      { id: 'a', data: { definitionId: 'speridlabs-idol', params: {} } },
+      { id: 'b', data: { definitionId: 'flux-3-image-klein', params: {} } },
+    ];
+    expect(nodesKeyLockReason(nodes, ['b', 'a'], { loaded: true, apiKeys: {} })).toBe(KEYED_LINE);
+    expect(nodesKeyLockReason(nodes, ['b'], { loaded: true, apiKeys: {} })).toBeNull();
+    expect(nodesKeyLockReason(nodes, ['a'], { loaded: false, apiKeys: {} })).toBeNull();
+    expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
+    // A keyed Space route says what is needed (GM r5 item 1).
+    expect(modelReadiness(keyed, {}, { apiKeys: {}, loaded: true }, HEALTH)).toMatchObject({
+      label: 'Needed', connectionLabel: 'Hugging Face token' });
+  });
+
+  it('uses the route\'s own line only for a missing key alone, and on Auto only when every route has one', () => {
+    const keyed = NODE_DEFINITIONS['speridlabs-idol'];
+    const unset = { kind: 'unset' as const, provider: null, key: null, routeId: null, missing: ['HF_TOKEN'] };
+    expect(routeMissingKeyLine(keyed, unset)).toBe(KEYED_LINE);
+    expect(routeMissingKeyLine(keyed, { ...unset, routeId: 'hf-space', block: { reason: 'unsupported', param: 'mode', on: null } }))
+      .toBeNull();
+    expect(routeMissingKeyLine(keyed, { ...unset, missing: [] })).toBeNull();
+    const twoRoutes: ModelNodeDefinition = { ...keyed, routes: [keyed.routes![0],
+      { ...keyed.routes![0], missingKeyLine: undefined, id: 'fal', provider: 'fal', keys: ['FAL_KEY'], handler: 'fal' }] };
+    expect(routeMissingKeyLine(twoRoutes, unset)).toBeNull();
+    expect(routeMissingKeyLine(twoRoutes, { ...unset, routeId: 'hf-space' })).toBe(KEYED_LINE);
+    expect(routeMissingKeyLine(twoRoutes, { ...unset, routeId: 'fal' })).toBeNull();
   });
 });
 

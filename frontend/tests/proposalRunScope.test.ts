@@ -13,6 +13,11 @@ import { proposalAcceptLock } from '../src/lib/proposalAcceptLock';
 import { deferredRunKeyLock } from '../src/store/canvasProposalsStore';
 import type { NodeData } from '../src/types';
 import type { ProposalView } from '../src/lib/wsClient';
+import { keyIdolInEachTest } from './helpers/keyedSpace';
+
+// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+keyIdolInEachTest();
 const ACC = 'You can accept this after you add your Hugging Face token in Settings.';
 const RUN = 'You can run Idol after you add your Hugging Face token in Settings.';
 const NO = { loaded: true, apiKeys: {} };

@@ -3,6 +3,11 @@ import type { Node } from '@xyflow/react';
 import { historyRunKeyLock, placeholderKey } from '../../src/lib/historyRunKeyLock';
 import type { RunRecord } from '../../src/lib/runHistory';
 import type { NodeData } from '../../src/types';
+import { keyIdolInEachTest } from '../helpers/keyedSpace';
+
+// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+keyIdolInEachTest();
 
 /**
  * GM, PR #203 r8 items 1-3: a Run History replay locks only when the run it

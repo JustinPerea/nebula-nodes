@@ -325,12 +325,12 @@ def test_route_docs_describe_pr5_behaviour():
         assert "Hidden settings" in text and "Model Jam (speed)" in text, doc
 
 
-# -- Idol: a keyed Space route (GM PR #203 r4); the keyless rules stay -----------
+# -- Idol: keyless again (PR #203 round 7); the keyed rules stay ------------------
 
 
 def _keyless_idol() -> dict:
-    """Idol switched back to keyless, as it would be if the first live run
-    shows ZeroGPU asks 120 s (docs/model-providers/speridlabs/idol.md)."""
+    """Idol keyless, built from the registry either way (round 7: the first
+    live call ran without a token, docs/model-providers/speridlabs/idol.md)."""
     definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
     route = definition["routes"][0]
     route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
@@ -339,14 +339,27 @@ def _keyless_idol() -> dict:
     return definition
 
 
-def test_describe_node_shows_idols_token_billing_and_whether_it_is_set(monkeypatch):
+def _keyed_idol() -> dict:
+    """Idol as a keyed Space route (PR #203 rounds 4 to 6), for the keyed
+    formatting rules."""
+    definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"] = ["HF_TOKEN"]
+    route.pop("optionalKeys", None)
+    route.pop("mayBillWithKey", None)
+    definition["envKeyName"], definition["directKeyName"] = ["HF_TOKEN"], ["HF_TOKEN"]
+    return definition
+
+
+def test_describe_node_shows_idols_optional_token_billing_and_whether_it_is_set(monkeypatch):
     for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True)):
         monkeypatch.setattr(main, "load_settings", lambda keys=keys: {"apiKeys": keys})
         body = TestClient(main.app).get("/api/agent/nodes/speridlabs-idol").json()
         [route] = body["routes"]
-        assert route["keys"] == ["HF_TOKEN"] and route["keySet"] is is_set
-        assert "optionalKeys" not in route
+        assert route["keys"] == [] and route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
         assert route["billing"] == main.HF_SPACE_BILLING_NOTE
+        # Round 7: with the token, propose it.
+        assert "propose it instead (propose_change)" in route["billing"]
     # Only a Space route carries the billing note.
     assert all("billing" not in route for route in TestClient(main.app).get(
         "/api/agent/nodes/flux-3-image-klein").json()["routes"])
@@ -359,14 +372,12 @@ def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set
         assert route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
 
 
-def test_find_nodes_lists_idol_as_ready_and_free_only_with_its_token(real_nodes, monkeypatch):
-    # No token: not ready, so a ready-only search leaves it out.
+def test_find_nodes_lists_idol_as_ready_and_free_with_or_without_its_token(real_nodes, monkeypatch):
+    # Round 7: keyless, so ready and free with no token.
     body = real_nodes.get("/api/agent/nodes", params={"query": "idol"}).json()
-    assert all(node["id"] != "speridlabs-idol" for node in body["nodes"])
-    body = real_nodes.get("/api/agent/nodes", params={"query": "idol", "ready_only": "false"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
-    # No route can start, so no list price, as on every keyed node.
-    assert row["price"] is None and not row["runsWith"] and row["missing"]
+    assert row["price"] == "free" and row["runsWith"] and not row.get("missing")
+    assert row["billing"] == main.HF_SPACE_BILLING_NOTE
     monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": "hf_x"}})
     body = TestClient(main.app).get("/api/agent/nodes", params={"query": "idol"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
@@ -380,12 +391,13 @@ def test_find_nodes_lists_idol_as_ready_and_free_only_with_its_token(real_nodes,
 def test_start_here_notes_who_can_bill_past_idols_allowance():
     from tests.test_cli_commands import _start_notes
 
-    for via in ("mcp", "cli"):
-        notes = _start_notes({"HF_TOKEN": "hf_x"}, via=via)
-        [note] = [note for note in notes if note.startswith("speridlabs-idol")]
-        assert note == f"speridlabs-idol: free here. {main.HF_SPACE_BILLING_NOTE}"
-    # Not ready without the token, so nothing to note.
-    assert not [note for note in _start_notes({}) if "speridlabs-idol" in note]
+    for keys in ({"HF_TOKEN": "hf_x"}, {}):
+        for via in ("mcp", "cli"):
+            notes = _start_notes(keys, via=via)
+            [note] = [note for note in notes if note.startswith("speridlabs-idol")]
+            assert note.startswith("speridlabs-idol: free here. Runs free without a token")
+            # The CLI's words for the MCP tool names (_cli_words).
+            assert ("`nebula propose`" if via == "cli" else "(propose_change)") in note
 
 
 def test_nebula_info_prints_idols_billing_line(monkeypatch, capsys):
@@ -406,8 +418,8 @@ def test_nebula_info_prints_idols_billing_line(monkeypatch, capsys):
     assert format_billing_line({}) is None
 
 
-def test_nebula_info_names_idols_token_and_a_keyless_routes_optional_one():
-    text = format_node_detail(REGISTRY["speridlabs-idol"])
+def test_nebula_info_names_a_keyed_space_routes_token():
+    text = format_node_detail(_keyed_idol())
     assert "Key: HF_TOKEN" in text
     route_line = next(line for line in text.splitlines() if line.strip().startswith("hf-space"))
     assert "HF_TOKEN" in route_line and "optional" not in route_line
@@ -423,10 +435,10 @@ def test_nebula_info_names_a_keyless_routes_optional_token():
                                               if line.strip().startswith("hf-space"))
 
 
-def test_nebula_keys_counts_idols_token_and_a_keyless_routes_optional_one():
+def test_nebula_keys_counts_a_keyed_space_routes_token():
     from cli.formatter import format_keys
 
-    idol = REGISTRY["speridlabs-idol"]
+    idol = _keyed_idol()
     set_text = format_keys({"configured": {"HF_TOKEN": True}}, [idol])
     assert "HF_TOKEN" in set_text and "1 node (Idol)" in set_text and "1 nodes" not in set_text
     unset_text = format_keys({"configured": {"HF_TOKEN": False}}, [idol])

@@ -264,8 +264,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     if (refuseEditWhileFollowing()) return;
     if (refuseEditWhileOffline()) return;
     // GM, PR #203 r6 item 1 (review r4 LOW-2): every way to accept refuses
-    // while the run it starts needs a key that isn't set (Idol without a
-    // Hugging Face token), in GM's Accept line, before anything is sent, so
+    // while the run it starts needs a key that isn't set (a keyed
+    // route's missing key), in GM's Accept line, before anything is sent, so
     // no proposal is applied with a run that can't go.
     const graph = useGraphStore.getState();
     const keyLock = proposalAcceptLock(entry.view, entry.values, { nodes: graph.nodes, edges: graph.edges },

@@ -5646,7 +5646,7 @@ No settings.
 |---|---|
 | **ID** | `speridlabs-idol` |
 | **Provider** | speridlabs |
-| **API Key** | HF_TOKEN |
+| **API Key** | — |
 | **Endpoint** | `speridlabs/idol` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
@@ -5657,7 +5657,7 @@ No settings.
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `hf-space` | Speridlabs | HF_TOKEN | `speridlabs/idol` | maker; Free with a Hugging Face token. |
+| `hf-space` | Speridlabs | none (optional HF_TOKEN) | `speridlabs/idol` | maker |
 
 **Speridlabs (`hf-space`) settings**
 

@@ -165,7 +165,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
-  // A node that can't run without its key (Idol's Hugging Face token), this
+  // A node that can't run without its key (a keyed route's missing key), this
   // one or one feeding it: Run is locked with its line as the reason (GM, PR
   // #203 r4), aria-disabled so it keeps its focus and tooltip, and it reads
   // the line out (keyLockedProps).
@@ -1217,7 +1217,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            // canvasLock's order (run, following, offline), then the missing key (withKeyLock).
+            // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
             {...withKeyLock(lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting }), keyLock, keyLockId)}
             onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
           >

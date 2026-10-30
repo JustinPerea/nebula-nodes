@@ -14,14 +14,22 @@ and returns ``[Model3D file (.ply), seed, html]``. The Gradio queue protocol
 ``/gradio_api/upload`` (multipart ``files``), which answers with the
 server-side paths, the call the Gradio client makes.
 
-Who pays: nobody bills Nebula. The run uses the person's own ZeroGPU time
-through their ``HF_TOKEN`` (free 5, PRO 40 minutes a day; past that, a PRO
-account can be billed $1 per 10 GPU-minutes,
-https://huggingface.co/docs/hub/spaces-zerogpu). The route needs the token
-(GM, PR #203 r4): the Space asks for 120 s, which ``spaces`` 0.51.3 turns into
-180 s on ZeroGPU's Blackwell cards, more than the 2-minute anonymous
-allowance. The engine refuses a run without it before anything is sent; the
-anonymous branch here stays as a backstop and for a switch back to keyless.
+Who pays: nobody bills Nebula. The route is keyless (PR #203 round 7):
+without ``HF_TOKEN`` the run goes to Hugging Face's shared ZeroGPU with no
+auth header; with it, the person's own ZeroGPU time
+(https://huggingface.co/docs/hub/spaces-zerogpu), and past the daily quota a
+PRO, Team or Enterprise account's prepaid credits, so with a token agents
+propose it first (RouteSpec ``mayBillWithKey``, agent_spend.may_bill_nodes).
+
+The one live call (2026-10-30, no token, approved by Justin) showed a run
+with no token works: every request 200, 27.6 s, a valid 65,536-Gaussian
+splat, the Space on ``zero-a10g`` and ``app.py`` still at ``duration=120``.
+It didn't settle whether the ask is 120 s or 180 s (``spaces`` scales it by
+the GPU), which pool a server-side call with no X-IP-Token draws on, the
+real refusal texts (the mapping below is built against ``spaces`` 0.51.3 and
+re-ruled once one is seen), or whether a fine-grained token with no
+permissions applies the person's quota. docs/model-providers/speridlabs/idol.md.
+
 The token is sent only to huggingface.co (``Authorization``) and the Space's
 own host (``X-HF-Authorization``) over HTTPS, and never appears in a log line
 or an error.
@@ -167,11 +175,19 @@ def quota_error(message: str, *, signed_in: bool) -> IdolSpaceError:
                 "or raise it on your Hugging Face account.")
         text = f"The Idol Space refused the run: your ZeroGPU quota is used up ({message})"
     else:
-        line = ("Idol’s free allowance is used up for now. Try again later, "
-                "or add your Hugging Face token in Settings to use your own.")
+        line = ANONYMOUS_ALLOWANCE_OUT
         text = ("The Idol Space refused the run: the anonymous ZeroGPU quota is used up. "
                 f"Add HF_TOKEN in Settings > Providers for the person's own quota ({message})")
     return with_provider_line(IdolSpaceError(text), line)
+
+
+# GM, PR #203 r12 item 6: an anonymous run (no token) that finds the free GPU
+# time used up, from the quota and the Space-limit refusals alike. Nobody
+# knows whose pool a server-side call with no token draws on (no X-IP-Token
+# reaches the Space), so the line names no allowance numbers. Re-ruled once
+# the real text is seen live.
+ANONYMOUS_ALLOWANCE_OUT = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
+                           "or add your Hugging Face token in Settings to use your own allowance.")
 
 
 def gpu_busy_error(*, detail: str) -> IdolSpaceError:
@@ -182,9 +198,14 @@ def gpu_busy_error(*, detail: str) -> IdolSpaceError:
 
 
 def space_limit_error(*, detail: str) -> IdolSpaceError:
+    # Only an anonymous run reaches it (zerogpu_kind: with HF_TOKEN sent the
+    # same text means the token didn't apply). No X-IP-Token reached the
+    # Space, so the shared pool a call with no token draws on is out: GM r12
+    # item 6's anonymous line.
     return with_provider_line(
-        IdolSpaceError(f"The Idol Space has reached its own ZeroGPU limit ({detail})"),
-        "Idol has reached its own limit on Hugging Face for now. Try again later.")
+        IdolSpaceError(f"The Idol Space has reached its own ZeroGPU limit; no X-IP-Token reached it, so the run "
+                       f"drew on the shared pool a call with no token uses ({detail})"),
+        ANONYMOUS_ALLOWANCE_OUT)
 
 
 def token_not_applied_error(*, detail: str) -> IdolSpaceError:
@@ -815,12 +836,13 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
         image.value if image is not None else None)
     if not image_value:
         raise as_person_line(ValueError("Idol needs an image. Connect one, then run it again."))
-    # An agent's run on a PRO, Team or Enterprise token can be billed by
-    # Hugging Face past the daily quota ($1 per 10 GPU minutes,
-    # https://huggingface.co/docs/hub/spaces-zerogpu). The spend gate admits
-    # it at $0 today, and every agent surface says so (HF_SPACE_BILLING_NOTE),
-    # pending a product decision on whether agents ask before runs that can
-    # bill a PRO account.
+    # A run on a PRO, Team or Enterprise token can be billed by Hugging Face
+    # past the daily quota ($1 per 10 GPU minutes,
+    # https://huggingface.co/docs/hub/spaces-zerogpu). So with the token set
+    # an agent can't start it: the spend gate sends it to a proposal
+    # (agent_spend.may_bill_nodes, the route's mayBillWithKey), and every
+    # agent surface says so (main.HF_SPACE_BILLING_NOTE). The person's own
+    # Run and an accepted proposal run here as usual.
     # Settings and the settings check trim too; this is the backstop.
     token = clean_token(api_keys.get(TOKEN_KEY))
     params = dict(node.params)

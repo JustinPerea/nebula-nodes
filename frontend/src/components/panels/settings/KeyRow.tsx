@@ -167,13 +167,24 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
                   aria-label={`${revealed ? 'Hide' : 'Show'} ${credentialName}`}>{revealed ? 'Hide' : 'Show'}</button>
               </div>
             )}
+            {/* GM, PR #203 r11 item 1: how to make the key, its page, then the caveat. */}
+            {spec.instruction && <p className="settings-hint">{spec.instruction}</p>}
+            {spec.keyLink && (
+              <p className="settings-hint">
+                <a href={spec.url} target="_blank" rel="noopener noreferrer">
+                  {spec.keyLink}<span aria-hidden="true"> ↗</span>
+                </a>
+              </p>
+            )}
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
             {error && <p className="settings-row__error" role="alert">{error}</p>}
             <div className="settings-row__foot">
-              <span className="settings-hint">
-                {configured ? 'Key page: ' : 'No key yet? '}
-                <a href={spec.url} target="_blank" rel="noopener noreferrer">{hostOf(spec.url)} ↗</a>
-              </span>
+              {spec.keyLink ? <span /> : (
+                <span className="settings-hint">
+                  {configured ? 'Key page: ' : 'No key yet? '}
+                  <a href={spec.url} target="_blank" rel="noopener noreferrer">{hostOf(spec.url)} ↗</a>
+                </span>
+              )}
               <button type="submit" className="settings__button settings__button--primary" disabled={!canSave}>
                 {pending ? 'Saving…' : 'Save key'}
               </button>

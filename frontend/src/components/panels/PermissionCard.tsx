@@ -60,7 +60,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
       role="group" aria-label={`${agentName} asks permission`}>
       <div className="permission-card__head">
         <ShieldAlert className="permission-card__icon" size={14} strokeWidth={2} aria-hidden="true" focusable="false" />
-        <span className="permission-card__who">{agentName} asks to</span>
+        <span className="permission-card__who"><span className="agent-name">{agentName}</span> asks to</span>
         <span className="permission-card__kind">{part.toolKind}</span>
       </div>
       <div className="permission-card__title">{part.title}</div>

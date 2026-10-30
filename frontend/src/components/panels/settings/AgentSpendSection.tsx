@@ -216,7 +216,7 @@ function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
       {rows.map((agent) => (
         <div className="settings-pref" key={agent.id} data-testid="settings-personal-spend-row">
           <span className="settings-pref__text">
-            <span className="settings-pref__title">{agent.name}</span>
+            <span className="settings-pref__title agent-name">{agent.name}</span>
             <span className="settings-pref__description">
               {spentUsd(agent.spentUsd)} in the last 24 h
               {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}, inside the budget above

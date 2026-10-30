@@ -78,3 +78,30 @@ describe('the notice stack keeps below the top bars (GM r9 item 2)', () => {
     expect(region.hasAttribute(NOTICE_CROWDED_ATTR)).toBe(false);
   });
 });
+
+// PR #203 round 6 review, NIT-4: offline, the banner sits on the 10000 layer
+// at 150 px, the selection toolbar's line plus 8, which a crowded stack
+// reached. The stack stops below the banner while it shows, and measures
+// again when the connection changes.
+describe('the notice stack keeps below the offline banner (review r6 NIT-4)', () => {
+  it('its room ends under the banner while it shows, and goes back to the top bars\' line when it leaves', async () => {
+    const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
+    resetBackendConnectionForTests();
+    const { region } = setup({ regionBottom: 820, topBarBottom: 92, content: 900 });
+    stop = keepNoticesBelowTopBars(region);
+    expect(region.style.getPropertyValue(NOTICE_ROOM_VAR)).toBe(`${820 - 100}px`);
+    const banner = document.createElement('div');
+    banner.className = 'backend-connection backend-connection--offline';
+    banner.getBoundingClientRect = () => rect(150, 186);
+    document.body.append(banner);
+    noteBackendConnection('offline');
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(region.style.getPropertyValue(NOTICE_ROOM_VAR)).toBe(`${820 - (186 + 8)}px`);
+    expect(region.hasAttribute(NOTICE_CROWDED_ATTR)).toBe(true);
+    banner.remove();
+    noteBackendConnection('online');
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(region.style.getPropertyValue(NOTICE_ROOM_VAR)).toBe(`${820 - 100}px`);
+    resetBackendConnectionForTests();
+  });
+});

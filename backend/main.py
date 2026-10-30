@@ -5032,15 +5032,19 @@ PROVIDER_CHOICE_NOTE = (
 
 
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with
-# credits". Pending a product decision on whether agents ask before runs that
-# can bill a PRO account; until then agents are told on every surface that
-# lists the node: describe_node's route `billing` (`nebula info`'s BILLING
-# line), the find_nodes row's `billing` where it runs free (`nebula nodes`
-# prints it under the table), and start_here's notes (`nebula context`).
+# credits". A product decision (PR #203 round 7): with the person's Hugging
+# Face token set, an agent proposes Idol runs instead of starting them
+# (agent_spend.may_bill_nodes, RouteSpec mayBillWithKey); without it, agents
+# run it as any free node. Every surface that lists the node says so:
+# describe_node's route `billing` (`nebula info`'s BILLING line), the
+# find_nodes row's `billing` where it runs free (`nebula nodes` prints it
+# under the table), and start_here's notes (`nebula context`).
 HF_SPACE_BILLING_NOTE = (
-    "Runs on the person's own Hugging Face ZeroGPU allowance (HF_TOKEN). Nebula prices it at $0, but past "
-    "the daily quota Hugging Face bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10 "
-    "minutes of GPU time (https://huggingface.co/docs/hub/spaces-zerogpu)."
+    "Runs free without a token on Hugging Face's shared ZeroGPU. With the person's HF_TOKEN set it runs on "
+    "their own ZeroGPU allowance instead, and past the daily quota Hugging Face bills a PRO, Team or "
+    "Enterprise account's prepaid credits at $1 per 10 minutes of GPU time "
+    "(https://huggingface.co/docs/hub/spaces-zerogpu). Nebula prices it at $0, but with HF_TOKEN set an agent "
+    "can't run it: propose it instead (propose_change), and the person accepts on the canvas."
 )
 
 
@@ -7914,6 +7918,13 @@ def _estimate_proposal_run(
     )
     wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
+    # A route that is free unless the person's key is set, and then may bill
+    # their own account (mayBillWithKey: Idol), adds nothing to the estimate:
+    # not "$0", since past the allowance the cost is real, and not unpriced
+    # (GM, PR #203 r11 item 2: "Estimate line: show nothing for Idol").
+    items = [item for item in items
+             if not node_route.key_billing(definitions.get(str(item.get("definitionId") or "")),
+                                           item.get("params") or {}, api_keys)]
     # Measured from the file the run would get: an upload, or an ancestor's
     # output that already exists (it isn't in the run: see _proposal_cost).
     return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired, measured.sizes)

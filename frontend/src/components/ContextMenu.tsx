@@ -119,13 +119,13 @@ export function ContextMenu() {
     );
   }
 
-  // A node that can't run without its key (Idol's Hugging Face token), this
+  // A node that can't run without its key (a keyed route's missing key), this
   // one or one feeding it: locked as the other Runs are (withKeyLock).
   const keyLock = runKeyLockLine(graphNodes, graphEdges, { kind: 'node', nodeId }, settingsCache);
   const items: MenuItem[] = [
     {
       label: 'Run This Node',
-      // The run lock's line wins (M2): run, follow, offline; then the key (withKeyLock).
+      // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
       run: isExecuting || runStarting,
       keyLock,
       action: () => {

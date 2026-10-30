@@ -187,6 +187,12 @@ class RouteSpec(TypedDict, total=False):
       rule H in docs/PROVIDER-ROUTES.md).
     - ``pricing``: its key under model_pricing.json ``routes`` (default id).
     - ``note``: readiness copy for this route.
+    - ``mayBillWithKey``: a keyless route whose run, with one of its
+      ``optionalKeys`` set, can bill the key owner's account past a free
+      allowance (Idol: a Hugging Face PRO, Team or Enterprise account's
+      prepaid credits past its daily ZeroGPU time). Its price stays the
+      sourced one (Nebula bills nothing); an agent can't start such a run
+      itself and must propose it (agent_spend.may_bill_nodes).
 
     Nodes without ``routes`` get computed specs from :func:`routes_of`,
     whose ``rules`` also carry ``requires`` (DIRECT_REQUIRES) and
@@ -207,6 +213,8 @@ class RouteSpec(TypedDict, total=False):
     paramVisibleWhen: dict[str, Any]
     pricing: str
     note: str
+    missingKeyLine: str
+    mayBillWithKey: bool
 
 
 def keys(value: Any) -> list[str]:
@@ -792,6 +800,36 @@ def route_key(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | No
         if _is_set(api_keys, key):
             return key
     return None
+
+
+def may_bill(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+             api_keys: Mapping[str, Any]) -> bool:
+    """Whether a run of this node with these params and keys can bill the key
+    owner's own provider account (RouteSpec ``mayBillWithKey``: the route it
+    takes runs with one of its optional keys set). Its list price is unchanged."""
+    if not definition or not has_routes(definition):
+        return False
+    route = select_route(definition, params, api_keys)
+    if not route.route_id or not route.key:
+        return False
+    spec = route_by_id(definition, route.route_id)
+    return bool(spec and spec.get("mayBillWithKey") is True and route.key in keys(spec.get("optionalKeys")))
+
+
+def key_billing(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                api_keys: Mapping[str, Any]) -> str | None:
+    """How a run on a ``mayBillWithKey`` route is counted (GM, PR #203 r11
+    and r12): "mayCost" with one of its optional keys set (may_bill), "free"
+    without one. None for any other route or node: it is counted as before
+    (paid when it calls a provider). Never "paid": such a route has no list
+    price beyond its sourced $0. frontend directRoute.keyBilling is the twin."""
+    if not definition or not has_routes(definition):
+        return None
+    route = select_route(definition, params, api_keys)
+    spec = route_by_id(definition, route.route_id) if route.route_id else None
+    if not spec or spec.get("mayBillWithKey") is not True:
+        return None
+    return "mayCost" if route.key and route.key in keys(spec.get("optionalKeys")) else "free"
 
 
 def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:
@@ -1962,7 +2000,8 @@ def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any,
 # The clients a route can name (execution/route_clients.py ROUTE_CLIENTS).
 ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea", "hf-space")
 _ROUTE_FIELDS = {"id", "provider", "maker", "keys", "optionalKeys", "plan", "handler", "endpoint", "endpointWhen",
-                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note", "missingKeyLine"}
+                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note", "missingKeyLine",
+                 "mayBillWithKey"}
 _ROUTE_RULE_KEYS = set(_RULE_KEYS) | {"ports"}
 
 
@@ -2027,6 +2066,12 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
                     problems.append(f"{where}.optionalKeys names {key}, which Settings doesn't store")
             if plan:
                 problems.append(f"{where} a keyless route can't bill a plan")
+        may_bill = route.get("mayBillWithKey")
+        if may_bill is not None:
+            if may_bill is not True:
+                problems.append(f"{where}.mayBillWithKey must be true when present")
+            if not optional:
+                problems.append(f"{where}.mayBillWithKey needs optionalKeys: it says a run with one of them may bill")
         if plan != "only" and not route_keys and optional is None:
             problems.append(f"{where} needs keys (only a plan-only or keyless route runs without one)")
         # A maker's Hugging Face Space (handler hf-space) names the maker as

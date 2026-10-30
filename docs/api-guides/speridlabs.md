@@ -1,8 +1,7 @@
 # Speridlabs (Idol) in Nebula Nodes
 
-> **Structural integration verified 2026-10-30.** Nebula implements the Idol
-> Space's Gradio API with mocked tests. No Idol run was started for this
-> pass, so this isn't a live result.
+> **Structural integration verified 2026-10-30**, with mocked tests and one
+> live run without a token. No run with a token has been made yet.
 
 [Idol](https://huggingface.co/spaces/speridlabs/idol) by Speridlabs turns one
 image of an object into a 3D Gaussian splat. Nebula runs it on Speridlabs' own
@@ -31,35 +30,22 @@ seed for a different object.
 
 ## Keys and cost
 
-Idol needs your Hugging Face token. Add it in **Settings → Providers →
-Hugging Face**; create one at
+Idol runs without a token on Hugging Face’s shared GPUs, which can be busy or out of free time. Add a fine-grained token with no repository access to use your own ZeroGPU allowance. With Hugging Face PRO, time past that allowance uses your prepaid credits.
+
+Add the token in **Settings → Providers → Hugging Face**; create it at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
-Until it's set, nothing on the canvas runs Idol: Run on the node says "You
-can run Idol after you add your Hugging Face token in Settings.", the
-toolbar's Run says "You can run this canvas after you add your Hugging Face
-token in Settings.", and an agent's proposal that would run it can't be
-accepted yet.
+Nebula shows Idol at $0 a run, since
+[Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
+Any bill for time past your allowance is between you and Hugging Face;
+Nebula can't see it.
 
-It runs on Hugging Face ZeroGPU, which
-[Hugging Face offers free](https://huggingface.co/docs/hub/spaces-zerogpu),
-so Nebula shows $0 a run. Each run uses your own daily GPU time: 5 minutes on
-a free account, 40 on PRO or Team, 60 on Enterprise. Visitors without an
-account get a small free daily allowance (2 minutes, by Hugging Face's
-table, which may not apply to calls from a server like Nebula's).
+With a token set, an agent can't run Idol on its own: it proposes the run,
+and you accept it on the canvas. The proposal says "may use your Hugging Face
+credits", and the Run chip counts Idol as "may cost", never as paid. Without
+a token nothing can bill, so agents run it as they run any free node.
 
-Why the token: the Space asks for 120 seconds of GPU a run, and on
-ZeroGPU's Blackwell cards Hugging Face's `spaces` package counts that as
-180 seconds (`duration_factor` 1.5), more than the 2 minutes without an
-account. A run needs that much left in your day to start, and is likely
-charged only the time it uses. Hugging Face doesn't publish the longest task
-a free account may run, and for longer tasks its `spaces` package points free
-accounts to PRO, so whether a free account can run Idol is open until the
-first live run. That run will settle it: ZeroGPU's errors name the seconds
-asked for and left.
-
-**On a PRO, Team or Enterprise account, Hugging Face can bill you** for GPU
-time past your daily quota, from your prepaid credits at $1 per 10 minutes.
-That bill is between you and Hugging Face; Nebula can't see it.
+Whether a fine-grained token with no repository access applies your own
+allowance isn't confirmed yet; Hugging Face's docs don't say.
 
 ## The result
 
@@ -80,8 +66,8 @@ doesn't take an Idol splat.
 ## When it doesn't run
 
 The Space is Speridlabs' demo on Hugging Face. It may be asleep (Nebula wakes
-it and waits up to 3 minutes), paused, or busy. If your daily allowance is
-used up, try later. The card says which of these it is. If Speridlabs change the Space's API,
+it and waits up to 3 minutes), paused, or busy. If the free GPU time, or your
+own allowance, is used up, try later. The card says which of these it is. If Speridlabs change the Space's API,
 the node stops with a line saying so until Nebula is updated.
 
 Details: [model-providers/speridlabs/idol.md](../model-providers/speridlabs/idol.md).

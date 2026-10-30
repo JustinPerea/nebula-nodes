@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  isKeylessRoute, PROVIDER_PARAM, providerChoice,
+  isKeylessRoute, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -168,6 +168,16 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   return note.charAt(0).toLowerCase() + note.slice(1, -1);
 }
 
+/** A keyless Space route's row line, GM's PR #203 r12 item 2: "Free on
+ * Hugging Face." without its token, "Uses your Hugging Face allowance." with
+ * it. No allowance numbers (GM r12). */
+function spaceNote(spec: RouteSpec, keyed: boolean): string | null {
+  if (!isKeylessRoute(spec) || spec.handler !== 'hf-space') return null;
+  const key = spec.optionalKeys?.[0];
+  const name = (key && KEY_NAMES[key]?.[0]) || 'Hugging Face';
+  return keyed ? `Uses your ${name} allowance.` : `Free on ${name}.`;
+}
+
 /** The Auto row when the run can't start. No key set for any route is GM's
  * one shared string (PR #203 r5 item 4): "Auto · needs a key". */
 export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
@@ -213,7 +223,12 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
-    label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO }) : `Auto · runs on ${autoName}`,
+    label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })
+      // GM, PR #203 r12 item 2: a keyless Space route (Idol's) reads "Auto ·
+      // free" without its token and plain "Auto" with it.
+      : autoSpec && isKeylessRoute(autoSpec) && autoSpec.handler === 'hf-space'
+        ? (autoRoute.key ? 'Auto' : 'Auto · free')
+        : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
@@ -237,7 +252,8 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,
-        ...(spec.note && !note ? { info: spec.note } : {}),
+        ...(!note && spaceNote(spec, keyed) ? { info: spaceNote(spec, keyed)! }
+          : spec.note && !note ? { info: spec.note } : {}),
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
         writes: billingWrites(definition, spec.id, false),
       });

@@ -332,7 +332,9 @@ body.app-slava-restraint {
    * didn't open draws under it. A new floating surface takes its side from
    * that, without a new question:
    * - above: every panel (10 and up: the Inspector, the library, the chat,
-   *   Run History, the Agent log), Settings (30), context menus and popovers
+   *   Run History, the Agent log once expanded), the Updates list (46: it
+   *   draws over the bar and keeps its room, GM r13 item 2), Settings (30),
+   *   context menus and popovers
    *   (40, the provider switcher's 60, Final export's 100), the chat model
    *   picker (1100), the drag layer (10000) and every modal (60 and up: the
    *   palette, the 3D viewers, the dialogs), whose scrim dims the bar with
@@ -341,7 +343,10 @@ body.app-slava-restraint {
    *   token that unlocks Accept goes).
    * - under: --sr-layer-ambient, the bars that are always there: the bottom
    *   bar and the canvas tabs, the following bar included while a proposal
-   *   shows and no modal is open (below, after the tabs' own rules). The
+   *   shows and no modal is open (below, after the tabs' own rules), and the
+   *   Agent log while collapsed (its default chip) with its "hidden" notice.
+   *   A surface takes its side from its state, not its name (GM r13 item 3:
+   *   the Agent log expanded is opened, collapsed it is chrome). The
    *   two bars also never meet: the notice stack stops below the top bars
    *   (noticeRegion.css, GM r9 item 2).
    * Notices stay above all of it (--sr-layer-notice, GM r25).
@@ -2559,8 +2564,12 @@ body.app-slava-restraint .panel-launcher:active {
  * small today (time/source/message), so Slava expresses status through a
  * subtle signal strip, source dots, and restrained mono metadata.
  * ───────────────────────────────────────────────────────────────────── */
+/* Its layer follows its state (GM, PR #203 r13 item 3; the rule beside
+ * --sr-layer-proposal): collapsed, the default chip, it is lasting chrome
+ * and sits under the proposal bar; expanded, the person opened it, so it
+ * draws over the bar, and drops back under when collapsed. */
 body.app-slava-restraint .agent-log {
-  z-index: var(--sr-layer-agent-log);
+  z-index: var(--sr-layer-ambient);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);
@@ -2569,6 +2578,10 @@ body.app-slava-restraint .agent-log {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
   box-shadow: var(--sr-shadow-panel-sm);
+}
+
+body.app-slava-restraint .agent-log.agent-log--open {
+  z-index: var(--sr-layer-agent-log);
 }
 
 body.app-slava-restraint .agent-log__drag-row,
@@ -2605,8 +2618,10 @@ body.app-slava-restraint .agent-log__hide:focus-visible {
   color: var(--sr-ink);
 }
 
+/* The "hidden" notice is the log's chrome, not one of the notices above
+ * dialogs: ambient, under the proposal bar (GM, PR #203 r13). */
 body.app-slava-restraint .agent-log-hidden-notice {
-  z-index: var(--sr-layer-agent-log);
+  z-index: var(--sr-layer-ambient);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);

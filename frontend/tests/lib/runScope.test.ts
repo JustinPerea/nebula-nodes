@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
-  cinemaSceneBase, describeRunScope, runChipLabel, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
+  cinemaSceneBase, describeRunScope, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
   summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
@@ -106,15 +106,51 @@ describe('run cost', () => {
     expect(describeRunScope(summary)).toContain('No list price for Writer');
   });
 
-  it('shows a sourced $0 run as "$0", not "~$0" (Idol on its free Space, GM PR #203 r1)', () => {
-    const shipped = { pricing: shippedTable as unknown as PricingTable, apiKeys: { HF_TOKEN: 'fixture-hf' } };
-    const summary = summarizeRunScope([priced('i', 'speridlabs-idol', {}, 'Idol')], [], { kind: 'graph' }, shipped);
-    expect(summary.cost?.low).toBe(0);
-    expect(summary.cost?.high).toBe(0);
+  it('decides "$0" by source: a run whose every priced row is 0 reads "$0", titled "This costs nothing to run."; one that only rounds to zero keeps "~" (GM, PR #203 r11 item 4)', () => {
+    const free: PricingTable = { ...pricing, nodes: { ...pricing.nodes, 'nano-banana': { currency: 'usd', per: 'image', rows: [{ match: {}, price: 0 }] } } };
+    const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing: free, apiKeys: {} });
+    expect(summary.cost?.sourcedZero).toBe(true);
     expect(runChipLabel(summary)).toBe('$0');
-    // A run that rounds to $0 but isn't 0 keeps its "~".
-    const tiny = { ...summary, cost: { ...summary.cost!, low: 0.0001, high: 0.0001 } };
-    expect(runChipLabel(tiny)).not.toBe('$0');
+    expect(runChipTitle(summary)).toBe('This costs nothing to run.');
+    // A closed 0 with no sourced zero (a figure that only rounds to it) is an estimate.
+    const rounded = { ...summary, cost: { ...summary.cost!, sourcedZero: undefined } };
+    expect(runChipLabel(rounded)).toBe('~$0');
+    expect(runChipTitle(rounded)).toBe('Estimated cost');
+    // A paid priced line beside it: not a sourced zero.
+    const mixed = summarizeRunScope([priced('a', 'nano-banana'), priced('b', 'veo-3')], [], { kind: 'graph' },
+      { pricing: free, apiKeys: { GOOGLE_API_KEY: 'set' } });
+    expect(mixed.cost?.sourcedZero).toBeUndefined();
+  });
+
+  it('never counts Idol as paid: free without a token, "1 may cost" with one (GM, PR #203 r11 item 2, r12)', () => {
+    const shipped = (keys: Record<string, string>) => ({ pricing: shippedTable as unknown as PricingTable, apiKeys: keys });
+    const idol = priced('i', 'speridlabs-idol', {}, 'Idol');
+    const keyless = summarizeRunScope([idol], [], { kind: 'graph' }, shipped({}));
+    expect(keyless.paid).toEqual([]);
+    expect(keyless.mayCost).toBeUndefined();
+    expect(keyless.cost?.lines).toEqual([]);
+    expect(runChipLabel(keyless)).toBeNull();
+    expect(runChipTitle(keyless)).toBeUndefined();
+    const signed = summarizeRunScope([idol], [], { kind: 'graph' }, shipped({ HF_TOKEN: 'hf_fixture' }));
+    expect(signed.paid).toEqual([]);
+    expect(signed.cost?.lines).toEqual([]);
+    expect(signed.mayCost).toEqual([{ name: 'Idol', account: 'Hugging Face' }]);
+    expect(runChipLabel(signed)).toBe('1 may cost');
+    expect(runChipTitle(signed)).toBe('Idol can use your Hugging Face credits.');
+    expect(describeRunScope(signed)).toBe('Runs 1 node · no paid providers. Idol can use your Hugging Face credits');
+  });
+
+  it('counts Idol apart beside paid models: "2 paid · 1 may cost", and a priced chip keeps its amount with Idol\'s sentence last', () => {
+    const keys = { HF_TOKEN: 'hf_fixture' };
+    const idol = priced('i', 'speridlabs-idol', {}, 'Idol');
+    const unpricedPair = summarizeRunScope([idol, priced('c', 'claude-chat', {}, 'Writer'), priced('d', 'claude-chat', {}, 'Editor')],
+      [], { kind: 'graph' }, { pricing, apiKeys: keys });
+    expect(unpricedPair.paid).toEqual(['Writer', 'Editor']);
+    expect(runChipLabel({ ...unpricedPair, cost: undefined })).toBe('2 paid · 1 may cost');
+    expect(runChipTitle({ ...unpricedPair, cost: undefined })).toBe('Idol can use your Hugging Face credits.');
+    const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
+    expect(runChipLabel(withPrice)).toBe('~$0.05');
+    expect(runChipTitle(withPrice)).toBe('Estimated cost\nIdol can use your Hugging Face credits.');
   });
 
   it('falls back to counting paid nodes when nothing is priced or the table is missing', () => {

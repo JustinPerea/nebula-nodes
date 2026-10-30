@@ -128,7 +128,7 @@ function GhostCard({
         <span className={`proposal-ghost__cost proposal-ghost__cost--${node.cost.kind}`}>{node.cost.label}</span>
         <p className="proposal-ghost__caption">
           {node.model ? `${node.ref} · ${node.model}` : node.ref} ·{' '}
-          <span className="proposal-ghost__by">proposed by {agentName}</span>
+          <span className="proposal-ghost__by">proposed by <span className="agent-name">{agentName}</span></span>
         </p>
       </div>
       {node.ports.inputs.map((port, row) => (
