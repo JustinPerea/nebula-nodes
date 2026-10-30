@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import sys
 import time
@@ -408,9 +409,25 @@ def _tab(client):
     return socket, tab
 
 
+def _marker_says(manager) -> bool:
+    """Whether the state dir's kept marker has caught up with the manager.
+    The server adds the tab to kept_tabs before it writes the marker, so a
+    check right after kept_tabs changes can land in between on a slow runner."""
+    path = manager.kept_marker
+    if path is None:
+        return True
+    count = manager.kept_count()
+    if count == 0:
+        return not path.exists()
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("keptTabs") == count
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def _say_kept(tab, kept: bool, manager, *, kept_now: int) -> None:
     tab.send_json({"type": "keptEdits", "kept": kept})
-    assert _settles(lambda: len(manager.kept_tabs) == kept_now)
+    assert _settles(lambda: len(manager.kept_tabs) == kept_now and _marker_says(manager))
 
 
 def _refused(response) -> bool:
