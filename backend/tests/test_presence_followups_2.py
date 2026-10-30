@@ -80,3 +80,33 @@ def test_a_retarget_without_detail_drops_the_closed_ones():
     ref = agent_notes_module._retargeted_ref({"id": "a", "kind": "commons", "targetId": "x", "changes": 4}, "b",
                                              {"changes": 1})
     assert ref == {"id": "b", "kind": "commons", "targetId": "x", "changes": 1}
+
+
+def test_the_inbox_flag_is_only_ever_true():
+    clean = agent_notes_module.proposal_detail
+    assert clean({"changes": 1, "inbox": True}) == {"changes": 1, "inbox": True}
+    assert clean({"inbox": "yes"}) == {} and clean({"inbox": 1}) == {} and clean({"inbox": False}) == {}
+    ref = agent_notes_module._retargeted_ref({"id": "a", "kind": "commons", "targetId": "x", "changes": 1, "inbox": True},
+                                             "b", {"changes": 2})
+    assert ref == {"id": "b", "kind": "commons", "targetId": "x", "changes": 2}
+
+
+def test_post_proposal_checks_what_it_is_handed(api, monkeypatch):
+    """PR #202 review 1 NIT-1: post_proposal itself puts only the checked
+    detail in the ref, whatever its caller hands it."""
+    import main
+
+    monkeypatch.setattr(main, "asset_update_detail", lambda proposal: {
+        "cover": "/x.png", "changes": 2.5, "inbox": "yes", "url": C})
+    _pin(api, A, api.person)
+    view = _propose(api, {"cover": C}).json()["proposal"]
+    (note,) = _proposal_notes(api)
+    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk}
+    assert C not in json.dumps(_note_messages(api, "added")[-1]["note"])
+
+
+def test_a_count_is_one_to_999_and_a_float_is_no_count():
+    clean = agent_notes_module.proposal_detail
+    assert clean({"changes": 0}) == {}
+    assert clean({"changes": 1}) == {"changes": 1} and clean({"changes": 999}) == {"changes": 999}
+    assert clean({"changes": 2.5}) == {} and clean({"changes": 2.0}) == {}

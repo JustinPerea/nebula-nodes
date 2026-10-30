@@ -28,6 +28,13 @@ export const HELD_PROPOSAL_LINE = 'You can review this when this tab is connecte
 
 const NO_NOTES: readonly AgentNote[] = [];
 
+/** A ref's count of changes: 1 to 999, anything else (absent, 0) one change
+ * (PR #202 review 1 NIT-2: a real ask has at least one edit). */
+function changesOf(ref: AgentNoteProposal | null | undefined): number {
+  const count = ref?.changes;
+  return typeof count === 'number' && Number.isInteger(count) && count >= 1 && count <= 999 ? count : 1;
+}
+
 /** The real card's header for each kind, from the Update's structured ref
  * (agent_notes.proposal_detail), never its text: review 20 NIT-3, an agent's
  * name in the text could spoof a count. A cover says which kind (GM, PR #200
@@ -35,7 +42,7 @@ const NO_NOTES: readonly AgentNote[] = [];
 function headerFor(kind: AssetProposalKind, ref: AgentNoteProposal | null | undefined): string {
   if (kind === 'moodboard') return 'asks to send these notes to generators';
   if (kind === 'commons') {
-    const count = ref?.changes ?? 1;
+    const count = changesOf(ref);
     return count === 1 ? 'proposes a change to this reference' : `proposes ${count} changes to this reference`;
   }
   return ref?.cover === 'automatic' ? 'proposes the automatic cover' : 'proposes a new cover';
@@ -66,4 +73,51 @@ export function useHeldProposals(kind: AssetProposalKind, targetId: string): Hel
   const awaitingSync = useAssetProposalsStore((state) => state.awaitingSync);
   return useMemo(() => heldProposalsFor(notes, proposals, awaitingSync, kind, targetId),
     [notes, proposals, awaitingSync, kind, targetId]);
+}
+
+/** GM, PR #202 r1: the Commons proposals line while this tab is held. One
+ * entry per open Update, each standing for one proposal, worded as the
+ * promoted line words one proposal; CommonsProposalsLine merges them per
+ * reference as it does the proposals, with no Review until the promote. The
+ * count and the kind come from the Update's ref, never its text or the
+ * person-only proposal list. An Update resolved (withdrawn, expired) takes
+ * its line with it. */
+export interface HeldCommonsLine {
+  proposalId: string;
+  assetId: string;
+  agentName: string;
+  agentColor: string;
+  asks: string;
+  at: number;
+}
+
+/** What one Commons proposal asks, in the promoted line's words (CommonsProposalsLine). */
+export function commonsAsks(ref: AgentNoteProposal | null | undefined): string {
+  const count = changesOf(ref);
+  if (count > 1) return `make ${count} changes to a reference`;
+  return ref?.inbox ? 'take a reference out of the inbox' : 'change a reference';
+}
+
+export function heldCommonsLines(notes: readonly AgentNote[], proposals: Readonly<Record<string, AssetProposalEntry>>,
+  awaitingSync: boolean): HeldCommonsLine[] {
+  if (!awaitingSync) return [];
+  const lines: HeldCommonsLine[] = [];
+  for (const note of notes) {
+    if (note.about !== 'proposal' || note.resolvedAt) continue;
+    const op = note.actions.find((action) => action.op.kind === 'proposal.review')?.op;
+    const proposalId = typeof op?.proposalId === 'string' ? op.proposalId : '';
+    const assetId = typeof op?.targetId === 'string' ? op.targetId : '';
+    if (!proposalId || !assetId || op?.target !== 'commons' || proposals[proposalId]) continue;
+    const at = Date.parse(note.at);
+    lines.push({ proposalId, assetId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color),
+      asks: commonsAsks(note.proposal), at: Number.isFinite(at) ? at : 0 });
+  }
+  return lines.sort((left, right) => left.at - right.at);
+}
+
+export function useHeldCommonsLines(): HeldCommonsLine[] {
+  const notes = useAgentNotesStore((state) => selectCanvasList(state).notes ?? NO_NOTES);
+  const proposals = useAssetProposalsStore((state) => state.proposals);
+  const awaitingSync = useAssetProposalsStore((state) => state.awaitingSync);
+  return useMemo(() => heldCommonsLines(notes, proposals, awaitingSync), [notes, proposals, awaitingSync]);
 }

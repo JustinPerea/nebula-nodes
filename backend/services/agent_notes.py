@@ -939,15 +939,19 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
     def retarget_proposal(self, project_id: str, note_id: str, proposal_id: str,
-                          detail: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+                          detail: Mapping[str, Any] | None = None, text: str | None = None) -> dict[str, Any] | None:
         """The agent's other proposal on the same target is still open: the
         Update now reviews that one, and its ref says that one's ``detail``
-        (``proposal_detail``). None when the update has left the list."""
+        (``proposal_detail``) and, given ``text``, its words say that one's
+        too (PR #202 review 1 LOW-1: the count and the words come from the
+        same proposal). None when the update has left the list."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None or note.get("resolvedAt"):
                 return None
             note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            if text is not None:
+                note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -957,11 +961,12 @@ class AgentNotes:
         return None if note is None else {"projectId": project_id, "note": note_view(note)}
 
     def reopen_proposal(self, project_id: str, note_id: str, proposal_id: str,
-                        detail: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+                        detail: Mapping[str, Any] | None = None, text: str | None = None) -> dict[str, Any] | None:
         """The undo of a node delete reopened the proposal (GM, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
-        update has left the list or still reviews another open proposal."""
+        update has left the list or still reviews another open proposal.
+        Given ``text``, its words are the reopened proposal's (LOW-1)."""
         def mutate(notes: list[dict[str, Any]]) -> tuple[dict[str, Any], int] | None:
             note = next((n for n in notes if n.get("id") == note_id), None)
             if note is None:
@@ -971,6 +976,8 @@ class AgentNotes:
             for key in ("resolvedAt", "resolvedBy", "outcome"):
                 note.pop(key, None)
             note["proposal"] = _retargeted_ref(note.get("proposal"), proposal_id, detail)
+            if text is not None:
+                note["text"] = clean_note_text(text)
             for action in note.get("actions") or []:
                 if (action.get("op") or {}).get("kind") == "proposal.review":
                     action["op"]["proposalId"] = proposal_id[:64]
@@ -1022,15 +1029,17 @@ MAX_PROPOSAL_CHANGES = 999
 
 
 def proposal_detail(raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    """The checked ``cover`` and ``changes`` of a proposal ref; anything else is dropped."""
+    """The checked ``cover``, ``changes`` and ``inbox`` of a proposal ref; anything else is dropped."""
     detail: dict[str, Any] = {}
     if not isinstance(raw, Mapping):
         return detail
     if raw.get("cover") in PROPOSAL_COVER_KINDS:
         detail["cover"] = raw["cover"]
     changes = raw.get("changes")
-    if isinstance(changes, int) and not isinstance(changes, bool) and 0 <= changes <= MAX_PROPOSAL_CHANGES:
+    if isinstance(changes, int) and not isinstance(changes, bool) and 1 <= changes <= MAX_PROPOSAL_CHANGES:
         detail["changes"] = changes
+    if raw.get("inbox") is True:
+        detail["inbox"] = True
     return detail
 
 
@@ -1038,7 +1047,7 @@ def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None
     """The ref now about ``proposal_id``: the kind and target stay; the detail is the new proposal's
     (an older caller that passes none keeps none, rather than the closed one's)."""
     base = {key: value for key, value in (old if isinstance(old, Mapping) else {}).items()
-            if key not in ("cover", "changes")}
+            if key not in ("cover", "changes", "inbox")}
     return {**base, "id": proposal_id[:64], **proposal_detail(detail)}
 
 

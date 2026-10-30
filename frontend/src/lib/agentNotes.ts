@@ -61,6 +61,8 @@ export interface AgentNote {
 export interface AgentNoteProposal {
   cover?: 'automatic' | 'image';
   changes?: number;
+  /** A Commons ask only to take a reference out of the inbox (GM, PR #202 r1). */
+  inbox?: true;
 }
 
 /** A done card's run (backend agent_notes.post_run_done). */
@@ -138,9 +140,10 @@ function sanitizeProposal(raw: unknown): AgentNoteProposal | null {
   const ref = raw as Record<string, unknown>;
   const out: AgentNoteProposal = {};
   if (ref.cover === 'automatic' || ref.cover === 'image') out.cover = ref.cover;
-  if (typeof ref.changes === 'number' && Number.isInteger(ref.changes) && ref.changes >= 0 && ref.changes <= 999) {
+  if (typeof ref.changes === 'number' && Number.isInteger(ref.changes) && ref.changes >= 1 && ref.changes <= 999) {
     out.changes = ref.changes;
   }
+  if (ref.inbox === true) out.inbox = true;
   return out;
 }
 

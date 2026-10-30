@@ -2384,15 +2384,20 @@ generators", "Claude Code asks to change a reference in the Commons" (or
 reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
 targetId}`, plus, for a cover, `cover`: `"automatic"` or `"image"` (which
-kind, never which image), and for a Commons ask `changes` (how many edits).
+kind, never which image), and for a Commons ask `changes` (how many edits)
+(1 to 999) and `inbox: true` when it only asks to take a reference out of
+the inbox.
 A tab that isn't connected as the person sees only the Update, and its
-placeholder card reads these, never the text. It has one **Review** action (`proposal.review`), which takes the
+placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
 Studio on that board, or to the Commons on that reference, from whichever
 screen they are on. One per agent and
 target: a new proposal on the same target replaces the agent's earlier
 Update (the socket's `removed`), and while the agent still has another
-proposal open there, closing one leaves the Update asking about the other.
+proposal open there, closing one leaves the Update asking about the other:
+its text and its `proposal` ref change in place to that one's (op
+`changed`, same id, read state kept), as they do when an undo reopens a
+proposal.
 When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
 the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
 changed", "You kept your cover", "You kept the notes here", "Applied",

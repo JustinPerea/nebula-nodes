@@ -17,6 +17,7 @@ import { CommonsEvaluation } from './CommonsEvaluation';
 import { CommonsReview } from './CommonsReview';
 import { CommonsSettings } from './CommonsSettings';
 import { CommonsProposalsLine } from './CommonsProposalsLine';
+import { useHeldCommonsLines } from '../../store/heldAssetProposals';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
@@ -340,6 +341,8 @@ export function CommonsView() {
   const [ask, promptElement] = useCommonsPrompt();
   const proposedIds = useAssetProposalsStore(useShallow((state) => targetsOf(state, 'commons')));
   const proposed = useMemo(() => new Set(proposedIds), [proposedIds]);
+  // GM, PR #202 r1: a held tab shows the proposals line from the Updates it has.
+  const heldLines = useHeldCommonsLines().length;
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -597,7 +600,7 @@ export function CommonsView() {
         />
       </WorkspaceHeader>
 
-      {(error || notice || uploadFailures.length > 0 || proposed.size > 0) && (
+      {(error || notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0) && (
         <div className="commons-messages">
           {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
           {uploadFailures.length > 0 && (

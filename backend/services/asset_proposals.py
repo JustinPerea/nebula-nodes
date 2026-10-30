@@ -253,7 +253,15 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     if proposal.kind == "project":
         return {"cover": "automatic" if proposal.change.get("cover") is None else "image"}
     if proposal.kind == "commons":
-        return {"changes": len(proposal.change.get("edits") or [])}
+        edits = proposal.change.get("edits") or []
+        detail: dict[str, Any] = {"changes": len(edits)}
+        # GM, PR #202 r1: the held Commons line says what the promoted one says.
+        # An ask only to take a reference out of the inbox is worded so there
+        # (update_text's own rule), so the ref says so too (``inbox``).
+        membership = edits[0].get("membership") if len(edits) == 1 and isinstance(edits[0], dict) else None
+        if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
+            detail["inbox"] = True
+        return detail
     return {}
 
 

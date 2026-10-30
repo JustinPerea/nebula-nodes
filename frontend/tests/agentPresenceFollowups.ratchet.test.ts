@@ -2432,6 +2432,14 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       ':root { font-size: 1000px; } .canvas-pin__edge { min-width: 0.25rem; width: 2px; }',
       ':root { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 0.25rem; }',
       ':root { font-size: 1000px; } .canvas-pin__edge { font-size: 0.25rem; width: 1em; }',
+      // PR #202 review 1 NIT-1: the cases its surviving mutations needed. Two
+      // root states (the larger one counts), an ancestor's rem size, a space
+      // and a Latin-1 glyph, and a generic family listed before a named face.
+      ':root { font-size: 16px; } :root:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
+      ':root { font-size: 1000px; } .canvas-pin__card { font-size: 1rem; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 0.25em; }',
+      '.canvas-pin__edge::before { content: " "; width: 3px; font-size: 4px; word-spacing: 400px; }',
+      '.canvas-pin__edge::before { content: "Æ"; width: 3px; font-size: 4px; }',
+      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; font-family: serif, "Very Wide"; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
     // The edge in other units, and borders the fill stops short of, stay the edge.
     for (const css of [

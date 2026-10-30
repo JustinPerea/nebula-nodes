@@ -6205,14 +6205,15 @@ async def _asset_reopen_misfit(proposal: AssetProposal, exported: dict[str, Any]
 
 
 async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
-                         detail: Mapping[str, Any] | None = None) -> None:
+                         detail: Mapping[str, Any] | None = None, text: str | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
-    proposal's ref carries its ``detail`` again (asset_proposals.update_detail)."""
+    proposal's ref carries its ``detail`` again (asset_proposals.update_detail), and its
+    words are that proposal's (``text``, asset_proposals.update_text; review 1 LOW-1)."""
     if not ref:
         return
     try:
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
-                                         detail)
+                                         detail, text)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -6423,7 +6424,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal))
+        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal))
         _schedule_asset_expiry(proposal)
     if reopened_assets:
         try:
@@ -8207,7 +8208,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             if waiting:
                 newest = max(waiting, key=lambda p: p.created_at)
                 result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
-                                                 asset_update_detail(newest))
+                                                 asset_update_detail(newest), asset_update_text(newest))
                 op, extra = "changed", {}
             else:
                 by = _RESOLVED_BY.get(proposal.status) or (

@@ -178,3 +178,235 @@ review 20 (`held_color_unvalidated`, `fallback_differs`) are now killed.
 - Build budget: 421,139 bytes raw (129,418 gzip); 101 JS assets eval-free;
   fonts OK. dist removed after.
 - Live (8795/5795, 8000-8010 and 5173 blocked, nothing run): 14 of 14.
+
+# PR #202 r1 (GM)
+
+GM signed off the visuals with one change and one check
+(`gm-pr202-r1.md`). Built on d8c366ce; nothing else pulled in.
+
+## 1. A name made only of "…"
+
+No code change. `noteHeadingName` already keeps the single "…" (the name
+is "…") and never adds a cut "…" after it, at any width; a node labelled
+"…" is titled "…", with no type-name fallback. Pinned in
+`tests/presenceFollowups2.noteHeading.test.ts` (the "GM PR #202 r1" block)
+and `src/components/canvas/noteHeadingTitle.fu2b.test.ts`. These pass on
+d8c366ce, as they should: they pin what is already there.
+
+## 2. The Commons proposals line while the tab is held
+
+- A held tab gets no proposals (they are person-only), only their Updates.
+  `heldCommonsLines` (store/heldAssetProposals.ts) makes one entry per open
+  `about: 'proposal'` Update whose review op targets `commons`, skipping
+  any proposal already in the store, only while `awaitingSync`.
+  `CommonsProposalsLine` merges those entries with the known proposals per
+  reference, counting one proposal per entry, the same way as before. A line
+  known only from Updates has no Review; on promote the person's sync brings
+  the same proposals, so the words stay and only Review is added.
+  `CommonsView` shows its messages box when there are held lines too.
+- The words come from the Update's ref, never its text and never the
+  person-only list: `changes: N` gives "make N changes to a reference". An
+  ask only to take a reference out of the inbox is worded that way on the
+  promoted line, so the ref now carries `inbox: true` for it
+  (`asset_proposals.update_detail`; `agent_notes.proposal_detail` keeps it
+  only when it is exactly `true`; a retarget drops it with `cover` and
+  `changes`; the frontend sanitizer keeps only `true`). The MCP-SETUP ref
+  docs list it.
+- GM asked for one line per ref where combining can't match. Decision: keep
+  merging per reference, because the promoted line merges per reference and
+  only the merge keeps the words the same. One case can't match: an agent
+  asking twice about the same reference while held shares one Update, so
+  the promote raises the count in place on that line. The held tab can't
+  see that case. The code comment says so.
+- Each agent gets a dot in its colour (`proposalAgentColor`, so 'red' falls
+  back to #5B9DFF), on held and promoted lines alike.
+- Review stays right-aligned, where it already was (the line's
+  space-between layout), rather than an inline " · Review". Promoting
+  doesn't move it.
+- Not changed: on promote the grid tiles gain "PROPOSAL" badges. They are
+  overlays and move nothing.
+
+## Tests on d8c366ce
+
+- `CommonsProposalsLine.held.test.tsx`: all 13 fail (the held line doesn't
+  exist).
+- `CommonsView.held.test.tsx`: fails (no messages box while held).
+- Backend: `test_an_inbox_ask_says_so_in_the_ref_and_nothing_else_does` and
+  `test_the_inbox_flag_is_only_ever_true` fail.
+- The "…" pins pass (see 1).
+
+## Mutations (GM r1 part): 17 of 17 killed
+
+- Frontend (13):
+  - the view's box ignoring held lines;
+  - Review always shown;
+  - the count read from the text;
+  - `inbox` ignored;
+  - no `awaitingSync` gate;
+  - resolved Updates kept;
+  - known proposals counted twice;
+  - no dot;
+  - the dot in a fixed colour;
+  - counting per agent, not per proposal;
+  - the sanitizer keeping a truthy `inbox`;
+  - the sanitizer dropping `inbox`;
+  - a "…" name taking a second "…".
+- Backend (4): `inbox` always set, never set, `proposal_detail` taking a
+  truthy `inbox`, a retarget keeping `inbox`.
+- Two mutations survived the first pass: counting per agent, and the
+  frontend `inbox` sanitizing. The tests added for them are "one agent
+  asking twice" and "the inbox word reaches the line only from a ref that
+  says inbox: true".
+
+## Live (8795/5795, 8000-8010 and 5173 blocked, nothing run): 8 of 8
+
+- The setup:
+  - two references;
+  - Codex makes a 3-change ask and Claude Code a region ask, both on the
+    first reference;
+  - Codex makes a role ask on the second reference.
+- Held, at 1440 and 1280, two lines with no Review:
+  - "Codex and Claude Code ask to change a reference (2 proposals)", with
+    dots rgb(122, 211, 255) and rgb(195, 232, 107);
+  - "Codex asks to change a reference".
+- On promote only Review is added. These keep their boxes exactly
+  (getBoundingClientRect):
+  - the lines, their text and dots;
+  - the messages box (h 68);
+  - the detail bar;
+  - the card's top-left and width.
+  The card grows downward as the placeholder becomes the real card.
+- A proposal withdrawn after the promote, and one withdrawn before it, take
+  their lines with them.
+- The harness waits until the Updates corner's arrival cards (queued, about
+  4s each) have been gone for 3s before each shot, so the crops show the
+  lines and Review.
+
+# PR #202 review 1 (of d8c366ce), and GM's ruling on its Q1
+
+Same round. Review 1 found 0 HIGH, 0 MEDIUM, 1 LOW and 7 NITs.
+
+## LOW-1: the words follow the ref on a fallback
+
+- When an agent's newer ask on a target closes and its Update falls back to
+  the agent's older, still-open ask, `retarget_proposal` now rewrites the
+  Update's text from `update_text` of that ask, as well as its ref.
+  `reopen_proposal` (an undo reopening a proposal) does the same. The count
+  and the words therefore always come from the same proposal.
+- Only Commons words vary by ask: cover words don't depend on the kind.
+- GM's ruling on Q1: the line changes in place to the older ask's words, with
+  no motion, marker or toast.
+  - In place: the "changed" op keeps the Update's id, its read state and
+    the corner's count.
+  - The store's "changed" branch adds no arrival card (it only drops a
+    pending one for that id, as it already did). A frontend test pins
+    this, and it held live: unread 1 → 1, arrivals 0 → 0.
+- **Review open when the ask goes:** the existing close path, with no new
+  path.
+  - Live, with Review open on the reference: the withdrawn ask's card went
+    open → closing → gone.
+  - The older card and the detail stayed.
+  - The line changed in place to "Codex asks to make 3 changes to a
+    reference".
+  - Focus was on the body before and after.
+  - Shot: `fu2b-review-open-withdrawn-1440.png`.
+- **The Agent log: not built, and flagged for GM.** No withdrawal reaches
+  the Agent log today, for asset or canvas proposals. Live, the log added
+  nothing on the withdraw. There is no existing withdraw wording to reuse:
+  - the asset ask's log line is "Asks to {…} (decide {where})";
+  - the Update's outcome is "Withdrawn by {agent}";
+  - the CLI prints "Withdrew {id}.".
+
+  GM's example ("Codex withdrew its request to change “Name”.") would be new
+  copy. GM said no new copy, so this needs GM's wording before it is built.
+  The mechanism would be one `_say_agent_action` call in
+  `_withdraw_asset_proposal` (and the canvas withdraw).
+
+## NITs
+
+- **NIT-2:** `changes` is 1 to 999 on both sides; 0 reads as absent. The
+  frontend readers (`changesOf`) also treat anything else as one change, so
+  a raw ref with 0 can't say "0 changes".
+- **NIT-5:** the "…" fold runs in every branch of the cut. A cut that reaches
+  the name's end shows the name whole, with no "…" after it: `“……”` at 1 →
+  `“…”`, `"……"x` at 2 → `"…"x`, `a……b c d e f` at 5 → `a…b…`. The whole
+  name (keep undefined or past the end) and the tooltip stay unfolded. A
+  name of only "…" stays "…".
+- **NIT-1:** tests added for the review's survivors:
+  - frontend `changes` bounds (0, -1, 1000, 1e9, 2.5, "3", true, null);
+  - a Commons Update with no count, or 0 (never "0 changes");
+  - focus with two real cards;
+  - any padding on a `.asset-proposal--held` rule in any stylesheet other
+    than its own `padding-left`;
+  - `post_proposal` fed junk, through the real route;
+  - float and 0 counts;
+  - the five ratchet-corpus cases: two root states, an ancestor rem, a
+    space glyph, a Latin-1 glyph, `serif, "Very Wide"`.
+- **NIT-7:** the backend count below is passed only.
+- **Follow-ups, not in this round** (per the coordinator):
+  - NIT-3: the ratchet under-catches `font-size-adjust`, `text-emphasis`,
+    `font-stretch`/`font-variation-settings`, and a media-conditioned
+    root size.
+  - NIT-4: the ratchet over-catches `calc()`/`clamp()` root sizes, zero
+    shadows and strokes, generic family lists and `ui-sans-serif`.
+  - NIT-6: Review on an Update focuses the strip's first card, not the
+    card for its own proposal.
+  - The Agent log withdraw line (above).
+
+## Tests on d8c366ce (this part)
+
+- Backend: these 4 fail:
+  - both fallback tests;
+  - `test_a_count_is_one_to_999_and_a_float_is_no_count`;
+  - `test_a_reopened_proposals_update_says_its_words_again`.
+- Frontend:
+  - fail: the NIT-5 cases, `changes` 0, and the no-count Commons cases;
+  - pass there by design, since they pin behaviour that is already right
+    and exist to kill mutations: the two-card focus, the padding scan, the
+    corner swap, the ratchet corpus lines and the `post_proposal` junk test.
+
+## Mutations (this part): 21 of 21 killed
+
+- LOW-1 (4):
+  - retarget without the words;
+  - reopen without the words;
+  - `retarget_proposal` ignoring `text`;
+  - `reopen_proposal` ignoring `text`.
+- Backend bounds (3): 0 allowed, floats allowed, `post_proposal` unchecked.
+- Frontend (9):
+  - 0 allowed;
+  - no upper bound;
+  - no lower bound;
+  - a missing count read as 0;
+  - focus to the first card;
+  - `padding-inline-start: 10px` after the 14px;
+  - no fold in the main branch;
+  - no fold in the visible branch;
+  - a whole name still getting a cut.
+- Ratchet (5): min over root states, an ancestor rem read as 16, a space
+  allowed, Latin-1 allowed, a generic first word matching.
+
+## Live (this part, 1440): 3 more checks, 11 of 11 in all
+
+- **Held:** Codex makes a 3-edit ask, then a 1-edit ask, on one reference;
+  then it withdraws the newer one.
+  - The corner's Update goes from "Codex asks to change a reference in the
+    Commons" (changes 1) to "Codex asks to make 3 changes to a reference in
+    the Commons" (changes 3).
+  - It keeps the same id.
+  - The held line reads "Codex asks to make 3 changes to a reference".
+  - The placeholder reads "proposes 3 changes to this reference".
+- **Promoted with Review open:** see LOW-1 above.
+
+## Gates for this round (`lg run --gate`, on the final tree)
+
+- `tsc -b`: clean.
+- `npm run lint`: clean.
+- Vitest, the full run: 602 files, 7,594 tests passed.
+  - An earlier full run, before the review-1 changes, had one failure under
+    load: `noticeRegionScreenSwitch`, a frame-timing test that this work
+    doesn't touch. It passed 3 of 3 times alone, and in this run.
+- Backend, the full suite, isolated: 11,889 passed.
+- Build budget: 422,073 bytes raw (129,674 gzip); 101 JS assets eval-free;
+  fonts OK.
+- `dist` removed.

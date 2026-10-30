@@ -29,3 +29,21 @@ def test_a_reopened_cover_proposals_update_says_image_again(canvas, monkeypatch)
     note = _proposal_note(canvas)
     assert not note.get("resolvedAt")
     assert note["proposal"] == {"id": cover, "kind": "project", "targetId": canvas.project_id, "cover": "image"}
+
+
+def test_a_reopened_proposals_update_says_its_words_again(canvas, monkeypatch):
+    """PR #202 review 1 LOW-1: a reopen rewrites the Update's words from the
+    reopened proposal (update_text), as a retarget does, so the words and the
+    ref always come from the same proposal."""
+    book, c, cover = _cover_setup(canvas, monkeypatch)
+    item = _whole(canvas, c)
+    removal = _delete(canvas, c)["removal"]
+    # Words that went stale while it was closed: the reopen must put the proposal's back.
+    with canvas.main.project_store.transaction() as catalog:
+        for n in catalog["projects"][canvas.project_id].get("agentNotes") or []:
+            if n.get("about") == "proposal":
+                n["text"] = "stale words"
+        canvas.main.project_store.commit(catalog)
+    assert _proposal_note(canvas)["text"] == "stale words"
+    assert _restore(canvas, [item], [removal]).json()["reopened"] == [cover]
+    assert _proposal_note(canvas)["text"] == canvas.main.asset_update_text(book.get(cover))
