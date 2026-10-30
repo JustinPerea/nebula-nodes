@@ -1247,3 +1247,48 @@ Four of this round's ring shots are byte-identical to round 10 shots of the same
 - **Pinned on a3371c4d** (the new and changed tests copied onto the old commit): 15 of 51 fail there, all 13 of the fix23 store tests that test new behaviour, the live mark in `pr198Fix23Ui`, and `graphStore.fix22`'s 422 (now `nebula: true`). Five new tests pass there and stand as guards: the two NIT-5 focus paths, the rename-in-the-line UI test (the line was already built at render; the mark and the store lines weren't), Nebula's own reasons merging, and a quiet try again after the person acts.
 - **Gates.** `tsc -b` and `npm run lint` pass. Full vitest: 611 files, 7,915 tests. Full backend: 12,061 passed, 71 skipped. Build budget 426,128 bytes raw (128,922 gzip), up 59 from round 22.
 - **Live (8797/5797):** the round 23 sections (`runlockhang23`, `rename23`, `otherquiet23`) and round 22's run-lock and "other" ones 17/17, and again after the ratchet fix. The batch of round 12–22 sections: 41/41, 11/11, 20/20, 17/17, 35/35, 22/22, and h 12/14. h's two misses were `held21`'s 150 ms timing checks while tsc, lint and the a3371c4d run shared the machine; h alone passed them, then lost a page promise in `following22` (a Puppeteer protocol error), which passed 4/4 alone.
+
+## Fix round 24 (PR #198 review 22, GM's pr198 r35)
+
+- **Review 22 LOW-1: a one try with no answer goes back to its own stop.** `sceneTryTimedOut` gave a run-lock try (the save after the run) `stop = null`, so a 400, 413 or "other" stop came back as a server stop. It lost its line, and the next Codex change earned it a quiet try.
+  - Every one try now carries the stop it came out of: `clashAnswerStop.stop` ([Try again], a clash answer, Undo's save first) and `runLockTry.stop` (from the try the run held, or the stop a quiet try was in).
+  - At the bound, the try settles as that stop's kind, with its line and reason. The kind's own rule then applies.
+  - The reviewer's `timedOutKeepAlways` mutant now fails 7 tests.
+- **Review 22 LOW-2: a stop put back whole.** One helper, `putBackStop`, puts a deleted scene's stop back on both ways back (asked again behind the prompt, and Undo's save first). It restores the kind, line, who outpaced it, the "other" reason and whether the quiet try was spent; `stopToKeep` now records that last one.
+  - A clash answer also records the stop it came out of. Before, the answer had cleared `refusedLine`, so a hung Keep mine came back with an empty line.
+  - `stopLineText` never renders an empty "other" line; with no line kept it falls back to Nebula's own.
+- **Review 22 LOW-3: the mark during timed retries.**
+  - `markSceneUnsaved(…, retrying)` notes in a new `retryingMarks` map that the mark is the retries' line. It writes this in the same update as the mark, and every other write clears it.
+  - `sceneMarkLine` then says the retry line with the card's current name, but only while the mark is still that line.
+  - The retry toast is an event (GM r28) and keeps the name it was said with; see the open question.
+- **Review 22 NIT-1.** `setSceneStopped(…, false, then)` writes the run's line in the same update as the stop goes, for a stopped scene's quiet try that a run holds.
+- **GM r35 Q1 (review 22 NIT-2).** `setSceneStopped` clears `quietSpent` for any stop that isn't "other". This one rule replaced three per-path resets, two of which (400/413 and the timed-retries stop) were unobservable. A 500 after an "other" stop's quiet try is a server stop, so the next change makes a quiet try; a 400 after that waits.
+- **GM r35 Q2 (review 22 NIT-3), sized: nothing to restructure.**
+  - The person's scene save is `PUT /api/graph/node/{id}`. Its refusals that name a node are all 400s (`_check_asset_refs`, `_check_provider`, the param checks): Nebula writes its own line for a 400 and only logs the detail. The other one is `_refuse_agent_internal_params`'s 422, which is agent-only and uses the node id.
+  - The rest name no scene: `CANVAS_OUT_OF_DATE` and the coded 409s, the 507 paid-fence refusal ("Cannot update graph node parameters because …"), and the recovery-storage 507.
+  - The review's named line ("Couldn’t save “Opening”. It’s locked by the review.") came from the harness, not the backend.
+  - A line the backend writes whole is still shown as written; no regex. Agents read the backend's own text through MCP, which is unchanged.
+- **Review 22 NIT-5: the surviving mutants.**
+  - The edit's and the clash answer's resets of the spent quiet try each have their own test now. Each resend is refused the same way, so no landed save covers the reset.
+  - `keepReasonDrop` is pinned by the save-first hang (the Nebula reason merges with another scene's again).
+  - `otherReasonKeep` and `otherRunLockKeep` mutated code that is gone. `stopSceneOther` now takes its reason always: every "other" answer carries one, and a timed-out try passes its stop's. It no longer clears `runLockTry`, since the kept case already does that for every answer that isn't a run lock.
+  - `restoreReasonDrop` and `quietNoClearClash` had only been "killed" by the ratchet scanner timing out under load; both are pinned for real now.
+  - `quietNoClearOk` is equivalent. After a save lands nothing is stopped, and the next stop needs a save that only the person's edit, [Try again], a clash answer or a restore sends. The first three reset `quietSpent`, and a restore sets it from the stop it kept.
+- **Tests changed because behaviour changed:** none. The round 12–23 files pass unchanged.
+- **Mutations (148 tests: the round 20–24 store and UI files).**
+  - Killed, each by its own test:
+    - the timed-out try's stop (`timedOutKeepAlways`, the old null, the line guard, the reason);
+    - `runLockTry.stop`, the clash answer's stop, `putBackStop`'s reason and quiet try, `stopToKeep`'s quiet try and `keepReasonDrop`;
+    - the kind reset, NIT-1's `then` (both ends), the retrying mark (writer, reader, and reading any mark), the empty-line fallback;
+    - the edit, clash-answer and [Try again] resets.
+  - The first runs of `putBackNoQuiet` and `keepNoQuiet` survived because the save-first test let its late answer land, which cleared the stop before the check. The late answer is now refused, and both are killed.
+  - Equivalent: `quietNoClearOk` (above), and `retryNoStop` ([Try again] without `stop`). While the try is out, `retrying` holds the same stop, and `stopToKeep` rebuilds it from that. The capture stays so the bound doesn't depend on `retrying`'s lifetime.
+  - Some kills were joined by focus UI tests timing out at about 5 s under the run's load; each mutant also fails its own test.
+- **Pinned on 1077150e:** 14 of the 17 new tests fail there. Three pass and stand as guards: the server stop (already right), and the edit's and clash answer's resets (already there, now pinned).
+- **Gates.** `tsc -b` and `npm run lint` pass. Full vitest: 613 files, 7,932 tests. The first two full runs each had one unrelated timeout (`MaskPainterPortal.round10`, then `modalStyles.round11`); this Mac's load average was 57–79 from other sessions, and both pass alone. The third run, at a lower load, passed clean. Full backend: 12,061 passed, 71 skipped. Build budget 426,128 bytes raw (128,915 gzip).
+- **Live (8797/5797):**
+  - New sections: `hang24-400`, `hang24-413` and `hang24-other` (back at the 15 s bound with their own line; a late refusal changes nothing; Codex's change then sends nothing for 400 and 413, and one quiet try for "other" after [Try again]) and `retrymark24` (the mark says "Opening IV" at once while retrying).
+  - With round 22–23's sections: 24/25. The miss was my harness reading the label from the card's text (the header shows "Cinema Scene"); it now reads the store, and passed 5/5.
+  - Regression batch: c, e, e3, f and g all pass. a2 was 37/41 and h 13/14. `clashsend21` (prompt never asked in a2) passed alone.
+  - `held21`'s fast-try check (no grey look if the save answers within 150 ms) failed alone too, so I compared frontends on the same backend. The try took 127–348 ms on both, and 1077150e failed it 2 of 4 times. The backend round trip on this machine is right at the 150 ms threshold, so this is not round 24.
+- **Open:** the retry toast ("…Nebula is trying again.") is an event (GM r28) and keeps the name it was said with after a rename, while the mark now follows the rename. Should it follow too?

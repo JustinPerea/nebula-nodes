@@ -3795,9 +3795,15 @@ once.
 A scene stopped by a refusal Nebula has no line of its own for differs
 from 400 and 413 in one way: when another writer (you, or another window)
 changes the scene, it makes one quiet try, since the scene as it is now
-might save. If that try fails, the scene is stopped again with its line
-and waits for the person (their edit or Try again); further changes from
-other writers send nothing more until the person acts. The
+might save. If that try is refused the same way, the scene is stopped
+again with its line and waits for the person (their edit, Try again or a
+clash answer); further changes from other writers send nothing more until
+the person acts. Refused another way, it is a stop of that kind under that
+kind's rule: after a server error it shows the server line, and the next
+change makes a quiet try again; after a 400 it waits. A delete and Undo
+don't buy another quiet try. While Nebula is retrying a server error by
+itself, the "Unsaved" mark names the scene as its card is named now, too.
+The
 line's Try again tries every scene it names once: those that save leave
 the line, those that fail stay in it, and no new round of retries starts.
 While those tries run, the line stays (marked busy) and Try again (there
@@ -3822,8 +3828,13 @@ again, the person's clash answer, Undo bringing a stopped scene back) and
 it still fails after the run, that is still the one try: the scene goes
 back to stopped with its line and Try again, with no new round of retries.
 That save has the same 15-second bound: with no answer by then the run's
-line gives way to the stop line (in one step) with Try again, and its late
-answer, if it comes, follows the same rule as any try's.
+line gives way (in one step) to the line of the stop the scene was in
+before, with Try again: a 400 or 413 stop comes back as itself and keeps
+waiting for the person, and a stop for a reason Nebula has no line for
+keeps its reason. Its late answer, if it comes, follows the same rule as
+any try's. Every one try that gets no answer in time goes back to its own
+stop that way. A stopped scene's quiet try that a run holds swaps its stop
+line for the run's in one step.
 A scene leaves its line whenever its stop clears: it saved, or your write
 made it match the person's values (then the stop, the line and the
 "Unsaved" mark go together, and nothing is said or sent).
