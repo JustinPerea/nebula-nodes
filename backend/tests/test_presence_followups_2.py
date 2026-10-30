@@ -22,7 +22,8 @@ def test_a_cover_to_an_image_says_image_and_never_which(api):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image"}
+    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image",
+                               "since": view["createdAt"]}
     # What every tab gets (the socket's "added"): no image, no asset path.
     added = _note_messages(api, "added")[-1]["note"]
     assert added["proposal"]["cover"] == "image"
@@ -47,18 +48,21 @@ def test_closing_one_of_two_retargets_the_ref_with_the_other_ones_kind(api):
     assert note["proposal"]["id"] == second["id"] and note["proposal"]["cover"] == "image"
     assert api.client.delete(f"/api/canvas/proposals/{second['id']}", headers=CLAUDE).status_code == 200
     (note,) = _proposal_notes(api)
-    assert note["proposal"] == {"id": first["id"], "kind": "project", "targetId": api.dusk, "cover": "automatic"}
+    assert note["proposal"] == {"id": first["id"], "kind": "project", "targetId": api.dusk, "cover": "automatic",
+                               "since": first["createdAt"]}
     changed = _note_messages(api, "changed")[-1]["note"]
     assert changed["proposal"]["cover"] == "automatic"
 
 
-def test_a_moodboard_ask_carries_no_detail(api):
+def test_a_moodboard_ask_carries_only_when_it_was_asked(api):
+    """No detail of the change, only ``since`` (PR #202 review 3 LOW-1)."""
     from tests.test_asset_proposals import _board
 
     board = _board(api)
-    _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"])
+    view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert set(note["proposal"]) == {"id", "kind", "targetId"}
+    assert set(note["proposal"]) == {"id", "kind", "targetId", "since"}
+    assert note["proposal"]["since"] == view["createdAt"]
 
 
 def test_post_proposal_keeps_only_a_checked_kind_and_count():

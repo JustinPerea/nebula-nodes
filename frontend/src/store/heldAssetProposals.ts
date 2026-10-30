@@ -45,6 +45,15 @@ function askedAt(note: AgentNote): number {
   return Number.isFinite(at) ? at : 0;
 }
 
+/** Oldest ask first, the order the held placeholders and lines and the
+ * promoted cards and line share; two asks made in the same millisecond go by
+ * their proposal ids, so they don't swap on the promote either (PR #202
+ * review 3 NIT-1). */
+export function askedOrder(left: { at: number; id: string }, right: { at: number; id: string }): number {
+  if (left.at !== right.at) return left.at - right.at;
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
 /** The real card's header for each kind, from the Update's structured ref
  * (agent_notes.proposal_detail), never its text: review 20 NIT-3, an agent's
  * name in the text could spoof a count. A cover says which kind (GM, PR #200
@@ -73,7 +82,7 @@ export function heldProposalsFor(notes: readonly AgentNote[], proposals: Readonl
     // same identity, colour included, that the real card's view carries.
     held.push({ proposalId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color), header: headerFor(kind, note.proposal), at });
   }
-  return held.sort((left, right) => left.at - right.at);
+  return held.sort((left, right) => askedOrder({ at: left.at, id: left.proposalId }, { at: right.at, id: right.proposalId }));
 }
 
 /** The placeholders for one target, for the strip and its host. */
@@ -122,7 +131,7 @@ export function heldCommonsLines(notes: readonly AgentNote[], proposals: Readonl
     lines.push({ proposalId, assetId, agentName: note.author.name, agentColor: proposalAgentColor(note.author.color),
       asks: commonsAsks(note.proposal), at });
   }
-  return lines.sort((left, right) => left.at - right.at);
+  return lines.sort((left, right) => askedOrder({ at: left.at, id: left.proposalId }, { at: right.at, id: right.proposalId }));
 }
 
 export function useHeldCommonsLines(): HeldCommonsLine[] {

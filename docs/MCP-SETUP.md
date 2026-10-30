@@ -2391,11 +2391,12 @@ generators", "Claude Code asks to change a reference in the Commons" (or
 "asks to make 3 changes to a reference in the Commons", "asks to take a
 reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
-targetId}`, plus, for a cover, `cover`: `"automatic"` or `"image"` (which
-kind, never which image), and for a Commons ask `changes` (how many edits)
-(1 to 999), `inbox: true` when it only asks to take a reference out of
-the inbox, and `since` (when that ask was made, ms, as the proposal's
-`createdAt`).
+targetId, since}`, where `since` is when that ask was made (ms, as the
+proposal's `createdAt`; after the Update falls back to your older ask on the
+same target, that ask's). Plus, for a cover, `cover`: `"automatic"` or
+`"image"` (which kind, never which image), and for a Commons ask `changes`
+(how many edits) (1 to 999) and `inbox: true` when it only asks to take a
+reference out of the inbox.
 A tab that isn't connected as the person sees only the Update, and its
 placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard

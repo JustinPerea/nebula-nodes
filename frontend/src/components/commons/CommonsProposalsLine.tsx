@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AssetProposalView } from '../../lib/assetProposals';
 import { proposalAgentColor, useAssetProposalsStore } from '../../store/assetProposalsStore';
-import { useHeldCommonsLines } from '../../store/heldAssetProposals';
+import { askedOrder, useHeldCommonsLines } from '../../store/heldAssetProposals';
 import { agentNameList } from '../../lib/errorCopy';
 
 interface Agent {
@@ -60,13 +60,13 @@ export function CommonsProposalsLine({ onOpen }: { onOpen: (assetId: string) => 
     .filter((entry) => !entry.closing && entry.view.kind === 'commons')
     // A string per proposal keeps useShallow's comparison stable between renders.
     .map(({ view }) => JSON.stringify({ assetId: view.target.id, agent: { name: view.agent.name, color: proposalAgentColor(view.agent.color) },
-      asks: asks(view), at: view.createdAt }))));
+      asks: asks(view), at: view.createdAt, id: view.id }))));
   const held = useHeldCommonsLines();
   const asked = [
-    ...known.map((raw) => ({ ...(JSON.parse(raw) as { assetId: string; agent: Agent; asks: string; at: number }), held: null as string | null })),
+    ...known.map((raw) => ({ ...(JSON.parse(raw) as { assetId: string; agent: Agent; asks: string; at: number; id: string }), held: null as string | null })),
     ...held.map((line) => ({ assetId: line.assetId, agent: { name: line.agentName, color: line.agentColor }, asks: line.asks, at: line.at,
-      held: line.proposalId })),
-  ].sort((left, right) => left.at - right.at);
+      id: line.proposalId, held: line.proposalId })),
+  ].sort(askedOrder);
   if (asked.length === 0) return null;
   const byAsset = new Map<string, Waiting & { held: string[]; known: number }>();
   for (const one of asked) {

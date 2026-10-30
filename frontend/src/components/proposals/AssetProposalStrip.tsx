@@ -7,7 +7,7 @@ import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../li
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
 import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
-import { HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
+import { askedOrder, HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 
 /** How often the strip rechecks expiry while one is showing. */
@@ -316,7 +316,7 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
       {[...entries.map((entry) => ({ at: entry.view.createdAt, id: entry.view.id, card: (
         <ProposalCard key={entry.view.id} entry={entry} now={now} names={names} inPlace={wasHeld.has(entry.view.id)} />) })),
       ...held.map((item) => ({ at: item.at, id: item.proposalId, card: <HeldCard key={item.proposalId} held={item} onLeaveFocused={onLeaveFocused} /> }))]
-        .sort((left, right) => left.at - right.at).map((item) => item.card)}
+        .sort(askedOrder).map((item) => item.card)}
     </div>
   );
 }

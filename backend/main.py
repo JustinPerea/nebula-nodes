@@ -8380,20 +8380,36 @@ async def _settle_proposal_updates() -> None:
             continue
         if known and proposal.is_open:
             continue
+        # PR #202 review 3 LOW-2: a closed asset proposal whose Update another
+        # open proposal still shares (the same agent's other ask on that
+        # target) is the close handling's to retarget (_follow_asset_updates);
+        # resolving it here, while that follow is under way, left the open ask
+        # under "Withdrawn by …".
+        if known and kind in _ASSET_UPDATE_KINDS and _shares_update(project_id, note["id"]):
+            continue
         # Not in memory: Nebula restarted while it was open (Q108 a).
         if not known:
             outcome = RESTART_OUTCOME
         else:
             outcome = asset_outcome_line(proposal) if kind in _ASSET_UPDATE_KINDS else canvas_outcome_line(proposal)
         try:
+            # Given the id, the resolve leaves an Update an undo's reopen took
+            # over meanwhile (reopen_proposal; PR #202 review 3 LOW-2).
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
-                                             outcome=outcome, by={"kind": "system"})
+                                             outcome=outcome, by={"kind": "system"},
+                                             proposal_id=str(ref.get("id") or ""))
         except (NoteError, ProjectStoreError):
             continue
         if result is not None:
             await _broadcast_raw_quietly(_notes_message("canvas", "resolved", project_id=project_id,
                                                         ids=[note["id"]], note=result["note"],
                                                         unread=result["unread"]))
+
+
+def _shares_update(project_id: str | None, note_id: str) -> bool:
+    """Whether an open asset proposal still shares this Update."""
+    ref = {"id": note_id, "projectId": project_id}
+    return any(isinstance(p, AssetProposal) and p.is_open and p.update == ref for p in asset_proposals.open_list())
 
 
 async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:

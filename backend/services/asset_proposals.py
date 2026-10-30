@@ -250,9 +250,16 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     edits (``changes``). A tab that isn't connected as the person sees only
     the Update, so its placeholder reads these, never the Update's text
     (review 20 NIT-3: an agent's name could spoof a count parsed from text).
-    Never the image, the asset or any field value."""
+    Never the image, the asset or any field value.
+
+    Every kind also says when the ask was made (``since``: the view's
+    createdAt, a timestamp only), so a held tab orders its placeholders and
+    lines as the promoted cards and line do, even after the Update fell back
+    to an older ask (PR #202 review 2 LOW-A for Commons; review 3 LOW-1 for
+    covers and moodboards)."""
+    since = int(proposal.created_at * 1000)
     if proposal.kind == "project":
-        return {"cover": "automatic" if proposal.change.get("cover") is None else "image"}
+        return {"cover": "automatic" if proposal.change.get("cover") is None else "image", "since": since}
     if proposal.kind == "commons":
         edits = proposal.change.get("edits") or []
         detail: dict[str, Any] = {"changes": len(edits)}
@@ -262,12 +269,9 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
         membership = edits[0].get("membership") if len(edits) == 1 and isinstance(edits[0], dict) else None
         if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
             detail["inbox"] = True
-        # PR #202 review 2 LOW-A: when the ask was made (the view's createdAt,
-        # a timestamp only), so a held tab orders its line and names as the
-        # promoted line does, even after the Update fell back to an older ask.
-        detail["since"] = int(proposal.created_at * 1000)
+        detail["since"] = since
         return detail
-    return {}
+    return {"since": since}
 
 
 # An Update whose proposal was open when Nebula restarted (Justin's Q108 a,

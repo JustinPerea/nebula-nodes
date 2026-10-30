@@ -5,6 +5,7 @@ Commons line names no reference by its id, filename, page title or collection,
 and carries no Commons text: "an image in the Commons" everywhere."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -153,6 +154,11 @@ def test_no_commons_log_line_carries_an_id_a_filename_a_page_title_or_commons_te
         cx.client.delete(f"/api/canvas/proposals/{made.json()['proposal']['id']}", headers=CLAUDE)
     lines = [words for _, words in _log(cx.sent[start:])]
     assert len(lines) >= 2 * (len(changes) + len(COMMONS_KINDS))
+    # PR #202 review 3 NIT-3: every field the socket sends on an Agent log
+    # event, not only its words, so a field added later is checked too.
+    events = [json.dumps(event, ensure_ascii=False) for event in cx.sent[start:] if event.get("type") == "agentPresence"]
+    assert len(events) >= len(lines)
+    lines += events
     ids = {asset, membership, cx.poster, cx.poster_membership, cx.region, cx.inbox, cx.inbox_membership, collection["id"]}
     for line in lines:
         assert not re.search(r"\b(?:ast|mem|reg|col)_[0-9a-z]+", line), line

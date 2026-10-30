@@ -541,6 +541,10 @@ for it.
     the Update's time for an older ref without it), the same rule the
     promoted line and the real cards use (createdAt ascending). Line order
     and agent order both follow it.
+  - **Correction (round 5, review 3 LOW-1):** this was true only for
+    Commons. `update_detail` set `since` only on Commons refs, so cover and
+    moodboard placeholders fell back to the Update's time and still swapped
+    on promote. Round 5 sends `since` for every kind (see below).
   - Live, the review's repros keep their order on promote:
     - (b) lines [A, B];
     - (c) names "Codex and Claude Code".
@@ -706,3 +710,89 @@ Live (8795/5795, 8000-8010 and 5173 blocked, 1440): 4 of 4.
   in the Commons to avoid", in the panel.
 - No id, filename, collection or Commons text appears in any line.
 - Shot: `fu2d-agent-log-commons-ask-withdrawal-1440.png`.
+
+# PR #202 round 5 (review 3, on 746f3f01)
+
+Review 3 found no HIGH or MEDIUM issues. This round fixes both of its LOWs and three NITs. NIT-4 (the log has
+no replay) and Q1-Q3 are out of scope. No copy changed.
+
+- **LOW-1: cover and moodboard placeholders swapped on promote.**
+  - `update_detail` now sends `since` for every kind: covers
+    `{cover, since}`, moodboards `{since}`, Commons as before.
+  - The frontend already ordered by `since` whenever it was there
+    (`askedAt`), so the fix is the backend's. The round 3 entry above is
+    corrected.
+  - `docs/MCP-SETUP.md` now gives `since` among the ref's own fields for
+    every kind.
+- **LOW-2: the Update settle closed an Update without the proposal-id
+  check.** In `_settle_proposal_updates`:
+  - It skips a known, closed asset proposal while another open asset
+    proposal still shares its Update (`_shares_update`). The close
+    handling (`_follow_asset_updates`) retargets that Update.
+  - Its resolve now passes `proposal_id`, so an undo's reopen that took
+    the Update over meanwhile is left alone.
+  - A closed ask whose Update nothing open shares is still settled (a
+    missed follow, a restart), and a test pins that.
+- **NIT-1: a tie-break on the proposal id.** The shared `askedOrder` sorts
+  by time, then by id. It is used by:
+  - `heldProposalsFor` and `heldCommonsLines`;
+  - the strip;
+  - the Commons line, whose promoted JSON now carries the id.
+- **NIT-2: tests for the two surviving mutations.**
+  - Withdrawing twice: one line, and the second withdraw gets 409.
+  - `agentNameList(['A','A','B','B','C'])` gives "A, B and C".
+- **NIT-3: the ratchet now scans the full JSON.** The round 4 ratchet also
+  scans every field of each `agentPresence` event it sees, not only the
+  words.
+
+Tests:
+- `tests/test_presence_followups_2e.py` (LOW-1 cover and moodboard);
+- `tests/test_presence_followups_2e_settle.py` (both of review 3's races,
+  plus the narrow guard);
+- `tests/test_withdraw_agent_log.py` (withdraw twice);
+- `tests/test_commons_log_wording.py` (full JSON);
+- `AssetProposalStrip.fu2e.test.tsx` (cover and moodboard held→promoted,
+  ties on the strip, the Commons line and the helpers, `agentNameList`).
+- I updated the exact-ref asserts that now include `since`, and renamed
+  the moodboard one.
+
+On a clean export of 746f3f01:
+- Backend: 9 failed, 51 passed. The failures are the 2 LOW-1 tests, the
+  2 LOW-2 races and the 5 exact-ref asserts.
+- Frontend: 4 of 9 failed (the NIT-1 tests).
+- The rest pass there by design:
+  - the frontend LOW-1 order (the frontend already read `since`);
+  - the narrow settle guard;
+  - withdraw twice and `agentNameList`, which pin correct code against
+    the surviving mutations;
+  - the JSON ratchet.
+
+Mutations: 13 of 13 killed.
+- `since` dropped from covers, and from moodboards.
+- The settle without the shared-Update skip.
+- The settle resolving without the id.
+- `_shares_update` always true.
+- The withdrawal line moved above the close.
+- An Agent log event carrying the target id in a new field.
+- `askedOrder` without the id.
+- Each of the four sorts back to time only.
+- `agentNameList` counting raw names.
+- The two held-helper sorts survived at first: their components re-sort.
+  Direct tests of the exported helpers now kill them.
+
+Live (8795/5795, with 8000-8010 and 5173 blocked), review 3's R3-1 on a
+project cover:
+1. Held: Codex asks for B, Claude Code asks for C, Codex asks for C and
+   withdraws it.
+2. Codex's Update falls back to its first ask: `since` is older than
+   Claude Code's while `at` is newer.
+3. Held cards: [Codex, Claude Code]. Promoted cards: [Codex, Claude Code].
+   Codex's card doesn't move. Claude Code's stays second, lower, because
+   the real card is taller than its placeholder.
+
+Live result: 9 of 9, with no requests toward the dev ports and no accept, reject or execute.
+
+Shots: `fu2e-cover-strip-{held,promoted}-1440.png`.
+
+Gates: tsc and lint clean; vitest 7,620 passed (605 files); backend
+11,921 passed (isolated); build budget 422,344 bytes raw.

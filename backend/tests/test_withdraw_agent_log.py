@@ -100,3 +100,16 @@ def test_a_refused_withdrawal_logs_nothing(api):
     other = api.client.delete(f"/api/canvas/proposals/{view['id']}", headers={"X-Nebula-Agent": "Codex"})
     assert other.status_code == 403
     assert not [line for line in _log_lines(api.sent) if line[1].startswith("Withdrew")]
+
+
+def test_withdrawing_twice_logs_one_withdrawal(api):
+    """PR #202 review 3 NIT-2: the line comes after the close, so a second
+    withdraw (409, already closed) logs nothing; a line moved above the
+    close would log twice."""
+    _pin(api, A, api.person)
+    view = _propose(api, {"cover": C}).json()["proposal"]
+    assert api.client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE).status_code == 200
+    again = api.client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE)
+    assert again.status_code == 409
+    assert [line for line in _log_lines(api.sent) if line[1].startswith("Withdrew")] == [
+        ("Claude Code", "Withdrew its request to make another image the cover of “Dusk”")]
