@@ -7,6 +7,8 @@ import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
+import { keptLockTitle, useKeptCanvas } from '../../lib/keptCanvas';
+import { KEPT_MARK } from '../../lib/canvasLock';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -30,6 +32,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   // fit the name (fix round 1 of PR #200, GM bug 1: only a name past 24
   // characters is cut).
   const following = useFollowingSwitch();
+  // GM r20 on PR #199: Projects would strand a kept canvas, so it holds,
+  // with the kept line for its verb (a press pulses it).
+  const kept = useKeptCanvas();
   const bar = useRef<HTMLDivElement | null>(null);
   const [lockedWidth, setLockedWidth] = useState<number | null>(null);
   // Measured when the follow starts, before the bar redraws with the line.
@@ -81,7 +86,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       {...(following ? { role: 'group', title: openingLine(following.projectName), 'aria-label': openingLine(following.projectName) } : {})}
       style={following && lockedWidth ? { minWidth: lockedWidth } : undefined}>
       <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
-        aria-busy={homeBusy || undefined} title="Projects" disabled={busy}
+        aria-busy={homeBusy || undefined} {...(kept ? { [KEPT_MARK]: '', disabled: true, title: keptLockTitle('home') }
+          : { title: 'Projects', disabled: busy })}
         onClick={(event) => (onHome ? onHome(event.currentTarget) : void useProjectStore.getState().goHome())}>
         <Home size={16} aria-hidden="true" />
         {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}

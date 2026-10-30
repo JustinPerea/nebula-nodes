@@ -1348,6 +1348,7 @@ class ProjectStore:
         # Open tabs hold the list as it was: a new revision makes them reload.
         catalog["workspaceRevision"] = uuid4().hex
         read_whole = bool(damage.raw is not None and salvages and salvages[0].complete)
+        records_unread = catalog_recovery.records_unread(damage.raw, head, read_whole)
         self._carry_protection(catalog, salvages, read_whole)
         try:
             self._check(catalog)
@@ -1481,6 +1482,13 @@ class ProjectStore:
             # destroyed), what it held past the damage is unknown, so nobody
             # may say nothing was lost (live check of fix round 1).
             "damagedReadWhole": read_whole,
+            # Whether, besides, the damaged file held project records Nebula
+            # couldn't read (GM r19 on PR #199, 6a;
+            # catalog_recovery.records_unread): a file cut after its
+            # projects group closed isn't read whole, but lost no project
+            # (a cut trash group is logged, not in the notice). Records from
+            # before it lack the field: unknown.
+            "damagedRecordsUnread": records_unread,
             # catalog-purged.json was older than a file that decided ids it
             # names (review 5, L-1): its write had failed, or a crash.
             "purgedFileBehind": merged.purged_file_behind,

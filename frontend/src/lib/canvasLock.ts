@@ -23,14 +23,19 @@ import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept
  *
  * PR #198 review 6, M2 (GM r9 answer 3): this tab's own run is a third
  * reason, for the controls it locks too (a run, a delete, a duplicate, an
- * undo). One order everywhere: the run, then following, then offline, then
- * the control's own title. A control the run lock wins on says only the
+ * undo). One order everywhere (PR #199 put kept before it: see below): the
+ * run, then following, then offline, then the control's own title. A control the run lock wins on says only the
  * run's line and carries neither mark, so a press never pulses the project
  * bar or the banner for a reason its tooltip doesn't give.
  *
- * PR #199 (GM r16-r18): the canvas kept in this tab after a restore is the
- * fourth reason, after the run, following and offline. A control that only
- * changes this tab's canvas (`kept: 'live'`) stays on.
+ * PR #199 (GM r16, 4; GM r19, 4): the canvas kept in this tab after a
+ * restore is a reason only the person can fix ([Save as a project], or
+ * discarding the kept edits), so it goes first, before the reasons that clear
+ * by themselves: kept, then the run, following, offline and the control's own
+ * state (a missing key, when one is a reason, goes before kept). Otherwise the
+ * person waits out a run or a reconnect only to be refused. A control that
+ * only changes this tab's canvas (`kept: 'live'`) stays on, under the run,
+ * following and offline as before.
  */
 export const FOLLOWING_MARK = 'data-following-disabled';
 /** GM r16 on PR #199, 4: a control disabled because the canvas is kept in
@@ -58,9 +63,9 @@ export interface CanvasLock {
    * in place of its own (fix round 1 of PR #200, answer 1). `run` (PR #198):
    * the run lock holds it now (the caller reads isExecuting, or a wider
    * condition such as a run that is starting, so a card that draws no run
-   * lock never re-renders when a run starts); its line then wins. Kept
-   * (PR #199) comes after the run, following and offline: GM's kept line
-   * for the control's `kept` action, unless it is 'live'. */
+   * lock never re-renders when a run starts); its line then wins over
+   * following and offline. Kept (PR #199, GM r19, 4) comes first of all:
+   * GM's kept line for the control's `kept` action, unless it is 'live'. */
   act(own: LockOwn, options?: RunLock): ActProps;
   /** The tooltip `act` gives, for a control that isn't disabled by it (a
    * read-only field). */
@@ -108,6 +113,8 @@ export interface ActProps {
 export function lockedAction(lock: CanvasLock, own: LockOwn,
   options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
+  // Kept first (GM r19, 4): the offline line never replaces the kept line.
+  if (props[KEPT_MARK] !== undefined) return props;
   if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
   // Create's and Remotion's actions keep their own title offline for now
@@ -129,12 +136,13 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   return {
     locked, following, offline, kept, mark, title,
     act: (own, options = {}) => {
-      // The run's line first, alone (PR #198 M2, N1).
+      // Kept first (GM r19, 4): its own line and its mark only (a press
+      // pulses the kept line). A control that only changes this tab's
+      // canvas stays on.
+      if (kept && own.kept !== 'live') return { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) };
+      // Then the run's line, alone (PR #198 M2, N1).
       if (options.run) return { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON };
-      // Then following and offline (their marks and lines), then kept: its
-      // own line and its mark only (a press pulses the kept line). A control
-      // that only changes this tab's canvas stays on.
-      if (!locked && kept && own.kept !== 'live') return { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) };
+      // Then following and offline (their marks and lines).
       return { ...mark, disabled: locked || Boolean(own.disabled), title: title(own) };
     },
   };
@@ -160,10 +168,10 @@ export function canvasLockNow(): CanvasLock {
  * nothing.
  */
 export function refuseCanvasEdit(): boolean {
-  // And while the canvas is kept in this tab after a restore (GM r15 on PR
-  // #199, Q11), after following and offline (the order `act` gives): only
-  // the tab-only edits join the kept edits (the store's gates).
-  return refuseEditWhileFollowing() || refuseEditWhileOffline() || refuseEditWhileKept();
+  // And while the canvas is kept in this tab after a restore (PR #199),
+  // first, as `act` orders it (GM r19, 4): only the tab-only edits join the
+  // kept edits (refuseTabOnlyEdit, the store's gates).
+  return refuseEditWhileKept() || refuseEditWhileFollowing() || refuseEditWhileOffline();
 }
 
 /**

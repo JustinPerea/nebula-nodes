@@ -154,6 +154,24 @@ def canvas_owner_per_test(monkeypatch):
         monkeypatch.setattr(graph, "owner", OWNER_UNKNOWN)
 
 
+@pytest.fixture(autouse=True)
+def no_kept_grace_between_tests():
+    """Each test starts and ends with no kept-mode grace left by a kept tab's
+    socket that closed (main.KEPT_GRACE_SECONDS): the manager lives for the
+    process, so a test that closed a kept tab held agents back in the next
+    test for 10 s."""
+    import sys
+
+    def clear() -> None:
+        manager = getattr(sys.modules.get("main"), "manager", None)
+        if manager is not None and hasattr(manager, "kept_grace_until"):
+            manager.kept_grace_until = None
+
+    clear()
+    yield
+    clear()
+
+
 @pytest.fixture
 def spending_limits_off(monkeypatch):
     """Run as if the person turned agent spending limits off in Settings.

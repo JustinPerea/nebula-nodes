@@ -118,11 +118,13 @@ describe('GM r18, Q3: delete, move and undo are the kept tab’s own', () => {
     expect(pulses).toBe(0);
   });
 
-  it('Undo of a delete keeps the typing done since; a duplicate is a step too', () => {
+  it('Undo takes the typing back first, then the delete (GM r19, 5: typing is a step); a duplicate is a step too', () => {
     useGraphStore.getState().deleteNode('n1');
     useGraphStore.getState().updateNodeData('n2', { params: { value: 'n2 typed after' } });
     useGraphStore.getState().undo();
-    expect(values()).toEqual(['n1', 'n2 typed after', 'n3']);
+    expect(values()).toEqual(['n2', 'n3']);
+    useGraphStore.getState().undo();
+    expect(values()).toEqual(['n1', 'n2', 'n3']);
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((n) => ({ ...n, selected: n.id === 'n3' })) }));
     useGraphStore.getState().duplicateSelected();
     expect(ids()).toHaveLength(4);
@@ -138,6 +140,8 @@ describe('GM r18, Q3 guard: Undo never steps back into the history Nebula saved'
     useGraphStore.getState().deleteNode('n3');
     useGraphStore.getState().updateNodeData('n1', { params: { value: 'n1 typed' } });
     const saved = useGraphStore.getState().undoStack;
+    useGraphStore.getState().undo(); // the typing (GM r19, 5)
+    expect(values()).toEqual(['n1', 'n2']);
     useGraphStore.getState().undo(); // the first kept edit, undone
     const afterFirst = useGraphStore.getState();
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
@@ -149,7 +153,7 @@ describe('GM r18, Q3 guard: Undo never steps back into the history Nebula saved'
     expect(after.undoStack[0]).toBe(SAVED_STEP);
     expect(after.redoStack).toEqual([]);
     expect(after.keptUndo).toEqual([]);
-    expect(values()).toEqual(['n1 typed', 'n2', 'n3']);
+    expect(values()).toEqual(['n1', 'n2', 'n3']);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

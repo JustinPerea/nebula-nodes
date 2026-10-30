@@ -57,8 +57,9 @@ for a generator's own params and ports.
 Projects: `nebula projects` lists them; `*` is the one open on the canvas.
 If Nebula found its project list damaged and restored it, `nebula projects`
 (and `nebula context`) start with a note saying so: from which copy and how
-old it is, which projects it added back, which went back to the copy's
-version, came back after a delete, or are in Recently deleted again, whether
+old it is, which projects it added back, which it left out because the list
+was at its project limit (still in the damaged file), which went back to the
+copy's version, came back after a delete, or are in Recently deleted again, whether
 the live canvas was saved as its own project ("<project> (recovered)", or
 "Recovered canvas", "Recovered canvas 2" and on when which project it was is
 unknown), whether the
@@ -106,9 +107,13 @@ first."). Right after a restore of the project list, your first change finds
 the same: Nebula reads whether the canvas waits from the canvas itself.
 While the person's tab keeps edits Nebula couldn't save after a restore of
 the project list (their tab shows "They’re kept in this tab." with Save as a
-project), every change, run or project switch of yours is refused (409
-`canvas_kept_in_tab`); reads still work. Tell the person, and try again after
-they click Save as a project.
+project and Discard edits), every canvas change, run or project switch of yours is
+refused (409 `canvas_kept_in_tab`). Still allowed: reads, renaming a project,
+moving a project that isn't open to Recently deleted, and restoring one from
+Recently deleted. Tell the person, and try again after they save those edits
+as a project or discard them. Discarding is theirs alone: you have no way to
+do it. If their tab's connection drops, this holds for about 10 seconds more
+in case the tab comes back.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to

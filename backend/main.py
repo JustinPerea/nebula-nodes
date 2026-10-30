@@ -330,9 +330,15 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
     if record.get("source") and record.get("copyAt"):
         parts.append(f"That copy is from {record['copyAt']}.")
     if record.get("kind") == "restored" and record.get("damagedReadWhole") is False:
-        parts.append("The damaged file couldn't be read whole (cut, zeroed, or a key or section name damaged), "
-                     "so changes made after the copy may be missing without being listed here "
-                     "(damagedReadWhole: false).")
+        # GM r19 on PR #199, 6a: "may be missing" only when project records
+        # went unread, as the person's notice says it.
+        if record.get("damagedRecordsUnread") is False:
+            parts.append("The damaged file couldn't be read whole, but the damage came after its projects, so no "
+                         "project is missing (damagedReadWhole: false, damagedRecordsUnread: false).")
+        else:
+            parts.append("The damaged file couldn't be read whole (cut, zeroed, or a key or section name damaged), "
+                         "so changes made after the copy may be missing without being listed here "
+                         "(damagedReadWhole: false).")
     added = count("addedBackCount")
     if added:
         parts.append(f"{projects(added)} the copy lacked {'were' if added != 1 else 'was'} "
@@ -510,6 +516,10 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
     for key in ("notAddedBackLimitCount", "projectLimit"):
         if isinstance(record.get(key), int):
             view[key] = record[key]
+    # GM r19 on PR #199, 6a: whether the damaged file held records Nebula
+    # couldn't read; left out for records from before it (unknown).
+    if isinstance(record.get("damagedRecordsUnread"), bool):
+        view["damagedRecordsUnread"] = record["damagedRecordsUnread"]
     return {**view, "note": _catalog_restore_note(record)}
 
 
@@ -4389,6 +4399,14 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
+# How long kept mode outlasts the person's kept tab's socket (GM's call on
+# review 13 NIT-2 of PR #199): a network blip or a backend restart closes the
+# socket, and the tab says keptEdits again after its next hello. Without this,
+# an agent's write in that gap landed on a canvas the tab won't show. A tab
+# that said kept:false before closing ends kept mode at once.
+KEPT_GRACE_SECONDS = 10.0
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
@@ -4396,6 +4414,9 @@ class ConnectionManager:
         # The person's tabs that keep edits Nebula couldn't save after a
         # restore (GM r15 on PR #199, Q11): agents' writes wait for them.
         self.kept_tabs: set[WebSocket] = set()
+        # time.monotonic() until which a closed kept tab still holds kept
+        # mode (KEPT_GRACE_SECONDS), or None.
+        self.kept_grace_until: float | None = None
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -4418,14 +4439,30 @@ class ConnectionManager:
     def set_kept(self, websocket: WebSocket, kept: object) -> None:
         """The person's tab says it keeps edits Nebula couldn't save (or no
         longer does): only a promoted socket (is_browser) gets here."""
-        if kept is True and websocket in self.browser_connections:
+        if websocket not in self.browser_connections:
+            self.kept_tabs.discard(websocket)
+            return
+        if kept is True:
+            # A tab back within the grace carries kept mode on seamlessly.
             self.kept_tabs.add(websocket)
         else:
+            # The person's tab says it no longer keeps edits: that also ends
+            # the grace a closed kept tab left.
             self.kept_tabs.discard(websocket)
+            self.kept_grace_until = None
 
     def kept_in_tab(self) -> bool:
-        """Whether a connected person's tab keeps unsaved edits now."""
-        return any(websocket in self.browser_connections for websocket in self.kept_tabs)
+        """Whether a person's tab keeps unsaved edits now: a connected one, or
+        one whose socket closed less than KEPT_GRACE_SECONDS ago."""
+        if any(websocket in self.browser_connections for websocket in self.kept_tabs):
+            return True
+        grace = self.kept_grace_until
+        if grace is None:
+            return False
+        if _time_module.monotonic() < grace:
+            return True
+        self.kept_grace_until = None
+        return False
 
     def canvas_open(self) -> bool:
         """Whether a canvas is connected: any socket without an agent marker.
@@ -4439,7 +4476,10 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
-        self.kept_tabs.discard(websocket)
+        if websocket in self.kept_tabs:
+            # Still keeping edits as it closed: a blip, most likely.
+            self.kept_tabs.discard(websocket)
+            self.kept_grace_until = _time_module.monotonic() + KEPT_GRACE_SECONDS
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -17698,14 +17738,18 @@ async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
 # couldn't save after it restored its project list (kept mode, GM r15 Q11),
 # the tab neither sends nor shows any canvas change. An agent's write or
 # project switch would land on a canvas the person can't see, and the
-# person's [Save as a project] then opens their edits over it, so both are
-# refused with this code until the person saves them (or closes the tab).
+# person's [Save as a project] then opens their edits over it, so both
+# (and runs) are refused with this code until the person saves them as a
+# project or discards them (Discard is the person's alone), or the tab has
+# been closed for KEPT_GRACE_SECONDS. Renaming a project, trashing one that
+# isn't open and restoring from Recently deleted still pass.
 CANVAS_KEPT_CODE = "canvas_kept_in_tab"
 # Curly ’ (GM r17 on PR #199, Q4): agents relay it to the person.
 CANVAS_KEPT_IN_TAB_DETAIL = (
     "The person’s tab is keeping edits Nebula couldn’t save before it restored its project list, so the canvas "
-    "can’t be changed and projects can’t be switched until they save those edits as a project. Tell the person; "
-    "try again after they click Save as a project.")
+    "can’t be changed, nothing can be run and projects can’t be switched until they save those edits as a project "
+    "or discard them. Renaming a project, trashing one that isn’t open and restoring from Recently deleted still "
+    "work. Tell the person; try again after they click Save as a project or Discard edits.")
 
 
 class CanvasKeptRefusal(HTTPException):

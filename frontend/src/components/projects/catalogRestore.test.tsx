@@ -241,11 +241,14 @@ describe('the Projects home notice', () => {
   });
 
   it('puts focus on "Recent projects" after × from the keyboard (the notice stack’s fallback)', () => {
+    // Review 13 of PR #199 (MEDIUM-1): the stack's rule, once the notice goes.
     const onDismissCatalogRestore = vi.fn();
-    render(<ProjectHome {...props({ catalogRestore: restore(), onDismissCatalogRestore })} />);
+    const view = render(<ProjectHome {...props({ catalogRestore: restore(), onDismissCatalogRestore })} />);
     const close = screen.getByRole('button', { name: 'Dismiss' });
     close.focus();
     fireEvent.click(close);
+    expect(onDismissCatalogRestore).toHaveBeenCalled();
+    view.rerender(<ProjectHome {...props({ catalogRestore: null, onDismissCatalogRestore })} />);
     expect(document.activeElement?.id).toBe('recent-projects-title');
   });
 

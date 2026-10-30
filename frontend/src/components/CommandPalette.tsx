@@ -17,17 +17,18 @@ import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies 
 import { claimIntent } from '../lib/heldIntents';
 import { returnFocusOnSlip } from '../lib/modalFocus';
 import { ModalPortal } from './ModalPortal';
-import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import { refuseCanvasEdit, refuseTabOnlyEdit, useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
 import { composing } from '../lib/imeComposing';
 import '../styles/command-palette.css';
 
 /** A palette command's line while the canvas is kept (GM r17 on PR #199). */
-function paletteKeptAction(id: string): KeptAction {
+function paletteKeptAction(id: string): KeptAction | 'live' {
   if (id === 'action:run') return 'run';
   if (id === 'action:load') return 'load';
   if (id === 'agent:ask') return 'ask';
-  if (id.startsWith('node:')) return 'add-node';
+  // GM r19 (5): adding a node is the kept tab's own now.
+  if (id.startsWith('node:')) return 'live';
   return 'other';
 }
 
@@ -220,7 +221,8 @@ export function CommandPalette() {
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
       // Enter on an acting command while locked: refused, with the pulse.
-      if (cmd.acts && refuseCanvasEdit()) return;
+      // A node command is the kept tab's own while kept (GM r19 on PR #199, 5).
+      if (cmd.acts && (paletteKeptAction(cmd.id) === 'live' ? refuseTabOnlyEdit() : refuseCanvasEdit())) return;
       if (!cmd.keepsOpen) close();
       cmd.perform();
     },

@@ -17,42 +17,17 @@ import type { CatalogRestore } from '../../lib/projects';
 /** How many projects are named before a line gives a count. */
 export const RESTORE_NAMED_MAX = 3;
 
-/** GM r12 on PR #199, 1: the button beside the line a restore leaves when
- * this tab's edits weren't saved (projectStore RESTORED_LIST_UNSAVED). */
-export const SAVE_AS_A_PROJECT = 'Save as a project';
-
-/** Its saved toast names the project the edits went into, under the
- * "(recovered)" name (GM r14 on PR #199, 1, verbatim). */
-export function editsRecoveredToast(name: string): string {
-  return `Your latest edits were saved as their own project, ${quoted(name)}.`;
-}
-
-/** GM r14, 3 (and r12, 1): the second half of a kept-in-this-tab line, for
- * edits a closed project never got. */
-export const LATEST_EDITS_KEPT = "Your latest edits weren’t saved yet. They’re kept in this tab.";
-/** GM r14, 3: added where the tab can't go home by itself. */
-export const RELOAD_TO_CONTINUE = 'Reload projects to continue.';
-
-/** GM r14 on PR #199, 3, verbatim: the agent and what it did to the
- * person's canvas when its write closed the project the tab showed ("An
- * agent" when unknown). `name` is that project's: it was kept, untouched.
- * The same words are the person's Agent log row for a canvas that already
- * was a project (GM r15, Q10). */
-export function agentClosedLine(agent: string | null | undefined, action: 'clear' | 'replace' | 'change', name: string): string {
-  const who = agent && agent.trim() ? agent.trim() : 'An agent';
-  if (action === 'clear') return `${who} cleared the canvas. ${quoted(name)} is kept as its own project.`;
-  if (action === 'replace') return `${who} replaced the canvas. ${quoted(name)} is kept as its own project.`;
-  return `${who} made its changes on a copy of ${quoted(name)}. ${quoted(name)} is kept as it was.`;
-}
-
-/** The button the notice shows when something is in Recently deleted. */
-export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
+// The lines the entry chunk needs (the store's, the kept line's button)
+// live in restoreCopyCore; the rest of this module loads only when a
+// restore notice shows (restoreCopyLoader; review 13 of PR #199, LOW-1).
+export { SAVE_AS_A_PROJECT, editsRecoveredToast, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, agentClosedLine,
+  OPEN_RECENTLY_DELETED, DEFAULT_PROJECT_LIMIT } from './restoreCopyCore';
+import { agentClosedLine, DEFAULT_PROJECT_LIMIT, quoted } from './restoreCopyCore';
 
 const OPENING = "Nebula’s project list was damaged, so it restored the last good copy";
 const REBUILT = "Nebula’s project list was damaged and there was no good copy, so it recovered every project it could still read.";
 const KEPT = 'The damaged file was kept.';
 
-const quoted = (name: string) => `“${name}”`;
 
 /** GM r18 on PR #199, Q5, verbatim: readable records the restore left out
  * because the list was at its project limit (reconcile adds none past it).
@@ -230,8 +205,6 @@ function deleteToSaveMany(context: CanvasLimitContext): string {
   return deletes === 1 ? 'Delete a project and Nebula will save them.' : `Delete ${deletes} projects and Nebula will save them.`;
 }
 
-/** The backend's MAX_PROJECTS, for a listing that doesn't say it. */
-export const DEFAULT_PROJECT_LIMIT = 500;
 
 /** GM r5, the size cap's advice by whether Recently deleted has items. */
 function sizeCapAdvice(trashHasItems: boolean): string {
@@ -526,7 +499,7 @@ function holding<R extends { id?: string; trashed?: boolean }>(rows: R[] | undef
 type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
   & Partial<Pick<CatalogRestore, 'source' | 'copyAt' | 'damagedFile' | 'setAside' | 'notAddedBack' | 'notAddedBackLimitCount' | 'projectLimit' | 'reverted'
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
-    | 'canvasNotFiled' | 'damagedReadWhole' | 'openProjectMissing' | 'alsoFiled' | 'agentCopies'>>;
+    | 'canvasNotFiled' | 'damagedReadWhole' | 'damagedRecordsUnread' | 'openProjectMissing' | 'alsoFiled' | 'agentCopies'>>;
 
 /** What else the restore notice says while it shows (GM r9): held canvases
  * that couldn't be read, merged in as one more outcome before the closing. */
@@ -626,7 +599,11 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   // as its own project: the canvas sentence is its one sentence (GM r3), so
   // its failed add-back isn't said beside "so nothing in it is lost". The
   // Agent log still lists it.
-  const savedFrom = restore.recoveredCanvas ? restore.openProjectMissing ?? null : null;
+  // GM r19 (b): the same holds for the open canvas that waits on the limit
+  // (its canvas line owns the project): it isn't said left out at the limit
+  // beside it too.
+  const canvas = canvasOutcome(restore, current);
+  const savedFrom = restore.recoveredCanvas || canvas ? restore.openProjectMissing ?? null : null;
   const failedListed = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
   const failedOut = (restore.notAddedBack ?? []).length - failedListed.length;
   const recordedNotAdded = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
@@ -734,21 +711,24 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
 
   // The open canvas, saved as its own project (GM r3 string 1), or the
   // limit it waits on (GM r5).
-  const canvas = canvasOutcome(restore, current);
   if (canvas) outcomes.push(...canvas.lines);
 
   // GM r3 string 4: a damaged file that wasn't read to its end (cut,
   // zeroed, or a key damaged): what it held past that is unknown. Only
   // where a damaged file was kept (a missing catalog has none to read).
+  // GM r19 (a): only when the damaged file had records Nebula couldn't read
+  // (`damagedRecordsUnread`; a record from before the field: unknown, so
+  // said): a file cut only past its last record lost none.
   const readWhole = restore.damagedReadWhole === true;
-  if (!readWhole && kept) outcomes.push(NOT_READ_WHOLE);
+  const unreadRecords = !readWhole && restore.damagedRecordsUnread !== false;
+  if (unreadRecords && kept) outcomes.push(NOT_READ_WHOLE);
   // "No projects were missing." only when the restore had nothing else to
   // say, never because the other lines have since gone.
   const filedSince = (restore.alsoFiled ?? []).length > 0 || (restore.agentCopies ?? []).length > 0;
   const saidAtFirst = recordedLiveAdded > 0 || recordedTrashedAdded.length > 0 || recordedFailed > 0
     || recordedLimit > 0 || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
-    || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (!readWhole && kept);
-  if (!saidAtFirst && readWhole) outcomes.push('No projects were missing.');
+    || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (unreadRecords && kept);
+  if (!saidAtFirst && !unreadRecords) outcomes.push('No projects were missing.');
   // GM r9: held canvases that couldn't be read, merged in as one more
   // outcome before the closing line, which then names both files.
   const held = extras?.heldUnreadable;
@@ -757,7 +737,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   // restore found it: it stays when the lines that called for it go). The
   // left-out line says "which was kept" itself (GM r18, Q5), so not twice.
   const restoreKept = kept && leftOut === 0 && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
-    || Boolean(restore.canvasNotFiled) || filedSince || !readWhole);
+    || Boolean(restore.canvasNotFiled) || filedSince || unreadRecords);
   const closing = held ? (kept ? KEPT_BOTH : KEPT) : restoreKept ? KEPT : null;
   // "Open Recently deleted" while Recently deleted holds one of the notice's
   // items, and opens to them (GM r4); the size cap's line adds it too (GM r5).

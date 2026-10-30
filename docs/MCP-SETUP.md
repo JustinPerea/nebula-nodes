@@ -448,8 +448,8 @@ The server exposes these tools for building and running (see
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. A
-  project restore into a full list is refused with the whole HTTP refusal,
-  `"<detail> (413, {"limit": "projects", "projectLimit": 500})"`.
+  project restore may pass the project limit; after one, `new_project` is
+  still refused (413, `limit: "projects"`, `projectLimit`).
   `list_trash` takes `kind` (`moodboard`, `character`, `style` or `project`),
   and `scope` (`global`, or `project` with `project_id`, an id or
   `"current"`; `project_id` alone means `project`) as the route does. See
@@ -3284,21 +3284,30 @@ Nebula process restores the same folder. The restore:
    While the person's tab keeps edits Nebula couldn't save before it
    restored its project list (the tab shows "Nebula restored its project
    list before your latest edits were saved. They’re kept in this tab."
-   with Save as a project), the tab neither sends nor shows canvas
+   with Save as a project and Discard edits), the tab neither sends nor shows canvas
    changes. The person can still type, move, delete, duplicate, arrange and
    clear on that tab, and undo those (never past what was saved): only that
-   tab sees them until they click Save as a project. Every canvas write, run and project switch of yours (add, set,
-   connect, delete, clear, load, apply, run, `open_project`,
-   `create_project`, deleting the open project) is refused (409, `code:
-   "canvas_kept_in_tab"`) with "The person’s tab is keeping edits Nebula
-   couldn’t save before it restored its project list, so the canvas can’t
-   be changed and projects can’t be switched until they save those edits
-   as a project. Tell the person; try again after they click Save as a
-   project." Reads still answer. MCP tools add "(409,
+   tab sees them until they save them as a project or discard them. Every
+   canvas change, run and project switch of yours (add, set, connect,
+   delete, clear, load, apply, run, `open_project`, `new_project`, deleting
+   the open project) is refused (409, `code: "canvas_kept_in_tab"`) with
+   "The person’s tab is keeping edits Nebula couldn’t save before it
+   restored its project list, so the canvas can’t be changed, nothing can be
+   run and projects can’t be switched until they save those edits as a
+   project or discard them. Renaming a project, trashing one that isn’t open
+   and restoring from Recently deleted still work. Tell the person; try
+   again after they click Save as a project or Discard edits." Reads still
+   answer. MCP tools add "(409,
    canvas_kept_in_tab)" and the CLI "(canvas_kept_in_tab)". It ends when
-   the person saves those edits (the tab then opens the saved project) or
-   closes the tab. Only the person's own tab can start it (its socket says
-   so after its hello with the person token); an agent's socket can't.
+   the person saves those edits as a project (the tab then opens the saved
+   project) or discards them; Discard is the person's alone, and agents
+   have no way to discard the person's edits. When the tab's socket closes while
+   it still keeps edits (a network blip, a backend restart, or the tab
+   closed), kept mode holds for about 10 seconds more, so a tab that
+   reconnects and says it again carries on with no gap; after that it
+   ends. A tab that said it no longer keeps edits before closing ends it at
+   once. Only the person's own tab can start, carry on or end it (its socket
+   says so after its hello with the person token); an agent's socket can't.
    The person's own open, create, clear and load always
    hold it, whatever its size: such a canvas is saved over the save limit and
    opens with saving paused. A person request that reaches the refusal gets
@@ -3387,7 +3396,7 @@ notAddedBack, notAddedBackCount, reverted, revertedCount, cameBack,
 cameBackCount, backInTrash, backInTrashCount, keptDeleted, keptDeletedCount,
 projectCount, trashCount, openProject, openFrom, openProjectMissing,
 openProjectName, recoveredCanvas, alsoFiled, canvasNotFiled, damagedReadWhole,
-notAddedBackLimitCount?, projectLimit?, note}`:
+damagedRecordsUnread?, notAddedBackLimitCount?, projectLimit?, note}`:
 
 - `kind` is `restored` (from the copy named in `source`, saved at `copyAt`)
   or `rebuilt` (`source` null); `reason` is `corrupt` (not JSON, or a value
@@ -3429,12 +3438,21 @@ notAddedBackLimitCount?, projectLimit?, note}`:
   changes made after the copy may be missing without a row saying so, the
   note says that, and the person's notice says so instead of "No projects
   were missing."
+- `damagedRecordsUnread` (restores since PR #199 round 15; left out of older
+  ones) is true when the damaged file held project records Nebula couldn't
+  read: a record in the `projects` group (or in a group that can't be told)
+  failed, or the file can't be shown to have closed its `projects` group
+  before the damage. Damage only after the `projects` group closed (a cut
+  `trash` group, junk at the end) is not read whole, but lost no project:
+  false; lost Recently deleted entries are logged, not in the notice. Read
+  whole: false.
 
 A restore while Nebula runs reaches open canvases at once: a `graphSync`
 carrying the restore notice's id (`catalogRestore`) and a `projectsChanged`
 (`catalogRestored`). A canvas holding edits it hadn't saved keeps them where
-the person is, with [Save as a project]; nothing they type is refused or
-put back. A restore at startup is journaled once the server starts, so
+the person is, with [Save as a project] and [Discard edits]; nothing they type is
+refused or put back. While it does, your canvas changes, runs and project
+switches are refused (409 `canvas_kept_in_tab`, above). A restore at startup is journaled once the server starts, so
 `project.catalogRestored` reaches `nebula watch` for it too.
 
 Project ids read before a restore may be stale: list the projects again.

@@ -1,18 +1,28 @@
 import { useEffect, useState } from 'react';
 import { keptEditsLine, useProjectStore } from '../../store/projectStore';
+import { useGraphStore } from '../../store/graphStore';
 import { pulseKeptCanvas, subscribeKeptPulse, useKeptCanvas } from '../../lib/keptCanvas';
-import { KEPT_MARK } from '../../lib/canvasLock';
-import { SAVE_AS_A_PROJECT } from './catalogRestoreCopy';
+import { KEPT_MARK, useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_REASON } from '../../lib/cinemaScene';
+import { SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { DISCARD_EDITS, KeptDiscardConfirm } from './KeptDiscardConfirm';
 import './KeptEditsNotice.css';
+
+/** Each button's own offline line (GM r19, 4: Save as a project shows its own). */
+export const SAVE_KEPT_OFFLINE = 'You can save it as a project when Nebula reconnects.';
+export const DISCARD_KEPT_OFFLINE = 'You can discard the kept edits when Nebula reconnects.';
 
 /**
  * GM r15 on PR #199, Q11 (review 11, HIGH-1): the line a restore (or an
  * agent's write that closed the project) leaves where the person is, when
  * the tab's latest edits weren't saved: GM r12, 1's "Nebula restored its
  * project list before your latest edits were saved. They're kept in this
- * tab." (or GM r14, 3's agent form) with [Save as a project]. It stays until
- * resolved (no Dismiss, no timer); the person can keep typing meanwhile, and
- * the unload warning holds. A failed save says why under the line.
+ * tab." (or GM r14, 3's agent form) with [Save as a project] and, GM r20,
+ * [Discard edits] (after its confirm). It stays until resolved (no Dismiss,
+ * no timer); the person can keep typing meanwhile, and the unload warning
+ * holds. A failed save or discard says why under the line. GM r19, 4: each
+ * button names what holds it: a run (its line, as the run lock gives it),
+ * then offline (its own line).
  */
 export function KeptEditsNotice() {
   const kept = useProjectStore((state) => state.keptEdits);
@@ -30,7 +40,19 @@ export function KeptEditsNotice() {
     document.addEventListener('pointerdown', pressed, true);
     return () => document.removeEventListener('pointerdown', pressed, true);
   }, [canvasKept]);
+  // Offline as every canvas surface reads it (lib/canvasLock).
+  const lock = useCanvasLock();
+  const offline = lock.offline;
+  const running = useGraphStore((state) => !state.canSwitchProject({ exceptSaves: true }));
+  // The confirm belongs to the kept canvas it was asked for: it goes with it.
+  const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
   if (!kept || !onWorkspace) return null;
+  const confirming = confirmingFor !== null && confirmingFor.sourceId === kept.sourceId;
+  const setConfirming = (open: boolean) => setConfirmingFor(open ? kept : null);
+  const held = running ? { disabled: true, title: RUN_LOCK_REASON }
+    : offline ? { disabled: true, ...lock.mark } : null;
+  const saveHeld = held ? { ...held, ...(held.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: kept.saving };
+  const discardHeld = held ? { ...held, ...(held.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: kept.saving };
   return (
     <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}
       role="status" aria-live="polite" data-kept-edits="">
@@ -38,8 +60,12 @@ export function KeptEditsNotice() {
         {keptEditsLine(kept)}
         {kept.error && <span className="kept-edits-notice__error" role="alert">{kept.error}</span>}
       </span>
-      <button type="button" className="canvas-undo-notice__action" disabled={kept.saving} aria-busy={kept.saving || undefined}
-        onClick={() => void useProjectStore.getState().saveKeptEdits()}>{SAVE_AS_A_PROJECT}</button>
+      <button type="button" className="canvas-undo-notice__action" {...saveHeld} aria-busy={kept.saving || undefined}
+        data-kept-save="" onClick={() => void useProjectStore.getState().saveKeptEdits()}>{SAVE_AS_A_PROJECT}</button>
+      <button type="button" className="canvas-undo-notice__action kept-edits-notice__discard" {...discardHeld} data-kept-discard-button=""
+        onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>
+      {confirming && <KeptDiscardConfirm onKeep={() => setConfirming(false)}
+        onDiscard={() => { setConfirming(false); void useProjectStore.getState().discardKeptEdits(); }} />}
     </div>
   );
 }

@@ -177,7 +177,7 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     const root = resolve(__dirname, '../src/components');
     const sites: [string, RegExp][] = [
       ['nodes/ModelNode.tsx', /lock\.act\(\{ disabled: !latestPaperSourceReady,[\s\S]{0,240}\{ run: isExecuting \}\)\}\s*onClick[\s\S]{0,240}Rerun with latest source/],
-      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'unlock' \}, \{ run: isExecuting \}\)/],
+      ['panels/RunHistoryPanel.tsx', /lock\.act\(\{ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' \}, \{ run: isExecuting \}\)/],
       ['canvas/DeferredRunNotice.tsx', /lock\.act\(\{ kept: 'run' \}, \{ run: isExecuting \|\| runStarting \}\)/],
     ];
     for (const [file, pattern] of sites) {

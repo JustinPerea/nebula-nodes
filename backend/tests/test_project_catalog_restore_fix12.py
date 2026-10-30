@@ -199,8 +199,10 @@ def test_r16_mcp_the_persons_own_requests_pass_and_reads_pass(app):
         assert opened.status_code == 200, opened.text
 
 
-def test_r16_mcp_a_closed_tab_or_an_agents_socket_never_holds_agents_back(app):
+def test_r16_mcp_a_closed_tab_or_an_agents_socket_never_holds_agents_back(app, monkeypatch):
     client, _store, _graph, _state = app
+    # Past the grace a closed kept tab leaves (test_pr199_round15_kept_grace has the grace itself).
+    monkeypatch.setattr(main_module, "KEPT_GRACE_SECONDS", 0.0)
     _create(client, "Delta")
     with client.websocket_connect("/ws", headers=PERSON) as socket:
         socket.receive_json()

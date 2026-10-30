@@ -58,8 +58,12 @@ export function useKeptCanvas(): boolean {
  * a `kept` for each, and a test walks the sources). */
 // GM r18 (Q3): delete, arrange, clear and undo are the kept tab's own now
 // (live, no line), as duplicate and settings became in r17.
+// GM r19 (2): Forget ID has its own verb. GM r20: the routes that replace
+// the canvas (Projects, another project, a new one, Load, Import) name both
+// ways out, since discarding the kept edits unlocks them too.
 export type KeptAction = 'run' | 'note' | 'ask' | 'settings'
-  | 'add-node' | 'next-step' | 'rewrite' | 'load' | 'proposal' | 'unlock'
+  | 'add-node' | 'next-step' | 'rewrite' | 'load' | 'import' | 'proposal' | 'unlock' | 'forget'
+  | 'home' | 'open' | 'create'
   | 'edit-video' | 'generate' | 'scene' | 'other';
 const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   run: 'You can run this after you save it as a project.',
@@ -70,10 +74,18 @@ const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   'add-node': 'You can add nodes after you save it as a project.',
   'next-step': 'You can add a next step after you save it as a project.',
   rewrite: 'You can rewrite the prompt after you save it as a project.',
-  load: 'You can load a graph after you save it as a project.',
+  // GM r20: a route that replaces the canvas names both ways out, each
+  // in its control's own verb.
+  load: 'You can load a graph after you save it as a project or discard the kept edits.',
+  import: 'You can import a graph after you save it as a project or discard the kept edits.',
+  home: 'You can go to Projects after you save it as a project or discard the kept edits.',
+  open: 'You can open another project after you save it as a project or discard the kept edits.',
+  create: 'You can create a project after you save it as a project or discard the kept edits.',
   proposal: 'You can answer proposals after you save it as a project.',
   // GM r18, Q1, verbatim.
   unlock: 'You can unlock nodes after you save it as a project.',
+  // GM r19, 2, verbatim: Forget ID's own verb (it writes the node's recovery).
+  forget: 'You can forget the ID after you save it as a project.',
   'edit-video': 'You can edit the video after you save it as a project.',
   // The verb of the buttons it covers ("Generate", "Generate all"): GM r18, Q1.
   generate: 'You can generate after you save it as a project.',

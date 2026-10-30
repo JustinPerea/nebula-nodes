@@ -151,8 +151,12 @@ describe('a focus target the page moves focus to rings from the keyboard only (P
   });
 
   it('moves focus to "Recent projects" after a dismiss', () => {
-    render(<ProjectHome {...props({ catalogRestore: restore() })} />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]);
+    // Review 13 of PR #199 (MEDIUM-1): the stack's rule, once the notice goes.
+    const view = render(<ProjectHome {...props({ catalogRestore: restore() })} />);
+    const close = screen.getAllByRole('button', { name: 'Dismiss' })[0];
+    close.focus();
+    fireEvent.click(close);
+    view.rerender(<ProjectHome {...props({ catalogRestore: null })} />);
     expect(document.activeElement?.id).toBe('recent-projects-title');
     expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
   });

@@ -8,7 +8,8 @@ import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { NodeSettingsAction } from '../src/components/nodes/NodeSettingsAction';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
-import { canvasLockOf, KEPT_MARK } from '../src/lib/canvasLock';
+import { canvasLockOf, KEPT_MARK, lockedAction, refuseCanvasEdit } from '../src/lib/canvasLock';
+import { noteBackendConnection, resetBackendConnectionForTests, subscribeOfflinePulse } from '../src/lib/backendConnection';
 import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import {
   KEPT_GENERIC_LINE, keptLockTitle, resetKeptCanvasForTests, setCanvasKept, subscribeKeptPulse,
@@ -179,24 +180,32 @@ describe('GM r17, Q2: every control names its own kept line', () => {
   });
 });
 
-describe('the lock reasons go run, follow, offline, then kept (PR #198 merged into PR #199)', () => {
+describe('the lock reasons go kept, run, follow, offline (GM r16, 4; GM r19, 4)', () => {
   const following = { projectId: 'p', projectName: 'Delta' } as never;
-  it('a run first, alone: its line and no mark, over a follow, offline and kept', () => {
-    expect(canvasLockOf(following, true, true).act({ title: 'Run selected nodes', kept: 'run' }, { run: true }))
-      .toEqual({ disabled: true, title: RUN_LOCK_REASON });
-  });
-  it('then the follow, then offline, each over kept', () => {
-    expect(canvasLockOf(following, true, true).act({ title: 'Run selected nodes', kept: 'run' }))
-      .toMatchObject({ disabled: true, title: 'Wait for “Delta” to open.', 'data-following-disabled': '' });
-    const offline = canvasLockOf(null, true, true).act({ title: 'Run selected nodes', kept: 'run' });
-    expect(offline).toMatchObject({ disabled: true, title: 'Run selected nodes', 'data-offline-disabled': '' });
-    expect(offline).not.toHaveProperty(KEPT_MARK);
-  });
-  it('then kept: its own line and its mark only', () => {
-    expect(canvasLockOf(null, false, true).act({ title: 'Run selected nodes', kept: 'run' }))
-      .toEqual({ [KEPT_MARK]: '', disabled: true, title: keptLockTitle('run') });
+  it('kept first: its own line and its mark only, over a run, a follow and offline', () => {
+    const keptLine = { [KEPT_MARK]: '', disabled: true, title: keptLockTitle('run') };
+    expect(canvasLockOf(following, true, true).act({ title: 'Run selected nodes', kept: 'run' }, { run: true })).toEqual(keptLine);
+    expect(canvasLockOf(null, false, true).act({ title: 'Run selected nodes', kept: 'run' }, { run: true })).toEqual(keptLine);
+    expect(canvasLockOf(following, false, true).act({ title: 'Run selected nodes', kept: 'run' })).toEqual(keptLine);
+    expect(canvasLockOf(null, true, true).act({ title: 'Run selected nodes', kept: 'run', offline: 'rerun' })).toEqual(keptLine);
     // Typing stays: fields read `locked`, which the kept canvas alone never sets.
     expect(canvasLockOf(null, false, true).locked).toBe(false);
+  });
+  it('lockedAction never puts the offline line over the kept line', () => {
+    const props = lockedAction(canvasLockOf(null, true, true), { title: 'Generate', kept: 'generate' }, { verb: 'generate' });
+    expect(props).toMatchObject({ [KEPT_MARK]: '', disabled: true, title: keptLockTitle('generate') });
+    expect(props).not.toHaveProperty('data-offline-disabled');
+    expect(props).not.toHaveProperty('data-offline-neutral');
+  });
+  it('then the run, alone: its line and no mark, over a follow and offline', () => {
+    expect(canvasLockOf(following, true, false).act({ title: 'Run selected nodes', kept: 'run' }, { run: true }))
+      .toEqual({ disabled: true, title: RUN_LOCK_REASON });
+  });
+  it('then the follow, then offline', () => {
+    expect(canvasLockOf(following, true, false).act({ title: 'Run selected nodes', kept: 'run' }))
+      .toMatchObject({ disabled: true, title: 'Wait for “Delta” to open.', 'data-following-disabled': '' });
+    const offline = canvasLockOf(null, true, false).act({ title: 'Run selected nodes', kept: 'run' });
+    expect(offline).toMatchObject({ disabled: true, title: 'Run selected nodes', 'data-offline-disabled': '' });
   });
   it("a 'live' control is left on by the kept canvas, never by a follow, a run or offline", () => {
     expect(canvasLockOf(null, false, true).act({ title: 'Duplicate selected nodes', kept: 'live' }))
@@ -205,10 +214,37 @@ describe('the lock reasons go run, follow, offline, then kept (PR #198 merged in
     expect(canvasLockOf(null, false, true).act({ kept: 'live' }, { run: true }).disabled).toBe(true);
     expect(canvasLockOf(null, true, true).act({ kept: 'live' }).disabled).toBe(true);
   });
+  it('the store refuses a kept edit with the kept pulse first, whatever else holds it', async () => {
+    act(() => setCanvasKept(true));
+    useGraphStore.setState({ isExecuting: true });
+    let pulses = 0;
+    const stop = subscribeKeptPulse(() => { pulses += 1; });
+    let offlinePulses = 0;
+    const stopOffline = subscribeOfflinePulse(() => { offlinePulses += 1; });
+    await useGraphStore.getState().executeGraph();
+    useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'text' });
+    expect(pulses).toBe(1);
+    expect(offlinePulses).toBe(0);
+    useGraphStore.setState({ isExecuting: false });
+    stop(); stopOffline();
+  });
+  it('refuseCanvasEdit pulses the kept line first, not the offline banner', () => {
+    act(() => setCanvasKept(true));
+    noteBackendConnection('offline');
+    let pulses = 0;
+    const stop = subscribeKeptPulse(() => { pulses += 1; });
+    let offlinePulses = 0;
+    const stopOffline = subscribeOfflinePulse(() => { offlinePulses += 1; });
+    expect(refuseCanvasEdit()).toBe(true);
+    expect(pulses).toBe(1);
+    expect(offlinePulses).toBe(0);
+    resetBackendConnectionForTests();
+    stop(); stopOffline();
+  });
 });
 
 describe('the keyboard shortcuts while kept', () => {
-  it('Run, Paste and an add change nothing and send nothing, and each pulses the kept line', async () => {
+  it('Run, Paste and a wire change nothing and send nothing, and each pulses the kept line', async () => {
     act(() => setCanvasKept(true));
     let pulses = 0;
     const stop = subscribeKeptPulse(() => { pulses += 1; });
@@ -225,8 +261,9 @@ describe('the keyboard shortcuts while kept', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     await each('run (⌘Enter)', () => store.executeGraph());
     await each('paste (⌘V)', () => store.pasteClipboard({ view: null }));
-    // An add creates the node on Nebula (POST /api/graph/node): a server write.
-    await each('add a node', () => store.addNode('text-input', { x: 0, y: 0 }));
+    // GM r19 (5): an add is the kept tab's own (a local node, a kept step):
+    // see keptScratchCanvas.fix15. A wire still needs Nebula.
+    await each('connect', () => store.onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'text' }));
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(useGraphStore.getState().isExecuting).toBe(false);
     expect(useGraphStore.getState().nodes.map(({ id, position }) => ({ id, position })))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from typing import Any, Callable
@@ -66,6 +67,12 @@ class NebulaClient:
                 # aside (review 7, L-3), or the person's tab keeps edits after
                 # a restore (GM r16): the code, for scripts.
                 message = f"{message} ({payload['code']})"
+            elif exc.status == 413 and payload.get("limit") in ("projects", "storage"):
+                # The project list's limit, whole, as MCP's new_project says it
+                # (mcp_server._limit_said_whole; review 13 of PR #199, LOW-3):
+                # which limit and how many projects it holds.
+                fields = {key: payload[key] for key in ("limit", "projectLimit", "scope", "code") if key in payload}
+                message = f"{message} (413, {json.dumps(fields)})"
         print(f"error: {message}", file=sys.stderr)
         sys.exit(1)
 

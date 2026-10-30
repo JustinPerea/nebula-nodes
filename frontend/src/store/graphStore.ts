@@ -522,7 +522,13 @@ export interface UndoNotice {
 export type KeptStep =
   | { kind: 'remove'; nodes: { item: Node<NodeData>; index: number }[]; edges: { item: Edge; index: number }[] }
   | { kind: 'add'; nodes: Node<NodeData>[]; edges: Edge[] }
-  | { kind: 'move'; from: Record<string, { x: number; y: number }>; to: Record<string, { x: number; y: number }> };
+  | { kind: 'move'; from: Record<string, { x: number; y: number }>; to: Record<string, { x: number; y: number }> }
+  // GM r19 (5): typing and a rename, as normal Undo takes them (one step per
+  // node while the typing runs, maybePushUndo's 500 ms).
+  | { kind: 'data'; nodeId: string; from: KeptNodeFields; to: KeptNodeFields };
+
+/** The fields a kept typing or rename step puts back. */
+export interface KeptNodeFields { params?: Record<string, unknown>; label?: string }
 
 /** The project a line's "Open copy" opens (the copy a failed handoff saved). */
 export interface NoticeCopy { projectId: string }
@@ -11421,22 +11427,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         return fail('The backend did not confirm the requested connection. Check canvas sync before trying again.');
       }
       const params = node.params && typeof node.params === 'object' && !Array.isArray(node.params) ? node.params : defaults;
-      const nodeTypes: Record<string, string> = {
-        batch: 'batchNode', 'paper-source': 'paperSourceNode', reroute: 'reroute-node',
-        'video-edit': 'editNode', 'remotion-node': 'remotionNode', 'cinema-scene': 'cinemaSceneNode',
-        character: 'characterNode', 'camera-rig': 'cameraRigNode', 'reference-set': 'referenceSetNode',
-        'nebula-moodboard': 'moodboardNode',
-      };
-      const dynamic = isDynamicDefinition(definitionId);
-      const data: NodeData = { label: canvasTitle(definition), definitionId, params, state: 'idle', outputs: {},
-        keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache),
-        ...(dynamic ? { isDynamic: true, providerType: dynamicProviderFor(definitionId),
-          dynamicInputPorts: definition.inputPorts.map(toDynamicPort), dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
-          dynamicParams: [], providerMeta: {} } : {}),
-      };
-      const newNode: Node<NodeData> = { id: nodeId,
-        type: nodeTypes[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
-        position: { ...position }, data };
+      const newNode = newCanvasNode(nodeId, definitionId, params, position);
       // A fast graphSync may already contain either item. Keep its canonical
       // data, outputs and edge ID (or its removal since: an agent's unwire);
       // otherwise expose the acknowledged pair now.
@@ -13525,6 +13516,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    // GM r20 on PR #199: a kept canvas never outlives its canvas (its kept
+    // mode and its kept Undo go with it; projectStore drops its line).
+    releaseKeptCanvas();
     canvasLoadedOverHttp();
     noteCanvasReplaced({ kind: 'changed' });
     forgetLandingsOfReplacedCanvas();
@@ -13650,6 +13644,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    // GM r20 on PR #199: a kept canvas never outlives its canvas (its kept
+    // mode and its kept Undo go with it; projectStore drops its line).
+    releaseKeptCanvas();
     // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
     canvasLoadedOverHttp();
     // Another project's canvas: the agent's while following, else one with
@@ -14540,6 +14537,29 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
 // Undo and Redo walk the kept tab's own steps (KeptStep), which start empty
 // when the canvas is kept: never a step of the history Nebula saved.
 
+/** React Flow's node type for a definition (an added node's card). */
+const NODE_TYPES: Record<string, string> = {
+  batch: 'batchNode', 'paper-source': 'paperSourceNode', reroute: 'reroute-node',
+  'video-edit': 'editNode', 'remotion-node': 'remotionNode', 'cinema-scene': 'cinemaSceneNode',
+  character: 'characterNode', 'camera-rig': 'cameraRigNode', 'reference-set': 'referenceSetNode',
+  'nebula-moodboard': 'moodboardNode',
+};
+
+/** A new node for `definitionId` as an add puts it on the canvas. */
+function newCanvasNode(id: string, definitionId: string, params: Record<string, unknown>,
+  position: { x: number; y: number }): Node<NodeData> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  const dynamic = isDynamicDefinition(definitionId);
+  const data: NodeData = { label: canvasTitle(definition), definitionId, params, state: 'idle', outputs: {},
+    keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache),
+    ...(dynamic ? { isDynamic: true, providerType: dynamicProviderFor(definitionId),
+      dynamicInputPorts: definition.inputPorts.map(toDynamicPort), dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
+      dynamicParams: [], providerMeta: {} } : {}),
+  };
+  return { id, type: NODE_TYPES[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
+    position: { ...position }, data };
+}
+
 /** Where each node a kept drag moves started, until its drop. */
 const keptDragFrom = new Map<string, { x: number; y: number }>();
 
@@ -14559,6 +14579,16 @@ function applyKeptStep(step: KeptStep, direction: 'do' | 'undo'): void {
     if (step.kind === 'move') {
       const at = direction === 'do' ? step.to : step.from;
       return { nodes: state.nodes.map((node) => (at[node.id] ? { ...node, position: { ...at[node.id] } } : node)) };
+    }
+    if (step.kind === 'data') {
+      const at = direction === 'do' ? step.to : step.from;
+      return { nodes: state.nodes.map((node) => {
+        if (node.id !== step.nodeId) return node;
+        const params = at.params ?? node.data.params;
+        return { ...node, data: { ...node.data, params, ...(at.label !== undefined ? { label: at.label } : {}),
+          ...(at.params ? { keyStatus: nodeKeyStatus(NODE_DEFINITIONS[node.data.definitionId], params,
+            useUIStore.getState().settingsCache) } : {}) } };
+      }) };
     }
     const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
     const edgeIds = new Set((step.kind === 'remove' ? step.edges.map((entry) => entry.item) : step.edges).map((edge) => edge.id));
@@ -14589,7 +14619,7 @@ function applyKeptStep(step: KeptStep, direction: 'do' | 'undo'): void {
  * and comes back with them. */
 function currentKeptStep(step: KeptStep, action: 'undo' | 'redo'): KeptStep {
   const { nodes, edges } = useGraphStore.getState();
-  if (step.kind === 'move') return step;
+  if (step.kind === 'move' || step.kind === 'data') return step;
   const removing = (step.kind === 'remove') === (action === 'redo');
   if (!removing) return step;
   const nodeIds = new Set((step.kind === 'remove' ? step.nodes.map((entry) => entry.item) : step.nodes).map((node) => node.id));
@@ -14663,12 +14693,84 @@ export function clearKeptCanvas(): boolean {
 }
 setKeptCanvasClearer(clearKeptCanvas);
 
+/** Review 13 of PR #199 (kept-scratch LOW-1): a kept action runs the
+ * store's own (a duplicate, Arrange, typing), which would push the saved
+ * history's undo step; the kept tab's steps are its own, so that history is
+ * put back as it was (lib/personInput says nothing while kept either). */
+function withSavedHistoryUntouched(run: () => void): void {
+  const { undoStack, redoStack } = useGraphStore.getState();
+  try { run(); } finally {
+    const now = useGraphStore.getState();
+    if (now.undoStack !== undoStack || now.redoStack !== redoStack) useGraphStore.setState({ undoStack, redoStack });
+  }
+}
+
+/** Typing (or a rename) while kept (GM r19, 5): the store's own edit,
+ * recorded as a kept step. Edits of one node within 500 ms are one step, as
+ * normal Undo takes them (maybePushUndo); a run's state or outputs aren't
+ * steps. */
+let keptTypingAt = 0;
+function keptRecordData(nodeId: string, data: Partial<NodeData>, run: () => void): void {
+  const before = useGraphStore.getState().nodes.find((node) => node.id === nodeId);
+  if (!before || !('params' in data || 'label' in data)) { withSavedHistoryUntouched(run); return; }
+  withSavedHistoryUntouched(run);
+  const after = useGraphStore.getState().nodes.find((node) => node.id === nodeId);
+  if (!after) return;
+  const from: KeptNodeFields = {};
+  const to: KeptNodeFields = {};
+  if ('params' in data && after.data.params !== before.data.params) { from.params = before.data.params; to.params = after.data.params; }
+  if ('label' in data && after.data.label !== before.data.label) { from.label = before.data.label; to.label = after.data.label; }
+  if (!from.params && from.label === undefined && to.label === undefined) return;
+  const now = Date.now();
+  const state = useGraphStore.getState();
+  const last = state.keptUndo.at(-1);
+  if (last?.kind === 'data' && last.nodeId === nodeId && now - keptTypingAt < 500 && state.keptRedo.length === 0) {
+    const merged: KeptStep = { kind: 'data', nodeId, from: { ...from, ...last.from }, to: { ...last.to, ...to } };
+    useGraphStore.setState({ keptUndo: [...state.keptUndo.slice(0, -1), merged] });
+  } else {
+    pushKeptStep({ kind: 'data', nodeId, from, to });
+  }
+  keptTypingAt = now;
+}
+
+/** A rename while kept (review 13 kept-scratch LOW-2): the name changes on
+ * this tab only (as typing), a kept step; nothing is sent. */
+function keptRename(nodeId: string, label: string): void {
+  renameDrafts.delete(nodeId);
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) return;
+  const next = cleanNodeLabel(node, label);
+  if (next === node.data.label) return;
+  useGraphStore.getState().updateNodeData(nodeId, { label: next });
+}
+
+/** Adding a node while kept (GM r19, 5: a full scratch canvas, whose empty
+ * state says "drag a node from the library to begin"): the node is this
+ * tab's own (a local id, as a duplicate's), sent nowhere until [Save as a
+ * project] files the canvas; one kept step that Undo takes off. */
+function keptAddNode(definitionId: string, position: { x: number; y: number }): Promise<string | null> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  if (!definition || useGraphStore.getState().isImportingGraph) return Promise.resolve(null);
+  let params: Record<string, unknown>;
+  if (isDynamicDefinition(definitionId)) {
+    params = {};
+    for (const param of definition.params) if (param.default !== undefined) params[param.key] = param.default;
+  } else {
+    params = buildDefaultParams(definition);
+    Object.assign(params, withNewKreaMode(definition, {}, useUIStore.getState().settingsCache.kreaConnectionMode));
+  }
+  const node = newCanvasNode(uuidv4(), definitionId, params, position);
+  useGraphStore.setState((state) => ({ nodes: [...state.nodes, node] }));
+  pushKeptStep({ kind: 'add', nodes: [node], edges: [] }, null);
+  return Promise.resolve(node.id);
+}
+
 /** Runs a tab-only add (a duplicate) and records what it added as a kept step. */
 function keptRecordAdd(run: () => void): void {
   const before = useGraphStore.getState();
   const nodeIds = new Set(before.nodes.map((node) => node.id));
   const edgeIds = new Set(before.edges.map((edge) => edge.id));
-  run();
+  withSavedHistoryUntouched(run);
   const after = useGraphStore.getState();
   const nodes = after.nodes.filter((node) => !nodeIds.has(node.id));
   const edges = after.edges.filter((edge) => !edgeIds.has(edge.id));
@@ -14679,7 +14781,7 @@ function keptRecordAdd(run: () => void): void {
  * persistNodePositions) and records the moves as a kept step. */
 function keptRecordMove(run: () => void): void {
   const before = new Map(useGraphStore.getState().nodes.map((node) => [node.id, { ...node.position }]));
-  run();
+  withSavedHistoryUntouched(run);
   const from: Record<string, { x: number; y: number }> = {};
   const to: Record<string, { x: number; y: number }> = {};
   for (const node of useGraphStore.getState().nodes) {
@@ -14754,7 +14856,7 @@ function keptEdgesChange(changes: EdgeChange[], pass: (changes: EdgeChange[]) =>
  * Delete key's deleteCanvasElements, duplicates and Arrange have their kept
  * versions in the gate below (they record kept steps). */
 const KEPT_TAB_ONLY: ReadonlySet<keyof GraphState> = new Set<keyof GraphState>(['updateNodeData', 'duplicateSelected', 'duplicateNode',
-  'deleteSelected', 'deleteNode', 'deleteGeneration']);
+  'deleteSelected', 'deleteNode', 'deleteGeneration', 'renameNode', 'addNode']);
 
 /** The actions whose own run lock refuses them with the run's line (and
  * changes nothing) while this tab runs: that line goes before following's
@@ -14931,6 +15033,11 @@ subscribeBackendConnection(() => {
     duplicateNode: (nodeId) => keptRecordAdd(() => ungated.duplicateNode(nodeId as string)),
     autoLayoutSelected: () => keptRecordMove(() => ungated.autoLayoutSelected()),
     autoLayout: () => keptRecordMove(() => ungated.autoLayout()),
+    // GM r19 (5): typing, a rename and an added node are kept steps too.
+    updateNodeData: (nodeId, data) => keptRecordData(nodeId as string, data as Partial<NodeData>,
+      () => ungated.updateNodeData(nodeId as string, data as Partial<NodeData>)),
+    renameNode: (nodeId, label) => keptRename(nodeId as string, label as string),
+    addNode: (definitionId, position) => keptAddNode(definitionId as string, position as { x: number; y: number }),
   };
   for (const [name, gate] of Object.entries(EDIT_GATES) as [keyof GraphState, EditGate][]) {
     const action = ungated[name] as unknown as (...args: unknown[]) => unknown;
@@ -14939,6 +15046,23 @@ subscribeBackendConnection(() => {
     const isRun = String(name).startsWith('execute') || String(name).startsWith('rerun') || name === 'retryFailedRun';
     const runSaysFirst = RUN_LOCK_FIRST.has(name);
     (gated as Record<string, unknown>)[name] = (...args: unknown[]) => {
+      const blocks = !gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args);
+      // Kept in this tab after a restore first (GM r19 on PR #199, 4: a
+      // reason only the person can fix goes before the run, following and
+      // offline, as lib/canvasLock orders them): typing joins the kept
+      // edits, and so do a duplicate (GM r17: its copies are this tab's own
+      // nodes, sent nowhere until [Save as a project] files the canvas), a
+      // rename, an added node and, GM r18 answer 3, moves, deletes, Arrange,
+      // Undo and Redo, on the kept tab's own steps. Any other edit or run is
+      // refused, and the kept line pulses.
+      const local = isCanvasKept() ? keptLocal[name] : undefined;
+      if (blocks && isCanvasKept()) {
+        const tabOnly = (KEPT_TAB_ONLY.has(name) || local !== undefined) && keptCanvasTakesTyping();
+        if (!tabOnly) {
+          pulseKeptCanvas();
+          return gate.refused();
+        }
+      }
       // PR #198 review 6, M2 (GM r9 answer 3): during this tab's own run, a
       // delete or an undo says the run's line (the action's own run lock),
       // as the toolbar's tooltip does, before following or offline.
@@ -14949,24 +15073,8 @@ subscribeBackendConnection(() => {
         if (!isRun) refuseEditWhileFollowing();
         return (follow.refused as (...a: unknown[]) => unknown)(...args);
       }
-      const blocks = !gate.blocks || (gate.blocks as (...a: unknown[]) => boolean)(...args);
       if (blocks && refuseEditWhileOffline()) {
         return gate.refused();
-      }
-      // Then kept in this tab after a restore (GM r15, Q11; after the run,
-      // following and offline, as lib/canvasLock orders them): typing joins the kept
-      // edits, and so do a duplicate (GM r17: its copies are this tab's own
-      // nodes, sent nowhere until [Save as a project] files the canvas) and,
-      // GM r18 (Q3), moves, deletes, Arrange, Undo and Redo, on the kept
-      // tab's own steps. Any other edit or run is refused, and the kept line
-      // pulses.
-      const local = isCanvasKept() ? keptLocal[name] : undefined;
-      if (blocks && isCanvasKept()) {
-        const tabOnly = (KEPT_TAB_ONLY.has(name) || local !== undefined) && keptCanvasTakesTyping();
-        if (!tabOnly) {
-          pulseKeptCanvas();
-          return gate.refused();
-        }
       }
       return local ? local(...args) : action(...args);
     };

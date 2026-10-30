@@ -5,6 +5,8 @@ import { useUIStore } from '../../store/uiStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import './ProjectSwitchToast.css';
 import { useLeave } from '../../lib/noticeLeave';
+import { keptLockTitle, useKeptCanvas } from '../../lib/keptCanvas';
+import { KEPT_MARK } from '../../lib/canvasLock';
 
 const VISIBLE_MS = 15000;
 
@@ -20,6 +22,8 @@ const switchKey = (notice: ProjectSwitchNotice | null) =>
 export function ProjectSwitchToast() {
   const notice = useProjectStore((state) => state.switchNotice);
   const busy = useProjectStore((state) => state.busy);
+  // GM r20 on PR #199: opening another project would strand a kept canvas.
+  const kept = useKeptCanvas();
   // In the Commons is what App shows: Projects wins over it, and leaving by
   // Projects keeps viewMode 'commons' behind Projects (#163).
   const commonsView = useUIStore((state) => state.viewMode === 'commons' && state.commonsEnabled);
@@ -52,7 +56,8 @@ export function ProjectSwitchToast() {
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
         <span className="project-switch-toast__text">{switchMessage(shown)}</span>
         {shown.previousProjectId && (
-          <button type="button" className="project-switch-toast__back" disabled={busy}
+          <button type="button" className="project-switch-toast__back"
+            {...(kept ? { [KEPT_MARK]: '', disabled: true, title: keptLockTitle('open') } : { disabled: busy })}
             onClick={() => void useProjectStore.getState().switchBack()}>
             Back to “{shown.previousProjectName ?? 'previous project'}”
           </button>

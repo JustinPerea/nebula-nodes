@@ -86,7 +86,7 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
           {/* Forgetting writes the node's recovery (deleteProviderRecovery):
               the canvas lock, following as well as offline (fix round 2 of
               PR #200, review 2 L-5). */}
-          <button type="button" className="prompt-dialog__destructive" {...lock.act({ offline: true, kept: 'unlock' })}
+          <button type="button" className="prompt-dialog__destructive" {...lock.act({ offline: true, kept: 'forget' })}
             onClick={onConfirm}>{FORGET_LABEL}</button>
         </div>
       </div>

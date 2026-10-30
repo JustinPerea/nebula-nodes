@@ -92,6 +92,10 @@ export interface CatalogRestore {
    * shape was wrong). False when it was cut or zeroed: what it held past the
    * damage is unknown, so the notice never says nothing was missing. */
   damagedReadWhole?: boolean;
+  /** GM r19 on PR #199 (a): the damaged file had records Nebula couldn't
+   * read (a cut record, or a cut before its groups closed). False for a file
+   * cut only past its last record; missing from older records (unknown). */
+  damagedRecordsUnread?: boolean;
   projectCount?: number; note?: string;
 }
 /** A canvas saved as its own project (backend main._saved_row): when it

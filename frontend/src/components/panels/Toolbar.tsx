@@ -278,10 +278,14 @@ export function Toolbar() {
     }
   }, [fitView]);
 
-  // The bottom Run while the canvas is kept (PR #199, GM r16, 4), after
-  // following and offline as lib/canvasLock orders them: its mark and line.
-  const runKept = lock.kept && !lock.locked;
-  const runKeptMark = runKept ? { [KEPT_MARK]: '' } : {};
+  // The bottom Run while the canvas is kept (PR #199, GM r16, 4), first, as
+  // lib/canvasLock orders it (GM r19, 4): its mark and line in place of
+  // following's or offline's.
+  const runKept = lock.kept;
+  // Spread after `lock.mark`: kept's mark, with following's and offline's
+  // taken off (an undefined attribute isn't rendered).
+  const runKeptMark: Record<string, '' | undefined> = runKept
+    ? { ...Object.fromEntries(Object.keys(lock.mark).map((key) => [key, undefined])), [KEPT_MARK]: '' } : {};
   const runKeptTitle = runKept ? keptLockTitle('run') : undefined;
 
   return (
@@ -317,8 +321,8 @@ export function Toolbar() {
           {...lock.mark}
           {...runKeptMark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={following ? waitToOpenTooltip(following.projectName) : runKeptTitle
-            ?? (isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`)}
+          title={runKeptTitle ?? (following ? waitToOpenTooltip(following.projectName)
+            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`)}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -362,7 +366,7 @@ export function Toolbar() {
                 <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI', kept: 'load' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI', kept: 'import' }, { run: isExecuting, runTitle: loadBlockedReason })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
                 <ToolbarIcon name="cli" /><span>Import CLI graph</span>

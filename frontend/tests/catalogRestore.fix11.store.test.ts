@@ -209,12 +209,19 @@ describe('review 11, HIGH-1 and GM r15, Q11: a restore while the person types', 
     graphWrites.sent = [];
     let pulses = 0;
     const stop = subscribeKeptPulse(() => { pulses += 1; });
+    // GM r19 (5) and review 13 kept-scratch LOW-2: an added node and a
+    // rename are the kept tab's own now (nothing sent).
     const before = useGraphStore.getState().nodes.length;
     const added = await useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
-    expect(added).toBeNull();
-    expect(useGraphStore.getState().nodes.length).toBe(before);
+    expect(added).not.toBeNull();
+    expect(useGraphStore.getState().nodes.length).toBe(before + 1);
     useGraphStore.getState().renameNode('n1', 'New name');
-    expect(useGraphStore.getState().nodes[0].data.label).not.toBe('New name');
+    expect(useGraphStore.getState().nodes[0].data.label).toBe('New name');
+    expect(pulses).toBe(0);
+    // A wire needs Nebula: refused, with a pulse.
+    const edges = useGraphStore.getState().edges.length;
+    useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: added!, targetHandle: 'text' });
+    expect(useGraphStore.getState().edges.length).toBe(edges);
     expect(pulses).toBeGreaterThan(0);
     expect(graphWrites.sent).toEqual([]);
     stop();

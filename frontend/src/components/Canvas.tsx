@@ -47,7 +47,7 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
-import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import { refuseTabOnlyEdit, useCanvasLock } from '../lib/canvasLock';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -537,7 +537,10 @@ export function Canvas() {
       // Nothing lands while following or offline: files, a character, a
       // moodboard or a library node (fix round 6 of PR #200; the store's edit
       // gate refused the node drops too, the handler now says so itself).
-      if (refuseCanvasEdit()) return;
+      // While kept (GM r19 on PR #199, 5) a library node lands on this tab
+      // only; files refuse in canvasFileDrop, and a character or moodboard
+      // (backend assets) in the store's kept gate, each with its kept line.
+      if (refuseTabOnlyEdit()) return;
       setFitFirstNodes(false);
 
       // Files from the desktop: every one is handled (lib/canvasFileDrop.ts).

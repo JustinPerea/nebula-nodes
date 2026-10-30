@@ -17,3 +17,13 @@
 @media (prefers-reduced-motion: reduce) {
   .kept-edits-notice--pulse .canvas-undo-notice__text { animation-timing-function: steps(1, end); }
 }
+/* [Discard edits] throws away edits only this tab has (GM r20 on PR #199):
+   red on hover, as Forget ID and Clear run history; its confirm is red too. */
+body.app-slava-restraint .kept-edits-notice button.kept-edits-notice__discard:not(:disabled):hover {
+  border-color: var(--sr-danger-edge);
+  background: var(--sr-danger-tint);
+  color: var(--sr-danger-ink, #ff887d);
+}
+body.app-slava-restraint .kept-edits-notice button.kept-edits-notice__discard:active:not(:disabled) {
+  color: var(--sr-danger-ink-hover, #ff9a91);
+}

@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
-import {
-  canvasHeldUnreadableLine, canvasSavedToast, canvasWaitingLine, catalogRestoreNotice, DEFAULT_PROJECT_LIMIT, editsRecoveredToast,
-  OPEN_RECENTLY_DELETED, SAVE_AS_A_PROJECT, type CanvasLimit, type CanvasLimitContext, type NoticeNow,
-} from './catalogRestoreCopy';
+import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, OPEN_RECENTLY_DELETED, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
+import { useRestoreCopy, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
 import { removalNote } from './trashDays';
 import { CrabMark } from '../brand/CrabMark';
@@ -459,14 +458,16 @@ const noop = () => {};
  * catalogRestoreCopy). Its status region is in the page from the start and
  * filled after it mounts, so screen readers announce it (a live region
  * reads changes, not what it held when it appeared: review 1 of PR #199,
- * L8). × closes it and puts focus on "Recent projects" (the notice stack's
- * fallback, PR #200 GM r16). */
-function CatalogRestoreNotice({ restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted, heading }: {
+ * L8). × closes it, and focus follows the notice stack's rule (PR #200 GM
+ * r16; review 13 of PR #199, MEDIUM-1): the notice now in its place, else
+ * "Recent projects". */
+function CatalogRestoreNotice({ copy, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
+  /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
+  copy: RestoreCopy | null;
   restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
   /** GM r9: held canvases that couldn't be read, merged in as one more line. */
   heldUnreadable?: { count: number | null } | null;
   onOpenRecentlyDeleted: (ids: string[]) => void;
-  heading: RefObject<HTMLHeadingElement | null>;
 }) {
   // Filled once the region is in the page: the callback ref runs after it
   // is attached, and the content follows in the next render.
@@ -474,7 +475,7 @@ function CatalogRestoreNotice({ restore, current, heldUnreadable = null, onDismi
   const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
   // Only the lines that still hold against the list now (GM r4), so a
   // restore or delete by the person or an agent updates it as it lands.
-  const notice = ready && restore ? catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
+  const notice = ready && restore && copy ? copy.catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
   return (
     // A polite live region rather than role="status": the page keeps one
     // status per notice it shows (the loading line, the saved-file line),
@@ -488,11 +489,7 @@ function CatalogRestoreNotice({ restore, current, heldUnreadable = null, onDismi
         {/* Only while Recently deleted holds one of the notice's items (GM r4; L6). */}
         {notice.openRecentlyDeleted && current.trash.length > 0 && <button type="button" className="project-home__restore-action project-home__restore-action--neutral"
           onClick={() => onOpenRecentlyDeleted(notice.recentlyDeletedIds)}>{OPEN_RECENTLY_DELETED}</button>}
-        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
-          // Before the button goes, so focus never drops to the page body.
-          heading.current?.focus();
-          onDismiss();
-        }}><X aria-hidden="true" /></button>
+        <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </>}
     </div>
   );
@@ -501,16 +498,11 @@ function CatalogRestoreNotice({ restore, current, heldUnreadable = null, onDismi
 /** GM r9: the held canvases that couldn't be read, when no restore notice
  * shows to say it: its own notice, styled like the restore notice, closed
  * with × (a one-time report; only the waiting line has no ×). */
-function CanvasHeldUnreadableNotice({ count, onDismiss, heading }: {
-  count: number | null; onDismiss: () => void; heading: RefObject<HTMLHeadingElement | null>;
-}) {
+function CanvasHeldUnreadableNotice({ copy, count, onDismiss }: { copy: RestoreCopy; count: number | null; onDismiss: () => void }) {
   return (
     <div className="project-home__notice project-home__restore" role="status">
-      <span className="project-home__restore-text">{canvasHeldUnreadableLine(count)}</span>
-      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={() => {
-        heading.current?.focus();
-        onDismiss();
-      }}><X aria-hidden="true" /></button>
+      <span className="project-home__restore-text">{copy.canvasHeldUnreadableLine(count)}</span>
+      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
     </div>
   );
 }
@@ -519,16 +511,18 @@ function CanvasHeldUnreadableNotice({ count, onDismiss, heading }: {
  * project yet, the list is at a limit, nothing in it is lost. A slim notice where the restore notice sits; it
  * can't be dismissed while the canvas waits and goes once it is saved. The
  * size cap's adds "Open Recently deleted" (only a delete for good frees it). */
-function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
+function CanvasWaitingNotice({ copy, waiting, trashCount, onOpenRecentlyDeleted }: {
+  copy: RestoreCopy;
   waiting: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null }; trashCount: number;
   onOpenRecentlyDeleted: () => void;
 }) {
-  const line = canvasWaitingLine(waiting.reason, {
+  const line = copy.canvasWaitingLine(waiting.reason, {
     projectLimit: waiting.projectLimit ?? DEFAULT_PROJECT_LIMIT, trashHasItems: trashCount > 0, canvases: waiting.canvases,
     deletes: waiting.deletes,
   });
   return (
-    <div className="project-home__notice project-home__restore project-home__waiting" role="status">
+    // No ×: the stack's focus rule can land on it, so it takes focus itself.
+    <div className="project-home__notice project-home__restore project-home__waiting" role="status" tabIndex={-1}>
       <span className="project-home__restore-text">{line}</span>
       {waiting.reason === 'storage' && trashCount > 0 && <button type="button" className="project-home__restore-action project-home__restore-action--neutral"
         onClick={onOpenRecentlyDeleted}>{OPEN_RECENTLY_DELETED}</button>}
@@ -537,12 +531,13 @@ function CanvasWaitingNotice({ waiting, trashCount, onOpenRecentlyDeleted }: {
 }
 
 /** GM r5: "Once saved: the normal toast", with the project's real name. */
-function CanvasSavedToast({ project, onDismiss }: {
+function CanvasSavedToast({ copy, project, onDismiss }: {
+  copy: RestoreCopy;
   project: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
     filed?: SavedCanvas[] };
   onDismiss: () => void;
 }) {
-  return <SavedToast text={canvasSavedToast(project.name, project.filed, project.overSaveLimit === true,
+  return <SavedToast text={copy.canvasSavedToast(project.name, project.filed, project.overSaveLimit === true,
     project.another === true, project.agentCopy)} onDismiss={onDismiss} />;
 }
 
@@ -570,7 +565,10 @@ function SavedToast({ text, onDismiss }: { text: string; onDismiss: () => void }
 /** Which notice in the stack focus was in, by its key, and the keys of the
  * stack as it was. React's focus events bubble through portals, so focus in
  * a notice's own dialog (the held edits' confirm) counts as in the notice. */
-type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
+// Review 13 of PR #199 (MEDIUM-1): the restore notices above the stack
+// follow its rule too, in page order: the restore notice, the waiting line,
+// the held canvases that couldn't be read, then the stack.
+type NoticeKey = 'restore' | 'waiting' | 'unreadable' | 'copy' | 'held' | 'saved' | 'error';
 
 /** The notice stack's focus rule (GM pr200 r16 #2, which replaced GM r15's
  * "first control"): when a notice goes and takes focus with it, focus moves
@@ -584,6 +582,8 @@ type NoticeKey = 'copy' | 'held' | 'saved' | 'error';
  * frame to wait for (a frame never comes in a background tab). */
 /** The × every dismissable notice carries (CopyNotice). */
 const NOTICE_DISMISS = 'button.project-home__notice-close';
+/** Any notice's × as the rule looks for it: the stack's, or the restore notices'. */
+const ANY_NOTICE_DISMISS = `${NOTICE_DISMISS}:not(:disabled), button.project-home__toast-close:not(:disabled)`;
 
 function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | null>,
   fallback: RefObject<HTMLElement | null>) {
@@ -599,11 +599,11 @@ function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | n
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
     const index = before.indexOf(was);
-    const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>(':scope > [data-notice]') ?? []);
+    const notices = Array.from(stack.current?.querySelectorAll<HTMLElement>('[data-notice]') ?? []);
     const target = notices[Math.min(index, notices.length - 1)];
     if (!target) { fallback.current?.focus(); return; }
     // Its ×, else the notice itself by its tabindex: never one of its actions.
-    const control = target.querySelector<HTMLElement>(`${NOTICE_DISMISS}:not(:disabled)`)
+    const control = target.querySelector<HTMLElement>(ANY_NOTICE_DISMISS)
       ?? target.querySelector<HTMLElement>('[tabindex="-1"]');
     (control ?? fallback.current)?.focus();
     // keys is read through `joined`: a new array each render, the same stack.
@@ -640,7 +640,19 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
   const showError = !unsavedEdits && Boolean(error);
+  const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
+  // The waiting line, unless the restore notice already says the limit.
+  // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its
+  // notices has something to say, not with the entry chunk.
+  const copy = useRestoreCopy(Boolean(catalogRestore || canvasNotFiled || canvasHeldUnreadable || canvasSaved));
+  const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled && copy
+    && copy.catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
+  const showWaiting = Boolean(canvasNotFiled && copy) && !restoreSaysLimit;
+  const showUnreadable = Boolean(canvasHeldUnreadable && copy) && !catalogRestore;
   const noticeKeys: NoticeKey[] = [
+    ...(catalogRestore ? ['restore' as const] : []),
+    ...(showWaiting ? ['waiting' as const] : []),
+    ...(showUnreadable ? ['unreadable' as const] : []),
     ...(copyNotice ? ['copy' as const] : []),
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
     ...(showError ? ['error' as const] : []),
@@ -666,10 +678,6 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
     setTrashFromNotice(ids);
     setTrashOpenRequest((last) => Math.max(Date.now(), last + 1));
   }, []);
-  const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
-  // The waiting line, unless the restore notice already says the limit.
-  const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled
-    && catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((left, right) => recentTimestamp(right) - recentTimestamp(left)), [projects, query]);
@@ -692,19 +700,23 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
-        <CatalogRestoreNotice restore={catalogRestore} current={current} onDismiss={onDismissCatalogRestore} heading={recentHeading}
-          heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} />
-        {canvasNotFiled && !restoreSaysLimit && <CanvasWaitingNotice waiting={canvasNotFiled} trashCount={trash.length}
-          onOpenRecentlyDeleted={() => openTrash()} />}
-        {canvasHeldUnreadable && !catalogRestore && <CanvasHeldUnreadableNotice count={canvasHeldUnreadable.count}
-          onDismiss={onDismissCanvasHeldUnreadable} heading={recentHeading} />}
+        {/* Every notice on the home, in page order, under one focus rule
+            (useNoticeStackFocus; review 13 of PR #199, MEDIUM-1). */}
+        <div ref={stack} className="project-home__notice-area">
+        {/* The same element with or without a restore: its live region stays in the page. */}
+        <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} restore={catalogRestore} current={current}
+          onDismiss={onDismissCatalogRestore} heldUnreadable={canvasHeldUnreadable} onOpenRecentlyDeleted={openTrash} /></div>
+        {showWaiting && canvasNotFiled && copy && <div {...track('waiting')}><CanvasWaitingNotice copy={copy} waiting={canvasNotFiled} trashCount={trash.length}
+          onOpenRecentlyDeleted={() => openTrash()} /></div>}
+        {showUnreadable && canvasHeldUnreadable && copy && <div {...track('unreadable')}><CanvasHeldUnreadableNotice copy={copy} count={canvasHeldUnreadable.count}
+          onDismiss={onDismissCanvasHeldUnreadable} /></div>}
 
         {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
             then the held edits or the line that says where they went, then
             the error. GM's WRAP rule: where "Try again" redoes the failure it
             is the retry, so the reason drops its own; where it only reloads,
             or can't help, the line stays whole. */}
-        {noticeKeys.length > 0 && <div ref={stack} className="project-home__notices">
+        {(copyNotice || unsavedEdits || editsSavedAs || showError) && <div className="project-home__notices">
           {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
             onRestore={onRestoreCopy} onOpen={onOpenCopy} onDismiss={onDismissCopy} /></div>}
           {unsavedEdits ? <div {...track('held')}><UnsavedEditsNotice reason={unsavedEdits.reason} downloadFailed={unsavedEdits.downloadFailed}
@@ -721,6 +733,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
               {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}</div></div>}
         </div>}
+        </div>
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
@@ -737,7 +750,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
         onUndo={() => onRestore(last.id, 'undo')} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
-      {canvasSaved && <CanvasSavedToast key={canvasSaved.id} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
+      {canvasSaved && copy && <CanvasSavedToast key={canvasSaved.id} copy={copy} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
       {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={editsRecoveredToast(editsRecoveredAs.name)}
         onDismiss={onDismissEditsRecovered} />}
       {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}

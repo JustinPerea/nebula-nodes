@@ -461,7 +461,11 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
         more = count - len(rows)
         lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
     if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
-        lines.append("  Damaged file not read whole: changes after the copy may be missing")
+        # GM r19 on PR #199, 6a: only unread project records may be missing.
+        if restore.get("damagedRecordsUnread") is False:
+            lines.append("  Damaged file not read whole, after its projects: no project is missing")
+        else:
+            lines.append("  Damaged file not read whole: changes after the copy may be missing")
     recovered = restore.get("recoveredCanvas")
     if isinstance(recovered, dict) and recovered.get("id") and recovered.get("current") is not False:
         lines.append(f"  Live canvas saved as its own project: {recovered.get('nameNow') or recovered.get('name')} "

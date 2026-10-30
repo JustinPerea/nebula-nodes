@@ -253,3 +253,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }
+
+/* Review 13 of PR #199 (MEDIUM-1): every notice on the home sits in one
+   area for the stack's focus rule; the area adds no box of its own. */
+.project-home__notice-area { display: contents; }

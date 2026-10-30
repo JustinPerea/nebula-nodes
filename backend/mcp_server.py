@@ -415,9 +415,12 @@ def start_here(ctx: Context | None = None) -> str:
     with "(409, canvas_waiting)", so open a project to work in; tell them what
     `note` says frees room, or, with `roomNow`, that the next listing saves
     it; don't free it yourself; and while the person's tab keeps edits
-    Nebula couldn't save after a restore, every change, run and project
-    switch is refused with "(409, canvas_kept_in_tab)": tell them, and try
-    again after they click Save as a project):
+    Nebula couldn't save after a restore (and for about 10 s after its
+    connection drops), every canvas change, run and project switch is
+    refused with "(409, canvas_kept_in_tab)", while renaming a project,
+    trashing one that isn't open and restoring from Recently deleted still
+    work: tell them, and try again after they save those edits as a project
+    or discard them, which only they can do):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1436,7 +1439,9 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     (until the person closes the notice): `note` says what happened,
     `source` the copy it came from (null: rebuilt from the damaged files),
     `addedBack` the projects it added back, `notAddedBack` those it
-    couldn't, `reverted` those that went back to the copy's version,
+    couldn't (`reason: "limit"` for readable ones left out at the project
+    limit, still in the damaged file; `notAddedBackLimitCount` counts those,
+    `projectLimit` is the limit), `reverted` those that went back to the copy's version,
     `cameBack` those deleted after the copy that are back, `backInTrash`
     those restored after the copy that are in Recently deleted again,
     `recoveredCanvas` the live canvas filed as its own project ("<project>
@@ -1445,7 +1450,9 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     filed because the list is at a limit, `damagedReadWhole` false when the
     damaged file couldn't be read whole (cut, zeroed, or a key or section
     name damaged: changes after the copy may then be missing without a
-    row), and `damagedFile` where the damaged file is kept. Every row says
+    row), `damagedRecordsUnread` true when it also held project records
+    Nebula couldn't read (false when the damage came only after its
+    projects group closed; absent on older restores), and `damagedFile` where the damaged file is kept. Every row says
     `current`: false once it no longer holds (that project was restored,
     deleted or deleted for good since), and `note` leaves those out, as the
     person's notice does. Project ids from before it may be stale; ask the

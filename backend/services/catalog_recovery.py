@@ -580,6 +580,85 @@ def _misfiled(found: Salvage, key_id: str | None, entry: dict[str, Any], group: 
     return True
 
 
+# What JSON allows outside strings: structure, whitespace and scalars' text.
+_JSON_OUTSIDE = frozenset(' \t\r\n{}[]:,-+.0123456789eEtrufalsn')
+
+
+def _projects_closed_before_damage(text: str) -> bool:
+    """Whether ``text`` (a damaged catalog file) shows its "projects" group
+    opened and closed inside the top-level object before its damage, so the
+    damage cut no project record off (GM r19 on PR #199, 6a). A bracket and
+    string tracker reads up to the first byte JSON doesn't allow there (or
+    the end). What comes after the group closed doesn't count: a cut trash
+    group isn't in the notice (GM: lost Recently deleted entries are logged,
+    not in the notice). False for anything else (no top-level object, a cut
+    inside the group or one of its records, the group key never seen or
+    damaged): unsure is False."""
+    index = len(text) - len(text.lstrip())
+    if index >= len(text) or text[index] != "{":
+        return False
+    depth = 0
+    in_string = escaped = False
+    string_start = 0
+    expect_key = False
+    key: str | None = None
+    opened_in: str | None = None
+    for at in range(index, len(text)):
+        char = text[at]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+                if depth == 1 and expect_key:
+                    key, expect_key = text[string_start:at], False
+            elif char < " ":
+                return False  # a control byte inside a string (a zeroed page): the damage
+            continue
+        if char == '"':
+            in_string, string_start = True, at + 1
+        elif char not in _JSON_OUTSIDE:
+            return False  # the damage
+        elif char in "{[":
+            depth += 1
+            if depth == 1:
+                expect_key = True
+            elif depth == 2:
+                opened_in = key
+        elif char in "}]":
+            depth -= 1
+            if depth <= 0:
+                return False  # the top-level object closed without it
+            if depth == 1:
+                if opened_in == "projects":
+                    return True
+                opened_in = None
+        elif char == "," and depth == 1:
+            expect_key, key = True, None
+    return False
+
+
+def records_unread(raw: bytes | None, found: Salvage | None, read_whole: bool) -> bool:
+    """Whether the damaged catalog.json held project records Nebula couldn't
+    read (GM r19 on PR #199, 6a): the restore notice's "changes made after
+    that copy may be missing" is true only then. The rule: read whole,
+    False. Otherwise True when a record that failed sat in the projects
+    group or in a group that can't be told, or when the "projects" member
+    wasn't seen opened and closed at depth 1 before the damage
+    (_projects_closed_before_damage); else False. A cut trash group, or any
+    damage after the projects group closed, is False: lost Recently deleted
+    entries are logged, not in the notice (GM)."""
+    if read_whole:
+        return False
+    if raw is None or found is None:
+        return True
+    if any(found.groups.get(entry_id) in ("projects", None) for entry_id in found.failed):
+        return True
+    return not _projects_closed_before_damage(raw.decode("utf-8", errors="replace"))
+
+
 def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
     """What ``raw`` (a damaged catalog file) still holds. ``parsed``: what
     the store already decoded it to, or None when it already failed to

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { hasUnsavedSceneEdits, keepCanvasLocally, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
-import { isCanvasKept, setKeptCanvasSaving } from '../lib/keptCanvas';
+import { isCanvasKept, pulseKeptCanvas, setKeptCanvasSaving, subscribeKeptCanvas } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { useArrangeStore } from './arrangeStore';
@@ -36,9 +36,10 @@ import {
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
-  agentClosedLine, canvasHeldLogLine, canvasHoldRefusedLogLine, catalogRestoreLogLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast,
-  LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, type CanvasLimitContext,
-} from '../components/projects/catalogRestoreCopy';
+  agentClosedLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
+} from '../components/projects/restoreCopyCore';
+import type { CanvasLimitContext } from '../components/projects/catalogRestoreCopy';
+import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
 
 /** The canvas kept in this tab (GM r15 on PR #199, Q11; review 11, HIGH-1):
  * Nebula restored its project list, or an agent's write closed the project
@@ -187,6 +188,12 @@ interface ProjectState {
   /** [Save as a project] on the kept line: everything typed up to the click
    * goes into its own project, which then opens here with the saved toast. */
   saveKeptEdits: () => Promise<void>;
+  /** GM r20 on PR #199: [Discard edits] on the kept line, after its
+   * confirm: the tab loads the project's saved state (or, when the restored
+   * list doesn't hold it, goes to Projects home, whose restore notice says
+   * where it is), leaves kept mode and its Undo, and says "Discarded the
+   * kept edits." */
+  discardKeptEdits: () => Promise<void>;
   workspaceRevision: string; error: string | null;
   /** What `error`'s Details toggle holds, for that line (projectErrorDetails). */
   errorDetails: ProjectErrorDetails | null;
@@ -874,6 +881,97 @@ function stopKeepingEdits(): void {
   useProjectStore.setState({ keptEdits: null });
 }
 
+// GM r20 on PR #199: kept mode never outlives its canvas. Whatever replaces
+// it (graphStore's loads release the kept canvas) takes the kept line with it.
+subscribeKeptCanvas(() => {
+  if (isCanvasKept()) return;
+  keptRecovery = null;
+  if (useProjectStore.getState().keptEdits) useProjectStore.setState({ keptEdits: null });
+});
+
+/** Set while [Save as a project] or [Discard edits] replaces the kept canvas
+ * itself: the only routes off a kept canvas (GM r20). */
+let leavingKept = false;
+
+/**
+ * GM r20 on PR #199: the person stays on a kept canvas. Every route that
+ * would replace it (Back to projects, opening another project, a new one,
+ * Load and Import) is refused, and the kept line pulses as for any kept
+ * refusal; the controls show the kept line for their verb. True when refused.
+ */
+function refuseLeavingKeptCanvas(): boolean {
+  if (!isCanvasKept() || leavingKept) return false;
+  pulseKeptCanvas();
+  return true;
+}
+
+/** GM r20, verbatim: the past-tense toast after [Discard edits]. */
+export const DISCARDED_KEPT_EDITS = 'Discarded the kept edits.';
+
+/** What blocks [Save as a project] and [Discard edits] (GM r19, 4: each
+ * names its own blocker): a run, then offline. Null when neither. */
+export function keptExitBlocker(): 'run' | 'offline' | null {
+  if (!useGraphStore.getState().canSwitchProject({ exceptSaves: true })) return 'run';
+  if (isBackendOffline()) return 'offline';
+  return null;
+}
+
+/**
+ * [Discard edits] on the kept line, once its confirm said so (GM r20): the
+ * project's saved state comes back here. The project the edits were made in
+ * is opened as the restored list now holds it; when that list doesn't hold
+ * it (left out at the limit, or not in the copy), there is no saved state to
+ * load, so the tab goes to Projects home, whose restore notice says where it
+ * is. Either way kept mode and its Undo end, and the toast says it (no Undo:
+ * the confirm was the guard). Agents can't do this: it is the person's.
+ */
+async function discardKeptEdits(): Promise<void> {
+  const kept = useProjectStore.getState().keptEdits;
+  if (!kept || kept.saving || !isCanvasKept() || keptExitBlocker()) return;
+  let list: ProjectList | null = null;
+  try {
+    listingGeneration += 1;
+    list = await api.listProjects();
+    useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
+      workspaceRevision: list.workspaceRevision });
+  } catch (error) {
+    const current = useProjectStore.getState().keptEdits;
+    if (current) useProjectStore.setState({ keptEdits: { ...current, error: isOfflineRefusal(error) ? null
+      : failureMessage(error, "Couldn't discard the kept edits.") } });
+    return;
+  }
+  if (!isCanvasKept()) return;
+  const saved = list.projects.some((project) => project.id === kept.sourceId);
+  if (!saved) {
+    // Kept mode first (its param pushes go with it), then the canvas.
+    stopKeepingEdits();
+    releaseLoadedProject();
+    // The home's own notice (its notice stack, ×): the canvas notice region
+    // isn't on the home, so a canvas notice would never show.
+    useProjectStore.setState({ screen: 'home', error: null, errorRetry: null,
+      copyNotice: { line: DISCARDED_KEPT_EDITS, restore: null } });
+    void relistProjects();
+    return;
+  }
+  leavingKept = true;
+  let opened = false;
+  try {
+    opened = await activate(() => api.openProject(kept.sourceId, useProjectStore.getState().workspaceRevision),
+      { action: 'open', id: kept.sourceId });
+  } finally { leavingKept = false; }
+  if (opened && !isCanvasKept()) {
+    useProjectStore.setState({ dirty: false, saveStatus: 'saved', saveError: null });
+    showNotice(DISCARDED_KEPT_EDITS, 'info');
+    return;
+  }
+  // Not opened: the canvas stays kept, and the line says why.
+  const after = useProjectStore.getState();
+  if (after.keptEdits && isCanvasKept()) {
+    useProjectStore.setState({ keptEdits: { ...after.keptEdits, error: after.error ?? "Couldn't discard the kept edits." },
+      error: null, errorRetry: null });
+  }
+}
+
 /**
  * [Save as a project] on the kept line (GM r15, Q11): everything typed up
  * to the click goes into its own project under the "(recovered)" name, that
@@ -885,6 +983,9 @@ function stopKeepingEdits(): void {
 async function saveKeptEdits(): Promise<void> {
   const kept = useProjectStore.getState().keptEdits;
   if (!kept || kept.saving || !isCanvasKept()) return;
+  // GM r19, 4 (review 13, LOW-3): a run holds it, as its button says, so
+  // the copy isn't made only for its open to be refused.
+  if (keptExitBlocker() === 'run') return;
   const snapshot = captureProjectSnapshot();
   const fingerprint = JSON.stringify(snapshot);
   if (projectSizeBytes(snapshot) > PROJECT_SAVE_LIMIT_BYTES) {
@@ -931,7 +1032,8 @@ async function saveKeptEdits(): Promise<void> {
     useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       workspaceRevision: list.workspaceRevision });
   } catch { /* The open says it if the revision is stale. */ }
-  await useProjectStore.getState().open(copy.id);
+  leavingKept = true;
+  try { await useProjectStore.getState().open(copy.id); } finally { leavingKept = false; }
   stopKeepingEdits();
   const after = useProjectStore.getState();
   if (after.screen === 'workspace' && after.activeProject?.id === copy.id) {
@@ -1100,6 +1202,8 @@ async function openCopyAfterUpdate(): Promise<void> {
 }
 
 const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
+/** The update's line while the canvas is kept: nothing reloads by itself. */
+export const KEPT_UPDATE_LINE = `${PARAMS_UPDATED} Save the kept edits as a project or discard them, then reload the tab to use the update.`;
 /** The backend runs another params version than this bundle (graphSync, the
  * project listing or a 409 params_outdated said so). The tab's values may be
  * from before a one-time upgrade, and the backend refuses its saves and runs,
@@ -1108,6 +1212,13 @@ const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
  * matches. Never applies a project in this bundle: only a reload brings the
  * new definitions and upgrade rules. */
 function handleParamsVersionChange(backendVersion: number | null): Promise<void> {
+  // GM r20 on PR #199: a reload would drop a kept canvas (its edits are only
+  // in this tab), so it waits for [Save as a project] or [Discard edits];
+  // the next listing or sync after that handles the update.
+  if (isCanvasKept()) {
+    useProjectStore.setState({ error: KEPT_UPDATE_LINE, errorRetry: null });
+    return Promise.resolve();
+  }
   if (paramsVersionChange) return paramsVersionChange;
   const handling = ++paramsHandling;
   const superseded = () => handling !== paramsHandling;
@@ -1297,6 +1408,8 @@ function adoptCanvasCamera(before: ProjectSnapshot['viewport']): void {
 async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
   then?: () => Promise<void>): Promise<boolean> {
   const state = useProjectStore.getState();
+  // GM r20 on PR #199: nothing replaces a kept canvas.
+  if (refuseLeavingKeptCanvas()) return false;
   if (!state.initialized || state.busy) return false;
   const heading = retry.action === 'open' ? "Couldn't open the project." : "Couldn't create the project.";
   // A create's Try again keeps what was to follow it (Q120: the file loads).
@@ -1408,7 +1521,8 @@ function restoreFrom(list: ProjectList): CatalogRestore | null {
   if (!restore || typeof restore.id !== 'string' || dismissedRestores.has(restore.id)) return null;
   if (!loggedRestores.has(restore.id) && typeof window !== 'undefined') {
     loggedRestores.add(restore.id);
-    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system', message: catalogRestoreLogLine(restore) } }));
+    withRestoreCopy((copy) => window.dispatchEvent(new CustomEvent('nebula:agent-log-entry',
+      { detail: { source: 'system', message: copy.catalogRestoreLogLine(restore) } })));
   }
   return restore;
 }
@@ -2082,6 +2196,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
   dismissEditsRecovered: () => set({ editsRecoveredAs: null }),
   dismissAgentClosedNote: () => set({ agentClosedNote: null }),
   saveKeptEdits: () => saveKeptEdits(),
+  discardKeptEdits: () => discardKeptEdits(),
   dismissCatalogRestore: () => {
     const restore = get().catalogRestore;
     if (!restore) return;
@@ -2122,6 +2237,8 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     }
   },
   goHome: async () => {
+    // GM r20 on PR #199: not off a kept canvas (it would strand the edits).
+    if (refuseLeavingKeptCanvas()) return;
     // The person's own way to Projects: refused, as the corner's Review is.
     refuseWhileCommonsUnsaved();
     if (get().busy) return;
@@ -2606,21 +2723,20 @@ export function subscribeProjectAutosave(): () => void {
       // An agent's clear or graph load over the canvas waiting to be saved
       // as a project: one Agent log line, no toast (GM's held model).
       const held = event.canvasHeld;
-      if (held && typeof window !== 'undefined') {
-        const message = event.change === 'canvasHeld'
-          ? canvasHeldLogLine(held.agent, held.action === 'cleared' || held.action === 'replaced' ? held.action : 'changed',
-            typeof held.savedAs === 'string' && held.savedAs ? held.savedAs : null, held.copy === true, held.kept === true)
-          : event.change === 'canvasHoldRefused'
-            ? canvasHoldRefusedLogLine(held.agent, held.action === 'clear' || held.action === 'replace' ? held.action : 'change')
-            : null;
+      if (held && typeof window !== 'undefined' && (event.change === 'canvasHeld' || event.change === 'canvasHoldRefused')) {
         // The agent's own row (GM r7): its name and colour, so filtering the
         // log to that agent shows what it tried. Nebula's when unnamed.
         const agent = typeof held.agentId === 'string' && typeof held.agent === 'string'
           ? { id: held.agentId, name: held.agent, color: typeof held.color === 'string' ? held.color : '' } : null;
-        if (message) {
+        const change = event.change;
+        withRestoreCopy((copy) => {
+          const message = change === 'canvasHeld'
+            ? copy.canvasHeldLogLine(held.agent, held.action === 'cleared' || held.action === 'replaced' ? held.action : 'changed',
+              typeof held.savedAs === 'string' && held.savedAs ? held.savedAs : null, held.copy === true, held.kept === true)
+            : copy.canvasHoldRefusedLogLine(held.agent, held.action === 'clear' || held.action === 'replace' ? held.action : 'change');
           window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
             detail: agent ? { source: 'agent', agent, message } : { source: 'system', message } }));
-        }
+        });
       }
       const state = useProjectStore.getState();
       // The toast's way back shows on the canvas too: a change to that
@@ -2654,6 +2770,13 @@ export function subscribeProjectAutosave(): () => void {
   const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
   for (const type of ['focus', 'online']) window.addEventListener(type, relistIfStale);
   const beforeUnload = (event: BeforeUnloadEvent) => {
+    // GM r20 on PR #199: a kept canvas is only in this tab, so a reload, a
+    // tab close or the browser's Back asks first, until kept mode ends.
+    if (isCanvasKept()) {
+      event.preventDefault();
+      event.returnValue = '';
+      return;
+    }
     // Review 9, M-3: a scene card's unsaved edits count too (they are
     // saved by their own request, not the project's autosave).
     if (reloadingForParams || (!useProjectStore.getState().dirty && !hasUnsavedSceneEdits())) return;

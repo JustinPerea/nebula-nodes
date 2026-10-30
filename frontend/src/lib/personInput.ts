@@ -6,6 +6,8 @@
  * backend (wsClient.notePersonAct 'personInput'), which ends the protection
  * of a project filed from the person's waiting canvas.
  */
+import { isCanvasKept } from './keptCanvas';
+
 type Listener = () => void;
 
 let listener: Listener | null = null;
@@ -16,7 +18,10 @@ export function onPersonInput(next: Listener): () => void {
   return () => { if (listener === next) listener = null; };
 }
 
-/** One of the person's own edits happened. */
+/** One of the person's own edits happened. Not while the canvas is kept
+ * in this tab (review 13 of PR #199, kept-scratch LOW-1): the project it was
+ * is gone, and a kept edit is only this tab's until [Save as a project]. */
 export function notePersonInput(): void {
+  if (isCanvasKept()) return;
   listener?.();
 }
