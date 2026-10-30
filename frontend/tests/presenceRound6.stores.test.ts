@@ -138,12 +138,13 @@ describe('GM r7 (2): the load screens retry on the promote', () => {
     await vi.waitFor(() => expect(vi.mocked(projects.recoverProject).mock.calls.length).toBeGreaterThan(sent));
   });
 
-  it('a line that is no longer the screen\'s is not loaded again on the promote', async () => {
+  // Review 5 NIT-3 (round 7): by the screen's state, not its line.
+  it('a screen that loaded another way is not loaded again on the promote', async () => {
     session.reportPersonRequired();
     vi.mocked(projects.listProjects).mockRejectedValueOnce(gate("Couldn't load your projects."));
     emit(SWITCH);
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(BECAUSE('switch projects')));
-    useProjectStore.setState({ error: 'Something else.' });
+    useProjectStore.setState({ error: 'Something else.', initialized: true });
     const calls = vi.mocked(projects.listProjects).mock.calls.length;
     session.notePersonPromoted();
     await flush();

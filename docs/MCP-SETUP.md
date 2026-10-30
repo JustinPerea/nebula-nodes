@@ -1033,7 +1033,10 @@ Person-only, refused with 403 `person_required` otherwise:
 - making, limiting, coloring and revoking connected-agent tokens
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
-  workspace or agent token is minted without the person;
+  workspace or agent token is minted without the person. The chat socket is
+  the tab's own (no agent uses it): its `person_required` error echoes the
+  frame's `ref` (a string of 1 to 64 characters) when the frame carried one,
+  so the tab reads each refusal against the frame it answers;
 - deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
   `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
   `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an

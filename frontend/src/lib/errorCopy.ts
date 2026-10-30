@@ -406,7 +406,7 @@ export class FailureNotice extends Error {
 
 /** A person-gate refusal that came on a socket, not as a Response (the chat socket's error):
  * stamped with the promote count its message went out under, checked as apiFetch's are. */
-export function personRefusalSentAt(sentAt: number): FailureNotice {
+export function personRefusalSentAt(sentAt: number | null): FailureNotice {
   return new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt });
 }
 
@@ -539,16 +539,17 @@ export async function readDetail(response: Response): Promise<unknown> {
 /** An answer's `detail` and `code` (the person gate's, when it has one), from
  * one read of its body, for a caller that words the failure itself
  * (copyForAnswer). */
-/** The send-time stamp of the latest person-gate refusal read (review 4 LOW-2): what a line
- * built from a refusal's words, with no error object, is stamped with in graphStore notify. */
-let lastPersonRefusal: number | null = null;
-export const lastPersonRefusalSentAt = (): number | null => lastPersonRefusal;
-
 export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null; sentAt: number | null; sentBeforePromote: boolean }> {
   const { detail, code } = await readFailureBody(response);
   const sentAt = sentUnderPromote(response);
-  if (code === PERSON_REQUIRED_CODE) lastPersonRefusal = sentAt;
   return { detail, code, sentAt, sentBeforePromote: isBeforePromote(sentAt) };
+}
+
+/** A read refusal as the error its line carries (review 5 LOW-4, round 7): the person gate's,
+ * with this answer's own send-time stamp, or undefined for any other refusal. A line built
+ * from the refusal's words hands this to notify, so it clears by its own stamp. */
+export function refusalError(read: { code: string | null; sentAt: number | null }): FailureNotice | undefined {
+  return read.code === PERSON_REQUIRED_CODE ? new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt: read.sentAt }) : undefined;
 }
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's

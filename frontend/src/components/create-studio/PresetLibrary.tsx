@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Search, Bookmark } from 'lucide-react';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { PresetCard } from './PresetCard';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
+import { presetLibraryPlacement } from '../../lib/presetLibraryPlacement';
 
 export interface PresetLibraryProps {
   onApply: (preset: Preset) => void;
@@ -40,6 +42,19 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   }, [reloadKey, projectId, changed]);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<{ bottom: number; maxHeight: number } | null>(null);
+  useLayoutEffect(() => {
+    const place = () => setPlacement((was) => {
+      const next = presetLibraryPlacement();
+      return was && was.bottom === next.bottom && was.maxHeight === next.maxHeight ? was : next;
+    });
+    place();
+    // The composer grows (a reference tray, the reuse line): Styles follows it.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    for (const bar of document.querySelectorAll(`[${BOTTOM_BAR_ATTR}]`)) observer?.observe(bar);
+    window.addEventListener('resize', place);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', place); };
+  }, []);
   useEffect(() => {
     // A modal dialog over Styles owns Escape (review 8, L-d).
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !keyBlockedByModal(rootRef.current)) onClose(); };
@@ -60,7 +75,8 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   }, [presets, query, category]);
 
   return (
-    <div ref={rootRef} className="preset-library" role="dialog" aria-label="Styles">
+    <div ref={rootRef} className="preset-library" role="dialog" aria-label="Styles"
+      style={placement ? { bottom: placement.bottom, maxHeight: placement.maxHeight } : undefined}>
       <div className="preset-library__top">
         <div className="preset-library__search">
           <Search size={15} strokeWidth={1.75} aria-hidden="true" />

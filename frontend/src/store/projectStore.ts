@@ -585,9 +585,10 @@ function showNotConnectedLoad(error: unknown, what: 'load your work' | 'save you
   const line = notConnectedBecause(what);
   useProjectStore.setState({ ...extra, error: line, errorDetails: detailsFor(line, error), errorRetry: null });
   retryOnPromote(error, 'project.load', () => { // clears-on-promote: project.load-retry
-    // Only while this line is still the screen's: a load that got on by
-    // another way (a Try again elsewhere, a switch) isn't run twice.
-    if (useProjectStore.getState().error !== line) return;
+    // Only while the screen still hasn't loaded: a load that got on by another
+    // way (a Try again elsewhere, a switch) isn't run twice. Review 5 NIT-3: by
+    // the screen's state, not its line, which another refusal may have replaced.
+    if (useProjectStore.getState().initialized) return;
     void useProjectStore.getState().retry();
   });
   return true;
@@ -1459,6 +1460,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   // What this tab last saved or loaded for the project it is leaving.
   const lastSavedThere = lastSaved;
   let keptCopy = false;
+  let savingCopy = false;
   let copy: { id: string; name: string } | null = null;
   try {
     await saveQueue.catch(() => {});
@@ -1492,7 +1494,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
           handoffFailed = true;
           pendingRecovery = pendingRecoveryOf(context.id, snapshot);
           lastRecoveredCopy = null;
+          savingCopy = true;
           await whenSent(() => recoverPendingWork());
+          savingCopy = false;
           keptCopy = true;
           copy = lastRecoveredCopy;
         }
@@ -1537,7 +1541,8 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
     // GM r7 (2): refused only because this tab isn't connected as the person.
-    if (showNotConnectedLoad(error, 'switch projects', { screen: 'home', initialized: false, dirty: Boolean(pendingRecovery) })) return;
+    // GM r9 (2): a refused recovered copy says what it was doing, as the other load screens do.
+    if (showNotConnectedLoad(error, savingCopy ? 'save your unsaved edits' : 'switch projects', { screen: 'home', initialized: false, dirty: Boolean(pendingRecovery) })) return;
     const newest = latest();
     const who = newest.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
@@ -1657,10 +1662,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
     if (initializing) return initializing;
     set({ loading: true, error: null, errorRetry: null });
     initializing = (async () => {
+      // GM r9 (2): the verb fits what was refused: saving the recovered edits, or the load.
+      let saving = true;
       try {
         // A stale tab cannot write to its former active project. Persist its
         // unsaved authoring as an inactive recovered copy before replacement.
         await recoverPendingWork();
+        saving = false;
         await loadWorkspace();
       } catch (error) {
         // Refused for good: the held edits' screen says it (holdRefusedEdits).
@@ -1678,7 +1686,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
         // A full disk is read from the answer (RequestFailedError.storageFull,
         // the backend's storage refusal), never from its words (round 3f).
         // GM r7 (2): refused only because this tab isn't connected as the person.
-        if (showNotConnectedLoad(error, 'load your work')) return;
+        if (showNotConnectedLoad(error, saving ? 'save your unsaved edits' : 'load your work')) return;
         const copy = failureCopy(error, { heading: LOAD_HEADING });
         const general = copy.reason === REFUSED_FALLBACK_COPY;
         const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL

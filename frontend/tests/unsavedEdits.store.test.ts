@@ -331,7 +331,8 @@ describe('every path that sends the held copy', () => {
   });
 });
 
-const NOT_CONNECTED_LOAD = 'Nebula couldn’t load your work because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+// GM r9 (2), #204 round 7: refused while the load saves the recovered edits, the verb says so.
+const NOT_CONNECTED_SAVE = 'Nebula couldn’t save your unsaved edits because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 
 describe("review: refusals reconnecting can fix, and files Load graph can't open", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
@@ -342,7 +343,7 @@ describe("review: refusals reconnecting can fix, and files Load graph can't open
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(refusal(BILLING, 403, { code: 'person_required' }));
     await useProjectStore.getState().retry();
     expect(state().unsavedEdits ?? null).toBeNull();
-    expect(state().error).toBe(NOT_CONNECTED_LOAD);
+    expect(state().error).toBe(NOT_CONNECTED_SAVE);
     expect(projectRetryOffer(state())).toBe('none');
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered'));
     notePersonPromoted();
@@ -396,7 +397,7 @@ describe("GM's lines in the store", () => {
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(
       new projects.ProjectRequestError(BILLING, 403, { heading: RECOVER, detail: BILLING, code: 'person_required' }));
     await useProjectStore.getState().retry();
-    expect(state().error).toBe(NOT_CONNECTED_LOAD);
+    expect(state().error).toBe(NOT_CONNECTED_SAVE);
     expect(errorDetails()).toBe(BILLING);
     expect(projectRetryOffer(state())).toBe('none');
     // Another line later doesn't carry these Details.

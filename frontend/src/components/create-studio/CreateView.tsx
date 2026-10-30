@@ -30,7 +30,7 @@ import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
 import { FailureNotice, failureMessage, notConnectedBecause } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
-import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
+import { isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
@@ -101,7 +101,6 @@ export function CreateView() {
       ? { ...node, data: { ...node.data, state: 'queued' as const } }
       : node);
   }, [allNodes, activeCreateRuns]);
-  const [generationError, setGenerationError] = useState<string | null>(null);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
   const [ask, promptElement] = usePrompt();
@@ -165,6 +164,19 @@ export function CreateView() {
   // GM, #204 r6: a refusal sentence doesn't belong in the toolbar row; Save
   // style's lines show in the app's notice region, with the other save lines.
   const styleLine = (line: string, error?: unknown) => useGraphStore.getState().notify(line, 'error', { error });
+  // GM r8 (3), #204 r7: Generate's lines too. A new Generate, a new draft or a reuse takes
+  // back the run line it showed (as the toolbar span cleared then), and only that line.
+  const runLineShown = useRef<string | null>(null);
+  const runLine = (line: string, error?: unknown) => { runLineShown.current = line; styleLine(line, error); };
+  const clearRunLine = () => {
+    const line = runLineShown.current;
+    if (line === null) return;
+    runLineShown.current = null;
+    useGraphStore.setState((state) => ({
+      ...(state.messageNotice?.text === line ? { messageNotice: null } : {}),
+      ...(state.undoNotice?.text === line && !state.undoNotice.offer ? { undoNotice: null } : {}),
+    }));
+  };
 
   /** Send one Style. GM r6 (1): refused only because this tab isn't connected
    * as the person, it says so in the "because" form and sends the same Style
@@ -238,14 +250,15 @@ export function CreateView() {
     if (!sessionId) return;
     clearCreateReferenceUploads(sessionId);
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
-    setGenerationError(null);
     setStyleNote(null);
+    clearRunLine();
     setReusedDraft(null);
   };
 
   const handleReuseSettings = (context: ResultContext) => {
+    clearRunLine();
     if (!sessionId || !context.reusableDraft) {
-      setGenerationError(context.reuseUnavailableReason ?? 'This recipe cannot be copied into Create. Open it on Canvas.');
+      runLine(context.reuseUnavailableReason ?? 'This recipe cannot be copied into Create. Open it on Canvas.');
       return;
     }
     const current = useCreateDraftStore.getState().drafts[sessionId];
@@ -258,7 +271,6 @@ export function CreateView() {
     focusDraft.current = true;
     useCreateDraftStore.getState().resetDraft(sessionId, structuredClone(context.reusableDraft));
     setReusedDraft({ previous, fingerprint: JSON.stringify(useCreateDraftStore.getState().drafts[sessionId]), removedAttachments: current.uploads.length > 0 });
-    setGenerationError(null);
   };
 
   const handleUndoReuse = () => {
@@ -271,17 +283,18 @@ export function CreateView() {
 
   const handleGenerate = async () => {
     if (!sessionId) return;
+    clearRunLine();
     const currentDraft = useCreateDraftStore.getState().drafts[sessionId];
     const currentModel = currentDraft?.modelId ? NODE_DEFINITIONS[currentDraft.modelId] : null;
     if (!currentDraft || !currentModel) return;
     if (currentDraft.uploads.length > 0) {
-      setGenerationError('Finish attaching references or remove them before generating.');
+      runLine('Finish attaching references or remove them before generating.');
       return;
     }
     // Selection and saved styles can prefill models outside the Create picker.
     // Check admission before reserving a job or authoring an incomplete recipe.
     if (!isCreateModel(currentModel)) {
-      setGenerationError('This model needs Canvas input controls. Choose another model or return to Canvas.');
+      runLine('This model needs Canvas input controls. Choose another model or return to Canvas.');
       return;
     }
     const store = useGraphStore.getState();
@@ -291,7 +304,6 @@ export function CreateView() {
     const genId = uuidv4();
     if (!store.reserveCreateGeneration(genId)) return;
     const ts = Date.now();
-    setGenerationError(null);
     const layoutY = Math.max(80, ...store.nodes.filter((node) => node.data._createOrigin).map((node) => node.position.y + 320));
     try {
       const { modelNodeIds, allNodeIds } = await store.authorGenerationCluster({
@@ -316,10 +328,10 @@ export function CreateView() {
       // Offline is read-only (round 15 of PR #114): a refused Generate says nothing.
       if (isOfflineRefusal(error)) return;
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        const line = failureMessage(error, GENERATE_HEADING);
-        setGenerationError(line);
-        // Review 3 MEDIUM-1 (#204 r5): a cluster or start refused only for this tab goes on the promote.
-        clearSetterOnPromote(error, setGenerationError, line, null); // clears-on-promote: create.generate
+        // GM r8 (3), #204 r7: in the app's notice region, never the toolbar row. A cluster or
+        // start refused only for this tab goes on the promote (notify registers it by the
+        // refusal's own stamp: review 3 MEDIUM-1, #204 r5).
+        runLine(failureMessage(error, GENERATE_HEADING), error);
       }
     } finally {
       store.releaseCreateGeneration(genId);
@@ -367,7 +379,6 @@ export function CreateView() {
         navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleNote && <span className="create-view__style-note" role="status">{styleNote}</span>}
-        {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
         {createLaunchingIds.map((genId) => {
           const cancelling = createCancelledLaunchIds.includes(genId);

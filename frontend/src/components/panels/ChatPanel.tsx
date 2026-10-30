@@ -48,7 +48,7 @@ import { chatAuthority } from '../../lib/commonsChatAuthority';
 import {
   CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
 } from '../../lib/chatClear';
-import { onPersonConnected, personPromotions, reportPersonRequired } from '../../lib/personSession';
+import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -60,6 +60,9 @@ import {
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 type ChatAgent = ChatAgentId;
+/** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
+type SentRef = { sentAt: number; permission?: string };
+let chatRefSeq = 0;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
@@ -862,19 +865,28 @@ export function ChatPanel() {
   }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
-  // Review 4 NIT-2 (round 6): the promote count the latest message on the chat socket went out
-  // under, so its person_required error is stamped like apiFetch's answers.
-  const sentUnder = useRef(personPromotions());
+  // Review 4 NIT-2, review 5 NIT-1 (round 7): each message the gate can refuse goes out with
+  // its own `ref` and the promote count it was sent under; the backend echoes the ref on its
+  // person_required error, so the refusal is stamped with its own message's count (and a
+  // refused permission answer is known by its request).
+  const sentRefs = useRef(new Map<string, SentRef>());
+  const stampedRef = useCallback((extra: Omit<SentRef, 'sentAt'> = {}): string => {
+    const ref = `r${++chatRefSeq}`;
+    sentRefs.current.set(ref, { sentAt: personPromotions(), ...extra });
+    // Answered messages never come back: keep the newest few dozen.
+    while (sentRefs.current.size > 64) sentRefs.current.delete(sentRefs.current.keys().next().value!);
+    return ref;
+  }, []);
   useEffect(() => {
     closePersonalSessionRef.current = (id: string) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       void personTokenForSocket(ws.url).then((personToken) => {
         if (ws.readyState !== WebSocket.OPEN) return;
-        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ...(personToken ? { personToken } : {}) }));
+        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ref: stampedRef(), ...(personToken ? { personToken } : {}) }));
       });
     };
-  }, []);
+  }, [stampedRef]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
   useEffect(() => {
@@ -1235,8 +1247,19 @@ export function ChatPanel() {
             if (personRequired) {
               // One stamp and one check (review 4 NIT-2): an answer to what went out before the
               // promote is the old state's; it holds nothing, and its line goes at once.
-              const refusal = personRefusalSentAt(sentUnder.current);
+              // Its own message's stamp, by the ref the backend echoes; an error with no ref (an
+              // older backend) has no stamp, so it holds the tab and its line waits for the promote.
+              const sent = typeof event.ref === 'string' ? sentRefs.current.get(event.ref) : undefined;
+              if (typeof event.ref === 'string') sentRefs.current.delete(event.ref);
+              const refusal = personRefusalSentAt(sent?.sentAt ?? null);
               if (!refusal.sentBeforePromote) reportPersonRequired();
+              // Review 5 MEDIUM-2 (GM r9 1): a refused answer to a permission puts its card back
+              // to waiting, so the person can answer after the promote; the agent's own timeout runs on.
+              if (sent?.permission) {
+                const requestId = sent.permission;
+                upsertAssistant((msg) => ({ ...msg, parts: msg.parts.map((part) => part.kind === 'permission'
+                  && part.requestId === requestId && part.status === 'sent' ? { ...part, status: 'pending' } : part) }));
+              }
               clearRefusedOnPromote(refusal, () => setMessages((prev) => withoutPersonGateLines(prev))); // clears-on-promote: chat.transcript
             }
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
@@ -1620,10 +1643,10 @@ export function ChatPanel() {
     applyCancellationEvent({ type: 'send' });
     setInput((current) => current.trim() === raw ? '' : current);
 
-    sentUnder.current = personPromotions();
     ws.send(
       JSON.stringify({
         type: 'send',
+        ref: stampedRef(),
         message: raw,
         selectedNodeIds: useGraphStore.getState().nodes
           .filter((node) => node.selected)
@@ -1650,6 +1673,7 @@ export function ChatPanel() {
     agent,
     handleModelChange,
     applyCancellationEvent,
+    stampedRef,
   ]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
@@ -1667,30 +1691,34 @@ export function ChatPanel() {
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
     void personTokenForSocket(ws.url).then((personToken) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      sentUnder.current = personPromotions();
-      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value,
+      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value, ref: stampedRef(),
         ...(personToken ? { personToken } : {}) }));
     });
-  }, [sessionId]);
+  }, [sessionId, stampedRef]);
 
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
     // Round 16 (L5): "Allow once" lets the agent act while the person's own
     // edits are blocked, so offline it's refused and the request stays
     // pending until Nebula answers. Deny only reduces, so it always goes.
     if (decision === 'allow' && refuseEditWhileOffline()) return;
+    // Review 5 MEDIUM-2 (GM r9 1): an ask with a decision on it waits while this tab isn't
+    // connected as the person (the card's buttons lock in place; this is the same rule).
+    if (personUnconfirmed()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    upsertAssistant((msg) => ({
+    const mark = (from: PermissionStatus, to: PermissionStatus) => upsertAssistant((msg) => ({
       ...msg,
-      parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId && part.status === 'pending'
-        ? { ...part, status: 'sent' } : part),
+      parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId && part.status === from
+        ? { ...part, status: to } : part),
     }));
+    mark('pending', 'sent');
     void personTokenForSocket(ws.url).then((personToken) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      sentUnder.current = personPromotions();
-      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ...(personToken ? { personToken } : {}) }));
-    });
-  }, [upsertAssistant]);
+      // Not sent after all: the card waits again.
+      if (ws.readyState !== WebSocket.OPEN) { mark('sent', 'pending'); return; }
+      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ref: stampedRef({ permission: requestId }),
+        ...(personToken ? { personToken } : {}) }));
+    }, () => mark('sent', 'pending'));
+  }, [upsertAssistant, stampedRef]);
 
   // After the person accepts the notice, send what they typed once the
   // acknowledged state has rendered (send reads it).

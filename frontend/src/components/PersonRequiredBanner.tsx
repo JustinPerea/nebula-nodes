@@ -4,20 +4,16 @@ import { currentPersonBannerLine, onPersonRequired, personRequiredMessage, setPe
 import { clearsOnPromote } from '../lib/clearsOnPromote';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
+import { notConnectedLineShown, subscribeToLines } from '../lib/notConnectedLine';
 
-/**
- * Says why Settings, proposals and chats are locked in this tab: it isn't
- * connected as the person (no launch token; see lib/personSession.ts). Shown
- * when the backend refuses a person-only action or the canvas socket can't
- * say hello as the person. Dismissible; the next refusal shows it again.
- * Hidden again when the server promotes this tab as the person (GM r29
- * item 3: the UI follows the server's state both ways; a link taken in isn't
- * proof by itself).
- *
- * GM r24 (PR #200 fix round 15): whether it shows is shared
- * (personSession's banner line), so the note dialog can hold Send note while
- * it shows and leave the fix to it. Neutral, in the shared notice colours.
- */
+const subscribeToNothing = () => () => {};
+
+/** notConnectedLineShown, kept current while `watching` (read again at most once a frame). */
+function useNotConnectedLineShown(watching: boolean): boolean {
+  return useSyncExternalStore(watching ? subscribeToLines : subscribeToNothing,
+    () => watching && notConnectedLineShown(), () => false);
+}
+
 export function PersonRequiredBanner() {
   const message = useSyncExternalStore(subscribePersonBanner, currentPersonBannerLine);
 
@@ -36,8 +32,11 @@ export function PersonRequiredBanner() {
     return () => { stopRequired(); stopSweep(); setPersonBannerLine(null); };
   }, []);
 
+  // GM r8 (1): while a specific line says it, the general notice steps out (and comes back when
+  // that line goes). The line stays set, so what defers to it (the note dialog) still does.
+  const specific = useNotConnectedLineShown(message !== null);
   // It leaves as it entered, a surface (fix round 7, GM r11 answer 2).
-  const leave = useLeave(message);
+  const leave = useLeave(specific ? null : message);
   if (!leave.shown) return null;
 
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).

@@ -840,7 +840,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                         ...(kept ? { _fileName: kept } : {}) },
                     });
                   })
-                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error'));
+                  .catch((err) => useGraphStore.getState().notify(failureMessage(err, heading), 'error', { error: err }));
               }}
             />
           </label>

@@ -223,7 +223,14 @@ function sanitizeActions(raw: unknown): AgentNoteAction[] {
     const action = item as Record<string, unknown>;
     const op = action.op as Record<string, unknown> | undefined;
     if (typeof action.label !== 'string' || !op || typeof op !== 'object' || typeof op.kind !== 'string') continue;
-    actions.push({ label: action.label, op: { ...op, kind: op.kind } });
+    // GM r9 3 (#204 round 7): an old stored Update's Accept and Reject are no longer offered.
+    // They become one Review of the same canvas proposal, so every row decides through the
+    // one full view (the bar). `legacy` lets the corner grey it when the proposal is gone.
+    if (op.kind === 'proposal.accept' || op.kind === 'proposal.reject') {
+      const proposalId = typeof op.proposalId === 'string' ? op.proposalId : '';
+      if (!proposalId || actions.some((kept) => kept.op.kind === 'proposal.review' && kept.op.proposalId === proposalId)) continue;
+      actions.push({ label: 'Review', op: { kind: 'proposal.review', proposalId, target: 'canvas', legacy: true } });
+    } else actions.push({ label: action.label, op: { ...op, kind: op.kind } });
     if (actions.length === MAX_NOTE_BUTTONS) break;
   }
   return actions;

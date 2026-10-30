@@ -157,7 +157,8 @@ describe('agent notes store (Updates)', () => {
     api.dismissAgentNote.mockRejectedValue(new RequestFailedError("Couldn't dismiss the update.", 404, { reason: 'That update is no longer in the list.' }));
     const done = useAgentNotesStore.getState().dismiss({ kind: 'canvas' }, 'an_1');
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeTruthy();
-    expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(0);
+    // #204 round 7 (review 5 LOW-8): the count is the server's, so it waits for the answer.
+    expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);
     await done;
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeNull();
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);

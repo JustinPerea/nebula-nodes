@@ -268,22 +268,25 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     const now = new Date().toISOString();
     set((state) => ({
       arrivals: state.arrivals.filter((a) => a.id !== id),
-      lists: withList(state.lists, key, (list) => {
-        const notes = list.notes.map((n) => (n.id === id ? { ...n, dismissedAt: n.dismissedAt ?? now } : n));
-        return { ...list, notes, unread: countUnread(notes) };
-      }),
+      // Review 5 LOW-8 (round 7): the header's unread count is the server's (GM r4), never the
+      // tab's hope: the note greys at once, the count waits for the answer.
+      lists: withList(state.lists, key, (list) => ({
+        ...list, notes: list.notes.map((n) => (n.id === id ? { ...n, dismissedAt: n.dismissedAt ?? now } : n)),
+      })),
     }));
     try {
-      await dismissAgentNote(surface, id);
+      const answer = await dismissAgentNote(surface, id);
+      if (typeof answer?.unread === 'number' && Number.isFinite(answer.unread)) {
+        const unread = answer.unread;
+        set((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread })) }));
+      }
     } catch (error) {
       const line = failureMessage(error, "Couldn't dismiss the note.");
       clearLineOnPromote(error, () => get().error, line, () => set({ error: null })); // clears-on-promote: notes.dismiss
       set((state) => ({
         error: line,
-        lists: withList(state.lists, key, (list) => {
-          const notes = list.notes.map((n) => (n.id === id ? before : n));
-          return { ...list, notes, unread: countUnread(notes) };
-        }),
+        // The note back as it was; the count was never the tab's to change.
+        lists: withList(state.lists, key, (list) => ({ ...list, notes: list.notes.map((n) => (n.id === id ? before : n)) })),
       }));
     }
   },

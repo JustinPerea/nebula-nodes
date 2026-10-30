@@ -4142,6 +4142,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 # ---------- Chat WebSocket (/ws/chat) ----------
 
+def _chat_ref(payload: dict[str, Any]) -> dict[str, str]:
+    """The tab's own `ref` for a message, echoed on its person_required refusal so the tab
+    reads the refusal against the promote that message went out under (PR #204 round 7).
+    A short string only; anything else is left out."""
+    ref = payload.get("ref")
+    return {"ref": ref} if isinstance(ref, str) and 0 < len(ref) <= 64 else {}
+
+
 @app.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket) -> None:
     """Chat WebSocket — one message per turn, streams agent output.
@@ -4457,7 +4465,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
                     await send_event({"type": "error", "code": "person_required", "message": (
                         "Only the person can answer or close a personal agent, from a Nebula canvas connected as them."
-                    ), "source": "system"})
+                    ), "source": "system", **_chat_ref(payload)})
                     continue
                 if msg_type == "permission":
                     for host in acp_sessions.live():
@@ -4528,7 +4536,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "error", "code": "person_required", "message": (
                     "Only the person can start a chat, from a Nebula canvas connected as them. Open the "
                     "link the backend printed at launch (backend/devserver.py, or restart it with --open)."
-                ), "source": "system"})
+                ), "source": "system", **_chat_ref(payload)})
                 await send_event({"type": "done", "source": "system"})
                 continue
             from commons.activation import is_enabled

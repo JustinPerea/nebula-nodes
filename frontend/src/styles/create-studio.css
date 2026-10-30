@@ -335,7 +335,3 @@ body.app-slava-restraint .model-picker__row-check { color: var(--sr-accent); fle
 body.app-slava-restraint .model-picker button:focus-visible,
 body.app-slava-restraint .model-picker input:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
 
-.create-view__run-error {
-  color: var(--error, #ef4444);
-  font-size: 12px;
-}

@@ -134,11 +134,13 @@ const SITES: Record<string, string> = {
   'project.save-retry': 'store/projectStore.ts',
   'project.load-retry': 'store/projectStore.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
-  'create.generate': 'components/create-studio/CreateView.tsx',
   'graph.refusal': 'store/graphStore.ts',
   'graph.notify': 'store/graphStore.ts',
   'graph.run-start': 'store/graphStore.ts',
   'graph.shot-start': 'store/graphStore.ts',
+  // Round 7 (review 5 MEDIUM-1): Undo's and Redo's refusal line, and a scene save's retry.
+  'graph.undo-refusal': 'store/graphStore.ts',
+  'cinema.scene-save-retry': 'store/graphStore.ts',
 };
 
 const NO_LINE = (why: string) => ({ none: why });
@@ -194,9 +196,9 @@ const GATED: Record<string, Surface> = {
   // Create's Save style (POST /api/presets, _check_style_write) and Generate (POST
   // /api/graph/cluster) answer with it too (review 3 MEDIUM-1, round 5).
   _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.load-retry', 'project.error', 'graph.notify', 'graph.run-start',
-    'graph.refusal', 'create.style-retry', 'create.generate'],
-  _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal'],
-  _refuse_agent_growth_past_save_limit: ['graph.notify', 'graph.refusal'],
+    'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry', 'create.style-retry'],
+  _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal', 'graph.undo-refusal'],
+  _refuse_agent_growth_past_save_limit: ['graph.notify', 'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry'],
   _reader_spend_hold: NO_LINE('POST /api/moodboards/{id}/read: no tab calls it (agents and the CLI only)'),
   // stop_refusal
   _refuse_stopping_the_persons_run: NO_LINE('a refused Stop shows no line: graphStore requestTrackedCancellation keeps the intent and asks again; only an offline Stop says so'),
@@ -235,6 +237,7 @@ const CLASSIFIERS: Record<string, string> = {
   'lib/wsClient.ts': 'reports the socket\'s personRequired frame to the banner; keeps no line',
   'lib/canvasPins.ts': 'words a pin refusal; canvasPinsStore keeps the line and registers it',
   'lib/commonsChatAuthority.ts': 'throws the session failure; ChatPanel keeps the line and registers it',
+  'lib/notConnectedLine.ts': 'reads whether the page already shows a not-connected line (GM r8 1); keeps none',
 };
 
 /** `onPersonPromoted(` outside the mechanism: work on the promote that isn't a line. */
@@ -268,7 +271,9 @@ type Caller = string[] | { none: string };
 const CALLERS: Record<string, Caller> = {
   // Its line is kept by what it hands the failure to.
   'components/GraphFileActions.tsx#importGraph': ['graph.notify'], // showNotice → graphStore notify, which reads GM's line
-  'components/panels/ChatPanel.tsx#acceptWarning': ['settings.agent-warning'], // throws to PersonalAgentWarning
+  // Round 7: acceptWarning throws on (no catch); ChatPanel hands it to PersonalAgentWarning's
+  // onAccept, whose catch registers the line.
+  'components/panels/ChatPanel.tsx#ChatPanel': ['settings.agent-warning'],
   // No line.
   'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: a failure logs and tries again on the next read of settings'),
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
@@ -276,9 +281,11 @@ const CALLERS: Record<string, Caller> = {
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
   // Round 6 (review 4 LOW-4, MEDIUM-1): cancelWithinTimeLimit throws on to its two callers.
   'store/graphStore.ts#fencePaidUnknownRun': NO_LINE('the 404 rule\'s Stop for a paid World Labs start: a refusal logs; the Stop stays on the run and the person\'s own Stop sends it again'),
-  'store/graphStore.ts#refused': NO_LINE('an offline refusal built locally: nothing is sent'),
-  'store/graphStore.ts#saves': NO_LINE('describes a cut-off save from its path; sends nothing'),
-  'store/graphStore.ts#typingSaves': NO_LINE('describes typing a cut-off save held; sends nothing'),
+  // Round 7: the trace reads these itself now (OfflineRefusal and describeSaves only name a path).
+  // Round 7: its refusal is settled first, then the save registers its retry (in its finally).
+  'store/graphStore.ts#flushCinemaScenePersistence': ['cinema.scene-save-retry'],
+  'store/graphStore.ts#renameNode': NO_LINE('a refused rename puts the old name back, with no line of its own (the banner says why)'),
+  'store/graphStore.ts#sendRestoredWire': NO_LINE('Keep mine\'s wire put back: a refused one stays off the card and the info line names its shot (shotBackWithoutLine), what came back, not why'),
   'store/projectStore.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
   // GM r7 (2): the load screens retry on the promote (showNotConnectedLoad in each catch).
   // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
@@ -294,6 +301,7 @@ const RETRIES: Record<string, string> = {
   'create.style-retry': 'components/create-studio/CreateView.tsx',
   'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
+  'cinema.scene-save-retry': 'store/graphStore.ts',
 };
 
 const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'/.test(source)

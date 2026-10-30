@@ -1067,15 +1067,15 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         }
         // An asset proposal's Update (Q92 a): go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
-        const proposals = useCanvasProposalsStore.getState();
-        const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
-        if (action.op.kind === 'proposal.accept' && proposals.proposals[id]) return proposals.accept(id);
-        if (action.op.kind === 'proposal.reject' && proposals.proposals[id]) return proposals.reject(id);
+        // GM r9 3: no Update decides a proposal from its row any more (an old Accept or
+        // Reject is read as Review, lib/agentNotes); anything else can't run here.
         throw writtenLine(`"${action.label}" can't run from here.`);
       },
       actionState: (action) => {
         // Review's proposal lives off the canvas; the backend resolves its Update when it closes.
-        if (action.op.kind !== 'proposal.accept' && action.op.kind !== 'proposal.reject') return null;
+        // An old Update's Review (once Accept and Reject) has no such resolve: it greys as
+        // Expired when its proposal isn't waiting any more.
+        if (action.op.kind !== 'proposal.review' || action.op.legacy !== true) return null;
         const id = typeof action.op.proposalId === 'string' ? action.op.proposalId : '';
         return useCanvasProposalsStore.getState().proposals[id] ? null : 'Expired';
       },

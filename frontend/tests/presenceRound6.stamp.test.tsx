@@ -86,7 +86,8 @@ describe('review 4 NIT-2: the chat socket\'s refusal is stamped with its turn', 
     await sendText('Make a simple graph');
     await waitFor(() => expect(socket.sent).toHaveLength(1));
     act(() => notePersonPromoted());
-    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: 'Only the person' }); socket.receive({ type: 'done' }); });
+    // Round 7 (review 5 NIT-1): the backend echoes the turn's own ref, which carries its stamp.
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: 'Only the person', ref: socket.sent[0].ref }); socket.receive({ type: 'done' }); });
     expect(seen).not.toHaveBeenCalled();
     expect(screen.queryByText(LINE)).toBeNull();
     window.removeEventListener('nebula:person-required', seen);

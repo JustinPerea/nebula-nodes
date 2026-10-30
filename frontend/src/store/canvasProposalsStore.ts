@@ -18,7 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
-import { onPersonPromoted, personGateHeld } from '../lib/personSession';
+import { onPersonPromoted, personGateHeld, personUnconfirmed } from '../lib/personSession';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
@@ -241,6 +241,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // #114): nothing is sent or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
     if (refuseEditWhileOffline()) return;
+    // Review 5 LOW-5 (round 7): a decision waits while this tab isn't connected as the person,
+    // whatever button asked (the bar's lock is the same state): nothing is sent or marked.
+    if (personUnconfirmed()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes
     // arrive, taken before the backend's graphSync can bring them.
@@ -305,6 +308,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // Offline is read-only (round 15 of PR #114): nothing is sent or marked;
     // the banner pulses.
     if (refuseEditWhileOffline()) return;
+    if (personUnconfirmed()) return; // review 5 LOW-5, as accept
     set((state) => ({ pending: { ...state.pending, [id]: 'reject' }, errors: without(state.errors, id) }));
     try {
       await rejectProposal(id, entry.acceptKey, reason);

@@ -444,18 +444,23 @@ export async function apiFetch(path: string, init?: RequestInit,
   // no screen shows the browser's "Failed to fetch" (error-copy, GM): a
   // ConnectionLostError, still a TypeError, with fetch's own as its cause.
   // The caller's own abort comes back as fetch threw it.
-  const send = (url: string) => fetchUrl(url, requestInit);
+  // Which promote each request was sent under (review 3 LOW-1, PR #204 r5), recorded on its
+  // answer and compared whenever it is read (review 4 LOW-1, round 6). Taken as each request
+  // goes out, so a discovery replay after a promote carries its own (review 5 NIT-2, round 7).
+  // One request is in flight at a time here (the replay goes after the first answer).
+  let lastSent = personPromotions();
+  const send = (url: string) => {
+    lastSent = personPromotions();
+    return fetchUrl(url, requestInit);
+  };
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency
   // key. Only read-only requests may transparently rediscover and replay.
   const mayReplayAfterDiscovery = method === 'GET' || method === 'HEAD';
 
-  // Which promote this request was sent under (review 3 LOW-1, PR #204 r5), recorded on its
-  // answer and compared whenever it is read (review 4 LOW-1, round 6).
-  const promotions = personPromotions();
   const stamp = (response: Response): Response => {
-    noteSentUnder(response, promotions);
+    noteSentUnder(response, lastSent);
     return response;
   };
   // One stamp and one check for every answer (review 4 NIT-2, round 6), the discovery replay's too.

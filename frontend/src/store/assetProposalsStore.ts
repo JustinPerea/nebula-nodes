@@ -7,7 +7,7 @@ import {
   type AssetProposalView,
 } from '../lib/assetProposals';
 import { failureMessage } from '../lib/errorCopy';
-import { personGateHeld, subscribePersonGate } from '../lib/personSession';
+import { personGateHeld, personUnconfirmed, subscribePersonGate } from '../lib/personSession';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
 
 /** How long a closed proposal's strip fades before it goes. Matches asset-proposals.css. */
@@ -175,6 +175,8 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   const store = useAssetProposalsStore;
   const entry = store.getState().proposals[id];
   if (!entry || entry.closing || store.getState().pending[id]) return;
+  // Review 5 LOW-5 (round 7): no decision is sent while this tab isn't connected as the person.
+  if (personUnconfirmed()) return;
   store.setState((state) => ({ pending: { ...state.pending, [id]: verb }, errors: without(state.errors, id) }));
   try {
     if (verb === 'accept') await acceptAssetProposal(id, entry.acceptKey);

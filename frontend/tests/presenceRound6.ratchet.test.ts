@@ -52,47 +52,182 @@ function enclosing(node: ts.Node): ts.FunctionLikeDeclaration | null {
 const where = (source: ts.SourceFile, node: ts.Node) =>
   `${relative(SRC, source.fileName)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
 
-const WORDS_BECAUSE = /\b(?:notConnectedBecause|markReadRefusedCopy)\(/;
+const BECAUSE_CALL = /^(?:notConnectedBecause|markReadRefusedCopy)$/;
 
-/** Calls that read like a request, which a clear callback must not make. */
-const REQUEST = /^(?:retry\w*|save\w*|send\w*|dismiss\w*|load\w*|reload\w*|fetch\w*|flush\w*|refresh\w*|hydrate\w*|setAttempt\w*|initialize|open|run|apiFetch|apiRequest|requestJson)$/;
-const CLEARS: Record<string, number> = { clearsOnPromote: 0, clearRefusedOnPromote: 1, clearLineOnPromote: 3 };
+/** Whether `expr` is a because-form line: a `notConnectedBecause(…)`/`markReadRefusedCopy(…)` call,
+ * or a name bound (in the same function) to one. */
+function isBecause(expr: ts.Expression, fn: ts.Node): boolean {
+  let e: ts.Expression = expr;
+  while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e)) e = e.expression;
+  if (ts.isCallExpression(e)) { const name = calleeName(e); return !!name && BECAUSE_CALL.test(name); }
+  // `isPersonRefusal(x) ? because : other`: the refusal's branch is what counts.
+  if (ts.isConditionalExpression(e) && /\bisPersonRefusal\(/.test(e.condition.getText())) return isBecause(e.whenTrue, fn);
+  if (ts.isIdentifier(e)) {
+    let bound = false;
+    const go = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === e.text && node.initializer) {
+        bound = isBecause(node.initializer, fn);
+      }
+      ts.forEachChild(node, go);
+    };
+    go(fn);
+    return bound;
+  }
+  return false;
+}
 
+/** Calls that put a line on screen (a setter, notify, showError, a store's line writers). */
+const SHOWS = /^(?:set[A-Z]\w*|setState|set|notify|showNotice|showError|styleLine|show\w*Line|show\w*)$/;
+
+/**
+ * Review 5 LOW-2 (round 7): per call site, not per function. In the block that holds each
+ * `retryOnPromote(` (the branch it runs in), every call that shows a line passes it a because-form
+ * line (or an object whose line-ish property is one), and at least one such call is there.
+ */
 export function retriesWithoutBecause(sources = files().map(parse)): string[] {
   const bad: string[] = [];
   for (const source of sources) callsIn(source, (call) => {
     if (calleeName(call) !== 'retryOnPromote') return;
     const fn = enclosing(call);
-    if (!fn || !WORDS_BECAUSE.test(fn.getText(source))) bad.push(where(source, call));
+    let block: ts.Node | undefined = call.parent;
+    while (block && !ts.isBlock(block) && !ts.isSourceFile(block)) block = block.parent;
+    if (!fn || !block) { bad.push(where(source, call)); return; }
+    // Round 7: a retry whose line another function words (a scene save's answer, settled before
+    // the retry registers) names it, `// because-line: sceneRefusal`, and that function must
+    // word the person gate's refusal with notConnectedBecause.
+    let statement: ts.Node = call;
+    while (statement.parent && !ts.isBlock(statement.parent)) statement = statement.parent;
+    const elsewhere = /\/\/ because-line: (\w+)/.exec(statement.getFullText(source));
+    if (elsewhere) {
+      const worded = declared(source, elsewhere[1]);
+      let because = false;
+      if (worded) callsIn(worded, (inner) => { if (calleeName(inner) === 'notConnectedBecause') because = true; });
+      if (!because) bad.push(where(source, call));
+      return;
+    }
+    let shown = 0;
+    let generic = false;
+    // The statements that run with the retry: the block's own expression statements (a branch
+    // that returns early, `if (!isPersonRefusal(e)) { …; return; }`, is another path).
+    for (const statement of (block as ts.Block).statements) {
+      if (!ts.isExpressionStatement(statement)) continue;
+      callsIn(statement, (inner) => {
+        if (inner === call || enclosing(inner) !== enclosing(call)) return;
+        const name = calleeName(inner);
+        if (!name || !SHOWS.test(name)) return;
+        const lines: ts.Expression[] = [];
+        for (const argument of inner.arguments) {
+          if (ts.isObjectLiteralExpression(argument)) {
+            for (const property of argument.properties) {
+              if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && /error$|line$|Error$|Line$/.test(property.name.text)
+                && !/Details$|Retry$/.test(property.name.text)) lines.push(property.initializer);
+            }
+          } else if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) lines.push(argument);
+        }
+        const lineArgs = lines.filter((line) => !(ts.isIdentifier(line) && /^(?:err|error|exc|e|refusal|failure)$/.test(line.text))
+          && line.kind !== ts.SyntaxKind.NullKeyword && !ts.isStringLiteral(line) || (ts.isStringLiteral(line) && /\s/.test(line.text)));
+        if (lineArgs.length === 0) return;
+        if (lineArgs.some((line) => isBecause(line, fn))) shown += 1;
+        else generic = true;
+      });
+    }
+    if (shown === 0 || generic) bad.push(where(source, call));
   });
   return bad;
 }
 
+/** Calls a clear may make: setters, and reads that change nothing (review 5 LOW-1: only these). */
+const SETTER = /^(?:set|setState|set[A-Z]\w*|patch|delete|clear|clear\w*(?:Error|Line|Notice|Message)s?)$/;
+const PURE = /^(?:get|getState|has|includes|map|filter|find|findIndex|some|every|slice|concat|keys|values|entries|fromEntries|assign|max|min|now|trim|startsWith|endsWith|test|indexOf|join|split|toString|String|Number|Boolean|isArray|stringify|parse|from|reduce|flatMap|sort|at|current|isPersonRefusal|saysPersonRequired|current\w*|shotPortId|nodeKeyStatus)$/;
+/** Setters whose only effect is to make an effect request again. */
+const BUMPS = /^set(?:Attempt|Reload|Retry|Refresh)\w*$|^set\w*(?:Key|Attempt|Tick|Nonce)$/;
+/** A local collection's own writes (`kept.push(x)`, `seen.add(k)`): not a request. */
+const LOCAL_WRITE = /^(?:push|add)$/;
+/** The clears and which argument is the callback; clearSetterOnPromote's argument 1 is a setter. */
+const CLEARS: Record<string, number> = { clearsOnPromote: 0, clearRefusedOnPromote: 1, clearLineOnPromote: 3, clearsOnPromoteIf: 1, clearSetterOnPromote: 1 };
+
+/** A function `name` declared in `source` (a declaration, or a const bound to a function). */
+function declared(source: ts.SourceFile, name: string): ts.Node | null {
+  let found: ts.Node | null = null;
+  const go = (node: ts.Node) => {
+    if (found) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) found = node;
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name && node.initializer
+      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) found = node.initializer;
+    ts.forEachChild(node, go);
+  };
+  go(source);
+  return found;
+}
+
+/** Every call in a clear that isn't a setter or a pure read; same-file helpers are read too. */
+function unsafeCalls(source: ts.SourceFile, root: ts.Node, seen = new Set<ts.Node>()): ts.CallExpression[] {
+  if (seen.has(root)) return [];
+  seen.add(root);
+  const out: ts.CallExpression[] = [];
+  callsIn(root, (inner) => {
+    const name = calleeName(inner);
+    if (!name) { out.push(inner); return; }
+    // A setter that only bumps what an effect re-reads (`setAttempt`, `setReloadKey`) is a request.
+    if (SETTER.test(name) && !BUMPS.test(name) || PURE.test(name)) return;
+    if (LOCAL_WRITE.test(name) && ts.isPropertyAccessExpression(inner.expression) && ts.isIdentifier(inner.expression.expression)) return;
+    const helper = ts.isIdentifier(inner.expression) ? declared(source, name) : null;
+    if (helper) { out.push(...unsafeCalls(source, helper, seen)); return; }
+    out.push(inner);
+  });
+  return out;
+}
+
+/** The functions in a file that hand one of their parameters to a clear as its callback, with that
+ * parameter's index: wrappers (graphStore's `clearsOnPromoteIf`) are clears too. */
+function wrappers(source: ts.SourceFile, clears: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  const go = (node: ts.Node) => {
+    if ((ts.isFunctionDeclaration(node) && node.name) || (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer
+      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)))) {
+      const fn = (ts.isFunctionDeclaration(node) ? node : node.initializer) as ts.FunctionLikeDeclaration;
+      const name = (node.name as ts.Identifier).text;
+      const params = fn.parameters.map((p) => (ts.isIdentifier(p.name) ? p.name.text : ''));
+      if (fn.body) callsIn(fn.body, (call) => {
+        const callee = calleeName(call);
+        if (!callee || !(callee in clears) || callee === name) return;
+        const arg = call.arguments[clears[callee]];
+        if (arg && ts.isIdentifier(arg) && params.includes(arg.text)) out[name] = params.indexOf(arg.text);
+      });
+    }
+    ts.forEachChild(node, go);
+  };
+  go(source);
+  return out;
+}
+
+/**
+ * Review 4 LOW-3, review 5 LOW-1 (round 7): a clear only takes a line down. Its callback (and
+ * clearSetterOnPromote's setter) may call setters and pure reads; any other call fails, inline,
+ * by name (a same-file function read in turn), or through a wrapper that hands its callback on.
+ */
 export function requestsInClears(sources = files().map(parse)): string[] {
   const bad: string[] = [];
-  for (const source of sources) callsIn(source, (call) => {
-    const name = calleeName(call);
-    if (!name || !(name in CLEARS)) return;
-    const clear = call.arguments[CLEARS[name]];
-    if (!clear) return;
-    callsIn(clear, (inner) => {
-      const innerName = calleeName(inner);
-      if (innerName && REQUEST.test(innerName)) bad.push(`${where(source, inner)} ${innerName}()`);
+  for (const source of sources) {
+    const clears = { ...CLEARS, ...wrappers(source, CLEARS) };
+    callsIn(source, (call) => {
+      const name = calleeName(call);
+      if (!name || !(name in clears)) return;
+      // The wrapper's own forwarding call isn't a clear of its own.
+      const clear = call.arguments[clears[name]];
+      if (!clear) return;
+      const fn = enclosing(call);
+      if (fn && ts.isIdentifier(clear) && fn.parameters.some((p) => ts.isIdentifier(p.name) && p.name.text === clear.text)) return;
+      let body: ts.Node | null = null;
+      if (ts.isArrowFunction(clear) || ts.isFunctionExpression(clear)) body = clear;
+      else if (ts.isIdentifier(clear)) {
+        if (SETTER.test(clear.text)) return;
+        body = declared(source, clear.text);
+        if (!body) { bad.push(`${where(source, clear)} ${clear.text} (unread)`); return; }
+      } else { bad.push(`${where(source, clear)} (unread)`); return; }
+      for (const inner of unsafeCalls(source, body)) bad.push(`${where(source, inner)} ${calleeName(inner) ?? inner.expression.getText(source)}()`);
     });
-    // A clear passed by name: its declaration in the same file is read too.
-    if (ts.isIdentifier(clear)) {
-      const go = (node: ts.Node) => {
-        const declared = (ts.isFunctionDeclaration(node) && node.name?.text === clear.text) ? node
-          : (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === clear.text && node.initializer) ? node.initializer : null;
-        if (declared) callsIn(declared, (inner) => {
-          const innerName = calleeName(inner);
-          if (innerName && REQUEST.test(innerName)) bad.push(`${where(source, inner)} ${innerName}()`);
-        });
-        ts.forEachChild(node, go);
-      };
-      go(source);
-    }
-  });
+  }
   return bad;
 }
 
@@ -115,9 +250,9 @@ describe('GM r6 (2): what retries on the promote says why in the because form', 
   });
 
   it('the ratchet catches a retry whose line keeps the generic form (mutant)', () => {
-    const mutant = fixture(`function f(e) { const line = personRequiredCopy(); retryOnPromote(e, 'k', () => go()); }`);
+    const mutant = fixture(`function f(e) { const line = personRequiredCopy(); setError(line); retryOnPromote(e, 'k', () => go()); }`);
     expect(retriesWithoutBecause([mutant])).toHaveLength(1);
-    const kept = fixture(`function f(e) { const line = notConnectedBecause('save it'); retryOnPromote(e, 'k', () => go()); }`);
+    const kept = fixture(`function f(e) { const line = notConnectedBecause('save it'); setError(line); retryOnPromote(e, 'k', () => go()); }`);
     expect(retriesWithoutBecause([kept])).toEqual([]);
   });
 });
@@ -136,6 +271,42 @@ describe('review 4 LOW-3: nothing retries outside retryOnPromote', () => {
     expect(requestsInClears([named])).toEqual(['fixture.ts:1 reload()']);
     const clean = fixture(`clearRefusedOnPromote(e, () => { setError((now) => (now === line ? null : now)); });`);
     expect(requestsInClears([clean])).toEqual([]);
+  });
+
+  // Review 5 LOW-1 (round 7): the reviewer's three survivors, K1-K3, each fail it now.
+  it('K1: a request a list of names never had (markRead) fails it: only setters and reads may run', () => {
+    const k1 = fixture(`clearLineOnPromote(e, () => get().error, line, () => { setState({ error: null }); void getState().markRead(surface); });`);
+    expect(requestsInClears([k1])).toEqual(['fixture.ts:1 markRead()']);
+  });
+  it('K2: a wrapper that hands its callback to a clear (clearsOnPromoteIf) is a clear too', () => {
+    const k2 = fixture(`function clearsOnPromoteIf(error, clear) { if (error) clearsOnPromote(clear); }
+clearsOnPromoteIf(failure, () => { set({ line: null }); void useGraphStore.getState().runAll(); });`);
+    expect(requestsInClears([k2])).toEqual(['fixture.ts:2 runAll()']);
+  });
+  it('K3: clearSetterOnPromote\'s setter is read', () => {
+    const k3 = fixture(`clearSetterOnPromote(exc, (u) => { setError(u); getOutsideSpend().then(setView); }, line, null);`);
+    expect(requestsInClears([k3]).length).toBeGreaterThan(0);
+  });
+});
+
+describe('review 5 LOW-2: the because rule reads each retry\'s own line', () => {
+  it('K4: a generic line beside an unreachable notConnectedBecause still fails it', () => {
+    const k4 = fixture(`function f(err) { setError(failureMessage(err, "Couldn't save the style.")); if (false) notConnectedBecause('x'); retryOnPromote(err, 'k', () => go()); }`);
+    expect(retriesWithoutBecause([k4])).toHaveLength(1);
+  });
+  it('a retry whose line another function words names it, and that function must use the because form', () => {
+    const named = fixture(`function word() { return notConnectedBecause('save it'); }
+function f(e) {
+  // because-line: word
+  retryOnPromote(e, 'k', () => go());
+}`);
+    expect(retriesWithoutBecause([named])).toEqual([]);
+    const wrong = fixture(`function word() { return personRequiredCopy(); }
+function f(e) {
+  // because-line: word
+  retryOnPromote(e, 'k', () => go());
+}`);
+    expect(retriesWithoutBecause([wrong])).toHaveLength(1);
   });
 });
 
@@ -221,6 +392,9 @@ const UNTRACED: Record<string, string> = {
   'lib/spatialValue.ts must be an unsigned relative /api/outputs/ path': 'a validation message',
   'lib/storedImage.ts /api/outputs/': 'SERVED: which image paths are Nebula\'s own',
   'lib/storedImage.ts /api/presets/thumbnails/': 'SERVED',
+  // Round 7 (gates-security LOW-1): the bare prefix is listed now, never skipped.
+  'lib/backend.ts /api/': 'rewriteExecutionAssetUrls: `value.startsWith(\'/api/\')`, which run values are backend paths; sends nothing',
+  'lib/canvasSelection.ts /api/': 'outputUrls: `value.startsWith(\'/api/\')`, which outputs are URLs; sends nothing',
 };
 
 describe('round 6: every /api/ text the trace can\'t follow is declared', () => {
@@ -237,16 +411,18 @@ describe('round 6: every /api/ text the trace can\'t follow is declared', () => 
 describe('review 4 MEDIUM-1: a store action that throws on is followed into the components that call it', () => {
   const cluster = () => gatedRoutes().find((route) => route.method === 'POST' && route.path === '/api/graph/cluster')!;
 
-  it('today: CreateView\'s catch on authorGenerationCluster registers (create.generate)', { timeout: 60_000 }, () => {
+  // GM r8 (3), #204 r7: Generate's line goes to the notice region through notify (graph.notify).
+  it('today: CreateView\'s catch on authorGenerationCluster registers (runLine, through notify)', { timeout: 60_000 }, () => {
     const found = callersOf(cluster());
     expect(found.has('store/graphStore.ts#authorGenerationCluster')).toBe(false); // followed past
     expect(found.get('components/create-studio/CreateView.tsx#handleGenerate')?.outcome).toBe('keeps');
   });
 
-  it('mutant 1: CreateView\'s create.generate registration removed: its caller drops the line', { timeout: 60_000 }, () => {
+  it('mutant 1: CreateView\'s catch shows its line without notify: its caller drops the line', { timeout: 60_000 }, () => {
     const sources = realSources();
     const file = 'components/create-studio/CreateView.tsx';
-    sources[file] = sources[file].split('\n').filter((line) => !line.includes('// clears-on-promote: create.generate')).join('\n');
+    sources[file] = sources[file].replace('runLine(failureMessage(error, GENERATE_HEADING), error);', 'console.warn(failureMessage(error, GENERATE_HEADING));');
+    expect(sources[file]).toContain('console.warn(failureMessage(error, GENERATE_HEADING));');
     const found = withSources(sources, () => callersOf(cluster()));
     expect(found.get(`${file}#handleGenerate`)?.outcome).toBe('drops');
   });

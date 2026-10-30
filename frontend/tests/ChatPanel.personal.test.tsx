@@ -169,7 +169,7 @@ describe('Personal agents in the chat panel', () => {
     expect(within(card).getByText(/No answer in \d+s denies it/)).toBeInTheDocument();
     fireEvent.click(within(card).getByRole('button', { name: 'Allow once' }));
     await waitFor(() => expect(socket.sent).toHaveLength(2));
-    expect(socket.sent[1]).toEqual({ type: 'permission', requestId: 'r-1', decision: 'allow', personToken: TOKEN });
+    expect(socket.sent[1]).toEqual({ type: 'permission', requestId: 'r-1', decision: 'allow', personToken: TOKEN, ref: expect.any(String) });
     await act(async () => {
       socket.receive({ type: 'permission_resolved', requestId: 'r-1', outcome: 'allowed', source: 'personal' });
     });
@@ -203,7 +203,7 @@ describe('Personal agents in the chat panel', () => {
     });
     await sendText('/clear');
     await waitFor(() => expect(socket.sent).toHaveLength(3));
-    expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN });
+    expect(socket.sent[2]).toEqual({ type: 'close_session', sessionId: 'host-2', personToken: TOKEN, ref: expect.any(String) });
     // Typing /clear is the person's confirmation, so it sends force (the
     // backend refuses to clear a project with nodes without it).
     expect(apiMocks.apiFetch).toHaveBeenCalledWith('/api/graph?force=true',
@@ -235,7 +235,7 @@ describe('A personal agent that offers models', () => {
     fireEvent.change(select, { target: { value: 'argon-low' } });
     await waitFor(() => expect(socket.sent).toHaveLength(2));
     expect(socket.sent[1]).toEqual({ type: 'personal_option', sessionId: 'host-1', configId: 'model', value: 'argon-low',
-      personToken: TOKEN });
+      personToken: TOKEN, ref: expect.any(String) });
     await act(async () => {
       socket.receive({ type: 'personal_options', sessionId: 'host-1', source: 'personal', error: 'Fake Agent didn\'t switch: busy.',
         options: [{ id: 'model', name: 'Model', category: 'model', current: 'argon-medium',

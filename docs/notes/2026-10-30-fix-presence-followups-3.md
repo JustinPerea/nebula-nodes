@@ -650,10 +650,11 @@ The first full backend run on the merged tree failed 9 tests.
   - LOW-4: a refused run restores the state the node last settled in. A node queued
     again while queued or executing keeps the earlier settled snapshot, or goes back
     idle; a refusal takes its nodes' entries, and the map is capped at 500. Found while
-    testing: every start path calls `resetExecution()` before it queues, which already
-    turns queued and executing nodes idle, so today a node never reads queued or
-    executing when `queuedFrom` sees it. That branch is a guard for a future path; the two
-    tests for it pass on 6e130e26 for the same reason. The consume and the cap are new
+    testing: the run, node and cluster paths call `resetExecution()` before they queue,
+    which already turns queued and executing nodes idle, so on those paths a node never
+    reads queued or executing when `queuedFrom` sees it; the two tests for it pass on
+    6e130e26 for that reason. (Corrected in round 7, gates NIT-3: `executeClusterConcurrent`,
+    Creator Studio's start, queues with no reset first, so that branch is live there.) The consume and the cap are new
     and are what the tests pin.
   - NIT-1: tests kill M2 (a press in the lock's first moment sends nothing), M9 (the
     save retry skips another open project), M16 (the discovery replay is stamped and
@@ -680,3 +681,144 @@ The first full backend run on the merged tree failed 9 tests.
   - Seen live, not changed: in Creator Studio the header's left group narrowed by 41 px
     between entering and the demote, with the same text. New draft, History and Updates
     didn't move.
+
+
+## Round 7 (review 5 on df92135b; GM r8, r9)
+
+- **One notice, not two (GM r8 1).** The general "This tab isn’t connected as you…" notice
+  steps out while any other line on the page says the same thing (a because line, a row's
+  or a card's own line), and comes back when that line goes. One derived state drives it:
+  `notConnectedLineShown` (lib/notConnectedLine.ts) walks the page's text with
+  `saysPersonRequired`, skipping the notice itself and hidden parts; a tooltip (`title`)
+  doesn't count. The banner reads it through `useSyncExternalStore` and a MutationObserver
+  (once a frame), and leaves through its usual `useLeave`. Its line stays set, so what defers
+  to it still does. Beside the locked question form, whose lock says it only in a tooltip,
+  the notice stays.
+- **Placement (GM r8 2).** Creator Studio's region was already anchored at the bottom over the
+  composer (`--bottom-bar-clearance`). What landed on content was Styles: the picker sat at a
+  fixed `bottom: 96px`, inside the region's band, so the because line under a refused Save
+  covered its cards. Styles now stops above the reserved band like every floating panel
+  (`floatingBottomLimit`, lib/presetLibraryPlacement.ts), follows the composer's height and
+  a resize, and caps its height under the header's line. Measured live on Canvas, Creator
+  Studio, Projects, Commons, Moodboard and Cinema (below).
+- **Generate's run error (GM r8 3).** Its lines go through the notice region (`runLine`, graphStore
+  `notify` with the error, so a refusal clears on the promote by its own stamp); the toolbar
+  span, its state and `.create-view__run-error` are gone, and the `create.generate` site with
+  them. A new Generate, a new draft or a reuse takes back the line it showed, only that
+  line, as the span cleared then. Ratchet: `presenceRound7.toolbar.test.ts` fails a
+  `role="alert"` or an error, refusal or failure expression inside a toolbar row
+  (WorkspaceHeader, or a class naming a toolbar, topbar or header bar), skipping dialogs,
+  menus and listboxes opened from it. The grep found no other refusal sentence in a toolbar
+  row. Creator Studio's `styleNote` (a Style's applied/changed note) stays in the row: it is
+  an info line, not a refusal or error.
+- **The 41 px narrowing (GM r8 4).** A demote and a promote remount the header, and "Saved"
+  replayed its fold (`--settled`'s animation, 41 px of label) from the start. `settleDelay`
+  (lib/saveSettle.ts) keeps when "Saved" settled across remounts and starts the animation
+  that far in (a negative delay), so a header that comes back long after the save shows it
+  folded. The width is pinned across a demote and a promote in `presenceRound7.header.test.tsx`
+  and measured live.
+- **GM r9 1, the permission card.** Allow once and Deny read the one held state and lock in
+  place (aria-disabled, focusable, "You can answer this when this tab is connected as you.",
+  the 150 ms rule); a press while held sends nothing, and the panel's handler refuses too.
+  'sent' is set when the answer goes, and rolled back to waiting if the socket closed before
+  it was written or if the gate refused it (the backend echoes the answer's `ref`, which names
+  the request). The agent's own timeout keeps running; "Denied: no answer in time" stays if it
+  runs out while held.
+- **GM r9 2, the load verb.** The first load that is saving the recovered edits says "save your
+  unsaved edits", as the update reload does; an agent's switch whose recovered copy is
+  refused says it too. The load itself keeps "load your work", a switch "switch projects".
+- **GM r9 3, old Accept and Reject.** A stored Update's `proposal.accept` / `proposal.reject` is
+  read as one Review of that canvas proposal (lib/agentNotes `sanitizeActions`, `legacy: true`),
+  greyed as Expired when the proposal isn't waiting; the corner no longer decides from a row.
+  `docs/contracts/07-studios-and-resources.md` and `docs/moodboard-canvas-plan.md` say so;
+  MCP-SETUP, SKILL.md and the tool docstrings already said Review.
+- **Review 5 held-state-ui.**
+  - MEDIUM-1: a refused wire (POST connect, DELETE edge), node add, undo and scene save carry
+    the refusal into `notify` (or `clearsOnPromoteIf`) with its own stamp (`refusalError`).
+    A scene save refused by the gate gets the because line and goes again on the promote,
+    only while that entry is still refused for that reason (`cinema.scene-save-retry`). The
+    trace requires a marker or a registering call in the `!res.ok` branch, and a keeper is a
+    function that registers in its own body or always forwards to one (every function of
+    that name, a statement of its own body). The reviewer's wire probe is a test.
+  - MEDIUM-2: as GM r9 1 above.
+  - LOW-1: the no-request-in-a-clear rule is inverted: a clear callback, and
+    `clearSetterOnPromote`'s setter, may call only setters and pure reads (a setter that only
+    bumps an effect, `setAttempt`, counts as a request). Same-file helpers are read in turn,
+    and a function that hands its callback to a clear (graphStore's `clearsOnPromoteIf`) is a
+    clear too. K1 (`markRead`), K2 (`runAll` through `clearsOnPromoteIf`) and K3 (the setter)
+    each fail it as fixtures.
+  - LOW-2: the because ratchet reads each `retryOnPromote` call site: in the block it runs in,
+    every call that shows a line passes a because-form line (`notConnectedBecause(…)`,
+    `markReadRefusedCopy()`, a const bound to one, or the refusal branch of an
+    `isPersonRefusal` conditional), and there is at least one. A retry whose line another
+    function words names it (`// because-line: sceneRefusal`), and that function must call
+    `notConnectedBecause`. K4 fails it.
+  - LOW-3: a refused shot goes back to the output it last settled with (`clearShotRefusal`).
+  - LOW-4: each line carries its own refusal (`refusalError`); `lastPersonRefusal` is gone. A
+    line that says the gate held with no error gets a bare code and waits for the next
+    promote. The text path is tested; Inspector's upload passes `{ error }`.
+  - LOW-5: `canvasProposalsStore` accept/reject and `assetProposalsStore` decide refuse while
+    `personUnconfirmed()`: nothing is sent or marked. Tab-side only; agents are unaffected.
+  - LOW-6 / gates LOW-2: `personGateRoutes.py` fails closed: a path it can't read, a route
+    with no methods, an unknown router or owner and a deeper `Name.attr` chain are errors,
+    and every module under backend/ is read. The 66 routes are pinned by count and by a list
+    snapshot (`personGateRoutes.snapshot.json`) that must be updated on purpose.
+  - LOW-7 / gates LOW-1: the trace fails closed in every unit, not only lib/: a store action
+    destructured from `getState()`, `sendsTo`, and the `outcomeAt` keepsLine fallback. The
+    reviewers' probes are tests (P1–P12, P1–P7). P6 documents a limit that stays: a catch that
+    registers another line counts as keeping this one.
+  - LOW-8: after Not now the header shows the server's count (the answer's `unread`); the
+    optimistic set and the revert no longer recount.
+  - NITs: a ref per chat message (the backend echoes it on person_required); the discovery
+    replay takes its own promote count at send; the load retry reads the screen's state
+    (`initialized`), not its line; a start's queued scope is recorded when it queues and used
+    at the refusal, and a start Nebula took leaves no kept state (`startTaken`), the cluster
+    path included.
+- **Review 5 gates-security.** LOW-1 and LOW-2 above. LOW-3: the PR body's read-boundary item
+  for the journal now says every proposal entry carries the agent's note: `proposal.created`,
+  `accepted`, `reopened`, and the closed entries (`withdrawn`, `expired`, `rejected`,
+  `invalidated`). NIT-1: close_session carries its own ref too, and the send-time stamp is
+  pinned. NIT-2: the replay's check (`retryBaseUrl !== baseUrl`) and its own stamp are pinned.
+  NIT-3: the round 6 note is corrected above, and the cluster path consumes its kept states.
+- **Found in this round.** The trace read a marker in a node's leading trivia, so a marker
+  ending the line before a function or a branch counted for it. It now reads a node's own
+  text and the comment ending its last line (`ownText`); probe P12 pins it.
+- **MCP, CLI and docs.** One agent-visible change, on the tab-only chat socket: a
+  `person_required` error echoes the frame's `ref` (a string of 1 to 64 characters; anything
+  else is left out). Agents don't use `/ws/chat`; MCP-SETUP's person-only bullet says it. The
+  proposal stores' refusal is tab-side only. No MCP tool, CLI command or server route
+  changed.
+- **Round 7 gates.**
+  - On df92135b, with round 7's tests copied in, 85 of the 109 new frontend tests fail
+    (77 fail, and the banner and header files can't load there: their helpers are new). The
+    24 that pass pin what already held: a refusal for another reason keeps its line, the
+    connected decision goes, a forwarder that always forwards keeps, and the like. With round
+    7's trace and ratchets on df92135b's source, the ratchets fail on its dropped lines. Of the
+    7 new backend tests, 2 fail there (the ref echo); the other 5 check what is left out.
+  - Mutants: 50 of 51 frontend mutants are caught, and 3 of 3 backend ones. The one left is
+    the chat panel's own unconfirmed check alone: the card's lock already stops every press,
+    so it can't be reached; with both removed, the tests fail. The first pass left five
+    alive (close_session's ref, a scene retry for another refusal, the switch verb, the
+    cluster's kept states, and two trace forwarder rules); each now has a test that kills
+    it. Writing the forwarder probe found the leading-trivia leak above.
+  - tsc and lint are clean.
+  - vitest: the full run had 8,796 tests in 699 files: 8,741 passed and 55 failed in 25
+    files, with the backend suite, the mutants and other lanes beside it (load about 27).
+    Four files were real: tests that still expected the old lines or lacked `notify` in a
+    mock, and the new lib file missing from the ratchet's list. They are fixed. The 25 files
+    rerun alone: 430 of 451 passed, the rest timeouts; those 18 files run one at a time: 335
+    of 335 passed.
+  - build: 451,185 B raw, within budget. Backend: 12,354 passed in a full isolated run.
+  - Live on 8795/5795: 21 of 21, 12 distinct shots (md5 checked). Staged, and flagged: the
+    isolated backend takes this tab's Save style and run starts (no gate on them), so their
+    refusals are answered in the page with the gate's 403; the demotes and promotes in the
+    person's tab are the frontend's own `reportPersonRequired`/`notePersonPromoted`; the
+    permission ask is delivered on the tab's own chat socket (no ACP agent here), and the
+    chat turn before it stays in the page. In an early harness run, before the run starts
+    were staged, one Generate reached the isolated backend and stopped at its missing Gemini
+    key (no keys there, nothing paid); a Style was saved to that scratch state once. Nothing
+    was accepted, rejected, answered or dismissed.
+  - Placement, measured: Styles ends at y 648 and the notice band starts at 656 in Creator
+    Studio (composer top 711); notices sit 774-820 on Canvas and Commons (bar clearance 72),
+    656-702 in Creator Studio (190), and 830-876 on Moodboard, Cinema and Projects (no bar).
+  - The header's left group stayed 180 px through the demote and the promote.

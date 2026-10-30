@@ -63,6 +63,8 @@ afterEach(() => {
 
 const gate = { status: 403, body: { detail: 'Only the person can do this.', code: 'person_required' } };
 const alerts = () => screen.queryAllByRole('alert').map((node) => node.textContent ?? '');
+// GM r8 (3), #204 round 7: Generate's line is in the app's notice region (graphStore notify).
+const runNotices = () => { const state = useGraphStore.getState(); return [state.messageNotice?.text, state.undoNotice?.text].filter((text): text is string => Boolean(text)); };
 
 describe('review 3 MEDIUM-1: Create\'s lines clear on the promote', () => {
   it('Generate refused by the gate: the line shows, and goes on the promote', async () => {
@@ -70,21 +72,22 @@ describe('review 3 MEDIUM-1: Create\'s lines clear on the promote', () => {
     session.reportPersonRequired();
     render(<CreateView />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Generate' })); });
-    await waitFor(() => expect(alerts().some((line) => line.includes(PERSON_LINE))).toBe(true));
+    await waitFor(() => expect(runNotices().some((line) => line.includes(PERSON_LINE))).toBe(true));
+    expect(alerts().some((line) => line.includes(PERSON_LINE))).toBe(false);
     expect(pendingPromoteClears()).toBeGreaterThan(0);
     act(() => { session.notePersonPromoted(); });
-    await waitFor(() => expect(alerts().some((line) => line.includes(PERSON_LINE))).toBe(false));
+    await waitFor(() => expect(runNotices().some((line) => line.includes(PERSON_LINE))).toBe(false));
   });
 
   it('Generate refused for another reason keeps its line through the promote', async () => {
     answers.set('POST /api/graph/cluster', { status: 400, body: { detail: 'That model is retired.' } });
     render(<CreateView />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Generate' })); });
-    await waitFor(() => expect(alerts().length).toBe(1));
-    const [line] = alerts();
+    await waitFor(() => expect(runNotices().length).toBe(1));
+    const [line] = runNotices();
     act(() => { session.notePersonPromoted(); });
     await act(async () => { await Promise.resolve(); });
-    expect(alerts()).toEqual([line]);
+    expect(runNotices()).toEqual([line]);
   });
 
   it('Save style refused by the gate: the line shows, and goes on the promote', async () => {

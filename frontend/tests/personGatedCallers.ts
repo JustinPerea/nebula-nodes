@@ -2,7 +2,7 @@
  * PR #204 round 5 (review 3 MEDIUM-1): the structural half of the "clears on promote" ratchet.
  * It finds, without a hand-written map:
  *
- * 1. Every backend route behind the person gate: a route in backend/main.py or backend/routes/
+ * 1. Every backend route behind the person gate: a route anywhere in backend/ (round 7)
  *    whose handler reaches a gate form (`require_person(`, `_person_only_refusal(`,
  *    `stop_refusal(`, `person_only`, PersonGateError or PERSON_REQUIRED written inline, or a
  *    `Depends(person_only)` route, parameter or router) directly or through any helper in
@@ -43,12 +43,37 @@ export interface GatedRoute { method: string; path: string; handler: string }
  * backend given as {path: source} in place of the real one.
  */
 export function gatedRoutes(files?: Record<string, string>): GatedRoute[] {
+  return [...readGateRoutes(files).routes].sort((a, b) => `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`));
+}
+
+/** A route form personGateRoutes.py can't read (round 7): it is listed, never skipped. */
+export interface UnreadableRouteForm {
+  file: string; line: number; form: string;
+  handler: string | null; method: string | null; path: string | null;
+  /** Whether what it could read reaches a gate (null: no handler to read). */
+  gated: boolean | null;
+}
+
+/** Every route form the backend scan can't read: an owner, path, prefix, methods= or
+ * dependencies= it can't evaluate, an endpoint it can't find, a gated middleware, a file that
+ * doesn't parse. `files` as in gatedRoutes. */
+export function unreadableRouteForms(files?: Record<string, string>): UnreadableRouteForm[] {
+  return [...readGateRoutes(files).unreadable];
+}
+
+interface GateScan { routes: GatedRoute[]; unreadable: UnreadableRouteForm[] }
+let realScan: GateScan | undefined;
+
+/** One run of the script per backend: the real one is read once per test file. */
+function readGateRoutes(files?: Record<string, string>): GateScan {
+  if (!files && realScan) return realScan;
   const script = join(__dirname, 'personGateRoutes.py');
   const out = files
-    ? execFileSync('python3', ['-I', script, '--stdin'], { input: JSON.stringify({ files }), encoding: 'utf8' })
-    : execFileSync('python3', ['-I', script, BACKEND], { encoding: 'utf8' });
-  const routes = JSON.parse(out) as GatedRoute[];
-  return routes.sort((a, b) => `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`));
+    ? execFileSync('python3', ['-I', script, '--stdin'], { input: JSON.stringify({ files }), encoding: 'utf8', maxBuffer: 64 << 20 })
+    : execFileSync('python3', ['-I', script, BACKEND], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  const scan = JSON.parse(out) as GateScan;
+  if (!files) realScan = scan;
+  return scan;
 }
 
 // ---------- frontend ----------
@@ -58,6 +83,8 @@ export interface Unit {
   /** Round 6 (review 4 MEDIUM-1): what the catch on this call does with a refusal, at the worst
    * of the unit's calls on the route: 'keeps' (registers), 'drops' (must be declared). */
   outcome?: Outcome;
+  /** It hands a Response back to its callers (round 7): their `!res.ok` handling is what's read. */
+  responds?: boolean;
 }
 
 const isFunctionLike = (node: ts.Node | undefined): boolean => !!node && (ts.isArrowFunction(node) || ts.isFunctionExpression(node));
@@ -90,14 +117,51 @@ function pathRoot(node: ts.Node): ts.Node {
   return n;
 }
 
+/** A top-level `const NAME = '…'` of the node's file, by name: what a placeholder holds. */
+function constantText(node: ts.Node): string | null {
+  if (!ts.isIdentifier(node)) return null;
+  const source = node.getSourceFile();
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === node.text && declaration.initializer
+        && (ts.isStringLiteral(declaration.initializer) || ts.isNoSubstitutionTemplateLiteral(declaration.initializer))) {
+        return declaration.initializer.text;
+      }
+    }
+  }
+  return null;
+}
+
+/** A literal's texts: one, or, for a template whose placeholder picks between two strings
+ * (`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/…`), one per choice (round 7). */
+function literalTexts(node: ts.Node): string[] {
+  if (ts.isTemplateExpression(node)) {
+    let out = [node.head.text];
+    for (const span of node.templateSpans) {
+      let e: ts.Expression = span.expression;
+      while (ts.isParenthesizedExpression(e)) e = e.expression;
+      const choices = ts.isConditionalExpression(e) && [e.whenTrue, e.whenFalse].every((b) => ts.isStringLiteral(b) || ts.isNoSubstitutionTemplateLiteral(b))
+        ? [e.whenTrue, e.whenFalse].map((b) => (b as ts.StringLiteral).text)
+        : [constantText(span.expression) ?? '\uE000'];
+      out = out.flatMap((head) => choices.map((choice) => head + choice + span.literal.text));
+    }
+    return out;
+  }
+  const text = literalText(node);
+  return text === null ? [] : [text];
+}
+
 function literalText(node: ts.Node): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `\uE000${span.literal.text}`).join('');
+  // Round 7 (gates-security LOW-1): a placeholder that names a top-level string const is its text
+  // (`${API}presets` with `const API = '/api/'`).
+  if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `${constantText(span.expression) ?? '\uE000'}${span.literal.text}`).join('');
   if (ts.isParenthesizedExpression(node)) return literalText(node.expression);
   // Round 6 (review 4 LOW-1): '/api/' + 'presets', `${BASE}/api/…` + id.
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = literalText(node.left);
-    const right = literalText(node.right);
+    const left = literalText(node.left) ?? constantText(node.left);
+    const right = literalText(node.right) ?? constantText(node.right);
     if (left === null && right === null) return null;
     return (left ?? '\uE000') + (right ?? '\uE000');
   }
@@ -221,6 +285,10 @@ function build(files: Parsed[]): Frontend {
   const references = new Map<string, { file: string; node: ts.Identifier }[]>();
   for (const { file, source } of files) {
     const visit = (node: ts.Node) => {
+      // `getState()['save']()`: the string names the action (review 5 LOW-7, round 7).
+      if (ts.isStringLiteral(node) && ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node) {
+        references.set(node.text, [...(references.get(node.text) ?? []), { file, node: node as unknown as ts.Identifier }]);
+      }
       if (ts.isIdentifier(node)) {
         const parent = node.parent;
         const declares = (ts.isFunctionDeclaration(parent) || ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent)
@@ -296,20 +364,48 @@ function build(files: Parsed[]): Frontend {
   const untraced: { file: string; line: number; text: string }[] = [];
   for (const { file, source } of files) {
     const visit = (node: ts.Node) => {
-      const text = literalText(node);
-      if (text !== null && text.includes('/api/')) {
+      const texts = literalTexts(node);
+      if (texts.some((text) => text.includes('/api/'))) for (const text of texts) {
         const path = apiPath(text);
         const unit = unitOf(file, node);
         const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-        if (path === null || !unit) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
+        // Round 7 (gates-security LOW-1): a path whose first segment is a placeholder
+        // (`/api/${kind}/…`) could be any route, and a string that is only the /api/ prefix is
+        // joined to one somewhere the trace can't read: both are listed, never skipped.
+        const unplaced = path !== null && (/^\/api\/\uE000/.test(path) || /^\/api\/?$/.test(path));
+        // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
+        // sends nothing (round 7: no longer a caller to follow).
+        if (describesOnly(node)) return;
+        if (path === null || !unit || unplaced) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
         else literals.push({ text: path, method: methodOf(node), unit, node });
-        return; // the parts of a `+` are read with it
       }
+      if (texts.some((text) => text.includes('/api/'))) return; // the parts of a `+` are read with it
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
   return { files, references, imports, literals, untraced, defaults };
+}
+
+/** Constructors and functions whose /api/ argument only names a request (nothing is sent):
+ * graphStore's describeSaves turns a path into the settings GM's lines name. */
+const DESCRIBES = new Set(['OfflineRefusal', 'describeSaves']);
+function describesOnly(node: ts.Node): boolean {
+  let n: ts.Node = node;
+  while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent) || ts.isTemplateSpan(n.parent))) n = n.parent;
+  if (ts.isBinaryExpression(node.parent) && COMPARES.has(node.parent.operatorToken.kind)) return true; // `path === '/api/…'`
+  return !!n.parent && (ts.isNewExpression(n.parent) || ts.isCallExpression(n.parent) && n.parent.arguments.includes(n as ts.Expression))
+    && ts.isIdentifier(n.parent.expression) && DESCRIBES.has(n.parent.expression.text);
+}
+const COMPARES = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
+/** Climbs from a path literal through what still names the same request: parentheses, a concat,
+ * a template, and either branch of a conditional (`want ? '/a' : '/b'`). */
+function climbPath(at: ts.Node): ts.Node {
+  let n: ts.Node = at;
+  while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent) || ts.isTemplateSpan(n.parent)
+    || ts.isConditionalExpression(n.parent) && n.parent.condition !== n)) n = n.parent;
+  return n;
 }
 
 /** /api/ text the trace can't follow to a function: each must be declared (round 6, fail closed). */
@@ -357,16 +453,33 @@ function callsKeeper(file: string, node: ts.Node, except: string): boolean {
       const name = ts.isIdentifier(callee) ? callee.text
         : ts.isPropertyAccessExpression(callee) && !(ts.isIdentifier(callee.expression) && GLOBALS.has(callee.expression.text)) ? callee.name.text : null;
       if (name && name !== except && keepers.has(name)) found = true;
+      if (storeKeeper(file, n)) found = true;
     }
     ts.forEachChild(n, visit);
   };
   visit(node);
   return found;
 }
+
+/** `useGraphStore.getState().notify(…)`: an imported store's action whose own body registers (round
+ * 7: Create's Generate line goes through graphStore's notify). */
+function storeKeeper(file: string, call: ts.CallExpression): boolean {
+  const callee = call.expression;
+  if (!ts.isPropertyAccessExpression(callee) || !ts.isCallExpression(callee.expression)) return false;
+  const getState = callee.expression.expression;
+  if (!ts.isPropertyAccessExpression(getState) || getState.name.text !== 'getState' || !ts.isIdentifier(getState.expression)) return false;
+  const store = getState.expression.text;
+  for (const [module, taken] of frontend().imports.get(file) ?? []) {
+    if (!taken.names.has(store) || keepersBuilding.has(module)) continue;
+    if (keepersIn(module).has(callee.name.text)) return true;
+  }
+  return false;
+}
+const keepersBuilding = new Set<string>();
 const GLOBALS = new Set(['console', 'window', 'document', 'Promise', 'JSON', 'Object', 'Math', 'Array']);
 
 function handlerOutcome(unit: Unit, handler: ts.Node): Outcome {
-  if (MARKED.test(handler.getFullText()) || callsKeeper(unit.file, handler, unit.name)) return 'keeps';
+  if (marked(handler) || callsKeeper(unit.file, handler, unit.name)) return 'keeps';
   return throwsIn(handler) ? 'passes' : 'drops';
 }
 
@@ -374,8 +487,7 @@ function handlerOutcome(unit: Unit, handler: ts.Node): Outcome {
  * only a lost connection, so the function's own handling of `!res.ok` is what's read. */
 const ANSWERS_WITH_RESPONSE = new Set(['fetch', 'apiFetch', 'graphMutationFetch']);
 function answersWithResponse(at: ts.Node): boolean {
-  let n: ts.Node = at;
-  while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent) || ts.isTemplateSpan(n.parent))) n = n.parent;
+  const n = climbPath(at);
   const call = n.parent;
   if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return false;
   const callee = ts.isIdentifier(call.expression) ? call.expression.text
@@ -383,18 +495,158 @@ function answersWithResponse(at: ts.Node): boolean {
   return ANSWERS_WITH_RESPONSE.has(callee);
 }
 
-export function outcomeAt(unit: Unit, at: ts.Node): Outcome {
-  if (unit.constant || isSelector(unit)) return 'passes';
-  // A Response's refusal reaches a catch only when the try around it throws it (`if (!res.ok)
-  // throw await requestError(…)`); otherwise the function's own `!res.ok` handling is what's read.
-  if (answersWithResponse(at)) {
-    let tryBlock: ts.Node | null = null;
-    for (let n: ts.Node = at; n.parent && n !== unit.node; n = n.parent) {
-      if (ts.isTryStatement(n.parent) && n.parent.tryBlock === n) { tryBlock = n; break; }
+/** The call around a path literal (or the node itself when it is a call). */
+function callAround(at: ts.Node): ts.CallExpression | null {
+  if (ts.isCallExpression(at)) return at;
+  const n = climbPath(at);
+  if (n.parent && ts.isCallExpression(n.parent) && n.parent.arguments.includes(n as ts.Expression)) return n.parent;
+  if (n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n) return n.parent;
+  if (n.parent && ts.isPropertyAccessExpression(n.parent) && n.parent.name === n && ts.isCallExpression(n.parent.parent)) return n.parent.parent;
+  return null;
+}
+
+/** Whether the unit hands the call's own value back (`return call(…)`, an arrow whose body is the
+ * call, or `const r = await call(…); … return r`): a Response it returns goes to its callers. */
+function returnsCall(unit: Unit, call: ts.Node): boolean {
+  for (let n: ts.Node = call; n.parent && n !== unit.node; n = n.parent) {
+    if (ts.isReturnStatement(n.parent)) return true;
+    if (isFunctionLike(n.parent) && (n.parent as ts.ArrowFunction).body === n) return n.parent === unitBody(unit);
+    if (ts.isAwaitExpression(n.parent) || ts.isParenthesizedExpression(n.parent) || ts.isConditionalExpression(n.parent)) continue;
+    if (ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name)) {
+      const name = n.parent.name.text;
+      let returned = false;
+      const visit = (node: ts.Node) => {
+        if (ts.isReturnStatement(node) && node.expression && ts.isIdentifier(node.expression) && node.expression.text === name) returned = true;
+        if (!returned) ts.forEachChild(node, visit);
+      };
+      visit(unit.node);
+      return returned;
     }
-    if (!tryBlock || !throwsIn(tryBlock)) return keepsLine(unit) ? 'keeps' : 'drops';
+    break;
   }
-  // A catch that throws it on hands it to the next catch out, in this unit or its callers.
+  return false;
+}
+
+/** The function node a unit stands for (its declaration, or the function a const holds). */
+function unitBody(unit: Unit): ts.Node {
+  if (ts.isVariableDeclaration(unit.node) && unit.node.initializer) {
+    const init = unit.node.initializer;
+    if (isFunctionLike(init)) return init;
+    if (ts.isCallExpression(init)) { const fn = init.arguments.find((arg) => isFunctionLike(arg)); if (fn) return fn; }
+  }
+  if (ts.isPropertyAssignment(unit.node)) return unit.node.initializer;
+  return unit.node;
+}
+
+/** The name the call's Response is bound to: `const res = await call(…)`, or a `.then((res) => …)`
+ * on it; with the callback that reads it. */
+function responseBinding(call: ts.Node): { name: string; scope: ts.Node } | null {
+  let n: ts.Node = call;
+  while (n.parent && (ts.isAwaitExpression(n.parent) || ts.isParenthesizedExpression(n.parent) || ts.isConditionalExpression(n.parent))) n = n.parent;
+  if (ts.isVariableDeclaration(n.parent) && ts.isIdentifier(n.parent.name)) {
+    let scope: ts.Node = n.parent;
+    while (scope.parent && !ts.isBlock(scope) && !ts.isSourceFile(scope)) scope = scope.parent;
+    return { name: n.parent.name.text, scope };
+  }
+  // `res = await call(…)` into a `let res` declared further out: the branches on it are in the
+  // block that declares it.
+  if (ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    && n.parent.right === n && ts.isIdentifier(n.parent.left)) {
+    const name = n.parent.left.text;
+    for (let scope: ts.Node | undefined = n.parent.parent; scope; scope = scope.parent) {
+      if (!ts.isBlock(scope)) continue;
+      const declares = scope.statements.some((st) => ts.isVariableStatement(st)
+        && st.declarationList.declarations.some((decl) => ts.isIdentifier(decl.name) && decl.name.text === name));
+      if (declares) return { name, scope };
+      if (isFunctionLike(scope.parent)) break;
+    }
+    return null;
+  }
+  if (ts.isPropertyAccessExpression(n.parent) && n.parent.expression === n && n.parent.name.text === 'then'
+    && ts.isCallExpression(n.parent.parent)) {
+    const handler = n.parent.parent.arguments[0];
+    if (handler && isFunctionLike(handler)) {
+      const param = (handler as ts.ArrowFunction).parameters[0];
+      if (param && ts.isIdentifier(param.name)) return { name: param.name.text, scope: handler };
+    }
+  }
+  return null;
+}
+
+/** Whether every failure branch on the Response a call answers with throws: a function that returns
+ * it only once it is ok hands its callers a throw, not a Response to read. */
+function throwsOnFailure(call: ts.Node): boolean {
+  const bound = responseBinding(call);
+  const branches = bound ? failureBranches(bound.name, bound.scope) : [];
+  return branches.length > 0 && branches.every((group) => group.some((branch) => throwsIn(branch)));
+}
+
+/** The failure branches of a Response named `name` in `scope`: `if (!r.ok) {…}`, the else of
+ * `if (r.ok) {…} else {…}`, and the statements after `if (r.ok) return …`. */
+function failureBranches(name: string, scope: ts.Node): ts.Node[][] {
+  const out: ts.Node[][] = [];
+  const okOf = (expr: ts.Expression): 'ok' | 'not' | null => {
+    let e = expr;
+    while (ts.isParenthesizedExpression(e)) e = e.expression;
+    if (ts.isPropertyAccessExpression(e) && e.name.text === 'ok' && ts.isIdentifier(e.expression) && e.expression.text === name) return 'ok';
+    if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.ExclamationToken) return okOf(e.operand) === 'ok' ? 'not' : null;
+    return null;
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isIfStatement(node)) {
+      const test = okOf(node.expression);
+      if (test === 'not') out.push([node.thenStatement]);
+      if (test === 'ok') {
+        if (node.elseStatement) out.push([node.elseStatement]);
+        else if (ts.isBlock(node.parent) || ts.isSourceFile(node.parent)) {
+          const statements = (node.parent as ts.Block).statements;
+          const rest = statements.slice(statements.indexOf(node) + 1);
+          if (rest.length > 0) out.push([...rest]);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(scope);
+  return out;
+}
+
+/**
+ * What happens to a refusal at a call in a unit (review 4 MEDIUM-1, round 6; review 5 MEDIUM-1
+ * and gates-security LOW-1, round 7):
+ * - A call that answers with a Response (fetch, apiFetch, graphMutationFetch, or a function that
+ *   returns one): the unit returns it to its callers ('passes'), or each failure branch on it
+ *   (`!res.ok`) registers its line there (a marker, or a direct call to a function whose own
+ *   body registers: 'keeps'), throws it to a catch (read as below), or neither ('drops'). An
+ *   unchecked Response drops.
+ * - Otherwise the catch around this call registers ('keeps'), throws on ('passes'), or neither.
+ * - No catch: awaited or returned, it goes to the unit's callers ('passes'); left to itself, it
+ *   drops. Never the unit-wide guess of old.
+ */
+export function outcomeAt(unit: Unit, at: ts.Node, responds = false): Outcome {
+  if (unit.constant || isSelector(unit)) return 'passes';
+  const call = callAround(at);
+  if (call && (responds || answersWithResponse(at))) {
+    if (returnsCall(unit, call)) return 'passes';
+    const bound = responseBinding(call);
+    const branches = bound ? failureBranches(bound.name, bound.scope) : [];
+    if (branches.length === 0) return 'drops';
+    let result: Outcome = 'keeps';
+    for (const group of branches) {
+      const keeps = group.some((branch) => marked(branch) || callsKeeper(unit.file, branch, unit.name));
+      const thrower = group.find((branch) => throwsIn(branch));
+      const here: Outcome = keeps ? 'keeps' : thrower ? catchOutcome(unit, thrower, true) : 'drops';
+      if (here === 'drops') return 'drops';
+      if (here === 'passes') result = 'passes';
+    }
+    return result;
+  }
+  return catchOutcome(unit, at);
+}
+
+/** The catches around `at`, inside out: a catch that throws on hands it to the next one out, in
+ * this unit or its callers. */
+function catchOutcome(unit: Unit, at: ts.Node, throwing = false): Outcome {
   let thrown = false;
   for (let n: ts.Node = at; n.parent && n !== unit.node; n = n.parent) {
     const parent = n.parent;
@@ -411,18 +663,121 @@ export function outcomeAt(unit: Unit, at: ts.Node): Outcome {
     if (outcome !== 'passes') return outcome;
     thrown = true;
   }
+  if (runnerKeeps(unit, at)) return 'keeps';
   if (thrown) return 'passes';
-  if (keepsLine(unit)) return 'keeps';
-  // No catch around it: a store action that awaits or returns the call hands its refusal to
-  // whoever calls the action (`getState().action()`, a selector), and is followed there.
-  return isStoreAction(unit) && awaitedIn(unit, at) ? 'passes' : 'drops';
+  // No catch around it: thrown from the unit's own body, or awaited or returned there, the
+  // refusal goes to whoever calls this unit; left in a promise nobody holds, it drops.
+  return escapes(unit, at, throwing) ? 'passes' : 'drops';
 }
 
-/** Whether the call at `at` is awaited or returned by the unit itself (not by a callback in it). */
-function awaitedIn(unit: Unit, at: ts.Node): boolean {
-  for (let n: ts.Node = at; n.parent && n !== unit.node; n = n.parent) {
-    if (ts.isAwaitExpression(n) || ts.isReturnStatement(n)) return true;
-    if (isFunctionLike(n) && n.parent !== unit.node) return !!(n as ts.ArrowFunction).body && false;
+/** Whether `at` sits in a callback handed to a same-file runner (`run(async () => …)`) that
+ * awaits that callback inside a try whose catch registers the line (round 7). */
+function runnerKeeps(unit: Unit, at: ts.Node): boolean {
+  const body = unitBody(unit);
+  for (let n: ts.Node = at; n.parent && n !== body; n = n.parent) {
+    const call = n.parent;
+    // A callback, or the helper itself handed over by name (`act(checkKreaConnection)`).
+    if (!(isFunctionLike(n) || n === at && ts.isIdentifier(n)) || !ts.isCallExpression(call) || !ts.isIdentifier(call.expression)) continue;
+    const index = call.arguments.indexOf(n as ts.Expression);
+    if (index < 0) continue;
+    const runners = runnersNamed(call.expression);
+    return runners.length > 0 && runners.every((runner) => {
+      const param = runner.parameters[index]?.name;
+      if (!param || !ts.isIdentifier(param)) return false;
+      let keeps = false;
+      const visit = (node: ts.Node) => {
+        if (keeps) return;
+        if (ts.isTryStatement(node) && node.catchClause && callsName(node.tryBlock, param.text)
+          && handlerOutcome(unit, node.catchClause.block) === 'keeps') keeps = true;
+        ts.forEachChild(node, visit);
+      };
+      visit(runner);
+      return keeps;
+    });
+  }
+  return false;
+}
+
+/** The runner a name stands for, or, for a component's prop (`{ run }: Props`), the runner every
+ * `<Component run={…}>` in the file hands it (none found: none). */
+function runnersNamed(name: ts.Identifier): ts.SignatureDeclaration[] {
+  const own = runnerNamed(name);
+  if (own) return [own];
+  for (let n: ts.Node | undefined = name.parent; n; n = n.parent) {
+    if (!ts.isFunctionDeclaration(n) || !n.name) continue;
+    const prop = n.parameters[0]?.name;
+    if (!prop || !ts.isObjectBindingPattern(prop)) return [];
+    const bound = prop.elements.find((el) => ts.isIdentifier(el.name) && el.name.text === name.text);
+    if (!bound) return [];
+    const key = bound.propertyName && ts.isIdentifier(bound.propertyName) ? bound.propertyName.text : name.text;
+    const component = n.name.text;
+    const passed: (ts.SignatureDeclaration | null)[] = [];
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && ts.isIdentifier(node.tagName) && node.tagName.text === component) {
+        const attr = node.attributes.properties.find((a) => ts.isJsxAttribute(a) && ts.isIdentifier(a.name) && a.name.text === key) as ts.JsxAttribute | undefined;
+        const value = attr?.initializer && ts.isJsxExpression(attr.initializer) ? attr.initializer.expression : undefined;
+        passed.push(value && ts.isIdentifier(value) ? runnerNamed(value) : null);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(n.getSourceFile());
+    return passed.length > 0 && passed.every(Boolean) ? passed as ts.SignatureDeclaration[] : [];
+  }
+  return [];
+}
+
+/** The function a name is declared as, in a scope around the name (same file). */
+function runnerNamed(name: ts.Identifier): ts.SignatureDeclaration | null {
+  for (let scope: ts.Node | undefined = name.parent; scope; scope = scope.parent) {
+    if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
+    for (const statement of (scope as ts.Block).statements) {
+      if (ts.isFunctionDeclaration(statement) && statement.name?.text === name.text) return statement;
+      if (ts.isVariableStatement(statement)) for (const decl of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(decl.name) || decl.name.text !== name.text || !decl.initializer) continue;
+        if (isFunctionLike(decl.initializer)) return decl.initializer as ts.ArrowFunction;
+        // `const act = useCallback(async (work) => …, [])`
+        if (ts.isCallExpression(decl.initializer) && ts.isIdentifier(decl.initializer.expression) && decl.initializer.expression.text === 'useCallback'
+          && decl.initializer.arguments[0] && isFunctionLike(decl.initializer.arguments[0])) return decl.initializer.arguments[0] as ts.ArrowFunction;
+      }
+    }
+  }
+  return null;
+}
+
+function callsName(node: ts.Node, name: string): boolean {
+  let found = false;
+  const visit = (child: ts.Node) => {
+    if (found) return;
+    if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && child.expression.text === name) found = true;
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return found;
+}
+
+/** Whether a refusal at `node` (a throw when `throwing`, else a call's rejection) leaves the unit:
+ * through `.then`/`.catch`/`.finally` callbacks to the chain they're on, then out of the unit's
+ * body by a throw, an await or a return. */
+function escapes(unit: Unit, node: ts.Node, throwing: boolean): boolean {
+  const body = unitBody(unit);
+  let inline = throwing;
+  for (let n: ts.Node = node; n.parent; n = n.parent) {
+    if (n === body) return inline;
+    // Handed to a child as a prop (`onAccept={accept}`): the child's call meets the refusal.
+    if (ts.isJsxAttribute(n)) return false;
+    if (ts.isAwaitExpression(n) || ts.isReturnStatement(n)) inline = true;
+    if (isFunctionLike(n.parent) && (n.parent as ts.ArrowFunction).body === n) {
+      if (n.parent === body) return inline || !ts.isBlock(n);
+      // A callback: its rejection rides only on a promise chain it is part of.
+      const fn = n.parent;
+      const call = fn.parent;
+      if (!call || !ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)
+        || !/^(?:then|catch|finally)$/.test(call.expression.name.text)) return false;
+      inline = false;
+      n = fn; // continue from the chain's call
+      continue;
+    }
+    if (ts.isFunctionDeclaration(n) && n !== body) return false;
   }
   return false;
 }
@@ -439,15 +794,20 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
     const before = found.get(id)?.outcome;
     found.set(id, { ...unit, outcome: before === 'drops' ? 'drops' : outcome });
   };
-  const reach = (unit: Unit, at: ts.Node) => {
+  const reach = (unit: Unit, at: ts.Node, responds = false) => {
     const id = `${unit.file}#${unit.name}`;
-    // A lib helper that registers its own line (settingsWrites) is where the line is kept.
-    // So is a lib helper the ratchet declares as where its route's answer stops (stopAt).
+    // A function that hands back a Response it got: its callers read `!res.ok` (round 7).
+    const call = callAround(at);
+    const handsBack = !!call && (responds || answersWithResponse(at)) && returnsCall(unit, call) && !throwsOnFailure(call);
+    // A lib helper the ratchet declares as where its route's answer stops (stopAt).
     if (stopAt.has(id)) keep(id, unit, 'drops');
-    else if (unit.file.startsWith('lib/')) { if (keepsLine(unit)) keep(id, unit, 'keeps'); else queue.push(unit); }
-    else {
-      const outcome = outcomeAt(unit, at);
-      if (outcome === 'passes') { passed.add(id); queue.push(unit); } else keep(id, unit, outcome);
+    else if (unit.file.startsWith('lib/')) {
+      // A lib helper whose branch or catch registers the line (settingsWrites' `fail`) keeps it;
+      // any other hands the refusal, or the Response, to its callers.
+      if (!handsBack && outcomeAt(unit, at, responds) === 'keeps') keep(id, unit, 'keeps'); else queue.push({ ...unit, responds: handsBack });
+    } else {
+      const outcome = outcomeAt(unit, at, responds);
+      if (outcome === 'passes') { passed.add(id); queue.push({ ...unit, responds: handsBack }); } else keep(id, unit, outcome);
     }
   };
   const passed = new Set<string>();
@@ -480,9 +840,15 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
     seen.add(id);
     let followed = 0;
     const named = [unit.name];
+    // A local name is followed only inside the scope that declares it (round 7: `refused` in
+    // one function isn't `refused` in another).
+    const scope = unit.wide ? null : declaringScope(unit.node);
     for (const name of named) for (const reference of references.get(name) ?? []) {
       if (!unit.wide && reference.file !== unit.file) continue;
+      if (scope && !within(reference.node, scope)) continue;
       const parent = reference.node.parent;
+      // `typeof helper` in a type names it; it sends nothing.
+      if (ts.isTypeQueryNode(parent)) { followed += 1; continue; }
       // Another file reaches an exported helper only through an import of its module: by name
       // (`import { helper }`), through a namespace (`api.helper`), an imported object or instance
       // (`styles.save()`), a store's action (`getState().action()`), or a dynamic import.
@@ -495,7 +861,15 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
         }
         continue;
       }
-      if (reference.file !== unit.file && !reachesThroughImport(imports.get(reference.file)?.get(unit.file), reference.node, isStoreAction(unit))) continue;
+      if (reference.file !== unit.file && !reachesThroughImport(imports.get(reference.file)?.get(unit.file), reference.node, isStoreAction(unit))
+        && !(isStoreAction(unit) && reachesStoreThroughAlias(imports.get(reference.file), unit.file, imports))) continue;
+      // `const { action } = useStore.getState()` (review 5 LOW-7, round 7): the local name is
+      // followed to its calls in that file.
+      if (ts.isBindingElement(parent) && ((parent.propertyName ?? parent.name) === reference.node) && ts.isIdentifier(parent.name)) {
+        queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent, responds: unit.responds });
+        followed += 1;
+        continue;
+      }
       // `import { helper as alias }`: follow the alias in that file.
       if (ts.isImportSpecifier(parent) && parent.propertyName === reference.node) {
         queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent });
@@ -511,7 +885,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const caller = unitOf(reference.file, reference.node);
       if (!caller || (caller.file === unit.file && caller.name === unit.name)) continue;
       followed += 1;
-      reach({ ...caller, via: id }, reference.node);
+      reach({ ...caller, via: id }, reference.node, unit.responds);
     }
     // A module's default export, imported under another name.
     if (defaults.get(unit.file) === unit.name) {
@@ -520,22 +894,42 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
         followed += 1;
       }
     }
-    // Fail closed (round 6): a lib helper the trace reached but can't follow to any caller (a
-    // class built with `new`, a helper passed as a value) is returned, so it must be declared.
-    if (followed === 0 && unit.file.startsWith('lib/') && !passed.has(id)) keep(id, unit, 'drops');
+    // Fail closed (round 6; round 7, every unit): a function the trace reached and must follow
+    // (a lib helper, one whose catch throws on, a store action, a destructured name) but can't
+    // follow to any caller (a class built with `new`, a helper passed as a value) is returned,
+    // so it must be declared.
+    if (followed === 0) keep(id, unit, 'drops');
   }
   for (const id of passed) passedCache.add(id);
   return found;
 }
 
+/** The block or function a local unit is declared in (its name's scope). */
+function declaringScope(node: ts.Node): ts.Node | null {
+  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
+    if (ts.isBlock(n) || ts.isSourceFile(n) || isFunctionLike(n) || ts.isFunctionDeclaration(n)) return ts.isSourceFile(n) ? null : n;
+  }
+  return null;
+}
+const within = (node: ts.Node, scope: ts.Node) => node.pos >= scope.pos && node.end <= scope.end && node.getSourceFile() === scope.getSourceFile();
+
 /** Every function the trace followed past (a catch that throws on, a selector): seen, not callers. */
 const passedCache = new Set<string>();
 export function passedThrough(): Set<string> { return passedCache; }
+
+/** A store reached through a module that imports it (`export const useAlias = useA` in b.ts):
+ * one hop (gates-security LOW-1, round 7). */
+function reachesStoreThroughAlias(from: Map<string, Taken> | undefined, store: string, imports: Map<string, Map<string, Taken>>): boolean {
+  if (!from) return false;
+  for (const module of from.keys()) if (imports.get(module)?.has(store)) return true;
+  return false;
+}
 
 function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, storeAction = false): boolean {
   if (!taken) return false;
   if (taken.dynamic) return true;
   const parent = node.parent;
+  if (ts.isElementAccessExpression(parent) && storeAction) return true; // `getState()['action']()`
   if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
     if (storeAction) return true; // `useGraphStore.getState().action()`, `(s) => s.action`
     return ts.isIdentifier(parent.expression) && (taken.namespaces.has(parent.expression.text)
@@ -545,14 +939,24 @@ function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, sto
 }
 
 const MARKED = /\/\/ clears-on-promote: [\w.-]+/;
+/** A node's own text and the comment that ends its last line: what a marker on it may be.
+ * Round 7: never its leading trivia, which holds the line before it (a marker there belongs to
+ * the statement it ends, and counted for the next function or branch too). */
+function ownText(node: ts.Node): string {
+  const source = node.getSourceFile().getFullText();
+  const trailing = ts.getTrailingCommentRanges(source, node.getEnd()) ?? [];
+  return node.getText() + trailing.map((range) => source.slice(range.pos, range.end)).join(' ');
+}
+const marked = (node: ts.Node): boolean => MARKED.test(ownText(node));
 
-/** The functions in `file` whose own body registers a line, and every same-file function that
- * calls one of those (by name), to any depth. */
+/** The functions in `file` whose own body registers a line (a marked call). */
 const keepersCache = new Map<string, Set<string>>();
 function keepersIn(file: string): Set<string> {
   const cached = keepersCache.get(file);
   if (cached) return cached;
-  const parsed = frontend().files.find((entry) => entry.file === file)!;
+  const parsed = frontend().files.find((entry) => entry.file === file);
+  if (!parsed) return new Set();
+  keepersBuilding.add(file);
   const units = new Map<string, ts.Node[]>();
   const visit = (node: ts.Node) => {
     const name = ts.isFunctionDeclaration(node) && node.name ? node.name.text
@@ -563,40 +967,45 @@ function keepersIn(file: string): Set<string> {
     ts.forEachChild(node, visit);
   };
   visit(parsed.source);
-  const calls = (node: ts.Node): Set<string> => {
-    const names = new Set<string>();
-    const walkCalls = (n: ts.Node) => {
-      if (ts.isCallExpression(n)) {
-        const callee = n.expression;
-        if (ts.isIdentifier(callee)) names.add(callee.text);
-        else if (ts.isPropertyAccessExpression(callee)) names.add(callee.name.text); // get().showError(…), state.fail(…)
-      }
-      ts.forEachChild(n, walkCalls);
-    };
-    walkCalls(node);
-    return names;
-  };
+  // Review 5 MEDIUM-1 (round 7): a keeper registers in its own body. A function that calls one
+  // anywhere isn't (the call may be on another path); one whose body always makes that call, as
+  // a statement of its own body or as an arrow's whole body, is, when every function of that
+  // name in the file does.
   const keepers = new Set<string>();
-  for (const [name, nodes] of units) if (nodes.some((node) => MARKED.test(node.getFullText()))) keepers.add(name);
+  for (const [name, nodes] of units) if (nodes.some(marked)) keepers.add(name);
+  const alwaysCalls = (node: ts.Node): boolean => {
+    const fn = ts.isVariableDeclaration(node) || ts.isPropertyAssignment(node) ? node.initializer : node;
+    if (!fn || !isFunctionLike(fn) && !ts.isFunctionDeclaration(fn) && !ts.isMethodDeclaration(fn)) return false;
+    const body = (fn as ts.FunctionLikeDeclaration).body;
+    if (!body) return false;
+    const direct = ts.isBlock(body)
+      ? body.statements.flatMap((st) => ts.isExpressionStatement(st) ? [st.expression] : ts.isReturnStatement(st) && st.expression ? [st.expression] : [])
+      : [body];
+    return direct.some((expression) => {
+      let e: ts.Expression = expression;
+      while (ts.isAwaitExpression(e) || ts.isParenthesizedExpression(e) || ts.isVoidExpression(e)) e = e.expression;
+      if (!ts.isCallExpression(e)) return false;
+      const callee = e.expression;
+      const called = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : null;
+      return !!called && keepers.has(called) || storeKeeper(file, e);
+    });
+  };
   for (let grew = true; grew;) {
     grew = false;
-    for (const [name, nodes] of units) {
-      if (keepers.has(name)) continue;
-      if (nodes.some((node) => [...calls(node)].some((callee) => keepers.has(callee)))) { keepers.add(name); grew = true; }
-    }
+    for (const [name, nodes] of units) if (!keepers.has(name) && nodes.every(alwaysCalls)) { keepers.add(name); grew = true; }
   }
+  keepersBuilding.delete(file);
   keepersCache.set(file, keepers);
   return keepers;
 }
 
-/** Whether a function keeps its line with the mechanism: it registers in its own body, or calls
- * (by name) a function in its file that does. A heuristic: it can't tell which branch calls
- * (outcomeAt reads the catch around one call). */
+/** Whether a function registers in its own body, or calls a same-file function whose own body
+ * does (one level). Kept for the ratchets' declarations; outcomeAt reads the branch or catch. */
 export function keepsLine(unit: Unit): boolean {
   return registersInBody(unit) || callsKeeper(unit.file, unit.node, unit.name);
 }
 
 /** Whether a function registers a line with the mechanism in its own body (a marked call). */
 export function registersInBody(unit: Unit): boolean {
-  return MARKED.test(unit.node.getFullText());
+  return marked(unit.node);
 }

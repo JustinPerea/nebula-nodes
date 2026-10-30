@@ -17,6 +17,10 @@ interface FakeGraph {
   reserveCreateGeneration: (id: string) => boolean;
   releaseCreateGeneration: (id: string) => void;
   cancelCreateGeneration: (id: string) => void;
+  // GM r8 (3), #204 r7: Generate's lines go to the app's notice region.
+  messageNotice: { id: number; text: string; tone: 'error' | 'info' } | null;
+  undoNotice: null;
+  notify: (text: string, tone?: 'error' | 'info') => void;
   cancelRun: (id: string) => Promise<void>;
 }
 const mocks = vi.hoisted(() => ({
@@ -51,6 +55,8 @@ vi.mock('../../src/store/graphStore', async () => {
       createCancelledLaunchIds: state.createCancelledLaunchIds.filter((existing) => existing !== id),
     })),
     cancelCreateGeneration: (id) => store.setState((state) => ({ createCancelledLaunchIds: [...state.createCancelledLaunchIds, id] })),
+    messageNotice: null, undoNotice: null,
+    notify: (text, tone = 'info') => store.setState({ messageNotice: { id: Date.now(), text, tone } }),
     cancelRun: async (id) => { mocks.cancel(id); },
   }));
   mocks.store = store;
@@ -78,7 +84,7 @@ beforeEach(() => {
   mocks.author.mockReset().mockResolvedValue({ modelNodeIds: ['model'], allNodeIds: ['model'] });
   mocks.execute.mockReset(); mocks.cancel.mockReset(); mocks.exit.mockReset(); mocks.dock.mockReset();
   mocks.ui.consumePendingPreset.mockReset().mockReturnValue(null);
-  mocks.store!.setState({ nodes: [], edges: [], runHistory: [], createLaunchingIds: [], createCancelledLaunchIds: [], activeRuns: [] });
+  mocks.store!.setState({ nodes: [], edges: [], runHistory: [], createLaunchingIds: [], createCancelledLaunchIds: [], activeRuns: [], messageNotice: null });
 });
 
 describe('Create lifecycle across view visits', () => {
@@ -87,7 +93,8 @@ describe('Create lifecycle across view visits', () => {
       data: { ...model('selected-video').data, definitionId: 'runway-aleph' } }] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    expect(view.getByRole('alert')).toHaveTextContent('This model needs Canvas input controls');
+    expect(mocks.store!.getState().messageNotice?.text).toContain('This model needs Canvas input controls');
+    expect(view.queryByRole('alert')).toBeNull();
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.author).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
@@ -101,7 +108,8 @@ describe('Create lifecycle across view visits', () => {
     });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    expect(view.getByRole('alert')).toHaveTextContent('This model needs Canvas input controls');
+    expect(mocks.store!.getState().messageNotice?.text).toContain('This model needs Canvas input controls');
+    expect(view.queryByRole('alert')).toBeNull();
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.author).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
@@ -163,12 +171,24 @@ describe('Create lifecycle across view visits', () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    expect(await view.findByRole('alert')).toHaveTextContent("Couldn't start the generation. Its nodes weren't added to the canvas.");
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain("Couldn't start the generation. Its nodes weren't added to the canvas."));
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.execute).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
-    expect(view.queryByRole('alert')).toBeNull();
+    // The next Generate takes back the line it showed.
+    expect(mocks.store!.getState().messageNotice).toBeNull();
+  });
+
+  it('a new Generate takes back only its own line (another screen\'s notice stays)', async () => {
+    mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
+    const view = render(<CreateView />);
+    fireEvent.click(view.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain("Couldn't start the generation."));
+    act(() => mocks.store!.setState({ messageNotice: { id: 7, text: 'Another line.', tone: 'info' } }));
+    fireEvent.click(view.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
+    expect(mocks.store!.getState().messageNotice?.text).toBe('Another line.');
   });
 
   it('retains a cancelled authoring reservation across visits and never executes its delayed cluster', async () => {
