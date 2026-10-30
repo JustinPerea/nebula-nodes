@@ -38,15 +38,15 @@ describe('review 22 LOW-3: the mark while timed retries go', () => {
       data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},
         params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [] } } } } as unknown as NodeProps;
     useGraphStore.setState({ nodes: [scene('n1', 'Opening')], unsavedScenes: { n1: RETRYING('Opening') },
-      retryingMarks: { n1: RETRYING('Opening') }, stoppedScenes: {}, sceneStops: {}, sceneTries: {}, sceneClashes: {},
+      stoppedScenes: {}, sceneStops: { n1: { cause: 'retrying' } }, sceneTries: {}, sceneClashes: {},
       retrySceneSave: vi.fn() } as never);
     const { container } = render(<ReactFlowProvider><CinemaSceneNode {...props} /></ReactFlowProvider>);
     const mark = () => container.querySelector('.cinema-scene-node__unsaved') as HTMLElement;
     expect(mark().getAttribute('title')).toBe(RETRYING('Opening'));
     set({ nodes: [scene('n1', 'Opening IV')] });
     expect(mark().getAttribute('title')).toBe(RETRYING('Opening IV'));
-    // Another line took the mark (a clash's): it is said as written.
-    set({ unsavedScenes: { n1: CLASH } });
+    // Another line took the mark (a clash's, which takes the retrying line's place): it is said as written.
+    set({ unsavedScenes: { n1: CLASH }, sceneStops: {} });
     expect(mark().getAttribute('title')).toBe(CLASH);
   });
 });

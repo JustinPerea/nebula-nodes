@@ -608,66 +608,38 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 /* GM r33: every notice button that is held or locked reads the one
    disabled token set (slava-restraint.css), never a whole-control opacity:
    a filled button takes the grey fill, a ghost or text button greys its
-   label and gets no fill, and hover changes nothing. A button held while
-   its action is on its way (a [Try again], a clash answer being sent) is
-   aria-disabled at once and takes the look only once useHeldLook adds
-   data-held-look (~150 ms), so a fast try never flickers; a button the
-   canvas lock disables (following, offline) is :disabled, and the lock's
-   own whole-control dim (App.css) gives way here. */
-/* Since the merge with PR #200: its one disabled rule (disabled-buttons.css)
-   lists .canvas-undo-notice__action as a filled button and greys it, with
-   !important, the moment it is aria-disabled. The notice keeps GM r33's
-   own look here instead (the token set above, the grey only once
-   data-held-look comes, the quiet choice unfilled), so these win with
-   !important at a higher specificity. Which filled look is the app's is
-   GM's call (#200's 0.1 fill with a grey label, or this 0.42 fill with a
-   dark label). */
+   label and gets no fill, and hover changes nothing. Since round 25 (GM r37,
+   option c) the [Try again], Keep mine, Undo, Redo, Open copy and Save
+   paused actions take that look from the app's one shared rule
+   (styles/disabled-buttons.css: .canvas-undo-notice__action is a filled
+   button there, its quiet variant a ghost one). A button held while its
+   action is on its way is aria-disabled at once and keeps its own look for
+   the first ~150 ms (useHeldLook's data-held-pending, which the shared rule
+   passes over), so a fast try never flickers; a button the canvas lock
+   disables (following, offline) is :disabled, and the lock's own
+   whole-control dim (App.css) gives way here. */
 body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look],
 body.app-slava-restraint .canvas-undo-notice button:disabled {
-  opacity: 1 !important;
+  opacity: 1;
   cursor: default;
 }
 
-/* Held, not yet greyed (the first ~150 ms): it looks as it is, hover
-   included. Before the disabled look, so a button both held and locked takes it. */
-body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:not([data-held-look]):not(:disabled),
-body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:not([data-held-look]):not(:disabled):hover {
-  border-color: rgb(255 255 255 / 0.85) !important;
-  background: rgb(255 255 255 / 0.9) !important;
-  color: #111 !important;
+/* Held, not yet greyed (the first ~150 ms): hover leaves it as it is. */
+body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true']:hover {
+  background: rgb(255 255 255 / 0.9);
 }
 
-body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:not([data-held-look]):not(:disabled),
-body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:not([data-held-look]):not(:disabled):hover {
-  border-color: rgb(255 255 255 / 0.28) !important;
-  background: transparent !important;
-  color: rgb(255 255 255 / 0.9) !important;
+body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true']:hover {
+  background: transparent;
 }
 
-body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look],
-body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look]:hover,
-body.app-slava-restraint .canvas-undo-notice__action:disabled,
-body.app-slava-restraint .canvas-undo-notice__action:disabled:hover {
-  border-color: var(--disabled-fill) !important;
-  background: var(--disabled-fill) !important;
-  color: var(--disabled-fill-label) !important;
-}
-
-body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true'][data-held-look],
-body.app-slava-restraint .canvas-undo-notice__action--quiet[aria-disabled='true'][data-held-look]:hover,
-body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled,
-body.app-slava-restraint .canvas-undo-notice__action--quiet:disabled:hover {
-  border-color: rgb(255 255 255 / 0.28) !important; /* its enabled edge, never brighter */
-  background: transparent !important;
-  color: var(--disabled-label) !important;
-}
-
+/* The × isn't one of the shared rule's buttons: the ghost grey here. */
 body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look],
 body.app-slava-restraint .canvas-undo-notice__close[aria-disabled='true'][data-held-look]:hover,
 body.app-slava-restraint .canvas-undo-notice__close:disabled,
 body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
-  background: transparent !important;
-  color: var(--disabled-label) !important;
+  background: transparent;
+  color: var(--disabled-label);
 }
 
 .canvas-undo-notice__close {

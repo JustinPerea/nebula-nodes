@@ -444,14 +444,14 @@ describe('review 22 LOW-3: the mark reads the name live while timed retries go',
     h.fail('n1', 1000);
     typeIn('n1', 's1', 'mine');
     await vi.waitFor(() => expect(stopped().n1).toBe(true), { timeout: 3000, interval: 5 });
-    expect(useGraphStore.getState().retryingMarks.n1).toBeUndefined();
+    expect(useGraphStore.getState().sceneStops.n1?.cause).not.toBe('retrying');
     await rename(h, 'n1', 'Opening V');
     expect(markLine('n1')).toBe(SERVER('“Opening V”'));
     h.fail('n1', 0);
     useGraphStore.getState().retrySceneSave('n1');
     await vi.waitFor(() => expect(unsaved('n1')).toBeNull(), { timeout: 3000, interval: 5 });
     expect(markLine('n1')).toBeNull();
-    expect(useGraphStore.getState().retryingMarks).toEqual({});
+    expect(useGraphStore.getState().sceneStops).toEqual({});
   });
 });
 

@@ -993,9 +993,6 @@ interface GraphState {
   /** Cinema scenes whose edits are on screen but not saved (GM, PR #198 r6
    * item 1), by node id, with the line that said why. */
   unsavedScenes: Record<string, string>;
-  /** Review 22 LOW-3: scenes whose mark is their timed retries' line (the
-   * line as written): sceneMarkLine says it with the name the card shows now. */
-  retryingMarks: Record<string, string>;
   /** Scenes whose save stopped retrying by itself (GM r11 answer 3): their
    * "Unsaved" mark opens a popover with the line and [Try again] (GM r12
    * item 1, r13 answer 3), whatever toast the slot shows. */
@@ -3977,24 +3974,15 @@ function sceneSave(nodeId: string, node: Node<NodeData> | undefined): CutOffSave
 }
 
 /** The scene card's unsaved mark (GM r6 item 1: "keep the edits on screen,
- * marked unsaved"), with the line that says why; null clears it.
- * `retrying`: the line is the timed retries' (review 22 LOW-3: the mark
- * reads the name live while they go, sceneMarkLine). */
-function markSceneUnsaved(nodeId: string, line: string | null, retrying = false): void {
-  const state = useGraphStore.getState();
-  const marks = state.unsavedScenes;
-  const wasRetrying = state.retryingMarks[nodeId] !== undefined;
-  const nowRetrying = retrying && line !== null;
-  if ((marks[nodeId] ?? null) === line && wasRetrying === nowRetrying) return;
+ * marked unsaved"), with the line that says why; null clears it. While the
+ * timed retries go, the mark reads their state line, name live
+ * (sceneMarkLine; review 22 LOW-3, GM r36 Q1). */
+function markSceneUnsaved(nodeId: string, line: string | null): void {
+  const marks = useGraphStore.getState().unsavedScenes;
+  if ((marks[nodeId] ?? null) === line) return;
   const next = { ...marks };
   if (line === null) delete next[nodeId]; else next[nodeId] = line;
-  const patch: Partial<Pick<GraphState, 'unsavedScenes' | 'retryingMarks'>> = { unsavedScenes: next };
-  if (wasRetrying || nowRetrying) {
-    const kinds = { ...state.retryingMarks };
-    if (nowRetrying) kinds[nodeId] = line!; else delete kinds[nodeId];
-    patch.retryingMarks = kinds;
-  }
-  useGraphStore.setState(patch);
+  useGraphStore.setState({ unsavedScenes: next });
   if (line === null) {
     markSceneStopped(nodeId, false);
     // GM r36 Q1: nothing unsaved, so nothing is retrying.
@@ -4146,17 +4134,16 @@ function stopLineText(stop: SceneStop, names: string[]): string {
 
 /** GM r34: the "Unsaved" mark's line for a scene with a state line: its
  * stop's line for this scene alone, with the name the card shows now (a
- * rename shows at once). Review 22 LOW-3: while its timed retries go
- * (retryingMarks, as long as the mark is the line they wrote), the retry
- * line with that name too. Null when it has neither (the mark keeps its own). */
+ * rename shows at once). Since GM r36 Q1 the timed retries' line is one of
+ * these states too (review 22 LOW-3; review 23 NIT-1 removed the separate
+ * retryingMarks it no longer needed). Null when it has none (the mark keeps
+ * its own line). */
 export function sceneMarkLine(state: Pick<GraphState, 'nodes' | 'stoppedScenes' | 'sceneStops'>
-  & Partial<Pick<GraphState, 'sceneTries' | 'sceneClashes' | 'unsavedScenes' | 'retryingMarks'>>, nodeId: string): string | null {
+  & Partial<Pick<GraphState, 'sceneTries' | 'sceneClashes'>>, nodeId: string): string | null {
   const stop = sceneStopShown(state, nodeId);
-  const retrying = !stop && state.retryingMarks?.[nodeId] !== undefined
-    && state.retryingMarks[nodeId] === state.unsavedScenes?.[nodeId];
-  const node = stop || retrying ? state.nodes.find((candidate) => candidate.id === nodeId) : undefined;
-  if (!node) return null;
-  return stop ? stopLineText(stop, [cardTitle([node], nodeId)]) : sceneRetryingLine([cardTitle([node], nodeId)]);
+  const node = stop ? state.nodes.find((candidate) => candidate.id === nodeId) : undefined;
+  if (!stop || !node) return null;
+  return stopLineText(stop, [cardTitle([node], nodeId)]);
 }
 
 /** GM r29 call 7: reading order on the canvas, top to bottom, then left to
@@ -5021,6 +5008,9 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
       const leavesRun = answer.refused !== 'run-lock';
       if (leavesRun) entry.runLockTry = null;
       try {
+        // GM r38 (review 23 LOW-1): asked first, so the failure below is
+        // handled as one behind a clash (no line, nothing resent).
+        askClashAfterFailedSave(nodeId, entry, answer.refused);
         settleKeptAnswer(nodeId, entry, answer, quiet, answeredStop);
       } finally {
         dropRunLockStop(nodeId, answer.refused);
@@ -5029,6 +5019,31 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
   }
 }
 
+
+/** GM r38 (review 23 LOW-1): another writer's change to a field this
+ * failed save carried came while it was out (its sync waits in
+ * `entry.deferred`, merged only once a save is taken). The failed answer
+ * asks the clash now, with the same prompt, so the card never shows a value
+ * Nebula doesn't have with no hint. The existing clash rules hold: the
+ * prompt is the scene's only line, nothing is resent while it asks, and the
+ * answer sends the save. A change to another field merges as before (the
+ * next save's key check). Not for a refusal that hands the edits off (a
+ * moved or replaced canvas, an update), nor while a clash already asks. */
+function askClashAfterFailedSave(nodeId: string, entry: CinemaScenePersistence, refused: SceneRefusalKind): void {
+  const deferred = entry.deferred;
+  if (!deferred || entry.clash || !entry.base || refused === 'moved' || refused === 'replaced' || refused === 'params-outdated') return;
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) return;
+  let clashes: SceneField[];
+  try {
+    clashes = mergeScenes(entry.base, sceneFromNode(node), deferred.scene, sameCinemaValue).clashes;
+  } catch {
+    return;
+  }
+  if (clashes.length === 0) return;
+  entry.deferred = null;
+  rebaseOnto(nodeId, entry, deferred.scene, deferred.key, deferred.writer, false, deferred.rev);
+}
 
 /** settleSceneAnswerNow's `kept` answer (a refusal that keeps the edits).
  * `quiet`: the stopped save's own quiet try; `answeredStop`: the one try out
@@ -5139,7 +5154,7 @@ function settleKeptAnswer(nodeId: string, entry: CinemaScenePersistence, answer:
   entry.refusedLine = answer.line;
   // Review 22 LOW-3: a server error's mark is the timed retries' line, read
   // with the card's name live while they go.
-  if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, answer.line, answer.refused === 'server');
+  if (answer.refused !== 'params-outdated' && answer.line) markSceneUnsaved(nodeId, answer.line);
   if (answer.refused === 'replaced') {
     // M1: the clear's sync names these edits and lets them go; if it
     // never comes, the backend's graph is read once (a reconnect's sync).
@@ -10934,7 +10949,6 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // ---------------------------------------------------------------------------
 
   unsavedScenes: {},
-  retryingMarks: {},
   stoppedScenes: {},
   sceneStops: {},
   sceneTries: {},

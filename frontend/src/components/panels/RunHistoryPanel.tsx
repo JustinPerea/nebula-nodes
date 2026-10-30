@@ -10,6 +10,7 @@ import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
+import { runFinishesLine } from '../../lib/useBackendOffline';
 import { showNotice } from '../../lib/canvasNotice';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
@@ -268,7 +269,8 @@ export function RunHistoryPanel() {
                           ? 'Resume this run from its saved checkpoint'
                           : 'Run this again with the same nodes and settings',
                         offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
-                        { run: isExecuting })}
+                        // GM r37: while a run goes, what unlocks it, by its own verb.
+                        { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) })}
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
@@ -284,7 +286,7 @@ export function RunHistoryPanel() {
                           className="run-history__replay"
                           {...lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
-                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting })}
+                            : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
                           aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
                         >Rerun with latest source</button>

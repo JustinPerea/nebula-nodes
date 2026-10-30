@@ -96,25 +96,38 @@ function declsFor(css: string, selector: string): Record<string, string> {
 const PROPOSALS = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
 const SKIN = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
 const P = 'body.app-slava-restraint .canvas-undo-notice';
-const FILLED = { 'border-color': 'var(--disabled-fill)', background: 'var(--disabled-fill)', color: 'var(--disabled-fill-label)' };
-const GHOST = { background: 'transparent', color: 'var(--disabled-label)' };
-/** Since the merge with PR #200 the notice's own look wins over #200's
- * shared rule with !important (canvasProposals.css): every declaration a
- * notice rule writes carries it; the values compared are without it. */
-const bare = (decls: Record<string, string>) => {
-  const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(decls)) {
-    expect(value, `${name}: ${value}`).toMatch(/!important$/);
-    out[name] = value.replace(/\s*!important$/, '');
+const SHARED_CSS = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
+/** PR #198 round 25 (GM r37 option c): the notice's buttons take the app's
+ * one shared rule (disabled-buttons.css) on GM r33's tokens. A held button
+ * is in it once its first ~150 ms pass (useHeldLook's data-held-pending). */
+const STATES = ":is(:disabled, [aria-disabled='true']:not([data-held-pending]))";
+const FILLED = { background: 'var(--disabled-fill, rgb(255 255 255 / 0.42))', 'border-color': 'var(--disabled-fill, rgb(255 255 255 / 0.42))',
+  color: 'var(--disabled-fill-label, rgb(17 17 17 / 0.62))' };
+/** The quiet choice held: a ghost that keeps its own enabled edge (GM r33,
+ * "its enabled edge, never brighter"; live clashsend21). */
+const QUIET = { background: 'transparent', 'border-color': 'rgb(255 255 255 / 0.28)', color: 'var(--disabled-label, rgba(255, 255, 255, 0.55))' };
+/** The shared rules for `className` in the disabled states, in file order,
+ * each with its declarations (all !important) and whether hover is listed. */
+function sharedRulesFor(className: string): Array<{ decls: Record<string, string>; hover: boolean }> {
+  const out: Array<{ decls: Record<string, string>; hover: boolean }> = [];
+  for (const match of stripComments(SHARED_CSS).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = match[1].replace(/\s+/g, ' ');
+    if (!new RegExp(`\\.${className}[,)\\s]`).test(selector) || !selector.includes(STATES)) continue;
+    const decls: Record<string, string> = {};
+    for (const decl of match[2].split(';')) {
+      const at = decl.indexOf(':');
+      if (at < 0) continue;
+      const value = decl.slice(at + 1).trim();
+      expect(value, value).toMatch(/!important$/);
+      decls[decl.slice(0, at).trim()] = value.replace(/\s*!important$/, '');
+    }
+    out.push({ decls, hover: selector.includes(`${STATES}:hover`) });
   }
   return out;
-};
-const noticeDecls = (selector: string) => bare(declsFor(PROPOSALS, selector));
-/** The disabled look a notice button of this kind takes, for `state` (`:disabled` or the held look). */
-const lookFor = (kind: '__action' | '__action--quiet' | '__close', state: ':disabled' | "[aria-disabled='true'][data-held-look]") => ({
-  ...noticeDecls(`${P}${kind === '__action--quiet' ? '__action' : kind}${state}`),
-  ...(kind === '__action--quiet' ? noticeDecls(`${P}__action--quiet${state}`) : {}),
-});
+}
+/** The look a class ends with: its shared rules, the later winning (all !important, equal specificity). */
+const sharedLook = (...classes: string[]) => Object.assign({}, ...classes.flatMap((name) => sharedRulesFor(name)).map((rule) => rule.decls));
+const pick = (decls: Record<string, string>, keys: string[]) => Object.fromEntries(keys.map((key) => [key, decls[key]]));
 
 describe('GM r33: notice buttons read the one disabled token set', () => {
   it('the tokens: one definition each, in the shared stylesheet', () => {
@@ -127,27 +140,35 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
     expect(tokens['--disabled-filter']).toBe('grayscale(1)');
   });
 
-  it('filled, ghost and × buttons, held or locked: their own look, no whole-control opacity, hover the same, no pointer', () => {
+  it('filled, ghost and × buttons, held or locked: one look from the shared rule, no whole-control opacity, hover the same, no pointer', () => {
+    // GM r37 option c: the filled actions (Try again, Keep mine, Undo, Redo,
+    // Open copy, Save paused) the grey fill with its dark label; the quiet
+    // choice a ghost (after the filled rule, so it stays unfilled).
+    const filled = sharedRulesFor('canvas-undo-notice__action');
+    expect(filled).toHaveLength(1);
+    expect(filled[0].hover).toBe(true);
+    expect(pick(filled[0].decls, ['background', 'border-color', 'color'])).toEqual(FILLED);
+    expect(filled[0].decls).toMatchObject({ opacity: '1', 'box-shadow': 'none' });
+    const quiet = sharedRulesFor('canvas-undo-notice__action--quiet');
+    expect(quiet).toHaveLength(1);
+    expect(quiet[0].hover).toBe(true);
+    expect(pick(sharedLook('canvas-undo-notice__action', 'canvas-undo-notice__action--quiet'), ['background', 'border-color', 'color'])).toEqual(QUIET);
+    expect(SHARED_CSS.indexOf(':is(.canvas-undo-notice__action--quiet)')).toBeGreaterThan(SHARED_CSS.indexOf('  .canvas-undo-notice__action,'));
+    // The ×, not one of the shared rule's buttons: its grey label, no fill, hover the same.
     for (const state of [':disabled', "[aria-disabled='true'][data-held-look]"] as const) {
-      expect(declsFor(PROPOSALS, `${P} button${state}`), state).toEqual({ opacity: '1 !important', cursor: 'default' });
-      expect(lookFor('__action', state), state).toEqual(FILLED);
-      // A ghost button: no fill, its enabled edge (never brighter), the label grey.
-      expect(lookFor('__action--quiet', state), state).toEqual({ ...FILLED, 'border-color': 'rgb(255 255 255 / 0.28)', ...GHOST });
-      expect(declsFor(PROPOSALS, '.canvas-undo-notice__action--quiet')['border-color']).toBe('rgb(255 255 255 / 0.28)');
-      expect(lookFor('__close', state), state).toEqual(GHOST);
-      for (const kind of ['__action', '__action--quiet', '__close']) {
-        expect(noticeDecls(`${P}${kind}${state}:hover`), `${kind}${state}:hover`).toEqual(noticeDecls(`${P}${kind}${state}`));
-      }
+      expect(declsFor(PROPOSALS, `${P} button${state}`), state).toEqual({ opacity: '1', cursor: 'default' });
+      expect(declsFor(PROPOSALS, `${P}__close${state}`), state).toEqual({ background: 'transparent', color: 'var(--disabled-label)' });
+      expect(declsFor(PROPOSALS, `${P}__close${state}:hover`)).toEqual(declsFor(PROPOSALS, `${P}__close${state}`));
     }
-    // aria-disabled alone (the first ~150 ms) has no look of its own; hover leaves it as it is.
+    // No notice rule of its own for the actions' disabled look any more.
+    const own = [...stripComments(PROPOSALS).matchAll(/([^{}]+)\{[^{}]*\}/g)].flatMap((m) => m[1].split(','))
+      .map((one) => one.replace(/:not\([^)]*\)/g, '').trim()).filter((one) => /__action/.test(one) && /:disabled|data-held-look/.test(one));
+    expect(own).toEqual([]);
+    expect(stripComments(PROPOSALS)).not.toMatch(/!important/);
+    // The first ~150 ms held: no look of its own; hover leaves it as it is.
     expect(declsFor(PROPOSALS, `${P} button[aria-disabled='true']`)).toEqual({});
-    // Since the merge with #200 (whose shared rule greys it at once): it
-    // keeps its enabled look, hover the same, until data-held-look comes.
-    const notYet = `${P}__action[aria-disabled='true']:not([data-held-look]):not(:disabled)`;
-    expect(noticeDecls(notYet)).toEqual({ 'border-color': 'rgb(255 255 255 / 0.85)', background: 'rgb(255 255 255 / 0.9)', color: '#111' });
-    expect(noticeDecls(`${notYet}:hover`)).toEqual(noticeDecls(notYet));
-    const quietNotYet = `${P}__action--quiet[aria-disabled='true']:not([data-held-look]):not(:disabled)`;
-    expect(noticeDecls(quietNotYet)).toEqual({ 'border-color': 'rgb(255 255 255 / 0.28)', background: 'transparent', color: 'rgb(255 255 255 / 0.9)' });
+    expect(declsFor(PROPOSALS, `${P}__action[aria-disabled='true']:hover`)).toEqual({ background: 'rgb(255 255 255 / 0.9)' });
+    expect(declsFor(PROPOSALS, `${P}__action--quiet[aria-disabled='true']:hover`)).toEqual({ background: 'transparent' });
   });
 
   it.each<'following' | 'offline'>(['following', 'offline'])('%s: every lock-state notice button is truly disabled and takes its kind’s look', async (lock) => {

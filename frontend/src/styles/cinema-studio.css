@@ -932,7 +932,9 @@ body.app-slava-restraint .cinema-reference-upload__actions {
   grid-row: 1 / span 2;
 }
 
-body.app-slava-restraint .cinema-reference-upload__actions button {
+body.app-slava-restraint .cinema-reference-upload__actions button,
+body.app-slava-restraint .cinema-reference-upload__retry,
+body.app-slava-restraint .cinema-upload__remove {
   background: none;
   border: 1px solid var(--sr-edge);
   border-radius: 2px;
@@ -980,21 +982,17 @@ body.app-slava-restraint .cinema-reference-upload__actions button:focus-visible 
 }
 
 /* GM's merge check (PR #200 r2): every Cinema control Nebula's being offline
-   locks looks locked, not live. The disabled look of #200 r2 item 1: the
-   label at 55% of the ink, the outline fainter at 12%, no fill or accent.
-   It replaces the dimming and the neutral look (one level, never both), so
-   the orange Generate, the bright arrows and the prompt can't read as live.
-   Checkboxes, swatches and sliders keep the fieldset's dimming above.
-   Since the merge with PR #200 it reads #200's shared tokens
-   (styles/disabled-buttons.css): the one grey label, and the disabled edge
-   that is never brighter than an enabled one (GM 2026-10-28 answer 3, which
-   replaced the 12% outline). */
-body.app-slava-restraint .cinema-studio-view :is(button, textarea)[data-offline-disabled],
-body.app-slava-restraint .cinema-studio-view :is(button, textarea)[data-offline-disabled]:hover,
-body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(button, select, textarea, input[type="text"], input[type="number"]),
-body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(button, select, textarea, input[type="text"], input[type="number"]):hover {
+   locks looks locked, not live. Round 25 (review 23 MEDIUM-1, GM r37
+   option c): the buttons take the app's one disabled look from the shared
+   rule (styles/disabled-buttons.css), the same offline as following: the
+   orange Generate shot the grey fill with its dark label, the rest the grey
+   label. Only the text fields have their look here: the label grey, the
+   outline the disabled edge (never brighter than enabled), no fill.
+   Checkboxes, swatches and sliders keep the fieldset's dimming above. */
+body.app-slava-restraint .cinema-studio-view textarea[data-offline-disabled],
+body.app-slava-restraint .cinema-studio-view .cinema-offline-lock:disabled :is(select, textarea, input[type="text"], input[type="number"]) {
   opacity: 1 !important;
-  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
   background: transparent !important;
   box-shadow: none !important;

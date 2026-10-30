@@ -119,6 +119,8 @@ function sources(dir: string): string[] {
 
 /** A failure sentence that a reason could follow. */
 const FAILURE = String.raw`(?:Nebula )?(?:Couldn['’]t|couldn['’]t|Can['’]t|can['’]t|Cannot) `;
+/** Text any hit holds: a failure sentence's opening, or a heading slot. */
+const MAY_HIT = /[Cc]ouldn['’]t|[Cc]an['’]t|Cannot|heading/i;
 /** Placeholder for an interpolation inside a template's text. */
 const SLOT = '\u0000';
 
@@ -170,12 +172,19 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);
   });
 
-  it('only the reviewed ones', () => {
+  // Review 23 NIT-2: it parses source files with the TypeScript parser
+  // (about 0.5 s alone, dominated by graphStore.ts) and once passed vitest's
+  // 5 s default under the full suite's parallel load: its own 30 s bound.
+  // Every hit holds a failure word or a `heading` slot, so a file whose
+  // text has neither is skipped unparsed (the same hits, a little faster).
+  it('only the reviewed ones', { timeout: 30_000 }, () => {
     const root = join(__dirname, '../../src');
     const unknown: string[] = [];
     for (const file of sources(root)) {
       const name = relative(root, file);
-      for (const hit of handBuilt(readFileSync(file, 'utf8'))) {
+      const text = readFileSync(file, 'utf8');
+      if (!MAY_HIT.test(text)) continue;
+      for (const hit of handBuilt(text)) {
         if (!HAND_BUILT.some((entry) => entry.file === name && entry.text === hit)) unknown.push(`${name}: ${hit}`);
       }
     }

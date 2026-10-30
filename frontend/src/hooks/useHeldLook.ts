@@ -4,13 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
  * that answers fast never flickers. */
 export const HELD_LOOK_DELAY_MS = 150;
 
-/** The attribute the shared disabled look keys on, beside aria-disabled
- * (canvasProposals.css: the notice buttons' disabled style). */
+/** Set once the hold has lasted HELD_LOOK_DELAY_MS: the grey shows. */
 export const HELD_LOOK_ATTR = 'data-held-look';
+
+/** Set for the hold's first HELD_LOOK_DELAY_MS: the shared disabled rule
+ * (styles/disabled-buttons.css) passes over a button that has it, so it
+ * keeps its own look meanwhile (round 25: one rule, no notice overrides). */
+export const HELD_PENDING_ATTR = 'data-held-pending';
 
 export interface HeldLookProps {
   'aria-disabled'?: true;
   'data-held-look'?: '';
+  'data-held-pending'?: '';
 }
 
 /**
@@ -18,7 +23,8 @@ export interface HeldLookProps {
  * again], a clash answer being sent) is aria-disabled at once, with its
  * label unchanged and no reason tooltip (a moment, not a lock). The grey
  * (the shared disabled style, keyed on aria-disabled) comes only after
- * HELD_LOOK_DELAY_MS, and goes the moment it is released.
+ * HELD_LOOK_DELAY_MS (data-held-pending until then), and goes the moment it
+ * is released.
  */
 export function useHeldLook(held: boolean): HeldLookProps {
   // One token per hold, so a grey from an earlier hold never carries over.
@@ -30,5 +36,5 @@ export function useHeldLook(held: boolean): HeldLookProps {
     return () => window.clearTimeout(timer);
   }, [hold]);
   if (!hold) return {};
-  return greyHold === hold ? { 'aria-disabled': true, [HELD_LOOK_ATTR]: '' } : { 'aria-disabled': true };
+  return greyHold === hold ? { 'aria-disabled': true, [HELD_LOOK_ATTR]: '' } : { 'aria-disabled': true, [HELD_PENDING_ATTR]: '' };
 }

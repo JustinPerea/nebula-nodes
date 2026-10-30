@@ -167,14 +167,18 @@ describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
     return '';
   };
 
-  it('a held notice button takes the disabled look once data-held-look comes (GM r33: the token set, no whole-control opacity)', () => {
+  it('a held notice button takes the disabled look once its first 150 ms pass (GM r33: the token set, no whole-control opacity)', () => {
     const held = rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look]");
-    expect(held).toMatch(/opacity:\s*1\s*(!important\s*)?;/);
+    expect(held).toMatch(/opacity:\s*1\s*;/);
     expect(held).not.toMatch(/--sr-disabled-opacity/);
-    const filled = rule("body.app-slava-restraint .canvas-undo-notice__action[aria-disabled='true'][data-held-look]");
-    expect(filled).toMatch(/background:\s*var\(--disabled-fill\)/);
-    expect(filled).toMatch(/color:\s*var\(--disabled-fill-label\)/);
-    // aria-disabled alone (the first ~150 ms) has no look of its own.
+    // PR #198 round 25 (GM r37 option c): the look is the app's one shared
+    // rule's, which passes over a hold still pending (data-held-pending).
+    const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const filled = [...shared.matchAll(/([^{}]+)\{([^}]*)\}/g)].find((m) => /\.canvas-undo-notice__action,/.test(m[1]))!;
+    expect(filled[1]).toContain(":is(:disabled, [aria-disabled='true']:not([data-held-pending]))");
+    expect(filled[2]).toMatch(/background:\s*var\(--disabled-fill,/);
+    expect(filled[2]).toMatch(/color:\s*var\(--disabled-fill-label,/);
+    // aria-disabled alone (the first ~150 ms) has no look of its own here.
     expect(rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true']")).toBe('');
   });
 });

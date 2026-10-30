@@ -1337,8 +1337,8 @@ Both PRs' behaviour kept: a union in every hunk. Read #200's side first (its not
   - **Open, the same GM call as above:** which filled disabled look is the app's.
 - **#200's ratchet G and #198's lock forms.**
   - G now reads #198's forms: `lockedAction(lock, …)`, a local helper that returns `lock.act(…)` (`runLocked`), and an `act` prop handed down (the clash prompt, the stop line).
-  - Two `CONTROL_AT` entries have reasons: the stop line's focus tracking, and Home's copy notice (locked by `busy || offline`).
-  - `reachOf` follows a file's own definitions from a worklist. The recursion overflowed the stack on the first, cold-cache file (App.tsx), even with origin/main's own App.tsx.
+  - Two `CONTROL_AT` entries have reasons: the stop line's focus tracking, and Home's copy notice (locked by `busy || offline`). (Removed in round 25: both came from G mixing up same-named locals across functions.)
+  - `reachOf` follows a file's own definitions from a worklist. The recursion overflowed the stack on the first, cold-cache file (App.tsx), even with origin/main's own App.tsx. (Corrected in round 25, review 23 NIT-4, since the merge report's choice 7 said the walk was no longer recursive: the file walk is still recursive and still scans every `src` file. Only `reachOf`'s chase of a file's local definitions became a worklist.)
 - **Tests changed because behaviour changed (#200's, to the merged copy):**
   - r1: Send to motion's verb, and the prompt's lack of a tooltip;
   - r1, store, r2store, nodeNameList: the curly "Couldn’t". r2store's `/Couldn't save/` filter would otherwise have passed vacuously;
@@ -1349,7 +1349,7 @@ Both PRs' behaviour kept: a union in every hunk. Read #200's side first (its not
   - pr198Fix22Ui: KNOWN dropped the shot ×'s opacity.
 - **Other ratchet updates:**
   - errorCopy.namedLine: deleteCopy's entry takes #200's form, and #200's note composer's accessible name (`${headingText} ${targetNode}`) is reviewed, since it's no failure line.
-  - G's describe timeout is now 300 s. G alone took 110 s, and it timed out at 120 s in the full suite at a load average of 68.
+  - G's describe timeout is now 300 s. G alone took 110 s, and it timed out at 120 s in the full suite at a load average of 68. (Back to 120 s in round 25: G reads names in scope now and takes about 12 s alone.)
 - **Live harness:** `held21`'s fast try is deterministic now. It checks the order of events: the grey shows only once 150 ms pass with no answer (the PUT's `responseEnd` from resource timing, on the observer's clock). It doesn't time the backend.
 - **Gates (merge).**
   - `tsc -b` and lint are clean.
@@ -1380,3 +1380,59 @@ Both PRs' behaviour kept: a union in every hunk. Read #200's side first (its not
   - Build: 442,969 bytes raw.
   - Live on 8797/5797: n (retrying36, retrymark24, twotries22, rename23) 11/11, a 41/41, c 11/11, e 20/20, e3 17/17, f 35/35, g 21/22 then 22/22 on rerun, h 6/6, r1 21/21.
   - g's one miss was `askedquiet` (`asked: false`): Codex's edit landed before the person's failing save was held, so no clash was asked. It passed alone and in the full g rerun. The section doesn't touch the retrying line.
+
+## Fix round 25 (PR #198 review 23, GM's pr198 r37 and r38)
+
+- **A failed save with Codex's change to the same field asks the clash at once (GM r38, review 23 LOW-1).**
+  - Before: Codex's sync arrived while the person's save was out and waited in `entry.deferred`, which is only rebased on an `ok` answer. A failed answer (500, 400, 413, "other") dropped the sync's chance to ask. The card showed the person's value, the backend had Codex's, and nothing said so until a later save reached the key check.
+  - Now `askClashAfterFailedSave` runs on a kept answer before `settleKeptAnswer`. When the deferred sync clashes with what the person has on the card (`mergeScenes(base, card, theirs).clashes`), it rebases onto it in the same update. The prompt takes the stop line's place, and nothing is resent while it asks.
+  - Unchanged: the answer's save is bounded at 15 s; a failure goes back to stopped and counts as the one try; Codex ending the clash takes the answer branch. A change to another field merges as before. Moved, replaced and params-outdated answers keep their own paths.
+  - When the 500 clears on the retry after the clash was asked, the clash wins: Keep mine saves the person's value, and the prompt shows once.
+- **One disabled look (GM r37 option c, review 23 MEDIUM-1 and LOW-2).**
+  - #200's shared rule (`styles/disabled-buttons.css`) now reads the r33 tokens. Filled buttons take `--disabled-fill` (white at 0.42) and `--disabled-fill-label` (#111 at 0.62). Ghost and outline buttons take `--disabled-label` (white at 0.55).
+  - The 150 ms hold stays. `useHeldLook` marks a held notice button `data-held-pending` for its first 150 ms, and the shared rule's state is `:is(:disabled, [aria-disabled='true']:not([data-held-pending]))`, so the notice needs no `!important` overrides of its own. canvasProposals.css has no `!important` left.
+  - **Filled token:** `.canvas-undo-notice__action` (Try again, Keep mine, Undo, Redo, Open copy, Save paused), the proposal bar's Accept, the asset strip's Use this cover, Cinema's Generate shot, and the rest of the filled list (Create's Generate, chat Send, the exports, Home's New project, the danger confirms, the mask painter's Save and others).
+  - **Label token:** the notice's quiet choice (Use Codex’s, its own rule after the filled one: transparent, the grey label, and its own enabled 0.28 edge, as GM r33 had it; live `clashsend21` caught a first cut that used the 0.06 disabled edge), Reject, Send note, Cinema's ghost buttons (the stepper, the arrows, ×, Reset, the upload Retry and ×), the selection toolbar, the Inspector's buttons, and the notice ×.
+  - Unchanged, still on `SWEEP_LATER`: Keep this one (`asset-proposal__button`) and the Commons buttons. Still on #200's `--sr-disabled-fill` (0.1), for GM: the checked Settings switch and the chosen Remotion anchor cell.
+  - Cinema's offline rule no longer paints buttons. It covers the text fields only (the grey label, the disabled edge, no fill), so Generate shot takes the shared filled look offline and while following.
+  - A new ratchet check fails on any `!important` background, colour or border colour for a disabled or lock-marked button (`:disabled`, `aria-disabled`, `data-offline-disabled`, `data-following-disabled`, `data-held-look`) outside the shared file. On 5b52ee7c's cinema-studio.css it names the four offline selectors.
+- **Run history's lock reason (GM r37 item 2).** While a run goes, Rerun, Retry failed, Recover and "Rerun with latest source" say the verb that unlocks them: "You can rerun it when the run finishes." (`runFinishesLine`). Clear keeps "Wait for the run to finish first.", which the merge didn't touch.
+  - The other "Wait for …" lock reasons the merge brought in, all #198's GM r9 line "Wait for the active run to finish." (`RUN_LOCK_REASON`, the default `runTitle`), left as they are: the context menu's rows, the deferred run notice, Cinema's toolbar Generate, a model node's next step, run history's Forget, and the toolbar's Auto-layout, Load, Import and Clear (`loadBlockedReason`, the same text on both parents and the base). Cinema's "Wait for “Shot 2” to finish." and "Wait for the running shots to finish." are #198's own.
+- **The ratchet, strict again (review 23 NIT-4).**
+  - An `act` prop spread on a control counts only when its component is a file-local, unexported function, every place the file names it is a JSX use, and each use passes a lock spread (`act={lock.act()}`).
+  - `lockedAction` counts only as canvasLock's own export, by its own name. A test reads its body: it starts from `lock.act(own, options)` and never writes `disabled` or `aria-disabled`.
+  - G reads a name where it is in scope (`visibleLocals`): the nearest definition, and a parameter hides the file's same-named locals. Both merge `CONTROL_AT` entries came from G mixing these up (StopLine's `track` param took SceneStopLines' `track` local; projectStore's `const opened = get()` took another function's `useProjectStore.getState()`), so they're gone. The same fix dropped four ChatPanel false positives (the model picker, an agent option's select, the permission answer and the Stop button, none of which reaches the chat's /clear), which had passed only through the `clearBackendNodes` hit allowlist. Send and the message field still reach it and still pass through that entry.
+  - The lock checks (`isLockValue`, `lockCoverage`, the spreads, the guards) read names in scope too, so a lock in another function can't vouch for a control. `refuseCoverage` keeps every same-named definition: more definitions only lower the coverage, so that stays the stricter reading.
+  - G takes about 12 s alone now (110 s before), and L-4's timeout is back to 120 s.
+  - Choice 7's wording in the merge section is corrected.
+- **The four unlisted side choices (review 23 NIT-3), each intended:**
+  - EditorTransport's Render Preview and Export lock while following: #200's review 3 LOW-4 (its notes, "LOW-4, trim editor"). #198 only added the offline gate.
+  - savingCutOff groups same-named nodes and lists them in canvas order: #200 (GM 2026-10-27, PR #200 answer 3). #198 changed only the apostrophes.
+  - placeholderRunConfirm's canvas order: #200 fix round 1 (GM answer 3, review L-6). Both parents used nodeNameList.
+  - Cinema's offline colours: the merge moved #198's 55%/12% to #200's tokens, per GM 2026-10-28 answer 3 (the 12% outline replaced). This round they're the r33 tokens, and the rule no longer touches buttons.
+  - Nothing reverted; none needs a ruling.
+- **Tests.**
+  - New `tests/store/graphStore.fix25.test.ts` (17): GM r38's four causes (the prompt with the failed answer, in one update, no line before it, nothing sent), 500 then Keep mine, the retry out when the sync arrives then 200 (one prompt), a different field merging (pinned: the card and the PUT count right after the failed answer), moved, replaced and params-outdated answers asking no clash; and review 23 NIT-1's survivors: the reconnect resend's retrying line, the outpaced stop's exclusion, a retry answered moved, replaced or params-outdated clearing the line, the retrying line's rank, and a retrying scene deleted and undone.
+  - New `tests/pr198Fix25Held.test.tsx` (3, NIT-5): the real store against a fake backend, a MutationObserver noting the hold, the grey and the answer on one clock. The grey shows only once 150 ms pass with no answer, `data-held-pending` until then, and a fast answer never greys; a slow try that fails again leaves nothing on the live button.
+  - RunHistoryPanel: each replay's own verb. The ratchet: the override check, the NIT-4 corpus (act, lockedAction, scoping).
+  - `retryingMarks` is gone (dead since r36: the retrying stop gives the mark its line). `sceneMarkLine` reads the shown stop only.
+  - errorCopy.namedLine's "only the reviewed ones" (NIT-2): a prefilter skips files with no failure-line pattern, and the test has a 30 s timeout with the reason in a comment.
+  - Changed because the look changed: r1, r2, r3, r5, r6 (the shared rule's state text and kinds), pr198Fix5Offline (one offline rule, text fields only), pr198Fix21Ui and pr198Fix22Ui (the notice reads the shared rule), pr198Fix24Ui and graphStore.fix24 (no `retryingMarks`).
+- **Mutation (review 23's 27 store mutants that still apply, plus 5 new; the store, fix20–25 and namedLine files).** Killed: everything NIT-1 named except the delete-and-Undo one (resend, outpaced, moved/replaced/params-outdated, rank), the new `sceneMarkLine` mutant, and the r38 guard (taking it out fails 5 tests; dropping the "moved, replaced, params-outdated keep their own path" check fails 3 new ones; dropping the "only a clash" check fails the different-field test, which now pins the card and the PUT count right after the failed answer). Still alive, each equivalent as far as I can read the code:
+  - `keepRetryingAsStop`: the retrying cause only shows while `entry.stopped` is false, and `stopToKeep` reads `sceneStops` only for a stopped entry, so that clause is never reached (a retrying scene deleted and undone keeps no stop, killed or not).
+  - `retryNoStop`: a [Try again]'s own `sceneTries` stop is read first; `clashAnswerStop.stop` is the fallback.
+  - `savedKeepsRetrying`, `stopToRetryNull`, `retryingShownUnderClash`: the ok answer, the one-try rule and the clash prompt already clear or replace the retrying stop in the same update.
+  - `askClashKeepsDeferred`: a second rebase onto the same scene is a no-op (`knownScene`). Clearing it stays, so it can't be read twice.
+- **Live (8797/5797, 8000–8010 and 5173 blocked, 0 attempts after the canary, nothing paid).**
+  - Round 25: `r25clash500` (one prompt, no stop line, 1 PUT; Keep mine then saves), `r25held` (a held Accept and a held [Try again] side by side: both `rgba(255, 255, 255, 0.42)` with `rgba(17, 17, 17, 0.62)`; [Try again] `data-held-pending` first, then the grey), `r25runlock` (the run state set in the page: Rerun and Retry failed read their own verbs). 6/6, and 5/5 on the rerun.
+  - Review 23's 13 (r22hang ×3, r22retrymark, r22reasons, r22quietleak, r23askedrace, r23reload, r23looks): 13/13. `r23askedrace` (the deterministic askedquiet repro) now asks the clash.
+  - #198's batches: a 22/23, then 23/23 after the fix below; a2 34/34, g 22/22 (`askedquiet` included), m 11/11, e 34/34, f 35/35. #200's r30, r33, r34: 23/23.
+  - The one miss, `clashsend21`: the quiet choice held had taken the 0.06 disabled edge, not its own 0.28. Fixed in the shared rule (above) and in pr198Fix22Ui.
+  - Shots (`r25-r25-*` in the scratchpad's r25/live): the held Accept and [Try again] at 1440 and 1280, the clash prompt after a 500, run history while a run goes (its reason is a native tooltip, so the shot shows the disabled buttons; the text is checked in the DOM). No duplicate md5s among them; the harness's two same-state shots (`clash-answer-being-sent`, `held-text-button`) match each other, as they always have.
+- **Tests that fail on 5b52ee7c:** 21 in 10 files (fix25's four GM r38 causes and Keep mine; pr198Fix25Held's first test; RunHistoryPanel's verbs; the ratchet's override check and its look checks; r1, r2, r3, r5, r6, pr198Fix5Offline, pr198Fix21Ui, pr198Fix22Ui on the shared rule). The NIT-1 and NIT-4 tests pass there by design: they kill mutants of the store and of the ratchet, and each was checked against its mutant.
+- Not agent-visible (the clash prompt, the look and a tooltip; no MCP tool or channel text changed), so MCP-SETUP.md is unchanged.
+- **Gates (round 25).**
+  - `tsc -b` and lint are clean.
+  - Full vitest: 660 files, 8,437 tests (the last run, after the quiet edge fix). The first run had 2 failures, r5 and r6 reading the shared rule's old state text; both fixed.
+  - Full backend: 12,185 passed, 71 skipped (no backend change).
+  - Build: 442,990 bytes raw (136,027 gzip).

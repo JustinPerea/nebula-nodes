@@ -200,16 +200,32 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
 });
 
 describe('GM\'s merge check: each locked Cinema control looks locked', () => {
-  // Since the merge with PR #200: the label and outline are #200's shared
-  // tokens (the one grey, white at 0.55; the disabled edge, never brighter
-  // than an enabled one: GM 2026-10-28 answer 3 replaced the 12% outline).
-  it('one rule: the shared grey label, the disabled edge, no fill, no dimming on top', () => {
+  // PR #198 round 25 (review 23 MEDIUM-1, GM r37 option c): a locked
+  // Cinema button looks the same offline as following, the app's one shared
+  // rule on GM r33's tokens (the orange Generate shot the grey fill with its
+  // dark label, the rest the grey label). Only the text fields keep a
+  // Cinema rule: the grey label, the disabled edge, no fill.
+  it('the buttons take the shared rule; one Cinema rule for the text fields: the grey label, the disabled edge, no fill, no dimming on top', () => {
     const css = readFileSync(join(__dirname, '../src/styles/cinema-studio.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const rule = css.match(/\.cinema-studio-view :is\(button, textarea\)\[data-offline-disabled\][^{]*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).toMatch(/color:\s*var\(--sr-disabled-ink, rgba\(255, 255, 255, 0\.55\)\) !important/);
+    const offlineRules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => /data-offline-disabled|\.cinema-offline-lock:disabled/.test(m[1])
+      && /color|background|border/.test(m[2]));
+    expect(offlineRules).toHaveLength(1);
+    const [, selector, rule] = offlineRules[0];
+    expect(selector).not.toMatch(/\bbutton\b/);
+    expect(selector).toMatch(/textarea\[data-offline-disabled\]/);
+    expect(rule).toMatch(/color:\s*var\(--disabled-label, rgba\(255, 255, 255, 0\.55\)\) !important/);
     expect(rule).toMatch(/border-color:\s*var\(--sr-disabled-edge, rgba\(255, 255, 255, 0\.06\)\) !important/);
     expect(rule).toMatch(/background:\s*transparent !important/);
     expect(rule).toMatch(/opacity:\s*1 !important/);
+    const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const listOf = (fill: RegExp) => [...shared.matchAll(/:is\(([^)]*)\):is\(:disabled[^{]*\{([^}]*)\}/g)].filter((m) => fill.test(m[2])).map((m) => m[1]).join(' ');
+    const filled = listOf(/background:\s*var\(--disabled-fill,/);
+    const ghost = listOf(/background:\s*transparent/);
+    expect(filled).toMatch(/\.cinema-shot-panel__action--primary\b/);
+    for (const name of ['cinema-shot-panel__action', 'cinema-shots-rail__add', 'cinema-shots-rail__move', 'cinema-shots-rail__remove',
+      'cinema-shot-panel__reset', 'cinema-reference-upload__retry', 'cinema-upload__remove']) {
+      expect(ghost, name).toMatch(new RegExp(`\\.${name}[,\\s]`));
+    }
   });
 
   it('every control GM checks carries the mark the rule reads', () => {
@@ -218,6 +234,8 @@ describe('GM\'s merge check: each locked Cinema control looks locked', () => {
     for (const name of ['Generate shot', 'Generate 2', 'Generate all', '+ Add shot', 'Send to motion',
       'Move Shot 2 earlier', 'Move Shot 2 later', 'Remove Shot 3']) {
       expect(screen.getByRole('button', { name }), name).toHaveAttribute('data-offline-disabled');
+      // :disabled, so the shared rule's look is the one it shows.
+      expect(screen.getByRole('button', { name }), name).toBeDisabled();
     }
     expect(screen.getByLabelText('Prompt')).toHaveAttribute('data-offline-disabled');
   });

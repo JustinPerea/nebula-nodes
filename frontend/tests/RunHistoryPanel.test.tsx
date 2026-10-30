@@ -81,6 +81,26 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toBeDisabled();
   });
 
+  // GM r37 (PR #198 round 25): a lock reason says what unlocks it, by the
+  // control's own verb: "You can rerun it when the run finishes.", never
+  // "Wait for the active run to finish."
+  it('while a run goes, each replay says what unlocks it, by its own verb', () => {
+    const recovered = record('world-recovered', 'cancelled', 'world');
+    recovered.snapshot.nodes[0] = { id: 'world', definitionId: 'worldlabs-environment', params: { existing_world_id: 'world_already_accepted' }, outputs: {} };
+    recovered.statusNote = WORLD_LABS_RECOVERY_READY_NOTE;
+    const paper = { ...record('paper-run', 'complete', 'paper-target'), paperInputs: [{ nodeId: 'paper-node', snapshot: { id: 'snap', hash: 'A', previewUrl: '/x.png',
+      capturedAt: 'now', width: 1, height: 1, identity: { objectName: 'Frame' }, exportSettings: { scale: 1 } } }] } as unknown as RunRecord;
+    useGraphStore.setState({ runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete'), recovered, paper], isExecuting: true });
+    render(<RunHistoryPanel />);
+    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toHaveAttribute('title', 'You can retry it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Recover Single node run' })).toHaveAttribute('title', 'You can recover it when the run finishes.');
+    const latest = screen.getByRole('button', { name: 'Rerun Single node with latest source' });
+    expect(latest).toBeDisabled();
+    expect(latest).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(document.body.innerHTML).not.toMatch(/Wait for the active run to finish/);
+  });
+
   it('disables repeated cancellation while the backend is still stopping', () => {
     const cancelExecution = vi.fn(async () => undefined);
     useGraphStore.setState({

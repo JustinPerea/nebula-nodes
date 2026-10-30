@@ -278,14 +278,17 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
 
 describe('GM answer 6: one disabled colour treatment', () => {
   const rules = cssRules(read('styles/disabled-buttons.css'));
-  const filled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--sr-disabled-fill/.test(body));
+  // PR #198 round 25 (GM r37 option c): the filled rule takes GM r33's grey fill.
+  const filled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--disabled-fill[,)]/.test(body));
   const unfilled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*transparent/.test(body));
 
   it('a filled button keeps a fill, turned neutral grey; ghost and outline stay unfilled; no extra opacity', () => {
     expect(filled, 'the filled rule').toBeDefined();
     expect(unfilled, 'the unfilled rule').toBeDefined();
+    // GM r37 option c: a dark label on the grey fill; the grey label on a ghost.
+    expect(filled!.body).toMatch(/color:\s*var\(--disabled-fill-label[^;]*!important/);
+    expect(unfilled!.body).toMatch(/color:\s*var\(--disabled-label[^;]*!important/);
     for (const rule of [filled!, unfilled!]) {
-      expect(rule.body).toMatch(/color:\s*var\(--sr-disabled-ink[^;]*!important/);
       expect(rule.body).toMatch(/opacity:\s*1\s*!important/);
       expect(rule.body).not.toMatch(/--sr-accent|--sr-danger|--sr-error|#ff5a1f/i);
     }
