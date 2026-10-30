@@ -342,7 +342,9 @@ describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', (
     said = [];
     useGraphStore.setState({ notify: (text: string) => { said.push(text); } } as never);
     typeIn('s2', 'later');
-    await vi.waitFor(() => expect(said).toEqual([RETRYING]), { timeout: 3000, interval: 5 });
+    // GM r36 Q1: the retries' line is a state (the state slot), not a toast.
+    await vi.waitFor(() => expect(stopLineOf('n1')).toBe(RETRYING), { timeout: 3000, interval: 5 });
+    expect(said).toEqual([]);
     await vi.waitFor(() => expect(unsaved()).toBeNull(), { timeout: 3000, interval: 5 });
     expect(h.backendBrief()[1]).toBe('s2:later');
   });

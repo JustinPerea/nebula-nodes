@@ -1358,3 +1358,25 @@ Both PRs' behaviour kept: a union in every hunk. Read #200's side first (its not
   - Build: 442,969 bytes raw (136,030 gzip).
   - Live on 8797/5797, #198's batches: a3 41/41, c 11/11, e 20/20, e3 17/17, f 35/35, g 22/22, h 14/14, r1 25/25. #200's `r34` and `r30` sections: 19/19 (held tab, promote, placeholder and real card in place, note heading on a node, held run release over a reload).
 - **Checked:** "Undid Codex’s edit." and "Codex changed the canvas." keep their periods, both in canvasUndo and through `agent_line`, `agent_text` and the channel's `clean_text`.
+
+## Fix round 24b (GM's pr198 r36)
+
+- **The retrying line is a state (Q1).** "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again." left the event slot (a toast) for the state slot.
+  - It is a `SceneStop` of its own, `{ cause: 'retrying' }`, drawn by `sceneStopLines` like the other lines Nebula writes. It reads the names live, so a rename shows at once, and it merges across scenes in reading order.
+  - It has no [Try again], no × and no timer, the same as the run-lock line: Nebula is acting on it by itself.
+  - It sits in the stop line's place. A server error out of a stop moves stop → retrying in one `setSceneStopped(…, false, { cause: 'retrying' })`. Running out of retries goes back to the stop in one update. An answer that isn't a server error drops it in the update that settles that answer (`dropRunLockStop` covers both lines now). A clash prompt takes its place in the same update. A save that lands clears it (`markSceneUnsaved(null)`). A deleted scene takes it along, like the stop line.
+  - The person's next change after a server stop is the try that line promised ("…will try again with your next change"), so that change, and a reconnect's resend, show the retrying line in the stop's place, in one update. `retryPromised` limits this to server stops with no clash asking and no other writer behind the stop. A 400, 413, "other" or outpaced stop clears as before (GM r32).
+  - `dropRetryingLine` is gone: no toast holds that line any more. `dropSceneLines` now drops only the kept line.
+  - Past-tense event toasts keep their text and their slot.
+- **Tests.**
+  - New `tests/store/graphStore.fix24b.test.ts`, 7 tests: the state slot with no button and no toast; stop → retrying → stop; retrying → 400; a rename during the retry; two scenes sharing one line; a clash taking its place; a deleted scene. Each records every store update's lines, so a frame with an empty slot fails. All 7 fail on f674500e.
+  - Changed because the behaviour changed: fix5, fix7, fix8, fix12, fix19, fix20 and fix23 expected the toast, or a stop line that cleared before the retry. They now read the state slot. fix5's server-error test records the line's frames instead of sampling at 40 ms, which had raced the suite's 30 ms retry.
+- **Live:** a new `retrying36` section in the harness. It checks the line's slot (no button, × or timer, no toast) and a Codex rename during the retry (the frame where the label changes already has the new name). It then follows stop → retrying → stop → retrying → cleared through the person's edits, each in one update. Shot: `fix24b-retrying-line-after-rename`.
+- Not agent-visible: the MCP tools and the channel don't carry this line, so MCP-SETUP.md is unchanged.
+- **Gates (r36).**
+  - `tsc -b` and lint are clean.
+  - Full vitest: 658 files, 8,412 tests.
+  - Full backend: 12,185 passed, 71 skipped.
+  - Build: 442,969 bytes raw.
+  - Live on 8797/5797: n (retrying36, retrymark24, twotries22, rename23) 11/11, a 41/41, c 11/11, e 20/20, e3 17/17, f 35/35, g 21/22 then 22/22 on rerun, h 6/6, r1 21/21.
+  - g's one miss was `askedquiet` (`asked: false`): Codex's edit landed before the person's failing save was held, so no clash was asked. It passed alone and in the full g rerun. The section doesn't touch the retrying line.

@@ -218,7 +218,8 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     typeIn('s2', 'person edits s2');
     await sleep(80);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:person edits s2', 's3:agent shot']);
-    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
+    // GM r36 Q1: the retries' line is a state (the state slot), never a toast.
+    expect(said).toEqual([]);
   });
 
   it('5c (control): with nothing kept, the same agent edit is simply shown', async () => {
@@ -326,7 +327,8 @@ describe('L2-L5', () => {
     typeIn('s1', 'x');
     await sleep(500);
     expect(h.puts).toHaveLength(9);
-    expect(said).toHaveLength(1);
+    // GM r36 Q1: the retries' line was a state, so nothing was ever toasted.
+    expect(said).toEqual([]);
     // GM r11 answer 3: the stopped line, with [Try again] on its toast.
     const stopped = "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.";
     expect(unsaved()).toBe(stopped);

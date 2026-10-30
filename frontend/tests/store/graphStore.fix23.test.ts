@@ -458,6 +458,8 @@ describe('GM r34: state lines read the names live', () => {
 });
 
 describe('review 21 NIT-5: the run line and other refusals', () => {
+  // GM r36 Q1: the retries' line is a state, so it takes the run line's
+  // place in the state slot (never a toast).
   it('an ordinary save the run held, refused another way after the run (a server error): the run line goes', async () => {
     const h = backend({ n1: 'Opening' });
     store.setSceneRetryDelaysForTests([150]);
@@ -465,9 +467,10 @@ describe('review 21 NIT-5: the run line and other refusals', () => {
     typeIn('n1', 's1', 'during the run');
     await vi.waitFor(() => expect(stopLines()).toEqual([RUN_LINE]), { timeout: 3000, interval: 5 });
     h.fail('n1', 1);
-    await vi.waitFor(() => expect(said.some((line) => line.includes('trying again'))).toBe(true), { timeout: 3000, interval: 5 });
-    expect(stopLines()).toEqual([]);
-    expect(useGraphStore.getState().sceneStops.n1).toBeUndefined();
+    const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
+    await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING]), { timeout: 3000, interval: 5 });
+    expect(said.some((line) => line.includes('trying again'))).toBe(false);
+    expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'retrying' });
     await vi.waitFor(() => expect(unsaved('n1')).toBeNull(), { timeout: 3000, interval: 5 });
     expect(h.brief('n1')).toEqual(['s1:during the run', 's2:b']);
   });

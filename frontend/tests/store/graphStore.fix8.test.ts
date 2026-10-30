@@ -30,6 +30,8 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
+const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -289,21 +291,23 @@ describe('H1: an order clash works, and never breaks a sync', () => {
 });
 
 describe('M1 (GM r10): while a clash waits, nothing retries and no retry line shows', () => {
-  it('C1: a 500 kept, then a clash: no PUT and no line while waiting; the retry toast leaves', async () => {
+  // GM r36 Q1: the retries' line is a state (the state slot), not a toast.
+  it('C1: a 500 kept, then a clash: no PUT and no line while waiting; the retry line gives way to the prompt', async () => {
     const h = backend();
     h.failNext(100);
     typeIn('s1', 'mine');
     await sleep(20);
-    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
-    useGraphStore.setState({ undoNotice: { id: 99, text: said[0], offer: null } } as never);
+    expect(said).toEqual([]);
+    expect(stopLineOf('n1')).toBe(RETRYING);
     h.other((shots) => setPrompt(shots, 's1', "codex's s1"));
     await sleep(10);
     expect(clash()).not.toBeNull();
-    expect(useGraphStore.getState().undoNotice).toBeNull();
+    expect(stopLineOf('n1')).toBeNull();
     const before = h.puts.length;
     await sleep(300);
     expect(h.puts.length).toBe(before);
-    expect(said).toHaveLength(1);
+    expect(said).toEqual([]);
+    expect(stopLineOf('n1')).toBeNull();
     expect(unsaved()).toBe(clash()?.line);
   });
 
@@ -318,10 +322,13 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(1);
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(15);
-    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
+    // GM r36 Q1: in the state slot, not a toast.
+    expect(said).toEqual([]);
+    expect(stopLineOf('n1')).toBe(RETRYING);
     await sleep(80);
     expect(h.backendBrief()).toEqual(['s1:mine', 's2:b']);
     expect(unsaved()).toBeNull();
+    expect(stopLineOf('n1')).toBeNull();
   });
 });
 

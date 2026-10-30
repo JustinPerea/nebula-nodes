@@ -360,6 +360,8 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
     expect(stopLines()).toEqual([]);
   });
 
+  // GM r36 Q1: the retries' line is a state now (the state slot), beside
+  // Codex's toast; the delete takes it with the scene.
   it('a scene still retrying, its retry line beside another toast: the delete takes that line too (the path another writer’s delete uses)', async () => {
     const h = backend({ n1: 'Opening' });
     useGraphStore.setState({ notify: realNotify } as never);
@@ -373,7 +375,9 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
     await vi.waitFor(() => expect(toast()?.text).toBe('Codex changed the canvas.'), { timeout: 3000, interval: 5 });
     release();
     const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
-    await vi.waitFor(() => expect(messageSlot()?.text).toBe(RETRYING), { timeout: 3000, interval: 5 });
+    await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING]), { timeout: 3000, interval: 5 });
+    expect(messageSlot()).toBeNull();
+    expect(toast()?.text).toBe('Codex changed the canvas.');
     useGraphStore.getState().deleteNode('n1');
     await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
     await sleep(40);

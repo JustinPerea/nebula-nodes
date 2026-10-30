@@ -341,19 +341,34 @@ describe('GM r29 call 7: reading order with a row tolerance', () => {
 // Review 18 NIT-1, with GM r29 Q1's retrying line: when the save stops, the
 // retry line it said ("…Nebula is trying again.") leaves the event slots, so
 // it never sits under the stop line that contradicts it.
+// GM r36 Q1: the retrying line is a state, in the state slot (never a
+// toast); the stop line takes its place in the same store update.
 describe('review 18 NIT-1: the retrying line goes when the save stops', () => {
   const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
   const events = () => [toast()?.text ?? null, messageSlot()?.text ?? null];
+  /** Each store update's state lines, in order (repeats collapsed). */
+  const watchStops = () => {
+    const seen: string[][] = [stopLines()];
+    const off = useGraphStore.subscribe(() => {
+      const now = stopLines();
+      if (JSON.stringify(now) !== JSON.stringify(seen[seen.length - 1])) seen.push(now);
+    });
+    return { seen, off };
+  };
 
   it('the timed retries run out (stopSceneSave): the retrying line goes as the stop line comes', async () => {
     const h = backend({ n1: 'Opening' });
     useGraphStore.setState({ notify: realNotify } as never);
     store.setSceneRetryDelaysForTests([150, 150]);
     h.fail('n1', 1000);
+    const watch = watchStops();
     typeIn('n1', 's1', 'mine n1');
-    await vi.waitFor(() => expect(events()).toContain(RETRYING), { timeout: 3000, interval: 5 });
+    await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING]), { timeout: 3000, interval: 5 });
+    expect(events()).not.toContain(RETRYING);
     await vi.waitFor(() => expect(stopped().n1).toBe(true), { timeout: 3000, interval: 5 });
+    watch.off();
     expect(stopLines()).toEqual([SERVER('“Opening”')]);
+    expect(watch.seen).toEqual([[], [RETRYING], [SERVER('“Opening”')]]);
     expect(events()).not.toContain(RETRYING);
   });
 
@@ -362,11 +377,14 @@ describe('review 18 NIT-1: the retrying line goes when the save stops', () => {
     useGraphStore.setState({ notify: realNotify } as never);
     store.setSceneRetryDelaysForTests([200]);
     h.fail('n1', 1);
+    const watch = watchStops();
     typeIn('n1', 's1', 'mine n1');
-    await vi.waitFor(() => expect(events()).toContain(RETRYING), { timeout: 3000, interval: 5 });
+    await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING]), { timeout: 3000, interval: 5 });
     h.refuse('n1', 400);
     await vi.waitFor(() => expect(stopped().n1).toBe(true), { timeout: 3000, interval: 5 });
+    watch.off();
     expect(stopLines()).toEqual([CANT('“Opening”')]);
+    expect(watch.seen).toEqual([[], [RETRYING], [CANT('“Opening”')]]);
     expect(events()).not.toContain(RETRYING);
   });
 });

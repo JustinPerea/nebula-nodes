@@ -337,15 +337,25 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
 
   it('a server error: kept, "Nebula is trying again." (GM r29 Q1), and it does', async () => {
     const h = harness({ first: () => json({ detail: 'boom' }, 500), later: () => json({ ok: true }) });
+    // GM r36 Q1: a state, in the state slot, not a toast. Every change of
+    // the scene's line is recorded, so the check doesn't race the 30 ms retry.
+    const lines: (string | null)[] = [];
+    const stopWatch = useGraphStore.subscribe(() => {
+      const line = stopLineOf('n1');
+      if (lines[lines.length - 1] !== line) lines.push(line);
+    });
     typeIn('s1', 'retry me');
     await sleep(20);
     h.release();
-    await sleep(40);
-    expect(said).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
-    expect(brief()[0]).toBe('s1:retry me');
     await sleep(200);
+    stopWatch();
+    expect(said).toEqual([]);
+    expect(lines.filter((line) => line !== null)).toEqual(["Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again."]);
+    expect(lines[lines.length - 1]).toBeNull();
+    expect(brief()[0]).toBe('s1:retry me');
     expect(h.puts).toEqual([['s1:retry me', 's2:b'], ['s1:retry me', 's2:b']]);
     expect(unsaved()).toBeNull();
+    expect(stopLineOf('n1')).toBeNull();
   });
 
   it('404: deleted, no promise, nothing sent again', async () => {
