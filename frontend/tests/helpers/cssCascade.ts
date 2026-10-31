@@ -55,23 +55,25 @@ function cssFiles(dir: string): string[] {
 
 function specificityOf(selector: selectorParser.Selector): [number, number, number] {
   let a = 0; let b = 0; let c = 0;
-  selector.walk((node) => {
+  // PR #204 round 13: the selector's own nodes, one by one. (A walk() that returned false at an
+  // :is(), :not() or :where() ended the whole walk, so nothing after it counted: the filled list
+  // `:is(.x):is(:disabled, …)` read (0,1,0), not (0,3,0).) Combinators sit between the
+  // compounds in `nodes`; a pseudo's arguments are read only where they count.
+  for (const node of selector.nodes) {
     if (node.type === 'id') a += 1;
     else if (node.type === 'class' || node.type === 'attribute') b += 1;
     else if (node.type === 'tag' && node.value !== '*') c += 1;
     else if (node.type === 'pseudo') {
       if (node.value.startsWith('::')) c += 1;
-      else if (node.value === ':where') return false;
+      else if (node.value === ':where') continue;
       else if ([':not', ':is', ':has'].includes(node.value)) {
         const inner = node.nodes.map(specificityOf);
         const max = inner.reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && (next[1] > best[1]
           || (next[1] === best[1] && next[2] > best[2])))) ? next : best, [0, 0, 0] as [number, number, number]);
         a += max[0]; b += max[1]; c += max[2];
-        return false;
       } else b += 1;
     }
-    return undefined;
-  });
+  }
   return [a, b, c];
 }
 
@@ -124,7 +126,10 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       let loose = base;
       try {
         selectorParser((root) => {
-          root.walkAttributes((attribute) => { attribute.remove(); });
+          // PR #204 round 11: `data-line-because` marks a line's words (components/LineText), not
+          // a state a control takes, so a rule for it reaches only an element that carries it:
+          // the because sheet's sans face (styles/becauseLine.css) isn't a pin edge's own font.
+          root.walkAttributes((attribute) => { if (attribute.attribute !== 'data-line-because') attribute.remove(); });
           root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
           // A compound left empty ("> [data-x]") matches anything: "*".
           root.each((sel) => {

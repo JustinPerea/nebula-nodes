@@ -5,6 +5,7 @@ import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AgentQuestionsAnswers } from './AgentQuestionsAnswers';
 import { ScrollFade } from '../ScrollFade';
 import { AuthorDot, BusyButton, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
+import { LineText } from '../LineText';
 
 /** One list in the opened Updates: its updates (newest first) and how to draw and run them. */
 export interface AgentNotesListSection {
@@ -33,6 +34,7 @@ export function AgentNotesList({
   listRef,
   sections,
   newCount,
+  unread = 0,
   now,
   onClose,
   onSeeAll,
@@ -46,6 +48,9 @@ export function AgentNotesList({
   sections: AgentNotesListSection[];
   /** Updates that arrived while this list was open ("· 1 new"). */
   newCount: number;
+  /** The server's count of unread Updates in these lists: "all read" only once it is 0
+   * (GM, #204 r3 item 1), so a read the server refused never shows as done. */
+  unread?: number;
   now: number;
   onClose: (returnFocus: boolean) => void;
   /** "See all actions →": null while the Agent log is switched off. */
@@ -60,8 +65,11 @@ export function AgentNotesList({
   top?: ReactNode;
 }) {
   const today = new Date(now);
-  const state = newCount > 0 ? `${newCount} new` : 'all read';
   const total = sections.reduce((sum, section) => sum + section.notes.length, 0);
+  // GM, #204 r4 item 1: "2 · all unread" mirrors "2 · all read"; "5 · 2 unread" when some
+  // are. The count is always the server's, never what the tab hopes.
+  const state = unread > 0 ? (unread >= total ? 'all unread' : `${unread} unread`)
+    : newCount > 0 ? `${newCount} new` : 'all read';
   const notNow = sections.some((section) => section.notes.some(offersNotNow));
   const single = sections.length === 1 ? sections[0] : null;
 
@@ -109,7 +117,7 @@ export function AgentNotesList({
           {label && <span className="agent-notes-entry__label">{label}</span>}
           <time className="agent-notes-entry__time" dateTime={note.at}>{clockTime(note.at, today)}</time>
         </div>
-        <p className="agent-notes-entry__text"><RunOutcomeIcon run={note.run} />{noteText(note, adapter.numberFor)}</p>
+        <p className="agent-notes-entry__text" data-agent-text=""><RunOutcomeIcon run={note.run} />{noteText(note, adapter.numberFor)}</p>
         <RunThumbnail run={note.run} />
         <QuestionAnswersFor note={note} />
         <NoteButtons
@@ -133,7 +141,9 @@ export function AgentNotesList({
     >
       <div className="agent-notes-panel__head">
         <span className="agent-notes-panel__title">Updates</span>
-        <span className="agent-notes-panel__count">{`${total} · ${state}`}</span>
+        {/* Review 4 NIT-3 (round 6): its changes ("2 · all unread" to "2 · all read" on the
+            promote) are read out politely, once each, as one phrase. */}
+        <span className="agent-notes-panel__count" role="status" aria-live="polite" aria-atomic="true">{`${total} · ${state}`}</span>
         {single && <span className="agent-notes-panel__kept">{single.adapter.keptWith}</span>}
       </div>
       {top}
@@ -168,7 +178,7 @@ export function AgentNotesList({
           ))}
         </ScrollFade>
       )}
-      {error && <div className="agent-notes-panel__error" role="alert">{error}</div>}
+      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} /></div>}
       <div className="agent-notes-panel__foot">
         <span className="agent-notes-panel__foot-note">{notNow ? 'Not now hides a suggestion for good' : ''}</span>
         {onSeeAll && (

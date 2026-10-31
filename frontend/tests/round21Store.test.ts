@@ -205,7 +205,7 @@ describe('G1: Create while following', () => {
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'text-input', prompt: 'x', params: {},
       refPaths: [], quantity: 1, sessionId: 's', genId: 'g', layoutOrigin: { x: 0, y: 0 } } as never).catch((reason: unknown) => reason);
     expect(failureMessage(error, graphStoreModule.GENERATE_HEADING))
-      .toBe("Couldn't start the generation. Claude Code is opening “beta”.");
+      .toBe("Nebula couldn’t start the generation. Claude Code is opening “beta”.");
     expect(graphWrites.sent).toEqual([]);
   });
 });

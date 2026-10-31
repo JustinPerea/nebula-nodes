@@ -25,7 +25,7 @@
 
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
-import { inDesktopShell, personUnavailableReason } from './personSession';
+import { inDesktopShell, isBeforePromote, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -66,8 +66,29 @@ export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this win
 /** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
  * developer setups (a debug port, the dev renderer), where the banner already
  * gives the real fix. */
+/** The dev setups' ending: the line defers to the general notice for the fix (lib/notConnectedLine). */
+export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
-  + 'The notice below says why.';
+  + DEFERS_TO_NOTICE;
+
+/** PR #204 round 10 (GM r16 Q2): the one word every lock line uses for where this page runs:
+ * "window" in the desktop app, "tab" in a browser. */
+export function lockPlace(desktop: boolean = inDesktopShell()): 'window' | 'tab' {
+  return desktop ? 'window' : 'tab';
+}
+
+/** PR #204 round 10 (GM r15): a control whose route is the person's alone, while this tab isn't
+ * connected as them: "You can <verb> when this tab is connected as you." Every lock line comes
+ * from here (components/PersonLock.tsx and the held cards), so the word is the same everywhere. */
+export function personLockLine(verb: string, desktop: boolean = inDesktopShell()): string {
+  return `You can ${verb} when this ${lockPlace(desktop)} is connected as you.`;
+}
+
+/** GM r14 (5), PR #204 round 9: Settings' Connect (and Create token) while this tab isn't connected
+ * as the person. The server refuses it (POST /api/agent/spend/apps: require_person). */
+export function connectAgentLockCopy(desktop: boolean = inDesktopShell()): string {
+  return personLockLine('connect an agent', desktop);
+}
 
 /** Line 3 for where this page runs: `desktop` is personSession's
  * inDesktopShell() (the preload bridge), the flag the rest of the error copy
@@ -78,8 +99,100 @@ export function personRequiredCopy(desktop: boolean = inDesktopShell(),
   return reason === 'debug-port' || reason === 'dev-renderer' ? PERSON_REQUIRED_DEV_COPY : PERSON_REQUIRED_APP_COPY;
 }
 
+/** GM, PR #204 round 3 ruling item 3 (2026-10-30), verbatim for a tab: the line when
+ * opening the Updates couldn't mark them read because this tab isn't the person's. No
+ * "then try again": the promote retries it (lib/clearsOnPromote retryOnPromote). The
+ * desktop app's two forms follow personSession's banners for a window. */
+// One sentence pair each, written whole (a reason, not a heading joined to one).
+export const MARK_READ_REFUSED_COPY =
+  'Nebula couldn’t mark the updates as read because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+export const MARK_READ_REFUSED_APP_COPY =
+  'Nebula couldn’t mark the updates as read because this window isn’t connected as you. Quit Nebula and open it again.';
+export const MARK_READ_REFUSED_DEV_COPY =
+  'Nebula couldn’t mark the updates as read because this window isn’t connected as you. The notice below says why.';
+
+/**
+ * GM, PR #204 r6 (2026-10-30), the rule for the shared line: "a 'not connected' refusal of
+ * anything that retries on promote uses this 'because' form, with no 'then try again' and
+ * no 'This change needs your OK'. Keep the r2 generic line only for one-shot actions that
+ * can't retry." `what` is what Nebula was doing ("save the style", "load your work"). Every
+ * caller registered with retryOnPromote words its line through this (the ratchet checks).
+ * The desktop app's two forms follow personSession's banners for a window, as mark-read's.
+ */
+export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
+  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again.';
+  return `Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`;
+}
+
+/**
+ * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
+ * retries on the promote).
+ * - The cluster itself refused: GM r10 (3), verbatim for a tab, the r2 general words after
+ *   "Its nodes weren’t added to the canvas."
+ * - The cluster added and only the start refused: GM r13 (1), verbatim for a tab, the because
+ *   form. The nodes are on the canvas, so it never says try again (a second Generate would add
+ *   them again): the person runs them from the canvas. The desktop app's forms follow
+ *   notConnectedBecause's (a window's fix; the dev setups defer to the notice).
+ */
+/** GM r12 (2), PR #204 round 9: every Generate line opens with this (curly apostrophe). */
+export const GENERATE_HEADING = 'Nebula couldn’t start the generation.';
+export const CLUSTER_NOT_ADDED = 'Its nodes weren’t added to the canvas.';
+
+export function generateRefusedCopy(clusterAdded: boolean, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  if (!clusterAdded) return `${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`;
+  const lead = `${ADDED_LEAD} because`;
+  if (!desktop) return `${lead} this tab isn’t connected as you. ${thenRunFromCanvas('Open the link Nebula printed when it started.', true)}`;
+  if (reason === 'debug-port' || reason === 'dev-renderer') return `${lead} this window isn’t connected as you. ${DEFERS_TO_NOTICE}`;
+  return `${lead} this window isn’t connected as you. ${thenRunFromCanvas('Quit Nebula and open it again.', true)}`;
+}
+
+const ADDED_LEAD = 'Nebula added the nodes to the canvas but couldn’t start the generation';
+
+/**
+ * GM r16 Q3 (PR #204 round 10): Generate's nodes are on the canvas, so pressing Generate again
+ * would add them twice. A fix that ends "try again" becomes "then run them from the canvas"; the
+ * not-connected case (`always`) ends that way after its own fix too. One rule for both.
+ */
+export function thenRunFromCanvas(fix: string, always = false): string {
+  const text = fix.trim();
+  if (/^try again\.$/i.test(text)) return 'Run them from the canvas.';
+  const tail = text.match(/^([\s\S]*?)(?:,|;)?\s+(?:and\s+|then\s+)?try again\.$/i);
+  if (tail) {
+    const before = tail[1].trimEnd();
+    // "… respond. Try again." is its own sentence; "Wait a moment, then try again." isn't.
+    return /[.!?]$/.test(before) ? `${before} Run them from the canvas.` : `${before}, then run them from the canvas.`;
+  }
+  if (always && text.endsWith('.')) return `${text.slice(0, -1)}, then run them from the canvas.`;
+  return text;
+}
+
+/** GM r16 Q3: Generate's start failed for a reason other than this tab: the nodes are there. */
+export function generateStartFailedCopy(error: unknown): string {
+  const { reason } = failureCopy(error);
+  return reason ? `${ADDED_LEAD}. ${thenRunFromCanvas(reason)}` : `${ADDED_LEAD}.`;
+}
+
+export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  return notConnectedBecause('mark the updates as read', desktop, reason);
+}
+
+/** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
+ * couldn’t … because"): a line of that shape. */
+const NOT_CONNECTED_BECAUSE = /^Nebula (?:couldn’t|added .+ but couldn’t) .+ because this (?:tab|window) isn’t connected as you\. /;
+
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
+
+/** Whether a written line carries GM's person-required reason (any of the three
+ * forms, alone or after a heading): its only reason was this tab (lib/clearsOnPromote). */
+export function saysPersonRequired(line: string): boolean {
+  return line.includes(PERSON_REQUIRED_COPY) || line.includes(PERSON_REQUIRED_APP_COPY)
+    || line.includes(PERSON_REQUIRED_DEV_COPY) || NOT_CONNECTED_BECAUSE.test(line);
+}
 
 /** GM's WRAP rule (round 2): "when the surface already has a retry button,
  * the reason line drops its 'try again'. The button is the retry." Only
@@ -93,17 +206,27 @@ export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
 export const BACKEND_NOT_RUNNING_COPY = "Nebula's backend isn't running. Start it, then reload.";
-/** The Commons lost the person's sign-in in a plain browser tab (GM, round
- * 2): "That's a dev setup and the reader is Justin, so naming the terminal
- * is right." The desktop app refetches its token silently; if a 401 still
- * comes back there, it says ACCESS_LOST_COPY, since a reload fetches the
- * shell's token again. */
-export const COMMONS_SESSION_EXPIRED_COPY = 'Your session expired. Open a fresh Commons link from the backend terminal.';
+/**
+ * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
+ * per launch and never expires on its own (backend services/person_session.py; commons/actors.py
+ * checks the Bearer against it). A request goes without it only because this tab (or window)
+ * isn't connected as the person: it never had the link, or the backend restarted with a new
+ * one. So it is the because form, a fix line, under the call's own words: "Couldn't load the
+ * references." gives "Nebula couldn’t load the references because this tab isn’t connected as
+ * you. Open the link Nebula printed when it started." A heading that isn't "Couldn't …"
+ * (or none) gives the general words. Refused as a person refusal (code person_required), so
+ * it is neutral, clears on the promote, and offers no Try again.
+ */
+export function commonsNotConnectedCopy(heading: string, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  const what = /^Couldn['’]t (.+)\.$/.exec(heading.trim())?.[1];
+  return what ? notConnectedBecause(what, desktop, reason) : personRequiredCopy(desktop, reason);
+}
 
-/** The line for a Commons call with no person session: `desktop` is
- * personSession's inDesktopShell(). */
-export function commonsSessionCopy(desktop: boolean): string {
-  return desktop ? ACCESS_LOST_COPY : COMMONS_SESSION_EXPIRED_COPY;
+/** The Commons' refusal with no person session to send: its line, the person gate's code, and
+ * the promotes so far (so the line is a person refusal and clears on the next one). */
+export function commonsNotConnected(heading: string): { message: string; code: string; sentAt: number } {
+  return { message: commonsNotConnectedCopy(heading), code: PERSON_REQUIRED_CODE, sentAt: personPromotions() };
 }
 
 /** The status a failure with no answer carries wherever a status is read. */
@@ -293,10 +416,19 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
+  /** The promote count its request was sent under (review 4 LOW-1, round 6; null: unknown). */
+  readonly sentAt: number | null;
+  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
+   * read against the promotes so far each time it is asked: its refusal is the old state's, so
+   * its line clears at once (lib/clearsOnPromote). */
+  get sentBeforePromote(): boolean {
+    return isBeforePromote(this.sentAt);
+  }
 
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
-      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
+      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
+      sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -309,6 +441,7 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
+    this.sentAt = sentAtOf(options);
   }
 
   get kind(): FailureKind {
@@ -328,14 +461,40 @@ export class FailureNotice extends Error {
   /** A whole written line that reads on its own (writtenLine): failureCopy
    * puts no heading over it, whatever heading the catch passes. */
   readonly standalone: boolean;
+  /** The refusal's `code` when the line came from one (`person_required`: clearsOnPromote
+   * reads it, so a line refused only for this tab goes on the promote; PR #204 round 4). */
+  readonly code: string | null;
+  /** The promote count its request was sent under, as RequestFailedError's. */
+  readonly sentAt: number | null;
+  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
+   * read against the promotes so far each time it is asked: its refusal is the old state's, so
+   * its line clears at once (lib/clearsOnPromote). */
+  get sentBeforePromote(): boolean {
+    return isBeforePromote(this.sentAt);
+  }
 
-  constructor(heading: string, reason: string, options: { standalone?: boolean } = {}) {
+  constructor(heading: string, reason: string,
+    options: { standalone?: boolean; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
     this.standalone = options.standalone === true;
+    this.code = options.code ?? null;
+    this.sentAt = sentAtOf(options);
   }
+}
+
+/** A person-gate refusal that came on a socket, not as a Response (the chat socket's error):
+ * stamped with the promote count its message went out under, checked as apiFetch's are. */
+export function personRefusalSentAt(sentAt: number | null): FailureNotice {
+  return new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt });
+}
+
+/** `sentAt` as given, or (an error built by hand) `sentBeforePromote: true` as before any promote. */
+function sentAtOf(options: { sentAt?: number | null; sentBeforePromote?: boolean }): number | null {
+  if (typeof options.sentAt === 'number') return options.sentAt;
+  return options.sentBeforePromote === true ? -1 : null;
 }
 
 /** A step written in the browser that says it all on its own ("The project
@@ -428,7 +587,8 @@ export function copyForStatus(status: number, detail: unknown): string {
  * copyForStatus says, or the caller's own `reason`. A person-only refusal
  * is a 4xx: a 5xx or no answer keeps GM's line for those. */
 export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
-  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return personRequiredCopy();
+  // A person refusal says the person line; one written here already (the Commons' because form) keeps its words.
+  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return reason !== undefined && saysPersonRequired(reason) ? reason : personRequiredCopy();
   return reason ?? copyForStatus(status, detail);
 }
 
@@ -461,9 +621,17 @@ export async function readDetail(response: Response): Promise<unknown> {
 /** An answer's `detail` and `code` (the person gate's, when it has one), from
  * one read of its body, for a caller that words the failure itself
  * (copyForAnswer). */
-export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null }> {
+export async function readRefusal(response: Response): Promise<{ detail: unknown; code: string | null; sentAt: number | null; sentBeforePromote: boolean }> {
   const { detail, code } = await readFailureBody(response);
-  return { detail, code };
+  const sentAt = sentUnderPromote(response);
+  return { detail, code, sentAt, sentBeforePromote: isBeforePromote(sentAt) };
+}
+
+/** A read refusal as the error its line carries (review 5 LOW-4, round 7): the person gate's,
+ * with this answer's own send-time stamp, or undefined for any other refusal. A line built
+ * from the refusal's words hands this to notify, so it clears by its own stamp. */
+export function refusalError(read: { code: string | null; sentAt: number | null }): FailureNotice | undefined {
+  return read.code === PERSON_REQUIRED_CODE ? new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt: read.sentAt }) : undefined;
 }
 
 /** An answer's `detail`, and whether it says the disk is full (the backend's
@@ -589,7 +757,7 @@ export async function requestError(heading: string, response: Response,
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, sentAt: sentUnderPromote(response) });
 }
 
 /**

@@ -1,0 +1,86 @@
+/*
+ * GM r14 (4), PR #204 round 9: a "because" line ("Nebula couldn’t … because this tab isn’t
+ * connected as you. …") destroys nothing, so it never takes the warning colour, on any surface.
+ * One shared style, not a per-screen fix: <LineText> (components/LineText.tsx) marks the element
+ * a because line registers on with `data-line-because`, and this sheet turns every warning token
+ * inside it into the neutral ink, edge and surface. A surface's own error rule keeps reading its
+ * token (`color: var(--sr-danger)`) and gets the neutral one. Words in their own span
+ * (`data-line-because="own"`, FailureLines' heading and reason) take it on the element that holds
+ * them, since their colour comes from there. A surface whose warning is its own literal reads it
+ * through `var(--line-warning, <its colour>)` (or -soft, -edge): unset anywhere else, so the
+ * literal shows, and set here, so a because line gets the neutral one.
+ *
+ * tests/becauseLine.ratchet.test.tsx fails a warning token missing here, and a rule for a line's
+ * element that sets a warning colour some other way.
+ */
+[data-line-because],
+:has(> [data-line-because='own']),
+:has(> .failure-lines > [data-line-because='own']),
+[data-line-box]:has([data-line-because]) {
+  --line-warning: var(--sr-ink-light);
+  --line-warning-soft: var(--sr-surface-control);
+  --line-warning-edge: var(--sr-edge-strong);
+  --sr-accent: var(--sr-ink-light);
+  --sr-accent-hover: var(--sr-ink-light);
+  --sr-error: var(--sr-ink-light);
+  --sr-danger: var(--sr-ink-light);
+  --sr-danger-ink: var(--sr-ink-light);
+  --sr-danger-ink-hover: var(--sr-ink-light);
+  --sr-warning: var(--sr-ink-light);
+  --sr-accent-soft: var(--sr-surface-control);
+  --sr-accent-hover-soft: var(--sr-surface-control);
+  --sr-error-soft: var(--sr-surface-control);
+  --sr-danger-soft: var(--sr-surface-control);
+  --sr-danger-tint: var(--sr-surface-control);
+  --sr-warning-soft: var(--sr-surface-control);
+  --sr-accent-border: var(--sr-edge-strong);
+  --sr-accent-border-soft: var(--sr-edge-strong);
+  --sr-accent-border-muted: var(--sr-edge-strong);
+  --sr-accent-border-medium: var(--sr-edge-strong);
+  --sr-accent-border-strong: var(--sr-edge-strong);
+  --sr-error-border: var(--sr-edge-strong);
+  --sr-danger-border: var(--sr-edge-strong);
+  --sr-danger-edge: var(--sr-edge-strong);
+}
+
+/*
+ * PR #204 round 11 (GM r18 c): a because line, and the box it sits in, are in the sans face on
+ * every surface (a canvas card's error box set mono): mono is for ids and code, so raw provider
+ * text under Details and code inside keep it.
+ */
+[data-line-because],
+[data-line-box]:has([data-line-because]) {
+  font-family: var(--sr-ui) !important;
+}
+[data-line-box]:has([data-line-because]) :is(code, kbd, samp, pre, .error-details__raw) {
+  font-family: var(--sr-mono);
+}
+
+/*
+ * Review 8 MEDIUM-1, GM r16 Q1 (PR #204 round 10): the box a because line sits in (a card's
+ * error panel, the Projects error, a toast) goes neutral too: its rail, border and fill, and the
+ * colour it hands down. The box carries `data-line-box`; while a because line is inside it reads
+ * the neutral tokens above, and these win over its own literals and its sheet's specificity.
+ * tests/becauseLine.ratchet.test.tsx walks every element around a line up to its component's
+ * root: a box that draws in a warning colour has to carry the mark.
+ */
+[data-line-box]:has([data-line-because]) {
+  color: var(--sr-ink-light) !important;
+  background-image: none !important;
+  background-color: var(--sr-surface-control) !important;
+  border-color: var(--sr-edge-strong) !important;
+}
+
+/* The shared box for a section's own line (components/LineBox): the warning look for a failure,
+   neutral (the rule above) when its line is a because line. */
+.line-box {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--sr-danger-border);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-label);
+  line-height: 1.4;
+}

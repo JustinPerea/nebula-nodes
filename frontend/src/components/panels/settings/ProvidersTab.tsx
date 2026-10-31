@@ -14,6 +14,9 @@ import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
 import { KREA_ROW, NOUS_ROW } from './rowHelpers';
 import { useKreaConnection } from './useKreaConnection';
+import { LineText } from '../../LineText';
+import { PersonLockLine } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 
 const NODES = Object.values(NODE_DEFINITIONS);
 const KREA_ACCOUNT_NODES = NODES.filter((node) => supportsKreaAccount(node));
@@ -42,6 +45,10 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const [query, setQuery] = useState('');
   const health = useProviderReadinessStore();
   const krea = useKreaConnection();
+  // PR #204 round 10 (GM r15, r17 item 1): every key's Add, Replace, Save and Remove, and the
+  // Krea sign-in's, are the person's alone. Round 11 (GM r18 a): one lock for the group, its line
+  // directly under the first heading ("Connect a provider · 23"), every row described by it.
+  const keyLock = usePersonLock('change provider settings');
   const setupTarget = useUIStore((s) => s.settingsProviderTarget);
   const root = useRef<HTMLDivElement>(null);
   // Offline (GM, round 16 of PR #114): the search stays usable; everything
@@ -60,12 +67,12 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       const connected = !!saved.apiKeys[spec.key]?.trim();
       return { id: spec.key, connected, reach: unlockCount(spec), order,
         matches: (q: string) => providerMatches(spec, q),
-        render: () => <KeyRow key={spec.key} spec={spec} configured={connected} /> };
+        render: () => <KeyRow key={spec.key} spec={spec} configured={connected} lock={keyLock} /> };
     }),
     { id: KREA_ROW, connected: !!kreaStatus && kreaStatus !== 'disconnected', reach: KREA_ACCOUNT_NODES.length, order: PROVIDER_KEYS.length,
       matches: (q: string) => 'krea sign-in workspace'.includes(q.trim().toLowerCase())
         || KREA_ACCOUNT_NODES.some((node) => matchesModelSearch(node, q)),
-      render: () => <KreaSignInRow key={KREA_ROW} krea={krea} mode={saved.kreaConnectionMode} /> },
+      render: () => <KreaSignInRow key={KREA_ROW} krea={krea} mode={saved.kreaConnectionMode} lock={keyLock} /> },
     { id: NOUS_ROW, connected: nousConnected, reach: NOUS_NODES.length, order: PROVIDER_KEYS.length + 1,
       matches: (q: string) => 'nous portal hermes'.includes(q.trim().toLowerCase())
         || NOUS_NODES.some((node) => matchesModelSearch(node, q)),
@@ -129,7 +136,6 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
         />
       </label>
       <fieldset className="settings__fieldset settings__fieldset--providers" disabled={offline} {...offlineMark(offline)}>
-
       {connected.length > 0 && (
         <section aria-labelledby="settings-connected-heading">
           <div className="settings-label">
@@ -137,8 +143,9 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
             <button type="button" className="settings-label__action" disabled={health.loading}
               onClick={() => void health.checkConnections()}>{health.loading ? 'Checking…' : 'Check connections'}</button>
           </div>
+          <PersonLockLine lock={keyLock} place="heading" />
           <div className="settings-list">{connected.map((entry) => entry.render())}</div>
-          {health.error && <p className="settings-row__error" role="alert">{health.error}</p>}
+          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} /></p>}
           {desktop?.credentials && <p className="settings-hint settings-list__note">Keys are stored in the macOS Keychain.</p>}
         </section>
       )}
@@ -148,6 +155,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           <div className="settings-label">
             <h3 id="settings-add-heading">{anyConnected || q ? 'Add a provider' : 'Connect a provider'} · {toAdd.length}</h3>
           </div>
+          {connected.length === 0 && <PersonLockLine lock={keyLock} place="heading" />}
           <div className="settings-list">{toAdd.map((entry) => entry.render())}</div>
           {!anyConnected && !q && (
             <p className="settings-hint settings-list__note">Sorted by how many nodes each one runs. Keys stay on this computer.</p>

@@ -39,7 +39,8 @@ import { clearCanvasFromChat } from '../../lib/chatCanvasClear';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { clearRefusedOnPromote, clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
@@ -47,7 +48,7 @@ import { chatAuthority } from '../../lib/commonsChatAuthority';
 import {
   CHAT_CLEARED_CANVAS, CHAT_CLEARED_CANVAS_KEPT, CHAT_CLEARED_CANVAS_UNCONFIRMED,
 } from '../../lib/chatClear';
-import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
+import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -57,8 +58,15 @@ import {
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { usePersonView } from '../../hooks/useTabHeld';
 
 type ChatAgent = ChatAgentId;
+/** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
+type SentRef = { sentAt: number; permission?: string };
+let chatRefSeq = 0;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
@@ -143,7 +151,27 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
+  /** Its only reason was this tab not being connected as the person: it goes
+   * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
+  personGate?: true;
 };
+
+/** The transcript without its lines that said only "this tab isn't connected as you" (GM, #204 r3);
+ * a message left with nothing to say goes too. */
+function withoutPersonGateLines(messages: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const kept: ChatMessage[] = [];
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.parts.some((part) => part.kind === 'system' && part.personGate)) {
+      kept.push(message);
+      continue;
+    }
+    changed = true;
+    const parts = message.parts.filter((part) => !(part.kind === 'system' && part.personGate));
+    if (parts.length) kept.push({ ...message, parts });
+  }
+  return changed ? kept : messages;
+}
 
 type ThoughtChunk = {
   kind: 'thought';
@@ -379,7 +407,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><span>{part.text}</span><ErrorDetails raw={part.details} className="chat__system-details" /></> : part.text}
+              {part.details ? <><LineText text={part.text} /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} />}
             </div>
           );
         }
@@ -543,8 +571,11 @@ export function ChatPanel() {
     catch { /* Browsing without persistent storage still works. */ }
   }, [selection]);
 
+  // PR #204 round 11: the list of personal agents is the person's to read. A tab that isn't
+  // connected as the person doesn't ask (it would only be refused); it reads on the promote.
+  const { ready: personReady } = usePersonView();
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !personReady) return;
     let cancelled = false;
     const load = () => {
       fetchPersonalAgents()
@@ -554,7 +585,7 @@ export function ChatPanel() {
     load();
     window.addEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load);
     return () => { cancelled = true; window.removeEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load); };
-  }, [visible]);
+  }, [visible, personReady]);
 
   useEffect(() => {
     if (!visible || !providerAgent) return;
@@ -658,6 +689,8 @@ export function ChatPanel() {
     };
   }, [agent]);
 
+  // PR #204 round 10 (GM r15): the ChatGPT sign-in is the person's alone (require_person).
+  const codexLock = usePersonLock('sign in to Codex');
   const handleStartCodexChatGPTLogin = useCallback(async (deviceAuth = false) => {
     setCodexLoginBusy(true);
     setCodexLoginError(null);
@@ -666,7 +699,9 @@ export function ChatPanel() {
       setCodexLoginState(state);
       setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
     } catch (err) {
-      setCodexLoginError(failureMessage(err, "Couldn't start the ChatGPT sign-in."));
+      const line = failureMessage(err, "Couldn't start the ChatGPT sign-in.");
+      setCodexLoginError(line);
+      clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login (GM, #204 r3)
     } finally {
       setCodexLoginBusy(false);
     }
@@ -695,7 +730,9 @@ export function ChatPanel() {
         }
       } catch (err) {
         if (cancelled) return;
-        setCodexLoginError(failureMessage(err, "Couldn't check the ChatGPT sign-in."));
+        const line = failureMessage(err, "Couldn't check the ChatGPT sign-in.");
+        setCodexLoginError(line);
+        clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login-check (GM, #204 r3)
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -837,16 +874,28 @@ export function ChatPanel() {
   }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  // Review 4 NIT-2, review 5 NIT-1 (round 7): each message the gate can refuse goes out with
+  // its own `ref` and the promote count it was sent under; the backend echoes the ref on its
+  // person_required error, so the refusal is stamped with its own message's count (and a
+  // refused permission answer is known by its request).
+  const sentRefs = useRef(new Map<string, SentRef>());
+  const stampedRef = useCallback((extra: Omit<SentRef, 'sentAt'> = {}): string => {
+    const ref = `r${++chatRefSeq}`;
+    sentRefs.current.set(ref, { sentAt: personPromotions(), ...extra });
+    // Answered messages never come back: keep the newest few dozen.
+    while (sentRefs.current.size > 64) sentRefs.current.delete(sentRefs.current.keys().next().value!);
+    return ref;
+  }, []);
   useEffect(() => {
     closePersonalSessionRef.current = (id: string) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       void personTokenForSocket(ws.url).then((personToken) => {
         if (ws.readyState !== WebSocket.OPEN) return;
-        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ...(personToken ? { personToken } : {}) }));
+        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ref: stampedRef(), ...(personToken ? { personToken } : {}) }));
       });
     };
-  }, []);
+  }, [stampedRef]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
   useEffect(() => {
@@ -1204,7 +1253,24 @@ export function ChatPanel() {
             // A person-only refusal says GM's line, by its code; the backend's
             // words, written for agents, go behind Details (Q116 a).
             const personRequired = event.code === PERSON_REQUIRED_CODE;
-            if (personRequired) reportPersonRequired();
+            if (personRequired) {
+              // One stamp and one check (review 4 NIT-2): an answer to what went out before the
+              // promote is the old state's; it holds nothing, and its line goes at once.
+              // Its own message's stamp, by the ref the backend echoes; an error with no ref (an
+              // older backend) has no stamp, so it holds the tab and its line waits for the promote.
+              const sent = typeof event.ref === 'string' ? sentRefs.current.get(event.ref) : undefined;
+              if (typeof event.ref === 'string') sentRefs.current.delete(event.ref);
+              const refusal = personRefusalSentAt(sent?.sentAt ?? null);
+              if (!refusal.sentBeforePromote) reportPersonRequired();
+              // Review 5 MEDIUM-2 (GM r9 1): a refused answer to a permission puts its card back
+              // to waiting, so the person can answer after the promote; the agent's own timeout runs on.
+              if (sent?.permission) {
+                const requestId = sent.permission;
+                upsertAssistant((msg) => ({ ...msg, parts: msg.parts.map((part) => part.kind === 'permission'
+                  && part.requestId === requestId && part.status === 'sent' ? { ...part, status: 'pending' } : part) }));
+              }
+              clearRefusedOnPromote(refusal, () => setMessages((prev) => withoutPersonGateLines(prev))); // clears-on-promote: chat.transcript
+            }
             // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
             if (event.code === 'personal_session_ended') setSessionId(null);
             if (event.code === 'personal_agent_warning_required') {
@@ -1223,7 +1289,7 @@ export function ChatPanel() {
                     : p,
                 ),
                 personRequired
-                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText }
+                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText, personGate: true }
                   : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
               ],
               streaming: false,
@@ -1527,7 +1593,10 @@ export function ChatPanel() {
       // A refusal also shows under Clear's heading.
       const outcome = await clearCanvasFromChat({
         onRefused: async (response) => {
-          setNotice(failureMessage(await requestError(CLEAR_CANVAS, response), CLEAR_CANVAS));
+          const refused = await requestError(CLEAR_CANVAS, response);
+          const line = failureMessage(refused, CLEAR_CANVAS);
+          setNotice(line);
+          clearSetterOnPromote(refused, setNotice, line, null); // clears-on-promote: chat.clear-canvas (GM, #204 r3)
         },
       });
       said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
@@ -1549,7 +1618,14 @@ export function ChatPanel() {
     if (commonsEnabled) setAuthorizing(true);
     try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
     // The session line on its own (a FailureNotice with no heading, GM round 2).
-    catch (error) { setNotice(oneLine(failureCopy(error))); reportPersonRequired(); return; }
+    catch (error) {
+      // No person token for the turn: its only reason is this tab, so it goes on the promote (GM, #204 r3).
+      const line = oneLine(failureCopy(error));
+      setNotice(line);
+      reportPersonRequired();
+      clearsOnPromote(() => setNotice((now) => (now === line ? null : now))); // clears-on-promote: chat.session
+      return;
+    }
     finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
     if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 
@@ -1579,6 +1655,7 @@ export function ChatPanel() {
     ws.send(
       JSON.stringify({
         type: 'send',
+        ref: stampedRef(),
         message: raw,
         selectedNodeIds: useGraphStore.getState().nodes
           .filter((node) => node.selected)
@@ -1605,6 +1682,7 @@ export function ChatPanel() {
     agent,
     handleModelChange,
     applyCancellationEvent,
+    stampedRef,
   ]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
@@ -1622,28 +1700,34 @@ export function ChatPanel() {
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
     void personTokenForSocket(ws.url).then((personToken) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value,
+      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value, ref: stampedRef(),
         ...(personToken ? { personToken } : {}) }));
     });
-  }, [sessionId]);
+  }, [sessionId, stampedRef]);
 
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
     // Round 16 (L5): "Allow once" lets the agent act while the person's own
     // edits are blocked, so offline it's refused and the request stays
     // pending until Nebula answers. Deny only reduces, so it always goes.
     if (decision === 'allow' && refuseEditWhileOffline()) return;
+    // Review 5 MEDIUM-2 (GM r9 1): an ask with a decision on it waits while this tab isn't
+    // connected as the person (the card's buttons lock in place; this is the same rule).
+    if (personUnconfirmed()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    upsertAssistant((msg) => ({
+    const mark = (from: PermissionStatus, to: PermissionStatus) => upsertAssistant((msg) => ({
       ...msg,
-      parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId && part.status === 'pending'
-        ? { ...part, status: 'sent' } : part),
+      parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId && part.status === from
+        ? { ...part, status: to } : part),
     }));
+    mark('pending', 'sent');
     void personTokenForSocket(ws.url).then((personToken) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ...(personToken ? { personToken } : {}) }));
-    });
-  }, [upsertAssistant]);
+      // Not sent after all: the card waits again.
+      if (ws.readyState !== WebSocket.OPEN) { mark('sent', 'pending'); return; }
+      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ref: stampedRef({ permission: requestId }),
+        ...(personToken ? { personToken } : {}) }));
+    }, () => mark('sent', 'pending'));
+  }, [upsertAssistant, stampedRef]);
 
   // After the person accepts the notice, send what they typed once the
   // acknowledged state has rendered (send reads it).
@@ -2042,7 +2126,8 @@ export function ChatPanel() {
                     <button
                       type="button"
                       className="chat-panel__connect-btn chat-panel__connect-btn--primary"
-                      onClick={() => handleStartCodexChatGPTLogin(false)}
+                      {...codexLock.control()}
+                      onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(false))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
                       <LogIn
@@ -2052,20 +2137,22 @@ export function ChatPanel() {
                         aria-hidden="true"
                         focusable="false"
                       />
-                      {codexLoginState?.running ? 'Opening ChatGPT...' : 'Connect ChatGPT Account'}
+                      {codexLoginState?.running ? 'Opening ChatGPT…' : 'Connect ChatGPT Account'}
                     </button>
                     <button
                       type="button"
                       className="chat-panel__connect-btn"
-                      onClick={() => handleStartCodexChatGPTLogin(true)}
+                      {...codexLock.control()}
+                      onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(true))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
                       Device Code
                     </button>
                   </div>
+                  <PersonLockLine lock={codexLock} place="control" />
                   {(codexLoginState || codexLoginError) && (
                     <div className="chat-panel__connect-progress">
-                      {codexLoginError || codexLoginState?.message}
+                      <LineText text={codexLoginError || codexLoginState?.message} />
                       {codexLoginState?.authUrl && (
                         <a
                           className="chat-panel__connect-link"
@@ -2098,7 +2185,7 @@ export function ChatPanel() {
             </div>
           </details>
         )}
-        {notice && <div className="chat-panel__notice" data-chat-notice="true">{notice}</div>}
+        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} /></div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -2123,7 +2210,7 @@ export function ChatPanel() {
                   </>
                 )}
                 {chip.status === 'error' && (
-                  <div className="chat-panel__chip-error">{chip.error}</div>
+                  <div className="chat-panel__chip-error"><LineText text={chip.error} /></div>
                 )}
                 <button
                   type="button"

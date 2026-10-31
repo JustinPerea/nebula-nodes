@@ -29,6 +29,7 @@ import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
 
 type Scope = 'global' | 'project';
 type Tab = 'characters' | 'moodboards' | 'styles';
@@ -283,10 +284,10 @@ export function AssetsPanel() {
           )}
           {busy && <div className="character-palette__empty">Loading…</div>}
           {failed && !busy && (
-            <div className="character-palette__empty character-palette__empty--error">{failed}</div>
+            <div className="character-palette__empty character-palette__empty--error"><LineText text={failed} /></div>
           )}
           {moveError && (
-            <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
+            <div className="character-palette__empty character-palette__empty--error" role="alert"><LineText text={moveError} /></div>
           )}
           {tab === 'styles' && deleting.deleteError && (
             <div className="character-palette__empty character-palette__empty--error" role="alert"><FailureLines failure={deleting.deleteError} /></div>

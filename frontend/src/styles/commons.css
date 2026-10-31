@@ -13,6 +13,9 @@ body.app-slava-restraint .commons-scope {
   font-size: 12px;
 }
 
+/* Round 11: the Commons' focus and drafts wrapper (CommonsView) takes no box of its own. */
+.commons-view-root { display: contents; }
+
 body.app-slava-restraint .commons-view {
   --commons-detail-w: 0px;
   position: fixed;
@@ -254,6 +257,19 @@ body.app-slava-restraint .commons-add {
   position: relative;
 }
 
+/* PR #204 round 12 (GM r20 1): Add's lock line sits in the banner row below the header
+   (components/commons/CommonsPageLines), under the because line, or alone in the row.
+   Round 13 (GM r21 1): it starts where the because line's words start, not at its rail, and at
+   the same x when it stands alone, so it never moves between the two. The x is the line's own
+   measure (--commons-line-text-x below), not a second offset. */
+body.app-slava-restraint .commons-messages__lock-line {
+  margin: 0;
+  padding-left: var(--commons-line-text-x);
+}
+body.app-slava-restraint .commons-messages > * + .commons-messages__lock-line {
+  margin-top: 4px;
+}
+
 body.app-slava-restraint .commons-add__menu {
   position: absolute;
   top: calc(100% + 6px);
@@ -371,6 +387,14 @@ body.app-slava-restraint .commons-settings > .commons-panel-title {
 
 /* -- messages + page candidates ---------------------------------------------- */
 
+/* A Commons line's rail and the inset of its words (PR #204 round 13, GM r21 1): one measure,
+   read by the line (.commons-notice) and by Add's lock line, which lines up with its words. */
+body.app-slava-restraint {
+  --commons-line-rail: 2px;
+  --commons-line-pad-x: 10px;
+  --commons-line-text-x: calc(var(--commons-line-rail) + var(--commons-line-pad-x));
+}
+
 body.app-slava-restraint .commons-messages {
   grid-area: messages;
   padding: 8px 16px 0;
@@ -382,8 +406,8 @@ body.app-slava-restraint .commons-notice {
   align-items: center;
   gap: 10px;
   margin: 0;
-  border-left: 2px solid currentColor;
-  padding: 6px 10px;
+  border-left: var(--commons-line-rail) solid currentColor;
+  padding: 6px var(--commons-line-pad-x);
   background: var(--sr-surface-control);
   color: var(--sr-ink-light);
 }

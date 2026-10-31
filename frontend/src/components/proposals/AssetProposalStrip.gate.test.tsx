@@ -4,6 +4,7 @@
 // promote and come back on its demote. A refusal by the gate stops saying so
 // once the tab is promoted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { blocked, lockLine } from '../../../tests/helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError } from '../../lib/errorCopy';
 
@@ -17,8 +18,8 @@ const { useAssetProposalsStore } = await import('../../store/assetProposalsStore
 const { coverProposal } = await import('../../test/assetProposalFixtures');
 const session = await import('../../lib/personSession');
 
-const ACCEPT = 'You can accept proposals when this tab is connected as you.';
-const REJECT = 'You can reject proposals when this tab is connected as you.';
+const ACCEPT = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
+const REJECT = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
 const accept = () => screen.getByRole('button', { name: 'Use this cover' }) as HTMLButtonElement;
 const reject = () => screen.getByRole('button', { name: 'Keep mine' }) as HTMLButtonElement;
 
@@ -29,21 +30,21 @@ describe('GM r33 item 1: the asset strip holds with the person gate', () => {
   it('held: both disabled with the bar\'s titles, nothing sent; promoted: live; demoted: held again', async () => {
     useAssetProposalsStore.getState().open(coverProposal(), 'k1');
     render(<AssetProposalStrip kind="project" targetId="dusk" />);
-    expect(accept().disabled).toBe(false);
+    expect(blocked(accept())).toBe(false);
     expect(accept().title).toBe('');
     act(() => session.reportPersonRequired());
-    expect(accept().disabled).toBe(true);
-    expect(accept().title).toBe(ACCEPT);
-    expect(reject().disabled).toBe(true);
-    expect(reject().title).toBe(REJECT);
+    expect(blocked(accept())).toBe(true);
+    expect(lockLine(accept())).toBe(ACCEPT);
+    expect(blocked(reject())).toBe(true);
+    expect(lockLine(reject())).toBe(REJECT);
     await act(async () => { fireEvent.click(accept()); fireEvent.click(reject()); });
     expect(net.accept).not.toHaveBeenCalled();
     expect(net.reject).not.toHaveBeenCalled();
     act(() => session.notePersonPromoted());
-    expect(accept().disabled).toBe(false);
-    expect(reject().disabled).toBe(false);
+    expect(blocked(accept())).toBe(false);
+    expect(blocked(reject())).toBe(false);
     act(() => session.reportPersonRequired());
-    expect(accept().title).toBe(ACCEPT);
+    expect(lockLine(accept())).toBe(ACCEPT);
   });
 
   it('a gate refusal\'s error goes on promote; another error stays', async () => {

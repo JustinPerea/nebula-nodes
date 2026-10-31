@@ -13,7 +13,8 @@ import { RequestFailedError } from './errorCopy';
  * only when saving again could work.
  */
 export class CommonsRequestError extends RequestFailedError {
-  constructor(reason: string, status: number, options: { cause?: unknown; detail?: unknown; heading?: string } = {}) {
+  constructor(reason: string, status: number,
+    options: { cause?: unknown; detail?: unknown; heading?: string; code?: string | null; sentAt?: number | null } = {}) {
     const { heading = '', ...rest } = options;
     super(heading, status, { ...rest, reason });
     this.name = 'CommonsRequestError';

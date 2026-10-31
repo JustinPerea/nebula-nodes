@@ -207,7 +207,7 @@ export function Toolbar() {
       useGraphStore.getState().clearGraph({ undoStep });
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
-      showNotice(failureMessage(error, CLEAR_CANVAS));
+      showNotice(failureMessage(error, CLEAR_CANVAS), 'error', error);
     } finally {
       // An undo pressed while the clear was on its way now undoes it (review 10, L-2).
       useGraphStore.getState().endUndoStep(undoStep);
@@ -264,7 +264,7 @@ export function Toolbar() {
         void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
     } catch (error) {
-      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."));
+      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."), 'error', error);
     }
   }, [fitView]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { InNoticeRegion } from '../InNoticeRegion';
 import type { LeaveProps } from '../../lib/noticeLeave';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 /** How long the toast stays up while the pointer and focus are elsewhere. */
 export const BOARD_TOAST_MS = 6000;
@@ -29,14 +30,16 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   leave?: LeaveProps;
 }) {
   const [held, setHeld] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('board');
   const dismissRef = useRef(onDismiss);
   useEffect(() => { dismissRef.current = onDismiss; }, [onDismiss]);
 
   useEffect(() => {
-    if (held) return;
+    if (held || waiting) return;
     const timer = window.setTimeout(() => dismissRef.current(), BOARD_TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [held, toast.id]);
+  }, [held, waiting, toast.id]);
 
   return (
     <InNoticeRegion slot="board">

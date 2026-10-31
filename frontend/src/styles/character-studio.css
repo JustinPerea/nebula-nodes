@@ -196,7 +196,7 @@ body.app-slava-restraint .character-palette__empty {
 
 body.app-slava-restraint .character-rail__empty--error,
 body.app-slava-restraint .character-palette__empty--error {
-  color: #e0796b;
+  color: var(--line-warning, #e0796b);
 }
 
 /* The open Character is another project's: say where, above the list. */
@@ -384,7 +384,7 @@ body.app-slava-restraint .character-def__field input[type='range']:disabled {
 
 body.app-slava-restraint .character-def__error {
   font-size: 11px;
-  color: #e0796b;
+  color: var(--line-warning, #e0796b);
 }
 
 body.app-slava-restraint .character-def__input,
@@ -514,8 +514,8 @@ body.app-slava-restraint .character-studio-view__notice--warn {
 }
 
 body.app-slava-restraint .character-studio-view__notice--error {
-  border-color: #e0796b;
-  color: #e0796b;
+  border-color: var(--line-warning-edge, #e0796b);
+  color: var(--line-warning, #e0796b);
 }
 
 /* Someone else changed a field the person was editing: theirs is kept, and

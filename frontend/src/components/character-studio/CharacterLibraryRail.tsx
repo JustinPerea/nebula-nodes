@@ -9,6 +9,7 @@ import { emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHom
 import { NO_PROJECT_OPEN } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
 import { failureMessage } from '../../lib/errorCopy';
+import { LineText } from '../LineText';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
@@ -118,10 +119,10 @@ export function CharacterLibraryRail({
       </button>
 
       <div className="character-rail__list">
-        {notice && <div className="character-rail__empty character-rail__empty--notice" role="status">{notice}</div>}
+        {notice && <div className="character-rail__empty character-rail__empty--notice" role="status"><LineText text={notice} /></div>}
         {busy && <div className="character-rail__empty">Loading…</div>}
         {failed && !busy && (
-          <div className="character-rail__empty character-rail__empty--error">{failed}</div>
+          <div className="character-rail__empty character-rail__empty--error"><LineText text={failed} /></div>
         )}
         {!busy && !failed && characters.length === 0 && (
           <div className="character-rail__empty">

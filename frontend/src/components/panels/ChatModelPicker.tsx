@@ -9,6 +9,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import { shortLine } from '../../lib/errorCopy';
 import '../../styles/chat-model-picker.css';
+import { LineText } from '../LineText';
 
 type Agent = 'claude' | 'codex';
 
@@ -182,7 +183,7 @@ export function ChatModelPicker({ agent, personalAgents = [], model, effort, cat
           agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
           {/* GM's WRAP rule: Retry is the retry, so the reason drops its own. */}
-          <p role="status">{shortLine(unavailable)}</p>
+          <p role="status"><LineText text={shortLine(unavailable)} /></p>
           <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}

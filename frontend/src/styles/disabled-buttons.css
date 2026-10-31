@@ -100,7 +100,9 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .agent-roster__row,
+  .agent-notes-btn--held
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -127,7 +129,9 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .agent-roster__row,
+  .agent-notes-btn--held
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
@@ -224,6 +228,72 @@
   box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
+/* PR #204 round 11 (review 9 MEDIUM-1, GM r19 item 1): a person lock's control
+   (hooks/usePersonLock control(): data-person-lock, aria-disabled, focusable)
+   takes one disabled look through the helper, whatever its class: no class
+   list to forget. Past the held rule's first moment only (data-held-pending
+   keeps its own look then). No hover or press: these states are held to the
+   same look. Focus isn't: a locked control stays focusable, so it keeps the
+   shared focus ring (round 12; tests/focusRingCss).
+
+   Round 13 (review 10 MEDIUM-1): the ghost and filled lists win over this
+   block, and so does each per-class rule after it. The element part is
+   :where(), so the base rule is (0,2,0) against the lists' (0,3,0): a locked
+   filled button keeps the grey fill with its dark label (--disabled-fill,
+   --disabled-fill-label, GM r33), and a ghost keeps the ghost tokens. The
+   block sits above the filled list, so the list also wins while a locked
+   filled button is pressed from the keyboard (:active without :hover), where
+   this block's :active rule ties the list's base rule; the list's own hover
+   (0,4,0) wins on hover. :hover and :active are separate selectors, not
+   :is(:hover, :active), so tests/helpers/cssCascade reads them as states.
+
+   A select or input keeps its value visible in --disabled-label, so the
+   setting stays readable; a switch takes the 0.06 edge and a --disabled-label
+   knob, its on or off still readable by the knob's side.
+   tests/presenceRound11.lockLook.test.ts reads these rules,
+   tests/presenceRound13.lookCascade.test.ts resolves them through the
+   cascade, and the live check computes them on every locked control. */
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]),
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]):hover,
+:where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending]):active {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+:is(button, a, [role='button'])[data-person-lock]:not([data-held-pending]) :is(svg, span) {
+  color: inherit !important;
+}
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]),
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]):hover,
+:is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending]):active {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending]),
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):hover,
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):active {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending]):checked {
+  background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
+}
+input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
+  background: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+}
+
 /* Filled buttons: the accent (orange), the danger red (GM r8: #ff887d), white
    primaries ("Back to …", "New project", the canvas toast's Undo, Redo and
    Open copy) and other solid fills (the mask painter's blue Save): the fill
@@ -303,6 +373,16 @@
   /* Its own enabled edge, never brighter (GM r33): the quiet choice is
      outlined at rest, so held it keeps that outline. */
   border-color: rgb(255 255 255 / 0.28) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+}
+
+/* A ghost control whose label is several lines of its own text (the Agents
+   panel's row: name, count, ask line). Disabled, every line takes the
+   shared grey, whatever colour each line has enabled; an author's dot keeps
+   its colour, since it says who is asking (GM, PR #204 round 1). List a new
+   multi-line ghost control here, next to its entry in the ghost list above. */
+:is(.agent-roster__row):is(:disabled, [aria-disabled='true']:not([data-held-pending]))
+  :not(.agent-notes-dot, .agent-notes-dot *) {
   color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
 }
 

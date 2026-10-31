@@ -8,6 +8,9 @@ import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -41,7 +44,7 @@ type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
  */
 interface Scan { path: string; result: Promise<EvaluationBatch> }
 let scan: Scan | null = null;
-type ScanOutcome = { batch: EvaluationBatch } | { error: string };
+type ScanOutcome = { batch: EvaluationBatch } | { error: string; cause: unknown };
 
 function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutcome) => void): void {
   const settle = (outcome: ScanOutcome) => {
@@ -49,7 +52,7 @@ function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutc
     if (scan === pending) scan = null;
     show(outcome);
   };
-  pending.result.then((batch) => settle({ batch }), (e: unknown) => settle({ error: failureMessage(e, "Couldn't load the review.") }));
+  pending.result.then((batch) => settle({ batch }), (e: unknown) => settle({ error: failureMessage(e, "Couldn’t load the review."), cause: e }));
 }
 
 /**
@@ -81,6 +84,9 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
   const draft = useRef<DraftActions | null>(null);
   const [error, setError] = useState('');
+  // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, '', 'commons.evaluation-load', loadAgain);
   const [path, setPath] = useState(resumed?.path ?? '');
   const [index, setIndex] = useState(0);
   const [review, setReview] = useState(false);
@@ -92,18 +98,18 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   }, []);
   const showScan = useCallback((outcome: ScanOutcome) => {
     setBusy(false);
-    if ('batch' in outcome) setBatch(outcome.batch); else setError(outcome.error);
-  }, [setBatch]);
+    if ('batch' in outcome) setBatch(outcome.batch); else line.keep(outcome.cause, outcome.error);
+  }, [setBatch, line]);
   useEffect(() => {
     let cancelled = false;
     if (resumed) {
       followScan(resumed, () => !cancelled, showScan);
       return () => { cancelled = true; };
     }
-    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the review.")); })
+    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the review.", { reload: true }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [resumed, showScan, setBatch]);
+  }, [resumed, showScan, setBatch, loadEpoch, line]);
   useEffect(() => {
     onWork?.({ unsaved: dirty, saving, running: false,
       save: () => draft.current?.save() ?? Promise.resolve({ ok: true }),
@@ -162,7 +168,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     setBusy(true); setError('');
     const attempt = (async (): Promise<SaveResult> => {
       try { setBatch(await action()); setDirty(false); setNotice(''); return { ok: true }; }
-      catch (e) { const failure = saveFailure(e); setError(failure.message); return failure; }
+      catch (e) { const failure = saveFailure(e); line.keep(e, failure.message); return failure; }
       finally { setBusy(false); }
     })();
     setSaving(attempt);
@@ -186,8 +192,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
-    {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
-    {notice && <p role="status" className="commons-notice">{notice}</p>}
+    <CommonsErrorLine line={error} />
+    {notice && <p role="status" className="commons-notice"><LineText text={notice} /></p>}
     {!batch ? <form className="evaluation-setup" onSubmit={(e) => {
       e.preventDefault();
       const started: Scan = { path, result: api.prepare(path) };
@@ -241,6 +247,8 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
   const [imageError, setImageError] = useState('');
+  const [imageEpoch, imageAgain] = useReloadEpoch();
+  const imageLine = useCommonsLine(setImageError, '', `commons.evaluation-image-${item.position}`, imageAgain);
   const [crosshair, setCrosshair] = useState<AccentPoint>({ x: 0.5, y: 0.5 });
   const canvas = useRef<HTMLCanvasElement>(null);
   const readonly = batch.state !== 'open' || busy;
@@ -254,11 +262,11 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       image.onload = () => { if (!controller.signal.aborted && canvas.current) {
         canvas.current.getContext('2d')?.drawImage(image, 0, 0); setUrl(objectUrl);
       } };
-      image.onerror = () => { if (!controller.signal.aborted) setImageError("Couldn't show this reference. Reload to try again."); };
+      image.onerror = () => { if (!controller.signal.aborted) setImageError("Couldn’t show this reference. Reload to try again."); };
       image.src = objectUrl;
-    }, (e: unknown) => { if (!controller.signal.aborted) setImageError(failureMessage(e, "Couldn't load this reference.")); });
+    }, (e: unknown) => { if (!controller.signal.aborted) imageLine.show(e, "Couldn’t load this reference.", { reload: true }); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [item.position]);
+  }, [item.position, imageEpoch, imageLine]);
   const change = (patch: Partial<EvaluationLabels>) => { setLabels((current) => ({ ...current, ...patch })); onDirty(true); };
   const saveAccents = () => run(() => api.accents(item.position, batch.revision, points.map(({ x, y }) => ({ x, y })), noAccents));
   const saveLabels = () => run(() => api.labels(item.position, batch.revision, labels));
@@ -277,7 +285,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   return <>
     <div className="evaluation-image">
       <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-      {imageError && <p role="alert">{imageError}</p>}
+      {imageError && <p role="alert"><LineText text={imageError} /></p>}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
         <canvas ref={canvas} width={item.width} height={item.height} tabIndex={0}

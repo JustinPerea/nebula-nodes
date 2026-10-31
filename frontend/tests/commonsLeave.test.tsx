@@ -269,7 +269,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Labels changed in another window. Reload before saving.');
     expect(popover()).not.toHaveTextContent("Your labels aren't saved.");
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
@@ -287,7 +287,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Commons request failed (503)');
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Save and leave' })).toHaveFocus());
@@ -368,7 +368,7 @@ describe('a save already in progress', () => {
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(home());
     await act(async () => { panels.inFlight!({ ok: false, reason: 'Disk is read-only.', retry: true }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popover()).toHaveTextContent('Disk is read-only.');
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     expect(popover().dataset.anchor).toBe('home');
@@ -385,7 +385,7 @@ describe('a save already in progress that hits a conflict', () => {
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(back());
     await act(async () => { panels.inFlight!({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn't save your labels."));
+    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Stay' })).toHaveFocus());
   });

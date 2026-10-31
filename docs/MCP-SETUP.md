@@ -1033,7 +1033,10 @@ Person-only, refused with 403 `person_required` otherwise:
 - making, limiting, coloring and revoking connected-agent tokens
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
-  workspace or agent token is minted without the person;
+  workspace or agent token is minted without the person. The chat socket is
+  the tab's own (no agent uses it): its `person_required` error echoes the
+  frame's `ref` (a string of 1 to 64 characters) when the frame carried one,
+  so the tab reads each refusal against the frame it answers;
 - deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
   `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
   `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
@@ -1667,7 +1670,8 @@ only runs nodes). Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
-`proposal: {id, kind: "canvas", targetId: <project id>}`). Its one
+`proposal: {id, kind: "canvas", targetId: <project id>, since}`, `since`
+being when it was asked, ms, as its `createdAt`). Its one
 **Review** action (`proposal.review`, `target: "canvas"`) takes the person
 to the canvas from any screen, with that proposal shown in the bar and its
 ghosts in view. Every proposal gets its own Update, on the list of the
@@ -1890,7 +1894,9 @@ a proposal instead, and what it noticed is an Update.
   is `{questions: {id, status, questions, answers, ...}}`.
 - **The person answers:** the set posts one Update from the agent ("Claude
   Code has 2 questions.", with Answer, and Show on canvas when it names
-  nodes). Answer opens the form in the Updates corner. They may skip any
+  nodes). Its ref is `questions: {id, count, since}`: how many questions
+  (as the line says) and when the set was asked (ms, as its `createdAt`),
+  never the questions. Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
   none. When it closes, its line goes past tense ("Claude Code asked 2
   questions." / "asked a question.", on the stored Update, so `list_notes`
@@ -1962,7 +1968,14 @@ the Updates corner lists the agents working in the open project in two
 groups: **Needs you** (an agent with open questions or proposals there,
 longest wait first) and **Working** (everyone else around, most recent
 first). Clicking a Working row shows its node on the canvas; clicking a
-Needs-you row opens its oldest question set or proposal.
+Needs-you row opens its oldest question set or proposal. A tab that isn't
+connected as the person gets only your asks' Updates, so it counts Needs
+you from them (each ask's `since` orders it, a question set's `count` says
+how many, and an asset Update your asks on one target share counts `asks`
+from `firstSince`): the same rows, order and badge as once it is connected,
+with the row's action locked until then. What you read here is unchanged:
+`GET /api/canvas/agents` and its MCP and CLI reads count from Nebula's own
+open sets and proposals, whatever any tab holds.
 
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
@@ -2421,9 +2434,34 @@ proposal's `createdAt`; after the Update falls back to your older ask on the
 same target, that ask's). Plus, for a cover, `cover`: `"automatic"` or
 `"image"` (which kind, never which image), and for a Commons ask `changes`
 (how many edits) (1 to 999) and `inbox: true` when it only asks to take a
-reference out of the inbox.
+reference out of the inbox. Because one Update stands for all your open asks
+on that target, it also carries `asks` (how many of your proposals on that
+target are open and share it, 1 to 3: your open-proposal cap) and
+`firstSince` (when the oldest of them was made, ms). A new ask posts a new
+Update with them (op `added`, and the one it replaces `removed`); one of them
+closing or an undo reopening one changes them in place (op `changed`).
+You see `asks` and `firstSince` only on your own Updates: another agent's
+`list_notes`, `nebula notes`, `GET /api/canvas/agent-notes` and a board's
+`GET /api/moodboards/{id}/agent-notes` (and the socket's Updates messages) get its Updates without them, as before they existed, and
+so does a caller that names no agent. The person's tabs see them: a tab
+connected as the person, and a held tab, which says it is a tab with the
+`X-Nebula-Tab` header (`?tab=1` on its socket) and carries no agent marker.
+A tab claim never beats a marker: a request with both is read as that
+agent. "Your own" means the same agent: for an unverified agent that is its
+name, so a caller naming itself after you reads your two counts, as it can
+already withdraw your unverified proposals. The claim needs no secret: any
+local program, a page on any localhost origin, or an agent sandboxed with
+localhost network access can send it without a marker and see the two
+counts. An agent that reaches Nebula only through MCP or the CLI can't send
+it: neither ever does, and MCP always names itself. The claim reaches nothing else (it is not
+the person and passes no gate). The counts are not a secret either:
+`GET /api/asset-proposals` and the journal list every open ask with its
+agent, target and time, so this keeps other agents' Updates as they were
+before the fields existed rather than hiding anything.
 A tab that isn't connected as the person sees only the Update, and its
-placeholder card and the Commons proposals line read these, never the text. It has one **Review** action (`proposal.review`), which takes the
+placeholder card and the Commons proposals line read these, never the text;
+its Agents panel counts `asks` proposals from `firstSince`, as the connected
+tab counts and orders your open asks, so nothing moves when it connects. It has one **Review** action (`proposal.review`), which takes the
 person to the Projects screen with that card's strip in view, to Moodboard
 Studio on that board, or to the Commons on that reference, from whichever
 screen they are on. One per agent and

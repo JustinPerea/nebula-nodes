@@ -7,6 +7,7 @@
 //   within 8 graphemes) and on a cut that already ends a word; the
 //   punctuation a cut ends on goes before the "…"; never a bare "…".
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lockLine } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
@@ -138,12 +139,12 @@ describe('review 18 NIT-3: Send note\'s reasons in order', () => {
     render(<PinComposer />);
     expect(send().title).toBe(PIN_REFUSAL_COPY.writeFirst);
     act(() => session.reportPersonRequired());
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
     act(() => useGraphStore.setState({ nodes: [] } as never));
     expect(send().title).toBe(PIN_REFUSAL_COPY.nodeGone);
     act(() => useGraphStore.setState({ nodes: [node('n1', 'Text Input')] } as never));
     act(() => useCanvasPinsStore.getState().targetReturned());
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
     act(() => session.notePersonPromoted());
     expect(send().title).toBe(PIN_REFUSAL_COPY.writeFirst);
     fireEvent.change(field(), { target: { value: 'warmer' } });

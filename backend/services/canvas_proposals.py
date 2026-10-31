@@ -910,7 +910,9 @@ class ProposalBook:
         return self._items.get(proposal_id)
 
     def open_list(self) -> list[Proposal]:
-        return [p for p in self._items.values() if p.is_open]
+        # A snapshot first: the asset Update's share fields are read on a notes
+        # worker thread while the loop may add or close an ask (PR #204 round 3).
+        return [p for p in list(self._items.values()) if p.is_open]
 
     def open_unrunnable(self, proposal: Proposal) -> list[Proposal]:
         """The same agent's other open proposals on this canvas (project) whose

@@ -54,6 +54,7 @@ import * as execution from '../src/lib/api';
 import { ConnectionLostError, REFUSED_FALLBACK_COPY } from '../src/lib/errorCopy';
 import type { ProjectList, SavedProject } from '../src/lib/projects';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
+import { notePersonPromoted } from '../src/lib/personSession';
 
 const NEXT = GRAPH_PARAMS_VERSION + 1;
 const TOO_LARGE = 'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.';
@@ -330,18 +331,24 @@ describe('every path that sends the held copy', () => {
   });
 });
 
+// GM r9 (2), #204 round 7: refused while the load saves the recovered edits, the verb says so.
+const NOT_CONNECTED_SAVE = 'Nebula couldn’t save your unsaved edits because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+
 describe("review: refusals reconnecting can fix, and files Load graph can't open", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
 
-  it('a tab not connected as the person (person_required) keeps Try again, and the same copy saves once it reconnects', async () => {
+  // PR #204 r6 (GM r7 2): no Try again while the reason is "not connected"; the promote retries.
+  it('a tab not connected as the person (person_required): no Try again, and the same copy saves on the promote', async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(refusal(BILLING, 403, { code: 'person_required' }));
     await useProjectStore.getState().retry();
     expect(state().unsavedEdits ?? null).toBeNull();
-    expect(state().error).not.toBeNull();
-    expect(projectRetryOffer(state())).not.toBe('none');
+    expect(state().error).toBe(NOT_CONNECTED_SAVE);
+    expect(projectRetryOffer(state())).toBe('none');
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered'));
-    await useProjectStore.getState().retry();
+    notePersonPromoted();
+    await vi.waitFor(() => expect(vi.mocked(projects.recoverProject).mock.calls.length).toBe(2));
+    await vi.waitFor(() => expect(state()).toMatchObject({ initialized: true, error: null }));
     const [first, second] = vi.mocked(projects.recoverProject).mock.calls;
     expect(second[2]).toBe(first[2]);
     expect(second[1]).toEqual(first[1]);
@@ -380,19 +387,19 @@ describe("review: refusals reconnecting can fix, and files Load graph can't open
 
 /** GM - Design, 2026-10-23, verbatim (Q116 a). */
 describe("GM's lines in the store", () => {
-  const GM3 = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
   const errorDetails = () => (projectStore as unknown as {
     projectErrorDetails?: (state: unknown) => string | null }).projectErrorDetails?.(state()) ?? null;
 
-  it("a person-only refusal under \"Couldn't recover the project.\": GM's line 3, the backend's words behind Details", async () => {
+  // PR #204 r6 (GM r7 2): the load screen's because form, no Try again; Details as before.
+  it("a person-only refusal under \"Couldn't recover the project.\": the because line, the backend's words behind Details", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(
       new projects.ProjectRequestError(BILLING, 403, { heading: RECOVER, detail: BILLING, code: 'person_required' }));
     await useProjectStore.getState().retry();
-    expect(state().error).toBe(`${RECOVER} ${GM3}`);
+    expect(state().error).toBe(NOT_CONNECTED_SAVE);
     expect(errorDetails()).toBe(BILLING);
-    expect(projectRetryOffer(state())).toBe('redo');
+    expect(projectRetryOffer(state())).toBe('none');
     // Another line later doesn't carry these Details.
     useProjectStore.setState({ error: "Couldn't load your projects." });
     expect(errorDetails()).toBeNull();

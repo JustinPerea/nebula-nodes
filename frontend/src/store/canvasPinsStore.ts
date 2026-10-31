@@ -5,7 +5,7 @@ import { createPin, deletePin, fetchPins, fitNote, NODE_GONE_CODE, noteKeptLine,
 import { currentProject } from '../lib/currentProject';
 import { PERSON_REQUIRED_CODE, RequestFailedError } from '../lib/errorCopy';
 import { refuseCanvasEdit } from '../lib/canvasLock';
-import { onPersonPromoted } from '../lib/personSession';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { subscribeFollowingSwitch, followingSwitch } from '../lib/canvasFollow';
 import { subscribeCanvasReplaced } from '../lib/canvasReplaced';
 import { getProjectContext, STALE_CANVAS_DETAIL, type ProjectContext } from '../lib/projectContext';
@@ -246,10 +246,12 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       // what happened and what to do. (Not a draft yet: the dialog holds it,
       // and × or Esc keeps it as one.)
       const code = error instanceof RequestFailedError ? error.code : null;
-      set((state) => ({ draft: text, error: pinRefusalLine(error, 'add'), errorProject: project,
+      const line = pinRefusalLine(error, 'add');
+      set((state) => ({ draft: text, error: line, errorProject: project,
         errorPersonGate: code === PERSON_REQUIRED_CODE ? 'add' : false,
         targetGone: state.targetGone || code === NODE_GONE_CODE,
         tooLongRefusals: state.tooLongRefusals + (code === TOO_LONG_CODE ? 1 : 0) }));
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.add
       return false;
     }
   },
@@ -265,17 +267,19 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     } catch (error) {
       // Put it back: the backend still has it.
       const restored = previous.find((pin) => pin.id === id);
+      const line = pinDeleteLine(error);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
         // GM r20 Q1: the pin stays, and the line says so in its own words.
         // Review 16 LOW-1 / GM r29 (fix round 19): refused because this tab
         // isn't connected as the person, it's the Q116a line (how to fix it),
         // never "try again in a moment", which can't work from this tab.
-        error: pinDeleteLine(error),
+        error: line,
         errorPersonGate: error instanceof RequestFailedError && error.code === PERSON_REQUIRED_CODE
           && error.status >= 400 && error.status < 500 ? 'delete' : false,
         errorProject: null,
       }));
+      clearPinRefusalOnPromote(error, line); // clears-on-promote: pins.remove
     } finally {
       set((state) => {
         const removing = { ...state.removing };
@@ -367,14 +371,15 @@ wsClient.subscribe((event) => {
   }
 });
 
-// Review 17 LOW-1 (fix round 20): the server promoted this tab (lib/wsClient
-// saw the person-only proposalSync): a refusal for not being connected as the
-// person is no longer true, so its toast goes, never turning into the full
-// "isn’t connected as you" line as the banner leaves. Registered as the module
-// loads, before the banner's own listener, so both change in one render.
-onPersonPromoted(() => {
-  if (useCanvasPinsStore.getState().errorPersonGate) useCanvasPinsStore.getState().clearError();
-});
+// Review 17 LOW-1 (fix round 20), through GM's #204 round 3 mechanism: the
+// server promoted this tab (lib/wsClient saw the person-only proposalSync): a
+// refusal for not being connected as the person is no longer true, so its
+// toast goes, never turning into the full "isn’t connected as you" line as
+// the banner leaves. Swept in the same tick as the banner.
+function clearPinRefusalOnPromote(error: unknown, line: string | null): void {
+  clearLineOnPromote(error, () => useCanvasPinsStore.getState().error, line, // clears-on-promote: pins.refusal
+    () => useCanvasPinsStore.getState().clearError());
+}
 
 // Review 16 NIT 2 (fix round 19): the Unicode data loaded (by the dialog
 // opening, a hydrate or a push): the pins on screen are fitted again from

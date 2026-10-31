@@ -23,7 +23,7 @@ def test_a_cover_to_an_image_says_image_and_never_which(api):
     view = _propose(api, {"cover": C}).json()["proposal"]
     (note,) = _proposal_notes(api)
     assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image",
-                               "since": view["createdAt"]}
+                               "since": view["createdAt"], "asks": 1, "firstSince": view["createdAt"]}
     # What every tab gets (the socket's "added"): no image, no asset path.
     added = _note_messages(api, "added")[-1]["note"]
     assert added["proposal"]["cover"] == "image"
@@ -49,7 +49,7 @@ def test_closing_one_of_two_retargets_the_ref_with_the_other_ones_kind(api):
     assert api.client.delete(f"/api/canvas/proposals/{second['id']}", headers=CLAUDE).status_code == 200
     (note,) = _proposal_notes(api)
     assert note["proposal"] == {"id": first["id"], "kind": "project", "targetId": api.dusk, "cover": "automatic",
-                               "since": first["createdAt"]}
+                               "since": first["createdAt"], "asks": 1, "firstSince": first["createdAt"]}
     changed = _note_messages(api, "changed")[-1]["note"]
     assert changed["proposal"]["cover"] == "automatic"
 
@@ -61,7 +61,7 @@ def test_a_moodboard_ask_carries_only_when_it_was_asked(api):
     board = _board(api)
     view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert set(note["proposal"]) == {"id", "kind", "targetId", "since"}
+    assert set(note["proposal"]) == {"id", "kind", "targetId", "since", "asks", "firstSince"}
     assert note["proposal"]["since"] == view["createdAt"]
 
 
@@ -105,7 +105,9 @@ def test_post_proposal_checks_what_it_is_handed(api, monkeypatch):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk}
+    # The junk detail goes; the share fields (PR #204 round 3) are main's own, not the caller's.
+    assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk,
+                                "asks": 1, "firstSince": view["createdAt"]}
     assert C not in json.dumps(_note_messages(api, "added")[-1]["note"])
 
 

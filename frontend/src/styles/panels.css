@@ -501,7 +501,7 @@ body:not(.app-slava-restraint) .inspector__notice {
 }
 
 body:not(.app-slava-restraint) .inspector__model-error {
-  color: #c58b3a;
+  color: var(--line-warning, #c58b3a);
   font-size: 10px;
 }
 
@@ -2123,10 +2123,10 @@ body:not(.app-slava-restraint) .chat__bubble-thumb {
 }
 
 body:not(.app-slava-restraint) .chat-panel__notice {
-  color: #ffd27a;
+  color: var(--line-warning, #ffd27a);
   font-size: 11px;
-  background: rgba(255, 210, 122, 0.08);
-  border-top: 1px solid rgba(255, 210, 122, 0.15);
+  background: var(--line-warning-soft, rgba(255, 210, 122, 0.08));
+  border-top: 1px solid var(--line-warning-edge, rgba(255, 210, 122, 0.15));
 }
 
 .chat__bubble-text {

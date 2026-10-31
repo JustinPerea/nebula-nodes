@@ -88,7 +88,7 @@ def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canva
     (note,) = _proposal_notes(canvas_project)
     assert note["text"] == "Claude Code asks to change a reference in the Commons"
     assert note["proposal"] == {"id": newer["id"], "kind": "commons", "targetId": cx.poster, "changes": 1,
-                                "since": newer["createdAt"]}
+                                "since": newer["createdAt"], "asks": 2, "firstSince": older["createdAt"]}
 
     assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas_project)
@@ -96,7 +96,7 @@ def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canva
     assert after["text"] == "Claude Code asks to make 3 changes to a reference in the Commons"
     # PR #202 review 2 LOW-A: ``since`` is the older ask's createdAt now, so a held tab orders by it.
     assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.poster, "changes": 3,
-                                 "since": older["createdAt"]}
+                                 "since": older["createdAt"], "asks": 1, "firstSince": older["createdAt"]}
     assert after["actions"][0]["op"]["proposalId"] == older["id"]
     # In place: still read as it was, no new Update.
     assert after.get("readAt") == note.get("readAt")
@@ -113,7 +113,7 @@ def test_a_fallback_to_an_inbox_ask_says_so_in_words_and_ref(cx, canvas_project)
     (after,) = _proposal_notes(canvas_project)
     assert after["text"] == "Claude Code asks to take a reference out of the inbox"
     assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.inbox, "changes": 1, "inbox": True,
-                                 "since": older["createdAt"]}
+                                 "since": older["createdAt"], "asks": 1, "firstSince": older["createdAt"]}
 
 
 def test_a_fallback_keeps_a_read_update_read(cx, canvas_project):

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCommonsDraft } from './commonsDraftsContext';
 import { AXES, AXIS_LABELS, ROLES, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
 
 interface Props {
@@ -43,7 +43,7 @@ function AxisRange({ axis, range, onChange }: {
 }
 
 export function CommonsFilters({ filters, collections, onChange }: Props) {
-  const [keywordDraft, setKeywordDraft] = useState('');
+  const [keywordDraft, setKeywordDraft] = useCommonsDraft('filters.keyword', '');
   const set = (patch: Partial<FilterState>) => onChange({ ...filters, ...patch });
 
   const setAxis = (axis: Axis, range: [number, number] | undefined) => {
@@ -64,7 +64,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
       <label className="commons-field">
         Search
         <input
-          type="search" value={filters.query} placeholder="calm grid, warm serif…"
+          type="search" name="commons-search" value={filters.query} placeholder="calm grid, warm serif…"
           onChange={(event) => set({ query: event.target.value })}
         />
       </label>

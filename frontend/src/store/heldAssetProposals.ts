@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { personLockLine } from '../lib/errorCopy';
 import type { AgentNote, AgentNoteProposal } from '../lib/agentNotes';
 import type { AssetProposalKind } from '../lib/assetProposals';
 import { selectCanvasList, useAgentNotesStore } from './agentNotesStore';
@@ -24,7 +25,11 @@ export interface HeldProposal {
   at: number;
 }
 
-export const HELD_PROPOSAL_LINE = 'You can review this when this tab is connected as you.';
+/** An Update's held Review (and an asset proposal's lock): "window" in the app (PR #204 round 10,
+ * review 8 NIT-2), through the one lock line (lib/errorCopy personLockLine). */
+export const heldProposalLine = (): string => personLockLine('review this');
+/** GM, 2026-10-29: a question set's held action (the Agents panel's Needs-you row), worded as the line above. */
+export const heldQuestionsLine = (): string => personLockLine('answer this');
 
 const NO_NOTES: readonly AgentNote[] = [];
 

@@ -1,12 +1,14 @@
+import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
+import { personHeldSettled } from './personSession';
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
   CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS,
-  REFUSED_FALLBACK_COPY, commonsSessionCopy, copyForStatus, isNoAnswer, readDetail, requestSucceeded,
+  REFUSED_FALLBACK_COPY, commonsNotConnected, copyForStatus, isNoAnswer, readDetail, requestSucceeded,
   warnFailure, type FailureCopy,
 } from './errorCopy';
 import {
-  forgetPersonCredential, inDesktopShell, personToken, refreshPersonCredential, resetPersonSessionForTests,
+  forgetPersonCredential, personPromotions, personToken, refreshPersonCredential, resetPersonSessionForTests,
 } from './personSession';
 import type {
   AssetDetail, Collection, CommonsStatus, FilterState, FolderLink, Region, Role, SearchRow,
@@ -16,14 +18,19 @@ let session: Promise<string> | null = null;
 
 export function resetCommonsSessionForTests(): void {
   session = null;
+  holdCommonsCalls(false);
   resetPersonSessionForTests();
 }
 
-/** No person session to send (GM, error-copy round 2): in a plain browser
- * tab only a fresh link from the backend terminal brings it back; in the
- * desktop app a reload fetches the shell's token again (the silent refetch
- * already ran). */
-const sessionLost = (heading: string) => new CommonsRequestError(commonsSessionCopy(inDesktopShell()), 401, { heading });
+/** No person session to send: this tab isn't connected as the person (GM r12 (2), #204 round 9;
+ * lib/errorCopy commonsNotConnectedCopy). A person refusal, stamped with the promotes so far, so
+ * it clears on the next one. */
+const sessionLost = (heading: string, sentAt?: number) => {
+  const copy = commonsNotConnected(heading);
+  // Stamped with the promotes when the call started (round 9): a call sent before a promote and
+  // refused after it is the old state's answer, so its line clears at once (lib/clearsOnPromote).
+  return new CommonsRequestError(copy.message, 401, { heading, code: copy.code, sentAt: sentAt ?? copy.sentAt });
+};
 
 // Commons' human is the person: the same per-launch token (personSession.ts).
 async function resolveToken(): Promise<string> {
@@ -47,13 +54,19 @@ export async function resolveCommonsToken(): Promise<string> {
 const lostConnection = (heading: string, cause: unknown) =>
   new CommonsRequestError(CONNECTION_LOST_COPY, NO_ANSWER_STATUS, { cause, heading });
 
-async function send(heading: string, path: string, init: RequestInit): Promise<Response> {
+async function send(heading: string, path: string, init: RequestInit, sentAt?: number): Promise<Response> {
+  // A held tab holds the Commons (lib/commonsHold), read from the session itself too, so a call
+  // any pane sends before the view renders is held from the hold's 150 ms on (round 11). Round 13
+  // (review 10 held-calls MEDIUM-2): any hold, promoted on this page or not: a tab reloaded after
+  // a backend restart keeps its old token (sessionStorage) and was never promoted here, and its
+  // calls would go out with that token, only to be refused. The token stays as it is.
+  if (commonsCallsHeld() || personHeldSettled()) throw sessionLost(heading, sentAt);
   let token: string;
   try {
     token = await resolveCommonsToken();
   } catch (error) {
     // No session: say it under this call's heading.
-    throw error instanceof CommonsRequestError ? sessionLost(heading) : error;
+    throw error instanceof CommonsRequestError ? sessionLost(heading, sentAt) : error;
   }
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -65,17 +78,18 @@ async function send(heading: string, path: string, init: RequestInit): Promise<R
   }
 }
 
-/** One Commons request. `heading` names it the way the Commons does ("Couldn't
+/** One Commons request. `heading` names it the way the Commons does ("Couldn’t
  * save your labels."): a failure says "<heading> <reason>" (GM, error-copy
  * round 2), and the leave popover shows the reason under its own heading. */
 async function call<T>(heading: string, path: string, init: RequestInit = {}): Promise<T> {
-  let response = await send(heading, path, init);
+  const sentAt = personPromotions();
+  let response = await send(heading, path, init, sentAt);
   if (response.status === 401) {
     // The person token lives in backend memory; a restarted backend has a new
     // one. Re-resolve authority once (a new link, or the desktop shell's token).
     session = null;
     refreshPersonCredential();
-    response = await send(heading, path, init);
+    response = await send(heading, path, init, sentAt);
   }
   if (response.status === 401) {
     // Stop browser polling from repeatedly sending a token forgotten by a
@@ -83,7 +97,7 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
     session = null;
     forgetPersonCredential();
     warnFailure(heading, 401, 'no person session');
-    throw sessionLost(heading);
+    throw sessionLost(heading, sentAt);
   }
   if (!response.ok) {
     // Copy, never the status or a raw body (lib/errorCopy.ts): GM's line for
@@ -127,13 +141,13 @@ export interface UploadResult {
   person?: string;
 }
 
-/** A refused file as the person reads it (GM, round 2): "Couldn't upload
+/** A refused file as the person reads it (GM, round 2): "Couldn’t upload
  * {filename}." with the backend's line for its reason below it, GM's 4xx
  * fallback when it sent none. Never the raw `error`. The lines live in one
  * table, backend/commons/person_copy.py, as every Commons refusal's do. */
 export function uploadFailureCopy(result: UploadResult): FailureCopy {
   return {
-    heading: `Couldn't upload ${result.filename || 'that file'}.`,
+    heading: `Couldn’t upload ${result.filename || 'that file'}.`,
     reason: result.person?.trim() || REFUSED_FALLBACK_COPY,
   };
 }
@@ -147,56 +161,56 @@ export type UrlAddResult =
 export const commonsApi = {
   blob: (path: string, signal?: AbortSignal) => {
     if (!path.startsWith('/api/commons/blobs/')) throw new Error('Invalid Commons blob path');
-    return call<Blob>("Couldn't load the reference.", path.slice('/api/commons'.length), { signal });
+    return call<Blob>("Couldn’t load the reference.", path.slice('/api/commons'.length), { signal });
   },
-  status: () => call<CommonsStatus>("Couldn't check the Commons status.", '/status'),
-  collections: () => call<Collection[]>("Couldn't load the collections.", '/collections'),
+  status: () => call<CommonsStatus>("Couldn’t check the Commons status.", '/status'),
+  collections: () => call<Collection[]>("Couldn’t load the collections.", '/collections'),
   createCollection: (name: string, brand?: string | null) =>
-    post<Collection>("Couldn't create the collection.", '/collections', { name, brand: brand || null }),
+    post<Collection>("Couldn’t create the collection.", '/collections', { name, brand: brand || null }),
   patchCollection: (id: string, body: { name?: string; brand?: string | null }) =>
-    patch<Collection>("Couldn't save the collection.", `/collections/${id}`, body),
+    patch<Collection>("Couldn’t save the collection.", `/collections/${id}`, body),
   search: (body: { query: string; filters: Record<string, unknown>; all_scopes?: boolean; limit?: number }) =>
-    post<{ results: SearchRow[] }>("Couldn't load the references.", '/search', { limit: 20, ...body }),
-  asset: (id: string) => call<AssetDetail>("Couldn't load the reference.", `/assets/${id}`),
+    post<{ results: SearchRow[] }>("Couldn’t load the references.", '/search', { limit: 20, ...body }),
+  asset: (id: string) => call<AssetDetail>("Couldn’t load the reference.", `/assets/${id}`),
   uploadFiles: (collectionId: string, files: File[], why?: string, role: Role = 'neutral') => {
     const form = new FormData();
     form.append('collection_id', collectionId);
     form.append('role', role);
     if (why) form.append('why', why);
     files.forEach((f) => form.append('files', f));
-    return call<{ results: UploadResult[] }>("Couldn't upload the files.", '/intake/files', { method: 'POST', body: form });
+    return call<{ results: UploadResult[] }>("Couldn’t upload the files.", '/intake/files', { method: 'POST', body: form });
   },
   addUrl: (body: { url: string; collection_id: string; why?: string; page_url?: string; page_title?: string }) =>
-    post<UrlAddResult>("Couldn't add that URL.", '/intake/url', body),
+    post<UrlAddResult>("Couldn’t add that URL.", '/intake/url', body),
   importMoodboards: () => post<{ collections: number; added: number; skipped: { url: string; reason: string }[] }>(
-    "Couldn't import the moodboards.", '/intake/moodboards'),
-  folders: () => call<FolderLink[]>("Couldn't load the linked folders.", '/folders'),
-  linkFolder: (path: string, ignores?: string[]) => post<FolderLink>("Couldn't link the folder.", '/folders', { path, ignores }),
-  setIgnores: (id: string, ignores: string[]) => patch<FolderLink>("Couldn't save the ignore list.", `/folders/${id}`, { ignores }),
-  rescan: (id: string) => post<{ status: string }>("Couldn't rescan the folder.", `/folders/${id}/rescan`),
+    "Couldn’t import the moodboards.", '/intake/moodboards'),
+  folders: () => call<FolderLink[]>("Couldn’t load the linked folders.", '/folders'),
+  linkFolder: (path: string, ignores?: string[]) => post<FolderLink>("Couldn’t link the folder.", '/folders', { path, ignores }),
+  setIgnores: (id: string, ignores: string[]) => patch<FolderLink>("Couldn’t save the ignore list.", `/folders/${id}`, { ignores }),
+  rescan: (id: string) => post<{ status: string }>("Couldn’t rescan the folder.", `/folders/${id}/rescan`),
   patchMembership: (id: string, body: { role?: Role; why?: string }) =>
-    patch("Couldn't save the reference.", `/memberships/${id}`, body),
-  accept: (id: string) => post("Couldn't accept the reference.", `/memberships/${id}/accept`),
+    patch("Couldn’t save the reference.", `/memberships/${id}`, body),
+  accept: (id: string) => post("Couldn’t accept the reference.", `/memberships/${id}/accept`),
   correct: (assetId: string, body: { field_path: string; op: 'set' | 'add' | 'remove'; value: unknown; reason?: string }) =>
-    post("Couldn't save the correction.", `/assets/${assetId}/corrections`, body),
+    post("Couldn’t save the correction.", `/assets/${assetId}/corrections`, body),
   addRegion: (assetId: string, box: Region['box'], label: string) =>
-    post<Region>("Couldn't add the region.", `/assets/${assetId}/regions`, { box, label }),
+    post<Region>("Couldn’t add the region.", `/assets/${assetId}/regions`, { box, label }),
   patchRegion: (id: string, body: Partial<Pick<Region, 'label' | 'note' | 'status' | 'box'>>) =>
-    patch<Region>("Couldn't save the region.", `/regions/${id}`, body),
-  reanalyze: (assetId: string) => post("Couldn't reanalyze the reference.", `/assets/${assetId}/reanalyze`),
+    patch<Region>("Couldn’t save the region.", `/regions/${id}`, body),
+  reanalyze: (assetId: string) => post("Couldn’t reanalyze the reference.", `/assets/${assetId}/reanalyze`),
   reanalyzeStale: (collectionId?: string) => post<{ queued: number }>(
-    "Couldn't reanalyze the stale references.", '/reanalyze-stale', { collection_id: collectionId ?? null }),
-  purge: (assetId: string) => call("Couldn't delete the reference.", `/assets/${assetId}`, { method: 'DELETE' }),
+    "Couldn’t reanalyze the stale references.", '/reanalyze-stale', { collection_id: collectionId ?? null }),
+  purge: (assetId: string) => call("Couldn’t delete the reference.", `/assets/${assetId}`, { method: 'DELETE' }),
   comment: (assetId: string, text: string, membershipId?: string, regionId?: string) =>
-    post("Couldn't post the comment.", '/comments', { asset_id: assetId, text, membership_id: membershipId, region_id: regionId }),
-  settings: () => call<Record<string, unknown>>("Couldn't load the Commons settings.", '/settings'),
+    post("Couldn’t post the comment.", '/comments', { asset_id: assetId, text, membership_id: membershipId, region_id: regionId }),
+  settings: () => call<Record<string, unknown>>("Couldn’t load the Commons settings.", '/settings'),
   patchSettings: (body: Record<string, unknown>) =>
-    patch<Record<string, unknown>>("Couldn't save the Commons settings.", '/settings', body),
+    patch<Record<string, unknown>>("Couldn’t save the Commons settings.", '/settings', body),
   candidates: () => call<{ term: string; count: number; assets: string[] }[]>(
-    "Couldn't load the vocabulary candidates.", '/vocabulary/candidates'),
-  workerStart: () => post("Couldn't start the worker.", '/worker/start'),
-  workerStop: () => post("Couldn't stop the worker.", '/worker/stop'),
-  exportZip: () => call<Blob>("Couldn't export the ZIP.", '/export'),
+    "Couldn’t load the vocabulary candidates.", '/vocabulary/candidates'),
+  workerStart: () => post("Couldn’t start the worker.", '/worker/start'),
+  workerStop: () => post("Couldn’t stop the worker.", '/worker/stop'),
+  exportZip: () => call<Blob>("Couldn’t export the ZIP.", '/export'),
 };
 
 export function filtersToRequest(f: FilterState): { query: string; filters: Record<string, unknown> } {
@@ -215,30 +229,30 @@ export function filtersToRequest(f: FilterState): { query: string; filters: Reco
 }
 
 export const commonsEvaluationApi = {
-  get: () => call<import('./commonsEvaluationTypes').EvaluationBatch | null>("Couldn't load Blind labeling.", '/evaluation'),
+  get: () => call<import('./commonsEvaluationTypes').EvaluationBatch | null>("Couldn’t load Blind labeling.", '/evaluation'),
   prepare: (path: string) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
-    "Couldn't prepare the held-out set.", '/evaluation/prepare', { path }),
+    "Couldn’t prepare the held-out set.", '/evaluation/prepare', { path }),
   image: (position: number, signal?: AbortSignal) =>
-    call<Blob>("Couldn't load the reference.", `/evaluation/items/${position}/image`, { signal }),
+    call<Blob>("Couldn’t load the reference.", `/evaluation/items/${position}/image`, { signal }),
   accents: (position: number, revision: number, points: import('./commonsEvaluationTypes').AccentPoint[], no_accents: boolean) =>
     post<import('./commonsEvaluationTypes').EvaluationBatch>(
-      "Couldn't save the accents.", `/evaluation/items/${position}/accents`, { revision, points, no_accents }),
+      "Couldn’t save the accents.", `/evaluation/items/${position}/accents`, { revision, points, no_accents }),
   labels: (position: number, revision: number, labels: import('./commonsEvaluationTypes').EvaluationLabels) =>
-    call<import('./commonsEvaluationTypes').EvaluationBatch>("Couldn't save your labels.", `/evaluation/items/${position}/labels`, {
+    call<import('./commonsEvaluationTypes').EvaluationBatch>("Couldn’t save your labels.", `/evaluation/items/${position}/labels`, {
       method: 'PUT', body: JSON.stringify({ revision, labels }),
     }),
   seal: (revision: number) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
-    "Couldn't seal the labels.", '/evaluation/seal', { revision }),
+    "Couldn’t seal the labels.", '/evaluation/seal', { revision }),
   /** Ends the batch as assisted review, never blind ground truth; the server requires the acknowledgement. */
   close: (revision: number) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
-    "Couldn't close the batch.", '/evaluation/close', { revision, acknowledge_not_blind: true }),
+    "Couldn’t close the batch.", '/evaluation/close', { revision, acknowledge_not_blind: true }),
 };
 
 export const commonsReviewApi = {
-  get: () => call<import('./commonsReviewTypes').ReviewBatch | null>("Couldn't load Agent review.", '/review'),
+  get: () => call<import('./commonsReviewTypes').ReviewBatch | null>("Couldn’t load Agent review.", '/review'),
   propose: (position: number) => post<import('./commonsReviewTypes').ReviewBatch>(
-    "Couldn't grade the reference.", `/review/items/${position}/propose`, {}),
+    "Couldn’t grade the reference.", `/review/items/${position}/propose`, {}),
   accept: (position: number, revision: number, labels: import('./commonsEvaluationTypes').EvaluationLabels) =>
-    call<import('./commonsReviewTypes').ReviewBatch>("Couldn't save your corrections.", `/review/items/${position}`,
+    call<import('./commonsReviewTypes').ReviewBatch>("Couldn’t save your corrections.", `/review/items/${position}`,
       { method: 'PUT', body: JSON.stringify({ revision, labels }) }),
 };

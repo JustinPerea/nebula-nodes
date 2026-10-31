@@ -2,7 +2,7 @@ import { failedModuleUrl } from './lazyWithPreload';
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiRequest } from './apiRequest';
-import { PERSON_REQUIRED_CODE, RequestFailedError, personRequiredCopy } from './errorCopy';
+import { PERSON_REQUIRED_CODE, RequestFailedError, personLockLine, personRequiredCopy } from './errorCopy';
 import type { Pin } from './wsClient';
 import type { ProjectContext } from './projectContext';
 
@@ -359,7 +359,8 @@ export const PIN_REFUSAL_COPY = {
   // banner shows, the same rule as Send's.
   notDeleted: 'Your note wasn’t deleted.',
   // GM r24: Send note's lock reason while the banner shows.
-  sendWhenConnected: 'You can send notes when this tab is connected as you.',
+  // "window" in the app (PR #204 round 10, review 8 NIT-2): read when shown.
+  get sendWhenConnected(): string { return personLockLine('send notes'); },
   // GM r30 item 3: Send note's reason while the field has no note in it.
   writeFirst: 'You can send this once you write a note.',
 } as const;

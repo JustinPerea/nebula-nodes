@@ -2,7 +2,10 @@ import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
 import { noteLabel, noteText } from '../../lib/agentNotesView';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { AuthorDot, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
+import { heldVerbFor } from './heldLock';
 
 interface HoldHandlers {
   onMouseEnter: () => void;
@@ -38,6 +41,14 @@ export function AgentNoteCard({
   onShow: (anchor?: HTMLElement) => void;
 }) {
   const label = noteLabel(note);
+  // PR #204 round 10 (GM r15): dismissing is the person's alone (POST .../agent-notes/{id}/dismiss:
+  // require_person), so × locks through the one lock. Round 11 (GM r19 item 3): a card with an
+  // open ask has one lock for both, "You can review (or answer) or dismiss this…", its line under
+  // the ask's buttons and both described by it; with no ask, ×'s own line sits right under it.
+  const askVerb = heldVerbFor(note);
+  const sharedLock = usePersonLock(`${askVerb === 'answer this' ? 'answer' : 'review'} or dismiss this`, askVerb !== null);
+  const ownDismissLock = usePersonLock('dismiss updates', askVerb === null);
+  const dismissLock = askVerb !== null ? sharedLock : ownDismissLock;
   return (
     <div
       ref={cardRef}
@@ -59,16 +70,18 @@ export function AgentNoteCard({
           type="button"
           className="agent-note-card__close"
           aria-label="Dismiss this update"
-          title="Dismiss (it stays in Updates)"
+          title={dismissLock.locked ? undefined : 'Dismiss (it stays in Updates)'}
+          {...dismissLock.control()}
           onClick={(event) => {
             event.stopPropagation();
-            onDismiss();
+            if (!dismissLock.locked) onDismiss();
           }}
         >
           <X size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>
       </div>
-      <p className="agent-note-card__text" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
+      {askVerb === null && <PersonLockLine lock={ownDismissLock} place="control" className="agent-note-card__held-line" />}
+      <p className="agent-note-card__text" data-agent-text="" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
         <RunOutcomeIcon run={note.run} />
         {noteText(note, adapter.numberFor)}
       </p>
@@ -78,7 +91,9 @@ export function AgentNoteCard({
         adapter={adapter}
         onAction={(action, anchor) => { onRead(); onAction(action, anchor); }}
         onShow={(anchor) => { onRead(); onShow(anchor); }}
+        sharedLock={askVerb !== null ? sharedLock : null}
       />
+      {askVerb !== null && <PersonLockLine lock={sharedLock} place="control" className="agent-note-card__held-line" />}
     </div>
   );
 }

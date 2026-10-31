@@ -9,6 +9,7 @@ import { NodeError } from './NodeError';
 import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/batch-node.css';
+import { LineText } from '../LineText';
 
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as NodeData;
@@ -53,7 +54,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       </div>
       <PlaceholderLine pending={nodeData.pending} />
       <p className="batch-node__guidance">Cap {cap} · Run explicitly. Editing does not generate.</p>
-      {authoringError && <p className="batch-node__warning" role="alert">{authoringError}</p>}
+      {authoringError && <p className="batch-node__warning" role="alert"><LineText text={authoringError} /></p>}
       {items.length > cap && !stoppedOnCap && <p className="batch-node__warning" role="alert">
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).
       </p>}

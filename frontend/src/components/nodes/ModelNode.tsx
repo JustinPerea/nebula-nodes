@@ -69,7 +69,7 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
     // "Couldn't download the output. <reason>" (downloadWorldAsset's own
     // lines keep their reason; anything else reads GM's general line).
     // A canvas notice, not a window.alert (round 3f).
-    showNotice(failureMessage(err, "Couldn't download the output."));
+    showNotice(failureMessage(err, "Couldn't download the output."), 'error', err);
   }
 }
 
@@ -372,7 +372,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     ? definition.params.find((param) => param.key === inlineTextParamKey)
     : null;
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
-  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
+  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text…';
   const isNodeSelected = selected || selectedInUi;
   const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
   // The Jev result below hides its echo of the field's text.

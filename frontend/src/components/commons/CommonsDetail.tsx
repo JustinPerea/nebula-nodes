@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useCommonsDraft } from './commonsDraftsContext';
 import { commonsApi } from '../../lib/commonsApi';
 import { wsClient } from '../../lib/wsClient';
 import { ProposalsFor } from '../proposals/ProposalsFor';
@@ -13,9 +14,11 @@ import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
-import { failureMessage } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 interface Props {
   assetId: string;
@@ -68,7 +71,7 @@ function Membership({ assetId, membership, run }: {
   membership: MembershipDetail;
   run: (work: () => Promise<unknown>) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useCommonsDraft(`note:${assetId}:${membership.id}`, '');
   const [posting, setPosting] = useState(false);
   const postingRef = useRef(false);
   return (
@@ -165,29 +168,32 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const [detail, setDetail] = useState<AssetDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftBox, setDraftBox] = useState<Box | null>(null);
-  const [keywordDraft, setKeywordDraft] = useState('');
+  const [keywordDraft, setKeywordDraft] = useCommonsDraft(`keyword:${assetId}`, '');
   const [frameIndex, setFrameIndex] = useState(0);
   const dragStart = useRef<[number, number] | null>(null);
   const [ask, promptElement] = useCommonsPrompt();
   const readOnly = useBackendOffline();
+  // PR #204 round 9: a not-connected line clears on the promote, and the reference loads again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, null, 'commons.detail-load', loadAgain);
 
   const load = useCallback(async () => {
     try {
       setDetail(await commonsApi.asset(assetId));
       setError(null);
     } catch (e) {
-      setError(failureMessage(e, "Couldn't load the reference."));
+      line.show(e, "Couldn’t load the reference.", { reload: true });
     }
-  }, [assetId]);
+  }, [assetId, line]);
 
   useEffect(() => {
     let cancelled = false;
     commonsApi.asset(assetId).then(
-      (d) => { if (!cancelled) setDetail(d); },
-      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the reference.")); },
+      (d) => { if (!cancelled) { setDetail(d); setError(null); } },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the reference.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, [assetId]);
+  }, [assetId, loadEpoch, line]);
 
   // An agent's proposal for this reference was accepted (here or in another
   // tab): the reading changed under the open detail, so read it again.
@@ -214,10 +220,10 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       return true;
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the change."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the change.");
       return false;
     }
-  }, [load, onChanged]);
+  }, [load, onChanged, line]);
 
   const correct = async (field_path: string, op: 'set' | 'add' | 'remove', value: unknown, withReason = false) => {
     let reason: string | undefined;
@@ -235,7 +241,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <div className="commons-detail__bar">
           <button type="button" className="commons-button" onClick={onClose}>Close</button>
         </div>
-        <p className="commons-empty">{error ?? 'Loading…'}</p>
+        <p className="commons-empty"><LineText text={error ?? 'Loading…'} /></p>
       </aside>
     );
   }
@@ -291,7 +297,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       await commonsApi.purge(assetId);
       onDeleted();
     } catch (e) {
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't delete the reference."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t delete the reference.");
     }
   };
 
@@ -310,7 +316,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <button type="button" className="commons-button" onClick={onClose} aria-label="Close detail">Close</button>
       </div>
 
-      {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+      <CommonsErrorLine line={error} />
 
       {/* Round 16 (L4): offline the reference is read-only like the canvas.
           Everything below Close is a write, so one fieldset disables it all;
@@ -319,7 +325,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
-        <div className="commons-notice commons-notice--error commons-analysis-failure">
+        <div className="commons-notice commons-notice--error commons-analysis-failure" data-line-box="">
           <div className="commons-analysis-failure__text">
             <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
             {asset.last_error && (

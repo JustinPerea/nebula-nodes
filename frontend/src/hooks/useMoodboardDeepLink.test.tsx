@@ -15,12 +15,13 @@ function setHash(hash: string) {
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   setHash('');
   useUIStore.setState({ viewMode: 'canvas', moodboardEditorId: null, moodboardEditorScope: 'global' });
   useProjectStore.setState(workspace);
 });
 
-afterEach(() => { setHash(''); });
+afterEach(() => { setHash(''); window.sessionStorage.clear(); });
 
 describe('#moodboard/<id>', () => {
   it('reads only a board id', () => {

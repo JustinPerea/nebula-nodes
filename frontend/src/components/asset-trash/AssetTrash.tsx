@@ -10,9 +10,14 @@ import {
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
 import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import type { LeaveProps } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 /**
  * Recently deleted, inside Moodboard Studio and Character Studio, and under
@@ -50,8 +55,10 @@ function deletedLine(item: TrashedItem): string {
 }
 
 /** Two-step button for the one action that can't be undone. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
+function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, lock }: {
   label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void;
+  /** The person-only lock (components/PersonLock): it never arms while locked. */
+  lock: PersonLock;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -59,7 +66,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
   if (!armed) {
     // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
     return <button type="button" ref={trigger} className="asset-trash__button asset-trash__trigger--danger" disabled={busy}
-      onClick={() => setArmed(true)}>{label}</button>;
+      {...lock.control()} onClick={() => { if (!lock.locked) setArmed(true); }}>{label}</button>;
   }
   return (
     <span className="asset-trash__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
@@ -68,7 +75,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
       <span className="asset-trash__confirm-prompt">{prompt}</span>
       <button type="button" className="asset-trash__button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="asset-trash__button asset-trash__button--danger" disabled={busy}
-        onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
+        {...lock.control()} onClick={() => { setArmed(false); if (!lock.locked) onConfirm(); }}>{confirmLabel}</button>
     </span>
   );
 }
@@ -89,6 +96,10 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
   // Which tab and project `items` came from.
   const [itemsFor, setItemsFor] = useState('');
   const [open, setOpen] = useState(false);
+  // PR #204 round 10 (GM r15, r17 items 1 and 3): deleting for good is the person's alone (DELETE
+  // /api/trash/{kind}/{id}, POST /api/trash/empty: require_person). Empty and every Delete
+  // forever lock as one group with one line under the heading.
+  const purgeLock = usePersonLock('delete items for good');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -141,7 +152,9 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       after?.();
     } catch (err) {
       // A request's own line; never another error's message (round 3b).
-      setError(failureMessage(err, ''));
+      const line = failureMessage(err, '');
+      setError(line);
+      clearSetterOnPromote(err, setError, line, null); // clears-on-promote: trash (GM, #204 r3)
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -159,12 +172,13 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
           <span className="asset-trash__count" aria-hidden="true">{items.length}</span>
         </button>
         {open && items.length > 0 && (
-          <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy}
+          <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} lock={purgeLock}
             prompt={items.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${items.length} ${noun.many} for good?`}
             onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
         )}
       </div>
-      {error && <p className="asset-trash__error" role="alert">{error}</p>}
+      {open && <PersonLockLine lock={purgeLock} place="control" />}
+      {error && <p className="asset-trash__error" role="alert"><LineText text={error} /></p>}
       {open && (
         <>
           <p className="asset-trash__note">Deleted {noun.many} stay here until you delete them for good.</p>
@@ -186,7 +200,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                     <RotateCcw aria-hidden="true" />Restore
                   </button>
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone."
-                    busy={busy} onConfirm={() => void act(() => purgeTrashed(kind, item.id))} />
+                    busy={busy} lock={purgeLock} onConfirm={() => void act(() => purgeTrashed(kind, item.id))} />
                 </span>
               </li>
             ))}
@@ -212,18 +226,20 @@ export interface UndoDeleteToastProps {
 /** "Moved “X” to Recently deleted · Undo", for a few seconds after a delete. */
 export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDismiss, leave }: UndoDeleteToastProps) {
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('asset-trash');
   useEffect(() => {
-    if (paused || busy || error) return;
+    if (paused || busy || error || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, busy, error, onDismiss]);
+  }, [paused, busy, error, waiting, onDismiss]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="asset-trash">
       <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? <LineText text={error} /> : <LineText text={oneLine({ ...error, reason: shortReason(error.reason) })} />) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
         <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
         <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>

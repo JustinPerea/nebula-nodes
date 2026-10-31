@@ -10,7 +10,12 @@ import {
   type OutsideSpend,
 } from '../../../lib/api';
 import { failureMessage } from '../../../lib/errorCopy';
+import { PersonLockLine, type LockProps } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 import { formatSpentUsd } from '../../../lib/pricing';
+import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
+import { LineBox } from '../../LineBox';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -35,7 +40,8 @@ function defaultName(client: AgentClientOption | undefined) {
   return client.id === 'other' ? '' : `My ${client.label}`;
 }
 
-function AppLimitSelect({ id, label, value, disabled, onChange }: {
+function AppLimitSelect({ id, label, value, disabled, onChange, lock = {} }: {
+  lock?: LockProps;
   id?: string;
   label?: string;
   value: number | null;
@@ -46,7 +52,7 @@ function AppLimitSelect({ id, label, value, disabled, onChange }: {
   const custom = value !== null && !(APP_LIMIT_CHOICES as readonly number[]).includes(value);
   return (
     <select id={id} aria-label={label} className="settings__select settings__select--compact" value={current}
-      disabled={disabled} onChange={(event) => onChange(event.target.value === 'none' ? null : Number(event.target.value))}>
+      disabled={disabled} {...lock} onChange={(event) => onChange(event.target.value === 'none' ? null : Number(event.target.value))}>
       {custom && <option value={current}>{usd(value!)} / 24 h</option>}
       {APP_LIMIT_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{usd(choice)} / 24 h</option>)}
       <option value="none">Shared budget only</option>
@@ -54,18 +60,19 @@ function AppLimitSelect({ id, label, value, disabled, onChange }: {
   );
 }
 
-function ColorPicker({ value, disabled, onChange }: {
+function ColorPicker({ value, disabled, onChange, lock = {} }: {
+  lock?: LockProps;
   value: string | null;
   disabled: boolean;
   onChange: (value: string | null) => void;
 }) {
   return (
     <span className="settings-apps__colors" role="radiogroup" aria-label="Cursor color">
-      <button type="button" role="radio" aria-checked={value === null} aria-label="Automatic color" disabled={disabled}
+      <button type="button" role="radio" aria-checked={value === null} aria-label="Automatic color" disabled={disabled} {...lock}
         className="settings-apps__swatch settings-apps__swatch--auto" onClick={() => onChange(null)} />
       {AGENT_COLORS.map((color) => (
         <button key={color} type="button" role="radio" aria-checked={value === color} aria-label={`Color ${color}`}
-          disabled={disabled} className="settings-apps__swatch" style={{ ['--swatch' as string]: color }}
+          disabled={disabled} {...lock} className="settings-apps__swatch" style={{ ['--swatch' as string]: color }}
           onClick={() => onChange(color)} />
       ))}
     </span>
@@ -164,15 +171,26 @@ export function ConnectedApps({ view, loadError, onChanged }: {
   const [armed, setArmed] = useState<string | null>(null);
   const [recoloring, setRecoloring] = useState<string | null>(null);
   const labelOf = (id: string | null | undefined) => clients.find((client) => client.id === id)?.label;
+  // GM r14 (5): the server refuses a new agent token from a tab that isn't connected as the person
+  // (create_agent_app: require_person). So Connect locks in place with its own line under it, and
+  // (PR #204 round 10, GM r15 and r17) a listed app's limit, colour and Revoke lock as a group
+  // with one line under the heading. Both through the one lock (components/PersonLock).
+  const connectLock = usePersonLock('connect an agent');
+  const rowLock = usePersonLock('change connected agents');
+  const tabHeld = connectLock.locked;
 
   const run = async (work: () => Promise<void>) => {
+    // Every change here is the person's alone (aria-disabled doesn't stop a click or a change).
+    if (tabHeld) return;
     setBusy(true);
     setError(null);
     try {
       await work();
       onChanged();
     } catch (exc) {
-      setError(failureMessage(exc, "Couldn't update the connected apps."));
+      const line = failureMessage(exc, "Couldn't update the connected apps.");
+      setError(line);
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.apps (GM, #204 r3)
     } finally {
       setBusy(false);
     }
@@ -208,13 +226,14 @@ export function ConnectedApps({ view, loadError, onChanged }: {
     <div className="settings-apps" aria-labelledby="settings-apps-heading" role="group">
       <div className="settings-apps__head">
         <h4 id="settings-apps-heading" className="settings-apps__title">Connect your agent</h4>
+        {apps.length > 0 && <PersonLockLine lock={rowLock} place="heading" />}
         <p className="settings-hint" id="settings-apps-help">
           Let an agent you already use work on this canvas through Nebula&rsquo;s MCP server. It keeps its own memory
           and tools, shows up as a named cursor, and gets its own daily limit inside &ldquo;Agents outside Nebula
           chats&rdquo;. Revoke a token you no longer use.
         </p>
       </div>
-      {loadError && <p className="settings-row__error" role="alert">{loadError}</p>}
+      <LineBox text={loadError} />
       {!available && view?.connect?.reason && (
         <p className="settings-hint" role="note">{view.connect.reason} You can still make a plain token below.</p>
       )}
@@ -223,9 +242,9 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           <div className="settings-pref settings-model-limit" key={app.id} data-testid="settings-app-row">
             <span className="settings-pref__text">
               <span className="settings-pref__title settings-apps__app-name">
-                <button type="button" className="settings-apps__dot-button" disabled={busy}
+                <button type="button" className="settings-apps__dot-button" disabled={busy} {...rowLock.control()}
                   aria-label={`Change the cursor color for ${app.name}`} aria-expanded={recoloring === app.id}
-                  onClick={() => setRecoloring(recoloring === app.id ? null : app.id)}>
+                  onClick={rowLock.guard(() => setRecoloring(recoloring === app.id ? null : app.id))}>
                   <span className={`settings-apps__dot${app.color ? '' : ' settings-apps__swatch--auto'}`} aria-hidden="true"
                     style={app.color ? { ['--swatch' as string]: app.color } : undefined} />
                 </button>
@@ -239,11 +258,11 @@ export function ConnectedApps({ view, loadError, onChanged }: {
             </span>
             <span className="settings-model-limit__controls">
               <AppLimitSelect label={`${app.name} daily limit`} value={app.dailyUsd} disabled={busy}
-                onChange={(dailyUsd) => void run(async () => { await setConnectedAppLimit(app.id, dailyUsd); })} />
+                lock={rowLock.control()} onChange={(dailyUsd) => void run(async () => { await setConnectedAppLimit(app.id, dailyUsd); })} />
               {armed === app.id ? (
                 <span className="settings__remove-confirm">
                   <button type="button" className="settings__button settings__confirm--danger" disabled={busy}
-                    onClick={() => void run(async () => { await revokeConnectedApp(app.id); setArmed(null); })}>
+                    {...rowLock.control()} onClick={() => void run(async () => { await revokeConnectedApp(app.id); setArmed(null); })}>
                     Revoke {app.name}
                   </button>
                   <button type="button" className="settings__button settings__button--ghost" disabled={busy}
@@ -251,12 +270,13 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                 </span>
               ) : (
                 <button type="button" className="settings__button settings__button--danger" disabled={busy}
-                  aria-label={`Revoke the token for ${app.name}`} onClick={() => setArmed(app.id)}>Revoke</button>
+                  aria-label={`Revoke the token for ${app.name}`} {...rowLock.control()}
+                  onClick={rowLock.guard(() => setArmed(app.id))}>Revoke</button>
               )}
             </span>
             {recoloring === app.id && (
               <span className="settings-model-limit__controls" role="group" aria-label={`Cursor color for ${app.name}`}>
-                <ColorPicker value={app.color ?? null} disabled={busy}
+                <ColorPicker value={app.color ?? null} disabled={busy} lock={rowLock.control()}
                   onChange={(next) => void run(async () => {
                     await setConnectedAppColor(app.id, next);
                     setRecoloring(null);
@@ -266,7 +286,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           </div>
         ))}
         <form className="settings-pref settings-model-limit settings-apps__new"
-          onSubmit={(event) => { event.preventDefault(); if (name.trim()) void create(); }}>
+          onSubmit={(event) => { event.preventDefault(); if (name.trim() && !tabHeld) void create(); }}>
           <span className="settings-pref__text">
             <span className="settings-pref__title">Add an agent</span>
             <span className="settings-pref__description">
@@ -285,10 +305,12 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               onChange={(event) => { setName(event.target.value); setNameTouched(true); }} />
             <ColorPicker value={color} disabled={busy} onChange={setColor} />
             <AppLimitSelect label="New agent daily limit" value={limit} disabled={busy} onChange={setLimit} />
-            <button type="submit" className="settings__button settings__button--primary" disabled={busy || !name.trim()}>
+            <button type="submit" className="settings__button settings__button--primary" disabled={busy || !name.trim()}
+              {...connectLock.control()}>
               {available ? 'Connect' : 'Create token'}
             </button>
           </span>
+          <PersonLockLine lock={connectLock} place="control" className="settings-apps__held-line" />
         </form>
       </div>
       {made?.setup && (
@@ -324,7 +346,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           )}
         </div>
       )}
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
     </div>
   );
 }

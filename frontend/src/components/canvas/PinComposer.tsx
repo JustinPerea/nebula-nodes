@@ -3,7 +3,8 @@ import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
-import { personBannerShown, personGateHeld, subscribePersonBanner, subscribePersonGate } from '../../lib/personSession';
+import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import { getProjectContext } from '../../lib/projectContext';
 import { useCanvasPinsStore } from '../../store/canvasPinsStore';
@@ -15,6 +16,7 @@ import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import { fitNoteHeading, HEADING_END, HEADING_START, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
+import { LineText } from '../LineText';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
  *
@@ -72,8 +74,14 @@ export function PinComposer() {
   // GM r27 item 2: and after the banner's ×, while the tab still isn't
   // connected as the person (× hides the banner, not the condition).
   const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
-  const gateBanner = bannerUp || gateHeld;
+  // GM r7 (3): the one held state (useTabHeld: held, demoted, or not answered yet), with the
+  // same lock and the 150 ms rule as every other ask (useLockPending), never a second flag.
+  // PR #204 round 10 (GM r15): through the one lock (components/PersonLock): aria-disabled with
+  // its line under the buttons, no tooltip. The banner being up locks it at once.
+  const sendLock = usePersonLock('send notes');
+  const tabHeld = sendLock.locked;
+  const heldPending = tabHeld && !sendLock.shown && !bannerUp;
+  const gateBanner = bannerUp || sendLock.shown;
   const lock = useCanvasLock();
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
@@ -314,9 +322,14 @@ export function PinComposer() {
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
-            : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected }
-            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) })}
+          confirm={{ ...lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+            : gateBanner ? {}
+            : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) }),
+            ...(heldPending && !targetGone ? { 'aria-disabled': true as const, 'data-held-pending': '' as const } : {}),
+            ...(gateBanner && !targetGone ? { 'aria-disabled': true as const, 'aria-describedby': sendLock.id, 'data-person-lock': 'send notes' } : {}) }}
+          footer={gateBanner && !targetGone ? (
+            <p id={sendLock.id} className="person-lock-line"><LineText text={PIN_REFUSAL_COPY.sendWhenConnected} /></p>
+          ) : null}
           onRefused={() => { if (!targetGone && !gateBanner && !noteEmpty) refuseCanvasEdit(); }}
           onDone={(value) => {
             if (value === null || !value.trim()) cancel();
@@ -327,8 +340,8 @@ export function PinComposer() {
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
       {errorLeave.shown && (
         <InNoticeRegion slot="pin">
-          <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" {...errorLeave.props}>
-            <span>{errorLeave.shown}</span>
+          <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" data-line-box="" {...errorLeave.props}>
+            <span><LineText text={errorLeave.shown} /></span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>
@@ -353,7 +366,7 @@ export function PinComposer() {
               {rows.map(({ key, item: note, leaving }) => {
                 const leave = rowProps(key, leaving);
                 return (
-                <div key={key} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-project={note.project}
+                <div key={key} className="canvas-pin-toast canvas-pin-toast--kept" role="status" data-line-box="" data-project={note.project}
                   data-entering={(!leaving && entering.has(note.project)) || undefined}
                   ref={leave.ref} data-leaving={leave['data-leaving']} inert={leave.inert}
                   onAnimationEnd={(event) => {

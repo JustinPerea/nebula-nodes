@@ -73,6 +73,12 @@
 .permission-card__actions button:active:not(:disabled) { transform: scale(0.96); }
 .permission-card__actions button:disabled { cursor: default; opacity: 0.6; }
 .permission-card__allow { font-weight: 600; border-color: var(--sr-accent-border, #8a7a3a) !important; }
+.permission-card__held-line {
+  margin: 0;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font-size: 11px;
+  line-height: 1.4;
+}
 .permission-card__timer { margin-left: auto; color: var(--sr-ink-muted, #999); font-size: 10px; }
 .permission-card__outcome { color: var(--sr-ink-muted, #aaa); font-size: 11px; font-style: italic; }
 
@@ -141,7 +147,7 @@
 .personal-warning__title { margin: 0; font-size: 16px; }
 .personal-warning__lead { margin: 0; }
 .personal-warning__list { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--sr-ink-muted, #ccc); }
-.personal-warning__error { margin: 0; color: #e08a8a; }
+.personal-warning__error { margin: 0; color: var(--line-warning, #e08a8a); }
 .personal-warning__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .personal-warning__actions button {

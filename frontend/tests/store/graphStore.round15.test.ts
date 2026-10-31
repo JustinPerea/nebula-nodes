@@ -260,13 +260,13 @@ describe('Create\'s cluster line (GM, round 15)', () => {
 
   it('a refusal with a person line: that line instead of "Try again."', async () => {
     fetchMock.mockImplementation(async () => json({ detail: 'A run is still going. Wait for it to finish or stop it first.' }, 409));
-    expect(failureMessage(await failure(), "Couldn't start the generation.")).toBe(
-      "Couldn't start the generation. Its nodes weren't added to the canvas. A run is still going. Wait for it to finish or stop it first.");
+    expect(failureMessage(await failure(), 'Nebula couldn’t start the generation.')).toBe(
+      "Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. A run is still going. Wait for it to finish or stop it first.");
   });
 
   it('a bare HTTP failure keeps "Try again."', async () => {
     fetchMock.mockImplementation(async () => new Response('', { status: 500 }));
-    expect(failureMessage(await failure(), "Couldn't start the generation.")).toBe(
-      "Couldn't start the generation. Its nodes weren't added to the canvas. Try again.");
+    expect(failureMessage(await failure(), 'Nebula couldn’t start the generation.')).toBe(
+      "Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. Try again.");
   });
 });

@@ -54,13 +54,13 @@ describe('sanitizeNote', () => {
     const kept = sanitizeNote({
       ...note({ source: 'nebula' }),
       actions: [
-        { label: 'Accept', op: { kind: 'proposal.accept', proposalId: 'p1' } },
-        { label: 'Reject', op: { kind: 'proposal.reject', proposalId: 'p1' } },
-        { label: 'Third', op: { kind: 'proposal.accept', proposalId: 'p1' } },
+        { label: 'Review', op: { kind: 'proposal.review', proposalId: 'p1' } },
+        { label: 'Open', op: { kind: 'project.open', projectId: 'x' } },
+        { label: 'Third', op: { kind: 'proposal.review', proposalId: 'p2' } },
         { label: 'No op' },
       ],
     });
-    expect(kept?.actions.map((a) => a.label)).toEqual(['Accept', 'Reject']);
+    expect(kept?.actions.map((a) => a.label)).toEqual(['Review', 'Open']);
   });
 });
 

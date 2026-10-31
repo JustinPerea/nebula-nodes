@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FailureCopy } from '../lib/errorCopy';
+import { clearLineOnPromote } from '../lib/clearsOnPromote';
 
 export type AssetStudioKind = 'character' | 'moodboard';
 export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
@@ -68,6 +69,11 @@ interface AssetStudioDraftState {
    * save leaves the draft dirty: an undo that didn't land changed nothing. */
   failSave: (key: string, id: string, message: StudioFailure,
     options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo'>; step?: string }) => void;
+  /** GM, #204 r3: a failure shown on this draft whose only reason was this tab
+   * not being connected as the person (`error` is the person gate's refusal)
+   * goes when the tab is promoted, while it is still the failure shown; the
+   * draft reads as unsaved again, so its next save runs. */
+  clearOnPromote: (key: string, error: unknown, failure: StudioFailure) => void;
   copyTo: (key: string, destination: string) => void;
   /** The asset moved (Global <-> a project): drafts kept for it take its new
    * `projectId` and the key of its new scope, so a later save never sends
@@ -130,6 +136,14 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     const retry = options.retry ?? 'save';
     get().patch(key, { pendingSaveId: null, dirty: retry === 'save' ? true : entry.dirty, saveState: 'error',
       saveError: message, retry, retryStep: retry === 'save' ? null : options.step ?? null });
+  },
+  clearOnPromote: (key, error, failure) => {
+    clearLineOnPromote(error, () => get().entries[resolveAssetStudioDraftKey(get(), key)]?.saveError, failure, () => { // clears-on-promote: studio.draft
+      const entry = get().entries[resolveAssetStudioDraftKey(get(), key)];
+      if (!entry) return;
+      get().patch(key, { saveError: null, retryStep: null,
+        ...(entry.saveState === 'error' ? { saveState: entry.dirty ? 'draft' : 'saved' } : {}) });
+    });
   },
   copyTo: (key, destination) => {
     const source = resolveAssetStudioDraftKey(get(), key);

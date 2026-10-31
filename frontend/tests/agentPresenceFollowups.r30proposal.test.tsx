@@ -5,6 +5,7 @@
 // back on promote and go again on demote. Review 17 LOW-1: an Accept or
 // Reject refused for the gate stops saying so once the tab is promoted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { blocked, lockLine } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ProposalView } from '../src/lib/wsClient';
 
@@ -77,18 +78,18 @@ afterEach(() => {
 
 const acceptButton = () => screen.getByRole('button', { name: 'Accept & run (1 paid)' }) as HTMLButtonElement;
 const rejectButton = () => screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
-const ACCEPT_HELD = 'You can accept proposals when this tab is connected as you.';
-const REJECT_HELD = 'You can reject proposals when this tab is connected as you.';
+const ACCEPT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
+const REJECT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
 
 describe('GM r30 item 7: Accept and Reject hold with the person gate', () => {
   it('held: both disabled with their reasons, nothing sent; Show still works', async () => {
     open(proposal('p_a'));
     act(() => session.reportPersonRequired());
     render(<ProposalBar />);
-    expect(acceptButton().disabled).toBe(true);
-    expect(acceptButton().title).toBe(ACCEPT_HELD);
-    expect(rejectButton().disabled).toBe(true);
-    expect(rejectButton().title).toBe(REJECT_HELD);
+    expect(blocked(acceptButton())).toBe(true);
+    expect(lockLine(acceptButton())).toBe(ACCEPT_HELD);
+    expect(blocked(rejectButton())).toBe(true);
+    expect(lockLine(rejectButton())).toBe(REJECT_HELD);
     await act(async () => { fireEvent.click(acceptButton()); fireEvent.click(rejectButton()); });
     expect(net.apiFetch).not.toHaveBeenCalled();
     expect((screen.getByRole('button', { name: 'Show' }) as HTMLButtonElement).disabled).toBe(false);
@@ -97,18 +98,18 @@ describe('GM r30 item 7: Accept and Reject hold with the person gate', () => {
   it('promoted: both live again; demoted: held again, from the same signal', () => {
     open(proposal('p_a'));
     render(<ProposalBar />);
-    expect(acceptButton().disabled).toBe(false);
+    expect(blocked(acceptButton())).toBe(false);
     expect(acceptButton().title).toBeFalsy();
     act(() => session.reportPersonRequired());
-    expect(acceptButton().disabled).toBe(true);
-    expect(rejectButton().disabled).toBe(true);
+    expect(blocked(acceptButton())).toBe(true);
+    expect(blocked(rejectButton())).toBe(true);
     act(() => session.notePersonPromoted());
-    expect(acceptButton().disabled).toBe(false);
-    expect(rejectButton().disabled).toBe(false);
+    expect(blocked(acceptButton())).toBe(false);
+    expect(blocked(rejectButton())).toBe(false);
     expect(rejectButton().title).toBeFalsy();
     act(() => session.reportPersonRequired());
-    expect(acceptButton().title).toBe(ACCEPT_HELD);
-    expect(rejectButton().title).toBe(REJECT_HELD);
+    expect(lockLine(acceptButton())).toBe(ACCEPT_HELD);
+    expect(lockLine(rejectButton())).toBe(REJECT_HELD);
   });
 
   it('a link taken in alone is not the server\'s promote: still held', () => {
@@ -116,7 +117,7 @@ describe('GM r30 item 7: Accept and Reject hold with the person gate', () => {
     act(() => session.reportPersonRequired());
     render(<ProposalBar />);
     act(() => { window.dispatchEvent(new CustomEvent(session.PERSON_CONNECTED_EVENT)); });
-    expect(acceptButton().disabled).toBe(true);
+    expect(blocked(acceptButton())).toBe(true);
   });
 
   it('review 17 LOW-1: an Accept refused by the gate stops saying so once promoted; another error stays', async () => {

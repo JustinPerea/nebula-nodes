@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import './ProjectSwitchToast.css';
 import { useLeave } from '../../lib/noticeLeave';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 const VISIBLE_MS = 15000;
 
@@ -26,6 +27,8 @@ export function ProjectSwitchToast() {
   const onProjects = useProjectStore((state) => state.screen === 'home');
   const inCommons = commonsView && !onProjects;
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('project-switch');
   const key = switchKey(notice);
   const [seen, setSeen] = useState<string | null>(null);
   const [held, setHeld] = useState(false);
@@ -36,10 +39,10 @@ export function ProjectSwitchToast() {
     setHeld(false);
   }
   useEffect(() => {
-    if (!notice || paused || held) return;
+    if (!notice || paused || held || waiting) return;
     const timer = window.setTimeout(() => useProjectStore.getState().dismissSwitchNotice(), VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [notice, paused, held]);
+  }, [notice, paused, held, waiting]);
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(notice);
   if (!leave.shown) return null;

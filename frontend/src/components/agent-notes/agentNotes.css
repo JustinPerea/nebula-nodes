@@ -840,11 +840,21 @@ body.app-slava-restraint .agent-notes-root {
 
 .agent-questions-form__foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
   padding: 11px 16px 12px;
   border-top: 1px solid var(--an-edge);
+}
+
+/* GM r10 (1): the held reason on its own row under Dismiss and Send. */
+.agent-questions-form__held-line {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
+  font: 400 12px/1.4 var(--an-ui);
+  text-align: right;
 }
 
 .agent-questions-form__foot .agent-notes-btn:disabled {

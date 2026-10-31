@@ -15,6 +15,7 @@ import { isSafeWorldUrl } from '../../lib/worldValue';
 import { isSplatExport, meshFormatLabel } from '../../lib/meshFormat';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
 
 interface MeshPreviewProps {
   src: string;
@@ -335,7 +336,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
                   ? 'Splat export ready to download'
                   : viewerStatus === 'loading'
                     ? 'Preparing bounded preview…'
-                    : viewerState.errorMessage || 'Interactive preview unavailable'}
+                    : <LineText text={viewerState.errorMessage || 'Interactive preview unavailable'} />}
               </span>
             </div>
             )}
@@ -343,7 +344,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               <span className="mesh-modal__format">
                 {formatLabel}
               </span>
-              {downloadError && <span className="mesh-modal__download-error" role="alert">{downloadError}</span>}
+              {downloadError && <span className="mesh-modal__download-error" role="alert"><LineText text={downloadError} /></span>}
               <button type="button" className="mesh-modal__download" onClick={() => void handleDownload()}>
                 <Download
                   className="mesh-modal__download-icon"

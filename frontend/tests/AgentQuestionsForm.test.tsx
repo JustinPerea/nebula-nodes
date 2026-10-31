@@ -9,7 +9,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
  * answer.", Send / Dismiss, and "No answer." for a blank one.
  */
 
-vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {} } }));
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, subscribeFirst: () => () => {}, connect: () => {}, send: () => {} } }));
 const api = vi.hoisted(() => ({ answerQuestions: vi.fn(), dismissQuestions: vi.fn() }));
 vi.mock('../src/lib/agentQuestions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/agentQuestions')>()),

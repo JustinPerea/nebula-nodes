@@ -76,16 +76,16 @@ export interface ProjectDeletion {
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,
     options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;
-      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
+      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull,
       storageLimit: options.storageLimit, code: options.code, overSaveLimit: options.overSaveLimit,
-      sizeBytes: options.sizeBytes });
+      sizeBytes: options.sizeBytes, sentAt: options.sentAt, sentBeforePromote: options.sentBeforePromote });
     this.name = 'ProjectRequestError';
   }
 }
 const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
   { heading: error.heading, detail: error.detail, storageFull: error.storageFull, storageLimit: error.storageLimit,
-    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes });
+    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, sentAt: error.sentAt });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;

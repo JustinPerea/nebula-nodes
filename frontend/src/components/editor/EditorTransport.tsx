@@ -30,6 +30,7 @@ import { offlineMark } from '../../lib/useBackendOffline';
 import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
+import { LineText } from '../LineText';
 
 const EMPTY_CLIPS: EditClip[] = [];
 
@@ -310,7 +311,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         {...lock.act({ disabled: isRendering || clips.length === 0, offline: true })}
       >
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
-        <span>{isRendering ? 'Rendering...' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
+        <span>{isRendering ? 'Rendering…' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
       </button>
       <div className="final-export">
         <button
@@ -375,7 +376,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
               </button>
             )}
             {(renderJob.error || renderJob.job?.error) && (
-              <div className="final-export__error" role="alert">{renderJob.error || renderJob.job?.error}</div>
+              <div className="final-export__error" role="alert"><LineText text={renderJob.error || renderJob.job?.error} /></div>
             )}
             {renderJob.job?.status === 'cancelled' && (
               <div className="final-export__status">Export cancelled.</div>

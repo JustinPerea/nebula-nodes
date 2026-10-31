@@ -2,6 +2,7 @@ import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
 import type { NodeData } from '../../types';
+import { LineText } from '../LineText';
 
 interface NodeErrorProps {
   category?: string;
@@ -38,9 +39,9 @@ export function NodeError({ category, friendly, person, providerText, provider, 
   const blocked = category === 'blocked' && !person;
   const modifier = `${className.split(' ').at(-1)}--blocked`;
   return (
-    <div className={blocked ? `${className} ${modifier}` : className}>
+    <div className={blocked ? `${className} ${modifier}` : className} data-line-box="">
       <span className="model-node__error-message">
-        {copy.heading ? <FailureLines failure={copy} /> : copy.reason}
+        {copy.heading ? <FailureLines failure={copy} /> : <LineText text={copy.reason} />}
       </span>
       {copy.details && <ErrorDetails raw={copy.details} className="model-node__error-details nodrag nowheel" />}
     </div>

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 /** The one-time notice before Nebula starts any of the person's own agents.
  * The backend refuses to start one until this is acknowledged. */
@@ -11,6 +15,9 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // PR #204 round 10 (GM r15): the acknowledgement is the person's alone
+  // (POST /api/personal-agents/acknowledge-warning: require_person).
+  const lock = usePersonLock('use your agents');
   const [error, setError] = useState<string | null>(null);
   const card = useRef<HTMLDivElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -22,12 +29,15 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
   }, []);
 
   const accept = async () => {
+    if (lock.locked) return;
     setBusy(true);
     setError(null);
     try {
       await onAccept();
     } catch (exc) {
-      setError(failureMessage(exc, "Couldn't save your answer."));
+      const line = failureMessage(exc, "Couldn't save your answer.");
+      setError(line);
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agent-warning (GM, #204 r3)
       setBusy(false);
     }
   };
@@ -64,13 +74,15 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
             conversations and channels.
           </li>
         </ul>
-        {error && <p className="personal-warning__error" role="alert">{error}</p>}
+        {error && <p className="personal-warning__error" role="alert"><LineText text={error} /></p>}
         <div className="personal-warning__actions">
           <button type="button" ref={cancelButton} onClick={onCancel} disabled={busy}>Not now</button>
-          <button type="button" className="personal-warning__accept" onClick={() => void accept()} disabled={busy}>
+          <button type="button" className="personal-warning__accept" onClick={() => void accept()} disabled={busy}
+            {...lock.control()}>
             I understand, start it
           </button>
         </div>
+        <PersonLockLine lock={lock} place="control" />
       </div>
     </div>
     </ModalPortal>

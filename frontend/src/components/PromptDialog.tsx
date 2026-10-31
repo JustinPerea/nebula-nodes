@@ -12,7 +12,7 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK', heading, headingLabel }: {
+export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK', heading, headingLabel, footer }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
@@ -33,7 +33,9 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
    * `act()`: disabled, its marks and tooltip). Enter does nothing then. */
-  confirm?: ActProps;
+  /** `aria-disabled` with `data-held-pending`: a lock in its first moment (GM r5 2a), which keeps
+   * the button's look and does nothing on a press. */
+  confirm?: ActProps & { 'aria-disabled'?: true; 'data-held-pending'?: ''; 'aria-describedby'?: string; 'data-person-lock'?: string };
   /** Enter or OK pressed while `confirm` is disabled. */
   onRefused?: () => void;
   /** A text that may run to several lines (the note for agents, fix round 1
@@ -49,6 +51,8 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   heading?: ReactNode;
   /** The dialog's name for `heading` (its text, the node's full title). */
   headingLabel?: string;
+  /** A line under the buttons (PR #204 round 10: Send note's lock line, components/PersonLock). */
+  footer?: ReactNode;
 }) {
   const [value, setValue] = useState(request.initial);
   const input = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -137,6 +141,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
       onRefused?.();
       return;
     }
+    if (confirm?.['aria-disabled']) return;
     onDone(value);
   };
   return (
@@ -192,6 +197,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
           <button type="button" onClick={() => onDone(null)}>Cancel</button>
           <button type="submit" className="prompt-dialog__confirm" {...confirm}>{confirmLabel}</button>
         </div>
+        {footer}
       </form>
     </div>
     </ModalPortal>

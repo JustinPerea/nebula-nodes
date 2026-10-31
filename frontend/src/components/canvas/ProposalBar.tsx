@@ -1,8 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
 import {
-  PROPOSAL_GATE_COPY,
   acceptLabel,
   countdown,
   ghostBoxes,
@@ -16,7 +15,9 @@ import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
-import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { LineText } from '../LineText';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -81,7 +82,13 @@ export function ProposalBar() {
   // GM r30 item 7: while this tab isn't connected as the person (the hold the
   // server's demote sets and its promote clears, lib/personSession), Accept
   // and Reject wait, disabled with their reasons; Show still works.
-  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld);
+  // GM, #204 r5 item 2: one state, held or not answered yet since load (useTabHeld). Before
+  // the socket's first answer the lock keeps its own look for 150 ms (gatePending), so a
+  // normal load never greys: aria-disabled, no reason, a click does nothing.
+  // PR #204 round 10 (GM r15, r17 item 2): through the one lock (components/PersonLock):
+  // aria-disabled, no tooltip, one line under both buttons, as the Updates rows say it.
+  const gate = usePersonLock('review this');
+  const gateHeld = gate.locked;
   const pruneExpired = useCanvasProposalsStore((s) => s.pruneExpired);
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
@@ -293,7 +300,7 @@ export function ProposalBar() {
             </div>
           )}
           {errorLeave.shown && (
-            <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
+            <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
           )}
         </div>
         <div className="proposal-bar__actions">
@@ -308,9 +315,10 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) })}
+            {...gate.control()}
             onClick={() => {
+              if (gateHeld) return;
               if (settled()) void reject(current.view.id);
             }}
           >
@@ -320,15 +328,17 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) })}
+            {...gate.control()}
             onClick={() => {
+              if (gateHeld) return;
               if (settled()) void accept(current.view.id);
             }}
           >
             {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
           </button>
         </div>
+        <PersonLockLine lock={gate} place="control" className="proposal-bar__held-line" />
       </div>
     </InNoticeRegion>
   );

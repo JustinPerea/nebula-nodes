@@ -11,6 +11,7 @@ import { useSwitchContext } from '../../hooks/useSwitchContext';
 import { floatingBottomLimit } from '../../lib/bottomBar';
 import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/provider-switcher.css';
+import { useCappedPopover } from '../../lib/noticeWaiting';
 
 /**
  * The provider switcher of a route-table node (docs/PROVIDER-ROUTES.md,
@@ -274,6 +275,8 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number; above: boolean } | null>(null);
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  useCappedPopover();
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current?.getBoundingClientRect();

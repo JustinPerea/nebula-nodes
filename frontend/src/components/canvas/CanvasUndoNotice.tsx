@@ -5,6 +5,7 @@ import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { OpenCopyButton } from './OpenCopyButton';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -43,7 +44,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
     return stack[stack.length - 1] === entry;
   });
 
-  const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss);
+  const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss, 'notice');
   // Round 23 (review 22, L-3): Undo and Redo edit the canvas (the store
   // refuses both while following), so they take the canvas lock. Dismiss and
   // Open copy only look.
@@ -69,7 +70,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       {...holdHandlers} {...leave.props}
     >
       {shown.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
-      <span className="canvas-undo-notice__text">{noticeText(shown.text, shown.mono)}</span>
+      <LineText className="canvas-undo-notice__text" text={shown.text}>{noticeText(shown.text, shown.mono)}</LineText>
       {actionable && (
         <button type="button" className="canvas-undo-notice__action" onClick={act} {...lock.act()}
           aria-keyshortcuts={shown.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>

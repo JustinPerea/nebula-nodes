@@ -29,7 +29,8 @@ def test_a_reopened_cover_proposals_update_says_image_again(canvas, monkeypatch)
     note = _proposal_note(canvas)
     assert not note.get("resolvedAt")
     assert note["proposal"] == {"id": cover, "kind": "project", "targetId": canvas.project_id, "cover": "image",
-                                "since": int(book.get(cover).created_at * 1000)}
+                                "since": int(book.get(cover).created_at * 1000), "asks": 1,
+                                "firstSince": int(book.get(cover).created_at * 1000)}
 
 
 def test_a_reopened_proposals_update_says_its_words_again(canvas, monkeypatch):

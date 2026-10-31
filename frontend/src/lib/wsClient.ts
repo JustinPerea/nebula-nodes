@@ -1,4 +1,5 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
+import { withTabClaim } from './tabId';
 import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
@@ -419,7 +420,7 @@ class WebSocketClient {
       .then((url) => {
         if (run !== this.connectRun) return;
         this.connecting = false;
-        const socket = new WebSocket(url);
+        const socket = new WebSocket(withTabClaim(url));
         this.ws = socket;
 
         socket.onopen = () => {

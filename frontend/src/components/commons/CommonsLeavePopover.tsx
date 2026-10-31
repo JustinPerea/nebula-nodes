@@ -9,7 +9,7 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 /**
  * The Commons' leave popover (commons-leave). GM - Design's copy, verbatim:
  * "Your labels aren't saved." with Save and leave (primary), Discard and
- * leave, Stay; after a failed save "Couldn't save your labels." and the
+ * leave, Stay; after a failed save "Couldn’t save your labels." and the
  * reason, and no Save and leave when saving again can't work (a conflict:
  * Discard and leave, Stay, focus on Stay); for a grading run alone "Agent
  * review is still running." with Stop and leave (primary), Stay. Anchored to the clicked control (the toolbar
@@ -57,7 +57,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   const settled = failed && !asking.retry;
   // Labels to save come first; a grading run alone gets its own ask.
   const labels = failed || unsaved || !running;
-  const line = failed ? "Couldn't save your labels." : labels ? "Your labels aren't saved." : 'Agent review is still running.';
+  const line = failed ? "Couldn’t save your labels." : labels ? "Your labels aren't saved." : 'Agent review is still running.';
   const reason = failed ? asking.failure : null;
   const anchorKind = asking.anchor?.matches('.workspace-header__back') ? 'back'
     : asking.anchor?.matches('.project-workspace-controls__home') ? 'home' : 'other';

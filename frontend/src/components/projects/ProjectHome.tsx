@@ -15,6 +15,10 @@ import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
   id: string;
@@ -59,6 +63,10 @@ export interface ProjectHomeProps {
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'none' hides Try again (the whole line). */
   retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
+  /** PR #204 round 11: Try again redoes a "Delete forever" or "Empty" (DELETE
+   * /api/projects/trash/{id}, POST /api/projects/trash/empty: require_person), so on a tab that
+   * isn't connected as the person it locks as those buttons do. */
+  retryPersonOnly?: boolean;
   /** GM r12 item 5: where an update's recovered copy went, when the reload
    * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
    * [Restore] while it is in Recently deleted. */
@@ -68,6 +76,10 @@ export interface ProjectHomeProps {
   /** GM #198 r22 Q2: [Open] on the notice saying where a stale tab's edits
    * were saved (a recovered project); opens it. */
   onOpenCopy?: () => void;
+  /** PR #204 round 11 (GM r18): whether this tab loaded the work. A card's node and connection
+   * counts come with it: while it couldn't (a tab that isn't connected as you), they show
+   * nothing rather than a 0 nobody counted. */
+  workLoaded?: boolean;
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -158,7 +170,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
       </div>
       {choices?.lostPin && <p className="project-home__cover-note">
         {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
-      {failed ? <p className="project-home__cover-note">{failed}</p>
+      {failed ? <p className="project-home__cover-note"><LineText text={failed} /></p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
             : (
@@ -194,7 +206,7 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean }) {
+function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean }) {
   // GM r18: the icons disabled offline carry the offline mark (the
   // not-allowed cursor, and a press pulses the banner).
   const off = offlineMark(offline);
@@ -218,7 +230,9 @@ function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelet
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
-        <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+        {counts
+          ? <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+          : <span data-testid="project-card-no-counts" />}
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
@@ -282,8 +296,10 @@ function deletedByNote(entry: TrashedProject): string {
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
+function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className, lock }: {
   label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
+  /** A person-only action's lock (components/PersonLock): it never arms while locked. */
+  lock?: PersonLock;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -291,7 +307,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   if (!armed) {
     // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
     return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
-      onClick={() => setArmed(true)}>{label}</button>;
+      {...lock?.control()} onClick={() => { if (!lock?.locked) setArmed(true); }}>{label}</button>;
   }
   return (
     <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
@@ -299,7 +315,8 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
     }}>
       <span className="project-home__confirm-prompt">{prompt}</span>
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
-      <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
+      <button type="button" className="project-home__danger" disabled={busy} {...lock?.control()}
+        onClick={() => { setArmed(false); if (!lock?.locked) onConfirm(); }}>{confirmLabel}</button>
     </span>
   );
 }
@@ -311,6 +328,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
   const [now, setNow] = useState(() => Date.now());
+  // PR #204 round 10 (GM r15, r17 item 1): deleting for good is the person's alone (DELETE
+  // /api/projects/trash/{id}, POST .../trash/empty: require_person). Empty and every Delete
+  // forever lock as one group with one line under the heading.
+  const purgeLock = usePersonLock('delete projects for good');
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
@@ -324,8 +345,9 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
           </button>
         </h2>
         {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
-          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
+          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" lock={purgeLock} />}
       </div>
+      {open && <PersonLockLine lock={purgeLock} place="control" />}
       {open && (
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
@@ -337,7 +359,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
                 <span className="project-home__trash-actions">
                   <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
-                    onConfirm={() => onPurge(entry.id)} />
+                    onConfirm={() => onPurge(entry.id)} lock={purgeLock} />
                 </span>
               </li>
             ))}
@@ -352,11 +374,13 @@ function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
   project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
 }) {
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('project-home');
   useEffect(() => {
-    if (paused) return;
+    if (paused || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id]);
+  }, [paused, waiting, onDismiss, project.id]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
@@ -381,7 +405,7 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 }) {
   return (
     <div className="project-home__notice project-home__notice--copy" role="status" data-copy-notice="">
-      <span className="project-home__notice-text">{notice.line}</span>
+      <span className="project-home__notice-text"><LineText text={notice.line} /></span>
       <span className="project-home__notice-actions">
         {notice.restore && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onRestore}>Restore</button>}
         {notice.open && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onOpen}>Open</button>}
@@ -452,7 +476,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
+  const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
   // delete, restore and covers are disabled as while busy; search and
@@ -517,13 +542,14 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
-            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error!) : error}</span>
+          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-              : <span>{retry === 'redo' ? shortLine(error!) : error}</span>}
+              : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
-            {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div></div>}
+            {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
+              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}
+            <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
@@ -532,7 +558,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

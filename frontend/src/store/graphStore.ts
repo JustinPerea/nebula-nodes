@@ -90,9 +90,11 @@ import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, held
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
-  failureMessage, headedLine, isNamedLine, readRefusal, requestError,
-  warnFailure, nodeNameList,
+  PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, refusalError, requestError,
+  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
+import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
+import { sentUnderPromote } from '../lib/personSession';
 import { CANVAS_NOTICE_EVENT, showNotice, type CanvasNoticeDetail } from '../lib/canvasNotice';
 import { sceneRetryingLine, sceneStoppedLine, sceneStopStateLine, type SceneStopCause, sceneOutpacedLine, type SceneOutpacedBy, type SceneWriter, sceneWriterOf,
   sameSceneWriter, UNKNOWN_WRITER, sceneDeletedLine, sceneRunLockLine, sceneOtherStopLine, sceneClashLine,
@@ -344,10 +346,14 @@ function markExecutionScopeQueued(
   nodes: Node<NodeData>[],
   edges: Edge[],
   targetNodeId?: string,
+  queued?: Set<string>,
 ): Node<NodeData>[] {
   const scopeIds = new Set(nodesInExecutionScope(nodes, edges, targetNodeId).map((node) => node.id));
+  // Review 5 NIT-5 (round 7): the scope this start queued, which its refusal marks and puts back.
+  if (queued) { queued.clear(); for (const id of scopeIds) queued.add(id); }
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -372,8 +378,20 @@ function markNodesErrored(
   nodeIds: Set<string>,
   message: string,
   failure?: unknown,
+  /** `message` is the whole line (GM r13's Generate line): the refusal's own words stay out. */
+  ownLine = false,
 ): Node<NodeData>[] {
-  const hidden = failure === undefined ? null : failureDetails(failure);
+  const hidden = failure === undefined || ownLine ? null : failureDetails(failure);
+  // PR #204 round 4: a start the gate refused only for this tab (a spend approval, a billing
+  // switch: main._person_only_refusal) leaves these nodes' line until the promote, while it is
+  // still theirs. Every refused start comes through here with its failure.
+  const line = hidden ?? message;
+  // Review 3 NIT-2 (#204 r5): what the refusal covered, so the promote puts each node back as
+  // it was (a complete node shows its image again), not idle.
+  const before = new Map(nodes.filter((node) => nodeIds.has(node.id)).map((node) => [node.id,
+    beforeQueued.get(node.id) ?? (UNSETTLED.has(node.data.state) ? IDLE_FIELDS : settledFields(node))]));
+  for (const id of nodeIds) beforeQueued.delete(id);
+  clearsOnPromoteIf(failure, () => useGraphStore.setState((state) => ({ nodes: withoutRefusedStart(state.nodes, before, line) }))); // clears-on-promote: graph.run-start
   return nodes.map((node) => {
     if (!nodeIds.has(node.id)) return node;
     return {
@@ -1031,7 +1049,9 @@ interface GraphState {
    * instead of replacing it (review 7, L3). `mono`: a part of the line shown
    * in mono (a model id, GM round 15 of PR #114). An empty line says nothing
    * (a write refused while offline). */
-  notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string }) => void;
+  /** A written line. Given the `error` it reports, a refusal only because this
+   * tab isn't connected as the person goes when the tab is promoted (GM, #204 r3). */
+  notify: (text: string, tone?: 'error' | 'info', options?: { mono?: string; error?: unknown }) => void;
 
   // Clipboard
   clipboard: CanvasClipboard | null;
@@ -1355,14 +1375,21 @@ async function backendDetail(response: Response): Promise<string> {
 class UniversalModelError extends Error {
   /** The backend's failure kind (MODEL_SETTINGS_FAILURE_HEADER), or null. */
   readonly kind: string | null;
-  constructor(message: string, kind: string | null) {
+  /** The answer's structured reason (`person_required` from the person gate), or null. */
+  readonly code: string | null;
+  constructor(message: string, kind: string | null, code: string | null = null) {
     super(message);
     this.kind = kind;
+    this.code = code;
   }
 }
 
 async function universalModelError(response: Response): Promise<UniversalModelError> {
-  return new UniversalModelError(await backendDetail(response), response.headers.get(MODEL_SETTINGS_FAILURE_HEADER));
+  const code = typeof response.clone === 'function'
+    ? await response.clone().json().then((body: { code?: unknown } | null) =>
+      (typeof body?.code === 'string' ? body.code : null)).catch(() => null)
+    : null;
+  return new UniversalModelError(await backendDetail(response), response.headers.get(MODEL_SETTINGS_FAILURE_HEADER), code);
 }
 
 /** GM - Design's line for a model picker that failed (round 13), naming the
@@ -1384,10 +1411,10 @@ function modelPickerFailure(err: unknown, name: string, definitionId: string): s
 function reportModelPickerFailure(err: unknown, nodeId: string, name: string, still: string, definitionId: string): void {
   const kind = err instanceof UniversalModelError ? err.kind : null;
   if (kind === MODEL_SETTINGS_FAILURE || kind === MISSING_KEY_FAILURE) {
-    useGraphStore.getState().notify(modelPickerFailure(err, name, definitionId));
+    useGraphStore.getState().notify(modelPickerFailure(err, name, definitionId), 'error', { error: err });
     return;
   }
-  reportModelChangeFailed(nodeId, still);
+  reportModelChangeFailed(nodeId, still, err);
 }
 
 /** The node's name as its card shows it. */
@@ -1478,12 +1505,11 @@ function configuredModel(node: Node<NodeData> | undefined): string {
 }
 
 /** Create's heading and its cluster line (GM, round 3f and round 15 of PR
- * #114): "Couldn't start the generation. Its nodes weren't added to the
- * canvas." then the backend's reason where it gave a person line (a World
+ * #114; GM r12 (2) of #204: "Nebula couldn’t start the generation."): "Nebula
+ * couldn’t start the generation. Its nodes weren’t added to the canvas." then the backend's reason where it gave a person line (a World
  * Labs state, a run, an access refusal), the connection line when Nebula
  * didn't answer, and "Try again." for a bare HTTP failure. */
-export const GENERATE_HEADING = "Couldn't start the generation.";
-export const CLUSTER_NOT_ADDED = "Its nodes weren't added to the canvas.";
+export { CLUSTER_NOT_ADDED, GENERATE_HEADING } from '../lib/errorCopy';
 export function clusterFailureReason(error: unknown): string {
   // GM, round 16: the unified line wherever #114 owns it.
   if (error instanceof ConnectionLostError) return NEBULA_NOT_ANSWERING_COPY;
@@ -1497,11 +1523,11 @@ export function clusterFailureReason(error: unknown): string {
  * round 15: the line shows what the model picker shows. The picker's own
  * label for it isn't kept outside the Inspector, and the card's badge shows
  * the id, so it is the id, in mono. The reason stays in the console. */
-function reportModelChangeFailed(nodeId: string, still: string): void {
+function reportModelChangeFailed(nodeId: string, still: string, error?: unknown): void {
   const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
   if (!node) return;
   useGraphStore.getState().notify(modelChangeFailedLine(node.data.label, still), 'error',
-    still ? { mono: still } : undefined);
+    { ...(still ? { mono: still } : {}), error });
 }
 
 /** Whether a wire keeps its ends on the node's new ports (a wire leaving the
@@ -1586,6 +1612,29 @@ function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
 /** A shot's output without its status or the last failure's fields (error
  *  copy round 3c-2): a new run, or a failure Nebula wrote itself, must not
  *  show an earlier failure's person line or Details. */
+/** A shot a refused start marked, back to how it was (its image, or idle), if it still says that line. */
+/** A refused shot start's line gone on the promote: the shot back to the state it last settled
+ * in before the start (review 5 LOW-3, round 7, the same rule as a refused run's nodes): done,
+ * error (an older failure keeps its line) or idle, or no output at all. A shot that read running
+ * then takes the look its result gives (done with an image, else idle). */
+function clearShotRefusal(nodeId: string, shotId: string, line: string, before: CinemaShot['output'] | undefined,
+  set: GraphSet, get: GraphGet): void {
+  const scene = (get().nodes.find((n) => n.id === nodeId)?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+  const shot = scene?.shots.find((s) => s.id === shotId);
+  if (!scene || shot?.output?.status !== 'error' || shot.output.error !== line) return;
+  const rest = withoutShotError(shot.output);
+  const settled = before && before.status !== 'running';
+  const output: CinemaShot['output'] = !before ? undefined
+    : settled ? before
+      : rest.imageUrl ? { ...rest, status: 'done' } : { ...rest, status: 'idle' };
+  applySceneToNode(set, nodeId, { ...scene, shots: scene.shots.map((s) => {
+    if (s.id !== shotId) return s;
+    const back: CinemaShot = { ...s, output };
+    if (!output) delete back.output;
+    return back;
+  }) });
+}
+
 function withoutShotError(output: CinemaShot['output']): Omit<NonNullable<CinemaShot['output']>, 'status'> {
   const rest: Partial<NonNullable<CinemaShot['output']>> = { ...(output ?? {}) };
   for (const key of ['status', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText', 'errorProvider', 'errorRaw'] as const) delete rest[key];
@@ -4586,7 +4635,9 @@ type SceneAnswer =
   | { kind: 'rendering'; shotIds: string[]; line: string }
   | { kind: 'gone'; line: string }
   | { kind: 'changed'; scene: CinemaSceneSpec; key: string | null; rev: number | null; by: SceneWriter }
-  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string; reason?: OtherReason | null };
+  | { kind: 'kept'; refused: SceneRefusalKind; line: string | null; log?: string; reason?: OtherReason | null;
+    /** The person gate's refusal, with this answer's stamp (review 5 MEDIUM-1, round 7). */
+    error?: unknown };
 
 /** GM r32, r34: why an "other" refusal stopped a save, as data, so its line
  * reads the scene's name live: `text` follows GM's heading ("Nebula
@@ -4661,14 +4712,18 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   // GM r34 Q3: a whole line the backend wrote stays as it is; a reason it
   // wrote goes after GM's heading, one line per scene; only Nebula's own
   // reason (no detail came) merges.
-  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false } };
+  const error = refusalError({ code, sentAt: sentUnderPromote(response) });
+  // Review 5 MEDIUM-1 (round 7): refused only because this tab isn't connected as the person,
+  // the line says so in the because form (GM r6 2): the save goes again on the promote.
+  if (error) return { kind: 'kept', refused: 'other', line: notConnectedBecause(`save your changes to “${label}”`), reason: { text: null, nebula: false }, error };
+  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false }, error };
   const reason = copyForAnswer(status, body.detail, code);
   const headed = headedLine(heading, reason);
   // headedLine puts the heading first unless one side is empty or the reason
   // already says it whole; only a reason under the heading is kept as data.
   const underHeading = Boolean(heading && reason) && headed !== reason;
   return { kind: 'kept', refused: 'other', line: headed,
-    reason: underHeading ? { text: reason, nebula: reason !== detail } : { text: null, nebula: false } };
+    reason: underHeading ? { text: reason, nebula: reason !== detail } : { text: null, nebula: false }, error };
 }
 
 async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePersistence): Promise<void> {
@@ -4775,6 +4830,13 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
         entry.inFlight = null;
         settleSceneAnswer(nodeId, entry, answer.kind === 'ok' ? { kind: 'ok', rev: answerRev } : answer);
         if (entry.answering === sendSeq) endClashAnswer(nodeId, entry);
+        // Review 5 MEDIUM-1 (round 7): refused only because this tab isn't connected as the
+        // person, the save goes again on the promote, as [Try again] does (after this answer is
+        // settled, so a promote already past sends it now); landing clears its line.
+        // because-line: sceneRefusal
+        if (answer.kind === 'kept') retryOnPromote(answer.error, `cinema.scene-save:${nodeId}`, () => { // clears-on-promote: cinema.scene-save-retry
+          if (cinemaScenePersistence.get(nodeId) === entry && entry.refused === 'other') retrySceneSave(nodeId);
+        });
       }
     }
   }
@@ -5773,6 +5835,55 @@ const nodeWrites = new Map<string, WireWrite>();
  * plain line goes through here: notify, a refused wire, a held delete
  * (review 8, L-d). `tone` as notify gives it; none keeps the notice's default.
  */
+/** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
+/** What markNodesErrored writes over: a refused start's clear puts these back. */
+const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
+  'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
+
+/** Each node as it last settled before a start queued it (review 3 NIT-2): what a refused start
+ * puts back, since by the refusal the node reads 'queued'. Review 4 LOW-4 (round 6): only a
+ * settled state (idle, complete, error, skipped) is kept; a node queued again while queued or
+ * running keeps the settled one it had, and one with none goes back idle, never to 'queued' or
+ * 'executing'. A refusal takes its nodes' entries, and the map stays bounded. */
+const beforeQueued = new Map<string, Partial<NodeData>>();
+const BEFORE_QUEUED_MAX = 500;
+const UNSETTLED: ReadonlySet<string> = new Set(['queued', 'executing']);
+function queuedFrom(node: Node<NodeData>): Node<NodeData> {
+  if (UNSETTLED.has(node.data.state)) {
+    if (!beforeQueued.has(node.id)) beforeQueued.set(node.id, IDLE_FIELDS);
+    return node;
+  }
+  beforeQueued.delete(node.id);
+  beforeQueued.set(node.id, settledFields(node));
+  if (beforeQueued.size > BEFORE_QUEUED_MAX) beforeQueued.delete(beforeQueued.keys().next().value!);
+  return node;
+}
+/** Idle, with none of a run's readings (its outputs stay: they aren't run fields). */
+const IDLE_FIELDS: Partial<NodeData> = { ...Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, undefined])), state: 'idle' };
+function settledFields(node: Node<NodeData>): Partial<NodeData> {
+  return Object.fromEntries(REFUSED_START_FIELDS.map((key) => [key, node.data[key]])) as Partial<NodeData>;
+}
+/** Review 5 NIT-5 (round 7): a start Nebula took leaves nothing for a refusal to put back, so a
+ * node it covered that a later start queues again reads its own state then, not this one's. */
+function startTaken(ids: Iterable<string>): void {
+  for (const id of ids) beforeQueued.delete(id);
+}
+/** Tests: how many nodes have a settled state kept for a refused start. */
+export function beforeQueuedSizeForTests(): number { return beforeQueued.size; }
+
+/** The nodes a refused start marked, back as they were before it (review 3 NIT-2): only those
+ * still showing its line, so a node that ran again and failed otherwise keeps its new line. */
+function withoutRefusedStart(nodes: Node<NodeData>[], before: Map<string, Partial<NodeData>>, line: string): Node<NodeData>[] {
+  return nodes.map((node) => {
+    const was = before.get(node.id);
+    return was && node.data.state === 'error' && node.data.error === line ? { ...node, data: { ...node.data, ...was } } : node;
+  });
+}
+
+function clearsOnPromoteIf(error: unknown, clear: () => void): void {
+  clearRefusedOnPromote(error, clear); // clears-on-promote: graph.refusal
+}
+
 function noticeLine(state: Pick<GraphState, 'undoNotice'>, text: string, tone?: 'error' | 'info',
   mono?: string): Partial<GraphState> {
   // Round 19 (GM): a write made for a canvas replaced since says nothing of
@@ -5815,13 +5926,14 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
     done(response.ok);
     if (response.ok) return;
     const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
-    const text = headedLine(heading, await backendRejectionReason(response, heading));
+    const { reason, error } = await backendRejectionReason(response, heading);
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
-      // Beside an agent's Undo, never over it (review 8, L-d: through notify's rule).
-      ...noticeLine(state, text),
     }));
+    // Beside an agent's Undo, never over it (review 8, L-d), through notify, which registers a
+    // refusal's line on the promote by the answer's own stamp (review 5 MEDIUM-1, round 7).
+    useGraphStore.getState().notify(headedLine(heading, reason), 'error', { error });
   }, (err) => {
     done(false);
     console.warn('[nebula] Wire sync failed:', err);
@@ -7258,6 +7370,7 @@ function markSnapshotScopeQueued(
 ): Node<NodeData>[] {
   return nodes.map((node) => {
     if (!scopeIds.has(node.id)) return node;
+    queuedFrom(node);
     return {
       ...node,
       data: {
@@ -7561,10 +7674,11 @@ function notStartedMessage(heading: string, status: string | undefined): string 
  * itself goes to the console under `heading`, once per call site. A
  * person-only refusal says GM's line for it, by its code (Q116 a); its own
  * words, written for agents, go to the console only. */
-async function backendRejectionReason(response: Response, heading: string): Promise<string> {
-  const { detail, code } = await readRefusal(response);
-  warnFailure(heading, response.status, detail);
-  return copyForAnswer(response.status, detail, code);
+async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown }> {
+  const read = await readRefusal(response);
+  warnFailure(heading, response.status, read.detail);
+  // Review 5 LOW-4 (round 7): the line carries this answer's own refusal and stamp.
+  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read) };
 }
 
 type NodeCreationAttempt = {
@@ -7650,13 +7764,15 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
     useGraphStore.getState().notify(heading);
     return null;
   }
-  return reportNodeCreationFailure(displayName, failureCopy(err).reason);
+  // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
+  return reportNodeCreationFailure(displayName, failureCopy(err).reason, err);
 }
 
-function reportNodeCreationFailure(displayName: string, reason: string): null {
+function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown): null {
   const message = headedLine(addHeading(displayName), reason);
   console.warn(`[nebula] ${message}`);
-  useGraphStore.getState().notify(message);
+  // A refusal's line carries the refusal (review 5 LOW-4): it clears by its own stamp.
+  useGraphStore.getState().notify(message, 'error', { error });
   return null;
 }
 
@@ -7776,10 +7892,8 @@ async function createNodeOnBackend(
 
     if (!res.ok) {
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      return reportNodeCreationFailure(
-        definition.displayName,
-        await backendRejectionReason(res, addHeading(definition.displayName)),
-      );
+      const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+      return reportNodeCreationFailure(definition.displayName, reason, error);
     }
 
     let node: { id?: unknown };
@@ -9445,7 +9559,7 @@ function sendRestore(
   /** Review 17, W5 and L-2: Nebula refused it, or it never answered within
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
-  const refused = (reason: string, how: { text?: string; quiet?: boolean } = {}) => {
+  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown } = {}) => {
     ownLinesWaiting.delete(notice.noticeId);
     skippedAfter.delete(notice.noticeId);
     // Another graph is open now: nothing here is that graph's (as before).
@@ -9495,6 +9609,11 @@ function sendRestore(
       return { nodes: withFreshKeyStatus(withLiveRenders(canvas.nodes, prevNodes, state.nodes, state.activeRuns), state.nodes),
         edges: canvas.edges, ...stacks, ...line };
     });
+    // Review 5 MEDIUM-1 (round 7): a refusal only for this tab goes on the promote, while it is
+    // still the line on screen.
+    if (how.quiet || admission.graph !== canvasReplacementRevision) return;
+    const shown = undoNoticeSeq;
+    clearsOnPromoteIf(how.error, () => set((state) => (state.undoNotice?.id === shown ? { undoNotice: null } : {}))); // clears-on-promote: graph.undo-refusal
   };
   // Behind the person's writes already waiting their turn too, in the order
   // made (round 18's property test, seed 55: typing flushed by this Cmd+Z
@@ -9587,9 +9706,9 @@ function sendRestore(
         });
         return;
       }
-      const reason = await backendRejectionReason(response, `Couldn't ${action} that.`);
+      const { reason, error } = await backendRejectionReason(response, `Couldn't ${action} that.`);
       console.warn(`[nebula] ${action} refused: ${reason}`);
-      refused(reason);
+      refused(reason, { error });
     } finally {
       // The newest copy Nebula synced of each node it held (M-2).
       if (admission.graph === canvasReplacementRevision) {
@@ -11014,7 +11133,23 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   // Empty: a write refused while offline says nothing (round 15 of PR #114).
   notify: (text, tone = 'error', options) => {
     if (!text) return;
-    set((state) => noticeLine(state, text, tone, options?.mono));
+    let shownId: number | null = null;
+    set((state) => {
+      const shown = noticeLine(state, text, tone, options?.mono);
+      shownId = (shown.undoNotice ?? shown.messageNotice)?.id ?? null;
+      return shown;
+    });
+    if (shownId === null) return;
+    const id = shownId;
+    // Review 4 LOW-2, review 5 LOW-4 (round 7): the refusal itself, so its own send-time
+    // stamp comes with it (a line built from a refusal's words passes refusalError of its
+    // answer). A line that says the gate held with no error gets a bare code: it waits for the
+    // next promote, never another request's stamp.
+    const refusal = isPersonRefusal(options?.error) ? options?.error
+      : saysPersonRequired(text) ? { code: PERSON_REQUIRED_CODE }
+        : options?.error;
+    clearsOnPromoteIf(refusal, () => useGraphStore.setState((state) => (state.undoNotice?.id === id // clears-on-promote: graph.notify
+      ? { undoNotice: null } : state.messageNotice?.id === id ? { messageNotice: null } : {})));
   },
 
   // ---------------------------------------------------------------------------
@@ -11266,7 +11401,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   addNodeAndConnect: async (definitionId, position, connect) => {
     const definition = NODE_DEFINITIONS[definitionId];
-    const fail = (reason: string) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason);
+    const fail = (reason: string, error?: unknown) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
     if (before.isExecuting || before.isImportingGraph) return fail('Wait for the current run or graph import to finish.');
@@ -11326,7 +11461,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        return fail(await backendRejectionReason(res, addHeading(definition.displayName)));
+        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+        return fail(reason, error);
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -11477,9 +11613,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
       }
       if (!res.ok) {
-        const reason = await backendRejectionReason(res, addHeading(definition.displayName));
+        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
         takeBack();
-        return reportNodeCreationFailure(definition.displayName, reason);
+        return reportNodeCreationFailure(definition.displayName, reason, error);
       }
       let body: { id?: unknown };
       try {
@@ -12363,9 +12499,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const runId = uuidv4();
     currentRunId = runId;
     registerRun(runId, snapshot);
+    const queuedScope = new Set<string>();
     set((state) => ({
       activeRuns: ownershipState().activeRuns,
-      nodes: markExecutionScopeQueued(state.nodes, state.edges),
+      nodes: markExecutionScopeQueued(state.nodes, state.edges, undefined, queuedScope),
       isExecuting: true,
       isCancelling: false,
       runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
@@ -12388,6 +12525,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
+      startTaken(queuedScope);
       if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
         const onItsCanvas = runOnItsCanvas(runId);
         closeTrackedRun(set, runId, { status: 'failed' });
@@ -12411,9 +12549,10 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
+        // Review 5 NIT-5: the scope this start queued, not one read again at the refusal.
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
-          new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
+          queuedScope,
           failureMessage(err, "Couldn't start the run."),
           err,
         ),
@@ -12473,6 +12612,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     let trimmed: RunRecord[] = [];
     // Registers the run: its Run history record, its nodes Queued, Stop. Again
     // after Nebula's refusal and a yes, unless another run started meanwhile.
+    const queuedScope = new Set<string>();
     const begin = (again = false) => {
       if (again && (get().isExecuting || get().isImportingGraph)) return false;
       const state = get();
@@ -12482,7 +12622,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       registerRun(runId, snapshot, nodeId);
       set((current) => ({
         activeRuns: ownershipState().activeRuns,
-        nodes: markExecutionScopeQueued(current.nodes, current.edges, nodeId),
+        nodes: markExecutionScopeQueued(current.nodes, current.edges, nodeId, queuedScope),
         isExecuting: true,
         isCancelling: false,
         runHistory: persistedRunHistory(openRunRecord(current.runHistory, {
@@ -12519,6 +12659,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           400,
         );
       }
+      startTaken(queuedScope);
       if (result.status === 'validation_error' && (currentRunId === runId || ownsRun(runId))) {
         const onItsCanvas = runOnItsCanvas(runId);
         closeTrackedRun(set, runId, { status: 'failed' });
@@ -12544,7 +12685,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set((state) => ({
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
-          new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
+          queuedScope,
           failureMessage(err, "Couldn't run the node."),
           err,
         ),
@@ -12711,7 +12852,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        failShot(failureMessage(err, "Couldn't start the shot."));
+        const line = failureMessage(err, "Couldn't start the shot.");
+        failShot(line);
+        // PR #204 round 4: refused only for this tab, the shot's line goes on the promote while it is still there.
+        const settledBefore = shotBefore;
+        clearsOnPromoteIf(err, () => clearShotRefusal(nodeId, shotId, line, settledBefore, set, get)); // clears-on-promote: graph.shot-start
         settleTrackedExecutionStatus('failed', runId, set, get);
       } else await reconcileWorldLabsExecutionStatus(runId, set, get, err);
     }
@@ -12788,7 +12933,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       nodes: state.nodes.map((n) =>
         idSet.has(n.id)
           ? {
-              ...n,
+              ...queuedFrom(n),
               data: {
                 ...n.data,
                 state: 'queued' as const,
@@ -12901,6 +13046,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status === 'started') {
+        // Gates NIT-3 (round 7): this path queues with no resetExecution, so a taken start's
+        // kept states go here too.
+        startTaken(idSet);
         updateRunPhase(runId, 'running', set);
         scheduleWorldLabsStatusReconciliation(runId, set, get);
         return;
@@ -12922,13 +13070,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
+      // GM r13 (1), PR #204 round 9: Generate's nodes were added and only their start was refused
+      // for this tab. Its result cards say so in GM's words: the nodes are there, run them from
+      // the canvas, never "try again" (a second Generate would add them again).
+      const generateRefused = Boolean(createOrigin) && isPersonRefusal(error);
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
-        failureMessage(error, "Couldn't start the run."), error) }));
+        // GM r16 Q3 (round 10): any other reason says the nodes are there too, never "try again".
+        generateRefused ? generateRefusedCopy(true) : createOrigin ? generateStartFailedCopy(error)
+          : failureMessage(error, "Couldn't start the run."), error, Boolean(createOrigin)) }));
     }
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
+    if (get().isImportingGraph) throw new FailureNotice(GENERATE_HEADING, 'Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -13007,7 +13161,11 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         console.error('[nebula] authorGenerationCluster persist failed:', err);
         // Refused while offline: nothing was sent, and Create says nothing.
         if (isOfflineRefusal(err)) throw err;
-        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`);
+        // Review 3 MEDIUM-1 (#204 r5): the refusal's code (and when it was sent) go with it, so
+        // Create's line clears on the promote when its only reason was this tab.
+        const refused = err instanceof RequestFailedError ? err : null;
+        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} ${clusterFailureReason(err)}`,
+          { code: refused?.code ?? null, sentAt: refused?.sentAt ?? null });
       } finally {
         synced.stop();
       }
@@ -14329,7 +14487,7 @@ useGraphStore.subscribe(fixAddsBelowNewSteps);
 if (typeof window !== 'undefined') {
   window.addEventListener(CANVAS_NOTICE_EVENT, (event) => {
     const detail = (event as CustomEvent<CanvasNoticeDetail>).detail;
-    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone);
+    if (detail?.text) useGraphStore.getState().notify(detail.text, detail.tone, { error: detail.error });
   });
 }
 

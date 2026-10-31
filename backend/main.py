@@ -164,6 +164,7 @@ from services.canvas_events import (
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
+from services.agent_notes import for_reader as notes_for_reader
 from services import person_session
 from services import asset_trash
 from services.child_env import scrubbed_env
@@ -3770,14 +3771,63 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
+# PR #204 round 4: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
+# sends on writes; the CLI and MCP never send it) on its Updates reads, and ``?tab=1`` on its
+# socket, where a browser can't set headers. It is a claim, not an agent marker: it never makes a
+# request the person (person_gate is untouched) and only decides who sees a shared asset Update's
+# ``asks`` and ``firstSince`` (agent_notes.for_reader). The claim needs no secret (security
+# review LOW-2, r5): any local program, a page on any localhost origin, or an agent sandboxed
+# with localhost network access can send it without a marker and read those two counts. Agents
+# that reach Nebula only through MCP or the CLI can't: neither ever sends the claim.
+# The counts are payload shape, not a secret: GET /api/asset-proposals and the journal let any
+# agent work them out (security review LOW-1).
+TAB_CLAIM_HEADER = "x-nebula-tab"
+TAB_CLAIM_PARAM = "tab"
+
+
+def _share_view(headers: Mapping[str, str] | None, *, tab_claim: bool | None = None) -> dict[str, Any]:
+    """Who this reader is for a shared Update's share fields: the person, a tab not connected as
+    the person (claims to be a tab, carries no agent marker), or the agent it names (only a marked
+    reader is one). ``tab_claim``: a socket's, from its URL."""
+    lower = {str(k).lower(): v for k, v in (headers or {}).items()}
+    marked = has_agent_marker(lower)
+    claim = bool(str(lower.get(TAB_CLAIM_HEADER) or "").strip()) if tab_claim is None else tab_claim
+    if is_person(lower) or (claim and not marked):
+        return {"sees_share": True, "agent_id": None}
+    identity = identify_agent(lower) if marked else None
+    return {"sees_share": False, "agent_id": identity.id if identity is not None else None}
+
+
+def _socket_share_view(websocket: WebSocket) -> dict[str, Any]:
+    try:
+        claim = websocket.query_params.get(TAB_CLAIM_PARAM) == "1"
+        return _share_view(websocket.headers, tab_claim=claim)
+    except Exception:  # noqa: BLE001 - a malformed handshake is another reader
+        return {"sees_share": False, "agent_id": None}
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
         self.browser_connections: set[WebSocket] = set()
+        self.share_views: dict[WebSocket, dict[str, Any]] = {}
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
+        self.share_views[websocket] = _socket_share_view(websocket)
+
+    def share_view(self, websocket: WebSocket) -> dict[str, Any]:
+        """The person's verified canvas sees everything; any other socket as it connected."""
+        if websocket in self.browser_connections:
+            return {"sees_share": True, "agent_id": None}
+        return self.share_views.get(websocket) or {"sees_share": False, "agent_id": None}
+
+    def for_socket(self, websocket: WebSocket, data: dict[str, Any]) -> dict[str, Any]:
+        """An Updates message as this socket may see it (agent_notes.for_reader)."""
+        if data.get("type") != "agentNotes":
+            return data
+        return notes_for_reader(data, **self.share_view(websocket))
 
     def promote(self, websocket: WebSocket, person_token: object) -> bool:
         """Mark a socket as the person's canvas after a valid hello frame.
@@ -3805,6 +3855,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        self.share_views.pop(websocket, None)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -3815,24 +3866,40 @@ class ConnectionManager:
         """Send `data` to every socket; with `others`, only the person's canvas
         sockets (a verified hello) get `data` and every other socket gets
         `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
-        message = json.dumps(data)
-        other_message = message if others is None else json.dumps(others)
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
             try:
-                await connection.send_text(message if connection in self.browser_connections else other_message)
+                base = data if others is None or connection in self.browser_connections else others
+                await connection.send_text(self._form(connection, base, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
             self.disconnect(conn)
 
+    def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
+        """`base` as this socket gets it, serialised once per form. An Updates message always
+        goes through its reader's form (agent_notes.for_reader), whichever form a broadcast
+        hands this socket (PR #204 r5, security review NIT-1: an `others=` form or a
+        broadcast_others of Updates never skips the filter)."""
+        if base.get("type") == "agentNotes":
+            view = self.share_view(connection)
+            key: tuple[Any, ...] = (id(base), view["sees_share"], view["agent_id"])
+            if key not in forms:
+                forms[key] = json.dumps(notes_for_reader(base, **view))
+            return forms[key]
+        key = (id(base),)
+        if key not in forms:
+            forms[key] = json.dumps(base)
+        return forms[key]
+
     async def broadcast_others(self, data: dict[str, Any]) -> None:
         """Send to every socket that isn't the person's canvas (CLI/MCP listeners)."""
-        message = json.dumps(data)
+        forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         for connection in [c for c in self.active_connections if c not in self.browser_connections]:
             try:
-                await connection.send_text(message)
+                await connection.send_text(self._form(connection, data, forms))
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
@@ -4038,7 +4105,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
-        await websocket.send_text(json.dumps(_canvas_notes_message()))
+        await websocket.send_text(json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -4074,6 +4141,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 # ---------- Chat WebSocket (/ws/chat) ----------
+
+def _chat_ref(payload: dict[str, Any]) -> dict[str, str]:
+    """The tab's own `ref` for a message, echoed on its person_required refusal so the tab
+    reads the refusal against the promote that message went out under (PR #204 round 7).
+    A short string only; anything else is left out."""
+    ref = payload.get("ref")
+    return {"ref": ref} if isinstance(ref, str) and 0 < len(ref) <= 64 else {}
+
 
 @app.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket) -> None:
@@ -4390,7 +4465,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
                     await send_event({"type": "error", "code": "person_required", "message": (
                         "Only the person can answer or close a personal agent, from a Nebula canvas connected as them."
-                    ), "source": "system"})
+                    ), "source": "system", **_chat_ref(payload)})
                     continue
                 if msg_type == "permission":
                     for host in acp_sessions.live():
@@ -4461,7 +4536,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "error", "code": "person_required", "message": (
                     "Only the person can start a chat, from a Nebula canvas connected as them. Open the "
                     "link the backend printed at launch (backend/devserver.py, or restart it with --open)."
-                ), "source": "system"})
+                ), "source": "system", **_chat_ref(payload)})
                 await send_event({"type": "done", "source": "system"})
                 continue
             from commons.activation import is_enabled
@@ -6750,7 +6825,8 @@ def _proposal_closed(proposal_id: str) -> bool:
 
 
 async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
-                         detail: Mapping[str, Any] | None = None, text: str | None = None) -> None:
+                         detail: Mapping[str, Any] | None = None, text: str | None = None,
+                         share: Callable[[], Mapping[str, Any]] | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
     proposal's ref carries its ``detail`` again (asset_proposals.update_detail), and its
     words are that proposal's (``text``, asset_proposals.update_text; review 1 LOW-1)."""
@@ -6758,7 +6834,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
         return
     try:
         result = await asyncio.to_thread(agent_notes.reopen_proposal, ref["projectId"], ref["id"], proposal_id,
-                                         detail, text, _proposal_closed)
+                                         detail, text, _proposal_closed, share)
     except (NoteError, ProjectStoreError):
         return
     if result is not None and result["projectId"] == _open_project_id():
@@ -6940,7 +7016,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
             })
         except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
             pass
-        await _reopen_update(proposal.update, proposal.id)
+        await _reopen_update(proposal.update, proposal.id, {"since": int(proposal.created_at * 1000)})
         _schedule_canvas_expiry(proposal)
 
     reopened_assets: list[AssetProposal] = []
@@ -6969,8 +7045,25 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal))
+        # PR #204 round 4: a newer ask from the same agent on the same target posted while this
+        # one was closed, and its Update replaced this one's (_same_ask). This ask joins that live
+        # Update, as if it had been open then; the refresh below counts it there. Without this it
+        # pointed at an Update that's gone: no Update of its own, and one too few on the live one.
+        live = next((other.update for other in _open_sharers(proposal)
+                     if other is not proposal and other.update and other.update != proposal.update), None)
+        if live is not None:
+            proposal.update = dict(live)
+        else:
+            await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
+                                 _share_reader(proposal, proposal.update))
+        # Review 3 LOW-2 (#204 r5): either way it is open again with a new expiry, and its old
+        # timer may have fired while it was closed: check it when it is due.
         _schedule_asset_expiry(proposal)
+    # MEDIUM-1: an ask reopened under an Update another open ask still holds
+    # leaves that Update on the other ask (reopen_proposal); it now stands for
+    # one more, so it says so.
+    for ref in {_ref_key(p.update): p.update for p in reopened_assets if p.update}.values():
+        await _refresh_asset_update(ref)
     if reopened_assets:
         try:
             await manager.broadcast_browser(_asset_proposal_open_message())
@@ -7236,7 +7329,8 @@ async def list_canvas_agent_notes(unread: int = 0) -> Any:
     """The open project's Updates, newest first (``?unread=1`` for unread only)."""
     try:
         await _settle_proposal_updates()  # never list an expired proposal as waiting
-        return agent_notes.canvas_list(unread_only=bool(unread))
+        return notes_for_reader(agent_notes.canvas_list(unread_only=bool(unread)),
+                                             **_share_view(current_request_headers()))
     except NoteError as exc:
         return _raise_note_error(exc)
 
@@ -7304,7 +7398,8 @@ async def list_board_agent_notes(moodboard_id: str, unread: int = 0) -> Any:
     board = await asyncio.to_thread(_live_board_for_notes, moodboard_id)
     if isinstance(board, JSONResponse):
         return board
-    return agent_notes.board_list(board, unread_only=bool(unread))
+    return notes_for_reader(agent_notes.board_list(board, unread_only=bool(unread)),
+                                         **_share_view(current_request_headers()))
 
 
 @app.post("/api/moodboards/{moodboard_id}/agent-notes", status_code=201)
@@ -8444,7 +8539,9 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
     try:
         result = await asyncio.to_thread(
             agent_notes.post_questions, author={"kind": "agent", **question_set.agent.as_dict()},
-            text=question_update_text(question_set), questions={"id": question_set.id},
+            text=question_update_text(question_set),
+            questions={"id": question_set.id, "count": len(question_set.spec.questions),
+                       "since": int(question_set.created_at * 1000)},
             refs=list(question_set.spec.node_ids), project_id=question_set.project_id, save_set=save_set)
     except (NoteError, ProjectStoreError):
         question_set.update = None  # never committed: no later save may keep it
@@ -8718,7 +8815,8 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=asset_update_text(proposal),
             proposal={"id": proposal.id, "kind": proposal.kind, "targetId": proposal.target_id,
-                      **asset_update_detail(proposal)})
+                      **asset_update_detail(proposal)},
+            share=_share_reader(proposal, None))
     except (NoteError, ProjectStoreError):
         return  # no project open: the Agent log line is the only notice, as before
     note = result["note"]
@@ -8733,10 +8831,77 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
     _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
+    # PR #204 round 4 (review 2 LOW-1): an ask that closed after the write counted it, but before
+    # it joined this Update, had its follow land on the Update this one replaced. Count again now
+    # that every sharer points here; the Update stays on this ask (no write when the count holds).
+    if proposal.is_open:
+        try:
+            recount = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], proposal.id,
+                                              asset_update_detail(proposal), asset_update_text(proposal),
+                                              _share_reader(proposal, ref))
+        except (NoteError, ProjectStoreError):
+            recount = None
+        if recount is not None and recount["projectId"] == _open_project_id():
+            await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=recount["projectId"],
+                                                        ids=[ref["id"]], note=recount["note"]))
 
 
 def _same_asker(one: AssetProposal, other: AssetProposal) -> bool:
     return one.agent.id == other.agent.id and one.kind == other.kind and one.target_id == other.target_id
+
+
+def _open_sharers(proposal: AssetProposal, ref: Mapping[str, Any] | None = None) -> list[AssetProposal]:
+    """The same agent's open asks on this proposal's target (given ``ref``, only those under that
+    Update): the asks one asset Update stands for."""
+    return [p for p in asset_proposals.open_list()
+            if isinstance(p, AssetProposal) and p.is_open and _same_asker(p, proposal)
+            and (ref is None or p.update == ref)]
+
+
+def _asset_share_detail(sharers: list[AssetProposal]) -> dict[str, Any]:
+    """PR #204 review 1 MEDIUM-1 (GM, 2026-10-30): what a shared asset Update stands for, so a
+    tab not connected as the person counts and orders it as the connected tab does and nothing
+    moves on the promote: ``asks``, how many open asks share it, and ``firstSince``, the oldest
+    one's createdAt (ms). Kept current wherever an ask joins or leaves it (post, the follow's
+    resolve or retarget, an undo's reopen). Its agent's own asks: nothing it didn't know."""
+    if not sharers:
+        return {}
+    return {"asks": len(sharers), "firstSince": int(min(p.created_at for p in sharers) * 1000)}
+
+
+def _share_reader(proposal: AssetProposal | None, ref: Mapping[str, Any] | None):
+    """The share fields as they are when the notes write runs, not when the caller looked (PR #204
+    round 3: a follow that closed an ask in between already wrote the smaller count). Given no
+    ``proposal``, every open ask under ``ref``."""
+    def read() -> dict[str, Any]:
+        if proposal is None:
+            return _asset_share_detail([p for p in asset_proposals.open_list()
+                                        if isinstance(p, AssetProposal) and p.is_open and p.update == ref])
+        return _asset_share_detail(_open_sharers(proposal, ref))
+    return read
+
+
+def _ref_key(ref: Mapping[str, Any]) -> tuple[str, str]:
+    return (str(ref.get("projectId") or ""), str(ref.get("id") or ""))
+
+
+async def _refresh_asset_update(ref: Mapping[str, Any]) -> None:
+    """The Update reviews the newest of the open asks under it, and its ref says how many share it
+    and the oldest one's time (MEDIUM-1). No write when it already does (retarget_proposal)."""
+    sharers = [p for p in asset_proposals.open_list()
+               if isinstance(p, AssetProposal) and p.is_open and p.update == ref]
+    if not sharers:
+        return
+    newest = max(sharers, key=lambda p: p.created_at)
+    try:
+        result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
+                                         asset_update_detail(newest), asset_update_text(newest),
+                                         _share_reader(None, ref))
+    except (NoteError, ProjectStoreError):
+        return
+    if result is not None and result["projectId"] == _open_project_id():
+        await _broadcast_raw_quietly(_notes_message("canvas", "changed", project_id=result["projectId"],
+                                                    ids=[ref["id"]], note=result["note"]))
 
 
 async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
@@ -8753,13 +8918,15 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
             if waiting:
                 newest = max(waiting, key=lambda p: p.created_at)
                 result = await asyncio.to_thread(agent_notes.retarget_proposal, ref["projectId"], ref["id"], newest.id,
-                                                 asset_update_detail(newest), asset_update_text(newest))
+                                                 asset_update_detail(newest), asset_update_text(newest),
+                                                 _share_reader(proposal, ref))
                 op, extra = "changed", {}
             else:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id)
+                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id,
+                                                 closed=_proposal_closed)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
             continue
@@ -8943,7 +9110,7 @@ async def _settle_proposal_updates() -> None:
             # over meanwhile (reopen_proposal; PR #202 review 3 LOW-2).
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"},
-                                             proposal_id=str(ref.get("id") or ""))
+                                             proposal_id=str(ref.get("id") or ""), closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is not None:
@@ -9006,7 +9173,9 @@ async def _post_canvas_update(proposal: Proposal) -> None:
         result = await asyncio.to_thread(
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=canvas_update_text(proposal), project_id=proposal.project_id,
-            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id})
+            proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id,
+                      # When it was asked (the view's createdAt), as asset refs say (GM 2026-10-29).
+                      "since": int(proposal.created_at * 1000)})
     except (NoteError, ProjectStoreError):
         return
     note = result["note"]
@@ -9046,7 +9215,8 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
                                              outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id)
+                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id,
+                                             closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:
