@@ -840,11 +840,26 @@ nebula notes --unread          # your updates the person hasn't opened
 field), `click`, `drag` (connecting, with `--from`), `run`, `propose`
 (waiting for the person's OK), `wait` (for their answer) or `error`
 (something failed). Any other value is refused. Your graph edits pick their
-own. Each of your sessions has its own cursor on the person's canvas
-("Claude Code", "Claude Code · 2"): under Claude Code the CLI uses your
-Claude Code session, which your subagents share, so give each lane its own
-`NEBULA_AGENT_SESSION` to give it its own cursor. Only the person sees
-sessions: `nebula look` and `nebula agents` show one cursor per agent.
+own.
+
+**One cursor per session, and `NEBULA_AGENT_SESSION`.** Each of your
+sessions has its own cursor on the person's canvas: "Claude Code", then
+"Claude Code · 2" (the lowest number free among your live cursors; a cursor
+keeps its number until it leaves). `NEBULA_AGENT_SESSION` says which session
+a call is: up to 64 of `A-Z a-z 0-9 _ . : -`, anything else is ignored.
+
+- **Without it**, under Claude Code the CLI uses your Claude Code session.
+  Your subagents see the same one, so every subagent moves your cursor, and
+  the person sees one cursor jumping between lanes. Over MCP, your subagents
+  share your MCP server and so its cursor too.
+- **To give each subagent its own cursor**, the orchestrator picks a value
+  per lane and tells the subagent to put it on every `nebula` call it makes,
+  for example `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`.
+  Use the CLI for this: an MCP server has one session for all its callers.
+- The same value keys the lane's scene reads, so a lane reads and writes
+  with it (above).
+- Only the person sees sessions: `nebula look` and `nebula agents` show one
+  cursor per agent.
 
 A note keeps the lines the person wrote: `nebula pins` prints a note of
 several lines under its pin's line, every line indented the same, so a list

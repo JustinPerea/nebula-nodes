@@ -59,3 +59,26 @@ describe('agentCursor.css runs on springs only', () => {
     expect(main).not.toMatch(/agent-cursor--idle/);
   });
 });
+
+describe('ratchets the look depends on (review 1, F5)', () => {
+  const rule = (selector: string) => {
+    const at = main.startsWith(`${selector} {`) ? 0 : main.indexOf(`\n${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return main.slice(at, main.indexOf('}', at));
+  };
+  it('the layer takes no pointer events, and nothing in it turns them back on', () => {
+    // Hover-to-name hit-tests the window pointer: the cursors must never
+    // cover node drags, wire pulls or the marquee.
+    expect(rule('.agent-cursor-layer')).toMatch(/pointer-events:\s*none;/);
+    expect(css).not.toMatch(/pointer-events:\s*(auto|all|visible)/);
+  });
+  it("the say pill moves exactly into the name's slot (20 px name + 4 px gap)", () => {
+    expect(rule(".agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__label")).toMatch(/transform:\s*translateY\(-24px\);/);
+    expect(rule('.agent-cursor__label')).toMatch(/gap:\s*4px;/);
+    expect(rule('.agent-cursor__name')).toMatch(/line-height:\s*16px;/);
+    expect(rule('.agent-cursor__name')).toMatch(/padding:\s*2px 7px;/);
+  });
+  it('the hidden name keeps its box at opacity 0', () => {
+    expect(rule(".agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__name")).toMatch(/opacity:\s*0;/);
+  });
+});

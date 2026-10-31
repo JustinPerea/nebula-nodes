@@ -96,10 +96,12 @@ describe('sessions', () => {
   it('caps one agent at 8 cursors, dropping the one heard from longest ago', () => {
     expect(AGENT_CURSOR_SESSIONS_PER_AGENT).toBe(8);
     apply({ ...event(), agent: CODEX } as never, 500);
-    for (let n = 1; n <= 8; n += 1) apply(event({ session: { key: key(n), ordinal: n } }), 1_000 + n);
+    // Numbers 2-10, so none is the plain cursor's 1 (a shared number is a
+    // cursor that left: the next test).
+    for (let n = 1; n <= 8; n += 1) apply(event({ session: { key: key(n), ordinal: n + 1 } }), 1_000 + n);
     // Heard again: no longer the oldest.
-    apply(event({ session: { key: key(1), ordinal: 1 } }), 2_000);
-    apply(event({ session: { key: key(9), ordinal: 9 } }), 3_000);
+    apply(event({ session: { key: key(1), ordinal: 2 } }), 2_000);
+    apply(event({ session: { key: key(9), ordinal: 10 } }), 3_000);
     const { agents } = useAgentPresenceStore.getState();
     const mine = Object.values(agents).filter((cursor) => cursor.id === 'claude');
     expect(mine).toHaveLength(8);
@@ -112,6 +114,34 @@ describe('sessions', () => {
     apply(event(), 4_000);
     expect(Object.values(useAgentPresenceStore.getState().agents).filter((c) => c.id === 'claude')).toHaveLength(8);
     expect(useAgentPresenceStore.getState().agents[`claude#${key(3)}`]).toBeUndefined();
+  });
+
+  it('shows the number the backend gave and never numbers on its own', () => {
+    apply(event({ session: { key: key(1), ordinal: 1 } }), 1_000);
+    apply(event({ session: { key: key(2), ordinal: 2 } }), 1_001);
+    apply(event({ session: { key: key(3), ordinal: 3 } }), 1_002);
+    // Session 2 left the backend, which gave its number to a new session.
+    // The old cursor goes here too, so two cursors never read "Claude · 2".
+    apply(event({ session: { key: key(4), ordinal: 2 } }), 1_003);
+    let { agents } = useAgentPresenceStore.getState();
+    expect(Object.keys(agents).sort()).toEqual([`claude#${key(1)}`, `claude#${key(3)}`, `claude#${key(4)}`]);
+    expect(Object.values(agents).map((c) => c.session?.ordinal).sort()).toEqual([1, 2, 3]);
+    // The live ones keep theirs.
+    expect(agents[`claude#${key(1)}`].session?.ordinal).toBe(1);
+    expect(agents[`claude#${key(3)}`].session?.ordinal).toBe(3);
+    // The plain cursor counts as 1, so a session given 1 takes its place.
+    useAgentPresenceStore.getState().clear();
+    apply(event(), 2_000);
+    apply(event({ session: { key: key(5), ordinal: 1 } }), 2_001);
+    ({ agents } = useAgentPresenceStore.getState());
+    expect(Object.keys(agents)).toEqual([`claude#${key(5)}`]);
+    // And the other way: the plain cursor back means session 1 left.
+    apply(event(), 2_001.5);
+    expect(Object.keys(useAgentPresenceStore.getState().agents)).toEqual(['claude']);
+    apply(event({ session: { key: key(5), ordinal: 1 } }), 2_001.7);
+    // Another agent's numbers are its own.
+    apply({ ...event(), agent: CODEX, session: { key: key(6), ordinal: 1 } } as never, 2_002);
+    expect(Object.keys(useAgentPresenceStore.getState().agents).sort()).toEqual(['codex#' + key(6), `claude#${key(5)}`].sort());
   });
 
   it('prune and forgetGraph work per cursor key', () => {

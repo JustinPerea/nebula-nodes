@@ -42,8 +42,9 @@ export interface ProjectSwitch {
 export { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from './agentPresenceActions';
 
 /** Which session of its agent a cursor is: an opaque key the backend derives
- * (never the agent's own id) and its number by first appearance, the same in
- * every tab ("Claude · 2"). Display only. */
+ * (never the agent's own id) and its number, the lowest free among the
+ * agent's live sessions, held until its cursor leaves. The backend is the one
+ * place that numbers, so every tab agrees ("Claude · 2"). Display only. */
 export interface AgentPresenceSession {
   key: string;
   ordinal: number;

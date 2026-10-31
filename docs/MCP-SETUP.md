@@ -620,7 +620,10 @@ nebula look          # the canvas as text; --json for the full snapshot
 
 The action (`point_at`'s `action`, `nebula point --action`, the cursor
 route's `action`) says what you are doing at the cursor. These are the only
-values; any other is refused with this list:
+values. Any other is refused (a 422 over HTTP, an error from `point_at` and
+`nebula point`) with one line that names the value you gave, for example:
+“hover” isn’t an action Nebula knows. Use one of move, look, think, type,
+click, drag, run, propose, wait or error.
 
 | Action | Means |
 |---|---|
@@ -636,15 +639,29 @@ values; any other is refused with this list:
 | `error` | something you tried failed |
 
 Graph edits through Nebula's API pick their own action on the person's
-canvas: a param or prompt edit shows as `type`, a run as `run`, a proposal as
-`propose`, a run that couldn't start as `error`, a connection as `drag`.
+canvas:
+
+- any change to a param's value shows as `type`, whether it comes through
+  `PUT /api/graph/node/{id}` (`nebula set`), `edit_canvas` or `nebula apply`
+  (when the edit's focus is a node whose values changed);
+- a rename, an added node, a removal or a move with no value change shows as
+  `click` (a node moved on the canvas as `move`);
+- a connection shows as `drag`, a run as `run`, a proposal as `propose`, and
+  a run that couldn't start as `error`.
+
+Agents read `click` for all of these but the connection and the move, as
+before.
 
 **One cursor per session.** Each session of an agent gets its own cursor on
 the person's canvas, in the agent's colour at a different lightness. The
-first is named as the agent ("Claude"); the others are numbered in the order
-they first appear, and keep their number until Nebula restarts ("Claude ·
-2", "Claude · 3"). One agent shows at most 8 at once. Where the session comes
-from:
+first is named as the agent ("Claude"). A new session takes the lowest
+number free among the agent's live cursors, where the plain "Claude" counts
+as 1 ("Claude · 2", "Claude · 3"). A live cursor keeps its number until it
+leaves, so nothing renumbers under the person. A cursor leaves when it has
+had no event for 120 s, when its node is deleted or the canvas is cleared or
+replaced, or when a ninth session of the agent pushes out its oldest idle one
+(one agent shows at most 8 at once). The backend is the one place that
+numbers; every tab shows the number it gives. Where the session comes from:
 
 | Client | Its session |
 |---|---|
@@ -653,11 +670,25 @@ from:
 | `nebula` under Claude Code | The Claude Code session (a hash of `CLAUDE_CODE_SESSION_ID`, never the id itself), unless `NEBULA_AGENT_SESSION` is set |
 | `nebula` elsewhere, an app token, a bare `X-Nebula-Agent` request | `NEBULA_AGENT_SESSION` (the `X-Nebula-Agent-Session` header) if set, else one cursor for the agent's name, as before |
 
-A Claude Code subagent sees its parent's `CLAUDE_CODE_SESSION_ID`, so a
-session and all its subagents share one CLI cursor; give each lane its own
-`NEBULA_AGENT_SESSION` to separate them (that also keeps each lane's scene
-reads its own, below). An agent that uses both MCP and the CLI under one name
-shows two cursors unless both use the same `NEBULA_AGENT_SESSION`.
+**`NEBULA_AGENT_SESSION`, for orchestrators.** It says which session a
+call is: up to 64 of `A-Z a-z 0-9 _ . : -` (anything else is ignored, as if
+unset). The CLI sends it on every call; the MCP server reads it once at
+start, for every call it serves.
+
+- **Without it, subagents share the parent's cursor.** A Claude Code
+  subagent sees its parent's `CLAUDE_CODE_SESSION_ID`, so a session and all
+  its subagents move one CLI cursor. Over MCP they share the parent's server
+  connection, and so its one cursor too.
+- **To give each subagent its own cursor**, pick a value per lane and have
+  the lane put it on every CLI call it makes:
+  `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`. Each lane
+  then shows as its own cursor ("Claude Code · 2"). An MCP server's value
+  covers all of its callers, so lanes that need their own cursors use the
+  CLI.
+- It also keys the lane's scene reads (below), so a lane reads and writes
+  with the same value.
+- An agent that uses both MCP and the CLI under one name shows two cursors
+  unless both use the same `NEBULA_AGENT_SESSION`.
 
 The session is for the cursor only: it never changes who the agent is, its
 colour's hue, what it may do or its spending. Only the person's own canvas

@@ -11,10 +11,12 @@ import {
 import type { AgentCursorAction } from '../../lib/wsClient';
 import { resolveAnchor, type Point } from '../../lib/agentCursorMotion';
 import {
+  AGENT_CURSOR_ENTRANCE_PX,
   AGENT_CURSOR_FADE_SPRING,
   AGENT_CURSOR_IDLE_OPACITY,
   AGENT_CURSOR_MOVING_SPEED,
   createMotion,
+  cursorDurationMs,
   entranceStart,
   isMoving,
   planMove,
@@ -22,7 +24,9 @@ import {
   type CursorMotion,
 } from '../../lib/agentCursorPlanner';
 import {
+  AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
+  AGENT_CURSOR_STACK,
   deStack,
   inkFor,
   labelLayout,
@@ -58,8 +62,6 @@ function cursorSpringVars(): Record<`--${string}`, string> {
   return springVars;
 }
 
-/** The person's pointer over a cursor's arrow or pills (cursors take no pointer events). */
-const HOVER_SLOP_PX = 4;
 
 /**
  * What the cursors share: each one's resolved target, so a later cursor
@@ -67,15 +69,26 @@ const HOVER_SLOP_PX = 4;
  * for the arc's side and the name on hover.
  */
 class CursorField {
-  readonly targets = new Map<string, { target: Point; receivedAt: number }>();
+  /** Each cursor's resolved target, and when it came to that spot (de-stacking order). */
+  readonly targets = new Map<string, { target: Point; since: number }>();
+  /** Each cursor's motion, so a new flight can see the others still under way. */
+  readonly motions = new Map<string, CursorMotion>();
   readonly wakers = new Map<string, () => void>();
   readonly pointerListeners = new Set<() => void>();
   pointer: Point | null = null;
+  /** The pane's box, read once and kept until it resizes or the viewport moves. */
+  private pane: DOMRect | null = null;
+  /** Bumped when anything on screen may have moved: cached hover boxes are stale. */
+  layoutEpoch = 0;
+  private arrivals = 0;
 
-  report(key: string, target: Point, receivedAt: number): void {
+  report(key: string, target: Point, zoom: number): void {
     const before = this.targets.get(key);
-    if (before && before.receivedAt === receivedAt && before.target.x === target.x && before.target.y === target.y) return;
-    this.targets.set(key, { target, receivedAt });
+    if (before && before.target.x === target.x && before.target.y === target.y) return;
+    // A cursor keeps its place in the stack while it stays on its spot; one
+    // that moves further than the stack radius came to a new spot.
+    const moved = !before || Math.hypot(before.target.x - target.x, before.target.y - target.y) * zoom > AGENT_CURSOR_STACK.radiusPx;
+    this.targets.set(key, { target, since: moved ? (this.arrivals += 1) : before.since });
     for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
@@ -85,8 +98,24 @@ class CursorField {
     return deStack(entries, zoom).get(key);
   }
 
+  /** Other cursors' flights still under way. */
+  flightsBesides(key: string) {
+    return [...this.motions].filter(([k, m]) => k !== key && m.plan).map(([, m]) => m.plan!);
+  }
+
+  paneRect(dom: Element): DOMRect {
+    if (!this.pane) this.pane = dom.getBoundingClientRect();
+    return this.pane;
+  }
+
+  readonly invalidateLayout = (): void => {
+    this.pane = null;
+    this.layoutEpoch += 1;
+  };
+
   forget(key: string): void {
     this.targets.delete(key);
+    this.motions.delete(key);
     this.wakers.delete(key);
     for (const wake of this.wakers.values()) wake();
   }
@@ -169,12 +198,13 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
   useLayoutEffect(() => {
     const reduced = prefersReducedMotion();
     const opacityTarget = () => (idleRef.current ? AGENT_CURSOR_IDLE_OPACITY : 1);
-    // The person's pointer in flow coordinates, or null off the canvas.
+    // The person's pointer in flow coordinates, or null off the canvas. The
+    // pane's box is cached on the field: no layout read per frame.
     const pointerInFlow = (): Point | null => {
       const client = field.pointer;
       const { domNode, transform } = store.getState();
       if (!client || !domNode || !transform) return null;
-      const box = domNode.getBoundingClientRect();
+      const box = field.paneRect(domNode);
       if (client.x < box.left || client.x > box.right || client.y < box.top || client.y > box.bottom) return null;
       const [tx, ty, scale] = transform;
       return { x: (client.x - box.left - tx) / scale, y: (client.y - box.top - ty) / scale };
@@ -189,10 +219,15 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       // Set outside React so a re-render never hides a placed cursor again.
       el.dataset.placed = 'true';
     };
-    const updateWire = (start: Point | null) => {
+    const updateWire = (start: Point | null, arrivedNow = false) => {
       const line = wireRef.current;
       const m = motion.current;
       if (!line) return;
+      if (arrivedNow && start && m && dragging) {
+        // The tip is at the port: the wire ends there as it fades.
+        line.setAttribute('x2', String(m.pos.x));
+        line.setAttribute('y2', String(m.pos.y));
+      }
       if (!start || !m || phase.current !== 'travel' || !dragging) {
         line.style.opacity = '0';
         return;
@@ -203,6 +238,18 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       line.setAttribute('y2', String(m.pos.y));
       line.style.strokeWidth = String(2 / zoomRef.current);
       line.style.opacity = '1';
+    };
+    // The cursor's own hover boxes (arrow and pills), read at most once per
+    // landing, label change or viewport move, never per frame or per pointermove.
+    let hoverBoxes: DOMRect[] | null = null;
+    let hoverEpoch = -1;
+    const hoverHit = (x: number, y: number): boolean => {
+      if (!hoverBoxes || hoverEpoch !== field.layoutEpoch) {
+        const parts = [pointerRef.current, ...(cursorRef.current?.querySelectorAll('.agent-cursor__name, .agent-cursor__say') ?? [])];
+        hoverBoxes = parts.filter((part): part is Element => part !== null).map((part) => part.getBoundingClientRect());
+        hoverEpoch = field.layoutEpoch;
+      }
+      return hoverBoxes.some((rect) => overlaps(rect, x, y));
     };
     // The name and say rules (§4), written as one attribute from the loop,
     // the pointer and the timers: never React state per frame.
@@ -217,7 +264,18 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
         hovered: hovered.current,
         sinceFirstSightMs,
       });
-      el.dataset.label = labelLayout(shown, sayShownRef.current);
+      const layout = labelLayout(shown, sayShownRef.current);
+      if (el.dataset.label !== layout) hoverBoxes = null; // the pills changed: their boxes too
+      el.dataset.label = layout;
+    };
+    const onPointer = () => {
+      const client = field.pointer;
+      // While it flies the boxes are stale; it re-tests on landing.
+      const flying = phase.current !== 'rest';
+      const over = client !== null && !flying && hoverHit(client.x, client.y);
+      if (over === hovered.current) return;
+      hovered.current = over;
+      updateLabel.current();
     };
 
     const tick = (time: number) => {
@@ -227,21 +285,52 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
       if (!resolved) return; // Node not drawn yet; the store subscription wakes us.
       const z = zoomRef.current;
-      field.report(cursor.key, resolved, cursor.receivedAt);
+      field.report(cursor.key, resolved, z);
       const target = field.spot(cursor.key, z) ?? resolved;
       const goal = phase.current === 'pickup' && start ? start : target;
       const pointer = pointerInFlow();
+      const others = field.flightsBesides(cursor.key);
+
+      // An event this tab heard while hidden (or long ago) snaps to its
+      // target: no flight replayed, no action shown as if it were now
+      // (GM - Design, PR #211 r2). The say shows only while still current.
+      const ageMs = Date.now() - cursor.receivedAt;
+      const flightPx = motion.current
+        ? Math.hypot(goal.x - motion.current.pos.x, goal.y - motion.current.pos.y) * z
+        : AGENT_CURSOR_ENTRANCE_PX;
+      const stale = planPending.current && !reduced && ageMs > cursorDurationMs(flightPx);
+      if (stale) {
+        planPending.current = false;
+        phase.current = 'rest';
+        if (!motion.current) {
+          motion.current = createMotion(target, opacityTarget());
+          field.motions.set(cursor.key, motion.current);
+        }
+        const m = motion.current;
+        stepMotion(m, target, 0, { zoom: z, reduced: true, opacityTarget: opacityTarget() });
+        firstSightAt.current = performance.now();
+        if (ageMs >= AGENT_SAY_MS) setSayDoneSeq(cursor.seq);
+        window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
+        lastTime.current = null;
+        apply();
+        updateWire(null);
+        field.invalidateLayout();
+        updateLabel.current();
+        onPointer();
+        return;
+      }
 
       if (!motion.current) {
         // First sighting: in from 64 px back along the line to its first target.
         motion.current = reduced
           ? createMotion(target, opacityTarget())
           : createMotion(entranceStart(goal, start ? { from: start, to: target } : null, z), 0);
+        field.motions.set(cursor.key, motion.current);
         firstSightAt.current = performance.now();
         window.setTimeout(() => updateLabel.current(), AGENT_CURSOR_NAME_FIRST_SIGHT_MS + 20);
-        if (!reduced) planMove(motion.current, goal, { zoom: z, pointer });
+        if (!reduced) planMove(motion.current, goal, { zoom: z, pointer, others });
       } else if (planPending.current && !reduced) {
-        planMove(motion.current, goal, { zoom: z, pointer });
+        planMove(motion.current, goal, { zoom: z, pointer, others });
       }
       planPending.current = false;
 
@@ -249,24 +338,30 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       const dt = lastTime.current === null ? 1 / 60 : (time - lastTime.current) / 1000;
       lastTime.current = time;
       const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer });
+      let arrivedNow = false;
 
       if (phase.current === 'pickup' && start) {
         // At the port, nearly still: now pull the wire to the target.
         const near = Math.hypot(m.pos.x - start.x, m.pos.y - start.y) * z < 2;
         if (!m.plan && near && Math.hypot(m.vel.x, m.vel.y) * z < AGENT_CURSOR_MOVING_SPEED) {
           phase.current = 'travel';
-          planMove(m, target, { zoom: z, pointer });
+          planMove(m, target, { zoom: z, pointer, others });
         }
-      } else if (phase.current === 'travel' && (result.arrived || reduced || (!m.plan && !m.landing))) {
+      } else if (phase.current === 'travel' && (result.arrived || reduced || (!m.plan && !m.landing && !m.awaiting))) {
+        arrivedNow = true;
+        // The tip is at the target (within 2 px): the action fires and the
+        // wire lets go here, never at the hand-off.
         phase.current = 'rest';
         setArrivedSeq(cursor.seq);
+        field.invalidateLayout();
       }
       apply();
-      updateWire(start);
+      updateWire(start, arrivedNow);
       updateLabel.current();
 
       if (phase.current === 'rest' && result.atRest) {
         lastTime.current = null;
+        onPointer(); // landed under a still pointer, or flew out from under it
         return; // At rest: sleep until the canvas, an event or a timer changes.
       }
       frame.current = requestAnimationFrame(tick);
@@ -276,14 +371,6 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       if (frame.current === null) frame.current = requestAnimationFrame(tick);
     };
     field.wakers.set(cursor.key, () => wake.current());
-    const onPointer = () => {
-      const client = field.pointer;
-      const parts = [pointerRef.current, ...(cursorRef.current?.querySelectorAll('.agent-cursor__name, .agent-cursor__say') ?? [])];
-      const over = client !== null && parts.some((part) => part && overlaps(part.getBoundingClientRect(), client.x, client.y));
-      if (over === hovered.current) return;
-      hovered.current = over;
-      updateLabel.current();
-    };
     field.pointerListeners.add(onPointer);
 
     phase.current = dragging && !reduced ? 'pickup' : 'travel';
@@ -341,7 +428,8 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
           <path d="M1.5 1.5 L1.5 17.5 L6 13.3 L9.1 20.1 L11.9 18.9 L8.9 12.3 L14.7 12.1 Z" />
         </svg>
         <div className="agent-cursor__label">
-          <span className="agent-cursor__name">{name}</span>
+          {/* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */}
+          <span className="agent-cursor__name"><bdi>{cursor.name}</bdi>{name.slice(cursor.name.length)}</span>
           {showSay && !idle && (
             <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>{cursor.say}</span>
           )}
@@ -364,6 +452,28 @@ export function AgentCursorLayer() {
     const timer = window.setInterval(() => prune(), PRUNE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [prune]);
+
+  // The cached pane box and hover boxes go stale when the viewport moves or
+  // the pane resizes: drop them then, and only then.
+  const storeApi = useStoreApi<Node<NodeData>>();
+  useEffect(() => {
+    let transform = storeApi.getState().transform;
+    const unsubscribe = storeApi.subscribe((state) => {
+      if (state.transform !== transform) {
+        transform = state.transform;
+        field.invalidateLayout();
+      }
+    });
+    const dom = storeApi.getState().domNode;
+    const observer = dom && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => field.invalidateLayout()) : null;
+    if (dom) observer?.observe(dom);
+    window.addEventListener('resize', field.invalidateLayout);
+    return () => {
+      unsubscribe();
+      observer?.disconnect();
+      window.removeEventListener('resize', field.invalidateLayout);
+    };
+  }, [storeApi, field]);
 
   useEffect(() => {
     const onMove = (event: PointerEvent) => {

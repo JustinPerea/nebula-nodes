@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_CURSOR_ARRIVE_PX,
+  AGENT_CURSOR_CROSS_PX,
   AGENT_CURSOR_ENTRANCE_PX,
+  AGENT_CURSOR_FADE_SPRING,
   AGENT_CURSOR_IDLE_OPACITY,
+  AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX,
   AGENT_CURSOR_LAND_HANDOFF,
+  AGENT_CURSOR_LEAN_REST,
+  AGENT_CURSOR_LEAN_SPRING,
   AGENT_CURSOR_STEP_SECONDS,
   createMotion,
+  arcGapPx,
   cursorBow,
   cursorDurationMs,
   entranceStart,
@@ -56,15 +63,13 @@ function fly(to: Point, opts: { dt?: number; zoom?: number; pointer?: Point | nu
     const wasLanding = m.landing !== null;
     const result = stepMotion(m, to, dt, { zoom, reduced: false, opacityTarget: 1 });
     t += dt;
-    if (result.arrived) {
-      arriveMs = t * 1000;
-      dir = { ...m.vel };
-    }
+    if (result.arrived && arriveMs === null) arriveMs = t * 1000;
+    if (result.handedOff) dir = { ...m.vel };
     if (dir) {
       const len = Math.hypot(dir.x, dir.y) || 1;
       overshootPx = Math.max(overshootPx, (((m.pos.x - to.x) * dir.x + (m.pos.y - to.y) * dir.y) / len) * zoom);
     }
-    if ((wasLanding || result.arrived) && m.landing === null && settleMs === null && !m.plan) settleMs = t * 1000;
+    if ((wasLanding || result.handedOff) && m.landing === null && settleMs === null && !m.plan) settleMs = t * 1000;
     peakLeanDeg = Math.max(peakLeanDeg, Math.abs(m.lean.x));
     apexPx = Math.max(apexPx, -m.pos.y * zoom);
     if (result.atRest) restMs = t * 1000;
@@ -180,6 +185,169 @@ describe("GM's measured landings", () => {
   });
 });
 
+describe('the lean rest snap (GM - Design, PR #211 r1)', () => {
+  it('pins the threshold: under 0.1° and turning under 3°/s', () => {
+    expect(AGENT_CURSOR_LEAN_REST).toEqual({ deg: 0.1, degPerSecond: 3 });
+  });
+
+  it.each([
+    { label: '1500 px', to: { x: 1500, y: 0 } },
+    { label: '1500 px diagonal', to: { x: 1500 / Math.SQRT2, y: 1500 / Math.SQRT2 } },
+  ])('sleeps the loop by about 900 ms on a $label move, the frame the tip comes to rest', ({ to }) => {
+    const flight = fly(to);
+    expect(flight.settleMs).not.toBeNull();
+    expect(flight.restMs).not.toBeNull();
+    // Round 1 kept the loop running to 933-1033 ms for the last 0.05° of lean.
+    expect(flight.restMs!).toBeLessThanOrEqual(900 + 1000 / 60 / 2);
+    expect(flight.restMs! - flight.settleMs!).toBeLessThanOrEqual(1000 / 60 + 0.5);
+    expect(flight.finalLean).toBe(0);
+    expect(flight.motion.lean.v).toBe(0);
+  });
+
+  it.each([400, 900])('sleeps the frame the tip rests on a %s px move', (d) => {
+    const flight = fly({ x: d, y: 0 });
+    expect(flight.restMs! - flight.settleMs!).toBeLessThanOrEqual(1000 / 60 + 0.5);
+  });
+
+  it('keeps running while the lean is still visible, then snaps it to exactly 0', () => {
+    // 100 px: the tip rests at about 467 ms with the lean still near 0.8°.
+    const flight = fly({ x: 100, y: 0 });
+    expect(flight.restMs! - flight.settleMs!).toBeGreaterThan(80);
+    expect(flight.finalLean).toBe(0);
+  });
+
+  it('never snaps a lean that is still turning fast, nor one at 0.1° or more', () => {
+    const still = (lean: { x: number; v: number }) => {
+      const m = createMotion({ x: 0, y: 0 }, 1);
+      m.lean = { ...lean };
+      return stepMotion(m, { x: 0, y: 0 }, 0, { zoom: 1, reduced: false, opacityTarget: 1 }).atRest;
+    };
+    expect(still({ x: 0.09, v: 2.9 })).toBe(true);
+    expect(still({ x: 0.09, v: 3.1 })).toBe(false);
+    expect(still({ x: 0.11, v: 0 })).toBe(false);
+    expect(still({ x: -0.09, v: -2.9 })).toBe(true);
+  });
+
+  it('skips under 0.1° of swing: a lean at 3°/s from upright peaks below 0.1°', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    m.lean = { x: 0, v: AGENT_CURSOR_LEAN_REST.degPerSecond };
+    let peak = 0;
+    for (let i = 0; i < 120; i += 1) {
+      // Hold off the snap to watch the free swing: step the lean spring only.
+      const a = -AGENT_CURSOR_LEAN_SPRING.stiffness * m.lean.x - AGENT_CURSOR_LEAN_SPRING.damping * m.lean.v;
+      m.lean.v += a * H;
+      m.lean.x += m.lean.v * H;
+      peak = Math.max(peak, Math.abs(m.lean.x));
+    }
+    expect(peak).toBeLessThan(AGENT_CURSOR_LEAN_REST.deg);
+  });
+});
+
+describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
+  it.each([100, 400, 900, 1500])('%s px: arrives once, within 2 px of the target, after the hand-off', (d) => {
+    const to = { x: d, y: 0 };
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, to, { zoom: 1, pointer: null });
+    let handOff = -1;
+    let arrivals = 0;
+    for (let i = 0; i < 400; i += 1) {
+      const r = stepMotion(m, to, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 });
+      if (r.handedOff) handOff = i;
+      if (r.arrived) {
+        arrivals += 1;
+        expect(handOff).toBeGreaterThanOrEqual(0);
+        expect(i).toBeGreaterThan(handOff);
+        expect(dist(m.pos, to)).toBeLessThanOrEqual(AGENT_CURSOR_ARRIVE_PX);
+      } else if (arrivals === 0) {
+        // Not arrived yet: still further than 2 px (checked at the frame's end).
+        if (i > handOff && handOff >= 0) expect(dist(m.pos, to)).toBeGreaterThan(0);
+      }
+      if (r.atRest) break;
+    }
+    expect(AGENT_CURSOR_ARRIVE_PX).toBe(2);
+    expect(arrivals).toBe(1);
+  });
+
+  it('a target that moves after landing is followed with no second arrival', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 300, y: 0 }, { zoom: 1, pointer: null });
+    let arrivals = 0;
+    for (let i = 0; i < 400; i += 1) if (stepMotion(m, { x: 300, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 }).arrived) arrivals += 1;
+    for (let i = 0; i < 400; i += 1) if (stepMotion(m, { x: 310, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 }).arrived) arrivals += 1;
+    expect(arrivals).toBe(1);
+  });
+
+  it('a frame gap over 2 s snaps to the target with no flight (arrived, never handed off)', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 900, y: 0 }, { zoom: 1, pointer: null });
+    const r = stepMotion(m, { x: 900, y: 0 }, 2.01, { zoom: 1, reduced: false, opacityTarget: 1 });
+    expect(r).toEqual({ arrived: true, handedOff: false, atRest: true });
+    expect(m.pos).toEqual({ x: 900, y: 0 });
+  });
+});
+
+describe('long chords keep follow-through to 2 px (GM - Design, PR #211 r2)', () => {
+  it.each([2000, 3000, 6000])('%s px runs at most 2 px past its target', (d) => {
+    const flight = fly({ x: d, y: 0 });
+    expect(AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX).toBe(2);
+    expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
+    expect(flight.motion.pos).toEqual({ x: d, y: 0 });
+  });
+  it('the diagonal 1500 px move stays within 2 px', () => {
+    expect(fly({ x: 1500 / Math.SQRT2, y: 1500 / Math.SQRT2 }).overshootPx).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('crossing flights bow apart (GM - Design, PR #211 r2)', () => {
+  const opts = { zoom: 1, pointer: null };
+  it('a later flight that would cross another still flying bows the other way', () => {
+    expect(AGENT_CURSOR_CROSS_PX).toBe(24);
+    const a = createMotion({ x: 0, y: 400 }, 1);
+    planMove(a, { x: 800, y: 400 }, opts);
+    // B flies the other way 15 px lower: on its usual screen-up bow its
+    // apex would sit 15 px under A's, closer than 24 px along the way.
+    const usual = createMotion({ x: 800, y: 415 }, 1);
+    planMove(usual, { x: 0, y: 415 }, opts);
+    expect(arcGapPx(a.plan!, usual.plan!, 1)).toBeLessThan(AGENT_CURSOR_CROSS_PX);
+    const b = createMotion({ x: 800, y: 415 }, 1);
+    planMove(b, { x: 0, y: 415 }, { ...opts, others: [a.plan!] });
+    // A bows up (screen-up), B the other way: down, clear of A.
+    expect(a.plan!.control.y).toBeLessThan(400);
+    expect(b.plan!.control.y).toBeGreaterThan(415);
+    expect(arcGapPx(a.plan!, b.plan!, 1)).toBeGreaterThanOrEqual(15 - 1e-9);
+    // Same 10% cap: 80 px apex off the chord.
+    expect(Math.abs(b.plan!.control.y - 415) / 2).toBeCloseTo(80, 6);
+  });
+  it('a flight far from the others keeps its usual side', () => {
+    const a = createMotion({ x: 0, y: 0 }, 1);
+    planMove(a, { x: 800, y: 0 }, opts);
+    const b = createMotion({ x: 0, y: 600 }, 1);
+    planMove(b, { x: 800, y: 600 }, { ...opts, others: [a.plan!] });
+    expect(b.plan!.control.y).toBeLessThan(600);
+  });
+  it('with no flight under way, nothing changes', () => {
+    const b = createMotion({ x: 800, y: 400 }, 1);
+    planMove(b, { x: 0, y: 400 }, { ...opts, others: [] });
+    expect(b.plan!.control.y).toBeLessThan(400);
+  });
+});
+
+describe('pinned values', () => {
+  it('entrance 64 px, idle 0.45, the fade spring k 170 / c 26', () => {
+    expect(AGENT_CURSOR_ENTRANCE_PX).toBe(64);
+    expect(AGENT_CURSOR_IDLE_OPACITY).toBe(0.45);
+    expect(AGENT_CURSOR_FADE_SPRING).toEqual({ stiffness: 170, damping: 26, mass: 1 });
+  });
+  it('steps in place: no new position or velocity objects per frame', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+    const { pos, vel } = m;
+    for (let i = 0; i < 30; i += 1) stepMotion(m, { x: 400, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 });
+    expect(m.pos).toBe(pos);
+    expect(m.vel).toBe(vel);
+  });
+});
+
 describe('the landing hand-off', () => {
   it(`hands position and velocity to the land spring at p = ${AGENT_CURSOR_LAND_HANDOFF}`, () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
@@ -192,7 +360,7 @@ describe('the landing hand-off', () => {
       before = { pos: { ...m.pos }, vel: { ...m.vel } };
       const result = stepMotion(m, to, H, { zoom: 1, reduced: false, opacityTarget: 1 });
       elapsed += H;
-      if (result.arrived) break;
+      if (result.handedOff) break;
     }
     expect(m.plan).toBeNull();
     expect(m.landing).not.toBeNull();
@@ -241,7 +409,7 @@ describe('re-planning mid-flight', () => {
   it('a new event mid-landing re-plans from where the cursor is, with no jump', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
     planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
-    for (let i = 0; i < 400 && !step(m, { x: 400, y: 0 }).arrived; i += 1);
+    for (let i = 0; i < 400 && !step(m, { x: 400, y: 0 }).handedOff; i += 1);
     const pos = { ...m.pos };
     const speed = Math.hypot(m.vel.x, m.vel.y);
     planMove(m, { x: 400, y: 300 }, { zoom: 1, pointer: null });

@@ -454,7 +454,7 @@ async def test_a_failed_refresh_keeps_the_card_line_beside_its_text(tmp_path):
     class Transport:
         error = None
 
-        async def capture(self, identity, settings):
+        async def capture(self, identity, settings, **_kw):
             if self.error:
                 raise self.error
             return ({**identity, "fileName": "F", "pageName": "P", "objectName": "Logo",

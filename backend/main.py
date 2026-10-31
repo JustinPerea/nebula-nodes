@@ -162,7 +162,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
-from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, ACTIONS_TEXT as CURSOR_ACTIONS_TEXT
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
@@ -5377,6 +5377,18 @@ def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
     return agent_presence.point(identity, project_id=project_id, **kwargs)
 
 
+def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: Any) -> dict[str, Any]:
+    """agent_presence.person_form, built apart from the agent form: if the
+    person's copy fails, that is logged and the event goes out as the agent
+    form alone, as before sessions (review 1, LOW-1). It never silences the
+    agent form or fails the route."""
+    try:
+        return agent_presence.person_form(event, identity, session=presence_session(headers), **kwargs)
+    except Exception:  # noqa: BLE001 - decoration: the agent form still goes out
+        logging.getLogger("nebula.presence").exception("person form failed; sending the agent form only")
+        return event
+
+
 async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any]) -> None:
     """Send a cursor event: ``person`` (agent_presence.person_form) to the
     person's canvas sockets and ``event``, the agent form, to every other
@@ -5431,7 +5443,7 @@ async def _show_agent(
         if log is not None and clean_say(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
-        person = agent_presence.person_form(event, identity, session=presence_session(headers), shown=shows)
+        person = _person_form(event, identity, headers, shown=shows)
         await _broadcast_presence(event, person)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -6024,7 +6036,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
         action = body.get("action") or "move"
         if not isinstance(action, str) or action not in CURSOR_ACTIONS:
-            raise PresenceError(f"action must be one of {CURSOR_ACTIONS_TEXT}")
+            raise PresenceError(cursor_action_refusal(action))
         event = _point(
             identity,
             target=target,
@@ -6039,8 +6051,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     # The person's tabs draw this session's own cursor; the response and the
     # agent form are what they were (a line said in place keeps `target`).
-    person = agent_presence.person_form(event, identity, session=presence_session(headers),
-                                        in_place=placed != "target")
+    person = _person_form(event, identity, headers, in_place=placed != "target")
     await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed}
@@ -14506,7 +14517,10 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
-        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
+        # A param value change is typing, as through PUT (GM - Design, PR
+        # #211 r2): the person's tabs show `type`; agents still read `click`.
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {

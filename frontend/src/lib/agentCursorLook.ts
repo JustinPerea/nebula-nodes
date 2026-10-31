@@ -6,10 +6,18 @@ import type { Point } from './agentCursorMotion';
  * each session of one agent, and how cursors keep off each other's tips.
  */
 
+/** The person's pointer counts as over a cursor's arrow or pills within this many px (cursors take no pointer events). */
+export const AGENT_CURSOR_HOVER_SLOP_PX = 4;
 /** The name shows this long on a first sighting. */
 export const AGENT_CURSOR_NAME_FIRST_SIGHT_MS = 1500;
-/** OKLCH lightness steps for an agent's sessions, in order of appearance, repeating. */
-export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, 0.1, -0.1, 0.18] as const;
+/** OKLCH lightness offsets for an agent's sessions 1-5, cycling after five (GM - Design, PR #211 r2). */
+export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const;
+/**
+ * A step that would put L above `max` is mirrored (−step), one under `min`
+ * the other way; a result within `minGap` of a session already used takes
+ * the next unused offset instead. No fill is ever pure white.
+ */
+export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05 } as const;
 /** A later cursor whose target is this close to an earlier one's lands this far down-right. */
 export const AGENT_CURSOR_STACK = { radiusPx: 16, offsetPx: 10 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
@@ -22,12 +30,25 @@ interface SessionLike {
 }
 
 /**
- * "Claude" for an agent's first session, then "Claude · 2", "Claude · 3" in
- * the order they appeared. A chat title, when Nebula has one for the session,
- * takes the number's place.
+ * "Claude" for number 1, then "Claude · 2", "Claude · 3": the number the
+ * backend gave, the lowest free among the agent's live sessions. This only
+ * shows it and never numbers. A chat title, when Nebula has one for the
+ * session, takes the number's place.
  */
+/** The first `count` user-perceived characters (grapheme clusters), so a flag or an accent is never split. */
+export function cutGraphemes(text: string, count: number): string {
+  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+  if (!Segmenter) return [...text].slice(0, count).join('');
+  const parts: string[] = [];
+  for (const { segment } of new Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    if (parts.length === count) break;
+    parts.push(segment);
+  }
+  return parts.join('');
+}
+
 export function sessionName(name: string, session: SessionLike | null, title?: string | null): string {
-  const cut = title ? [...title.trim()].slice(0, AGENT_CURSOR_TITLE_CHARS).join('').trim() : '';
+  const cut = title ? cutGraphemes(title.trim(), AGENT_CURSOR_TITLE_CHARS).trim() : '';
   if (cut) return `${name} · ${cut}`;
   if (!session || !Number.isInteger(session.ordinal) || session.ordinal < 2) return name;
   return `${name} · ${session.ordinal}`;
@@ -80,18 +101,57 @@ function oklchToLinear(L: number, C: number, h: number): Rgb {
 const inGamut = (rgb: Rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
 /**
- * The fill for one session of an agent: the agent's own hue, a lightness
- * step per session (0, +0.10, −0.10, +0.18, repeating), and chroma lowered
- * only as far as it must be to stay in sRGB. The first session is the
- * agent's colour exactly.
+ * The OKLCH lightness of an agent's session `ordinal`, from the agent's own L
+ * (GM - Design, PR #211 r2). Sessions take the offsets 0, −0.10, +0.10,
+ * −0.20, +0.20 in order. A step past 0.92 is mirrored down, one under 0.35
+ * mirrored up, and one landing within 0.05 of an earlier session's L takes
+ * the next unused offset. The offsets cycle after five, so sessions 1 and 6
+ * share a fill (their names differ, and with two or more cursors names show).
  */
-export function sessionFill(hex: string, session: SessionLike | null): string {
-  const ordinal = session && Number.isInteger(session.ordinal) && session.ordinal > 0 ? session.ordinal : 1;
+export function sessionLightness(baseL: number, ordinal: number): number {
   const steps = AGENT_CURSOR_SESSION_LIGHTNESS;
-  const delta = steps[(ordinal - 1) % steps.length];
-  const base = hexToOklch(hex);
-  if (!base || delta === 0) return hex;
-  const L = Math.min(1, Math.max(0, base.l + delta));
+  const { max, min, minGap } = AGENT_CURSOR_SESSION_BAND;
+  const place = (delta: number) => {
+    const L = baseL + delta;
+    if (L > max) return baseL - Math.abs(delta);
+    if (L < min) return baseL + Math.abs(delta);
+    return L;
+  };
+  const index = (ordinal - 1) % steps.length;
+  const used: number[] = [];
+  const taken = new Set<number>();
+  // Session 1 is the agent's own colour, unless that is white (shown at 0.92).
+  let L = baseL >= 0.9999 ? max : baseL;
+  used.push(L);
+  taken.add(0);
+  for (let k = 1; k <= index; k += 1) {
+    const order = [...steps.keys()].map((j) => (k + j) % steps.length).filter((j) => !taken.has(j));
+    const clear = (candidate: number) => used.every((u) => Math.abs(u - candidate) >= minGap - 1e-9);
+    let chosen = order.find((j) => clear(place(steps[j])));
+    if (chosen !== undefined) {
+      L = place(steps[chosen]);
+    } else {
+      // Near either end of the band the mirrored offsets fold onto each
+      // other (from L 0.85, +0.10 and +0.20 mirror onto 0.75 and 0.65), so
+      // no unused offset is clear. Then step on by 0.10 inside the band,
+      // nearest first, until one is.
+      chosen = order[0];
+      L = place(steps[chosen]);
+      for (let m = 3; m <= 10; m += 1) {
+        const next = [baseL - m * 0.1, baseL + m * 0.1].find((c) => c >= min && c <= max && clear(c));
+        if (next !== undefined) {
+          L = next;
+          break;
+        }
+      }
+    }
+    taken.add(chosen);
+    used.push(L);
+  }
+  return L;
+}
+
+function fillAt(base: { l: number; c: number; h: number }, L: number): string {
   if (inGamut(oklchToLinear(L, base.c, base.h))) return toHex(oklchToLinear(L, base.c, base.h).map(toGamma) as Rgb);
   let lo = 0;
   let hi = base.c;
@@ -101,6 +161,22 @@ export function sessionFill(hex: string, session: SessionLike | null): string {
     else hi = mid;
   }
   return toHex(oklchToLinear(L, lo, base.h).map(toGamma) as Rgb);
+}
+
+/**
+ * The fill for one session of an agent: the agent's own hue and chroma at
+ * the session's lightness (sessionLightness), with chroma lowered only as far
+ * as it must be to stay in sRGB. The first session is the agent's colour
+ * exactly, unless that is pure white, which no cursor ever is.
+ */
+export function sessionFill(hex: string, session: SessionLike | null): string {
+  const ordinal = session && Number.isInteger(session.ordinal) && session.ordinal > 0 ? session.ordinal : 1;
+  const base = hexToOklch(hex);
+  if (!base) return hex;
+  const L = Math.min(1, Math.max(0, sessionLightness(base.l, ordinal)));
+  // sessionLightness keeps every L at or under 0.92 except an agent's own
+  // off-white colour as its session 1, so no fill is ever #ffffff.
+  return L === base.l && hex.toLowerCase() !== '#ffffff' ? hex : fillAt(base, L);
 }
 
 /** WCAG relative luminance. */
@@ -135,13 +211,16 @@ export function inkFor(fillHex: string): string {
 }
 
 /**
- * The name is hidden while the cursor moves. It shows when two or more agent
- * cursors are on the canvas, while the person's pointer is over it, and for a
- * moment on a first sighting.
+ * With two or more agent cursors on the canvas the name always shows, moving
+ * too. A lone cursor hides its name while it moves, and shows it while the
+ * person's pointer is over it and for a moment on a first sighting.
  */
 export function nameVisible(o: { moving: boolean; peers: number; hovered: boolean; sinceFirstSightMs: number }): boolean {
+  // Two or more cursors: the name holds its slot, moving or not, so the say
+  // pill under it never jumps (GM - Design, PR #211 r2).
+  if (o.peers >= 2) return true;
   if (o.moving) return false;
-  return o.peers >= 2 || o.hovered || o.sinceFirstSightMs < AGENT_CURSOR_NAME_FIRST_SIGHT_MS;
+  return o.hovered || o.sinceFirstSightMs < AGENT_CURSOR_NAME_FIRST_SIGHT_MS;
 }
 
 /** What the label shows. With the name hidden, the say pill takes the name's slot. */
@@ -155,25 +234,32 @@ export function labelLayout(nameShown: boolean, sayShown: boolean): LabelLayout 
 interface StackEntry {
   key: string;
   target: Point;
-  receivedAt: number;
+  /** When this cursor came to its spot: earlier ones keep their place (GM - Design, PR #211 r2). */
+  since: number;
 }
 
 /**
- * Where each cursor lands so no tip covers another's. In order of arrival, a
- * cursor lands 10 screen px down and right for each earlier cursor whose
- * target is within 16 screen px of its own, so a third on the same spot
- * steps past the second. Targets and results are in flow coordinates.
+ * Where each cursor lands so no tip covers another's. Cursors are placed in
+ * the order they came to their spots. Each starts at its target; while it is
+ * within 16 screen px of an earlier cursor's placed tip and not already at
+ * least 10 px down and right of it, it steps 10 px down and right. So a
+ * second cursor on a spot lands 10 px down-right of the first, a third past
+ * both, and one aimed up-left of an earlier tip never lands on it. Targets
+ * and results are in flow coordinates.
  */
 export function deStack(cursors: readonly StackEntry[], zoom: number): Map<string, Point> {
   const radius = AGENT_CURSOR_STACK.radiusPx / zoom;
   const offset = AGENT_CURSOR_STACK.offsetPx / zoom;
   const placed = new Map<string, Point>();
-  const ordered = [...cursors].sort((a, b) => a.receivedAt - b.receivedAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  ordered.forEach((cursor, index) => {
-    const { x, y } = cursor.target;
-    const under = ordered.slice(0, index).filter((earlier) => Math.hypot(earlier.target.x - x, earlier.target.y - y) < radius).length;
-    placed.set(cursor.key, { x: x + under * offset, y: y + under * offset });
-  });
+  const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const eps = 1e-9;
+  for (const cursor of ordered) {
+    let at = { ...cursor.target };
+    const blocked = () => [...placed.values()].some((p) => Math.hypot(p.x - at.x, p.y - at.y) < radius
+      && !(at.x >= p.x + offset - eps && at.y >= p.y + offset - eps));
+    for (let i = 0; i <= 2 * placed.size + 2 && blocked(); i += 1) at = { x: at.x + offset, y: at.y + offset };
+    placed.set(cursor.key, at);
+  }
   return placed;
 }
 

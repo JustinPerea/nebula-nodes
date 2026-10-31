@@ -350,3 +350,29 @@ async def asgi_get(app, path: str, query: str = "", headers: dict | None = None,
              "server": ("testserver", 80)}
     await app(scope, receive, send)
     return answer
+
+
+class BroadcastCapture:
+    """A stand-in for manager.broadcast_raw that takes what the real one
+    takes, ``others=`` included (presence sends the person form as ``data``
+    and the agent form as ``others``). ``sent`` is every call's ``data``;
+    ``others`` holds each call's ``others`` (None when there was one form)."""
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+        self.others: list[dict | None] = []
+
+    async def __call__(self, data, *, others=None, **_kw) -> None:
+        self.sent.append(data)
+        self.others.append(others)
+
+
+@pytest.fixture
+def broadcast_capture(monkeypatch) -> BroadcastCapture:
+    """Patch main.manager.broadcast_raw with a BroadcastCapture. Use it in
+    place of a hand-written fake (review 1 of PR #211, LOW-2)."""
+    import main
+
+    capture = BroadcastCapture()
+    monkeypatch.setattr(main.manager, "broadcast_raw", capture)
+    return capture

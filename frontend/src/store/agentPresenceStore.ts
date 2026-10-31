@@ -117,6 +117,15 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
       const previous = state.agents[key];
       const agents = { ...state.agents };
       if (!previous) {
+        // The backend numbers sessions among the live ones, and this tab only
+        // shows its number. A new cursor with a number another cursor of this
+        // agent still shows means that one has left the backend (it went
+        // quiet for AGENT_CURSOR_EXPIRE_MS, or the cap pushed it out): it goes
+        // here too, so two cursors never read the same name.
+        const ordinal = session?.ordinal ?? 1;
+        for (const other of Object.values(agents)) {
+          if (other.id === agent.id && (other.session?.ordinal ?? 1) === ordinal) delete agents[other.key];
+        }
         // One agent can't flood the canvas: past the cap, its cursor heard
         // from longest ago goes.
         const mine = Object.values(agents).filter((cursor) => cursor.id === agent.id);

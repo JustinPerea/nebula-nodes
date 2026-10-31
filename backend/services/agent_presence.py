@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
 from services import node_route, universal_ports
-from services.cursor_actions import ACTIONS, ACTIONS_TEXT
+from services.cursor_actions import ACTIONS, refusal as action_refusal
 from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 from services.text_cut import safe_cut
@@ -58,8 +58,7 @@ MAX_SNAPSHOT_NODES = 300
 # One cursor per agent session, on the person's tabs (person_form).
 SESSIONS_PER_AGENT = 8          # live slots per agent; the frontend caps at the same number
 SESSION_IDLE_SECONDS = 20.0     # = the frontend's AGENT_CURSOR_IDLE_MS
-SESSION_ORDINAL_MEMORY = 64     # session numbers remembered per agent (least recently seen go first)
-SESSION_AGENT_MEMORY = 256      # agents remembered
+SESSION_AGENT_MEMORY = 256      # agents whose live sessions are kept (least recently seen go first)
 SESSION_KEY_CHARS = 12
 # Where a request's session id may come from, besides an agent token's own
 # record (presence_session). X-Nebula-Agent-Session is the MCP server's
@@ -339,10 +338,9 @@ class AgentPresence:
         # Sessions (person_form). Apart from _agents, so nothing an agent
         # reads (active, here, the snapshot) ever sees them.
         self._session_secret = secrets.token_bytes(16)
-        # agent id -> raw session ('' for none) -> its number, first seen first
-        self._ordinals: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
-        self._next_ordinal: dict[str, int] = {}
-        self._slots: dict[str, OrderedDict[str, _SessionSlot]] = {}
+        # agent id -> raw session ('' for none) -> its live slot, oldest first.
+        # The one source of every session's number: tabs show it as given.
+        self._slots: OrderedDict[str, OrderedDict[str, _SessionSlot]] = OrderedDict()
 
     # -- cursors --------------------------------------------------------
     def point(
@@ -377,7 +375,7 @@ class AgentPresence:
         nothing still has one; the event carries it only when given.
         """
         if not isinstance(action, str) or action not in ACTIONS:
-            raise PresenceError(f"action must be one of {ACTIONS_TEXT}")
+            raise PresenceError(action_refusal(action))
         now = self._clock()
         event: dict[str, Any] = {
             "type": "agentPresence",
@@ -458,50 +456,40 @@ class AgentPresence:
         message = f"{agent_id}\0{raw}".encode("utf-8")
         return hmac.new(self._session_secret, message, hashlib.sha256).hexdigest()[:SESSION_KEY_CHARS]
 
-    def _ordinal(self, agent_id: str, raw: str, keep: int | None = None) -> int:
-        """This session's number for its agent: 1, 2, 3... by first
-        appearance, kept for the process's lifetime (every tab agrees).
-        ``keep`` is a live slot's own number, re-remembered as it is."""
-        numbers = self._ordinals.get(agent_id)
-        if numbers is None:
-            numbers = self._ordinals[agent_id] = OrderedDict()
-            while len(self._ordinals) > SESSION_AGENT_MEMORY:
-                old, _ = self._ordinals.popitem(last=False)
-                self._slots.pop(old, None)
-                self._next_ordinal.pop(old, None)
-        else:
-            self._ordinals.move_to_end(agent_id)
-        if raw in numbers:
-            numbers.move_to_end(raw)
-            return numbers[raw]
-        if keep is not None:
-            number = keep
-        else:
-            number = self._next_ordinal.get(agent_id, 1)
-        self._next_ordinal[agent_id] = max(self._next_ordinal.get(agent_id, 1), number + 1)
-        numbers[raw] = number
-        while len(numbers) > SESSION_ORDINAL_MEMORY:
-            numbers.popitem(last=False)
-        return number
-
     def _slot(self, agent_id: str, raw: str, now: float) -> _SessionSlot:
-        slots = self._slots.setdefault(agent_id, OrderedDict())
+        """This session's live slot, made on its first event with a target.
+
+        Numbers go among the agent's live sessions (GM - Design, PR #211 r1):
+        a new session takes the lowest number no live one holds, and the
+        agent's plain cursor counts as 1 ("Claude"). A live session keeps its
+        number until its cursor leaves, so nothing renumbers under the person.
+        A cursor leaves when it has had no event for PRESENCE_TTL_SECONDS (the
+        frontend's AGENT_CURSOR_EXPIRE_MS, when the tab prunes it too), or
+        when the cap below pushes it out. Its number is free from then on.
+        """
+        slots = self._slots.get(agent_id)
+        if slots is None:
+            slots = self._slots[agent_id] = OrderedDict()
+            while len(self._slots) > SESSION_AGENT_MEMORY:
+                self._slots.popitem(last=False)
+        else:
+            self._slots.move_to_end(agent_id)
         for stale in [k for k, slot in slots.items() if now - slot.last_t > PRESENCE_TTL_SECONDS]:
-            del slots[stale]  # its number stays in _ordinals: it comes back as itself
+            del slots[stale]
         slot = slots.get(raw)
         if slot is None:
-            slot = _SessionSlot(key=self.session_key(agent_id, raw), ordinal=self._ordinal(agent_id, raw),
-                                last_t=now, target=None)
-            slots[raw] = slot
-            if len(slots) > SESSIONS_PER_AGENT:
+            if len(slots) >= SESSIONS_PER_AGENT:
                 # An agent can't flood the canvas with cursors: the oldest
                 # idle session goes first, else the oldest.
-                others = [(k, v) for k, v in slots.items() if k != raw]
-                idle = [(k, v) for k, v in others if now - v.last_t >= SESSION_IDLE_SECONDS]
-                victim = min(idle or others, key=lambda item: item[1].last_t)[0]
+                idle = [(k, v) for k, v in slots.items() if now - v.last_t >= SESSION_IDLE_SECONDS]
+                victim = min(idle or slots.items(), key=lambda item: item[1].last_t)[0]
                 del slots[victim]
-        else:
-            self._ordinal(agent_id, raw, keep=slot.ordinal)  # seen again: remembered longer
+            taken = {live.ordinal for live in slots.values()}
+            number = 1
+            while number in taken:
+                number += 1
+            slot = _SessionSlot(key=self.session_key(agent_id, raw), ordinal=number, last_t=now, target=None)
+            slots[raw] = slot
         slot.last_t = now
         return slot
 
@@ -573,9 +561,12 @@ class AgentPresence:
                 else:
                     value["target"] = dict(fallback)
         for slots in self._slots.values():
-            for slot in slots.values():
+            for raw, slot in list(slots.items()):
                 if slot.target is not None and slot.target.get("nodeId") == node_id:
-                    slot.target = None if fallback is None else dict(fallback)
+                    if fallback is None:
+                        del slots[raw]  # it leaves, as the agent's cursor does: its number is free
+                    else:
+                        slot.target = dict(fallback)
 
     def forget_graph(self) -> None:
         """Drop node anchors after the whole graph is cleared or replaced.
@@ -592,10 +583,13 @@ class AgentPresence:
                 value["did"] = {**did, "nodeId": None}
             if "nodeId" in value["target"]:
                 del self._agents[key]
+        # A session cursor on a node leaves with it, as the agent's cursor
+        # does above and the tab's does (agentPresenceStore.forgetGraph): a
+        # /clear that clears the canvas frees the old chat's number.
         for slots in self._slots.values():
-            for slot in slots.values():
+            for raw, slot in list(slots.items()):
                 if slot.target is not None and "nodeId" in slot.target:
-                    slot.target = None
+                    del slots[raw]
 
     # -- browser view ---------------------------------------------------
     def report_view(self, body: Any) -> dict[str, Any]:

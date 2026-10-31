@@ -23,7 +23,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
-from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, ACTIONS_TEXT as _CURSOR_ACTIONS_TEXT
+from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -597,7 +597,9 @@ def point_at(
 
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set
-    NEBULA_AGENT_SESSION to choose the id yourself.
+    NEBULA_AGENT_SESSION to choose the id yourself. Subagents that share this
+    server share its cursor; to give each lane its own, have each use the
+    CLI with its own NEBULA_AGENT_SESSION.
     """
     def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any] | None:
         if node:
@@ -607,7 +609,7 @@ def point_at(
         return None
 
     if not isinstance(action, str) or action not in _CURSOR_ACTIONS:
-        raise ValueError(f"point_at: action must be one of {_CURSOR_ACTIONS_TEXT} (you gave {_json.dumps(action, default=str)})")
+        raise ValueError(f"point_at: {_cursor_action_refusal(action)}")
     if not node_id and (x is None) != (y is None):
         raise ValueError(f"point_at needs node_id, or x and y (both): you gave only {'x' if y is None else 'y'}")
     target = anchor(node_id, port, x, y)

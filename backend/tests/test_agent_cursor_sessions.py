@@ -36,6 +36,12 @@ from tests.test_canvas_proposals import CLAUDE, api  # noqa: F401 - fixture
 
 TEN = ["move", "look", "think", "type", "click", "drag", "run", "propose", "wait", "error"]
 TEN_TEXT = ", ".join(TEN)
+
+
+def REFUSED(value: str) -> str:
+    """GM's line, verbatim (PR #211 r2), echoing the value given."""
+    return (f"\u201c{value}\u201d isn\u2019t an action Nebula knows. "
+            "Use one of move, look, think, type, click, drag, run, propose, wait or error.")
 MCP_SESSION = {"X-Nebula-Agent-Session": "a1b2c3d4e5f60718"}
 CLI_SESSION = {"X-Nebula-Cursor-Session": "cc-0123456789abcdef"}
 
@@ -67,9 +73,15 @@ def test_presence_itself_takes_only_the_ten():
     presence = AgentPresence(Clock())
     for action in TEN:
         assert _event(presence, action=action)["action"] == action
-    for bad in ("hover", "MOVE", 5, None):
-        with pytest.raises(PresenceError, match=f"^action must be one of {TEN_TEXT}$"):
+    for bad, shown in (("hover", "hover"), ("MOVE", "MOVE"), (5, "5"), (None, "null")):
+        with pytest.raises(PresenceError) as refused:
             _event(presence, action=bad)
+        assert str(refused.value) == REFUSED(shown)
+    assert REFUSED("hover") == "\u201chover\u201d isn\u2019t an action Nebula knows. Use one of move, look, think, type, click, drag, run, propose, wait or error."
+    # A long value is cut, never echoed whole.
+    with pytest.raises(PresenceError) as refused:
+        _event(presence, action="x" * 500)
+    assert str(refused.value) == REFUSED("x" * 39 + "\u2026")
 
 
 def test_the_cursor_route_takes_all_ten_and_refuses_anything_else_listing_them(api):  # noqa: F811
@@ -79,11 +91,11 @@ def test_the_cursor_route_takes_all_ten_and_refuses_anything_else_listing_them(a
                              json={"target": {"nodeId": node}, "action": action})
         assert ok.status_code == 200, (action, ok.text)
         assert ok.json()["action"] == action
-    for bad in ("hover", 5, "MOVE", ["move"], {"a": 1}):
+    for bad, shown in (("hover", "hover"), (5, "5"), ("MOVE", "MOVE"), (["move"], '["move"]'), ({"a": 1}, '{"a": 1}')):
         refused = api.client.post("/api/canvas/cursor", headers=CLAUDE,
                                   json={"target": {"nodeId": node}, "action": bad})
         assert refused.status_code == 422, bad
-        assert refused.json()["detail"] == f"action must be one of {TEN_TEXT}"
+        assert refused.json()["detail"] == REFUSED(shown)
 
 
 def test_mcp_point_at_refuses_an_unknown_action_before_any_request(monkeypatch):
@@ -93,7 +105,7 @@ def test_mcp_point_at_refuses_an_unknown_action_before_any_request(monkeypatch):
     monkeypatch.setattr(mcp_server.httpx, "request", lambda *a, **k: calls.append(a))
     with pytest.raises(ValueError) as refused:
         mcp_server.point_at(node_id="n1", action="hover")
-    assert str(refused.value) == f'point_at: action must be one of {TEN_TEXT} (you gave "hover")'
+    assert str(refused.value) == f"point_at: {REFUSED('hover')}"
     assert calls == []
     # What each means is in the tool's own description, in this order.
     doc = mcp_server.point_at.__doc__ or ""
@@ -131,7 +143,10 @@ def test_the_cli_takes_the_ten_and_refuses_others(capsys):
         assert parser.parse_args(["point", "n1", "--action", action]).action == action
     with pytest.raises(SystemExit):
         parser.parse_args(["point", "n1", "--action", "hover"])
-    assert "hover" in capsys.readouterr().err
+    assert capsys.readouterr().err.rstrip().endswith(f"argument --action: {REFUSED('hover')}")
+    # The help still lists the ten.
+    assert "{move,look,think,type,click,drag,run,propose,wait,error}" in " ".join(
+        parser._subparsers._group_actions[0].choices["point"].format_help().split())
 
 
 def test_the_cli_sends_the_action_and_defaults_as_before():
@@ -220,21 +235,97 @@ def test_sessions_touch_no_permission_path():
 
 # -- the session table ----------------------------------------------------
 
-def test_numbers_go_by_first_appearance_and_stay():
+def _ordinal(presence, session, target=None):
+    form = presence.person_form(_event(presence, target), AGENT, session=session)
+    return form.get("session", {}).get("ordinal", 1)
+
+
+def test_numbers_go_among_live_sessions_the_lowest_free_first():
     clock = Clock()
     presence = AgentPresence(clock)
-    forms = {}
+    numbers = {}
     for raw in ("a", "b", "c", "a", "b"):
         clock.now += 1
-        forms[raw] = presence.person_form(_event(presence), AGENT, session=raw)
-    assert [forms[raw]["session"]["ordinal"] for raw in ("a", "b", "c")] == [1, 2, 3]
-    # Gone past the TTL and back: the same number and key.
-    key_b = forms["b"]["session"]["key"]
+        numbers[raw] = _ordinal(presence, raw)
+    assert [numbers[raw] for raw in ("a", "b", "c")] == [1, 2, 3]
+    # All gone quiet past the TTL: they left, and a new session is "Claude".
     clock.now += PRESENCE_TTL_SECONDS + 5
-    again = presence.person_form(_event(presence), AGENT, session="b")
-    assert again["session"] == {"key": key_b, "ordinal": 2}
-    fresh = presence.person_form(_event(presence), AGENT, session="d")
-    assert fresh["session"]["ordinal"] == 4
+    assert _ordinal(presence, "d") == 1
+    # So is a returning one: its old number was freed when it left.
+    assert _ordinal(presence, "b") == 2
+
+
+def test_a_lone_chat_after_three_clears_reads_claude():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    # Each /clear starts a new chat session. The old chat's cursor leaves
+    # with the canvas the clear wipes (forget_graph), as it does on the tab.
+    for chat in range(4):
+        clock.now += 1
+        form = presence.person_form(_event(presence, {"nodeId": "n1"}), AGENT, session=f"chat:{chat:032x}")
+        assert form["session"]["ordinal"] == 1
+        assert form["session"]["key"]  # a session, shown bare: "Claude"
+        presence.forget_graph()
+    # Or the old one went quiet past the TTL (a clear the canvas refused).
+    presence = AgentPresence(clock)
+    for chat in range(4):
+        clock.now += PRESENCE_TTL_SECONDS + 1
+        assert _ordinal(presence, f"chat:{chat:032x}") == 1
+    # Within the TTL the old chat's cursor is still on the canvas, so the
+    # new one is numbered beside it.
+    assert _ordinal(presence, "chat:" + "f" * 32) == 2
+
+
+def test_with_three_live_a_new_session_takes_the_number_one_that_left_freed():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    for raw in ("s1", "s2", "s3"):
+        clock.now += 1
+        assert _ordinal(presence, raw) == int(raw[1])
+    # s1 and s3 keep talking; s2 goes quiet until it leaves.
+    for _ in range(int(PRESENCE_TTL_SECONDS // 30) + 1):
+        clock.now += 30
+        assert _ordinal(presence, "s1") == 1
+        assert _ordinal(presence, "s3") == 3
+    assert _ordinal(presence, "new") == 2
+    assert sorted(n for _, n in presence.live_sessions(AGENT.id)) == [1, 2, 3]
+
+
+def test_a_live_sessions_number_never_changes_while_another_leaves():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    for raw in ("s1", "s2", "s3", "s4"):
+        clock.now += 1
+        _ordinal(presence, raw, {"nodeId": f"node-{raw}"})
+    # s1 leaves (quiet past the TTL), then s2 (its node is deleted with no
+    # place to go), then s3 (the graph is replaced while s4 points at a spot).
+    for _ in range(5):
+        clock.now += 30
+        for raw, n in (("s2", 2), ("s3", 3), ("s4", 4)):
+            assert _ordinal(presence, raw, {"nodeId": f"node-{raw}"}) == n
+    presence.forget_node("node-s2")
+    assert _ordinal(presence, "s4", {"x": 5, "y": 5}) == 4
+    assert _ordinal(presence, "s3", {"nodeId": "node-s3"}) == 3
+    presence.forget_graph()
+    assert _ordinal(presence, "s4", {"x": 6, "y": 6}) == 4
+    assert [n for _, n in presence.live_sessions(AGENT.id)] == [4]
+    # The freed numbers go lowest first, and s4 still holds its own.
+    assert [_ordinal(presence, raw) for raw in ("n1", "n2", "n3", "n4")] == [1, 2, 3, 5]
+    assert _ordinal(presence, "s4", {"x": 6, "y": 6}) == 4
+
+
+def test_leaving_means_the_same_on_the_backend_and_the_tab():
+    """One source of numbers: the backend frees a number when the cursor
+    leaves, by the same TTL and cap the tab prunes by."""
+    import pathlib
+    import re as _re
+    store = (pathlib.Path(__file__).resolve().parents[2] / "frontend/src/store/agentPresenceStore.ts").read_text()
+    expire = int(_re.search(r"AGENT_CURSOR_EXPIRE_MS = ([0-9_]+);", store).group(1).replace("_", ""))
+    idle = int(_re.search(r"AGENT_CURSOR_IDLE_MS = ([0-9_]+);", store).group(1).replace("_", ""))
+    cap = int(_re.search(r"AGENT_CURSOR_SESSIONS_PER_AGENT = ([0-9]+);", store).group(1))
+    assert expire == PRESENCE_TTL_SECONDS * 1000
+    assert idle == SESSION_IDLE_SECONDS * 1000
+    assert cap == SESSIONS_PER_AGENT
 
 
 def test_the_no_session_cursor_takes_part_and_carries_a_number_only_after_others():
@@ -269,7 +360,7 @@ def test_an_agent_has_at_most_eight_live_sessions_and_the_oldest_idle_goes_first
     for n in range(SESSIONS_PER_AGENT):
         clock.now += 1
         presence.person_form(_event(presence), AGENT, session=f"s{n}")
-    keys = dict((raw, presence.session_key(AGENT.id, raw)) for raw in (f"s{n}" for n in range(9)))
+    keys = dict((raw, presence.session_key(AGENT.id, raw)) for raw in (f"s{n}" for n in range(10)))
     # s3 idle long enough; the others active just now.
     clock.now += SESSION_IDLE_SECONDS
     for n in range(SESSIONS_PER_AGENT):
@@ -286,9 +377,18 @@ def test_an_agent_has_at_most_eight_live_sessions_and_the_oldest_idle_goes_first
     presence.person_form(_event(presence), AGENT, session="s9")
     live = [key for key, _ in presence.live_sessions(AGENT.id)]
     assert len(live) == SESSIONS_PER_AGENT and keys["s0"] not in live and keys["s8"] in live
-    # A pruned session keeps its number when it comes back.
+    # The new sessions took the numbers the pruned ones freed: s8 took s3's 4,
+    # s9 took s0's 1, and the others kept theirs.
+    numbers = dict(presence.live_sessions(AGENT.id))
+    assert numbers[keys["s8"]] == 4 and numbers[keys["s9"]] == 1
+    assert sorted(numbers.values()) == list(range(1, SESSIONS_PER_AGENT + 1))
+    assert all(numbers[keys[f"s{n}"]] == n + 1 for n in (1, 2, 4, 5, 6, 7))
+    # A pruned session coming back is a new one: the oldest goes (s1, idle
+    # since the first round), and it takes that freed number.
+    clock.now += SESSION_IDLE_SECONDS
     back = presence.person_form(_event(presence), AGENT, session="s3")
-    assert back["session"]["ordinal"] == 4
+    assert back["session"]["ordinal"] == 2
+    assert keys["s1"] not in dict(presence.live_sessions(AGENT.id))
 
 
 def test_a_line_said_in_place_stays_at_its_own_sessions_cursor():
@@ -551,3 +651,178 @@ def test_the_broadcast_helper_sends_one_form_when_they_are_the_same(sockets):
     asyncio.run(api.main._broadcast_presence(event, {**event, "session": {"key": "k", "ordinal": 2}}))
     assert api.listener.sent[-1] == json.dumps(event)
     assert json.loads(api.person_socket.sent[-1])["session"]["ordinal"] == 2
+
+
+# -- NEBULA_AGENT_SESSION for orchestrators (GM - Design, PR #211 r1) ---------
+
+def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
+    """The CLI help, the skill and MCP-SETUP say how to give each subagent
+    its own cursor, and what happens without it."""
+    import pathlib
+
+    from cli.__main__ import build_parser
+
+    parser = build_parser()
+    top = parser.format_help()
+    assert "NEBULA_AGENT_SESSION" in top
+    assert "subagents share" in top and "parent's cursor" in top
+    assert "NEBULA_AGENT_SESSION=lane-a nebula point" in top
+    subs = next(a for a in parser._actions if a.__class__.__name__ == "_SubParsersAction").choices
+    point = subs["point"].format_help()
+    assert "NEBULA_AGENT_SESSION" in point and "parent's" in point
+    assert "NEBULA_AGENT_SESSION" in subs["agents"].format_help()
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    skill = " ".join((root / "skills/nebula/SKILL.md").read_text().split())
+    setup = " ".join((root / "docs/MCP-SETUP.md").read_text().split())
+    for text in (skill, setup):
+        assert "NEBULA_AGENT_SESSION=lane-a nebula point" in text
+        assert "subagents share" in text.lower() or "your subagents see the same one" in text.lower()
+    assert "Without it" in skill and "Without it, subagents share the parent's cursor" in setup
+    # The numbering the docs describe is the live one, not "until Nebula restarts".
+    assert "lowest number free" in setup and "until Nebula restarts (\"Claude" not in setup
+    assert "lowest number free" in skill
+
+
+# -- review 1 and GM's r2 answers ---------------------------------------------
+
+def test_any_param_value_change_shows_type_through_put_and_apply_and_rename_stays_click(sockets):
+    """GM - Design, PR #211 r2, answer 8: a param value change is `type`
+    through PUT, edit_canvas or apply; a rename stays `click`. Agents read
+    `click` throughout."""
+    api = sockets
+    text = api.client.post("/api/graph/node", headers=CLAUDE,
+                           json={"definitionId": "text-input", "params": {"value": "a"}}).json()["id"]
+
+    def step(call) -> list[tuple[str, str]]:
+        api.listener.sent.clear()
+        api.person_socket.sent.clear()
+        response = call()
+        assert response.status_code < 300, response.text
+        return _forms(api)
+
+    # apply / edit_canvas: a param value change.
+    assert step(lambda: api.client.post("/api/graph/apply", headers=CLAUDE, json={
+        "params": [{"nodeId": text, "params": {"value": "b"}}]})) == [("click", "type")]
+    # apply: a rename only.
+    assert step(lambda: api.client.post("/api/graph/apply", headers=CLAUDE, json={
+        "rename": {text: "Brief"}})) == [("click", "click")]
+    # apply: an added node with its params.
+    assert step(lambda: api.client.post("/api/graph/apply", headers=CLAUDE, json={
+        "nodes": [{"ref": "+t", "definitionId": "text-input", "params": {"value": "c"}}]})) == [("click", "click")]
+    # PUT with values: type. PUT with no keys (position only): one form, click.
+    assert step(lambda: api.client.put(f"/api/graph/node/{text}", headers=CLAUDE,
+                                       json={"params": {"value": "d"}})) == [("click", "type")]
+    api.listener.sent.clear()
+    api.person_socket.sent.clear()
+    moved = api.client.put(f"/api/graph/node/{text}", headers=CLAUDE, json={"position": {"x": 40, "y": 40}})
+    assert moved.status_code < 300, moved.text
+    agent = [json.loads(t) for t in _presence_frames(api.listener)]
+    person = [json.loads(t) for t in _presence_frames(api.person_socket)]
+    assert [e["action"] for e in agent if "target" in e] == [e["action"] for e in person if "target" in e]
+    assert {e["action"] for e in person if "target" in e} <= {"click"}
+    # The rename route: click.
+    renamed = step(lambda: api.client.put(f"/api/graph/node/{text}/label", headers=CLAUDE, json={"label": "Hero"}))
+    assert renamed == [("click", "click")]
+
+
+def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets, monkeypatch):
+    """Review 1, LOW-1: the person's copy is built apart from the agent form."""
+    api = sockets
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("person form broke")
+
+    monkeypatch.setattr(api.main.agent_presence, "person_form", broken)
+    node = api.graph.add_node("text-input", {"value": "hi"})
+    pointed = api.client.post("/api/canvas/cursor", headers={**CLAUDE, **MCP_SESSION},
+                              json={"target": {"nodeId": node}, "action": "look"})
+    assert pointed.status_code == 200, pointed.text
+    # Everyone gets the agent form, the person's tabs included.
+    for socket in (api.listener, api.person_socket):
+        frames = [json.loads(t) for t in _presence_frames(socket)]
+        assert frames and frames[-1]["action"] == "look" and "session" not in frames[-1]
+    # An edit emitter too.
+    api.listener.sent.clear()
+    api.person_socket.sent.clear()
+    put = api.client.put(f"/api/graph/node/{node}", headers=CLAUDE, json={"params": {"value": "yo"}})
+    assert put.status_code < 300
+    assert [json.loads(t)["action"] for t in _presence_frames(api.listener)] == ["click"]
+    assert [json.loads(t)["action"] for t in _presence_frames(api.person_socket)] == ["click"]
+
+
+def test_the_agents_kept_are_bounded_and_the_oldest_goes_with_its_slots():
+    """Review 1, LOW-3: at most SESSION_AGENT_MEMORY agents keep live slots."""
+    from services.agent_presence import SESSION_AGENT_MEMORY
+
+    clock = Clock()
+    presence = AgentPresence(clock)
+    first = AgentIdentity(id="ext:a0", name="A0", color="#3FC1A5", verified=False)
+    presence.person_form(presence.point(first, target={"x": 1, "y": 1}), first, session="s")
+    assert presence.live_sessions(first.id)
+    for n in range(1, SESSION_AGENT_MEMORY + 4):
+        clock.now += 0.001
+        agent = AgentIdentity(id=f"ext:a{n}", name=f"A{n}", color="#3FC1A5", verified=False)
+        presence.person_form(presence.point(agent, target={"x": 1, "y": 1}), agent, session="s")
+    assert presence.live_sessions(first.id) == []
+    assert len(presence._slots) == SESSION_AGENT_MEMORY
+    # Seen again, it starts afresh: "A0" is plain number 1.
+    again = presence.person_form(presence.point(first, target={"x": 1, "y": 1}), first, session="s")
+    assert again["session"]["ordinal"] == 1
+
+
+def test_a_marked_socket_with_the_real_token_is_never_the_persons(api, person):  # noqa: F811
+    """Review 1, M3 (it hung through the socket tests): promote, directly."""
+    token = person.token
+    manager = api.main.ConnectionManager()
+
+    class Socket:
+        def __init__(self, headers):
+            self.headers = headers
+
+    marked, plain = Socket({"x-nebula-agent": "Claude"}), Socket({})
+    manager.active_connections.extend([marked, plain])
+    assert manager.promote(marked, token) is False
+    assert marked not in manager.browser_connections
+    for header in ({"x-nebula-client": "cli"}, {"authorization": "Agent abc"}):
+        other = Socket(header)
+        manager.active_connections.append(other)
+        assert manager.promote(other, token) is False
+    assert manager.promote(plain, "wrong") is False
+    assert manager.promote(plain, token) is True
+
+
+def test_every_broadcast_raw_fake_in_the_tests_takes_others():
+    """Review 1, LOW-2: a fake that can't take ``others=`` raised a TypeError
+    that _show_agent swallowed, so presence events vanished in 40 test files.
+    Every fake patched over manager.broadcast_raw must take ``others``."""
+    import ast
+    import pathlib
+
+    narrow = []
+    for path in sorted(pathlib.Path(__file__).parent.glob("test_*.py")):
+        tree = ast.parse(path.read_text())
+        defs: dict[str, list] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                defs.setdefault(node.name, []).append(node)
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "setattr" and len(node.args) >= 3):
+                continue
+            if not (isinstance(node.args[1], ast.Constant) and node.args[1].value == "broadcast_raw"):
+                continue
+            fake = node.args[2]
+            fns = defs.get(fake.id, []) if isinstance(fake, ast.Name) else [fake] if isinstance(fake, ast.Lambda) else []
+            for fn in fns:
+                args = fn.args
+                if args.kwarg is None and not any(a.arg == "others" for a in args.args + args.kwonlyargs):
+                    narrow.append(f"{path.name}:{getattr(fn, 'lineno', node.lineno)}")
+    assert narrow == []
+
+
+def test_the_shared_capture_records_both_forms(sockets, broadcast_capture):
+    api = sockets
+    node = api.graph.add_node("text-input", {"value": "hi"})
+    api.client.post("/api/canvas/cursor", headers={**CLAUDE, **MCP_SESSION}, json={"target": {"nodeId": node}})
+    person, agent = broadcast_capture.sent[-1], broadcast_capture.others[-1]
+    assert person["session"]["ordinal"] == 1 and "session" not in agent

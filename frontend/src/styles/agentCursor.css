@@ -71,9 +71,11 @@
   transition: transform var(--agent-cursor-say-fade);
 }
 
-/* The name is hidden while the cursor moves, and shows with a second cursor,
-   on hover and on a first sighting (GM's agent cursor spec, §4). With it
-   hidden, the say pill moves up into its slot: the name's 20px and the 4px gap. */
+/* With two or more cursors the name always shows, moving too, so the say pill
+   under it never jumps. A lone cursor hides its name while it moves, and
+   shows it on hover and on a first sighting (GM's agent cursor spec, §4, and
+   PR #211 r2). With it hidden, the say pill moves up into its slot: the
+   name's 20px and the 4px gap. */
 .agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__label {
   transform: translateY(-24px);
 }
