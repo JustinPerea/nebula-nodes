@@ -14,7 +14,8 @@
 - GM r22, 5 (review 14 LOW-1, NIT-1): the kept grace starts again at boot
   when a tab kept edits before the restart, and each closed kept tab holds
   its own grace.
-- The project limit on a kept save: the 413 carries ``projectCount``.
+- The project limit on a kept save: the 413 carries ``projectCount``; the
+  person's kept save may pass the limit (Justin, 2026-10-31).
 """
 from __future__ import annotations
 
@@ -569,6 +570,50 @@ def test_a_kept_save_past_the_limit_says_the_limit_and_the_count(app, monkeypatc
     assert refused.status_code == 413, refused.text
     assert refused.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": limit,
                               "projectCount": count}
+
+
+def _kept_recover(client, source: str, snapshot: dict, headers=PERSON, recovery_id: str = "f" * 32):
+    return client.post("/api/projects/recover", headers=headers, json={
+        "sourceProjectId": source, "snapshot": snapshot, "recoveryId": recovery_id,
+        "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta", "kept": True})
+
+
+@pytest.mark.parametrize("limit, count", [(2, 2), (1, 2)])
+def test_the_persons_kept_save_may_pass_the_limit_and_then_new_projects_are_refused(app, monkeypatch, limit, count):
+    """Justin, 2026-10-31 (on PR #199): the person's save of a kept tab's
+    edits may take the list past the project limit, as a restore and an
+    Undo of a delete may. A new project is then refused until it is back
+    under, and the list's other saves still land."""
+    client, *_ = app
+    source, snapshot = _kept_snapshot(client)
+    _create(client, "Echo")
+    monkeypatch.setattr(store_module, "MAX_PROJECTS", limit)
+    saved = _kept_recover(client, source, snapshot)
+    assert saved.status_code == 200, saved.text
+    listed = client.get("/api/projects", headers=PERSON).json()["projects"]
+    assert len(listed) == count + 1 and saved.json()["project"]["id"] in {row["id"] for row in listed}
+    refused = client.post("/api/projects", headers=PERSON, json={"name": "Foxtrot"})
+    assert refused.status_code == 413, refused.text
+    assert refused.json()["limit"] == "projects"
+    # A retry of the same save answers as the first did (no second copy).
+    again = _kept_recover(client, source, snapshot)
+    assert again.status_code == 200 and again.json()["project"]["id"] == saved.json()["project"]["id"]
+    assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == count + 1
+
+
+@pytest.mark.parametrize("who", ["agent", "stale tab"])
+def test_only_the_persons_kept_save_passes_the_limit(app, monkeypatch, who):
+    """An agent can't pass the limit this way, with or without ``kept``,
+    and a stale tab's recovery (no ``kept``) is refused as before."""
+    client, *_ = app
+    source, snapshot = _kept_snapshot(client)
+    _create(client, "Echo")
+    monkeypatch.setattr(store_module, "MAX_PROJECTS", 2)
+    refused = _kept_recover(client, source, snapshot, headers=CODEX) if who == "agent" else _recover(client, source, snapshot)
+    assert refused.status_code in {403, 413}, refused.text
+    if refused.status_code == 413:
+        assert refused.json()["limit"] == "projects"
+    assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 2
 
 
 def test_nit1_a_tab_back_that_saves_ends_its_own_grace_at_once(app, clock, monkeypatch, tmp_path):

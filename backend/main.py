@@ -855,7 +855,7 @@ provider_start_guard = ProviderStartGuard(
 #   Try again in a moment."
 # - ambiguity (and the browser's own unconfirmed run): "A World Labs run
 #   needs your check first. Use the notice at the top of the screen." (the
-#   status bar's "I've checked Marble")
+#   status bar's "I’ve checked Marble")
 # - recovery: "“<node>” has a saved World Labs recovery ID. Check the run in
 #   Marble, then forget the ID in Run History." (Run History's "Forget ID")
 # - params: "“<node>” has a World Labs ID in its settings. Check it in
@@ -882,17 +882,23 @@ def _quoted_fields(fields: Sequence[str]) -> str:
     return quoted[0] if len(quoted) == 1 else ", ".join(quoted[:-1]) + " and " + quoted[-1]
 
 
-def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[str] = ()) -> str:
+def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[str] = (),
+                       subject: str | None = None) -> str:
     """GM's line for a World Labs `state`. `node` is the held node's card
     title (recovery, params); `fields` the labels of the ID fields that hold
-    an ID (params)."""
+    an ID (params). `subject` (a canvas replacement: _held_person_subject)
+    is the line's whole subject instead, as placed by the hold's own rules:
+    "“World”", "“World” from “Alpha”" or "A World Labs Environment node"."""
     if state == "active":
         return WORLD_LABS_STARTING_PERSON
     if state == "ambiguity":
         return WORLD_LABS_NEEDS_CHECK_PERSON
     if state == "bootstrap":
         return WORLD_LABS_BOOTSTRAP_PERSON
-    name = f"\u201c{node}\u201d" if node else "\u201cWorld Labs Environment\u201d"
+    if subject:
+        name = subject
+    else:
+        name = f"\u201c{node}\u201d" if node else "\u201cWorld Labs Environment\u201d"
     if state == "recovery":
         return (f"{name} has a saved World Labs recovery ID. "
                 "Check the run in Marble, then forget the ID in Run History.")
@@ -900,7 +906,7 @@ def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[
 
 
 # The two buttons, by GM's round 13 labels.
-UNLOCK_BUTTON = "\u201cI've checked Marble\u201d"
+UNLOCK_BUTTON = "\u201cI\u2019ve checked Marble\u201d"  # curly apostrophe, GM r33 on PR #199
 FORGET_BUTTON = "\u201cForget ID\u201d"
 # Round 3b: a canvas edit that raced a change to the shared recovery journal.
 CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
@@ -930,7 +936,7 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, r
     raised with (ProviderStartConflictError.reason, never its text): the
     person reads _paid_state_person's line for the state that holds the
     canvas, agents the exact text. `own_node`: the request names the node
-    whose start is in flight (the status bar's "I've checked Marble")."""
+    whose start is in flight (the status bar's "I’ve checked Marble")."""
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
@@ -971,12 +977,13 @@ def _recovery_field_labels(nodes: list[dict[str, Any]]) -> list[str]:
 
 
 def _graph_paid_refusal(specific: str, state: str, *, node: str | None = None,
-                        fields: Sequence[str] = ()) -> HTTPException:
+                        fields: Sequence[str] = (), subject: str | None = None) -> HTTPException:
     """409 for replacing the whole canvas (clear it, open or make a project,
     replace the graph, restore a bundle) while World Labs state holds a node.
     The person's line (GM, round 13: _paid_state_person) leaves the action
     out: the screen's own heading ("Couldn't clear the canvas.") names it."""
-    return refusal_copy.refusal(409, specific, _paid_state_person(state, node=node, fields=fields), route="canvas")
+    return refusal_copy.refusal(409, specific, _paid_state_person(state, node=node, fields=fields, subject=subject),
+                                route="canvas")
 
 
 def _graph_settling_specific(action: str) -> str:
@@ -990,6 +997,14 @@ def _paid_start_refusal(action: str) -> HTTPException:
     return _coded(_graph_paid_refusal(_graph_settling_specific(action), "active"), "paid_start")
 
 
+def _paid_bootstrap_refusal(action: str) -> HTTPException:
+    """409 ``code: "paid_bootstrap"`` (PR #199 round 22, review 20
+    agents-docs LOW-2): Nebula couldn't save its World Labs recovery journal
+    and the write just tried again failed too, so a canvas replacement
+    waits. Its detail, its code and the hold beside it all say bootstrap."""
+    return _coded(_graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap"), "paid_bootstrap")
+
+
 # The states that hold a replacement of the whole canvas (an open, a create,
 # a clear, a graph load, a bundle restore), in the order the guards read them:
 # World Labs' five (_paid_replacement_state), then a registered run
@@ -1001,8 +1016,10 @@ REPLACEMENT_HOLD_STATES = ("active", "ambiguity", "recovery", "params", "bootstr
 
 
 def _paid_replacement_state() -> tuple[str, dict[str, Any]] | None:
-    """The World Labs state holding a replacement of the canvas, read with no
-    side effect (no fence, no journal write, no bootstrap retry): ("active",
+    """The World Labs state holding a replacement of the canvas, read
+    without the lifecycle fence, a journal write of its own or the bootstrap
+    retry (provider_start_guard.has_active() can still persist one thing:
+    it promotes a crashed backend's leftover starts): ("active",
     {}) while a paid start settles; ("ambiguity", {"records"}) for unresolved
     start ambiguities; ("recovery", {"records"}) for kept recovery records
     (any project's); ("params", {"nodeId"}) for a World Labs node on the live
@@ -1031,7 +1048,16 @@ def _graph_unresolved_specific(action: str) -> str:
             "Check Marble and resolve the exact recovery/ambiguity record first.")
 
 
-def _reject_graph_replacement_during_paid_start(action: str) -> None:
+def _reject_graph_replacement_during_paid_start(action: str, *, catalog: Mapping[str, Any] | None = None,
+                                                fenced: bool = False) -> None:
+    """409 while World Labs state holds a replacement of the whole canvas.
+    ``fenced``: the caller holds the paid lifecycle fence
+    (_paid_graph_mutation), whose entry already re-seeded the canvas and
+    tried a real journal write (_clear_bootstrap_error_after_real_write), so
+    the bootstrap state refuses at once there; the retry, which takes that
+    fence itself, runs only outside it (a bundle restore, the open's
+    ahead-of-time check). ``catalog``: the one the caller holds, else the
+    last committed, to place a held record for the person's line."""
     held = _paid_replacement_state()
     if held is None:
         return
@@ -1040,19 +1066,20 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
         raise _paid_start_refusal(action)
     if state == "bootstrap":
         # Nebula couldn't journal a recovery it read from the canvas at boot
-        # (see WORLD_LABS_BOOTSTRAP_PERSON): retried here, on the raising
-        # path only, never on a read of the hold.
-        if _retry_graph_recovery_bootstrap(action):
+        # (see WORLD_LABS_BOOTSTRAP_PERSON).
+        if not fenced and _retry_graph_recovery_bootstrap(action):
             return
-        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
-    node: str | None = None
+        raise _paid_bootstrap_refusal(action)
+    if catalog is None:
+        catalog = _catalog_for_the_hold()
     fields: list[str] = []
-    if state == "recovery":
-        node = _node_label(str(facts["records"][0].get("nodeId") or ""))
-    elif state == "params":
-        node = _node_label(facts["nodeId"])
+    if state == "params":
         fields = _recovery_field_labels([cli_graph.nodes.get(facts["nodeId"]) or {}])
-    raise _graph_paid_refusal(_graph_unresolved_specific(action), state, node=node, fields=fields)
+    # The person's subject, placed as the hold places it (PR #199 round 22,
+    # review 20 LOW-5): never the live canvas's node of the same id when the
+    # record is another project's.
+    raise _graph_paid_refusal(_graph_unresolved_specific(action), state, fields=fields,
+                              subject=_held_person_subject(catalog, state, facts))
 
 
 def _run_detail(action: str) -> str:
@@ -1136,38 +1163,28 @@ def _hold_node_name(project: Mapping[str, Any], node_id: str, open_id: Any) -> s
     return None
 
 
-def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
-                            action: str = "switch projects") -> dict[str, Any] | None:
-    """The guards' verdict, read with no side effect: what holds opening or
-    switching projects now (REPLACEMENT_HOLD_STATES, the guards' order), or
-    None. {state, nodeId, nodeName, projectId, projectName, count, fields,
-    detail}: the held node (the first ambiguity, the first recovery record,
-    the first World Labs node whose settings hold an ID; null for active,
-    bootstrap and run) and its project (by the record's run id; the open one
-    for params; null when it can't be known, never guessed from a node id);
-    ``count`` the records for recovery and ambiguity, else 1; ``fields`` the
-    ID fields' labels for params; ``detail`` the agents' text the refusal
-    would carry for ``action``. ``catalog``: the one the caller holds, else
-    the last committed."""
-    held = _paid_replacement_state()
-    if held is None:
-        if not execution_runs.has_active():
-            return None
-        held = ("run", {})
-    state, facts = held
-    if catalog is None:
-        try:
-            catalog = project_store.read_unlocked()
-        except Exception:  # noqa: BLE001 - a read of the hold never fails over the catalog
-            catalog = {}
+def _catalog_for_the_hold() -> Mapping[str, Any]:
+    """The last committed catalog, for placing a held record; empty when it
+    can't be read (a read of the hold, or a refusal's line, never fails over
+    the catalog: nothing is then placed)."""
+    try:
+        return project_store.read_unlocked()
+    except Exception:  # noqa: BLE001 - see above
+        return {}
+
+
+def _hold_place(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]
+                ) -> tuple[str | None, Mapping[str, Any] | None, str | None]:
+    """Where a held state's node is: (nodeId, its project, its name), by the
+    hold's rules (_graph_replacement_hold): the first ambiguity or recovery
+    record placed by its run id (a seeded recovery record by its World Labs
+    ID), the open project for params; the name from that project (the live
+    canvas when it is the open one). None for what can't be known."""
     open_id = catalog.get("activeProjectId")
     node_id: str | None = None
     project: Mapping[str, Any] | None = None
-    count = 1
-    fields: list[str] = []
     if state in {"ambiguity", "recovery"}:
         records = facts["records"]
-        count = len(records)
         node_id = str(records[0].get("nodeId") or "") or None
         project = _hold_run_project(catalog, records[0].get("runId"))
         if project is None and state == "recovery":
@@ -1175,7 +1192,82 @@ def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
     elif state == "params":
         node_id = facts["nodeId"]
         project = (catalog.get("projects") or {}).get(open_id)
-        fields = _recovery_field_labels([cli_graph.nodes.get(node_id) or {}])
+    name = _hold_node_name(project, node_id, open_id) if project is not None and node_id else None
+    if state == "params" and name is None and node_id:
+        name = _node_label(node_id)  # the live canvas is the open project's
+    return node_id, project, name
+
+
+def _held_node_type(state: str, facts: Mapping[str, Any]) -> str | None:
+    """The held node's type, as the node picker names it ("World Labs
+    Environment"), for a node whose name can't be known (its project
+    can't be, or no longer has it): known from the record alone only when it
+    holds an Existing World ID, a field only a World Labs Environment node
+    has. Never guessed from a node id. Else None."""
+    record = facts["records"][0] if state == "recovery" and facts.get("records") else {}
+    if not record.get("existingWorldId"):
+        return None
+    name = (node_registry.get_all().get("worldlabs-environment") or {}).get("displayName")
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def _held_person_subject(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]) -> str | None:
+    """The subject of the person's line for a held recovery or params state
+    (GM r34 A1 on PR #199): the node by its card title, "“World”", when its
+    project is the open one; "“World” from “Alpha”" for another project's
+    record (GM r32's "from" shape); "A World Labs Environment node" (its
+    type) when the node's name can't be known, "A World Labs node" when its
+    type can't be either. Never a bare type name, never the live canvas's
+    node that only shares the id. None for the other states (their lines
+    name no node)."""
+    if state not in {"recovery", "params"}:
+        return None
+    open_id = catalog.get("activeProjectId")
+    _node_id, project, name = _hold_place(catalog, state, facts)
+    if name:
+        subject = f"\u201c{name}\u201d"
+    else:
+        kind = _held_node_type(state, facts)
+        subject = f"A {kind} node" if kind else "A World Labs node"
+    if project is not None and project.get("id") != open_id and isinstance(project.get("name"), str):
+        subject += f" from \u201c{project['name']}\u201d"
+    return subject
+
+
+def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
+                            action: str = "switch projects") -> dict[str, Any] | None:
+    """The guards' verdict: what holds opening or switching projects now
+    (REPLACEMENT_HOLD_STATES, the guards' order), or None. {state, nodeId,
+    nodeName, projectId, projectName, count, fields, detail}: the held node
+    (the first ambiguity, the first recovery record, the first World Labs
+    node whose settings hold an ID; null for active, bootstrap and run) and
+    its project (by the record's run id; the open one for params; null when
+    it can't be known, never guessed from a node id); ``count`` the records
+    for recovery and ambiguity, else 1; ``fields`` the ID fields' labels for
+    params; ``detail`` the agents' text the refusal would carry for
+    ``action``. ``catalog``: the one the caller holds, else the last
+    committed.
+
+    No fence and no change to any canvas or project. What it can persist:
+    has_active() may promote a crashed backend's leftover starts (as every
+    guard read does), and while the bootstrap state holds, the read makes
+    the same real journal write the press's fence makes
+    (_clear_bootstrap_error_after_real_write), so the read and the press
+    never disagree (PR #199 round 22, review 20 NIT-1): the state clears
+    when that write holds, and stays (its detail true) when it fails."""
+    held = _paid_replacement_state()
+    if held is not None and held[0] == "bootstrap":
+        _clear_bootstrap_error_after_real_write()
+        held = _paid_replacement_state()
+    if held is None:
+        if not execution_runs.has_active():
+            return None
+        held = ("run", {})
+    state, facts = held
+    if catalog is None:
+        catalog = _catalog_for_the_hold()
+    count = len(facts["records"]) if state in {"ambiguity", "recovery"} else 1
+    fields = _recovery_field_labels([cli_graph.nodes.get(facts["nodeId"]) or {}]) if state == "params" else []
     if state == "active":
         detail = _graph_settling_specific(action)
     elif state == "bootstrap":
@@ -1184,9 +1276,7 @@ def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
         detail = _run_detail(action)
     else:
         detail = _graph_unresolved_specific(action)
-    name = _hold_node_name(project, node_id, open_id) if project is not None and node_id else None
-    if state == "params" and name is None and node_id:
-        name = _node_label(node_id)  # the live canvas is the open project's
+    node_id, project, name = _hold_place(catalog, state, facts)
     return {"state": state, "nodeId": node_id, "nodeName": name,
             "projectId": project.get("id") if project is not None else None,
             "projectName": project.get("name") if project is not None else None,
@@ -1231,7 +1321,10 @@ def _retry_graph_recovery_bootstrap(action: str) -> bool:
     (and the error cleared) only when that write held; False (the error
     kept) when it still can't be written. Reached only where the error is
     set, outside the fence: the bundle restore's pre-check and the open's
-    ahead-of-time check (_open_ingress_verdict_off_loop).
+    ahead-of-time check (_open_ingress_verdict_off_loop). Never under the
+    fence (PR #199 round 22, review 20 agents-docs LOW-2): the fence is
+    taken again here, so a nested retry answered a false "paid start is
+    settling"; a fenced guard refuses bootstrap directly instead.
 
     The paid-start fence's own storage failing (review 14's L7) is that
     store's error, not the journal's: it answers the 507 a canvas
@@ -1271,12 +1364,14 @@ def _paid_fence_unverifiable(action: str) -> HTTPException:
 
 
 def _clear_bootstrap_error_after_real_write() -> None:
-    """Under the lifecycle fence, with the bootstrap error set: clear it only
-    when the recovery journal takes a real write now (verify_writable), else
-    keep it, with the store's latest reason. Never refuses by itself, so an
-    ordinary edit that takes the fence isn't refused for this state (round
-    15: which states refuse is unchanged); it only stops clearing it on a
-    seed that wrote nothing."""
+    """With the bootstrap error set: clear it only when the recovery journal
+    takes a real write now (verify_writable, under the journal's own lock),
+    else keep it, with the store's latest reason. Run under the lifecycle
+    fence by every canvas change, and by a read of the hold
+    (_graph_replacement_hold) without it, so the read answers what the
+    press would. Never refuses by itself, so an ordinary edit that takes
+    the fence isn't refused for this state (round 15: which states refuse
+    is unchanged); it only stops clearing it on a seed that wrote nothing."""
     global _graph_recovery_bootstrap_error
     if _graph_recovery_bootstrap_error is None:
         return
@@ -15233,7 +15328,7 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        # The status bar's "I've checked Marble" (round 3b): the person reads the line for
+        # The status bar's "I’ve checked Marble" (round 3b): the person reads the line for
         # why it can't unlock yet; agents keep the exact text.
         raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
@@ -15339,10 +15434,9 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
     held = any(
         record.get("nodeId") == node_id for record in provider_start_guard.list()
     )
-    recovered = any(
-        record.get("nodeId") == node_id
-        for record in provider_recovery_store.list()
-    )
+    holding = [record for record in provider_recovery_store.list()
+               if record.get("nodeId") == node_id and _recovery_record_holds_node(record, node)]
+    recovered = bool(holding)
     params = node.get("params") or {}
     live_checkpoint = has_recovery_identity(
         str(node.get("definitionId") or ""), params
@@ -15350,14 +15444,91 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
     state = ("active" if active else "ambiguity" if held else "recovery" if recovered
              else "params" if live_checkpoint else None)
     if state is not None:
+        person = _paid_state_person(state, node=_node_label(node_id),
+                                    fields=_recovery_field_labels([node]) if state == "params" else ())
+        if state == "recovery" and not live_checkpoint:
+            person = _shared_id_delete_person(node_id, holding) or person
         raise _node_refusal(
             409,
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
-            _paid_state_person(state, node=_node_label(node_id),
-                               fields=_recovery_field_labels([node]) if state == "params" else ()),
+            person,
         )
+
+
+def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
+    """Whether a World Labs recovery record with this node's id holds the
+    node from deletion (Justin, 2026-10-31, on PR #199): node ids repeat
+    across projects, so a record holds the node only when it is placed in
+    the open project (its run registered on it here, or the open-hold
+    verdict's placement: _hold_run_project, then _hold_id_project), when it
+    can't be placed at all, or when the node's own settings hold the
+    record's ID. Another project's record holds nothing here: deleting this
+    node leaves that record and its ID as they are. Fails closed: anything
+    unknown (no catalog, no open project, a canvas that isn't the open
+    project's, an error) holds. Ambiguities and active starts carry no ID
+    and still hold by node id (_ensure_node_deletable). The same rule for
+    the person and for agents; their texts are unchanged."""
+    try:
+        wanted = {value for value in (record.get("resumeOperationId"), record.get("existingWorldId")) if value}
+        held = {value for value in recovery_identifiers(str(node.get("definitionId") or ""), node.get("params") or {})
+                if value}
+        if wanted & held:
+            return True
+        catalog = _catalog_for_the_hold()
+        open_id = catalog.get("activeProjectId")
+        if not isinstance(open_id, str) or not open_id or cli_graph.owner != open_id:
+            return True
+        run_id = record.get("runId")
+        canvas = getattr(execution_runs.get(run_id), "canvas", None) if isinstance(run_id, str) and run_id else None
+        if isinstance(canvas, tuple) and canvas and canvas[0] == open_id:
+            return True
+        project = _hold_run_project(catalog, run_id) or _hold_id_project(catalog, record)
+        return project is None or project.get("id") == open_id
+    except Exception:  # noqa: BLE001 - fail closed: a record Nebula can't place holds
+        return True
+
+
+def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]]) -> str | None:
+    """The person's line when a delete is refused only by recovery records
+    Nebula knows are another project's but can't place in one (GM r34
+    addendum 2 on PR #199): each one's run is in other projects' run
+    histories (a duplicate copies them), never the open project's, and the
+    node holds none of their IDs. "Nebula couldn’t delete “Delta brief”
+    because it shares the ID n1 with a World Labs Environment node from
+    another project, which has a saved World Labs recovery ID. Forget that
+    ID in Run History, then try again." ``holding``: the records that hold
+    the node (_recovery_record_holds_node); one placed in another project
+    holds nothing, so none here is named. None (the record's own line
+    stays) when any of them may be the open project's or can't be placed
+    anywhere. Read-only; never fails."""
+    try:
+        if not holding:
+            return None
+        catalog = _catalog_for_the_hold()
+        open_id = catalog.get("activeProjectId")
+        projects = catalog.get("projects") or {}
+        others = [project for project_id, project in projects.items() if project_id != open_id]
+        others += list((catalog.get("trash") or {}).values())
+
+        def ran(project: Any, run_id: Any) -> bool:
+            history = ((project.get("snapshot") or {}).get("runHistory") or []) if isinstance(project, dict) else []
+            return any(isinstance(entry, dict) and entry.get("id") == run_id for entry in history)
+
+        for record in holding:
+            run_id = record.get("runId")
+            canvas = getattr(execution_runs.get(run_id), "canvas", None) if isinstance(run_id, str) and run_id else None
+            if not isinstance(run_id, str) or not run_id or ran(projects.get(open_id), run_id) \
+                    or (isinstance(canvas, tuple) and bool(canvas) and canvas[0] == open_id) \
+                    or not any(ran(project, run_id) for project in others):
+                return None
+        kind = (node_registry.get_all().get("worldlabs-environment") or {}).get("displayName") or "World Labs Environment"
+        return (f"Nebula couldn\u2019t delete {_quoted(_node_label(node_id))} because it shares the ID {node_id} "
+                f"with a {kind} node from another project, which has a saved World Labs recovery ID. "
+                "Forget that ID in Run History, then try again.")
+    except Exception:  # noqa: BLE001 - the refusal itself never fails over its line
+        return None
 
 
 @app.delete("/api/graph/node/{node_id}")
@@ -17348,7 +17519,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     # refused at the limit, held aside first below it.
     await _refuse_a_waiting_canvas_change("replace")
     with _paid_graph_mutation("replace the graph"):
-        _reject_graph_replacement_during_paid_start("replace the graph")
+        _reject_graph_replacement_during_paid_start("replace the graph", fenced=True)
         if execution_runs.has_active():
             # The person reads the line Clear has (review 4, N2); agents keep
             # the specific one.
@@ -18286,6 +18457,17 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             result["nodes"][index]["data"][pending_nodes.PENDING_KEY] = flag
         else:
             result["nodes"][index]["data"].pop(pending_nodes.PENDING_KEY, None)
+        # Its landing stamp (RESULT_LANDED_KEY) loads with it, as the flag
+        # does (PR #199 round 22, review 20 LOW-1): an open no longer drops
+        # it from the live node, so the next save keeps it. Saves of the live
+        # canvas take it from the live graph (_live_result_stamps), and a
+        # handoff never takes the tab's.
+        stamp = _landing_stamp(data.get(RESULT_LANDED_KEY))
+        if stamp is not None:
+            staged_node[RESULT_LANDED_KEY] = stamp
+            result["nodes"][index]["data"][RESULT_LANDED_KEY] = stamp
+        else:
+            result["nodes"][index]["data"].pop(RESULT_LANDED_KEY, None)
         candidate.nodes[node_id] = staged_node
         if staged_node["definitionId"] != definition_id:
             # Migrated from a retired definition: the canvas shows the replacement.
@@ -20263,11 +20445,14 @@ async def _projects_live_export() -> dict[str, Any]:
     return await export_graph_for_frontend()
 
 
-def _project_replacement_guard(action: str = "switch projects", *, person: str | None = None) -> None:
+def _project_replacement_guard(action: str = "switch projects", *, person: str | None = None,
+                               catalog: Mapping[str, Any] | None = None, fenced: bool = True) -> None:
     """409 while a paid start settles or a run is registered. ``person``: the
     person's own line for the run refusal (refusal_copy), where GM wrote one
-    (Clear, round 11); agents keep the specific text either way."""
-    _reject_graph_replacement_during_paid_start(action)
+    (Clear, round 11); agents keep the specific text either way. ``catalog``
+    and ``fenced``: as _reject_graph_replacement_during_paid_start's (every
+    caller but the open's ahead-of-time check holds the fence)."""
+    _reject_graph_replacement_during_paid_start(action, catalog=catalog, fenced=fenced)
     _refuse_agent_while_kept(action)
     if execution_runs.has_active():
         specific = _run_detail(action)
@@ -20474,8 +20659,9 @@ async def dismiss_canvas_held_unreadable(body: dict[str, Any]) -> dict[str, Any]
 @app.get("/api/projects/open-hold")
 async def get_open_hold() -> dict[str, Any]:
     """What holds opening or switching projects now (the open route's own
-    guards, read with no side effect: no fence, no journal write, no retry),
-    for the person's tab (it locks Open before the press) and agents:
+    guards, read: no fence and no change to any canvas or project; what it
+    can persist is in _graph_replacement_hold's docstring), for the
+    person's tab (it locks Open before the press) and agents:
     {"hold": {state, nodeId, nodeName, projectId, projectName, count,
     fields, detail} | null} (_graph_replacement_hold)."""
     return {"hold": _graph_replacement_hold()}
@@ -20668,8 +20854,12 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         upgrade_project(project)
         _require_backend_node_ids(project["snapshot"])
         catalog["projects"][recovery_id] = project
+        # The person's save of a kept tab's edits may pass the project limit
+        # (Justin, 2026-10-31, on PR #199), as a restore and an Undo of a
+        # delete may; a stale tab's recovery and any agent's request may not.
+        kept_save = body.get("kept") is True and is_person(current_request_headers())
         try:
-            project_store.commit(catalog)
+            project_store.commit(catalog, kept_save=kept_save)
         except ProjectLimitError as exc:
             # The tab's line names the limit and how many there are (GM r22 on PR #199).
             if exc.limit == "projects":
@@ -20821,8 +21011,10 @@ def _with_run_result(node: Mapping[str, Any], result: Mapping[str, Any]) -> dict
 def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any] | None:
     """The tab's run record that gave ``node_id`` its result: the newest (by
     startedAt) in its run history that ran it (its outputs, its skip, or its
-    target). {id, startedAt, finishedAt (epoch ms: startedAt plus
-    durationSec; None when the record has no start time)}."""
+    target). {id, startedAt, finishedAt (epoch ms: the record's
+    ``nodeLandedAt[node_id]``, when the tab's result landed on that node,
+    when it has one; else startedAt plus durationSec; None when the record
+    has neither)}."""
     best: dict[str, Any] | None = None
     for record in snapshot.get("runHistory") or []:
         if not isinstance(record, dict) or not isinstance(record.get("id"), str) or not record["id"]:
@@ -20835,9 +21027,15 @@ def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any]
         started = timed or 0
         took = record.get("durationSec") if isinstance(record.get("durationSec"), (int, float)) \
             and not isinstance(record.get("durationSec"), bool) and math.isfinite(record["durationSec"]) else 0
+        # When this node's own result landed in the tab (PR #199 round 22,
+        # review 20 NIT-2): a long run's early result isn't dated by the
+        # run's end. Else the run's end, as before.
+        landings = record.get("nodeLandedAt") if isinstance(record.get("nodeLandedAt"), dict) else {}
+        node_landed = _landing_stamp(landings.get(node_id))
         if best is None or started >= best["startedAt"]:
             best = {"id": record["id"], "startedAt": started,
-                    "finishedAt": started + max(took, 0) * 1000 if timed is not None else None}
+                    "finishedAt": node_landed if node_landed is not None else (
+                        started + max(took, 0) * 1000 if timed is not None else None)}
     return best
 
 
@@ -20856,8 +21054,9 @@ def _tab_result_is_newer(project_id: str, node_id: str, tab_run: Mapping[str, An
     - No run record behind the tab's result: Nebula's stands.
     - Nebula saw the tab's run land in this process (node_result_runs) and
       its own: the run order decides.
-    - Otherwise the tab record's finish time against when Nebula's result
-      landed: ``stamp`` (the landing stamp kept with the stored result,
+    - Otherwise the tab record's time for the node (when its result landed
+      in the tab, ``nodeLandedAt``, else the run's end) against when
+      Nebula's result landed: ``stamp`` (the landing stamp kept with the stored result,
       RESULT_LANDED_KEY, which survives a restart) or a landing seen in this
       process, the later of the two. Equal times: Nebula's stands.
     - A side with no time (a result saved before the stamp existed, a tab
@@ -21037,14 +21236,39 @@ def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_n
     _journal(kind, data=data, summary=summary)
 
 
+def _enter_replacement_fence(fences: ExitStack, catalog: Mapping[str, Any]) -> None:
+    """Take the paid lifecycle fence for an open or a create. Its refusal
+    while a paid start settles (409 ``code: "paid_start"``) carries the
+    verdict as ``hold``, as the guards' refusals do, and both say "switch
+    projects", the hold's own action (PR #199 round 22, review 20
+    agents-docs LOW-1: one action word, so ``detail`` equals ``hold.detail``)."""
+    try:
+        fences.enter_context(_paid_graph_mutation("switch projects"))
+    except HTTPException as exc:
+        if exc.status_code != 409 or getattr(exc, "fields", {}).get("code") != "paid_start":
+            raise
+        raise _with_hold(exc, _hold_or_none(catalog)) from exc
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
     exported = await _projects_live_export()
     actor = _switch_actor()
-    with project_store.transaction() as catalog, _paid_graph_mutation("create a project"):
+    with project_store.transaction() as catalog, ExitStack() as fences:
+        # The fence's own refusal (a paid start settling) and the guard's
+        # carry the hold too (PR #199 round 22, review 20 agents-docs LOW-1
+        # and NIT-2), worded "switch projects" as the hold's detail is.
+        _enter_replacement_fence(fences, catalog)
         _project_revision(body, catalog)
-        _project_replacement_guard()
+        try:
+            _project_replacement_guard(catalog=catalog)
+        except CanvasKeptRefusal:
+            raise
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                raise
+            raise _with_hold(exc, _hold_or_none(catalog)) from exc
         # API callers need not visit the menu first. Never erase a legacy
         # live canvas merely because no catalog migration request preceded it.
         # Never replace a canvas that isn't the open project's without
@@ -21110,7 +21334,7 @@ async def _open_ingress_verdict_off_loop(project_id: str, body: dict[str, Any]) 
         # The transaction's own refusals, ahead of time: what it then holds
         # decides, so this only spares a refused open the check's wait.
         _project_revision(body, workspace)
-        _project_replacement_guard()
+        _project_replacement_guard(fenced=False)
     except (ProjectStoreError, HTTPException):
         return None
     reopening = workspace["activeProjectId"] == project_id
@@ -21156,12 +21380,15 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     verdict = await _open_ingress_verdict_off_loop(project_id, body or {})
     exported = await _projects_live_export()
     actor = _switch_actor()
-    with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
+    with project_store.transaction() as catalog, ExitStack() as fences:
+        # A paid start settling refuses at the fence's entry: with the hold
+        # too (PR #199 round 22, review 20 agents-docs LOW-1).
+        _enter_replacement_fence(fences, catalog)
         _project_revision(body or {}, catalog)
         try:
             # The run refusal has the person's line too (CLEAR_DURING_RUN_PERSON:
             # its words hold for an open), agents keep the specific text.
-            _project_replacement_guard(person=CLEAR_DURING_RUN_PERSON)
+            _project_replacement_guard(person=CLEAR_DURING_RUN_PERSON, catalog=catalog)
         except CanvasKeptRefusal:
             raise
         except HTTPException as exc:
@@ -21331,7 +21558,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             _live_pending_flags(staged["nodes"], cli_graph.nodes)
-            _live_result_stamps(staged["nodes"], cli_graph.nodes)
+            _live_result_stamps(staged["nodes"], cli_graph.nodes, project["snapshot"].get("nodes"))
             project["snapshot"] = staged
             # Which window saved each tab-local node (review 18 handoff-reopen
             # MEDIUM-1). This save's own rule is unchanged: the last window's
@@ -21372,15 +21599,26 @@ def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[
             data[pending_nodes.PENDING_KEY] = flag
 
 
-def _live_result_stamps(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
+def _live_result_stamps(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]],
+                        stored: Sequence[Any] | None = None) -> None:
     """A save keeps each node's landing stamp (RESULT_LANDED_KEY) as the live
     graph has it, as it keeps the placeholder flag: only a result landing
-    sets one, so a tab that lost it, or holds an old one, never changes it."""
+    sets one, so a tab that lost it, or holds an old one, never changes it.
+    ``stored``: the project's stored nodes. A live node with no stamp keeps
+    the stored copy's while its result is the one stored (PR #199 round 22,
+    review 20 LOW-1): a save never drops a stamp a result landing didn't
+    replace. Without it (a handoff), every stamp the tab sent goes."""
+    kept = {node.get("id"): node.get("data") for node in stored or []
+            if isinstance(node, dict) and isinstance(node.get("data"), dict)}
     for node in nodes:
         data = node.get("data") if isinstance(node, dict) else None
         if not isinstance(data, dict):
             continue
         stamp = _landing_stamp((live.get(node.get("id")) or {}).get(RESULT_LANDED_KEY))
+        was = kept.get(node.get("id"))
+        if stamp is None and was is not None and was.get("definitionId") == data.get("definitionId") \
+                and _run_result(was) == _run_result(data):
+            stamp = _landing_stamp(was.get(RESULT_LANDED_KEY))
         if stamp is None:
             data.pop(RESULT_LANDED_KEY, None)
         else:

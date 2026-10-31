@@ -48,7 +48,7 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     hold = listing.get("openHold")
     if isinstance(hold, dict):
         # The open's own guards, read (GET /api/projects/open-hold).
-        print(f"Note: {project_client.open_hold_note(hold)}")
+        print(f"Note: {project_client.open_hold_note(hold, active)}")
         print()
     if not projects:
         print("No saved projects.")

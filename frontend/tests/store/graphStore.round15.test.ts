@@ -243,7 +243,9 @@ describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <rea
 
   it('the canvas refuses a held node with its name', () => {
     useGraphStore.setState({ nodes: [text('n1', 'Harbor world')],
-      providerStartAmbiguities: [{ runId: 'r', nodeId: 'n1', kind: 'worldlabs-environment' }] } as never);
+      providerStartAmbiguities: [{ runId: 'r', nodeId: 'n1', kind: 'worldlabs-environment' }],
+      // Run r is this project's (review 20 of PR #199, LOW-2).
+      runHistory: [{ id: 'r', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], } as never);
     useGraphStore.getState().deleteNode('n1');
     expect(useGraphStore.getState().undoNotice?.text).toBe(
       "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");

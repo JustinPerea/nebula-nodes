@@ -35,9 +35,11 @@ export type ReopenHold = OpenHold | { state: 'tabRun' } | { state: 'uncertain' }
 export type ReopenHoldState = ReopenHold['state'];
 
 /** Where the canvas line sits (GM r32, 2): by what clears it. The Marble
- * forms by the World Labs notice at the top (where "I've checked Marble" is),
- * the Forget ID form by Run History, the others by Stop. The `params` form
- * sits by the notice too: the node's settings can be off screen. */
+ * forms inside the World Labs notice at the top, as its second line (GM r33,
+ * 6; the notice holds "I’ve checked Marble"), the Forget ID form by Run
+ * History, the others by Stop. The `params` form sits in the notice's box
+ * too (alone, when nothing else holds): the node's settings can be off
+ * screen. */
 export type ReopenHoldPlace = 'stop' | 'worldLabsNotice' | 'runHistory';
 export const REOPEN_HOLD_PLACES: Record<ReopenHoldState, ReopenHoldPlace> = {
   active: 'stop', ambiguity: 'worldLabsNotice', recovery: 'runHistory', params: 'worldLabsNotice',

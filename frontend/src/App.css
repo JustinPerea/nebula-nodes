@@ -46,7 +46,9 @@ a {
 .backend-connection {
   position: fixed;
   z-index: 10000;
-  top: 150px;
+  /* Under the toolbar's line, which moves below the World Labs notice while
+     it shows (GM r34 A5): the notice's foot, 8px, the 50px toolbar, 8px. */
+  top: max(150px, calc(var(--top-notice-bottom, 0px) + 66px));
   left: 50%;
   max-width: min(92vw, 560px);
   transform: translateX(-50%);
@@ -273,30 +275,27 @@ button[data-offline-neutral]:hover {
   flex: 1;
 }
 
-/* The World Labs notice with the held-reopen line under it (GM r32, 2 on
-   PR #199): one stack at the notice's place, so the line sits by the
-   notice whatever its height. */
-.world-labs-stack {
-  position: fixed;
-  z-index: 10001;
-  top: 54px;
-  left: 50%;
+/* The held-reopen line is the notice's second line (GM r33, 6 on PR #199):
+   the row wraps, and the line takes the box's full width under the notice's
+   own text and button. */
+.provider-recovery-status:has(.provider-recovery-status__reopen) {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.provider-recovery-status .provider-recovery-status__reopen {
   display: flex;
-  width: min(92vw, 680px);
-  flex-direction: column;
-  gap: 8px;
-  transform: translateX(-50%);
-  pointer-events: none;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 210 180 / 16%);
+  color: #fff0e5;
 }
 
-.world-labs-stack > * {
-  pointer-events: auto;
-}
-
-.world-labs-stack .provider-recovery-status {
-  position: static;
-  width: 100%;
-  transform: none;
+.provider-recovery-status--reopen-only .provider-recovery-status__reopen {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .reopen-hold-callout {

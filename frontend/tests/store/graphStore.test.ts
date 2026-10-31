@@ -226,6 +226,10 @@ describe('graphStore', () => {
     const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
       | ((event: ExecutionEvent) => void)
       | undefined;
+    // The tab's own run (review 20 of PR #199, LOW-2: only this project's
+    // record writes its ID into a node).
+    useGraphStore.setState({ runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete',
+      snapshot: { nodes: [], edges: [] } }] });
 
     subscribed?.({
       type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,

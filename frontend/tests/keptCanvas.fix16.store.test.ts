@@ -7,11 +7,14 @@
  *   server's wire rules (a refused one never exists).
  * - GM r21 (5): Discard opens the saved copy of the canvas, else Projects.
  * - GM r22 (2): an update while kept: Save and Discard reload.
- * - GM r22 on the limit: a 413 at the project limit keeps kept mode.
+ * - The project limit (Justin, 2026-10-31, replacing GM r22's limit line):
+ *   the person's kept save asks to pass it, as a restore may.
  * - Review 14 kept-hold MEDIUM-3, LOW-1, LOW-2 (H24), LOW-4, NIT-1;
  *   lock-order LOW-1 (M14), LOW-2 and NIT-3.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
@@ -58,9 +61,8 @@ vi.mock('../src/lib/projects', async (original) => ({
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
 }));
 
-import { DISCARDED_KEPT_EDITS, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, keptDiscardTarget, keptExitBlocker, keptProjectLimitLine,
+import { DISCARDED_KEPT_EDITS, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, keptDiscardTarget, keptExitBlocker,
   resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
-import { RequestFailedError } from '../src/lib/errorCopy';
 import { setFollowingSwitch } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests, subscribeOfflinePulse } from '../src/lib/backendConnection';
 import { useGraphStore } from '../src/store/graphStore';
@@ -417,30 +419,32 @@ describe('GM r22 (2) on PR #199: Nebula updated while kept (review 14 kept-hold 
   });
 });
 
-describe('GM r22 on PR #199 (review 14 kept-hold MEDIUM-2): [Save as a project] at the project limit', () => {
-  const limitRefusal = () => new RequestFailedError("Couldn't recover the project.", 413,
-    { detail: 'Project limit reached', storageLimit: 'projects' });
-
-  it('at the limit: kept mode stays, and the line names the limit (never the backend’s words)', async () => {
+describe('Justin, 2026-10-31: [Save as a project] may pass the project limit, as a restore may', () => {
+  it('the kept save asks for it (kept: true), and saves at the limit with no limit line', async () => {
     keepWithEdits();
-    vi.mocked(projects.recoverProject).mockRejectedValue(limitRefusal());
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('a'), summary('b'), summary('c')], projectLimit: 3 } as never));
+    vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('alpha-rec', 'Glass campaign (recovered)') });
     await useProjectStore.getState().saveKeptEdits();
-    expect(isCanvasKept()).toBe(true);
-    expect(useProjectStore.getState().keptEdits).toMatchObject({ saving: false,
-      error: 'You’ve reached the limit of 3 projects. Delete one, then save it as a project.' });
-    expect(useProjectStore.getState().unsavedEdits).toBeNull();
-    expect(JSON.stringify(useProjectStore.getState())).not.toContain('Project limit reached');
+    expect(vi.mocked(projects.recoverProject).mock.calls[0][5]).toBe(true);
+    expect(useProjectStore.getState().keptEdits?.error ?? null).toBeNull();
+    // The limit line is gone with the refusal it answered.
+    expect(readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8')).not.toContain('then save it as a project.');
   });
 
-  it('over it: how many to delete', async () => {
-    keepWithEdits();
-    vi.mocked(projects.recoverProject).mockRejectedValue(limitRefusal());
-    vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: ['a', 'b', 'c', 'd', 'e'].map((id) => summary(id)), projectLimit: 3 } as never));
-    await useProjectStore.getState().saveKeptEdits();
-    expect(isCanvasKept()).toBe(true);
-    expect(useProjectStore.getState().keptEdits?.error).toBe('You have 5 projects, over the limit of 3. Delete 3, then save it as a project.');
-    expect(keptProjectLimitLine(4, 3)).toBe('You have 4 projects, over the limit of 3. Delete 2, then save it as a project.');
+  it('the request carries kept only for the kept save', async () => {
+    const actual = await vi.importActual<typeof import('../src/lib/projects')>('../src/lib/projects');
+    const bodies: unknown[] = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String((init as RequestInit).body)));
+      return new Response(JSON.stringify({ project: { id: 'c', name: 'C' }, workspaceRevision: 'r' }), { status: 200,
+        headers: { 'Content-Type': 'application/json' } });
+    });
+    const snapshot = { nodes: [], edges: [] } as never;
+    await actual.recoverProject('alpha', snapshot, 'a'.repeat(32), 1, 'Alpha', true);
+    await actual.recoverProject('alpha', snapshot, 'b'.repeat(32), 1, 'Alpha');
+    fetchSpy.mockRestore();
+    expect((bodies[0] as { kept?: unknown }).kept).toBe(true);
+    expect('kept' in (bodies[1] as object)).toBe(false);
   });
 });
 

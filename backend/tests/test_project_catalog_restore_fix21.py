@@ -40,7 +40,7 @@ from models.events import ExecutedEvent  # noqa: E402
 from nebula_api import NebulaAPI  # noqa: E402
 from services.node_errors import NodeErrors  # noqa: E402
 from services.node_result_runs import NodeResultRuns  # noqa: E402
-from services.provider_recovery import ProviderRecoveryStore  # noqa: E402
+from services.provider_recovery import ProviderRecoveryPersistenceError, ProviderRecoveryStore  # noqa: E402
 from tests.conftest import PERSON  # noqa: E402
 from tests.test_project_catalog_restore_fix2 import _add_text, _create, app  # noqa: E402,F401
 from tests.test_project_catalog_restore_fix12 import CODEX  # noqa: E402
@@ -391,6 +391,11 @@ def test_a_the_states_file_is_every_state_the_verdict_answers(app, recoveries, m
     monkeypatch.setattr(main_module.execution_runs, "has_active", lambda: True)
     seen.append(_hold(client)["state"])
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", "x")
+
+    def unwritable():  # round 22: the read tries the journal write the press makes
+        raise ProviderRecoveryPersistenceError("provider recovery journal write failed")
+
+    monkeypatch.setattr(recoveries, "verify_writable", unwritable)
     seen.append(_hold(client)["state"])
     world = main_module.cli_graph.add_node(ENVIRONMENT, {"resume_operation_id": "op-p"})
     seen.append(_hold(client)["state"])
@@ -408,7 +413,9 @@ def test_a_agents_read_the_hold_in_list_projects_and_nebula_projects(app, recove
     _alpha_then_delta(client)
     recoveries.set(run_id="wl-run-delta", node_id="n1", resume_operation_id="op-1", existing_world_id=None)
     listed = project_client.list_projects(NebulaAPI("http://testserver", client=client), headers=CODEX)
-    note = f"Opening or switching projects is held: {UNRESOLVED}"
+    # Round 22 (review 20 agents-docs LOW-5): the note says the state, the node, its project and what clears it.
+    note = ("Opening or switching projects is held (recovery): \u201cDelta World\u201d (n1) in the open project "
+            "\u201cDelta\u201d has a saved World Labs recovery ID; the person forgets it in Run History.")
     assert listed["openHold"]["state"] == "recovery" and listed["openHold"]["note"] == note
     cli = NebulaClient("http://testserver")
     cli._client = client
@@ -833,7 +840,7 @@ def test_agent_docs_describe_round_21():
     skill = flat((ROOT / "skills/nebula/SKILL.md").read_text())
     for text in (setup, skill):
         assert "openHold" in text and "/api/projects/open-hold" in text
-        assert "Opening or switching projects is held:" in text
+        assert "Opening or switching projects is held (" in text  # round 22: the note names the state
         assert "resultLandedAt" in text and "Equal times keep Nebula's result" in text
         assert "the side with a time wins" in text
         assert "`node.result`" in text

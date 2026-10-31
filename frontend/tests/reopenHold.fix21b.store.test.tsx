@@ -75,6 +75,7 @@ import { OPEN_HOLD_STATES, REOPEN_HOLD_PLACES, reopenHoldLine } from '../src/lib
 import { runFinishesLine } from '../src/lib/useBackendOffline';
 import { savedOrder } from '../src/components/projects/catalogRestoreCopy';
 import { ReopenHoldCallout } from '../src/components/ReopenHoldCallout';
+import { ProviderRecoveryStatus } from '../src/components/ProviderRecoveryStatus';
 import { act, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -200,8 +201,8 @@ const LINES = {
   active: `You can reopen “${P}” when World Labs confirms the new run.`,
   bootstrap: `Nebula couldn’t save its World Labs safeguards. You can reopen “${P}” after you restart Nebula.`,
   bootstrapApp: `Nebula couldn’t save its World Labs safeguards. You can reopen “${P}” after you quit Nebula and open it again.`,
-  ambiguityIts: `You can reopen “${P}” after you check its World Labs run in Marble and press “I've checked Marble”.`,
-  ambiguityOther: `You can reopen “${P}” after you check the World Labs run for “World” from “Alpha” in Marble and press “I've checked Marble”.`,
+  ambiguityIts: `You can reopen “${P}” after you check its World Labs run in Marble and press “I’ve checked Marble”.`,
+  ambiguityOther: `You can reopen “${P}” after you check the World Labs run for “World” from “Alpha” in Marble and press “I’ve checked Marble”.`,
   run: `You can reopen “${P}” when the run finishes.`,
 };
 
@@ -226,7 +227,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
     expect(reopenHoldLine(P, 'alpha', hold('recovery', { nodeName: 'World' }) as never))
       .toBe(`You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run History.`);
     expect(reopenHoldLine(P, 'alpha', hold('ambiguity', { nodeName: 'World' }) as never))
-      .toBe(`You can reopen “${P}” after you check the World Labs run for “World” in Marble and press “I've checked Marble”.`);
+      .toBe(`You can reopen “${P}” after you check the World Labs run for “World” in Marble and press “I’ve checked Marble”.`);
   });
 
   it('parity: every state Nebula’s guard can refuse on has a line and a place here', () => {
@@ -240,7 +241,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
 
   it('each line is curly (’ and “”), with no straight double quote', () => {
     for (const line of Object.values(LINES)) {
-      expect(line.replace("I've checked Marble", '')).not.toMatch(/['"]/);
+      expect(line).not.toMatch(/['"]/);
     }
   });
 });
@@ -292,11 +293,13 @@ describe('review 19 item 1: each state locks before the press, says its line on 
     expect(card()).toBeNull();
   });
 
-  it('bootstrap: by Stop; a restart (Nebula’s next read) clears it', async () => {
+  it('bootstrap: by Stop, on its 409 (GM r34 A3: the press is sent, nothing locks before it); a restart (Nebula’s next read) clears it', async () => {
     duplicateN1();
     await verdict(hold('bootstrap'));
+    vi.mocked(projects.openProject).mockRejectedValue(new projects.ProjectRequestError('safeguards', 409,
+      { heading: 'Couldn’t open the project.', hold: hold('bootstrap') }));
     await askToReopen();
-    expect(vi.mocked(projects.openProject)).not.toHaveBeenCalled();
+    expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(1);
     expect(noticeNow()).toBe(LINES.bootstrap);
     await verdict(null);
     expect(noticeNow()).toBeNull();
@@ -324,7 +327,7 @@ describe('review 19 item 1: each state locks before the press, says its line on 
   it('an ambiguity this tab lists holds here even when Nebula’s verdict has none (the tab itself won’t switch until its own press)', async () => {
     duplicateN1();
     useGraphStore.setState({ providerStartAmbiguities: [{ runId: 'x', nodeId: 'n1', kind: 'worldlabs-environment', message: 'm', durable: true }] as never });
-    const neutral = `You can reopen “${P}” after you check the World Labs run in Marble and press “I've checked Marble”.`;
+    const neutral = `You can reopen “${P}” after you check the World Labs run in Marble and press “I’ve checked Marble”.`;
     expect(reopenHold('alpha')).toMatchObject({ state: 'ambiguity', projectId: null });
     expect(card()).toBe(neutral);
     await verdict(null);
@@ -398,7 +401,8 @@ describe('review 19 item 9: the canvas line follows the hold, never stale', () =
     duplicateN1();
     await verdict(PARAMS);
     await askToReopen();
-    render(<ReopenHoldCallout place="worldLabsNotice" />);
+    const line = held()!.line;
+    render(<ProviderRecoveryStatus reopenLine={{ line, onDismiss: useProjectStore.getState().dismissHeldReopenLine }} />);
     act(() => { screen.getByRole('button', { name: 'Dismiss' }).click(); });
     expect(held()).toBeNull();
     useGraphStore.setState({ isExecuting: false });
@@ -413,7 +417,7 @@ describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () 
     duplicateN1();
     await verdict(RECOVERY_ALPHA);
     await askToReopen();
-    const { container } = render(<><ReopenHoldCallout place="worldLabsNotice" /><ReopenHoldCallout place="runHistory" /></>);
+    const { container } = render(<ReopenHoldCallout place="runHistory" />);
     const shown = container.querySelectorAll('[data-reopen-hold-callout]');
     expect(shown).toHaveLength(1);
     expect(shown[0].getAttribute('data-reopen-hold-callout')).toBe('runHistory');
@@ -421,14 +425,15 @@ describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () 
     expect(shown[0].textContent).toContain(LINES.recovery);
   });
 
-  it('the Run History form is in the rail beside the Run History button; the Marble forms under the World Labs notice', () => {
+  it('the Run History form is in the rail beside the Run History button; the Marble forms in the World Labs notice', () => {
     const rail = readFileSync(resolve(__dirname, '../src/components/WorkspaceRail.tsx'), 'utf8');
     const anchor = rail.slice(rail.indexOf('workspace-rail__anchor'), rail.indexOf('</div>', rail.indexOf('workspace-rail__anchor')));
     expect(anchor).toContain('label="Open run history"');
     expect(anchor).toContain('<ReopenHoldCallout place="runHistory" />');
     const app = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf8');
-    const stack = app.slice(app.indexOf('className="world-labs-stack"'), app.indexOf('</div>', app.indexOf('className="world-labs-stack"')));
-    expect(stack).toMatch(/<ProviderRecoveryStatus \/>\s*\{isCanvas && <ReopenHoldCallout place="worldLabsNotice" \/>\}/);
+    // GM r33, 6: the notice's own second line, never a callout of its own.
+    expect(app).toMatch(/<ProviderRecoveryStatus reopenLine=\{isCanvas && projects\.heldReopenLine\?\.place === 'worldLabsNotice'/);
+    expect(app).not.toContain('ReopenHoldCallout');
   });
 });
 
@@ -558,7 +563,7 @@ describe('review 19 item 14: curly apostrophes on the lines round 20 touched', (
     const store = readFileSync(resolve(__dirname, '../src/store/projectStore.ts'), 'utf8');
     expect(store).toContain('your unsaved edits haven’t been saved yet.');
     expect(store).toContain('Try again before you reload, or they’ll be lost.');
-    expect(store).toContain("'Couldn’t reopen the project.'");
+    expect(store).toContain("'Nebula couldn’t reopen the project.'");
     expect(store).not.toContain("haven't been saved yet");
   });
 });

@@ -468,7 +468,7 @@ describe('round 18 (review 17)', () => {
       sameAsNebula();
     });
 
-    it('a failed delete puts the node back where it was, with its wires and the failure line, not selected', async () => {
+    it('a failed delete puts the node back where it was, with its wires and the failure line, selected again when nothing changed since the press (GM r34 addendum 3)', async () => {
       start([textFakeNode('n1'), { ...textFakeNode('n2'), position: { x: 420, y: 260 } }], [canvasWire('n1', 'n2')], ['n2']);
       nebula().holdAnswers = true;
       refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'DELETE', 500, 'Nope.');
@@ -479,7 +479,9 @@ describe('round 18 (review 17)', () => {
       await settle();
       expect(ids()).toEqual(['n1', 'n2']);
       expect(nodeOf('n2')?.position).toEqual({ x: 420, y: 260 });
-      expect(nodeOf('n2')?.selected).toBeFalsy();
+      // GM r34 addendum 3 (refining r20 B): the person did nothing since the
+      // press, so the selection it had comes back with it.
+      expect(nodeOf('n2')?.selected).toBe(true);
       expect(wires()).toEqual(['n1>n2']);
       // GM round 21 (LOCKED): a 500 names the node and says it's back.
       expect(lines().some((line) => /^Couldn't delete “[^”]+”\. Nebula ran into an error, so it's back on the canvas\./.test(String(line)))).toBe(true);

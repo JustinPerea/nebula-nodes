@@ -291,7 +291,7 @@ function duplicateN1(): string {
 }
 const noticeNow = () => useGraphStore.getState().messageNotice?.text ?? useGraphStore.getState().undoNotice?.text ?? null;
 const RUN_LINE = 'You can reopen “Glass campaign” when the run finishes.';
-const WL_LINE = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I\'ve checked Marble”.';
+const WL_LINE = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I’ve checked Marble”.';
 
 describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t go yet', () => {
   it('the lines', () => {
@@ -338,7 +338,7 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     expect(reopenHold('alpha')).toBeNull();
   });
 
-  it('a refusal after the press (Nebula’s 409) when Nebula’s verdict names no hold by then: back on the canvas, its reason said there, the bar not left on Saving…', async () => {
+  it('a refusal after the press (Nebula’s 409) when Nebula’s verdict names no hold by then: back on the canvas, the bar not left on Saving…, and no line (review 20 NIT-3: one quiet retry, then nothing false is said)', async () => {
     vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: null });
     duplicateN1();
     // Saved before the press: the bar says what it said then, never “Saving…”.
@@ -353,7 +353,14 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     expect(state.screen).toBe('workspace');
     expect(state.error).toBeNull();
     expect(state.saveStatus).toBe('saved');
-    expect(noticeNow()).toContain('A run is still going. Let it finish or stop it.');
+    // Nothing holds by then (the run ended, or another tab's reopen moved the
+    // revision): the press tries once more, quietly, and says nothing when
+    // that is refused too, never a run that has finished.
+    await vi.waitFor(() => expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(useProjectStore.getState().screen).toBe('workspace'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(2);
+    expect(String(noticeNow() ?? '')).not.toContain('A run is still going');
   });
 
   it('a run that began between the press and the request: back on the canvas with the run’s line', async () => {

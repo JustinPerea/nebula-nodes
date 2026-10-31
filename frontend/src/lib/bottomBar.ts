@@ -109,6 +109,53 @@ export function floatingTopLimit(gutter: number): number {
 }
 
 /**
+ * The canvas's top notices (the World Labs notice, its held-reopen line
+ * inside it) sit over the selection toolbar's line; the toolbar moves below
+ * them while they show (review 20 lens item 4, GM r34 A5 on PR #199): the
+ * notice covered 28% of the toolbar alone, and with the held-reopen line all
+ * seven of its controls. The notice publishes its foot as
+ * `--top-notice-bottom` (viewport px) and, for the toolbar's panel inside
+ * the canvas, `--top-notice-clearance`: the toolbar's top under the notice
+ * plus the 8 px gap, from the canvas's top edge. canvas.css takes the lower
+ * of that and the toolbar's own 92 px; the offline banner, which sits under
+ * the toolbar's line, reads the foot (App.css). Floating panels follow on
+ * their own, since they stop below the toolbar's marker (floatingTopLimit).
+ * With no notice, both are cleared and every line is where it was.
+ */
+export const TOP_NOTICE_BOTTOM_VAR = '--top-notice-bottom';
+export const TOP_NOTICE_CLEARANCE_VAR = '--top-notice-clearance';
+
+/** Writes the notice's foot on the root, or clears both values for null. */
+export function publishTopNotice(notice: HTMLElement | null): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const box = notice?.getBoundingClientRect();
+  if (!box || box.height <= 0) {
+    root.style.removeProperty(TOP_NOTICE_BOTTOM_VAR);
+    root.style.removeProperty(TOP_NOTICE_CLEARANCE_VAR);
+    return;
+  }
+  const canvasTop = document.querySelector<HTMLElement>('.react-flow')?.getBoundingClientRect().top ?? 0;
+  root.style.setProperty(TOP_NOTICE_BOTTOM_VAR, `${Math.ceil(box.bottom)}px`);
+  root.style.setProperty(TOP_NOTICE_CLEARANCE_VAR, `${Math.max(0, Math.ceil(box.bottom + BOTTOM_BAR_GAP - canvasTop))}px`);
+}
+
+/** Keeps `notice`'s foot published while it is on screen (its size and the
+ * window's), and clears it when it goes. Returns the stop. */
+export function watchTopNotice(notice: HTMLElement): () => void {
+  const publish = () => publishTopNotice(notice);
+  publish();
+  const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
+  observer?.observe(notice);
+  window.addEventListener('resize', publish);
+  return () => {
+    observer?.disconnect();
+    window.removeEventListener('resize', publish);
+    publishTopNotice(null);
+  };
+}
+
+/**
  * On the root while a bar comes or goes: a screen switch (back to the canvas
  * from a Studio, into Creator Studio). The notice region then jumps to its
  * new line (noticeRegion.css) instead of springing there: springing up from

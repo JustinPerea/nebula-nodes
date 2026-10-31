@@ -142,7 +142,8 @@ failure, notes) is the product of a run, not a setting: of the result on
 their tab and the one on Nebula's node, the newer run's stands. Nebula
 stamps when a result lands (`resultLandedAt`, kept with the node, so it
 survives a restart): when Nebula saw both runs land since it started, their
-order decides, else the tab's run record's finish time against that stamp.
+order decides, else the tab's time for the node (when its result landed
+in the tab, else its run's end) against that stamp.
 Equal times keep Nebula's result. A side with no time loses: the side with
 a time wins, and with neither, Nebula's result stands unless it has none.
 When the person's newer result replaces one on a node, `nebula watch` shows
@@ -152,12 +153,16 @@ another window that never had it, or a save that leaves it out, keeps it
 and your edits (a delete from a window that never saved it is ignored and
 listed in the save's `deletesKept`).
 **Opening or switching projects can be held.** `nebula projects` (and
-`list_projects`' `openHold`, `GET /api/projects/open-hold`) says so: "Opening
-or switching projects is held: <detail>", with `state` (`active`,
-`ambiguity`, `recovery`, `params`, `bootstrap` or `run`), the held node and
-its project. Reading it changes nothing; wait, or ask the person to clear it
-(Run History's Forget ID for `recovery`, the World Labs notice for
-`ambiguity`). A recovered copy's row says its source: `sourceName` (null when
+`list_projects`' `openHold`, `GET /api/projects/open-hold`) says so, with
+the state, the node, its project and what clears it: "Opening or switching
+projects is held (recovery): “World” (n1) from “Alpha” has a saved World
+Labs recovery ID; the person forgets it in Run History." `--json` and
+`openHold` have the fields (`state`: `active`, `ambiguity`, `recovery`,
+`params`, `bootstrap` or `run`). Reading it changes no canvas or project;
+wait, or ask the person to clear it (Run History's Forget ID for
+`recovery`, the World Labs notice for `ambiguity`). It covers Nebula's own
+holds only: while the person's tab keeps edits of its own, an open answers
+`canvas_kept_in_tab`, which it doesn't show. A recovered copy's row says its source: `sourceName` (null when
 unknown or deleted for good) and `sourceProjectId` (while it is still in the
 list), also in its `project.created` event; never read it from the copy's name. When the person
 reopens the project they show from Projects, their other windows on it
@@ -179,8 +184,9 @@ Recently deleted (or, on a list past the limit, how many: "The project
 list has 4 projects, over the limit of 3. Move 2 to Recently deleted to
 make room.", `deletes`); for the size limit, only deleting one for good. Once room
 is free (`roomNow`) the next listing saves it. Tell them, and don't delete
-anything to make room yourself. Restoring a project from Recently deleted
-is never refused by the limit (it may pass it); making a new one past the
+anything to make room yourself. Restoring a project from Recently deleted, and the person saving a kept
+tab's edits as a project, are never refused by the limit (they may pass
+it); making a new one past the
 limit still is (413 with `limit` and `projectLimit`, which MCP's
 `new_project` prints too).
 Start new work in a new project (`nebula project new "<name>"`) or open the
@@ -541,7 +547,7 @@ and `last_error_kind` (`unavailable`, `unreadable` or `other`) in
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
 person's wording. That includes the World Labs holds: a run start, the
-person's "I've checked Marble" (the status bar) and "Forget ID" (Run History)
+person's "I’ve checked Marble" (the status bar) and "Forget ID" (Run History)
 refused while a job is still waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the

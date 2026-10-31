@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useProjectStore } from '../../store/projectStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
 import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
-import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, recordNodeName, recoveryIdLabel } from '../../lib/worldLabsWaiting';
+import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
 import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
 import { runFinishesLine } from '../../lib/useBackendOffline';
@@ -58,6 +59,26 @@ export function RunHistoryPanel() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
   // Retry, Recover and Forget ID are disabled and look it.
   const lock = useCanvasLock();
+  // Whose each record is (review 20 of PR #199, LOW-2; GM r34 A1): one the
+  // open canvas owns is named by its node; the one Nebula's open-hold
+  // verdict names, by the verdict's names; any other as another project's.
+  const openHold = useProjectStore((s) => s.openHold);
+  const openId = useProjectStore((s) => s.activeProject?.id ?? null);
+  // A store method read through its selector, not the function imported:
+  // the presence ratchet's G scan follows an imported function into
+  // graphStore.ts, whose size made the scan run for most of an hour.
+  const recoveryOnCanvas = useGraphStore((s) => s.providerRecoveryOnCanvas);
+  const owned = providerRecoveries.map((checkpoint) => recoveryOnCanvas(checkpoint));
+  const verdictIndex = verdictRecordIndex(openHold, 'recovery', openId, providerRecoveries, owned);
+  const recordName = (index: number, inSentence = false) => heldRecordName(nodes, providerRecoveries[index].nodeId,
+    owned[index], index === verdictIndex ? openHold : null, inSentence);
+  // GM r34 A4: while Run History is open, the held reopen's Forget ID line
+  // shows at the top of its safeguards (the rail's callout hides). Its own
+  // polite region, mounted empty and then given the line, so the first
+  // line is announced too.
+  const reopenLine = useProjectStore((s) => (s.heldReopenLine?.place === 'runHistory' ? s.heldReopenLine.line : null));
+  const [announcedReopenLine, setAnnouncedReopenLine] = useState<string | null>(null);
+  useEffect(() => { setAnnouncedReopenLine(visible ? reopenLine : null); }, [reopenLine, visible]);
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
@@ -91,6 +112,11 @@ export function RunHistoryPanel() {
   useEffect(() => {
     if (!visible) setConfirmingForget(null);
   }, [visible]);
+
+  const forgetConfirmName = ({ runId, nodeId }: { runId: string; nodeId: string }) => {
+    const index = providerRecoveries.findIndex((checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId);
+    return index >= 0 ? recordName(index, true) : heldRecordName(nodes, nodeId, false, null, true);
+  };
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
@@ -147,20 +173,24 @@ export function RunHistoryPanel() {
       </div>
 
       <ScrollFade className="panel__body panel__body--history">
-        {providerRecoveries.length > 0 && (
+        {(providerRecoveries.length > 0 || reopenLine) && (
           <section className="run-history__safeguards" aria-label="World Labs recovery safeguards">
+            <p className="run-history__reopen-line" role="status" aria-live="polite" data-reopen-hold-line>
+              {announcedReopenLine}
+            </p>
             <div className="run-history__safeguards-title">World Labs recovery safeguards</div>
+            {providerRecoveries.length > 0 && (<>
             <p>
               These IDs prevent an accidental second World Labs run. Keep them unless you have
               checked Marble and intentionally want to forget recovery.
             </p>
             <ul>
-              {providerRecoveries.map((checkpoint) => {
+              {providerRecoveries.map((checkpoint, index) => {
                 const key = `${checkpoint.runId}:${checkpoint.nodeId}`;
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
                 // GM, round 14 of PR #114: named by node, then "Operation ID"
                 // or "World ID", the ID in mono (was "n2 · operation op-…").
-                const name = recordNodeName(nodes, checkpoint.nodeId);
+                const name = recordName(index);
                 const idLabel = recoveryIdLabel(checkpoint.existingWorldId);
                 return (
                   <li key={key}>
@@ -179,7 +209,7 @@ export function RunHistoryPanel() {
                         {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
-                        aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
+                        aria-label={forgetAriaLabel(recordName(index, true))}
                         aria-describedby={`run-history-recovery-${key}`}
                       >
                         <ShieldCheck size={11} aria-hidden="true" />
@@ -190,6 +220,7 @@ export function RunHistoryPanel() {
                 );
               })}
             </ul>
+            </>)}
           </section>
         )}
         {runHistory.length === 0 ? (
@@ -307,7 +338,7 @@ export function RunHistoryPanel() {
       </ScrollFade>
       {confirmingForget && visible && (
         <ForgetRecoveryConfirm
-          name={recordNodeName(nodes, confirmingForget.nodeId, true)}
+          name={forgetConfirmName(confirmingForget)}
           onCancel={() => setConfirmingForget(null)}
           onConfirm={() => {
             const { runId, nodeId } = confirmingForget;

@@ -293,10 +293,15 @@ export class RequestFailedError extends Error {
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
+  /** The answer's additive `hold` beside `detail` (a project open's 409:
+   * Nebula's own verdict of what holds it, PR #199 review 19 item 1), raw;
+   * undefined when the answer had none. lib/reopenHold reads it. */
+  readonly hold: unknown;
 
   constructor(heading: string, status: number,
     options: { detail?: unknown; reason?: string; cause?: unknown; storageFull?: boolean;
-      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
+      storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
+      hold?: unknown } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
     super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
@@ -309,6 +314,7 @@ export class RequestFailedError extends Error {
     this.code = options.code ?? null;
     this.overSaveLimit = options.overSaveLimit === true;
     this.sizeBytes = options.sizeBytes ?? null;
+    this.hold = options.hold;
   }
 
   get kind(): FailureKind {
@@ -470,18 +476,19 @@ export async function readRefusal(response: Response): Promise<{ detail: unknown
  * storage refusal, main._storage_error_body), from one read of its body. */
 interface FailureBody {
   detail: unknown; storageFull: boolean; storageLimit: StorageLimit | null; code: string | null;
-  overSaveLimit: boolean; sizeBytes: number | null;
+  overSaveLimit: boolean; sizeBytes: number | null; hold?: unknown;
 }
 async function readFailureBody(response: Response): Promise<FailureBody> {
   try {
     const body = await response.json() as {
-      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown;
+      detail?: unknown; storage?: unknown; limit?: unknown; code?: unknown; sizeBytes?: unknown; hold?: unknown;
     } | null;
     const limit = body?.limit === 'projects' || body?.limit === 'storage' ? body.limit : null;
     const code = typeof body?.code === 'string' ? body.code : null;
     const overSaveLimit = response.status === 413 && body?.limit === 'size';
     const sizeBytes = overSaveLimit && typeof body?.sizeBytes === 'number' && Number.isFinite(body.sizeBytes) ? body.sizeBytes : null;
-    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes };
+    return { detail: body?.detail, storageFull: body?.storage === 'full', storageLimit: limit, code, overSaveLimit, sizeBytes,
+      ...(body && typeof body === 'object' && 'hold' in body ? { hold: body.hold } : {}) };
   } catch {
     return { detail: undefined, storageFull: false, storageLimit: null, code: null, overSaveLimit: false, sizeBytes: null };
   }
@@ -589,7 +596,7 @@ export async function requestError(heading: string, response: Response,
   warnFailure(heading, response.status, body.detail);
   return new RequestFailedError(heading, response.status, { detail: body.detail, reason: options.reason,
     storageFull: body.storageFull, storageLimit: body.storageLimit, code: body.code,
-    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
+    overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes, hold: body.hold });
 }
 
 /**

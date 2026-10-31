@@ -163,7 +163,7 @@ function duplicateN1(): string {
 }
 const noticeNow = () => useGraphStore.getState().messageNotice?.text ?? useGraphStore.getState().undoNotice?.text ?? null;
 
-const WL = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I\'ve checked Marble”.';
+const WL = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I’ve checked Marble”.';
 const RUN = 'You can reopen “Glass campaign” when the run finishes.';
 const ambiguity = { runId: 'wl-run', nodeId: 'n1', kind: 'worldlabs-environment', message: 'Staged.', durable: true };
 const card = () => reopenHoldNow()?.line ?? null;

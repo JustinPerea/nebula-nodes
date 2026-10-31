@@ -390,8 +390,11 @@ The server exposes these tools for building and running (see
   canvas and in the saved project, so it survives a restart). When Nebula
   saw both runs land since it started, their order decides; otherwise the
   tab's run record's finish time is compared with that stamp. Equal times
-  keep Nebula's result. A side with no time (a result saved before the
-  stamp existed, a run record with no start time) loses: the side with a
+  keep Nebula's result. The tab's time for a node is when its result
+  landed in the tab (the run record's `nodeLandedAt`), else the run's end,
+  so a long run's early result isn't dated by its end. A side with no
+  time (a result saved before the stamp existed, a run record with no
+  start time) loses: the side with a
   time wins, and when neither has one Nebula's result stands unless it has
   none. A tab result no run record backs never replaces Nebula's. When the
   person's newer result does replace the one on a node, the journal says so
@@ -801,7 +804,8 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
-| `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids (the summary says "1 open proposal stayed open") |
+| `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids, at most 50) and `renumberedCount` (all of them); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids, and `proposalsOpen` (how many; the summary says "1 open proposal stayed open") |
+| `node.result` | the person's tab handed over a node's result from a newer run than Nebula's, which replaced it (in the person's name; no Agent log line) | `projectId`, `runId` (the tab's run), `replaced: true` |
 | `canvas.cleared` | Clear canvas | |
 | `project.cover` | a project's cover was pinned, changed or set back to automatic, by the person, an agent, or an accepted proposal (its summary ends "(accepted from <agent>)") | `projectId`, `projectName`, `cover` (the url, or null for automatic) |
 | `commons.corrected` / `commons.region` / `commons.membership` | the person curated a Commons reference: a correction, a region drawn or changed, a membership's role, why or inbox place; or accepted an agent's [Commons proposal](#commons-curation) (the summary ends "(accepted from <agent>)") | `assetId`; `fieldPath`, `op` for a correction; `regionId`, `change` (`["added"]` or the fields changed) for a region; `membershipId`, `collectionId`, `change` (`["accepted"]` or the fields) for a membership. Never Commons text (no values, labels or whys) |
@@ -816,7 +820,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
-| `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
+| `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it; `sourceName` and `sourceProjectId` on a recovered copy (its source; never read it from the name) |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
 | `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "Recovered <project>" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null), `held` (true: saved from the copy held aside when a project opened over it, or a clear or load replaced it) |
@@ -1295,7 +1299,7 @@ specific text, and the Commons decides by its actor (its UI session is the
 person). Parse status codes and your detail; don't match the person's lines.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
-and the same checks: the status bar's "I've checked Marble" (`DELETE
+and the same checks: the status bar's "I’ve checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
 Labs paid-start ambiguity changed; ..."), Run History's "Forget ID" (`DELETE
@@ -3271,7 +3275,8 @@ Nebula process restores the same folder. The restore:
    `limit`) while it can't be saved too. A restore from Recently deleted is
    never refused by the project limit: it may pass it (Justin, 2026-10-29),
    for example an Undo after the waiting canvas took the slot the delete
-   freed. A restore with a canvas still waiting saves that canvas into any
+   freed. The person's save of a kept tab's edits as a project may pass it
+   too (Justin, 2026-10-31); an agent can't pass the limit that way. A restore with a canvas still waiting saves that canvas into any
    freed place first, as a listing would, so it never takes the place a
    waiting canvas waits on. A list past the limit that way is like any other (a
    damaged project list restored from a copy of it comes back whole too:
@@ -3735,25 +3740,39 @@ its own `detail`:
 | Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
 | Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
 
-What holds opening or switching projects is one verdict, the open's own
-guards read with no side effect: `GET /api/projects/open-hold` answers
+What Nebula holds opening or switching projects for is one verdict, the
+open's own guards read: `GET /api/projects/open-hold` answers
 `{"hold": null}` or `{"hold": {state, nodeId, nodeName, projectId,
 projectName, count, fields, detail}}`, `GET /api/projects` carries the same
-as `openHold`, and the open's 409 carries it as `hold` beside `detail`.
-`list_projects` adds `openHold` with a `note` ("Opening or switching
-projects is held: <detail>"), and `nebula projects` prints that note.
+as `openHold`, and the 409 of an open or a new project carries it as `hold`
+beside `detail` (and beside `code`: `paid_start` for `active`,
+`paid_bootstrap` for `bootstrap`). Their `detail` says "switch projects"
+for both, the same words as `hold.detail`. `list_projects` adds `openHold`
+with a `note` that says the state, the node and its project, and what
+clears it, for example "Opening or switching projects is held (recovery):
+“World” (n1) from “Alpha” has a saved World Labs recovery ID; the person
+forgets it in Run History."; `nebula projects` prints that note.
+`openHold` covers Nebula's own holds only: while the person's tab keeps
+edits of its own, your open is refused with `code: "canvas_kept_in_tab"`
+(above), which `openHold` doesn't show.
 `state` is, in the order the guards read them: `active` (a World Labs paid
 start is settling), `ambiguity` (a World Labs start needs the person's
 check), `recovery` (a kept World Labs recovery ID, any project's; Run
 History's Forget ID clears it), `params` (a World Labs node's settings hold
 an ID; `fields` names the fields), `bootstrap` (Nebula couldn't save its
-World Labs safeguards; a restart clears it) or `run` (a run is going).
+World Labs safeguards: the read tries the same real journal write the open
+does, so it holds only while that write fails; a restart clears it) or
+`run` (a run is going).
 `nodeId` and `nodeName` name the held node, `projectId` and `projectName`
 the project it belongs to (by the held record's run, or, for a record
 Nebula seeded from a canvas, the project whose node holds the same World
 Labs ID; null when that can't be known, never guessed from a node id),
 `count` the records for `recovery` and `ambiguity`, and
-`detail` is the refusal's text. Reading it changes nothing.
+`detail` is the refusal's text. Reading it takes no fence and changes no
+canvas or project. It can persist two things: the paid-start check may
+record a crashed backend's leftover starts as needing the person's check
+(as every guard read does), and while `bootstrap` holds, its journal write
+clears that state when the write works.
 
 The person reads "A run is still going. Wait for it to finish or stop it
 first." for a Clear, an open or a loaded graph (PR #198 review 4, N2: an import from

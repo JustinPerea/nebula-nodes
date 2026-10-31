@@ -35,6 +35,8 @@ import {
   recordRunOutput,
   recordRunBatchOutputs,
   recordRunSkip,
+  recordNodeLanded,
+  paramsHoldRecoveryId,
   sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
   sameRecipeParams,
@@ -1186,6 +1188,12 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
   deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
+  /** Whether a recovery record is one the open canvas names as its own
+   * (providerRecoveryOnCanvas on the store as it is now), for Run History.
+   * A store method, so the panel reads it through its selector: importing
+   * the function made the presence ratchet's G scan follow it into this
+   * file's every same-named definition (round 22 of PR #199). */
+  providerRecoveryOnCanvas: (checkpoint: ProviderRecoveryCheckpoint) => boolean;
   /** The Delete key's guard (Canvas onBeforeDelete): false, with the canvas
    * notice saying why, when one of `nodeIds` holds World Labs state, so React
    * Flow removes neither the nodes nor their wires (round 3b). */
@@ -6190,6 +6198,13 @@ function changeCanvasNodes(
   breakUndoDebounce();
   const undoStep = shared?.step ?? pushUndo(set, get);
   const shownBefore = new Set(get().nodes.map((node) => node.id));
+  // What was selected and focused at the press: a delete Nebula refuses
+  // puts it back (below, putBackFailedDeletes).
+  const selectionBefore = {
+    nodes: get().nodes.filter((node) => node.selected).map((node) => node.id),
+    inspected: useUIStore.getState().selectedNodeId,
+    focus: focusMarkOf(typeof document === 'undefined' ? null : document.activeElement),
+  };
   // A project opened (or a graph loaded) before the answers came: the
   // canvas and its steps are another graph's now (second review).
   const replacementRevision = canvasReplacementRevision;
@@ -6348,20 +6363,31 @@ function changeCanvasNodes(
     }
   }
   /** The nodes whose delete failed come back where they were, with their
-   * wires, unselected; the steps taken since hold them again. Nothing was
-   * deleted at all: the step goes, wherever it is (a delete that didn't
-   * happen is no step), unless it also took wires (deleteCanvasElements). */
+   * wires; the steps taken since hold them again. Nothing was deleted at
+   * all: the step goes, wherever it is (a delete that didn't happen is no
+   * step), unless it also took wires (deleteCanvasElements).
+   *
+   * GM r34 addendum 3 on PR #199 (refining round 20 B): when the person
+   * hasn't selected or focused anything since the press, a refused delete
+   * restores the state at the press: the nodes come back selected as they
+   * were, the inspected one inspected again, focus where it was (so a
+   * refusal that names the node's id, which a selected card shows, reads
+   * beside it). When they've moved on, B holds: the nodes come back
+   * unselected, so a late refusal never rings a node over what they
+   * turned to. */
   function putBackFailedDeletes(failed: string[]): void {
     const back = new Set(failed);
-    // GM (round 20, B): the node comes back unselected, in the UI's
-    // selection too (the ring and the settings pill read selectedNodeId).
-    const selectedInUi = useUIStore.getState().selectedNodeId;
-    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null);
+    const ui = useUIStore.getState();
+    // Nothing selected since the press but what was selected then.
+    const untouched = get().nodes.every((node) => !node.selected || selectionBefore.nodes.includes(node.id))
+      && (ui.selectedNodeId === null || ui.selectedNodeId === selectionBefore.inspected);
+    const reselect = new Set(untouched ? selectionBefore.nodes.filter((nodeId) => back.has(nodeId)) : []);
+    if (!untouched && ui.selectedNodeId && back.has(ui.selectedNodeId)) ui.selectNode(null);
     set((state) => {
       const present = new Set(state.nodes.map((node) => node.id));
-      // Where it was, as it was; never selected (GM: "Don't select it").
+      // Where it was, as it was, selected only as it was at the press.
       const returning = onCanvas.filter((node) => back.has(node.id) && !present.has(node.id))
-        .map((node) => (node.selected ? { ...node, selected: false } : node));
+        .map((node) => (Boolean(node.selected) === reselect.has(node.id) ? node : { ...node, selected: reselect.has(node.id) }));
       const nodes = [...state.nodes];
       for (const node of returning) {
         const after = onCanvas.slice(onCanvas.findIndex((candidate) => candidate.id === node.id) + 1)
@@ -6390,10 +6416,38 @@ function changeCanvasNodes(
       const drop = removedNone && !shared?.keep;
       return { nodes, edges, ...(drop ? { undoStack: state.undoStack.filter((step) => step !== undoStep) } : {}) };
     });
+    if (!untouched) return;
+    if (selectionBefore.inspected && back.has(selectionBefore.inspected)) useUIStore.getState().selectNode(selectionBefore.inspected);
+    restoreFocusMark(selectionBefore.focus);
   }
   // A restore already queued (an earlier undo or redo) reaches the backend
   // after these deletes, so its restore can name what they removed.
   restoreQueue = restoreQueue.then(() => deleting);
+}
+
+/** Where focus was at a delete's press, so a refused delete can put it back
+ * (putBackFailedDeletes): the element itself, and, for when it was
+ * re-rendered meanwhile (a node card, the selection toolbar's button),
+ * how to find its new copy. */
+interface FocusMark { element: Element | null; nodeId: string | null; toolbarLabel: string | null }
+function focusMarkOf(element: Element | null): FocusMark | null {
+  if (!element || typeof document === 'undefined' || element === document.body) return null;
+  const card = element.closest('.react-flow__node');
+  const button = element.closest('.selection-toolbar button');
+  return { element, nodeId: card?.getAttribute('data-id') ?? null, toolbarLabel: button?.getAttribute('aria-label') ?? null };
+}
+/** Focus back on `mark`'s element, or its re-rendered copy, after the next
+ * paint; only while nothing else took focus meanwhile. */
+function restoreFocusMark(mark: FocusMark | null): void {
+  if (!mark || typeof window === 'undefined') return;
+  window.requestAnimationFrame(() => {
+    const now = document.activeElement;
+    if (now && now !== document.body && now !== mark.element) return;
+    const target = (mark.element?.isConnected ? mark.element : null)
+      ?? (mark.toolbarLabel ? document.querySelector(`.selection-toolbar button[aria-label="${CSS.escape(mark.toolbarLabel)}"]`) : null)
+      ?? (mark.nodeId ? document.querySelector(`.react-flow__node[data-id="${CSS.escape(mark.nodeId)}"]`) : null);
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  });
 }
 
 /** The canvas's wire changes, after the caller took the undo step for a
@@ -7038,9 +7092,70 @@ function namedOnCanvas(nodes: readonly Node<NodeData>[], nodeId: string): string
   return typeof label === 'string' && label.trim() ? `\u201c${label}\u201d` : undefined;
 }
 
+/**
+ * Whose World Labs record this is, as the tab can tell (review 20 of PR
+ * #199, LOW-2; the backend's journals list every project's records, with no
+ * project on them, and node ids repeat across projects): this project's
+ * when its run is in the open canvas's run history, or is a run this tab
+ * started on this project that is still going (its record opens with the
+ * run, so this only covers a history that has dropped it). Anything else
+ * can't be known to be this project's.
+ */
+export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory'>, runId: string): boolean {
+  if (state.runHistory.some((record) => record.id === runId)) return true;
+  const started = runCanvases.get(runId);
+  return started !== undefined && ownsRun(runId) && started.projectId === canvasNow().projectId;
+}
+
+/**
+ * The one matcher for a recovery record and a canvas node (Delete,
+ * Duplicate and Paste, the hydrate write, Run History's names): the same
+ * node id, and either the record is this project's
+ * (providerRecordIsThisProjects) or the node's own settings hold the
+ * record's ID (runHistory paramsHoldRecoveryId). Never by node id alone.
+ */
+export function providerRecoveryMatchesNode(
+  state: Pick<GraphState, 'runHistory'>,
+  checkpoint: ProviderRecoveryCheckpoint,
+  node: { id: string; data?: { definitionId?: unknown; params?: unknown } } | undefined,
+): boolean {
+  if (!node || checkpoint.nodeId !== node.id) return false;
+  if (providerRecordIsThisProjects(state, checkpoint.runId)) return true;
+  const { definitionId, params } = node.data ?? {};
+  return typeof definitionId === 'string' && params !== null && typeof params === 'object'
+    && paramsHoldRecoveryId(definitionId, params as Record<string, unknown>, checkpoint);
+}
+
+/** An unconfirmed start holds a node only when its run is this project's:
+ * it carries no ID a node could hold, so a run the tab can't place holds no
+ * node here (the backend still refuses a paid start it holds). */
+export function providerAmbiguityMatchesNode(
+  state: Pick<GraphState, 'runHistory'>,
+  ambiguity: ProviderStartAmbiguity,
+  nodeId: string,
+): boolean {
+  return ambiguity.nodeId === nodeId && providerRecordIsThisProjects(state, ambiguity.runId);
+}
+
+/** Whether a recovery record is one the open canvas names as its own (Run
+ * History's names): this project's (its node on the canvas or not), or a
+ * canvas node holds its ID. */
+export function providerRecoveryOnCanvas(
+  state: Pick<GraphState, 'runHistory' | 'nodes'>,
+  checkpoint: ProviderRecoveryCheckpoint,
+): boolean {
+  return providerRecordIsThisProjects(state, checkpoint.runId)
+    || providerRecoveryMatchesNode(state, checkpoint, state.nodes.find((node) => node.id === checkpoint.nodeId));
+}
+
+function nodeHasAmbiguity(state: GraphState, nodeId: string): boolean {
+  return state.providerStartAmbiguities.some((ambiguity) => providerAmbiguityMatchesNode(state, ambiguity, nodeId));
+}
+
 function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
-  return state.providerRecoveries.some((checkpoint) => checkpoint.nodeId === nodeId)
-    || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
+  const node = state.nodes.find((candidate) => candidate.id === nodeId);
+  return state.providerRecoveries.some((checkpoint) => providerRecoveryMatchesNode(state, checkpoint, node))
+    || nodeHasAmbiguity(state, nodeId);
 }
 
 /**
@@ -7147,7 +7262,7 @@ function refuseHeldNodeDelete(state: GraphState, ids: string[], set: GraphSet): 
   const held = ids.filter((nodeId) => nodeHasProviderSafety(state, nodeId));
   if (held.length === 0) return false;
   // The backend's order: an unconfirmed start before a recovery record.
-  const unlock = held.some((nodeId) => state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId));
+  const unlock = held.some((nodeId) => nodeHasAmbiguity(state, nodeId));
   const name = ids.length === 1 ? namedOnCanvas(state.nodes, ids[0]) : undefined;
   set(noticeLine(state, heldDeleteText(ids.length, unlock, held.length, name)));
   return true;
@@ -7241,12 +7356,12 @@ function providerSafeCloneParams(
   state: GraphState,
   node: Node<NodeData>,
 ): Record<string, unknown> | null {
-  if (state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === node.id)) {
+  if (nodeHasAmbiguity(state, node.id)) {
     return null;
   }
   const checkpoint = [...state.providerRecoveries]
     .reverse()
-    .find((candidate) => candidate.nodeId === node.id);
+    .find((candidate) => providerRecoveryMatchesNode(state, candidate, node));
   if (!checkpoint) {
     const snapshot = {
       nodes: [{
@@ -7310,12 +7425,22 @@ function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
   return replaceChanged(nodes, (node) => (node.selected ? { ...node, selected: false } : node));
 }
 
+/** The records' IDs written into the live nodes they belong to (a reload,
+ * a load, a hydrate). Only this project's records write (review 20 of PR
+ * #199, LOW-2, P7): a record the tab can't place never writes an ID into a
+ * node, so another project's record never lands in this project's node
+ * with the same id, nor overwrites the ID that node holds. `owner` is the
+ * run history that says whose a record is (the store's, or the one being
+ * loaded with these nodes). */
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
+  owner: Pick<GraphState, 'runHistory'> = useGraphStore.getState(),
 ): Node<NodeData>[] {
   const latestByNode = new Map<string, ProviderRecoveryCheckpoint>();
-  for (const checkpoint of checkpoints) latestByNode.set(checkpoint.nodeId, checkpoint);
+  for (const checkpoint of checkpoints) {
+    if (providerRecordIsThisProjects(owner, checkpoint.runId)) latestByNode.set(checkpoint.nodeId, checkpoint);
+  }
   let changed = false;
   const next = nodes.map((node) => {
     const checkpoint = latestByNode.get(node.id);
@@ -7966,6 +8091,7 @@ async function reconcilePendingNodeCreation(
       nodes: nodesWithProviderRecoveries(
         [...state.nodes, reconciledNode],
         state.providerRecoveries,
+        state,
       ),
       backendFreshStartPending: false,
     };
@@ -14189,7 +14315,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         if (record && runId && ownsRun(runId) && record.status === 'running'
           && record.snapshot.nodes.some((saved) => saved.id === event.nodeId)) {
           set((state) => {
-            let runHistory = recordRunOutput(state.runHistory, runId, event.nodeId, outputs);
+            let runHistory = recordNodeLanded(recordRunOutput(state.runHistory, runId, event.nodeId, outputs), runId, event.nodeId);
             if (batchOutputs) {
               runHistory = recordRunBatchOutputs(runHistory, runId, event.nodeId,
                 batchOutputs, batchVariants);
@@ -14241,7 +14367,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         const runId = event.runId ?? currentRunId;
         if (runId && ownsRun(runId)) {
           set((state) => {
-            const runHistory = recordRunSkip(state.runHistory, runId, event.nodeId, String(event.reason ?? ''));
+            const runHistory = recordNodeLanded(recordRunSkip(state.runHistory, runId, event.nodeId, String(event.reason ?? '')),
+              runId, event.nodeId);
             return runHistory === state.runHistory ? {} : { runHistory: persistedRunHistory(runHistory) };
           });
         }
@@ -14278,11 +14405,19 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         });
         break;
       }
-      case 'error':
+      case 'error': {
         if (event.runId && runErrors.has(event.runId)) {
           runErrors.set(event.runId, true);
         }
         if (!event.runId && currentRunId) runErrors.set(currentRunId, true);
+        // A node's failure is its result landing too (RunRecord.nodeLandedAt).
+        const failedRunId = event.runId ?? currentRunId;
+        if (failedRunId && ownsRun(failedRunId) && event.nodeId) {
+          set((state) => {
+            const runHistory = recordNodeLanded(state.runHistory, failedRunId, event.nodeId);
+            return runHistory === state.runHistory ? {} : { runHistory: persistedRunHistory(runHistory) };
+          });
+        }
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
@@ -14296,6 +14431,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           streamingPartials: undefined,
         });
         break;
+      }
       case 'validationError': {
         const runId = event.runId ?? currentRunId;
         // CLI runs also annotate their validation errors, but an unrelated
@@ -14359,7 +14495,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return {
         runHistory,
         providerRecoveries,
-        nodes: nodesWithProviderRecoveries(state.nodes, providerRecoveries),
+        nodes: nodesWithProviderRecoveries(state.nodes, providerRecoveries, { runHistory }),
       };
     });
   },
@@ -14442,6 +14578,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set({ uncertainWorldLabsRunId: currentRunId, providerRecoveryWarning: WORLD_LABS_STATUS_UNCERTAIN_WARNING });
     }
   },
+
+  providerRecoveryOnCanvas: (checkpoint) => providerRecoveryOnCanvas(get(), checkpoint),
 
   acknowledgeProviderStartAmbiguity: async (kind, nodeId) => {
     const ambiguity = get().providerStartAmbiguities.find(

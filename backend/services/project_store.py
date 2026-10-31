@@ -138,6 +138,13 @@ PURGED_FILE_MAX_BYTES = 1024 * 1024
 # The refusal and the Restore-greying it needed (main's restore guard and
 # `restoreRoom`, the frontend's "Couldn't restore …" line) are gone.
 RESTORE_MAY_PASS_THE_PROJECT_LIMIT = True
+# Whether the person's save of a kept tab's edits as a project (POST
+# /api/projects/recover with ``kept: true``, the person's request only) may
+# take the list past MAX_PROJECTS: yes (Justin, 2026-10-31, on PR #199), as a
+# restore and an Undo of a delete may. The list is then past the limit by
+# that copy, and a new project is refused until it is back under (prepare's
+# cap counts only projects new to the list). Agents never pass it this way.
+KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT = True
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
 # The fields prepare writes first, so a cut file still says which project was
 # open. ``canvasPending`` (what protects the person's canvas) comes right
@@ -2505,7 +2512,7 @@ class ProjectStore:
         known = getattr(self._local, "ids", None)
         return bool(known) and set(catalog["projects"]) <= known
 
-    def prepare(self, catalog: dict[str, Any], *, restoring: bool = False) -> Path:
+    def prepare(self, catalog: dict[str, Any], *, restoring: bool = False, kept_save: bool = False) -> Path:
         """Write/fsync a private temporary catalog before any live graph edit.
 
         Refuses (ProjectStoreError, nothing written) a catalog _read would
@@ -2518,9 +2525,14 @@ class ProjectStore:
         RESTORE_MAY_PASS_THE_PROJECT_LIMIT on it may pass the project limit
         (a copy of a list an Undo took past it). reconcile adds a record past
         the limit back only when the copy is below it, so the restored list
-        is past it only by what the copy holds. The size cap still holds."""
+        is past it only by what the copy holds. The size cap still holds.
+
+        ``kept_save``: the person's save of a kept tab's edits, which may pass
+        the project limit too (KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT); the
+        route sets it only for the person's request."""
         self._ensure_root()
         if (len(catalog["projects"]) > MAX_PROJECTS and not (restoring and RESTORE_MAY_PASS_THE_PROJECT_LIMIT)
+                and not (kept_save and KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT)
                 and not self._past_the_limit_by_restores_only(catalog)):
             raise ProjectLimitError("Project limit reached", "projects")
         try:
@@ -2678,8 +2690,8 @@ class ProjectStore:
                 link.unlink(missing_ok=True)
             os.close(fd)
 
-    def commit(self, catalog: dict[str, Any]) -> None:
-        temporary = self.prepare(catalog)
+    def commit(self, catalog: dict[str, Any], *, kept_save: bool = False) -> None:
+        temporary = self.prepare(catalog, kept_save=kept_save)
         try:
             self.commit_prepared(temporary)
         finally:

@@ -26,7 +26,6 @@ import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
-import { ReopenHoldCallout } from './components/ReopenHoldCallout';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { DEFERRED_PRELOADS } from './lib/deferredChunks';
 import { preloadAll, whenIdle } from './lib/lazyWithPreload';
@@ -348,11 +347,9 @@ export default function App() {
     <ReactFlowProvider>
       <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
-      {/* The World Labs notice, and under it the held-reopen line it clears (GM r32, 2). */}
-      <div className="world-labs-stack">
-        <ProviderRecoveryStatus />
-        {isCanvas && <ReopenHoldCallout place="worldLabsNotice" />}
-      </div>
+      {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
+      <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'
+        ? { line: projects.heldReopenLine.line, onDismiss: projects.dismissHeldReopenLine } : null} />
       <ProjectCoordinator />
       <ProjectSwitchToast />
       {!isHome && <GraphFileActions />}

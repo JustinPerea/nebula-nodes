@@ -1498,7 +1498,19 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     true means room is free and the next listing saves them; `projectLimit` (top level) is the list's limit; `note` says what frees it
     for that limit (the project limit: a move to Recently deleted; the size
     limit: only a delete for good). Don't free it for them. `canvasSaved`
-    ({id, name, at, filed}, for 10 minutes) says such canvases were then saved."""
+    ({id, name, at, filed}, for 10 minutes) says such canvases were then saved.
+    `openHold` is there while Nebula holds opening or switching projects
+    (open_project and new_project are refused): {state, nodeId, nodeName,
+    projectId, projectName, count, fields, detail, note}, `state` one of
+    active, ambiguity, recovery, params, bootstrap or run, and `note` says
+    which node and project hold and what clears it (the person's Forget ID
+    in Run History for recovery, their "I’ve checked Marble" for ambiguity).
+    It covers Nebula's own holds only: while the person's tab keeps edits
+    of its own, an open is refused with code canvas_kept_in_tab, which
+    `openHold` doesn't show. A recovered copy's row has `sourceName` (null
+    when unknown or deleted for good) and `sourceProjectId` (while that
+    project is in the list): its source. Never read the source from the
+    copy's name."""
     import project_client
 
     return project_client.list_projects(_api(), headers=_agent_headers(ctx))
@@ -1555,8 +1567,11 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "Recovered
     <project left>", then "Recovered <project left> copy", "copy 2" and so
-    on). Refused while a run is going. Open proposals close (another
-    project's canvas).
+    on). Refused while a run is going, and while World Labs state holds
+    (a paid start settling, a start waiting on the person's check, a kept
+    recovery ID or an ID in a node's settings, any project's): the 409
+    carries `hold`, as list_projects' `openHold` says it. Open proposals
+    close (another project's canvas).
     Refused at the project limit with the whole refusal, as HTTP answers it:
     "Project limit reached (413, {"limit": "projects", "projectLimit": N})".
     """
@@ -1576,7 +1591,12 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "Recovered
     <project left>", then "Recovered <project left> copy", "copy 2" and so
-    on; a number in the name is never read). Refused while a run is going.
+    on; a number in the name is never read). Refused while a run is going,
+    and while World Labs state holds (a paid start settling, a start
+    waiting on the person's check, a kept recovery ID or an ID in a node's
+    settings, any project's), the open of the project already open too:
+    the 409 carries `hold`, as list_projects' `openHold` says it; and while
+    the person's tab keeps edits of its own (code canvas_kept_in_tab).
     A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
     is held aside first, whole, and saved as its own project once there is
     room, so opening works then too.
@@ -2976,7 +2996,10 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
     Run History, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
-    output once the project is open."""
+    output once the project is open. A recovered copy has `sourceName` (null
+    when unknown or deleted for good) and `sourceProjectId` (while that
+    project is in the list): its source. Never read the source from the
+    copy's name."""
     import project_client
 
     return project_client.get_project(_api(), project_id, headers=_agent_headers(ctx))

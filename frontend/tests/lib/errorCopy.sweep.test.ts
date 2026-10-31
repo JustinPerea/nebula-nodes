@@ -40,7 +40,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't check the run.", () => api.getExecutionStatus('r1')],
   ["Couldn't cancel the run.", () => api.cancelExecution('r1')],
   // Round 3 (GM): "Name the action with the label the person clicked." The
-  // status bar's "I've checked Marble" unlocks a node; Run History's
+  // status bar's "I’ve checked Marble" unlocks a node; Run History's
   // "Forget ID" forgets the node's "World Labs recovery safeguard" (labels
   // since round 13 of PR #114).
   ["Couldn't unlock the node.", () => api.acknowledgeProviderStartAmbiguity('video' as never, 'n1', 'r1')],

@@ -164,16 +164,16 @@ export interface ProjectDeletion {
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,
     options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;
-      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null } = {}) {
+      code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null; hold?: unknown } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, storageFull: options.storageFull,
       storageLimit: options.storageLimit, code: options.code, overSaveLimit: options.overSaveLimit,
-      sizeBytes: options.sizeBytes });
+      sizeBytes: options.sizeBytes, hold: options.hold });
     this.name = 'ProjectRequestError';
   }
 }
 const asProjectError = (error: RequestFailedError) => new ProjectRequestError(error.reason, error.status,
   { heading: error.heading, detail: error.detail, storageFull: error.storageFull, storageLimit: error.storageLimit,
-    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes });
+    code: error.code, overSaveLimit: error.overSaveLimit, sizeBytes: error.sizeBytes, hold: error.hold });
 async function request<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   const response = await apiRequest(heading, path, init, { as: asProjectError });
   return response.json() as Promise<T>;
@@ -184,7 +184,7 @@ const json = (method: string, body: unknown): RequestInit => ({
 export const listProjects = () => request<ProjectList>("Couldn't load your projects.", '/api/projects');
 /** Whether Nebula would refuse to replace the open canvas now, and why
  * (review 19 item 1: the tab's reopen lock reads Nebula's own verdict). */
-export const getOpenHold = () => request<{ hold?: unknown }>("Couldn't load your projects.", '/api/projects/open-hold');
+export const getOpenHold = () => request<{ hold?: unknown }>("Nebula couldn’t load your projects.", '/api/projects/open-hold');
 export const getProject = (id: string) => request<SavedProject>("Couldn't load the project.", `/api/projects/${encodeURIComponent(id)}`);
 export const createProject = (name: string | undefined, workspaceRevision: string) =>
   request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
@@ -222,9 +222,9 @@ export const emptyProjectTrash = (ids: string[]) =>
 /** The person closed the restore notice (×): the backend doesn't list it again. */
 /** The person closed the notice that held canvases couldn't be read (GM r9). */
 export const dismissCanvasHeldUnreadable = (at: string) =>
-  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/canvas-held-unreadable/dismiss', json('POST', { at }));
+  request<{ dismissed: boolean }>("Nebula couldn’t close the notice.", '/api/projects/canvas-held-unreadable/dismiss', json('POST', { at }));
 export const dismissCatalogRestore = (id: string) =>
-  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
+  request<{ dismissed: boolean }>("Nebula couldn’t close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
 export const listCoverChoices = (id: string) =>
   request<CoverChoices>("Couldn't load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
 /** Pin one of the project's images as its cover, or `null` for automatic. */
@@ -256,10 +256,13 @@ export type RecoveredProject = SavedProject & { renumbered?: Record<string, stri
    * (GM r29 on PR #199, 2): the reload line names it, never a name read
    * back out of the copy's own. */
   sourceName?: string };
+/** `kept`: the person's save of a kept tab's edits, which may take the list
+ * past the project limit (Justin, 2026-10-31, on PR #199), as a restore and
+ * an Undo of a delete may. A stale tab's recovery sends none. */
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
-  sourceName?: string) =>
+  sourceName?: string, kept = false) =>
   request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown; sourceName?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
-    json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}) }))
+    json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}), ...(kept ? { kept: true } : {}) }))
     .then((result): RecoveredProject => {
       const renumbered = result.renumbered && typeof result.renumbered === 'object' && !Array.isArray(result.renumbered)
         ? Object.fromEntries(Object.entries(result.renumbered as Record<string, unknown>)

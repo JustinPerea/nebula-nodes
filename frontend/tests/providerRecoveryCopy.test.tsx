@@ -71,14 +71,14 @@ describe('Forget ID never shows a raw message', () => {
   });
 });
 
-describe('I\'ve checked Marble never shows a raw message', () => {
+describe('I’ve checked Marble never shows a raw message', () => {
   it('an error that is not a request says GM\'s general line under the heading', async () => {
     useGraphStore.setState({
       providerStartAmbiguities: [{ runId: 'r1', nodeId: 'world-node', kind: 'worldlabs-world', message: 'Check Marble.', durable: true }] as never,
       acknowledgeProviderStartAmbiguity: vi.fn().mockRejectedValue(new Error('internal: lifecycle fd closed')),
     });
     render(<ProviderRecoveryStatus />);
-    fireEvent.click(screen.getByRole('button', { name: /^I've checked Marble\. Unlock / }));
+    fireEvent.click(screen.getByRole('button', { name: /^I’ve checked Marble\. Unlock / }));
     await waitFor(() => expect(screen.getByText(`Couldn't unlock the node. ${GENERAL}`)).toBeTruthy());
     expect(screen.queryByText(/lifecycle fd/)).toBeNull();
   });
