@@ -128,6 +128,27 @@ Round 5:
 - With no Claude GitHub App on the repo, `--cloud` uploads the repo instead of cloning it. This repo is too big for that: a 224 MB pack and a 116 MB tree, against a 100 MB limit. Both tries failed with "Could not upload repo bundle (SSLV3_ALERT_BAD_RECORD_MAC after 3 attempts)".
 - The App has to be installed on the repo, so sessions clone it from GitHub.
 
+### Results on 0eaf9127 (team account, session_01KEDcyDf3qP81nJJNgjAvAj)
+
+- **Cold setup: 55 s.** The hook's lines: "Nebula cloud setup (55 s, …): backend: installed (Python 3.12.3) / frontend: installed (node v22.22.0)". The venv came first on `PATH`, `which python` was the venv's, and both stamps were written.
+- **Warm path: 0.015 s.** Both halves said "up to date".
+- **The session ran the three jobs at once.**
+  - **backend:** 12,318 passed, 8 failed, in 700 s. All 8 make a file or folder unreadable or unwritable with chmod. The session runs as root, which ignores permissions. Rerun as `nobody`, both files passed (54).
+  - **frontend:** `npm test` had 8,530 of 8,531 passing, in 645 s. The one failure was a 3 s `waitFor` timing out while the three jobs shared the CPU, and it passed alone. Lint passed in 62 s, and build in 26 s.
+  - **contracts:** passed in 1 s.
+- **The PR comment failed:** `gh api …/issues/206/comments` answered 403, "GitHub access to this repository is not enabled for this session." The results were read back with `claude --teleport <id> -p …`, with tools denied.
+
+### Round 7: what the cloud run found
+
+- **Root-safe permission tests.** `@pytest.mark.unprivileged` (registered in `tests/conftest.py`) skips a test as root. It's on the nine tests that take away a file's read or write permission: the eight that failed, and `test_startup_keeps_every_file_when_the_store_cant_be_read[unreadable]`, which passed as root only because its store was still readable. CI runs them all.
+  - `tests/test_unprivileged_marker.py` reads every test file's syntax tree. It finds each chmod whose mode drops the owner's read or write bit, follows helpers, helpers' helpers and fixtures to the tests that reach it, and fails on any test left unmarked.
+  - Skipping is the honest result: as root, chmod can't produce the condition these tests check. Simulating the failure instead (patching the write calls) would test a different path than the real one.
+  - Mutation check: 10 of 10 killed (each unmarked shape, the hook's root check, its marker check, its skip, the helper chain, fixtures and `mode=`).
+- **AGENTS.md** says:
+  - run the three jobs one after another in a cloud session;
+  - root and the marker;
+  - a cloud session may have no GitHub write access.
+
 ## Limits
 
 - A cloud session with several repositories, or a project's cloud thread, doesn't load repository hooks (cloud-environments docs). AGENTS.md gives the manual command.

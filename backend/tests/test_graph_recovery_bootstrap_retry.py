@@ -192,6 +192,7 @@ def test_the_retry_reseeds_under_the_lifecycle_fence(canvas, monkeypatch):
     assert canvas.main._graph_recovery_bootstrap_error is None
 
 
+@pytest.mark.unprivileged
 def test_a_retry_that_still_cant_write_the_journal_refuses_and_keeps_the_error(canvas, monkeypatch, unwritable):
     """As at boot: the seed of the canvas's IDs couldn't be written (the
     journal's folder is read-only), so the store is unhealthy and the error
@@ -256,6 +257,7 @@ def test_other_states_still_win_over_the_bootstrap_error_and_never_retry(canvas,
 
 # -- 3. agents: the MCP tool that restores a bundle passes the detail on unchanged -----------
 
+@pytest.mark.unprivileged
 def test_load_graph_file_hands_the_agent_the_bootstrap_detail(canvas, monkeypatch, unwritable):
     import asyncio
 
@@ -293,6 +295,7 @@ def _boot_failure(canvas, monkeypatch, directory):
     return store
 
 
+@pytest.mark.unprivileged
 def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(canvas, monkeypatch, unwritable):
     """Review 14's B1: once the folder can be written again, the next restore's
     retry writes the journal, clears the error and goes on."""
@@ -306,6 +309,7 @@ def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(can
     assert (unwritable / "provider-recoveries.json").is_file()
 
 
+@pytest.mark.unprivileged
 def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monkeypatch, unwritable):
     """Review 14's B4: the store's last operation succeeded (its flag says
     healthy), then the folder went read-only. The canvas holds no IDs, so the
@@ -340,6 +344,7 @@ def test_l7_an_unhealthy_paid_start_store_answers_its_own_507_and_keeps_the_boot
     assert json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str) == before
 
 
+@pytest.mark.unprivileged
 def test_verify_writable_is_a_real_write_and_read_back(tmp_path):
     from services.provider_recovery import ProviderRecoveryPersistenceError, ProviderRecoveryStore
 
@@ -387,6 +392,7 @@ def test_an_ordinary_edit_clears_the_bootstrap_error_only_after_a_real_write(can
     assert journal.is_file()
 
 
+@pytest.mark.unprivileged
 def test_an_ordinary_edit_over_an_unwritable_journal_goes_on_and_keeps_the_error(canvas, monkeypatch, unwritable):
     """Which states refuse is unchanged: a node add isn't refused for the
     bootstrap state, but it no longer clears it either."""
@@ -424,6 +430,7 @@ def test_a_paid_start_clears_the_bootstrap_error_only_after_a_real_write(canvas,
         canvas.main.provider_start_guard.release_run("fresh-run")
 
 
+@pytest.mark.unprivileged
 def test_a_paid_start_over_an_unwritable_journal_is_refused_and_keeps_the_error(canvas, monkeypatch, unwritable):
     store = _use_recovery_store(canvas, monkeypatch, unwritable)
     store.list()
