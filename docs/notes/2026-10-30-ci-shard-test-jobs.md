@@ -17,11 +17,14 @@ Why: the frontend job took 13 min 51 s on main (38bb573a) against its 15-minute 
 ## Decisions
 
 - **No new dependency.** pytest-split or pytest-xdist would add a package for what a 20-line collection hook does. xdist would also run tests in one process concurrently, which this suite's shared state hasn't been checked for.
-- **Split by test count, not time.** Counts are known at collection with no stored timings. If one part grows slow, the fix is a fourth part, not a timings file.
+- **Split by test count, not time.** Counts are known at collection with no stored timings. If one part grows slow, the fix is a fourth part, not a timings file. Files move between parts as tests are added; that's expected.
+- **Not for local runs.** Leave `NEBULA_TEST_SHARD` unset on your machine. Set to a part with no files among the ones you named, pytest exits 5 ("no tests ran").
 - **A part that never runs would pass silently,** so `backend/tests/test_ci_shard.py` reads ci.yml:
   - each split job's matrix lists exactly 1 to N;
   - its `/N` matches;
   - `fail-fast` is off;
+  - nothing (`exclude`, `include`, `if:`, `continue-on-error`) drops or quiets a part;
+  - each part's run command is exactly `python -m pytest` or `npm test -- --shard=${{ matrix.shard }}/3`;
   - lint and the build stay outside the split.
   - It also runs pytest's collection three times on three small files, to check the parts hold every test exactly once.
 - No branch protection names the old checks, so the renamed jobs need no settings change.

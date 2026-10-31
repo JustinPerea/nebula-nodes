@@ -98,8 +98,15 @@ def test_each_split_job_runs_every_part_of_its_count():
         [count] = counts
         assert shards == list(range(1, count + 1)), (name, shards, count)
         assert "fail-fast: false" in body
+        # Nothing may drop or skip a part, or let one fail quietly.
+        for word in ("exclude:", "include:", "if:", "continue-on-error"):
+            assert word not in body, (name, word)
+    # Each part runs its whole share, unnarrowed.
     assert "NEBULA_TEST_SHARD: ${{ matrix.shard }}/" in split["backend"]
-    assert "npm test -- --shard=${{ matrix.shard }}/" in split["frontend-tests"]
+    assert re.findall(r"^\s+run: (.*pytest.*)$", split["backend"], re.M) == ["python -m pytest"]
+    assert re.findall(r"^\s+run: (npm test.*)$", split["frontend-tests"], re.M) == [
+        "npm test -- --shard=${{ matrix.shard }}/3"
+    ]
     # Lint and the build still run once, outside the split.
     assert "npm run lint" in jobs["frontend"] and "npm run build" in jobs["frontend"]
     assert "npm test" not in jobs["frontend"]
