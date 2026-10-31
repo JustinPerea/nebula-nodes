@@ -72,6 +72,46 @@ import pytest  # noqa: E402
 from services.saved_graph_upgrades import PARAMS_VERSION  # noqa: E402  (pure: reads no env)
 
 
+def pytest_collection_modifyitems(config, items):
+    """CI runs the suite in parts, one per job (.github/workflows/ci.yml).
+    With NEBULA_TEST_SHARD="i/n" set, only part i's files run; unset, all do."""
+    value = os.environ.get("NEBULA_TEST_SHARD")
+    if not value:
+        return
+    from collections import Counter
+
+    from .ci_shard import assign_files, parse_shard
+
+    try:
+        index, count = parse_shard(value)
+    except ValueError as error:
+        raise pytest.UsageError(str(error)) from None
+    files = [item.nodeid.split("::", 1)[0] for item in items]
+    parts = assign_files(Counter(files), count)
+    kept = [item for item, path in zip(items, files) if parts[path] == index]
+    dropped = [item for item, path in zip(items, files) if parts[path] != index]
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+    items[:] = kept
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "unprivileged: needs file permissions to hold; skipped as root, which ignores them",
+    )
+
+
+def pytest_runtest_setup(item):
+    """Root ignores file permissions, so a test that makes a file unreadable or
+    unwritable with chmod proves nothing as root, and Claude Code cloud
+    sessions run as root (CI doesn't). Such tests carry
+    @pytest.mark.unprivileged; tests/test_unprivileged_marker.py keeps every
+    one of them marked."""
+    if item.get_closest_marker("unprivileged") and hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores file permissions; CI runs this as a normal user")
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):
     """Fail the test that leaves services.settings pointing anywhere but the
