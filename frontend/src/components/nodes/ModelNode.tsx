@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { currentMediaSource } from '../../lib/canvasNextSteps';
+import { isBackendNodeId } from '../../lib/canvasPins';
 import '../../styles/canvas-next-steps.css';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
@@ -391,7 +392,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {hasMediaPreview && <button type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
           data-next-step-anchor={id}
-          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle }, { run: isExecuting })}
+          {...lock.act({ disabled: !nextStepSource || !/^n\d+$/.test(id), title: nextStepTitle, kept: 'next-step' }, { run: isExecuting })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -411,6 +412,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
+          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // param edit stays on this tab as typing does; its writes are gated.
           title="Show node settings"
         >
           {inToolbar
@@ -453,21 +456,26 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
-        <span
-          className="model-node__id-chip nodrag"
-          title="Drag into the chat panel to reference this node"
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            const token = /^n\d+$/.test(id) ? `@${id}` : `@${id.slice(0, 8)} (${nodeData.label})`;
-            e.dataTransfer.setData('application/nebula-node-ref', token);
-            e.dataTransfer.setData('text/plain', token);
-            e.dataTransfer.effectAllowed = 'copy';
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {/^n\d+$/.test(id) ? id : id.slice(0, 4)}
-        </span>
+        {/* GM r23 (b) on PR #199: a node with a tab-local id (added while the
+            canvas is kept) has no id an agent can address yet, so the slot
+            stays empty, keeping its space (nodes.css) so the header doesn't
+            shift when the saved id arrives. Nothing to drag into the chat. */}
+        {isBackendNodeId(id) ? (
+          <span
+            className="model-node__id-chip nodrag"
+            title="Drag into the chat panel to reference this node"
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData('application/nebula-node-ref', `@${id}`);
+              e.dataTransfer.setData('text/plain', `@${id}`);
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {id}
+          </span>
+        ) : <span className="model-node__id-chip model-node__id-chip--pending" aria-hidden="true" />}
         {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
         {switchable && (
           <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"
@@ -536,9 +544,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <strong>Out of date — source updated</strong>
           {nodeData.outputFreshness.outOfDateReasons.map((reason) => <span key={reason}>{reason}</span>)}
           {/* A run: it takes the canvas lock (fix round 1 of PR #200: the ratchet's new control check found it), in
-            canvasLock's order (PR #198 review 7, L5: run, then following, then offline). */}
+            canvasLock's order (PR #198 review 7, L5; GM r19 on PR #199: kept, then the run, following, offline). */}
           {nodeData.outputFreshness.runId && <button type="button"
-            {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun',
+            {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun', kept: 'rerun',
               title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },
             { run: isExecuting })}
             onClick={(event) => {
@@ -597,7 +605,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
-              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to" })}
+              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to", kept: 'rewrite' })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();

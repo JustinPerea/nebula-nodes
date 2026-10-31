@@ -70,16 +70,56 @@ def cover_for_agents(api: NebulaAPI, cover: Any) -> dict[str, Any] | None:
     return shown
 
 
+def open_hold_note(hold: dict[str, Any]) -> str:
+    """The agents' sentence for GET /api/projects ``openHold``."""
+    return f"Opening or switching projects is held: {hold.get('detail') or hold.get('state')}"
+
+
 def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """MCP list_projects: each project's id, name, `open`, node count, last
-    edit and cover, most recently edited first."""
+    edit and cover, most recently edited first, `catalogRestore` after
+    Nebula restored a damaged project list (until the person closes its
+    notice), `canvasNotFiled` while the live canvas couldn't be saved as
+    its own project because the list is at a limit (with the agents' `note`
+    and `roomNow`), `canvasSaved` for a while after such a canvas was saved,
+    and `projectLimit`. A recovered copy's row has `sourceName` and
+    `sourceProjectId`; `openHold` (with its `note`) says what holds opening
+    or switching projects now."""
     listing = _call(api, "GET", "/api/projects", headers)
     active = listing.get("activeProjectId")
     rows = [{"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
              "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt"),
-             "cover": cover_for_agents(api, project.get("cover"))}
+             "cover": cover_for_agents(api, project.get("cover")),
+             # A recovered copy: its source, never read from the copy's name.
+             **({key: project.get(key) for key in ("sourceName", "sourceProjectId")}
+                if "sourceName" in project else {})}
             for project in listing.get("projects") or []]
-    return {"projects": rows, "openProjectId": active}
+    reply: dict[str, Any] = {"projects": rows, "openProjectId": active}
+    # What holds opening or switching projects now (the open's own guards),
+    # with the agents' sentence; absent when nothing does.
+    if isinstance(listing.get("openHold"), dict):
+        reply["openHold"] = {**listing["openHold"], "note": open_hold_note(listing["openHold"])}
+    # Nebula restored a damaged project list and the person hasn't closed its
+    # notice yet: what came back, from where, and where the damaged file is kept.
+    if isinstance(listing.get("catalogRestore"), dict):
+        reply["catalogRestore"] = listing["catalogRestore"]
+    # The live canvas isn't a project and couldn't be filed as its own: the
+    # list is at a limit, so opening or making a project is refused until
+    # the person frees room (PR #199, review 2 L4).
+    # With its `note` (what frees room for which limit) and `projectLimit`.
+    if isinstance(listing.get("canvasNotFiled"), dict):
+        reply["canvasNotFiled"] = listing["canvasNotFiled"]
+    # A waiting canvas was saved as its own project (the person sees a toast).
+    if isinstance(listing.get("canvasSaved"), dict):
+        reply["canvasSaved"] = listing["canvasSaved"]
+    # A held canvas couldn't be read or saved and may be lost (L-1).
+    if isinstance(listing.get("canvasHeldUnreadable"), dict):
+        reply["canvasHeldUnreadable"] = listing["canvasHeldUnreadable"]
+    # The list's project limit (a create past it is refused; a restore from
+    # Recently deleted may pass it: Justin, 2026-10-29).
+    if isinstance(listing.get("projectLimit"), int):
+        reply["projectLimit"] = listing["projectLimit"]
+    return reply
 
 
 def undo_rename_hint(project_id: str, previous: str, via: str) -> str:

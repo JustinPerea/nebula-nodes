@@ -700,7 +700,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
                       // lock's own tooltip, the follow reason first, then
                       // offline's verb; "Remove swatch" when live.
-                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches' })}
+                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches', kept: 'live' })}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -722,7 +722,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               className="inspector__action-button"
               // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
               // reason, not "Add a swatch", while it can't add.
-              {...lock.act({ title: 'Add a swatch', offline: 'add swatches' })}
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches', kept: 'live' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -1207,7 +1207,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
+            {...lock.act({ title: 'Run this node and its dependencies', kept: 'run' }, { run: runLocked || runStarting })}
             onClick={() => executeNode(renderNode.id)}
           >
             <Play
@@ -1222,7 +1222,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Duplicate this node' }, { run: runLocked })}
+            {...lock.act({ title: 'Duplicate this node', kept: 'live' }, { run: runLocked })}
             onClick={() => duplicateNode(renderNode.id)}
           >
             <Copy
@@ -1237,7 +1237,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button inspector__action-button--danger"
-            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node' }, { run: runLocked })}
+            {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node', kept: 'live' }, { run: runLocked })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
               // once and says "Deleted the node." with Undo (GM, 2026-10-23).

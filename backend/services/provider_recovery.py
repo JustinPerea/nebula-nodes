@@ -7,7 +7,7 @@ import fcntl
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 
@@ -459,6 +459,40 @@ class ProviderRecoveryStore:
                         self._records = previous
                         raise
                 return removed
+
+    def renumber_nodes(self, mapping: Mapping[str, str]) -> int:
+        """Move each checkpoint whose node got a new id ({old: new}; a renumber
+        of tab-local ids, PR #199 review 18 handoff-reopen LOW-2) to
+        ``(runId, new)``, its run and IDs unchanged, in one write: Run
+        History's hydration still finds its run record (moved to the new id
+        too) and the node's guards read it by its new id. A record already
+        at the new key is never overwritten (the old one stays). Answers how
+        many moved."""
+        if not mapping or self._path is None:
+            return 0  # no journal: nothing is kept to move
+        with self._lock:
+            with self._journal_lock():
+                self._reload_locked()
+                previous = dict(self._records)
+                moved: dict[tuple[str, str], dict[str, str | None]] = {}
+                count = 0
+                for (run_id, node_id), record in self._records.items():
+                    new = mapping.get(node_id)
+                    if (isinstance(new, str) and new and (run_id, new) not in self._records
+                            and (run_id, new) not in moved):
+                        moved[(run_id, new)] = {**record, "nodeId": new}
+                        count += 1
+                    else:
+                        moved[(run_id, node_id)] = record
+                if not count:
+                    return 0
+                self._records = moved
+                try:
+                    self._persist()
+                except ProviderRecoveryPersistenceError:
+                    self._records = previous
+                    raise
+                return count
 
     def delete_many_exact(
         self,

@@ -46,7 +46,7 @@ export function SceneClashNotices() {
   return (
     <>
       {entries.map(([nodeId, clash]) => (
-        <ClashPrompt key={clash.id} nodeId={nodeId} clash={clash} act={lock.act()} resolve={resolve} onAnswer={answered}
+        <ClashPrompt key={clash.id} nodeId={nodeId} clash={clash} act={lock.act({ kept: 'scene' })} resolve={resolve} onAnswer={answered}
           promptRef={(element) => { if (element) prompts.current.set(clash.id, element); else prompts.current.delete(clash.id); }} />
       ))}
     </>

@@ -9,10 +9,9 @@ import {
   StickyNote,
   Trash2,
 } from 'lucide-react';
-import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
+import { isTabLocalNode, sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
-import { isBackendNodeId } from '../lib/canvasPins';
 import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
@@ -23,8 +22,7 @@ import {
   selectedNodeIds,
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
-import { useCanvasLock } from '../lib/canvasLock';
-
+import { useCanvasLock, type LockOwn } from '../lib/canvasLock';
 
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
@@ -36,12 +34,16 @@ export function SelectionToolbar() {
   // agent's switch (GM round 22, A: one state, lib/canvasLock): Run, Ask,
   // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
   // for “<project>” to open." while following; Copy, Download and the
-  // node's Settings stay.
+  // node's Settings stay. While the canvas is kept after a restore (GM r16
+  // to r18 on PR #199) what writes to Nebula or spends is disabled, each
+  // with its own "You can … after you save it as a project."; Copy,
+  // Download, Settings, Duplicate, Arrange and Delete stay (they change only
+  // this tab, as typing does, and Undo takes them back: graphStore KeptStep).
   const lock = useCanvasLock();
   // A control this tab's own run also locks (#198's run lock): its reason
   // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
   // run, follow, offline; the Next step its node portals here reads the same).
-  const runLocked = (running: boolean, own: { disabled?: boolean; title?: string }) => lock.act(own, { run: running });
+  const runLocked = (running: boolean, own: LockOwn) => lock.act(own, { run: running });
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
   const copySelected = useGraphStore((state) => state.copySelected);
@@ -75,6 +77,15 @@ export function SelectionToolbar() {
   const sizeRefs = runScope.cost?.sizeRefs;
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
+  // GM r25 (3) on PR #199: while kept, Ask and Note say one line on any
+  // node (saving unlocks both). GM r26 (4): on a normal tab a duplicated or
+  // pasted node keeps a tab-local id until the project is next opened, so a
+  // selection holding one locks both with their own lines (lib/canvasLock
+  // TAB_LOCAL_LINES). STOPGAP: the bulk-create PR deletes `tabLocal`. Note
+  // always shows for one node, locked or not, so the bar never shifts when
+  // the node gets its id.
+  const tabLocal = ids.some(isTabLocalNode);
+  const showNote = ids.length === 1;
   const runScopeId = useId();
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar
   // that unmounts first (the selection cleared) cancels that focus.
@@ -137,16 +148,16 @@ export function SelectionToolbar() {
       </span>
       <span className="selection-toolbar__divider" aria-hidden="true" />
       <button type="button" className="selection-toolbar__button" onClick={openAgent}
-        {...lock.act({ title: 'Ask agent about selection' })}>
+        {...lock.act({ title: 'Ask agent about selection', kept: 'ask', tabLocal: tabLocal ? 'ask' : undefined })}>
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
-      {ids.length === 1 && isBackendNodeId(ids[0]) && (
+      {showNote && (
         <button
           type="button"
           className="selection-toolbar__button"
           onClick={() => composeNote({ nodeId: ids[0] })}
-          {...lock.act({ title: 'Note for agents' })}
+          {...lock.act({ title: 'Note for agents', kept: 'note', tabLocal: tabLocal ? 'note' : undefined })}
           aria-label="Note for agents"
         >
           <StickyNote size={17} aria-hidden="true" />
@@ -157,7 +168,9 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
-        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        // Kept: the shared lock (disabled, KEPT_MARK, its line), as the bottom
+        // bar's Run (GM r23, c).
+        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run-nodes' })}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
@@ -181,7 +194,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={duplicateSelected}
-        {...runLocked(isExecuting, { title: 'Duplicate selected nodes' })}
+        {...runLocked(isExecuting, { title: 'Duplicate selected nodes', kept: 'live' })}
       >
         <Files size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Duplicate</span>
@@ -190,7 +203,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button"
         onClick={autoLayoutSelected}
-        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes' })}
+        {...runLocked(isExecuting, { disabled: ids.length < 2, title: 'Arrange selected nodes', kept: 'live' })}
       >
         <LayoutGrid size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Arrange</span>
@@ -217,7 +230,7 @@ export function SelectionToolbar() {
         type="button"
         className="selection-toolbar__button selection-toolbar__button--danger"
         onClick={removeSelection}
-        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes' })}
+        {...runLocked(isExecuting, { disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete selected nodes', kept: 'live' })}
         aria-label="Delete selected nodes"
       >
         <Trash2 size={17} aria-hidden="true" />

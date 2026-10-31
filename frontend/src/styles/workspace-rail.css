@@ -65,6 +65,14 @@
   transform: scale(1);
 }
 
+/* Run History with the held-reopen line beside it (GM r32, 2 on PR #199). */
+.workspace-rail__anchor {
+  position: relative;
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
 .workspace-rail__group {
   display: flex;
   flex: 0 0 auto;

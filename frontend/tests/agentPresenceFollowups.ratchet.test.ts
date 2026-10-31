@@ -804,7 +804,8 @@ const reachesGated = (reach: Set<string>) => { for (const name of reach) if (GAT
  * A guard in a `catch`, after the call, inside a loop that `continue`s, or
  * whose result is dropped guards nothing. The handler's coverage is what all
  * its gated calls share. */
-const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
+// PR #199: refuseTabOnlyEdit refuses following and offline as refuseCanvasEdit does (lib/canvasLock).
+const REFUSERS: Record<string, number> = { refuseCanvasEdit: LOCKED, refuseTabOnlyEdit: LOCKED, refuseEditWhileFollowing: FOLLOWING, refuseEditWhileOffline: OFFLINE };
 function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = new Set()): number {
   const again = (node: ts.Expression) => guardMask(node, scope, seen);
   if (ts.isParenthesizedExpression(condition) || ts.isAwaitExpression(condition)) return again(condition.expression);

@@ -71,9 +71,21 @@ wsClient.subscribe((event) => {
 // line, arrive as window events.
 if (typeof window !== 'undefined') {
   window.addEventListener('nebula:agent-log-entry', (e: Event) => {
-    const detail = (e as CustomEvent).detail as { source?: unknown; message?: string } | undefined;
+    const detail = (e as CustomEvent).detail as { source?: unknown; message?: string; agent?: unknown } | undefined;
     const message = String(detail?.message ?? '').trim();
     if (!message) return;
-    useAgentLogStore.getState().add({ ts: Date.now(), source: normalizeAgentEventSource(detail?.source), message });
+    useAgentLogStore.getState().add({
+      ts: Date.now(), source: normalizeAgentEventSource(detail?.source), message, ...lineAgent(detail?.agent),
+    });
   });
+}
+
+/** A window line that names its agent (the waiting canvas's held or
+ * refused line, review 6 of PR #199, N-3): the row is that agent's, with
+ * its cursor's name and colour, as its other actions are. */
+function lineAgent(raw: unknown): { agent?: AgentLogEntry['agent'] } {
+  if (!raw || typeof raw !== 'object') return {};
+  const { id, name, color } = raw as { id?: unknown; name?: unknown; color?: unknown };
+  if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) return {};
+  return { agent: { id, name, color: typeof color === 'string' && SAFE_COLOR.test(color) ? color : FALLBACK_COLOR } };
 }

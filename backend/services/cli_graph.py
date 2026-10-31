@@ -6,7 +6,7 @@ import math
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from uuid import uuid4
 
 from services.cinema_scene_spec import (
@@ -21,6 +21,32 @@ from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrad
 
 
 SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
+# What a Nebula node id is (PR #199 round 17): "n" and ASCII digits, never
+# Python's Unicode \d, as the tab's CLI_ID_RE. The live graph holds only
+# these (main._require_backend_node_ids; load renumbers any other).
+BACKEND_NODE_ID = re.compile(r"n([0-9]+)")
+
+
+def _graph_ids(nodes: Mapping[str, Any]) -> list[Any]:
+    """A graph's node ids: its keys, and each node's own ``id``."""
+    return [*nodes, *(node.get("id", key) for key, node in nodes.items() if isinstance(node, Mapping))]
+
+
+class ForeignNodeIdError(RuntimeError):
+    """A write would put a node id that isn't Nebula's into the live graph."""
+
+
+def require_backend_ids(node_ids: Any) -> None:
+    """The live graph's invariant (PR #199 rounds 17 and 18, review 16
+    renumber-everywhere NIT-1), in one place: every id is a backend id
+    (``nN``), so every node's typing reaches the server. CLIGraph checks it
+    on every write that adopts or persists nodes (``_save_state``,
+    ``replace_with``, ``adopt``); only ``load()`` takes other ids, and it
+    renumbers them. A refusal is loud (nothing written, nothing adopted)."""
+    stray = [node_id for node_id in node_ids
+             if not (isinstance(node_id, str) and BACKEND_NODE_ID.fullmatch(node_id))]
+    if stray:
+        raise ForeignNodeIdError(f"Nebula's graph would hold node ids that aren't Nebula's: {stray[:5]}")
 # How far an explicit id (add_node's node_id) may sit above the counter. The
 # counter moves past a restored id, so an unbounded one (n999999999) would
 # make every later id too long for SHORT_ID_RE, and undo could never put
@@ -28,6 +54,72 @@ SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
 # Clear resets it (undoing them brings the old ids back), so this is a
 # ceiling, not "no higher than the counter".
 MAX_ID_JUMP = 1_000_000
+
+# The keys inside a node's data (its params included) whose value names
+# another canvas node by id (PR #199 round 17, review 15 NIT-2): a Remotion
+# manifest's timeline items (``params.manifest.timeline[].sourceNodeId``),
+# the gate that skipped a node (``skipGateNodeId``), a Paper run's inputs
+# (``nodeId``), and ``targetNodeId``. A renumbering moves each with the node.
+NODE_REFERENCE_KEYS = frozenset({"sourceNodeId", "skipGateNodeId", "gateNodeId", "nodeId", "targetNodeId"})
+# A list of node ids under this key moves the same way (a question set's
+# ``nodeIds``).
+NODE_REFERENCE_LIST_KEYS = frozenset({"nodeIds"})
+
+
+def moved_node_references(value: Any, mapping: Mapping[str, str]) -> Any:
+    """``value`` with every node reference (NODE_REFERENCE_KEYS,
+    NODE_REFERENCE_LIST_KEYS) that is an old id in ``mapping`` moved to
+    its new id, at any depth. Other values are left as they are."""
+    if isinstance(value, dict):
+        moved: dict[Any, Any] = {}
+        for key, item in value.items():
+            if key in NODE_REFERENCE_KEYS and isinstance(item, str):
+                moved[key] = mapping.get(item, item)
+            elif key in NODE_REFERENCE_LIST_KEYS and isinstance(item, list):
+                moved[key] = [mapping.get(entry, entry) if isinstance(entry, str) else entry for entry in item]
+            else:
+                moved[key] = moved_node_references(item, mapping)
+        return moved
+    if isinstance(value, list):
+        return [moved_node_references(item, mapping) for item in value]
+    return value
+
+
+# Which project the live canvas is (state.json's ``projectId``, PR #199
+# review 1, H1). The catalog says which project is open; this says whose
+# graph the canvas holds, so nothing saves one project's canvas into another
+# (main._overlay_live_project) after a restore, or a crash between the two
+# files. A project id, None for the unfiled canvas, or:
+# - OWNER_UNKNOWN: never recorded (a state.json saved before it, or a graph
+#   made in memory): the catalog's open project, as before;
+# - OWNER_UNPROVEN: it can't be known (the catalog was damaged when an
+#   unrecorded state.json loaded): no project's; main files it as its own.
+OWNER_UNKNOWN: Any = type("OwnerUnknown", (), {"__repr__": lambda self: "OWNER_UNKNOWN"})()
+OWNER_UNPROVEN: Any = type("OwnerUnproven", (), {"__repr__": lambda self: "OWNER_UNPROVEN"})()
+_UNPROVEN_MARK = "unproven"
+_PROJECT_ID = re.compile(r"[a-f0-9]{32}")
+
+
+def stored_owner(value: Any, present: bool) -> Any:
+    """``projectId`` as state.json holds it, as an owner."""
+    if not present:
+        return OWNER_UNKNOWN
+    if value is None:
+        return None
+    if value == _UNPROVEN_MARK:
+        return OWNER_UNPROVEN
+    return value if isinstance(value, str) and _PROJECT_ID.fullmatch(value) else OWNER_UNPROVEN
+
+
+def copy_note_of(note: Any, owner: Any) -> dict[str, Any] | None:
+    """``note`` (CLIGraph.copy_note) when it is the canvas's own: of the
+    project id ``owner`` is, with a name and an agent (or None)."""
+    if not isinstance(note, dict) or not isinstance(owner, str) or note.get("of") != owner:
+        return None
+    name, agent = note.get("name"), note.get("agent")
+    if not (isinstance(name, str) and 0 < len(name) <= 200) or not (agent is None or isinstance(agent, str)):
+        return None
+    return {"of": owner, "name": name, "agent": agent}
 
 
 class CLIGraph:
@@ -49,12 +141,23 @@ class CLIGraph:
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
         self._persist_path: Path | None = persist_path
+        # Which project this canvas is (OWNER_UNKNOWN above): set by whoever
+        # puts a project on it (main._commit_project_workspace), saved with it.
+        self.owner: Any = OWNER_UNKNOWN
+        # When this canvas is a copy an agent's change was made on (main's
+        # _protect_persons_canvas): {"of": the copy's id, "name", "agent"},
+        # saved with it as ``projectCopy`` while ``owner`` is that id. So the
+        # copy is named as the agent's whatever happens to the catalog's
+        # record of it (review 10 of PR #199, L-1). Inert once the owner changes.
+        self.copy_note: dict[str, Any] | None = None
         # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
         # and whether the file was saved before ``PARAMS_VERSION`` (true even
         # when no value changed: main's boot step writes the marker and makes
         # tabs loaded before the restart reload).
         self.upgraded_on_load = 0
         self.params_advanced_on_load = False
+        # The ids load gave nodes that didn't have Nebula's ({old: new}).
+        self.renumbered_on_load: dict[str, str] = {}
         # A Cinema shot's run media (output, variations, its port's output)
         # kept after a write took the shot out, by (node id, shot id), so an
         # Undo that brings the shot back brings its images too (fix round 9
@@ -245,20 +348,35 @@ class CLIGraph:
         persistence is configured, a failed write propagates before live memory
         changes so an API cannot report a graph that restart would discard.
         """
+        require_backend_ids(_graph_ids(candidate.nodes))
         replacement_nodes = copy.deepcopy(candidate.nodes)
         replacement_edges = copy.deepcopy(candidate.edges)
         replacement_counter = candidate._counter
         if self._persist_path is not None:
+            # The same canvas with new contents (an import, an apply): its
+            # project stays.
             self._save_state(
                 self._persist_path,
                 replacement_nodes,
                 replacement_edges,
                 replacement_counter,
+                self.owner,
+                self.copy_note,
             )
         self.nodes = replacement_nodes
         self.edges = replacement_edges
         self._counter = replacement_counter
         self.removed_shot_media = copy.deepcopy(candidate.removed_shot_media)
+
+    def adopt(self, candidate: "CLIGraph") -> None:
+        """Take a candidate's graph into memory as it is (its state.json was
+        already written: main's project switch commit). Its ids are checked
+        first (require_backend_ids)."""
+        require_backend_ids(_graph_ids(candidate.nodes))
+        self.nodes = copy.deepcopy(candidate.nodes)
+        self.edges = copy.deepcopy(candidate.edges)
+        self._counter = candidate._counter
+        self.owner = candidate.owner
 
     def clone(self) -> "CLIGraph":
         """Return a persistence-free deep copy suitable for staged mutation."""
@@ -266,6 +384,8 @@ class CLIGraph:
         candidate.nodes = copy.deepcopy(self.nodes)
         candidate.edges = copy.deepcopy(self.edges)
         candidate._counter = self._counter
+        candidate.owner = self.owner
+        candidate.copy_note = copy.deepcopy(self.copy_note)
         candidate.removed_shot_media = copy.deepcopy(self.removed_shot_media)
         return candidate
 
@@ -309,7 +429,7 @@ class CLIGraph:
 
     def save(self, path: Path) -> None:
         """Atomically persist the graph (including counter) to a JSON file."""
-        self._save_state(path, self.nodes, self.edges, self._counter)
+        self._save_state(path, self.nodes, self.edges, self._counter, self.owner, self.copy_note)
 
     @staticmethod
     def _save_state(
@@ -317,15 +437,24 @@ class CLIGraph:
         nodes: dict[str, dict[str, Any]],
         edges: list[dict[str, str]],
         counter: int,
+        owner: Any = OWNER_UNKNOWN,
+        copy_note: dict[str, Any] | None = None,
     ) -> None:
+        require_backend_ids(_graph_ids(nodes))
         target = require_allowed_path(path)
-        data = {
+        data: dict[str, Any] = {
             "nodes": list(nodes.values()),
             "edges": list(edges),
             "counter": counter,
             # Everything this code writes already holds upgraded params.
             "paramsVersion": PARAMS_VERSION,
         }
+        if owner is OWNER_UNPROVEN:
+            data["projectId"] = _UNPROVEN_MARK
+        elif owner is not OWNER_UNKNOWN:
+            data["projectId"] = owner
+        if note := copy_note_of(copy_note, owner):
+            data["projectCopy"] = {"name": note["name"], "agent": note["agent"]}
         temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
             with temporary.open("x", encoding="utf-8") as handle:
@@ -390,6 +519,25 @@ class CLIGraph:
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
         nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        # A node with an id that isn't Nebula's (PR #199 round 17, review 15
+        # HIGH-1): a state.json saved before the live graph refused them (an
+        # open loaded a duplicated or pasted node's tab-local id). Its typing
+        # never reached the graph, so it gets a backend id here, with its
+        # wires and the references to it; main moves the open project's copy
+        # the same way at boot (renumbered_on_load).
+        renumbered: dict[str, str] = {}
+        for node_id in list(nodes):
+            if not (isinstance(node_id, str) and BACKEND_NODE_ID.fullmatch(node_id)):
+                renumbered[node_id] = next_id(node_id)
+        if renumbered:
+            nodes = {renumbered.get(node_id, node_id): {**moved_node_references(node, renumbered),
+                                                        "id": renumbered.get(node_id, node_id)}
+                     for node_id, node in nodes.items()}
+            for edge in edges:
+                for key in ("source", "target"):
+                    if isinstance(edge, dict) and edge.get(key) in renumbered:
+                        edge[key] = renumbered[edge[key]]
+            print(f"[cli_graph] gave {len(renumbered)} node(s) Nebula ids: {renumbered}", flush=True)
         # A shot that lost its id in the file was given a new one: the port
         # it owned (its image) moves to its new id, with its wires (PR #198
         # review 5, L3). A port no shot owns stays: a removed shot's late
@@ -409,8 +557,12 @@ class CLIGraph:
         version = stored_version(data.get("paramsVersion"))
         upgraded = upgrade_flat_nodes(nodes.values(), version)
         self.nodes, self.edges, self._counter = nodes, edges, counter
+        self.owner = stored_owner(data.get("projectId"), "projectId" in data)
+        found = data.get("projectCopy")
+        self.copy_note = copy_note_of({**found, "of": self.owner}, self.owner) if isinstance(found, dict) else None
         self.removed_shot_media = {}
         self.upgraded_on_load = upgraded
+        self.renumbered_on_load = renumbered
         self.params_advanced_on_load = version < PARAMS_VERSION
 
 

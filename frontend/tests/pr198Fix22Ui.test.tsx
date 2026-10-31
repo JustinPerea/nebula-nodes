@@ -212,7 +212,9 @@ const TOUCHED = ['App.css', 'components/editor/EditorView.css', 'styles/asset-tr
   'styles/node-card-boundary.css', 'styles/noticeRegion.css', 'styles/project-home.css', 'styles/settings.css',
   'styles/slava-restraint.css', 'styles/workspace-header.css'];
 const KNOWN = [
-  'App.css | [data-offline-disabled], [data-following-disabled] | 0.6',
+  // PR #199: the kept canvas's controls share the lock's look.
+  // PR #199 round 18: and Ask and Note on a tab-local node (GM r26, 4).
+  'App.css | [data-offline-disabled], [data-following-disabled], [data-kept-disabled], [data-tab-local-disabled] | 0.6',
   'App.css | .provider-recovery-status button:disabled | 0.62',
   'styles/canvasProposals.css | .proposal-bar__button:disabled | 0.5',
   'styles/cinema-studio.css | body.app-slava-restraint .cinema-studio-toolbar__action:disabled | var(--sr-disabled-opacity, 0.5)',

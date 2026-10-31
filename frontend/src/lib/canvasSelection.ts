@@ -10,6 +10,7 @@ import {
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { copyForStatus, FailureNotice, requestError, requestSucceeded } from './errorCopy';
 import { isSafeWorldUrl, parseWorldValue } from './worldValue';
+import { isCanvasKept } from './keptCanvas';
 
 
 export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
@@ -18,6 +19,10 @@ export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
 
 
 export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSignal): Promise<void> {
+  // Review 14 of PR #199 (lock-order LOW-2): a kept canvas is this tab's
+  // own, and Nebula's canvas may be another project now, so its ids would
+  // name other nodes there. Nothing is shared while kept.
+  if (isCanvasKept()) return;
   // Background sync, never shown; named like every request so the console
   // says what failed, once.
   await apiRequest("Couldn't share the selection.", '/api/canvas/selection', {

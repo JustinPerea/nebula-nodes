@@ -49,11 +49,99 @@ export interface ProjectSnapshot {
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
 export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
+/** Nebula found its project list (catalog.json) damaged and restored it
+ * (backend project_store _restore). Listed until the person closes the
+ * Projects home notice; the path fields are for the Agent log and agents. */
+export interface CatalogRestore {
+  id: string; at: string;
+  /** 'restored': from the last good copy; 'rebuilt': no good copy, from what the damaged files held. */
+  kind: 'restored' | 'rebuilt';
+  source: string | null; damagedFile: string | null;
+  /** When the copy's catalog was saved (the notice says its age when it decided something). */
+  copyAt?: string | null;
+  setAside?: string[];
+  addedBack: { id: string; name: string; trashed?: boolean }[]; addedBackCount: number;
+  /** Found in the damaged file but not put back; `name` when it could be read. */
+  notAddedBack?: { id: string; reason: string; name?: string; trashed?: boolean }[];
+  notAddedBackCount: number;
+  /** Of those, the readable ones left out because the list was at its
+   * project limit (reason "limit"), and that limit (GM r18 on PR #199). */
+  notAddedBackLimitCount?: number;
+  projectLimit?: number;
+  /** What the copy decided (review 1 of PR #199, M1): (a) back to the copy's
+   * version (`liveCanvas`: the open project, whose graph came from the live
+   * canvas), (b) deleted after the copy and back, (c) restored after the copy
+   * and in Recently deleted again. */
+  reverted?: { id: string; name: string; trashed?: boolean; liveCanvas?: boolean }[]; revertedCount?: number;
+  cameBack?: { id: string; name: string; how?: string }[]; cameBackCount?: number;
+  backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
+  /** The live canvas filed as its own project (it wasn't one in the restored
+   * list): "Recovered <project>", numbered, or "Recovered canvas". */
+  recoveredCanvas?: SavedCanvas | null;
+  /** Other canvases filed as their own projects while the notice showed
+   * (GM's answer 1 to review 8: the notice names them, no toast does). */
+  alsoFiled?: SavedCanvas[];
+  /** Agents' copies of the person's canvas filed while the notice showed:
+   * each its own line (GM r11 on PR #199, 4). */
+  agentCopies?: SavedCanvas[];
+  /** It couldn't be filed: the list is at a limit (review 2 of PR #199, L4). */
+  canvasNotFiled?: { reason: 'projects' | 'storage'; current?: boolean } | null;
+  /** The open project that didn't come back, and its name when a file had it. */
+  openProjectMissing?: string | null; openProjectName?: string | null;
+  /** The damaged catalog.json was read to its end (it parsed; only its
+   * shape was wrong). False when it was cut or zeroed: what it held past the
+   * damage is unknown, so the notice never says nothing was missing. */
+  damagedReadWhole?: boolean;
+  /** GM r19 on PR #199 (a): the damaged file had records Nebula couldn't
+   * read (a cut record, or a cut before its groups closed). False for a file
+   * cut only past its last record; missing from older records (unknown). */
+  damagedRecordsUnread?: boolean;
+  projectCount?: number; note?: string;
+}
+/** A canvas saved as its own project (backend main._saved_row): when it
+ * was saved (`filedAt`, GM r10's order), and `agentCopy` when it is an
+ * agent's copy of the person's canvas (GM r11, 4). */
+export interface SavedCanvas {
+  id: string; name: string; overSaveLimit?: boolean; filedAt?: string;
+  agentCopy?: { agent?: string | null };
+}
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
+  /** Nebula's verdict on replacing the open canvas now (lib/reopenHold). */
+  openHold?: unknown;
   workspaceRevision: string; migratedProjectId?: string | null;
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
+  catalogRestore?: CatalogRestore;
+  /** A canvas the person had open isn't a project and the list had no room
+   * to save it as one: the live canvas (`live`), and `held` more held aside
+   * (opening a project holds it first; making one is refused, 413). */
+  canvasNotFiled?: { reason: 'projects' | 'storage'; from?: string | null; since?: string | null;
+    /** The project limit (the backend's MAX_PROJECTS), for GM's line. */
+    projectLimit?: number;
+    /** The agents' line (GM's waiting line is the person's). */
+    note?: string; live?: boolean; held?: number;
+    /** Each canvas that waits, in the order they are saved (the person's,
+     * then agents' copies: GM r12, 2), with the name of the project it was
+     * when known (review 6 of PR #199, N-2) and, at the project limit, how
+     * many projects to delete before it is saved (`deletes`). */
+    canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null; deletes?: number }[];
+    /** How many projects to delete before every waiting canvas is saved (GM's answer 3). */
+    deletes?: number;
+    /** Held canvases that couldn't be read (review 6, L-1). */
+    heldUnreadable?: { count: number | null; kept?: string[]; at?: string } };
+  /** A waiting canvas was saved as its own project, recently: GM's toast.
+   * `filed` names every canvas saved with it (review 6, N-2). */
+  canvasSaved?: { id: string; name: string; at?: string; overSaveLimit?: boolean;
+    /** Filed after a restore notice named a canvas: "Another canvas…" (GM). */
+    another?: boolean;
+    filedAt?: string; agentCopy?: { agent?: string | null };
+    filed?: SavedCanvas[] };
+  /** canvas-held.json didn't read whole and a held canvas may be lost, for a
+   * week (review 6, L-1): the person's line. `count` null: unknown. */
+  canvasHeldUnreadable?: { count: number | null; kept?: string[]; at?: string };
+  /** How many projects the list may hold (the backend's MAX_PROJECTS). */
+  projectLimit?: number;
 }
 export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;
@@ -94,6 +182,9 @@ const json = (method: string, body: unknown): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
 export const listProjects = () => request<ProjectList>("Couldn't load your projects.", '/api/projects');
+/** Whether Nebula would refuse to replace the open canvas now, and why
+ * (review 19 item 1: the tab's reopen lock reads Nebula's own verdict). */
+export const getOpenHold = () => request<{ hold?: unknown }>("Couldn't load your projects.", '/api/projects/open-hold');
 export const getProject = (id: string) => request<SavedProject>("Couldn't load the project.", `/api/projects/${encodeURIComponent(id)}`);
 export const createProject = (name: string | undefined, workspaceRevision: string) =>
   request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
@@ -103,12 +194,19 @@ export const openProject = (id: string, workspaceRevision: string) =>
  * settings and renames Nebula may not have; Nebula merges exactly those onto
  * its copy of the project left (backend `_save_handoff`). */
 export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string,
-  pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string> }) =>
+  pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string>; deleted?: string[] }) =>
   request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', {
     snapshot, workspaceRevision,
     ...(pending && Object.keys(pending.params).length > 0 ? { pendingParams: pending.params } : {}),
     ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
-  })).then((result) => result.project);
+    // Review 18 MEDIUM-1: the tab-local nodes this tab deleted; nothing else is a delete.
+    ...(pending?.deleted?.length ? { deletedNodeIds: pending.deleted } : {}),
+  })).then((result: ProjectActivation & { deletesKept?: unknown }) => {
+    // A handoff's listed deletes Nebula kept (another window saved the node
+    // last): the tab says so (review 19 item 5).
+    const kept = Array.isArray(result.deletesKept) ? result.deletesKept.filter((id): id is string => typeof id === 'string') : [];
+    return kept.length > 0 ? { ...result.project, deletesKept: kept } : result.project as SavedProject & { deletesKept?: string[] };
+  });
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>
@@ -121,6 +219,12 @@ export const purgeTrashedProject = (id: string) =>
  * deleted after it loaded stays restorable. */
 export const emptyProjectTrash = (ids: string[]) =>
   request<{ trash: TrashedProject[] }>("Couldn't empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
+/** The person closed the restore notice (×): the backend doesn't list it again. */
+/** The person closed the notice that held canvases couldn't be read (GM r9). */
+export const dismissCanvasHeldUnreadable = (at: string) =>
+  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/canvas-held-unreadable/dismiss', json('POST', { at }));
+export const dismissCatalogRestore = (id: string) =>
+  request<{ dismissed: boolean }>("Couldn't close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
 export const listCoverChoices = (id: string) =>
   request<CoverChoices>("Couldn't load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
 /** Pin one of the project's images as its cover, or `null` for automatic. */
@@ -128,5 +232,43 @@ export const pinProjectCover = (id: string, url: string | null) =>
   request<{ project: ProjectSummary }>("Couldn't set the cover.", `/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
-export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
-  request<ProjectActivation>("Couldn't recover the project.", '/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);
+/** `sourceName`: the project's name as this tab knew it, for a copy whose
+ * project is no longer listed (a restore took it away: GM r15 on PR #199),
+ * so the copy is "Recovered <name>", not "Deleted project". */
+/** A connection the recover route's rules left out of the copy (PR #199
+ * round 16: a kept tab's connections are checked there by the server's own
+ * rules), by the copy's ids. Round 17 (GM r23, 2): the server says why in
+ * fields (`kind` from the shared table, lib/portRules.json), and the tab
+ * writes the person's line from them; an end whose node isn't in the copy is
+ * null, with the tab's id in `sourceWas`/`targetWas`. */
+export interface DroppedWire {
+  source: string | null; sourceHandle?: string | null; target: string | null; targetHandle?: string | null;
+  sourceWas?: string | null; targetWas?: string | null;
+  sourceName?: string | null; targetName?: string | null; sourcePort?: string | null; targetPort?: string | null;
+  sourceType?: string | null; targetType?: string | null; limit?: number | null;
+  kind?: string; detail?: string;
+}
+/** The copy, with what the route changed on the way in (PR #199 round 16):
+ * `renumbered` maps each tab-local node id to the backend id the copy gave
+ * it, and `droppedWires` the wires its rules refused. */
+export type RecoveredProject = SavedProject & { renumbered?: Record<string, string>; droppedWires?: DroppedWire[];
+  /** The project the copy was made from, as Nebula stored it with the copy
+   * (GM r29 on PR #199, 2): the reload line names it, never a name read
+   * back out of the copy's own. */
+  sourceName?: string };
+export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
+  sourceName?: string) =>
+  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown; sourceName?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
+    json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}) }))
+    .then((result): RecoveredProject => {
+      const renumbered = result.renumbered && typeof result.renumbered === 'object' && !Array.isArray(result.renumbered)
+        ? Object.fromEntries(Object.entries(result.renumbered as Record<string, unknown>)
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : undefined;
+      const droppedWires = Array.isArray(result.droppedWires)
+        ? (result.droppedWires as unknown[]).filter((wire): wire is DroppedWire => Boolean(wire) && typeof wire === 'object'
+          && ['string', 'object'].includes(typeof (wire as DroppedWire).source)
+          && ['string', 'object'].includes(typeof (wire as DroppedWire).target)) : undefined;
+      const recoveredFrom = typeof result.sourceName === 'string' && result.sourceName ? result.sourceName : undefined;
+      return { ...result.project, ...(renumbered ? { renumbered } : {}), ...(droppedWires?.length ? { droppedWires } : {}),
+        ...(recoveredFrom ? { sourceName: recoveredFrom } : {}) };
+    });

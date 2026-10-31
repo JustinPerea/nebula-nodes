@@ -5,9 +5,14 @@ import { useNoticeHold } from '../../hooks/useNoticeHold';
 import { OpenCopyButton } from './OpenCopyButton';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
+import { useKeptCanvas } from '../../lib/keptCanvas';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
+
+/** A kept step's button with its stack empty (GM r19 on PR #199, 5). */
+export const NOTHING_TO_UNDO = 'Nothing to undo';
+export const NOTHING_TO_REDO = 'Nothing to redo';
 
 const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id === id;
 
@@ -35,10 +40,23 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
   // own "Deleted the node." (Create Studio's result delete) keeps its Undo.
   const notice = messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry)) ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);
+  // While the canvas is kept in this tab (GM r18 on PR #199), the button
+  // acts on the kept tab's own step only; a notice for a step of the history
+  // Nebula saved shows no button then, since a kept tab never steps into it.
+  const kept = useKeptCanvas();
+  // GM r19 (5): a kept step's button shows while its notice does; with the
+  // step no longer on top of its stack (the stack empty, or a newer edit
+  // took Redo away) it reads disabled, as any empty stack.
+  const keptOffer = useGraphStore((state) => kept && Boolean(state.undoNotice?.offer && state.undoNotice.keptStep));
   const actionable = useGraphStore((state) => {
     const offer = state.undoNotice?.offer;
+    const keptStep = state.undoNotice?.keptStep;
+    if (offer && keptStep) {
+      const stack = offer === 'undo' ? state.keptUndo : state.keptRedo;
+      return kept && stack[stack.length - 1] === keptStep;
+    }
     const entry = state.undoNotice?.entry;
-    if (!offer || !entry) return false;
+    if (!offer || !entry || kept) return false;
     const stack = offer === 'undo' ? state.undoStack : state.redoStack;
     return stack[stack.length - 1] === entry;
   });
@@ -70,8 +88,10 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
     >
       {shown.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
       <span className="canvas-undo-notice__text">{noticeText(shown.text, shown.mono)}</span>
-      {actionable && (
-        <button type="button" className="canvas-undo-notice__action" onClick={act} {...lock.act()}
+      {(actionable || keptOffer) && (
+        <button type="button" className="canvas-undo-notice__action" onClick={act}
+          {...lock.act({ kept: 'live', disabled: !actionable, title: actionable ? undefined
+            : shown.offer === 'undo' ? NOTHING_TO_UNDO : NOTHING_TO_REDO })}
           aria-keyshortcuts={shown.offer === 'undo' ? 'Meta+Z Control+Z' : 'Meta+Shift+Z Control+Shift+Z'}>
           {shown.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>

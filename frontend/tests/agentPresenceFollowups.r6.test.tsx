@@ -185,7 +185,8 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
 
 describe('GM r8: a filled destructive confirm is the red fill with near-black ink', () => {
   const confirms: Array<[string, string, string]> = [
-    ['styles/project-home.css', 'body.app-slava-restraint .project-home__confirm .project-home__danger', 'body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled)'],
+    ['styles/project-home.css', 'body.app-slava-restraint .project-home__confirm .project-home__danger', // PR #199 review 6, L-4: every hover on the home skips [aria-disabled="true"].
+    'body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled):not([aria-disabled="true"])'],
     ['styles/prompt-dialog.css', '.prompt-dialog__actions .prompt-dialog__danger', '.prompt-dialog__actions .prompt-dialog__danger:hover:not(:disabled)'],
     ['styles/asset-trash.css', 'body.app-slava-restraint .asset-trash__button--danger', 'body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled)'],
   ];

@@ -314,7 +314,7 @@ export function PinComposer() {
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
           onChange={setDraft}
-          confirm={lock.act({ offline: 'send notes', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
+          confirm={lock.act({ offline: 'send notes', kept: 'note', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
             : gateBanner ? { disabled: true, title: PIN_REFUSAL_COPY.sendWhenConnected }
             : noteEmpty ? { disabled: true, title: PIN_REFUSAL_COPY.writeFirst } : {}) })}
           onRefused={() => { if (!targetGone && !gateBanner && !noteEmpty) refuseCanvasEdit(); }}

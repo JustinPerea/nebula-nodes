@@ -19,7 +19,7 @@ export function RetrySceneButton({ nodeId, onRetry }: { nodeId: string; onRetry:
   const held = useHeldLook(trying);
   const lock = useCanvasLock();
   return (
-    <button type="button" className="canvas-undo-notice__action" {...lock.act()} {...held}
+    <button type="button" className="canvas-undo-notice__action" {...lock.act({ kept: 'scene' })} {...held}
       onClick={() => { if (trying) return; retry(nodeId); onRetry(); }}>
       {TRY_AGAIN}
     </button>

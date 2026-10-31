@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
-  wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
+  wsClient: { connect: vi.fn(), setViewing: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
     // The project store's own listener (M-3's beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));

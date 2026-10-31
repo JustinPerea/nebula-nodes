@@ -46,7 +46,7 @@ body.app-slava-restraint .project-home button:disabled { opacity: var(--sr-disab
 body.app-slava-restraint .project-home button:focus-visible,
 body.app-slava-restraint .project-home input:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__new { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--sr-ink); border-radius: var(--sr-node-media-radius); background: var(--sr-ink); color: var(--sr-canvas); font-size: 13px; font-weight: 600; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
-body.app-slava-restraint .project-home__new:hover:not(:disabled) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
+body.app-slava-restraint .project-home__new:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__new svg,
 body.app-slava-restraint .project-home__secondary svg { width: 16px; height: 16px; stroke-width: var(--sr-icon-stroke); }
 body.app-slava-restraint .project-home__section-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
@@ -77,13 +77,13 @@ body.app-slava-restraint .project-home__cover-close { display: grid; place-items
 body.app-slava-restraint .project-home__cover-close svg { width: 13px; height: 13px; }
 body.app-slava-restraint .project-home__cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; max-height: 196px; overflow-y: auto; }
 body.app-slava-restraint .project-home__cover-choice { aspect-ratio: 1; padding: 0; overflow: hidden; border: 2px solid transparent; border-radius: 6px; background: var(--sr-node-media-bg); }
-body.app-slava-restraint .project-home__cover-choice:hover:not(:disabled) { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .project-home__cover-choice:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-edge-strong); }
 body.app-slava-restraint .project-home__cover-choice[aria-pressed="true"] { border-color: var(--sr-ink); }
 body.app-slava-restraint .project-home__cover-choice img { display: block; width: 100%; height: 100%; object-fit: cover; }
 body.app-slava-restraint .project-home__cover-note { margin: 4px 0; color: var(--sr-ink-light); font-size: 12px; }
 body.app-slava-restraint .project-home__preview-open { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-node-pill-bg); color: var(--sr-ink); opacity: 0; transform: translateY(3px); transition: opacity var(--sr-motion-fast), transform var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__preview-open svg { width: 14px; height: 14px; }
-body.app-slava-restraint .project-home__open:hover .project-home__preview-open,
+body.app-slava-restraint .project-home__open:hover:not(:disabled):not([aria-disabled="true"]) .project-home__preview-open,
 body.app-slava-restraint .project-home__open:focus-visible .project-home__preview-open { opacity: 1; transform: translateY(0); }
 body.app-slava-restraint .project-home__graph { width: 100%; max-width: 320px; height: auto; }
 body.app-slava-restraint .project-home__graph-node { fill: var(--sr-glass-raised); stroke: var(--sr-edge-strong); stroke-width: 1.2; }
@@ -94,7 +94,7 @@ body.app-slava-restraint .project-home__card-name { display: block; margin: 18px
 body.app-slava-restraint .project-home__card-date { display: block; margin: 0 16px; color: var(--sr-ink-meta); font-size: 11px; line-height: 1.5; }
 body.app-slava-restraint .project-home__card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; color: var(--sr-ink-light); font-size: 11px; line-height: 1.5; }
 body.app-slava-restraint .project-home__rename { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
-body.app-slava-restraint .project-home__rename:hover:not(:disabled) { border-color: var(--sr-edge); background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__rename:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-edge); background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 /* GM r18: a card's icons, disabled (offline, or while busy), read as disabled. */
 body.app-slava-restraint .project-home__rename:disabled { opacity: var(--sr-disabled-opacity); cursor: not-allowed; }
 body.app-slava-restraint .project-home__rename svg { width: 14px; height: 14px; }
@@ -102,11 +102,11 @@ body.app-slava-restraint .project-home__rename-form { display: flex; gap: 6px; p
 body.app-slava-restraint .project-home__rename-form input { min-width: 0; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font: 12px var(--sr-ui); }
 body.app-slava-restraint .project-home__rename-form button { display: grid; place-items: center; width: 34px; min-height: 34px; flex-shrink: 0; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__rename-form button svg { width: 15px; height: 15px; }
-body.app-slava-restraint .project-home__rename-form button:hover:not(:disabled) { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__rename-form button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 body.app-slava-restraint .project-home__card-actions { display: flex; flex-shrink: 0; gap: 2px; }
 /* Fix round 5 of PR #200 (GM r7 answer 2): Delete hovers to the danger red, never orange. */
-body.app-slava-restraint .project-home__delete:hover:not(:disabled) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
-body.app-slava-restraint .project-home__delete:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
+body.app-slava-restraint .project-home__delete:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__delete:active:not(:disabled):not([aria-disabled="true"]) { color: var(--sr-danger-ink-hover, #ff9a91); }
 body.app-slava-restraint .project-home__trash { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--sr-edge); }
 body.app-slava-restraint .project-home__trash-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 body.app-slava-restraint .project-home__trash-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px 0 4px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink); font: inherit; }
@@ -123,17 +123,21 @@ body.app-slava-restraint .project-home__trash-actions button,
 body.app-slava-restraint .project-home__trash-empty,
 body.app-slava-restraint .project-home__confirm button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__trash-actions button svg { width: 13px; height: 13px; }
-body.app-slava-restraint .project-home__trash-actions button:hover:not(:disabled),
-body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
-body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+/* GM r7: Restore at the project limit, in the shared disabled grey but still
+   focusable, so its tooltip says why (aria-disabled, as the toolbar's). */
+/* Every hover rule here skips [aria-disabled="true"] (review 6 of PR #199,
+   L-4): the at-limit Restore keeps its resting look under the pointer. */
+body.app-slava-restraint .project-home__trash-actions button:hover:not(:disabled):not([aria-disabled="true"]),
+body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled):not([aria-disabled="true"]),
+body.app-slava-restraint .project-home__confirm button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
 /* GM r13: the trigger that arms a Delete forever or an Empty turns red on hover. */
-body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
-body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); color: var(--sr-danger-ink, #ff887d); }
+body.app-slava-restraint .project-home__trash button.project-home__trigger--danger:active:not(:disabled):not([aria-disabled="true"]) { color: var(--sr-danger-ink-hover, #ff9a91); }
 /* GM r8 (fix round 6 of PR #200): the red fill with near-black ink, never the orange. */
 body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger-fill, #ff887d); background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); font-weight: 600; }
-body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }
+body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-danger-fill-hover, #ff9a91); background: var(--sr-danger-fill-hover, #ff9a91); }
 /* Critically damped-ish spring (k 380, c 30, m 1): ~2% overshoot, settles in 420ms. */
 body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); display: flex; align-items: center; gap: 4px; max-width: min(var(--notice-max-w, 560px), calc(100vw - 32px)); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
 /* GM, #198 r8: a toast wraps (up to 3 lines) and never cuts a sentence. */
@@ -155,7 +159,7 @@ body.app-slava-restraint .project-home__empty-graph { width: 200px; margin-botto
 body.app-slava-restraint .project-home h3 { max-width: 100%; overflow-wrap: anywhere; font-size: 17px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.4; }
 body.app-slava-restraint .project-home__empty p { margin-top: 10px; color: var(--sr-ink-light); font-size: 13px; line-height: 1.6; }
 body.app-slava-restraint .project-home__secondary { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; margin-top: 24px; padding: 0 14px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
-body.app-slava-restraint .project-home__secondary:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__empty-search { width: 28px; height: 28px; margin-bottom: 20px; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__loading { display: flex; align-items: center; gap: 10px; min-height: 140px; color: var(--sr-ink-light); font-size: 13px; }
 body.app-slava-restraint .project-home__loading-dot { width: 6px; height: 6px; border-radius: var(--sr-radius-pill); background: var(--sr-ink-light); }
@@ -175,7 +179,7 @@ body.app-slava-restraint .project-home__edits-text { display: grid; gap: 2px; }
 body.app-slava-restraint .project-home__edits-heading { font-weight: 600; }
 body.app-slava-restraint .project-home__edits-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 body.app-slava-restraint .project-home__error .project-home__edits-primary { border-color: var(--sr-ink); background: var(--sr-ink); color: var(--sr-canvas); font-weight: 600; }
-body.app-slava-restraint .project-home__error .project-home__edits-primary:hover:not(:disabled) { border-color: var(--sr-ink-bold); background: var(--sr-ink-bold); }
+body.app-slava-restraint .project-home__error .project-home__edits-primary:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-ink-bold); background: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__error button:disabled { opacity: 0.55; cursor: default; }
 /* The notice stack (GM r14 item 1): the recovered copy's notice first, then
    the held edits or where they went, then the error, one gap apart. */
@@ -184,9 +188,11 @@ body.app-slava-restraint .project-home__notices .project-home__notice,
 body.app-slava-restraint .project-home__notices .project-home__error { margin-bottom: 0; }
 body.app-slava-restraint .project-home__notice--copy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; }
 body.app-slava-restraint .project-home__notice-text { min-width: 0; overflow-wrap: anywhere; }
+/* Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen that can't go yet, under its card. */
+body.app-slava-restraint .project-home__card-lock { margin: 0; padding: 0 16px 12px; color: var(--sr-ink-meta); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__notice-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
 body.app-slava-restraint .project-home__notice-restore { min-height: 34px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
-body.app-slava-restraint .project-home__notice-restore:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__notice-restore:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__notice-restore:disabled { opacity: 0.55; cursor: default; }
 body.app-slava-restraint .project-home__notice-close { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__notice-close:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
@@ -203,6 +209,15 @@ body.app-slava-restraint .project-home__notice:focus-visible,
 body.app-slava-restraint .project-home__error:focus-visible,
 body.app-slava-restraint .project-home #recent-projects-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__restore { display: flex; align-items: flex-start; gap: 12px; }
+body.app-slava-restraint .project-home__restore-text { flex: 1; min-width: 0; padding-top: 6px; }
+/* GM r6 (bug 2): 6px between outcomes, so a wrapped line doesn't read as two;
+   the line height within one stays the notice's. */
+body.app-slava-restraint .project-home__restore-lines { display: flex; flex-direction: column; gap: 6px; }
+body.app-slava-restraint .project-home__restore-lines > p { margin: 0; }
+body.app-slava-restraint .project-home__restore .project-home__toast-close { margin: -2px -6px 0 0; }
+body.app-slava-restraint .project-home__restore-action { flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; white-space: nowrap; }
+body.app-slava-restraint .project-home__restore-action:focus-visible { outline: var(--sr-focus-outline); outline-offset: 2px; }
 body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 1000px) {
   body.app-slava-restraint .project-home__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -220,7 +235,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__rename-form button { width: 44px; min-height: 44px; }
   body.app-slava-restraint .project-home__trash-row { grid-template-columns: minmax(0, 1fr); }
   body.app-slava-restraint .project-home__trash-actions { grid-row: auto; grid-column: 1; justify-content: flex-start; margin-top: 8px; }
-  body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close, body.app-slava-restraint .project-home__notice-restore { min-height: 44px; }
+  body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close, body.app-slava-restraint .project-home__notice-restore, body.app-slava-restraint .project-home__restore-action { min-height: 44px; }
   body.app-slava-restraint .project-home__notice-close { width: 44px; height: 44px; }
   body.app-slava-restraint .project-home__toast-close { width: 44px; }
   body.app-slava-restraint .project-home__error { align-items: flex-start; flex-direction: column; }
@@ -240,3 +255,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }
+
+/* Review 13 of PR #199 (MEDIUM-1): every notice on the home sits in one
+   area for the stack's focus rule; the area adds no box of its own. */
+.project-home__notice-area { display: contents; }

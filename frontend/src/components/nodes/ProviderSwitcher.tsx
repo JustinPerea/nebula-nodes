@@ -162,7 +162,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
           <button type="button" role="menuitemradio" aria-checked={row.selected}
             tabIndex={inline && index === active ? 0 : -1}
             className="provider-switcher__item"
-            {...lock.act({ title: row.block ?? row.info, offline: true })}
+            {...lock.act({ title: row.block ?? row.info, offline: true, kept: 'live' })}
             onClick={() => { onPick(row); onClose?.(true); }}>
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
@@ -184,7 +184,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {state.fixes.map((choice) => (
                 <button key={choice.param} type="button" role="menuitem" tabIndex={-1}
                   className="provider-switcher__alternative provider-switcher__fix"
-                  {...lock.act({ offline: true })}
+                  {...lock.act({ offline: true, kept: 'live' })}
                   onClick={() => {
                     onFix(choice);
                     onClose?.(true);
@@ -199,7 +199,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {state.alternatives.map((alternative) => (
                 <button key={alternative.routeId} type="button" role="menuitem" tabIndex={-1}
                   className="provider-switcher__alternative"
-                  {...lock.act({ offline: true })}
+                  {...lock.act({ offline: true, kept: 'live' })}
                   onClick={() => {
                     onPick({ writes: alternative.writes, routeId: alternative.routeId });
                     onClose?.(true);

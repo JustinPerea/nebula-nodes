@@ -597,7 +597,10 @@ def test_an_agents_run_shows_ran_only_once_it_is_registered(race, monkeypatch):
     monkeypatch.setattr(main, "_show_agent", show)
     answer = race.client.post("/api/graph/run", headers=AGENT, json={"targetNodeId": t1, "wait": 5})
     assert state.get("registered") is True, state
-    assert state["switch"] == "Cannot switch projects while a run is active. Wait for the run to finish or stop it first."
+    # The person's open (race.switch) reads the person's line for the run
+    # refusal since PR #199 round 21; agents keep "Cannot switch projects
+    # while a run is active. …" (tests/test_project_catalog_restore_fix21.py).
+    assert state["switch"] == main.CLEAR_DURING_RUN_PERSON
     assert answer.status_code == 200, answer.text
     assert race.store.read()["activeProjectId"] == race.active
 

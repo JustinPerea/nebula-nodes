@@ -201,3 +201,13 @@
     transition: none;
   }
 }
+
+/* GM r25 (4) on PR #199: a notice already showing when an aria-modal dialog
+   opens is under its scrim with the rest of the page (lib/modalFocus
+   holdNoticesUnderModal: inert, aria-hidden, this mark). The region stays on
+   its layer above every scrim (a newer notice lands there, live), so the
+   held one takes the scrim's dim itself: the brightness the scrim leaves of
+   the page (--notice-under-modal, set from the dialog's own scrim). */
+.notice-region [data-under-modal] {
+  filter: brightness(var(--notice-under-modal, 0.55));
+}

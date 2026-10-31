@@ -56,6 +56,10 @@ EVENT_KINDS = frozenset({
     "node.params",
     "node.moved",
     "node.renamed",
+    # The person's handoff kept the result of their newer run on a node,
+    # replacing the one Nebula held (main._journal_handoff_results): data
+    # {projectId, runId, replaced}.
+    "node.result",
     "edge.added",
     "edge.removed",
     "selection.changed",
@@ -144,6 +148,26 @@ EVENT_KINDS = frozenset({
     "project.renamed",
     "project.deleted",
     "project.restored",
+    # Nebula found catalog.json damaged and restored it (services/
+    # project_store.py _restore): data {id, kind (restored | rebuilt), reason,
+    # source (the copy, or null for a rebuild), folder, damagedFile and
+    # setAside (file names in that folder), addedBack [{id, name}],
+    # addedBackCount, notAddedBackCount, projectCount}.
+    "project.catalogRestored",
+    # The live canvas wasn't a project in the list (after a restore, or a
+    # crash between state.json and catalog.json) and was saved as its own
+    # (main._note_canvas_settled), or from its copy held aside when a
+    # project opened over it (main._note_held_filed, held true): data
+    # {projectId, name, from (the project it was, or null), restoreId (the
+    # restore it came from, or null), held?}.
+    "project.canvasFiled",
+    # It couldn't be: the list is at a limit. Nothing in it is lost (Nebula
+    # keeps it, also across restarts), no project is open, the person can't
+    # see or open it, opening a project holds it aside first, and the next
+    # listing with room files it: data
+    # {reason (projects | storage), from, restoreId, since (when it began
+    # waiting)}.
+    "project.canvasNotFiled",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",

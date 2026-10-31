@@ -1,6 +1,7 @@
 import type { InternalNode, Node } from '@xyflow/react';
 import type { NodeData, NodeState } from '../types';
 import { apiFetch } from './backend';
+import { isCanvasKept } from './keptCanvas';
 
 export interface CanvasViewReport {
   viewport: { x: number; y: number; zoom: number };
@@ -45,6 +46,8 @@ export function buildCanvasViewReport(
 }
 
 export async function publishCanvasView(report: CanvasViewReport, signal?: AbortSignal): Promise<void> {
+  // A kept canvas isn't Nebula's (review 14 of PR #199, lock-order LOW-2).
+  if (isCanvasKept()) return;
   const response = await apiFetch('/api/canvas/view', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

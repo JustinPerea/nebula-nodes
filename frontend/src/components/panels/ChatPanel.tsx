@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { refuseEditWhileFollowing } from '../../lib/canvasFollow';
-import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { refuseCanvasEdit, refuseTabOnlyEdit, useCanvasLock } from '../../lib/canvasLock';
 import { canvasReplacements, lastCanvasReplacement, replacedSinceWrittenLine, subscribeCanvasReplaced } from '../../lib/canvasReplaced';
 import { useProjectStore } from '../../store/projectStore';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
@@ -303,7 +303,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
 
   const applyToTarget = (content: string) => {
     if (!message.enhanceTargetId || message.enhanceCanvas !== canvasReplacements()) return;
-    if (refuseCanvasEdit()) return;
+    if (refuseTabOnlyEdit()) return;
     const { nodes, updateNodeData } = useGraphStore.getState();
     const target = nodes.find((n) => n.id === message.enhanceTargetId);
     if (!target) return;
@@ -340,7 +340,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
                         onClick={() => applyToTarget(seg.content)}
                         // Offline: when it works again (review 2 N-6), unless
                         // the canvas it was written for has gone for good.
-                        {...lock.act({ disabled: replacedSince, title: applyTitle, offline: replacedSince ? undefined : true })}
+                        {...lock.act({ disabled: replacedSince, title: applyTitle, offline: replacedSince ? undefined : true, kept: 'live' })}
                       >
                         {applyLabel}
                       </button>

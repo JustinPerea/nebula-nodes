@@ -207,7 +207,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
               <FolderDown size={15} strokeWidth={1.75} />
             </button>
           )}
-          <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} {...lock.act({ title: 'Delete' })} aria-label="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
+          <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} {...lock.act({ title: 'Delete', kept: 'live' })} aria-label="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
         </div>
         {dlOpen && url && (
           <div ref={downloadMenuRef} className="result-card__dl-menu" role="menu" aria-label="Download format" aria-orientation="horizontal"

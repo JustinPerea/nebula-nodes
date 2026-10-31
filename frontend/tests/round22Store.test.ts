@@ -20,7 +20,7 @@ const graphWrites = vi.hoisted(() => ({
   /** Answers never given in the test: given after it, so no test leaves a write out. */
   hanging: [] as Array<() => void>,
 }));
-vi.mock('../src/lib/wsClient', () => ({ wsClient: {
+vi.mock('../src/lib/wsClient', () => ({ wsClient: { setViewing: () => {}, notePersonAct: () => {},
   connect: vi.fn(), disconnect: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);
@@ -218,7 +218,7 @@ describe('L-c: a rename draft folded in at an agent\'s switch is handed off once
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     const first = vi.mocked(projects.saveProject).mock.calls.filter(([id]) => id === 'alpha');
-    expect(first.map(([, , , pending]) => pending)).toEqual([{ params: {}, labels: { n1: 'Draft name' } }]);
+    expect(first.map(([, , , pending]) => pending)).toEqual([{ params: {}, labels: { n1: 'Draft name' }, deleted: [] }]);
     vi.mocked(projects.saveProject).mockClear();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('alpha'), summary('beta'), summary('gamma')],
       activeProjectId: 'gamma', workspaceRevision: 'rev-c' }));

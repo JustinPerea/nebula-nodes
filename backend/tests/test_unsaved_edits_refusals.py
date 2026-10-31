@@ -87,7 +87,9 @@ def test_the_project_count_limit_says_which_limit(workspace, monkeypatch):
     monkeypatch.setattr(project_store_module, "MAX_PROJECTS", 1)
     response = _recover(client, source)
     assert response.status_code == 413
-    assert response.json() == {"detail": "Project limit reached", "limit": "projects"}
+    # projectCount: how many there are, for the kept tab's limit line (PR #199 round 16).
+    assert response.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 1,
+                               "projectCount": 1}
 
 
 def test_the_catalog_size_limit_says_which_limit(workspace, monkeypatch):
@@ -108,7 +110,7 @@ def test_a_store_limit_on_any_route_keeps_its_detail_and_says_which_limit(worksp
     # A create (an agent's new_project goes here too) over the count limit.
     response = client.post("/api/projects", json={"name": "One too many"})
     assert response.status_code == 413
-    assert response.json() == {"detail": "Project limit reached", "limit": "projects"}
+    assert response.json() == {"detail": "Project limit reached", "limit": "projects", "projectLimit": 1}
 
 
 def test_a_storage_failure_stays_a_507_with_no_limit(workspace, monkeypatch):

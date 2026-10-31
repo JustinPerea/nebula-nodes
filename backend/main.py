@@ -14,6 +14,7 @@ import errno
 import functools
 import hashlib
 import inspect
+import itertools
 import json
 import logging
 import math
@@ -35,7 +36,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
+from typing import Any, Awaitable, BinaryIO, Callable, Container, Iterable, Iterator, Mapping, NamedTuple, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -92,15 +93,20 @@ from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_p
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
+from services import catalog_recovery
 from services import output_thumbnail
 from services import refusal_copy
 from services import cinema_scene_spec
 from services.node_errors import NodeErrors
+from services.node_result_runs import NodeResultRuns
 from services import project_cover
 from services import graph_file_links, project_size
-from services.cli_graph import SHORT_ID_RE, CLIGraph
+from services.cli_graph import OWNER_UNKNOWN, OWNER_UNPROVEN, SHORT_ID_RE, CLIGraph, require_backend_ids
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
+from services import project_store as project_store_module
+from services import cli_graph as cli_graph_module
+from services.wording import counted
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, needs_cover, now as project_now,
@@ -110,10 +116,15 @@ from services.project_store import (
 from services.port_contracts import (
     ContractEdge,
     ContractNode,
+    PortContractIssue,
     cinema_output_ports,
+    input_connection_limit,
     input_takes_one,
     node_ports,
     validate_edge_contracts,
+    DROPPED_CONNECTION_KINDS,
+    PORT_RULES,
+    port_types_compatible,
 )
 from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS
@@ -241,6 +252,7 @@ from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 from services.selection_context import SelectionContextStore, _safe_value as _journal_safe_value, selection_prompt_context
+from services.selection_context import tab_only_fields
 from services.provider_recovery import (
     ProviderRecoveryCapacityError,
     ProviderRecoveryConflictError,
@@ -300,6 +312,377 @@ cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
 # Pins follow `main.project_store` through the getter (tests swap the store).
 canvas_pins = CanvasPins(lambda: project_store)
+# The serving loop, for a catalog restore made in a worker thread (set at startup).
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = False) -> str:
+    """What agents read about a catalog restore (GET /api/projects
+    `catalogRestore.note`, start_here, the journal): what happened, from
+    where, what came back, what the copy decided, where the damaged file is
+    kept. Not the person's notice (frontend catalogRestoreCopy.ts has GM's
+    lines). ``canvas_block``: the note goes beside the live `canvasNotFiled`
+    block (the listing, start_here, `nebula context`, `nebula projects`), so
+    it leaves the waiting canvas to that block and doesn't say it twice (GM
+    r23 e on PR #199); the journal's note, alone, still says it."""
+    def count(key: str) -> int:
+        # What still holds, when the record was checked against the list now.
+        value = record.get(f"{key[:-5]}CountNow") if key.endswith("Count") and f"{key[:-5]}CountNow" in record \
+            else record.get(key)
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def projects(number: int) -> str:
+        return f"{number} project{'s' if number != 1 else ''}"
+
+    where = f" from {record.get('source')}" if record.get("source") else " from the projects its damaged files still held"
+    did = "restored" if record.get("kind") == "restored" else "had no good copy and rebuilt"
+    parts = [f"Nebula found its project list (catalog.json) {record.get('reason') or 'damaged'} and {did} it{where}."]
+    if record.get("source") and record.get("copyAt"):
+        parts.append(f"That copy is from {record['copyAt']}.")
+    if record.get("kind") == "restored" and record.get("damagedReadWhole") is False:
+        # GM r19 on PR #199, 6a: "may be missing" only when project records
+        # went unread, as the person's notice says it.
+        if record.get("damagedRecordsUnread") is False and catalog_recovery.restore_said_more(record):
+            # GM r22 on PR #199, 1: "no project is missing" only under the
+            # person's rule (nothing else said, catalogRestoreCopy.ts
+            # saidAtFirst), never beside a project that wasn't added back.
+            parts.append("The damaged file couldn't be read whole, but the damage came after its project records, "
+                         "so every record in it was read (damagedReadWhole: false, damagedRecordsUnread: false).")
+        elif record.get("damagedRecordsUnread") is False:
+            parts.append("The damaged file couldn't be read whole, but the damage came after its projects, so no "
+                         "project is missing (damagedReadWhole: false, damagedRecordsUnread: false).")
+        else:
+            parts.append("The damaged file couldn't be read whole (cut, zeroed, or a key or section name damaged), "
+                         "so changes made after the copy may be missing without being listed here "
+                         "(damagedReadWhole: false).")
+    added = count("addedBackCount")
+    if added:
+        parts.append(f"{projects(added)} the copy lacked {'were' if added != 1 else 'was'} "
+                     "added back from the damaged file.")
+    updated = count("updatedFromDiskCount")
+    if updated:
+        parts.append(f"{projects(updated)} {'were' if updated != 1 else 'was'} brought up to date from the "
+                     "damaged file (updatedFromDisk).")
+    # GM r18 on PR #199: readable records left out because the list was
+    # at its project limit have their own line (the person's says the same).
+    # GM r21 on PR #199, 4: the canvas's line owns the open project, as on
+    # the person's notice (catalogRestoreCopy.ts savedFrom/failedListed):
+    # when the note says the open canvas was filed or waits on the limit,
+    # the open project's own left-out row isn't said again.
+    recovered = record.get("recoveredCanvas")
+    waiting = record.get("canvasNotFiled")
+    canvas_said = (isinstance(recovered, Mapping) and bool(recovered.get("id")) and recovered.get("current") is not False) \
+        or (isinstance(waiting, Mapping) and waiting.get("current") is not False)
+    saved_from = record.get("openProjectMissing") if canvas_said else None
+    all_rows = [row for row in record.get("notAddedBack") or [] if isinstance(row, Mapping)]
+    owned = [row for row in all_rows if saved_from and row.get("id") == saved_from]
+    rows = [row for row in all_rows if not (saved_from and row.get("id") == saved_from)]
+    limit_rows = [row for row in rows if row.get("reason") == "limit"]
+    limit_now = [row for row in limit_rows if row.get("current") is not False]
+    limit_recorded = record.get("notAddedBackLimitCount")
+    limit_recorded = (limit_recorded - sum(1 for row in owned if row.get("reason") == "limit")
+                      if isinstance(limit_recorded, int) else len(limit_rows))
+    limited = max(0, max(limit_recorded, len(limit_rows)) - (len(limit_rows) - len(limit_now)))
+    # A count "now" already leaves out rows that no longer hold.
+    owned_counted = [row for row in owned if row.get("current") is not False] \
+        if "notAddedBackCountNow" in record else owned
+    missing = max(0, count("notAddedBackCount") - len(owned_counted) - limited)
+    if missing:
+        parts.append(f"{projects(missing)} in the damaged file could not be added back "
+                     f"and {'stay' if missing != 1 else 'stays'} only there (notAddedBack).")
+    if limited:
+        names = [row.get("name") for row in limit_now]
+        if limited <= 3 and len(names) == limited and all(isinstance(name, str) and name for name in names):
+            quoted = [f'"{name}"' for name in names]
+            who = quoted[0] if limited == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+        else:
+            who = projects(limited)
+        limit = record.get("projectLimit") if isinstance(record.get("projectLimit"), int) \
+            else project_store_module.MAX_PROJECTS
+        were, they = ("weren't", "They're") if limited != 1 else ("wasn't", "It's")
+        parts.append(f"{who} {were} added back because the project list is at its limit of {counted(limit, 'project')}. "
+                     f'{they} still in the damaged file, which was kept (notAddedBack, reason "limit").')
+    reverted = count("revertedCount")
+    if reverted:
+        parts.append(f"{projects(reverted)} went back to {'their versions' if reverted != 1 else 'its version'} in "
+                     "the copy (reverted): the damaged file's newer record couldn't be read whole, and stays only "
+                     "there.")
+        if any(isinstance(row, Mapping) and row.get("liveCanvas") for row in record.get("reverted") or []):
+            parts.append("The open project's nodes and connections come from the live canvas, which is newer.")
+    came_back = count("cameBackCount")
+    if came_back:
+        parts.append(f"{projects(came_back)} deleted after the copy {'are' if came_back != 1 else 'is'} back "
+                     "(cameBack): the person may delete them again.")
+    back_in_trash = count("backInTrashCount")
+    if back_in_trash:
+        parts.append(f"{projects(back_in_trash)} restored from Recently deleted after the copy "
+                     f"{'are' if back_in_trash != 1 else 'is'} in Recently deleted again (backInTrash).")
+    kept_deleted = count("keptDeletedCount")
+    if kept_deleted:
+        parts.append(f"{projects(kept_deleted)} deleted for good after the copy "
+                     f"{'stay' if kept_deleted != 1 else 'stays'} deleted (keptDeleted).")
+    if isinstance(recovered, Mapping) and recovered.get("id") and recovered.get("current") is not False:
+        parts.append(f"The live canvas wasn't a project in the restored list, so it was filed as its own project "
+                     f"\"{recovered.get('nameNow') or recovered.get('name') or RECOVERED_CANVAS_NAME}\" "
+                     f"({recovered['id']}); nothing on it is lost.")
+    elif isinstance(waiting, Mapping) and waiting.get("current") is not False:
+        # Beside the canvasNotFiled block, that block says it (with the refusal codes).
+        if not canvas_block:
+            parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: "
+                         f"the list is at its {waiting.get('reason')} limit (canvasNotFiled). Nothing in it is lost. "
+                         "The person can't see or open that canvas until it is saved; opening a project holds it "
+                         "aside first, making one is refused until the person frees room, and the next listing then "
+                         "files it.")
+    elif record.get("openProjectMissing"):
+        parts.append("The project that was open didn't come back, so none is open.")
+    stale = record.get("noLongerHold")
+    if isinstance(stale, int) and stale > 0:
+        parts.append(f"{stale} of this restore's rows no longer hold (the projects moved since: restored, deleted "
+                     "or deleted for good); they are marked current: false and left out here.")
+    kept = [path for path in record.get("setAside") or [] if path]
+    if kept:
+        parts.append(f"The damaged file{'s are' if len(kept) > 1 else ' is'} kept at {', '.join(kept)}.")
+    parts.append("Project ids read before it may be stale: list the projects again "
+                 "(list_projects, `nebula projects`).")
+    return " ".join(parts)
+
+
+# Where each kind of restore row says its project is (GM r4 of PR #199, the
+# stale-lines rule): "projects", "trash", "own group" (the row's `trashed`
+# says which), or "gone" (in neither).
+_RESTORE_ROW_PLACE = {"addedBack": "own group", "updatedFromDisk": "own group", "notAddedBack": "gone",
+                      "reverted": "own group", "cameBack": "own group", "backInTrash": "trash",
+                      "keptDeleted": "gone"}
+
+
+def _restore_row_holds(key: str, row: Mapping[str, Any], projects: set[str], trash: set[str]) -> bool:
+    place = _RESTORE_ROW_PLACE[key]
+    project_id = row.get("id")
+    if place == "gone":
+        return project_id not in projects and project_id not in trash
+    if place == "trash":
+        return project_id in trash
+    return project_id in (trash if row.get("trashed") else projects)
+
+
+def _restore_as_it_holds(record: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """``record`` with each row marked `current` (whether it still holds,
+    against ``catalog`` now: a project restored, deleted or deleted for good
+    since makes its row untrue), each count less its rows that no longer
+    hold (a count past the rows is said as recorded), the saved canvas under
+    its name now (or dropped once it is gone), and the waiting canvas only
+    while it still waits. The person's notice applies the same rule
+    (frontend catalogRestoreCopy.ts); `note` and start_here use what holds."""
+    projects = set(catalog.get("projects") or {})
+    trash = set(catalog.get("trash") or {})
+    view = copy.deepcopy(dict(record))
+    stale = 0
+    for key in _RESTORE_ROW_PLACE:
+        rows = [row for row in view.get(key) or [] if isinstance(row, dict)]
+        dropped = 0
+        for row in rows:
+            if not _restore_row_holds(key, row, projects, trash):
+                row["current"] = False  # only the rows that no longer hold are marked
+                dropped += 1
+        view[key] = rows
+        recorded = view.get(f"{key}Count")
+        recorded = recorded if isinstance(recorded, int) else len(rows)
+        view[f"{key}CountNow"] = max(0, max(recorded, len(rows)) - dropped)
+        stale += dropped
+    canvas = view.get("recoveredCanvas")
+    if isinstance(canvas, dict) and canvas.get("id"):
+        now = (catalog.get("projects") or {}).get(canvas["id"]) or (catalog.get("trash") or {}).get(canvas["id"])
+        if not isinstance(now, Mapping):
+            canvas["current"] = False
+            stale += 1
+        elif isinstance(now.get("name"), str) and now["name"] != canvas.get("name"):
+            canvas["nameNow"] = now["name"]  # renamed since
+    for key in ("alsoFiled", "agentCopies"):
+        rows = [row for row in view.get(key) or [] if isinstance(row, dict) and row.get("id")]
+        for row in rows:
+            now = (catalog.get("projects") or {}).get(row["id"]) or (catalog.get("trash") or {}).get(row["id"])
+            if not isinstance(now, Mapping):
+                row["current"] = False
+                stale += 1
+            elif isinstance(now.get("name"), str) and now["name"] != row.get("name"):
+                row["nameNow"] = now["name"]
+        view[key] = rows
+    waiting = view.get("canvasNotFiled")
+    if isinstance(waiting, dict):
+        # Still waiting live, or held aside (opening a project held it: M-3).
+        live = _canvas_not_filed_now() or next(iter(_held_canvases()), None)
+        if live is None:
+            waiting["current"] = False
+            stale += 1
+        else:
+            waiting["reason"] = live["reason"]
+    view["noLongerHold"] = stale
+    return view
+
+
+def _catalog_restore_view(record: Mapping[str, Any] | None,
+                          catalog: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """A restore record as GET /api/projects carries it (`catalogRestore`):
+    the person's notice reads kind, the copy's time and the rows; agents and
+    support read the rest and `note`. With ``catalog`` (the list now), each
+    row says whether it still holds (`current`) and `note` says only what
+    does (_restore_as_it_holds)."""
+    if not record:
+        return None
+    if catalog is not None:
+        record = _restore_as_it_holds(record, catalog)
+    keys = ("id", "at", "kind", "reason", "source", "copyAt", "damagedFile", "setAside", "addedBack",
+            "addedBackCount", "updatedFromDisk", "updatedFromDiskCount", "notAddedBack", "notAddedBackCount",
+            "reverted", "revertedCount", "cameBack", "cameBackCount", "backInTrash", "backInTrashCount",
+            "keptDeleted", "keptDeletedCount", "projectCount", "trashCount", "openProject", "openFrom",
+            "openProjectMissing", "openProjectName", "recoveredCanvas", "alsoFiled", "agentCopies", "canvasNotFiled",
+            "damagedReadWhole")
+    view = {key: copy.deepcopy(record.get(key)) for key in keys}
+    for key in ("reverted", "cameBack", "backInTrash", "keptDeleted"):
+        view[key] = view[key] if isinstance(view[key], list) else []
+        view[f"{key}Count"] = view[f"{key}Count"] if isinstance(view[f"{key}Count"], int) else len(view[key])
+    if "noLongerHold" in record:
+        view["noLongerHold"] = record["noLongerHold"]
+    # GM r18 on PR #199: the readable records left out at the limit, and
+    # that limit (records from before round 14 have neither).
+    for key in ("notAddedBackLimitCount", "projectLimit"):
+        if isinstance(record.get(key), int):
+            view[key] = record[key]
+    # GM r19 on PR #199, 6a: whether the damaged file held records Nebula
+    # couldn't read; left out for records from before it (unknown).
+    if isinstance(record.get("damagedRecordsUnread"), bool):
+        view["damagedRecordsUnread"] = record["damagedRecordsUnread"]
+    # Checked against the list now, the canvas that waits is in the
+    # `canvasNotFiled` block every such surface carries beside it.
+    return {**view, "note": _catalog_restore_note(record, canvas_block=catalog is not None)}
+
+
+# Restores made while main.py is still importing (the boot read of the
+# catalog, _resolve_canvas_owner_at_boot): the journal isn't defined yet, so
+# each record waits here and is journaled at startup (_journal_boot_restores;
+# review 11 of PR #199, LOW-1).
+_boot_restores: list[dict[str, Any]] = []
+
+
+def _on_catalog_restore(record: dict[str, Any]) -> None:
+    """ProjectStore restored a damaged catalog (services/project_store.py,
+    after it let go of the lock): journal it for agents
+    (`project.catalogRestored`, with where it came from and where the
+    damaged file is kept) and tell open tabs (_tell_catalog_restore). On the
+    serving loop. A restore during the import, at boot, is printed now and
+    journaled at startup."""
+    view = _catalog_restore_view(record) or {}
+    print(f"[projects] {view.get('note')}", flush=True)
+    if "_journal" not in globals():
+        _boot_restores.append(copy.deepcopy(record))
+        return
+
+    def tell() -> None:
+        _tell_catalog_restore(view)
+
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is not None:
+        running.call_soon(tell)
+    elif _main_loop is not None and not _main_loop.is_closed():
+        _main_loop.call_soon_threadsafe(tell)
+    else:
+        tell()
+
+
+def _tell_catalog_restore(view: dict[str, Any]) -> None:
+    """Journal a restore (`project.catalogRestored`) and, on a running loop,
+    tell open tabs. A restore while Nebula runs moves the workspace revision
+    under a tab that may hold edits not saved yet: it gets a graphSync
+    carrying the restore notice's id (export_graph_for_frontend), the same
+    way a reconnect after a boot restore does, so it keeps those edits and
+    says so instead of having its writes refused (review 11 of PR #199,
+    HIGH-1). And `projectsChanged` lists again."""
+    data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "copyAt", "addedBackCount",
+                                           "notAddedBackCount", "revertedCount", "cameBackCount",
+                                           "backInTrashCount", "keptDeletedCount", "projectCount")}
+    # By name in their folder: the journal cuts strings at 160 characters.
+    kept = [Path(path) for path in view.get("setAside") or [] if path]
+    data["folder"] = str(kept[0].parent) if kept else None
+    data["damagedFile"] = Path(view["damagedFile"]).name if view.get("damagedFile") else None
+    data["setAside"] = [path.name for path in kept]
+    data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
+    _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
+    # The selection named the canvas before the restore (review 15
+    # kept-wires-ui LOW-1): agents read none until the tab publishes again.
+    selection_context.clear()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return  # no loop (boot): tabs list on load anyway
+    loop.create_task(_broadcast_graph_sync())
+    loop.create_task(_broadcast_projects_changed("catalogRestored"))
+
+
+project_store.on_restore = _on_catalog_restore
+
+
+def _canvas_owner_for_restore() -> Any:
+    """Which project the live canvas is, for a restore choosing which
+    project to open (ProjectStore.canvas_owner; review 1 of PR #199, H1):
+    that project, None for no project's (unfiled, or unproven), or
+    catalog_recovery.UNKNOWN when state.json never recorded it."""
+    from services import catalog_recovery
+
+    owner = cli_graph.owner
+    if owner is OWNER_UNKNOWN:
+        return catalog_recovery.UNKNOWN
+    return None if owner is OWNER_UNPROVEN else owner
+
+
+project_store.canvas_owner = _canvas_owner_for_restore
+
+
+def _fresh_digest() -> str:
+    """The live canvas's nodes and wires as the graph holds them, as a
+    digest (what it was when protected; kept with the record for the logs:
+    no longer a condition). Defined before the boot read of the catalog: a
+    restore there protects again with it (review 11 of PR #199, nit 4: the
+    export it used came later in the file, so a boot restore stored zeros)."""
+    return hashlib.sha256(json.dumps(cli_graph.get_state(), sort_keys=True,
+                                     default=str).encode("utf-8")).hexdigest()
+
+
+def _protect_after_restore(catalog: dict[str, Any]) -> None:
+    """A restore that couldn't read the damaged catalog whole reopened the
+    live canvas's own project (ProjectStore.protect_after_restore; review 10
+    of PR #199, HIGH-1): whether that project was the person's canvas still
+    protected may be what the damage took, so it is protected again, in the
+    restore's own commit. Better a needless copy than an empty project: the
+    agent's next write saves the canvas into it untouched and works on a
+    copy, until the person's own open or first own edit (GM r13, 1). An
+    agent's own copy (its note in state.json) isn't the person's canvas.
+    Under the store's lock: reads only the catalog given and the live canvas."""
+    owner = cli_graph.owner
+    if not isinstance(owner, str) or owner != catalog.get("activeProjectId") or owner not in catalog["projects"]:
+        return
+    if not (cli_graph.nodes or cli_graph.edges):
+        return
+    if cli_graph_module.copy_note_of(cli_graph.copy_note, owner) is not None:
+        return
+    pending = project_store_module.canvas_pending_of(catalog)
+    if (pending["fresh"] or {}).get("projectId") == owner:
+        return
+    try:
+        digest = _fresh_digest()
+    except Exception:  # noqa: BLE001 - the canvas changed under the read: the record says only which
+        digest = "0" * 64
+    project_store_module.set_canvas_pending_in(catalog, {**pending, "fresh": {"projectId": owner, "digest": digest}})
+    print(f"[projects] the restore reopened {owner}, the live canvas's project, from a damaged file it couldn't "
+          "read whole: protected again until the person opens or edits it", flush=True)
+
+
+project_store.protect_after_restore = _protect_after_restore
 
 
 def _open_project_id() -> str | None:
@@ -383,6 +766,56 @@ def _finish_params_upgrade_at_boot(*, live_graph_advanced: bool) -> bool:
     return rotated
 
 
+def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state_loaded: bool) -> None:
+    """Which project the live canvas is, when state.json didn't say (saved
+    before it recorded it, or no state.json at all). Read before any
+    restore, so a damaged catalog's copy never decides it (review 1, H1):
+    - no catalog (a fresh install, or a canvas from before projects): left
+      unknown, so the catalog's open project, as before;
+    - a canvas that didn't load (none saved, persistence off, a failed
+      load) beside a catalog: empty, so no project's (the open one is
+      never emptied by the next listing);
+    - a catalog that reads: its open project, as before this was recorded;
+    - a damaged one whose head still says which project was open: that
+      one, the same bytes an intact catalog would have been believed on
+      (review 2 of PR #199, L8: upgrade day, a pre-PR state.json beside a
+      catalog already damaged; the restore then opens that project and the
+      canvas goes back into it, rather than into a second project);
+    - a missing one, or a head that doesn't read: unproven, so the listing
+      files the canvas as its own project instead of saving it into the
+      restored list's. Never the copy's open project (review 1, H1)."""
+    if graph.owner is not OWNER_UNKNOWN:
+        return
+    if not store.path.exists():
+        if store.backup_path.exists() or store.older_backup_path.exists():
+            graph.owner = OWNER_UNPROVEN if state_loaded else None
+        return
+    if not state_loaded:
+        graph.owner = None
+        return
+    from services import catalog_recovery
+
+    try:
+        catalog, _raw = store._load(upgrade=False)
+    except ProjectStoreError:
+        return  # unreadable, not damaged (a link, too large, a newer Nebula): as before
+    except Exception as damage:  # noqa: BLE001 - _Damaged: the copy must not decide it
+        head = catalog_recovery.head_active(getattr(damage, "raw", None), getattr(damage, "parsed", None))
+        graph.owner = OWNER_UNPROVEN if head is catalog_recovery.UNKNOWN else head
+        return
+    graph.owner = catalog.get("activeProjectId")
+
+
+_resolve_canvas_owner_at_boot(cli_graph, project_store,
+                              state_loaded=_STATE_PATH is not None and _STATE_PATH.exists() and not _live_graph_load_failed)
+if cli_graph.owner is not OWNER_UNKNOWN and _STATE_PATH is not None and not _live_graph_load_failed:
+    cli_graph._maybe_persist()
+try:
+    project_store.sweep_orphans()  # temporary files a crash left behind (review 1, L7)
+except Exception as exc:  # noqa: BLE001 - housekeeping at boot never stops it
+    print(f"[projects] could not sweep temporary files: {exc}", flush=True)
+
+
 # Not after a failed state.json load: that boot already started from an empty
 # live graph, and nothing here should build on it.
 if not _live_graph_load_failed:
@@ -393,6 +826,9 @@ provider_recovery_store = ProviderRecoveryStore(
 )
 # Each node's last run error, per project, kept across restarts (services/node_errors.py).
 node_errors = NodeErrors(_STATE_DIR / "node-errors.json" if _STATE_PATH is not None else None)
+# Which run's result last landed on each node, for a handoff's "the newer
+# run wins" (services/node_result_runs.py; review 18 handoff-reopen MEDIUM-3).
+node_result_runs = NodeResultRuns()
 
 
 def _restore_node_errors() -> None:
@@ -554,38 +990,226 @@ def _paid_start_refusal(action: str) -> HTTPException:
     return _coded(_graph_paid_refusal(_graph_settling_specific(action), "active"), "paid_start")
 
 
-def _reject_graph_replacement_during_paid_start(action: str) -> None:
+# The states that hold a replacement of the whole canvas (an open, a create,
+# a clear, a graph load, a bundle restore), in the order the guards read them:
+# World Labs' five (_paid_replacement_state), then a registered run
+# (_project_replacement_guard). GET /api/projects/open-hold answers the one
+# holding now (_graph_replacement_hold), so the person's tab locks Open from
+# the backend's own verdict, never a re-derivation. The tab's parity test and
+# the backend's read the same list: backend/tests/data/replacement_hold_states.json.
+REPLACEMENT_HOLD_STATES = ("active", "ambiguity", "recovery", "params", "bootstrap", "run")
+
+
+def _paid_replacement_state() -> tuple[str, dict[str, Any]] | None:
+    """The World Labs state holding a replacement of the canvas, read with no
+    side effect (no fence, no journal write, no bootstrap retry): ("active",
+    {}) while a paid start settles; ("ambiguity", {"records"}) for unresolved
+    start ambiguities; ("recovery", {"records"}) for kept recovery records
+    (any project's); ("params", {"nodeId"}) for a World Labs node on the live
+    canvas whose settings hold an ID; ("bootstrap", {}) while Nebula couldn't
+    journal a recovery it read at boot (the raising path retries that first).
+    None when none holds. One read of the ambiguity list (review 13, nit 7):
+    the rule is literally b2b1529e's."""
     if provider_start_guard.has_active():
+        return "active", {}
+    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(list(cli_graph.nodes.values()))
+    ambiguities = provider_start_guard.list()
+    if ambiguities:
+        return "ambiguity", {"records": ambiguities}
+    records = provider_recovery_store.list()
+    if records:
+        return "recovery", {"records": records}
+    if canonical_checkpoints:
+        return "params", {"nodeId": canonical_checkpoints[0][0]}
+    if _graph_recovery_bootstrap_error is not None:
+        return "bootstrap", {}
+    return None
+
+
+def _graph_unresolved_specific(action: str) -> str:
+    return (f"Cannot {action} while unresolved World Labs paid state exists. "
+            "Check Marble and resolve the exact recovery/ambiguity record first.")
+
+
+def _reject_graph_replacement_during_paid_start(action: str) -> None:
+    held = _paid_replacement_state()
+    if held is None:
+        return
+    state, facts = held
+    if state == "active":
         raise _paid_start_refusal(action)
-    nodes = list(cli_graph.nodes.values())
-    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    if state == "bootstrap":
+        # Nebula couldn't journal a recovery it read from the canvas at boot
+        # (see WORLD_LABS_BOOTSTRAP_PERSON): retried here, on the raising
+        # path only, never on a read of the hold.
+        if _retry_graph_recovery_bootstrap(action):
+            return
+        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
     node: str | None = None
     fields: list[str] = []
-    # One read of the ambiguity list (review 13, nit 7): the rule is
-    # literally b2b1529e's, never an ambiguity seen by one read and not the next.
-    ambiguities = provider_start_guard.list()
-    records = provider_recovery_store.list() if not ambiguities else []
-    if ambiguities:
-        state = "ambiguity"
-    elif records:
-        state = "recovery"
-        node = _node_label(str(records[0].get("nodeId") or ""))
-    elif canonical_checkpoints:
-        state = "params"
-        held = cli_graph.nodes.get(canonical_checkpoints[0][0]) or {}
-        node = _node_label(canonical_checkpoints[0][0])
-        fields = _recovery_field_labels([held])
-    elif _graph_recovery_bootstrap_error is not None and not _retry_graph_recovery_bootstrap(action):
-        # Nebula couldn't journal a recovery it read from the canvas at boot
-        # (see WORLD_LABS_BOOTSTRAP_PERSON), and retrying that just now failed.
-        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
+    if state == "recovery":
+        node = _node_label(str(facts["records"][0].get("nodeId") or ""))
+    elif state == "params":
+        node = _node_label(facts["nodeId"])
+        fields = _recovery_field_labels([cli_graph.nodes.get(facts["nodeId"]) or {}])
+    raise _graph_paid_refusal(_graph_unresolved_specific(action), state, node=node, fields=fields)
+
+
+def _run_detail(action: str) -> str:
+    return f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+
+
+def _hold_run_project(catalog: Mapping[str, Any], run_id: Any) -> Mapping[str, Any] | None:
+    """The project a held World Labs record's run belongs to, by its run id
+    (node ids repeat across projects, so never by the node): the open
+    project when its stored run history has a record with that id, else the
+    one project (or Recently deleted entry) whose run history has it, else
+    the project Nebula registered the run on in this process
+    (execution_runs). None when it can't be known: none has it, or several
+    do (a duplicate copies run history)."""
+    if not isinstance(run_id, str) or not run_id:
+        return None
+    projects = catalog.get("projects") or {}
+
+    def ran(project: Any) -> bool:
+        history = ((project.get("snapshot") or {}).get("runHistory") or []) if isinstance(project, dict) else []
+        return any(isinstance(record, dict) and record.get("id") == run_id for record in history)
+
+    active = projects.get(catalog.get("activeProjectId"))
+    if active is not None and ran(active):
+        return active
+    found = [project for project in [*projects.values(), *(catalog.get("trash") or {}).values()] if ran(project)]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        return None
+    canvas = getattr(execution_runs.get(run_id), "canvas", None)
+    registered = canvas[0] if isinstance(canvas, tuple) and canvas else None
+    return projects.get(registered) if isinstance(registered, str) else None
+
+
+def _hold_id_project(catalog: Mapping[str, Any], record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The project a recovery record belongs to by its World Labs ID, for a
+    record no run history names (Nebula seeds one from the canvas, with a
+    run id of its own, before every canvas change): the project whose node
+    with the record's node id holds that same ID in its settings, the live
+    canvas first for the open project. Never by the node id alone. None
+    when none or several hold it."""
+    wanted = {value for value in (record.get("resumeOperationId"), record.get("existingWorldId")) if value}
+    node_id = record.get("nodeId")
+    if not wanted or not isinstance(node_id, str):
+        return None
+
+    def holds(definition_id: Any, params: Any) -> bool:
+        if not isinstance(definition_id, str) or not isinstance(params, dict):
+            return False
+        return bool(wanted & {value for value in recovery_identifiers(definition_id, params) if value})
+
+    projects = catalog.get("projects") or {}
+    active = projects.get(catalog.get("activeProjectId"))
+    live = cli_graph.nodes.get(node_id)
+    if active is not None and live is not None and cli_graph.owner == active.get("id") \
+            and holds(live.get("definitionId"), live.get("params")):
+        return active
+    found = []
+    for project in [*projects.values(), *(catalog.get("trash") or {}).values()]:
+        for node in ((project.get("snapshot") or {}).get("nodes") or []) if isinstance(project, dict) else []:
+            data = node.get("data") if isinstance(node, dict) and isinstance(node.get("data"), dict) else {}
+            if node.get("id") == node_id and holds(data.get("definitionId"), data.get("params")):
+                found.append(project)
+                break
+    return found[0] if len(found) == 1 else None
+
+
+def _hold_node_name(project: Mapping[str, Any], node_id: str, open_id: Any) -> str | None:
+    """A held node's name, as _node_label names it: on the live canvas when
+    ``project`` is the open one and holds it, else from the project's stored
+    snapshot, else None."""
+    if project.get("id") == open_id and node_id in cli_graph.nodes:
+        return _node_label(node_id)
+    for node in (project.get("snapshot") or {}).get("nodes") or []:
+        if isinstance(node, dict) and node.get("id") == node_id:
+            data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            definition_id = str(data.get("definitionId") or "")
+            definition = node_registry.get_all().get(definition_id, {})
+            return node_route.node_name(definition, data.get("label"), definition_id or node_id)
+    return None
+
+
+def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
+                            action: str = "switch projects") -> dict[str, Any] | None:
+    """The guards' verdict, read with no side effect: what holds opening or
+    switching projects now (REPLACEMENT_HOLD_STATES, the guards' order), or
+    None. {state, nodeId, nodeName, projectId, projectName, count, fields,
+    detail}: the held node (the first ambiguity, the first recovery record,
+    the first World Labs node whose settings hold an ID; null for active,
+    bootstrap and run) and its project (by the record's run id; the open one
+    for params; null when it can't be known, never guessed from a node id);
+    ``count`` the records for recovery and ambiguity, else 1; ``fields`` the
+    ID fields' labels for params; ``detail`` the agents' text the refusal
+    would carry for ``action``. ``catalog``: the one the caller holds, else
+    the last committed."""
+    held = _paid_replacement_state()
+    if held is None:
+        if not execution_runs.has_active():
+            return None
+        held = ("run", {})
+    state, facts = held
+    if catalog is None:
+        try:
+            catalog = project_store.read_unlocked()
+        except Exception:  # noqa: BLE001 - a read of the hold never fails over the catalog
+            catalog = {}
+    open_id = catalog.get("activeProjectId")
+    node_id: str | None = None
+    project: Mapping[str, Any] | None = None
+    count = 1
+    fields: list[str] = []
+    if state in {"ambiguity", "recovery"}:
+        records = facts["records"]
+        count = len(records)
+        node_id = str(records[0].get("nodeId") or "") or None
+        project = _hold_run_project(catalog, records[0].get("runId"))
+        if project is None and state == "recovery":
+            project = _hold_id_project(catalog, records[0])
+    elif state == "params":
+        node_id = facts["nodeId"]
+        project = (catalog.get("projects") or {}).get(open_id)
+        fields = _recovery_field_labels([cli_graph.nodes.get(node_id) or {}])
+    if state == "active":
+        detail = _graph_settling_specific(action)
+    elif state == "bootstrap":
+        detail = _graph_bootstrap_specific(action)
+    elif state == "run":
+        detail = _run_detail(action)
     else:
-        return
-    raise _graph_paid_refusal(
-        f"Cannot {action} while unresolved World Labs paid state exists. "
-        "Check Marble and resolve the exact recovery/ambiguity record first.",
-        state, node=node, fields=fields,
-    )
+        detail = _graph_unresolved_specific(action)
+    name = _hold_node_name(project, node_id, open_id) if project is not None and node_id else None
+    if state == "params" and name is None and node_id:
+        name = _node_label(node_id)  # the live canvas is the open project's
+    return {"state": state, "nodeId": node_id, "nodeName": name,
+            "projectId": project.get("id") if project is not None else None,
+            "projectName": project.get("name") if project is not None else None,
+            "count": count, "fields": fields, "detail": detail}
+
+
+def _hold_or_none(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The verdict for the listing's ``openHold`` and an open's 409 ``hold``,
+    or null when the World Labs journals can't be read just now: the
+    Projects screen still lists and the refusal still answers (GET
+    /api/projects/open-hold says the error)."""
+    try:
+        return _graph_replacement_hold(catalog)
+    except Exception as exc:  # noqa: BLE001 - a listing never fails over the hold's read
+        print(f"[projects] couldn't read the open hold for the listing: {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+
+def _with_hold(exc: HTTPException, hold: Mapping[str, Any] | None) -> CodedRefusal:
+    """``exc`` (status, detail, headers and any code kept) with ``hold``: the
+    verdict at refusal time (_graph_replacement_hold)."""
+    return CodedRefusal(exc.status_code, exc.detail, {**getattr(exc, "fields", {}), "hold": hold},
+                        headers=getattr(exc, "headers", None))
 
 
 def _graph_bootstrap_specific(action: str) -> str:
@@ -845,7 +1469,13 @@ def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
     call a full store "too large" when it can't keep a tab's unsaved edits
     (Q116 a)."""
     return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
-            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {})}
+            **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {}),
+            # The limit's number, beside the project limit (the create refusal's line names it).
+            **({"projectLimit": project_store_module.MAX_PROJECTS}
+               if isinstance(exc, ProjectLimitError) and exc.limit == "projects" else {}),
+            # How many projects there are, where the route knows (a kept save: GM r22 on PR #199).
+            **({"projectCount": exc.project_count}
+               if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "project_count", None), int) else {})}
 
 
 # Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
@@ -1210,6 +1840,9 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     person reads the canvas's own out-of-date line (a tab that sent its
     revision gets it from _check_workspace_revision); agents the detail."""
     _check_workspace_revision()
+    # The waiting-canvas guard again, in the write step (review 7 of PR #199,
+    # N-4): a restore may have landed during the route's awaits.
+    _fence_waiting_canvas(_canvas_guard_action.get())
     fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
     if (revision, project_id) != fence[:2]:
@@ -1346,6 +1979,92 @@ def _params_outdated(request: Request) -> bool:
     return supplied.strip() != str(PARAMS_VERSION)
 
 
+# The shared off-loop read: its loop, its future and the catalog file it
+# reads (signature, None when it couldn't be taken).
+_catalog_reading: tuple[asyncio.AbstractEventLoop, asyncio.Future[Any], tuple[int, int, int] | None] | None = None
+# The catalog file an off-loop read last failed on (its signature): a reader
+# on the loop then reads it itself and answers its own error, rather than
+# starting a read that fails the same way on every canvas event.
+_catalog_read_failed: tuple[int, int, int] | None = None
+
+
+def _start_catalog_read(loop: asyncio.AbstractEventLoop) -> asyncio.Future[Any]:
+    """The shared off-loop read of catalog.json (it restores a damaged one
+    in that worker thread), started if none is running on ``loop``."""
+    global _catalog_reading
+    if _catalog_reading is None or _catalog_reading[0] is not loop or _catalog_reading[1].done():
+        store = project_store
+        try:
+            signature = store.signature()
+        except ProjectStoreError:
+            signature = None
+
+        def finished(future: asyncio.Future[Any]) -> None:
+            global _catalog_read_failed
+            failed = future.cancelled() or future.exception() is not None
+            _catalog_read_failed = signature if failed else None
+
+        future = asyncio.ensure_future(asyncio.to_thread(store.projection))
+        future.add_done_callback(finished)
+        _catalog_reading = (loop, future, signature)
+    return _catalog_reading[1]
+
+
+def _catalog_read_in_flight(signature: tuple[int, int, int]) -> bool:
+    """ProjectStore.read_in_flight: whether the shared off-loop read of this
+    catalog file is running for a reader on this event loop. The reader then
+    answers the last projection instead of parsing the file on the loop
+    (fix round 2 of PR #199, L2: the parse that finds a 102 MB file damaged
+    held the loop 1.6 s). A worker thread (no running loop) reads it."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    reading = _catalog_reading
+    return reading is not None and reading[0] is loop and not reading[1].done() and reading[2] == signature
+
+
+def _hand_off_catalog_restore() -> bool:
+    """ProjectStore.hand_off_restore: a reader on the event loop (a canvas
+    event's workspace context, the pins of a /ws connect, the journal's
+    project tag) that found catalog.json damaged hands the restore to the
+    shared worker-thread read and answers the last projection, so the loop
+    never restores or waits on the lock for one (review 2 of PR #199, L2:
+    3.3 s at 31 MB, 14.1 s at 102 MB). In a worker thread (no running
+    loop) the reader restores itself, as before. Not after the same file
+    failed off the loop: the reader then gets that error itself."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    try:
+        if _catalog_read_failed is not None and project_store.signature() == _catalog_read_failed:
+            return False
+    except ProjectStoreError:
+        return False
+    _start_catalog_read(loop)
+    return True
+
+
+project_store.hand_off_restore = _hand_off_catalog_restore
+project_store.read_in_flight = _catalog_read_in_flight
+
+
+async def _read_catalog_off_loop() -> None:
+    """When catalog.json changed outside this process (or was damaged), read
+    it once in a worker thread before the request reads it on the loop: a
+    restore of a large catalog takes seconds to minutes, and on the loop it
+    held up every request, canvas event and run (review 1 of PR #199, L5).
+    Concurrent requests wait on the same read. A failure is left to the
+    request, which reads again and answers its own error."""
+    if not project_store.needs_reading():
+        return
+    reading = _start_catalog_read(asyncio.get_running_loop())
+    try:
+        await asyncio.shield(reading)
+    except Exception:  # noqa: BLE001 - the request reads it again and answers its own error
+        pass
+
 # Which routes a canvas tab's write must say its project and canvas for (round
 # 20 of PR #195, review 19 H2): every route that changes the graph or starts
 # work on the canvas carries the marker ``graph_write``, and the fence
@@ -1361,6 +2080,11 @@ FENCE_BEFORE_ROUTE = "before-route"
 # for some requests (/api/uploads with create_node). The fence still reads the
 # revision headers for it.
 FENCE_IN_ROUTE = "in-route"
+# What a graph write does to the canvas, for a canvas waiting to be saved as
+# a project (review 6 of PR #199, M-1; _fence_waiting_canvas): "clear" (DELETE
+# /api/graph), "replace" (a graph load) or "change" (every other write).
+CANVAS_ACTION_ATTR = "__nebula_canvas_action__"
+CANVAS_ACTIONS = ("change", "clear", "replace")
 
 
 # Set on a FENCE_BEFORE_ROUTE route by graph_write: its body starts with the
@@ -1368,7 +2092,7 @@ FENCE_IN_ROUTE = "in-route"
 GRAPH_FENCE_RECHECK_ATTR = "__nebula_graph_fence_recheck__"
 
 
-def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
+def graph_write(endpoint: Any = None, *, checks_in_route: bool = False, canvas_action: str = "change") -> Any:
     """Mark a route that changes the graph or starts work on the canvas. Put
     it right under ``@app.post(...)`` (or put, delete).
 
@@ -1383,8 +2107,15 @@ def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
     canvas its request was made for; a route that awaits first still checks
     again in the step that writes. ``functools.wraps`` keeps the signature,
     so FastAPI reads the route's parameters as before. Only async routes can
-    be marked: a sync one runs on a worker thread after an unknown wait."""
+    be marked: a sync one runs on a worker thread after an unknown wait.
+
+    ``canvas_action`` says what it does to the canvas (CANVAS_ACTIONS), for
+    the refusal and the Agent log line while a canvas waits (PR #199)."""
+    if canvas_action not in CANVAS_ACTIONS:
+        raise ValueError(f"canvas_action must be one of {CANVAS_ACTIONS}")
+
     def mark(function: Any) -> Any:
+        setattr(function, CANVAS_ACTION_ATTR, canvas_action)
         if checks_in_route:
             setattr(function, GRAPH_FENCE_ATTR, FENCE_IN_ROUTE)
             return function
@@ -1398,45 +2129,129 @@ def graph_write(endpoint: Any = None, *, checks_in_route: bool = False) -> Any:
 
         setattr(fenced, GRAPH_FENCE_ATTR, FENCE_BEFORE_ROUTE)
         setattr(fenced, GRAPH_FENCE_RECHECK_ATTR, True)
+        setattr(fenced, CANVAS_ACTION_ATTR, canvas_action)
         return fenced
     return mark(endpoint) if endpoint is not None else mark
 
 
-_GRAPH_FENCE_CACHE: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+_GRAPH_FENCE_CACHE: OrderedDict[tuple[str, str], tuple[str | None, str]] = OrderedDict()
 _GRAPH_FENCE_CACHE_SIZE = 1024
 
 
-def _graph_fence_of(method: str, path: str) -> str | None:
-    """The fence marker of the route a ``method`` request to ``path`` runs
-    (the first full match, as the router picks), or None."""
+def _graph_route_of(method: str, path: str) -> tuple[str | None, str]:
+    """The fence marker and canvas action of the route a ``method`` request
+    to ``path`` runs (the first full match, as the router picks): (None,
+    "change") for a route that isn't a graph write."""
     if method in {"GET", "HEAD", "OPTIONS"}:
-        return None
+        return None, "change"
     key = (method, path)
     if key in _GRAPH_FENCE_CACHE:
         return _GRAPH_FENCE_CACHE[key]
     scope = {"type": "http", "method": method, "path": path, "root_path": ""}
-    fence = None
+    found: tuple[str | None, str] = (None, "change")
     for route in app.router.routes:
         match, _child = route.matches(scope)
         if match is Match.FULL:
-            fence = getattr(getattr(route, "endpoint", None), GRAPH_FENCE_ATTR, None)
+            endpoint = getattr(route, "endpoint", None)
+            found = (getattr(endpoint, GRAPH_FENCE_ATTR, None), getattr(endpoint, CANVAS_ACTION_ATTR, "change"))
             break
-    _GRAPH_FENCE_CACHE[key] = fence
+    _GRAPH_FENCE_CACHE[key] = found
     while len(_GRAPH_FENCE_CACHE) > _GRAPH_FENCE_CACHE_SIZE:
         _GRAPH_FENCE_CACHE.popitem(last=False)
-    return fence
+    return found
+
+
+def _graph_fence_of(method: str, path: str) -> str | None:
+    """The fence marker of the route a ``method`` request to ``path`` runs, or None."""
+    return _graph_route_of(method, path)[0]
+
+
+# What the waiting-canvas guard did for this request (_fence_waiting_canvas):
+# {action, agent, held | refused}. The fence sets a fresh dict per graph
+# write and tells the person's Agent log after the route; the route can read
+# it (heldCanvas). A dict, so a route running in a child task fills the
+# fence's own.
+_canvas_guard_note: ContextVar[dict[str, Any] | None] = ContextVar("canvas_guard_note", default=None)
+_canvas_guard_action: ContextVar[str] = ContextVar("canvas_guard_action", default="change")
+
+
+def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The agent's reply's ``savedCanvas`` when its write filed the person's
+    canvas first (GM's rule (a)): {id, name, copy?, message}."""
+    saved = (note or {}).get("saved")
+    if not saved:
+        return {}
+    action = (note or {}).get("action") or "change"
+    kept = bool(note.get("kept"))
+    message = canvas_saved_for_agent(action, saved["name"], kept=kept)
+    waits = _copy_waits() if note.get("copy") else None
+    if waits is not None:
+        # GM r10, 3: the agent is told at the time that its copy waits.
+        message += f" {CANVAS_COPY_WAITS[waits]}"
+    return {"savedCanvas": {"id": saved["id"], "name": saved["name"],
+                            **({"kept": True} if kept else {}),
+                            **({"copy": note["copy"]} if note.get("copy") else {}),
+                            **({"copyWaits": waits} if waits else {}),
+                            "message": message}}
+
+
+# GM r10, 3: the second sentence of an agent's reply when the copy its change
+# was made on can't be saved as a project now. (A clear's or a load's new
+# canvas has no project and is never saved as the person's, so it never waits.)
+CANVAS_COPY_WAITS = {
+    "projects": "The copy isn’t saved as a project yet because the project limit is reached.",
+    "storage": "The copy isn’t saved as a project yet because Nebula’s project list is full.",
+}
+
+
+def _copy_waits() -> str | None:
+    """Which limit keeps the live canvas, an agent's copy not yet filed,
+    from being saved as a project now ("projects" or "storage"), or None."""
+    owner = cli_graph.owner
+    if not (cli_graph.nodes or cli_graph.edges):
+        return None
+    try:
+        catalog = project_store.read_unlocked()
+    except ProjectStoreError:
+        return None
+    if not isinstance(owner, str) or owner not in _copy_records(catalog) or owner in catalog["projects"]:
+        return None
+    if len(catalog["projects"]) + len(_held_distinct()) + 1 > project_store_module.MAX_PROJECTS:
+        return "projects"
+    return _filing_room(catalog, _graph_canvas_export(cli_graph))
+
+
+async def _with_canvas_saved(response: Any, note: Mapping[str, Any]) -> Any:
+    """Add ``savedCanvas`` to a JSON object reply that doesn't carry it (an
+    agent's edit, any route): the agent reads what Nebula did first."""
+    if "application/json" not in (response.headers.get("content-type") or ""):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    try:
+        found = json.loads(body)
+    except ValueError:
+        found = None
+    if isinstance(found, dict) and "savedCanvas" not in found:
+        found.update(_saved_canvas_reply(note))
+        body = json.dumps(found, ensure_ascii=False).encode("utf-8")
+    headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
+    return Response(content=body, status_code=response.status_code, headers=headers,
+                    media_type=response.media_type)
 
 
 def _refuse_tab_write_without_revision() -> None:
     """For a FENCE_IN_ROUTE route when this request writes the graph: a canvas
     tab's write that says no project (sent while the tab held none) is
-    refused, as the fence refuses it before FENCE_BEFORE_ROUTE routes."""
+    refused, as the fence refuses it before FENCE_BEFORE_ROUTE routes. Then
+    the waiting-canvas guard, which the fence runs itself for the others."""
     if _request_from_tab.get() and _request_workspace_revision.get() is None:
         raise HTTPException(status_code=409, detail=CANVAS_OUT_OF_DATE)
+    _fence_waiting_canvas(_canvas_guard_action.get())
 
 
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
+    await _read_catalog_off_loop()
     if _params_outdated(request):
         return JSONResponse(status_code=409, content={
             "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
@@ -1459,18 +2274,45 @@ async def project_workspace_fence(request: Request, call_next):
     canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
     tab_token = _request_from_tab.set(from_tab and guarded)
     execution_token = _execution_workspace_context.set(None)
+    # The waiting-canvas guard's record for this request (review 6 of PR
+    # #199, M-1): every graph write goes through it, here before the route
+    # (FENCE_BEFORE_ROUTE) or in the route's write step (FENCE_IN_ROUTE,
+    # _refuse_tab_write_without_revision).
+    guard_note: dict[str, Any] = {}
+    note_token = _canvas_guard_note.set(guard_note if guarded else None)
+    action_token = _canvas_guard_action.set(_graph_route_of(request.method, request.scope.get("path")
+                                                            or request.url.path)[1])
     try:
         if fence == FENCE_BEFORE_ROUTE:
             try:
                 _check_workspace_revision()
+                _fence_waiting_canvas(_canvas_guard_action.get())
+            except CanvasWaitingRefusal as exc:
+                await _tell_canvas_guarded(guard_note)
+                return JSONResponse(status_code=409, content=_canvas_waiting_body(exc))
+            except CanvasKeptRefusal:
+                return JSONResponse(status_code=409, content=_canvas_kept_body())
+            except CanvasHeldFull as exc:
+                return await canvas_held_full(request, exc)
             except HTTPException as exc:
                 # A CodedRefusal's fields too (workspace_moved, canvas_replaced: project, switchedBy).
                 return JSONResponse(status_code=exc.status_code,
                                     content={"detail": exc.detail, **getattr(exc, "fields", {})})
             except ProjectStoreError as exc:
                 return JSONResponse(status_code=507, content={**_storage_error_body(exc), "code": PROJECT_STORE_STORAGE_CODE})
-        return await call_next(request)
+            finally:
+                await _tell_canvas_settled(guard_note)
+        response = await call_next(request)
+        await _tell_canvas_settled(guard_note)
+        if guard_note.get("refused") or ((guard_note.get("held") or guard_note.get("saved"))
+                                          and 200 <= response.status_code < 300):
+            await _tell_canvas_guarded(guard_note)
+        if guard_note.get("saved") and 200 <= response.status_code < 300:
+            response = await _with_canvas_saved(response, guard_note)
+        return response
     finally:
+        _canvas_guard_action.reset(action_token)
+        _canvas_guard_note.reset(note_token)
         _execution_workspace_context.reset(execution_token)
         _request_from_tab.reset(tab_token)
         _request_canvas_revision.reset(canvas_token)
@@ -2372,7 +3214,9 @@ def _imported_output_type_is_valid(actual: str, declared: str | None) -> bool:
         return False
     if declared is None or declared == "Any":
         return True
-    return actual == declared or {actual, declared} == {"Image", "Mask"}
+    # The shared rule (port_rules.json's alsoCompatible, review 16
+    # kept-ui-rules NIT-3); a value whose own type is Any fits no typed port.
+    return actual != PORT_RULES["any"] and port_types_compatible(actual, declared)
 
 
 def _validate_imported_outputs(
@@ -3277,6 +4121,14 @@ app.include_router(commons_router)
 
 
 @app.on_event("startup")
+async def _catalog_restore_loop_startup() -> None:
+    """The loop a catalog restore made in a worker thread is told on
+    (_on_catalog_restore)."""
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
+
+
+@app.on_event("startup")
 async def _person_startup() -> None:
     """Set this launch's person token before serving (services/person_session.py),
     then read the desktop's provider keys and Krea vault key from the next
@@ -3349,6 +4201,19 @@ async def _personal_agents_startup() -> None:
 async def _personal_agents_shutdown() -> None:
     """Kill every personal agent's process tree and revoke its token."""
     await acp_sessions.shutdown()
+
+
+@app.on_event("startup")
+async def _journal_boot_restores() -> None:
+    """The restores made while main.py imported (_boot_restores): journaled
+    now that the journal exists, so an agent watching events sees a boot
+    restore too (`project.catalogRestored`, review 11 of PR #199, LOW-1)."""
+    while _boot_restores:
+        record = _boot_restores.pop(0)
+        try:
+            _tell_catalog_restore(_catalog_restore_view(record) or {})
+        except Exception as exc:  # noqa: BLE001 - telling is decoration on a restore that happened
+            print(f"[projects] announcing the boot restore failed: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -3770,10 +4635,51 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
+# How long kept mode outlasts the person's kept tab's socket (GM's call on
+# review 13 NIT-2 of PR #199): a network blip, the tab's reload, or the
+# backend's own restart closes the socket, and the tab says keptEdits again
+# after its next hello (it reconnects every 3 s). Without this, an agent's
+# write in that gap landed on a canvas the tab won't show. Each closed kept
+# tab holds its own grace, so another tab's kept:false never ends it (review
+# 14 NIT-1); a tab that said kept:false before closing ends nothing, as it
+# held none.
+KEPT_GRACE_SECONDS = 10.0
+# A restart (GM r22 on PR #199, 5): the kept tabs are remembered in the state
+# dir (KEPT_MARKER_NAME), and the grace starts again when the new backend
+# starts serving, one per remembered tab, for the usual grace plus the tab's
+# 3 s reconnect and its hello (person token fetch, promote, keptEdits):
+# 15 s in all. A tab that comes back and says kept:true carries kept mode on;
+# one that never does lets agents through when its grace runs out, and the
+# marker goes.
+KEPT_BOOT_SLACK_SECONDS = 5.0
+KEPT_MARKER_NAME = "kept-tab.json"
+# Beside a marker that couldn't be removed: "<marker>.ignored", the digest of
+# the marker it names, so later boots don't pause agents for it again.
+KEPT_MARKER_IGNORED = ".ignored"
+
+
 class ConnectionManager:
-    def __init__(self) -> None:
+    def __init__(self, kept_marker: Path | None = None) -> None:
         self.active_connections: list[WebSocket] = []
         self.browser_connections: set[WebSocket] = set()
+        # The person's tabs that keep edits Nebula couldn't save after a
+        # restore (GM r15 on PR #199, the kept mode): agents' writes wait for them.
+        self.kept_tabs: set[WebSocket] = set()
+        # Each closed kept tab's grace (KEPT_GRACE_SECONDS), and each kept tab
+        # a restart remembered (KEPT_BOOT_SLACK_SECONDS): a key of its own ->
+        # time.monotonic() until which it holds kept mode.
+        self.kept_graces: dict[object, float] = {}
+        # Where the kept tabs are remembered across a restart (None: not).
+        self.kept_marker = kept_marker
+        self._marker_count: int | None = None
+        # The marker lines already printed (each said once a run).
+        self._marker_said: set[str] = set()
+        self._grace_seq = itertools.count()
+
+    @property
+    def kept_grace_until(self) -> float | None:
+        """When the last grace ends, or None while none runs."""
+        return max(self.kept_graces.values(), default=None)
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -3793,6 +4699,208 @@ class ConnectionManager:
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
 
+    def _claim_grace(self) -> None:
+        """A tab says it keeps edits (or no longer does) on a socket that
+        wasn't kept: it is most likely a closed kept tab back, so it takes
+        over one grace, the one ending first (a tab's kept:true carries it
+        from now on, its kept:false ends it). The tabs aren't told apart (the
+        frames carry no tab id), so the grace left running is the latest,
+        the longest any other closed tab still holds."""
+        self._expire_graces()
+        if self.kept_graces:
+            del self.kept_graces[min(self.kept_graces, key=self.kept_graces.__getitem__)]
+
+    def set_kept(self, websocket: WebSocket, kept: object) -> None:
+        """The person's tab says it keeps edits Nebula couldn't save (or no
+        longer does): only a promoted socket (is_browser) gets here."""
+        if websocket not in self.browser_connections:
+            self.kept_tabs.discard(websocket)
+            return
+        if kept is True:
+            # A tab back within its grace carries kept mode on seamlessly.
+            if websocket not in self.kept_tabs:
+                self._claim_grace()
+                self.kept_tabs.add(websocket)
+        elif websocket in self.kept_tabs:
+            # This tab no longer keeps edits; another's grace holds (NIT-1).
+            self.kept_tabs.discard(websocket)
+        else:
+            # A closed kept tab back saying it no longer keeps edits: its grace ends.
+            self._claim_grace()
+        self._remember_kept()
+
+    def _expire_graces(self) -> None:
+        now = _time_module.monotonic()
+        for key in [key for key, until in self.kept_graces.items() if now >= until]:
+            del self.kept_graces[key]
+
+    def kept_in_tab(self) -> bool:
+        """Whether a person's tab keeps unsaved edits now: a connected one, or
+        one whose socket closed (or that a restart remembered) and whose
+        grace hasn't run out. Graces that ran out go first, and the marker
+        follows (review 15 agents-grace LOW-1: with another kept tab still
+        connected, an expired grace stayed counted, and a restart then held
+        agents for a tab long gone)."""
+        self._expire_graces()
+        self._remember_kept()
+        return any(websocket in self.browser_connections for websocket in self.kept_tabs) or bool(self.kept_graces)
+
+    def kept_count(self) -> int:
+        """How many tabs hold kept mode: kept and connected, or in a grace
+        that hasn't run out (an expired one never counts, even before
+        anything has dropped it)."""
+        now = _time_module.monotonic()
+        return len(self.kept_tabs) + sum(1 for until in self.kept_graces.values() if now < until)
+
+    def _remember_kept(self) -> None:
+        """Write (atomically) or remove the state dir's kept marker, so a
+        restart knows how many tabs kept edits. Best effort: a marker that
+        can't be written loses only the restart's grace; its temporary file
+        never stays behind (review 15 agents-grace NIT-1). A marker that
+        can't be removed is said once, then treated as no marker: this run
+        stops trying, and the ignore note beside it (KEPT_MARKER_IGNORED)
+        stops the next boots from pausing agents for it again."""
+        path = self.kept_marker
+        if path is None:
+            return
+        count = self.kept_count()
+        if count == self._marker_count:
+            return
+        if count == 0:
+            try:
+                if path.is_file() or path.is_symlink():
+                    path.unlink(missing_ok=True)
+                elif path.exists():
+                    # Not a file (a directory): it was never a marker (start_boot_grace).
+                    self._say_marker_once(f"[main] the kept marker {path} isn't a file; it is ignored")
+                self._ignore_note().unlink(missing_ok=True)
+            except OSError as exc:
+                self._say_marker_once(f"[main] couldn't remove the kept marker {path}: {exc}; it is ignored "
+                                      "from now on")
+                self._note_marker_ignored(path)
+            self._marker_count = 0
+            return
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            temporary.write_text(json.dumps({"keptTabs": count, "at": _time_module.time()}), encoding="utf-8")
+            os.replace(temporary, path)
+            self._marker_count = count
+            self._ignore_note().unlink(missing_ok=True)
+        except OSError as exc:
+            self._say_marker_once(f"[main] couldn't write the kept marker {path}: {exc}")
+            # Remembered (review 16 agents-grace NIT-2): every selection and
+            # view read asks, so a marker that can't be written (a directory
+            # where it goes) is tried again only when the count changes.
+            self._marker_count = count
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _say_marker_once(self, line: str) -> None:
+        """Print ``line`` unless this run already said it (an error's own
+        text after the first colon isn't part of what is compared)."""
+        key = line.split(": ", 1)[0]
+        if key not in self._marker_said:
+            self._marker_said.add(key)
+            print(line, flush=True)
+
+    def _ignore_note(self) -> Path:
+        assert self.kept_marker is not None
+        return self.kept_marker.with_name(f"{self.kept_marker.name}{KEPT_MARKER_IGNORED}")
+
+    def _note_marker_ignored(self, path: Path) -> None:
+        """Beside a marker that can't be removed: its bytes' digest, so a boot
+        that finds the same marker holds no grace for it. Best effort (a
+        state dir that can't be written at all: start_boot_grace ignores a
+        marker there)."""
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            self._ignore_note().write_text(digest, encoding="utf-8")
+        except OSError:
+            pass
+
+    def _marker_is_ignored(self, path: Path) -> bool:
+        try:
+            return self._ignore_note().read_text(encoding="utf-8").strip() == \
+                hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return False
+
+    def start_boot_grace(self) -> int:
+        """At boot: a grace for each kept tab the marker remembers (a restart
+        while a tab kept edits), from now. Returns how many. Only a regular
+        file is a marker (review 15 agents-grace NIT-1), and one an earlier
+        run couldn't remove after its grace holds none."""
+        path = self.kept_marker
+        if path is None or not path.exists():
+            return 0
+        if not path.is_file():
+            self._say_marker_once(f"[main] the kept marker {path} isn't a file; it is ignored")
+            return 0
+        if self._marker_is_ignored(path):
+            self._say_marker_once(f"[main] the kept marker {path} couldn't be removed before; it is ignored")
+            return 0
+        if not self._state_dir_writable(path.parent):
+            # Review 16 agents-grace NIT-1: in a folder Nebula can't write, no
+            # run since it became so could have written this marker, and none
+            # could remove it or note it as ignored, so it would pause agents
+            # at every boot. It is no marker (MCP-SETUP: once at most).
+            self._say_marker_once(f"[main] the kept marker {path} is in a folder Nebula can't write; it is ignored")
+            return 0
+        try:
+            remembered = json.loads(path.read_text(encoding="utf-8")).get("keptTabs")
+        except (OSError, ValueError, AttributeError):
+            remembered = None
+        # A damaged marker still says a tab kept edits.
+        tabs = remembered if isinstance(remembered, int) and not isinstance(remembered, bool) and remembered > 0 else 1
+        until = _time_module.monotonic() + KEPT_GRACE_SECONDS + KEPT_BOOT_SLACK_SECONDS
+        for index in range(min(tabs, 64)):
+            self.kept_graces[("boot", index)] = until
+        self._marker_count = None
+        self._remember_kept()
+        self._settle_kept_later(KEPT_GRACE_SECONDS + KEPT_BOOT_SLACK_SECONDS)
+        return min(tabs, 64)
+
+    # The errors that say no run could write a file in the folder: no
+    # permission (EACCES, EPERM) or a read-only file system (EROFS). Review
+    # 17 agents-docs NIT-3: any other (a full disk, a quota, an I/O error,
+    # too many open files) says nothing about who could write there, and a
+    # marker written before it is a real one, so the folder counts as
+    # writable and the marker holds its grace.
+    _CANT_WRITE_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
+
+    @classmethod
+    def _state_dir_writable(cls, folder: Path) -> bool:
+        """Whether a file can be made (and removed) in ``folder``: False only
+        for an error that means no run could have written the marker there
+        (_CANT_WRITE_ERRNOS)."""
+        probe = folder / f".kept-probe.{uuid4().hex}.tmp"
+        try:
+            with probe.open("x", encoding="utf-8"):
+                pass
+        except OSError as exc:
+            return exc.errno not in cls._CANT_WRITE_ERRNOS
+        try:
+            probe.unlink()
+        except OSError:
+            pass
+        return True
+
+    def clear_kept(self) -> None:
+        """Forget every kept tab and grace, and the marker (tests)."""
+        self.kept_tabs.clear()
+        self.kept_graces.clear()
+        self._marker_count = None
+        self._remember_kept()
+
+    def _settle_kept_later(self, seconds: float) -> None:
+        """Check again once a grace has run out, so the marker goes then even
+        if nothing asks (a restart after that starts no grace)."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.call_later(max(0.0, seconds) + 0.1, self.kept_in_tab)
+
     def canvas_open(self) -> bool:
         """Whether a canvas is connected: any socket without an agent marker.
 
@@ -3805,6 +4913,12 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
         self.browser_connections.discard(websocket)
+        if websocket in self.kept_tabs:
+            # Still keeping edits as it closed: a blip, most likely. Its own grace.
+            self.kept_tabs.discard(websocket)
+            self.kept_graces[("socket", next(self._grace_seq))] = _time_module.monotonic() + KEPT_GRACE_SECONDS
+            self._remember_kept()
+            self._settle_kept_later(KEPT_GRACE_SECONDS)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -3851,7 +4965,32 @@ class ConnectionManager:
             self.disconnect(conn)
 
 
-manager = ConnectionManager()
+manager = ConnectionManager(_STATE_DIR / KEPT_MARKER_NAME if _STATE_PATH is not None else None)
+
+
+def _kept_hides_reads() -> bool:
+    """Whether a person's tab keeps edits now (the live ``manager``, which
+    tests swap): agents then read no selection and no view (PR #199 round
+    17, review 15 kept-wires-ui LOW-1). The server ignores what was
+    published before kept mode, so nothing can go stale: every reader
+    (GET /api/canvas/selection, look_at_canvas, start_here, `nebula`, the
+    chat and ACP prompt context) goes through these two stores."""
+    return manager.kept_in_tab()
+
+
+selection_context.hidden = _kept_hides_reads
+agent_presence.hide_view = _kept_hides_reads
+
+
+@app.on_event("startup")
+async def _kept_grace_at_boot() -> None:
+    """A restart while the person's tab kept edits (GM r22 on PR #199, 5):
+    agents stay paused until that tab is back and says so, or its grace runs
+    out (ConnectionManager.start_boot_grace)."""
+    if count := manager.start_boot_grace():
+        print(f"[main] {count} tab{'s' if count != 1 else ''} kept edits before this start: agents' canvas writes "
+              f"wait up to {KEPT_GRACE_SECONDS + KEPT_BOOT_SLACK_SECONDS:g} s for {'them' if count != 1 else 'it'}",
+              flush=True)
 
 
 def _try_compact_execution_cancellation(run_id: str) -> bool:
@@ -4034,7 +5173,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it.
         await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
-                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
+                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT,
+                                              # What this boot's renumbering adds (PR #199 rounds 17, 18).
+                                              **_boot_first_sync()}))
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
@@ -4042,6 +5183,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
+                # The person's tab (promoted by its hello with this launch's
+                # person token: an agent's socket never gets here) says which
+                # project it shows (GM r11, 2).
+                try:
+                    frame = loads_checked(raw)
+                except (ValueError, RecursionError):
+                    continue
+                if isinstance(frame, dict) and frame.get("type") == "viewing":
+                    await _person_tab_viewing(frame.get("projectId"), frame.get("openedBy"))
+                elif isinstance(frame, dict) and frame.get("type") == "personInput":
+                    await _person_tab_input(frame.get("projectId"))
+                elif isinstance(frame, dict) and frame.get("type") == "personOpen":
+                    await _person_tab_open(frame.get("projectId"))
+                elif isinstance(frame, dict) and frame.get("type") == "keptEdits":
+                    manager.set_kept(websocket, frame.get("kept"))
                 continue
             try:
                 # ValueError, not only JSONDecodeError: an int past 4,300
@@ -5339,21 +6495,35 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="nodeIds must be an array")
     if len(node_ids) > 200:
         raise HTTPException(status_code=422, detail="nodeIds supports at most 200 entries")
-    before = set(selection_context.current())
+    before = (set(selection_context.current()), selection_context.tab_only())
     snapshot = selection_context.snapshot(
         cli_graph,
         node_registry,
         requested_ids=node_ids,
     )
     after = selection_context.current()
-    if set(after) != before:
+    tab_only = selection_context.tab_only()
+    # The selection agents can see, and how many nodes only the person's tab
+    # has (review 17 agents-docs LOW-1): selecting just a duplicate is a
+    # selection, never "cleared". Two selections of tab-local nodes with the
+    # same count read the same to agents (no id is kept), so no event.
+    if (set(after), tab_only) != before:
         live = [node_id for node_id in after if node_id in cli_graph.nodes]
         _journal(
             "selection.changed",
-            data={"nodeIds": live[:50], "count": len(live)},
-            summary=f"selected {_listed(live)}" if live else "cleared the selection",
+            data={"nodeIds": live[:50], "count": len(live), **tab_only_fields(snapshot)},
+            summary=_selection_summary(live, tab_only),
         )
     return snapshot
+
+
+def _selection_summary(live: list[str], tab_only: int) -> str:
+    """selection.changed's summary, for agents (`nebula watch`, MCP
+    wait_for_canvas_change). Nothing in the app shows it."""
+    only_tab = f"{counted(tab_only, 'node')} only their tab has" if tab_only else ""
+    if live:
+        return f"selected {_listed(live)}" + (f" and {only_tab}" if only_tab else "")
+    return f"selected {only_tab}" if only_tab else "cleared the selection"
 
 
 def _did(verb: str, node_id: str | None = None, label: str | None = None) -> dict[str, Any]:
@@ -5796,6 +6966,46 @@ def _note_run(run_id: str) -> None:
         pass
 
 
+# When a node's run result landed (epoch ms, the clock the tab's run records
+# use; PR #199 round 21, review 19 LOW-3): Nebula's stamp, kept beside the run
+# result (not part of the unit _run_result moves: a tab never sets it), on the
+# live node and in the node's stored ``data``. It moves with the node when it
+# is renumbered. A handoff's "newer run" (_tab_result_is_newer) reads it when
+# Nebula didn't see both runs land in this process (a restart).
+RESULT_LANDED_KEY = "resultLandedAt"
+
+
+def _landing_stamp(value: Any) -> float | None:
+    """A landing stamp, or None for anything that isn't one."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
+
+
+def _note_result_landed(event: Any, run_id: str | None) -> None:
+    """A run's result landed on a node (its output, failure or skip), in the
+    project the run was admitted in: the order a handoff judges "the newer
+    run" by (node_result_runs). A tab-local node's too (the tab's own graph
+    ran it): a renumber moves it to the node's new id."""
+    node_id = getattr(event, "node_id", None)
+    if not isinstance(event, (ExecutedEvent, ErrorEvent, SkippedEvent)) or not isinstance(node_id, str) or not run_id:
+        return
+    project = _run_project()
+    if project is ...:
+        project = _workspace_context()["activeProjectId"]
+    at = _time_module.time() * 1000
+    node_result_runs.landed(project if isinstance(project, str) else None, node_id, run_id, at=at)
+    # The stamp kept with the result (PR #199 round 21, review 19 LOW-3): a
+    # handoff after a restart still knows when Nebula's result landed. On the
+    # live node (state.json), and from there in the project's stored copy
+    # (the export carries it; every save keeps it from the live graph).
+    live = cli_graph.nodes.get(node_id)
+    if live is not None and project == _workspace_context()["activeProjectId"]:
+        live[RESULT_LANDED_KEY] = at
+        if not isinstance(event, ExecutedEvent):
+            cli_graph._maybe_persist()  # an output's own sync persists it
+
+
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
     """The canvas nodes a run set out to run: while it is going they count as
     run for an agent's undo, before the engine reaches them. The Cinema
@@ -6229,9 +7439,12 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/api/canvas/snapshot")
 async def get_canvas_snapshot() -> dict[str, Any]:
-    """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors."""
-    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
-    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
+    A selection holding nodes only the person's tab has adds ``tabOnlyCount``
+    and ``tabOnlyNote`` beside ``selection`` (review 17 agents-docs LOW-2)."""
+    read = selection_context.snapshot(cli_graph, node_registry)
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
+    snapshot.update(tab_only_fields(read))
     # Why a node's last run failed, as its card says it (services/node_errors.py).
     key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
@@ -6353,8 +7566,10 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
         raise HTTPException(status_code=422, detail="via must be mcp or cli")
     headers = current_request_headers()
     caller = identify_agent(headers)
-    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
-    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    read = selection_context.snapshot(cli_graph, node_registry)
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
+    # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
+    snapshot.update(tab_only_fields(read))
     catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
@@ -6377,7 +7592,11 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
     rows = await asyncio.to_thread(
         lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
     spend = await agent_spend_status(request)
+    restore = _catalog_restore_view(project_store.restore_notice(), catalog)
+    waiting = _canvas_not_filed_view(room_now=await _canvas_has_room_now(catalog), catalog=catalog)
     return agent_start.build(
+        **({"canvasNotFiled": waiting} if waiting else {}),
+        **({"catalogRestore": agent_start.catalog_restore_part(restore)} if restore else {}),
         canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
         pins=agent_start.pins_part(pins, via=via),
         proposals=agent_start.proposals_part(briefs, via=via),
@@ -7627,7 +8846,7 @@ def _stage_proposal(
         # nothing to the agent, which wrote +img.
         detail = exc.detail
         if isinstance(detail, str) and ref_for:
-            detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
+            detail = re.sub(r"\bn[0-9]+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
         raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     if report is not None:
         for node_id, reason in configured.items():
@@ -7880,7 +9099,7 @@ def _estimate_proposal_run(
 
 def _node_order(node_id: str) -> tuple[int, str]:
     digits = node_id[1:]
-    return (int(digits) if digits.isdigit() else 0, node_id)
+    return (int(digits) if digits.isascii() and digits.isdigit() else 0, node_id)
 
 
 def _proposal_layout_hints() -> tuple[dict[str, dict[str, Any]], dict[str, float] | None]:
@@ -8303,7 +9522,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     ]
     created = _rf_created(list(id_map.values()), edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
+    publish_action(f"Accepted {proposal.agent.name}'s proposal ({counted(len(id_map), 'node')})")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -9105,7 +10324,12 @@ async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
         mine = [p for p in waiting if p.target_id == active]
         if not mine:
             return
-        project = _open_project_record(active)
+        project = _cached_open_project_record(active)
+        if project is _NOT_CACHED:
+            # On the loop for every execution event: never the catalog lock,
+            # which a restore in a worker thread holds for seconds (review 3
+            # of PR #199, L-7). A worker thread reads it (and waits, if it must).
+            project = await asyncio.to_thread(_open_project_record, active)
         if project is None:
             return  # the sweep on the next read says "deleted"
         images = _cover_images_now(project, {"activeProjectId": active}, exported)
@@ -9138,6 +10362,22 @@ async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
 # (catalog.json's signature, the open project's record): a run's many output
 # syncs reuse it; the catalog is read again only once it is written.
 _open_project_cache: tuple[Any, str, dict[str, Any]] | None = None
+
+
+_NOT_CACHED: Any = object()
+
+
+def _cached_open_project_record(project_id: str) -> Any:
+    """_open_project_record's answer when it needs no read (the catalog
+    file is the one it last read), else _NOT_CACHED."""
+    try:
+        signature = project_store.signature()
+    except ProjectStoreError:
+        return _NOT_CACHED
+    cached = _open_project_cache
+    if signature is not None and cached is not None and cached[0] == signature and cached[1] == project_id:
+        return cached[2]
+    return _NOT_CACHED
 
 
 def _open_project_record(project_id: str) -> dict[str, Any] | None:
@@ -11723,8 +12963,24 @@ async def _broadcast_graph_sync(
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
     cleared: bool = False, run_params: str | None = None,
     dropped_ports: list[dict[str, Any]] | None = None,
+    renumbered: Mapping[str, str] | None = None,
+    proposals_kept: bool = False,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `proposals_kept` (a replacement only): a reopen of the project that was
+    already open and already the live canvas (the person's or an agent's
+    open of it; GM r29 of PR #199, 3). Its nodes keep their ids (only
+    tab-local nodes get new ones, past every id ever used), so nothing an
+    open proposal was made against changed: proposals, approved runs that
+    haven't started and the removal tags a delete's undo reopens them by
+    all stay (_proposals_after_reopen). The graphSync says so
+    (``proposalsKept``), and so does ``canvas.replaced``.
+
+    `renumbered` ({old: new}; a replacement only: an open that gave
+    tab-local node ids Nebula's, PR #199 round 17) rides on the graphSync as
+    ``renumbered``, so a tab showing those nodes adopts the new ids (its
+    selection, open panels), and on the ``canvas.replaced`` event.
 
     `dropped_ports` (a replacement's lenient read: _stray_port_report) goes in
     its ``canvas.replaced`` event as ``droppedPorts``.
@@ -11761,6 +13017,8 @@ async def _broadcast_graph_sync(
     positions into the undo step that added those nodes.
     """
     if graph_replaced:
+        # The boot's renumbering is the canvas before this one's (NIT-3).
+        _end_boot_replacement()
         # Node ids restart with another project; no open arrange can apply to
         # it. Node errors are kept per project (export points them at the one
         # open now); a graph loaded over this project replaces its nodes, so
@@ -11790,6 +13048,22 @@ async def _broadcast_graph_sync(
             # left out (PR #198 review 5, L3).
             data["droppedPorts"] = [dict(record) for record in dropped_ports[:20]]
             summary += f"; left out {len(dropped_ports)} shot output{'' if len(dropped_ports) == 1 else 's'} no shot owns"
+        if renumbered and safe_reason != "import":
+            # The nodes that got Nebula's ids (an open; an import gives every
+            # node a new id, and says so already): any id read before is stale.
+            data["renumbered"] = dict(list(renumbered.items())[:50])
+            data["renumberedCount"] = len(renumbered)
+            summary += f"; gave {counted(len(renumbered), 'node')} new ids"
+        proposals_kept = proposals_kept and safe_reason == "project-open"
+        closed: list[Proposal] = []
+        if proposals_kept:
+            # Before the event, so its count is what stayed open.
+            closed = _proposals_after_reopen()
+            data["proposalsKept"] = True
+            # How many stayed open (`nebula watch` says so only when any did).
+            data["proposalsOpen"] = kept = len(canvas_proposals.open_list())
+            if kept:
+                summary += f"; {counted(kept, 'open proposal')} stayed open"
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
@@ -11801,8 +13075,10 @@ async def _broadcast_graph_sync(
             except (PinError, ProjectStoreError):
                 detached = []
         _journal_detached(detached, "the canvas was replaced")
-        # Proposals point at node ids that just restarted: none of them still fit.
-        closed = canvas_proposals.invalidate_all("the canvas was replaced")
+        if not proposals_kept:
+            # Proposals point at node ids that just restarted, or another
+            # project's: none of them still fit.
+            closed = canvas_proposals.invalidate_all("the canvas was replaced")
         _journal_closed_proposals(closed)
     export = await export_graph_for_frontend()
     # A cover proposal's view follows the live canvas (a pin's image deleted
@@ -11821,6 +13097,8 @@ async def _broadcast_graph_sync(
                                  **({"cleared": True} if cleared and not graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+                                 **({"renumbered": dict(renumbered)} if renumbered and graph_replaced else {}),
+                                 **({"proposalsKept": True} if graph_replaced and proposals_kept else {}),
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
                                  **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
@@ -11839,13 +13117,37 @@ async def _broadcast_graph_sync(
         if safe_reason != "import":
             await _settle_proposal_updates()
             await _broadcast_raw_quietly(_canvas_notes_message())
-        # Runs approved on Accept that haven't started don't fit either.
-        run_approvals.clear()
+        if not proposals_kept:
+            # Runs approved on Accept that haven't started don't fit either.
+            run_approvals.clear()
         await _broadcast_closed_proposals(closed)
-        # Node ids started again, or another project's are live: no earlier
-        # delete's undo may reopen a cover proposal by its node id either.
-        asset_proposals.drop_removal_tags("the canvas was replaced")
+        if not proposals_kept:
+            # Node ids started again, or another project's are live: no earlier
+            # delete's undo may reopen a cover proposal by its node id either.
+            asset_proposals.drop_removal_tags("the canvas was replaced")
     return export
+
+
+def _proposals_after_reopen() -> list[Proposal]:
+    """A reopen of the open project (GM r29 of PR #199, 3), right after its
+    commit: its open proposals stay open with the same ids, as after any
+    edit. Their targets keep their ids; a value the save before the open (or
+    the stored copy the open loaded) changed is checked at Accept, exactly
+    as a later edit is (_refuse_overwriting_later_edits, _refuse_changed_runs:
+    "No longer fits"), never closed for it here. One whose node isn't on
+    the reopened canvas is closed as for that node's delete (no removal: an
+    open isn't an undoable delete), and one of another project (none should
+    be open) as for a switch. Returns the ones it closed."""
+    active = _workspace_context()["activeProjectId"]
+    closed: list[Proposal] = []
+    for proposal in canvas_proposals.open_list():
+        if proposal.project_id != active:
+            closed.append(canvas_proposals.close(proposal.id, "invalidated", reason="the canvas was replaced"))
+    for node_id in sorted({node_id for proposal in canvas_proposals.open_list() for node_id in proposal.references
+                           if node_id not in cli_graph.nodes}, key=_node_order):
+        closed.extend(canvas_proposals.invalidate_referencing(
+            node_id, f"{node_id} isn’t in the project as it was opened again"))
+    return closed
 
 
 def _normalized_event_outputs(outputs: Any) -> dict[str, Any]:
@@ -12008,6 +13310,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         _journal_execution_event(event, run_id)
         _note_node_ran(event, run_id)
         node_errors.observe(event)
+        _note_result_landed(event, run_id)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
         # normally after GraphComplete. Preserve that semantic failure in the
@@ -12381,6 +13684,18 @@ def _validate_connect_handles(
     connections and target-port multiplicity/maxConnections are enforced at
     graph mutation time as well as immediately before execution.
     """
+    proposed_issue = _connect_issue(src_node_id, src_port, dst_node_id, dst_port, graph=graph, saved=saved)
+    if proposed_issue is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=proposed_issue.message,
+        )
+
+
+def _connect_issue(src_node_id: str, src_port: str, dst_node_id: str, dst_port: str, *,
+                   graph: CLIGraph | None = None, saved: bool = False) -> PortContractIssue | None:
+    """What _validate_connect_handles refuses a proposed connection for (the
+    shared registry contract, with the edges already in ``graph``), or None."""
     target_graph = graph or cli_graph
     node_contracts = [
         ContractNode(
@@ -12420,10 +13735,8 @@ def _validate_connect_handles(
         None,
     )
     if proposed_issue is not None and not (saved and proposed_issue.kind == "retyped"):
-        raise HTTPException(
-            status_code=400,
-            detail=proposed_issue.message,
-        )
+        return proposed_issue
+    return None
 
 
 def _valid_param_keys(definition_id: str) -> set[str] | None:
@@ -13765,18 +15078,22 @@ def _require_clear_intent(force: bool) -> None:
 
 
 @app.delete("/api/graph")
-@graph_write
+@graph_write(canvas_action="clear")
 async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
     # a node with the same identity could silently duplicate provider spend.
     _check_workspace_revision()
     _require_clear_intent(force)
+    # A canvas waiting to be saved as a project (review 5 of PR #199, M-3):
+    # refused at the limit, held aside first below it.
+    await _refuse_a_waiting_canvas_change("clear")
     with _paid_graph_mutation("clear the canvas"):
         # As a switch, an import and a delete of the open project (round 11 of
         # PR #114): a registered run writes back by node id, and ids start
         # again after a clear. Its paid-start fence and the run fence.
         _project_replacement_guard("clear the canvas", person=CLEAR_DURING_RUN_PERSON)
+        hold = _guard_waiting_canvas("clear")
         # With the clear, before any await: a tab's write made for the old
         # canvas is refused from now on (_canvas_revision, round 19 of PR
         # #195), and so is a write an agent fenced before it (_graph_fence,
@@ -13784,9 +15101,13 @@ async def clear_graph(force: bool = False) -> dict:
         # first (round 20, M2): a crash in between leaves a moved revision
         # over the old canvas, never the cleared canvas under the old
         # revision. The epoch moves once per clear.
-        _forget_canvas_undo("the canvas was cleared since")
-        cli_graph.clear()
-        _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
+        try:
+            _forget_canvas_undo("the canvas was cleared since")
+            cli_graph.clear()
+            _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
+        except BaseException:
+            _undo_waiting_canvas_guard(hold)
+            raise
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
@@ -13810,7 +15131,9 @@ async def clear_graph(force: bool = False) -> dict:
     if detached:
         await _broadcast_pins()
     await _broadcast_closed_proposals(closed)
-    return {"status": "cleared", "canvasRevision": _canvas_revision()}
+    held = await _note_waiting_canvas_guarded(hold, "cleared")
+    return {"status": "cleared", "canvasRevision": _canvas_revision(), **({"heldCanvas": True} if held else {}),
+            **_saved_canvas_reply(_canvas_guard_note.get())}
 
 
 @app.delete("/api/provider-recoveries/{run_id}/{node_id}")
@@ -13944,10 +15267,16 @@ def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
     return refusal_copy.refusal(status, specific, person, route="canvas")
 
 
+# What an agent reads after a node id it holds isn't on the canvas (PR #199
+# round 17): ids can move at an open, so the answer says to read again.
+NODE_GONE_READ_AGAIN = ("Node ids can change when a project is opened again (a node made by Duplicate or Paste "
+                        "gets Nebula's id then): read the canvas again for the current ids.")
+
+
 def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
     """404 for a node that isn't on the canvas: GM's line for the person
-    (approved round 3), the id for agents."""
-    return _node_refusal(404, specific or f"Node {node_id} not found", NODE_GONE_PERSON)
+    (approved round 3), the id for agents, and what to do next."""
+    return _node_refusal(404, f"{specific or f'Node {node_id} not found'}. {NODE_GONE_READ_AGAIN}", NODE_GONE_PERSON)
 
 
 def _scene_write_gone(node_id: str) -> CodedRefusal:
@@ -15949,7 +17278,7 @@ def _stage_graph_edges(
 
 
 @app.post("/api/graph/import")
-@graph_write
+@graph_write(canvas_action="replace")
 async def import_graph(body: dict[str, Any]) -> dict:
     """Atomically replace cli_graph from a file-loaded graph.
 
@@ -15993,6 +17322,12 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
+    # Every node gets a fresh backend id (the live graph never holds another:
+    # PR #199 round 17); a node's references to another (a Remotion
+    # manifest's timeline items) move with them.
+    renumbered = {ref: node_id for ref, node_id in id_map.items() if ref != node_id}
+    for node in candidate.nodes.values():
+        node["params"] = _moved_node_references(node.get("params") or {}, renumbered)
     _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
     # What the scenes' lenient read left out (PR #198 review 5, L3): said in
     # the warnings, the canvas.replaced event and the Agent log.
@@ -16009,6 +17344,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         _require_empty_canvas_for_a_new_project_file()
     else:
         _refuse_agent_growth_past_save_limit(candidate)
+    # A canvas waiting to be saved as a project (review 5 of PR #199, M-3):
+    # refused at the limit, held aside first below it.
+    await _refuse_a_waiting_canvas_change("replace")
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active():
@@ -16018,6 +17356,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
                 "Cannot replace the graph while a run is active. "
                 "Stop the run and wait for its terminal state first."
             ), CLEAR_DURING_RUN_PERSON, route="canvas")
+        hold = _guard_waiting_canvas("replace")
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
         # The canvas revision moves first, on disk too (round 20, M2: a crash
@@ -16033,6 +17372,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
             )
         except BaseException:
             canvas_undo_book.restore_epoch(importing_into, previous_revision)
+            _undo_waiting_canvas_guard(hold)
             raise
         _forget_canvas_undo("a graph was loaded into the project since, so its node ids started again",
                             advance=False)
@@ -16041,16 +17381,21 @@ async def import_graph(body: dict[str, Any]) -> dict:
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True,
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True, renumbered=renumbered,
                                           **({"dropped_ports": stray_ports} if stray_ports else {}))
     await _say_stray_ports(_stray_log_lines(port_reports))
     publish_action(
-        f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
+        f"Loaded graph ({counted(len(cli_graph.nodes), 'node')}, {counted(len(cli_graph.edges), 'edge')})"
     )
+    held = await _note_waiting_canvas_guarded(hold, "replaced")
     return {
+        **({"heldCanvas": True} if held else {}),
+        **_saved_canvas_reply(_canvas_guard_note.get()),
         "status": "imported",
         "canvasRevision": _canvas_revision(),
         "idMap": id_map,
+        # The ids that changed ({file id: Nebula id}), as an open answers them.
+        "renumbered": renumbered,
         "nodeCount": len(cli_graph.nodes),
         "edgeCount": len(cli_graph.edges),
         "nodes": exported["nodes"],
@@ -16147,7 +17492,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
     created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Created cluster ({len(id_map)} nodes)")
+    publish_action(f"Created cluster ({counted(len(id_map), 'node')})")
 
     return {"idMap": id_map, **created}
 
@@ -16247,6 +17592,9 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     failed = node_errors.card(str(n.get("id") or ""))
     if failed:
         data.update(failed)
+    if _landing_stamp(n.get(RESULT_LANDED_KEY)) is not None:
+        # When its run result landed (PR #199 round 21): the stored copy keeps it.
+        data[RESULT_LANDED_KEY] = n[RESULT_LANDED_KEY]
     # An agent's placeholder (Q125 item 3): its owner, for the dashed outline.
     flag = pending_nodes.clean(n.get(pending_nodes.PENDING_KEY))
     if flag is not None:
@@ -16358,12 +17706,460 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
     return rf_nodes, edges_out, warnings
 
 
+def _port_facts(graph: CLIGraph, node_id: str, handle: str, port_key: str) -> tuple[str | None, str | None]:
+    """A staged node's port as the canvas shows it: (label, data type), or
+    (None, None) when the node or that port isn't there (a node whose
+    definition is gone has no ports)."""
+    node = graph.nodes.get(node_id)
+    if node is None:
+        return None, None
+    definition_id = str(node.get("definitionId") or "")
+    definition = node_registry.get(definition_id)
+    if definition is None:
+        return None, None
+    for port in node_ports(definition_id, node.get("params"), definition, port_key):
+        if isinstance(port, Mapping) and port.get("id") == handle:
+            label = str(port.get("label") or "").strip() or None
+            data_type = port.get("dataType") if isinstance(port.get("dataType"), str) else None
+            return label, data_type
+    return None, None
+
+
+def _dropped_wire(edge_id: str, endpoints: Sequence[str], kind: str, detail: str, graph: CLIGraph) -> dict[str, Any]:
+    """One connection the recover route left out (PR #199 round 17, GM r23
+    2): the tab writes the person's line from these fields, and ``detail``
+    is the agents' sentence (never a person's line such as "Remove the
+    extra one…": nothing was drawn to remove). ``kind`` is one of the
+    shared kinds (port_contracts.DROPPED_CONNECTION_KINDS: loop, duplicate,
+    missing, port, type, limit). An end whose node isn't in the copy is
+    null, its tab id in ``sourceWas`` / ``targetWas``; names and port
+    labels are null when absent. recover_project_copy moves the ends to the
+    copy's ids after renumbering."""
+    source, source_handle, target, target_handle = endpoints
+    source_port, source_type = _port_facts(graph, source, source_handle, "outputPorts")
+    target_port, target_type = _port_facts(graph, target, target_handle, "inputPorts")
+
+    def name(node_id: str) -> str | None:
+        node = graph.nodes.get(node_id)
+        return _ingress_node_name(str(node.get("definitionId") or ""), node.get("label")) if node else None
+
+    limit = None
+    if kind == "limit" and (node := graph.nodes.get(target)) is not None:
+        definition = node_registry.get(str(node.get("definitionId") or ""))
+        port = next((port for port in node_ports(str(node.get("definitionId") or ""), node.get("params"),
+                                                 definition, "inputPorts")
+                     if isinstance(port, Mapping) and port.get("id") == target_handle), None) if definition else None
+        limit = input_connection_limit(port)
+    return {"id": edge_id,
+            "source": source if source in graph.nodes else None, "sourceHandle": source_handle,
+            "target": target if target in graph.nodes else None, "targetHandle": target_handle,
+            "sourceWas": None if source in graph.nodes else source,
+            "targetWas": None if target in graph.nodes else target,
+            "sourceName": name(source), "targetName": name(target),
+            "sourcePort": source_port, "targetPort": target_port,
+            "sourceType": source_type, "targetType": target_type,
+            "limit": limit, "kind": kind, "detail": detail}
+
+
+def _wire_closes_loop(edges: Iterable[Mapping[str, Any]], source: str, target: str) -> bool:
+    """Whether ``source -> target`` makes a cycle with ``edges``."""
+    if source == target:
+        return True
+    following: dict[str, list[str]] = {}
+    for edge in edges:
+        following.setdefault(str(edge.get("source")), []).append(str(edge.get("target")))
+    seen: set[str] = set()
+    stack = [target]
+    while stack:
+        at = stack.pop()
+        if at == source:
+            return True
+        if at in seen:
+            continue
+        seen.add(at)
+        stack.extend(following.get(at, ()))
+    return False
+
+
+# A Nebula node id (PR #199 round 17, review 15 NIT-1): "n" and ASCII digits
+# only, as the tab's CLI_ID_RE (/^n\d+$/: ASCII in JavaScript) and CLIGraph's
+# SHORT_ID_RE, never Python's Unicode \d ("n٣" is not one).
+_BACKEND_NODE_ID = cli_graph_module.BACKEND_NODE_ID
+# The keys inside a node's data that name another node, and their move
+# (PR #199 round 17, review 15 NIT-2): services/cli_graph.py, which a load of
+# state.json renumbers with too.
+_NODE_REFERENCE_KEYS = cli_graph_module.NODE_REFERENCE_KEYS
+_NODE_REFERENCE_LIST_KEYS = cli_graph_module.NODE_REFERENCE_LIST_KEYS
+_moved_node_references = cli_graph_module.moved_node_references
+# At most this many left-out wires are kept on the copy for a retry's answer.
+_MAX_DROPPED_WIRES = RESTORE_MAX_GRAPH_EDGES
+# The most digits a counter may take from what a project holds: a short id's
+# (CLIGraph SHORT_ID_RE), so a stray long "n…" string can't push every later
+# id past what the routes accept.
+_MAX_ID_DIGITS = 9
+
+
+def _highest_backend_id(*values: Any) -> int:
+    """The highest ``n[0-9]+`` (of at most _MAX_ID_DIGITS digits) among
+    ``values``: every string that is exactly one, and every dict key, at any
+    depth (review 15 LOW-1: a deleted node's run records keep its id, in
+    ``targetNodeId``, the recipe's nodes and the ``resultOutputs`` keys)."""
+    highest = 0
+    stack: list[Any] = list(values)
+    while stack:
+        value = stack.pop()
+        if isinstance(value, str):
+            if len(value) <= _MAX_ID_DIGITS + 1 and (match := _BACKEND_NODE_ID.fullmatch(value)):
+                highest = max(highest, int(match.group(1)))
+        elif isinstance(value, dict):
+            stack.extend(key for key in value if isinstance(key, str))
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+    return highest
+
+
+def _ids_ever_used(snapshot: Mapping[str, Any]) -> int:
+    """The highest backend id a snapshot has ever used: its nodes and edge
+    ends, every reference in its nodes' data, and its run history (whose
+    records keep the ids of nodes deleted since)."""
+    return _highest_backend_id(
+        [node.get("id") for node in snapshot.get("nodes") or [] if isinstance(node, Mapping)],
+        [[edge.get("source"), edge.get("target")] for edge in snapshot.get("edges") or [] if isinstance(edge, Mapping)],
+        [_node_references_in((node.get("data") if isinstance(node, Mapping) else None))
+         for node in snapshot.get("nodes") or []],
+        snapshot.get("runHistory"))
+
+
+def _node_references_in(value: Any) -> list[str]:
+    """The node references (_NODE_REFERENCE_KEYS) in ``value``."""
+    found: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            for key, entry in item.items():
+                if key in _NODE_REFERENCE_KEYS and isinstance(entry, str):
+                    found.append(entry)
+                elif key in _NODE_REFERENCE_LIST_KEYS and isinstance(entry, list):
+                    found.extend(part for part in entry if isinstance(part, str))
+                else:
+                    stack.append(entry)
+        elif isinstance(item, list):
+            stack.extend(item)
+    return found
+
+
+def _renumber_tab_local_nodes(snapshot: dict[str, Any], counter: int) -> tuple[dict[str, str], int]:
+    """Give every node whose id isn't a backend id (``nN``) a fresh one, in
+    place (PR #199 round 16, review 14 HIGH-1; round 17, review 15 HIGH-1).
+    Duplicate, Paste and the nodes a kept tab adds make tab-local ids, and
+    the tab pushes a node's typing only for ``nN`` ids, so a node that kept
+    a local id inside Nebula's live graph lost later edits to the first read
+    of the open project. Numbered on past ``counter`` and every id the
+    snapshot has ever used (_ids_ever_used: its run history keeps deleted
+    nodes' ids, review 15 LOW-1), in node order. Every reference moves with
+    it: the edges' ends; in the run history every value or key that is
+    exactly an old id (a record's target, its outputs by node, its graph
+    snapshot); and in every node's data the keys that name a node
+    (_NODE_REFERENCE_KEYS: a Remotion manifest's timeline items, a gate's
+    skip; review 15 NIT-2). The Creator draft and the viewport hold no node
+    ids. Returns ({old: new}, the highest number used or seen)."""
+    counter = max(counter, _ids_ever_used(snapshot))
+    mapping: dict[str, str] = {}
+    for node in snapshot.get("nodes") or []:
+        node_id = node.get("id") if isinstance(node, dict) else None
+        if isinstance(node_id, str) and not _BACKEND_NODE_ID.fullmatch(node_id):
+            counter += 1
+            mapping[node_id] = f"n{counter}"
+    _apply_node_renumbering(snapshot, mapping)
+    return mapping, counter
+
+
+def _apply_node_renumbering(snapshot: dict[str, Any], mapping: Mapping[str, str]) -> None:
+    """Move a snapshot's nodes to the ids in ``mapping`` ({old: new}), in
+    place, with every reference to them (_renumber_tab_local_nodes)."""
+    if not mapping:
+        return
+    nodes = snapshot.get("nodes") or []
+    for node in nodes:
+        if isinstance(node, dict) and node.get("id") in mapping:
+            node["id"] = mapping[node["id"]]
+    for edge in snapshot.get("edges") or []:
+        for key in ("source", "target"):
+            if isinstance(edge, dict) and edge.get(key) in mapping:
+                edge[key] = mapping[edge[key]]
+    for node in nodes:
+        if isinstance(node, dict) and isinstance(node.get("data"), dict):
+            node["data"] = _moved_node_references(node["data"], mapping)
+
+    def moved(value: Any) -> Any:
+        if isinstance(value, str):
+            return mapping.get(value, value)
+        if isinstance(value, list):
+            return [moved(item) for item in value]
+        if isinstance(value, dict):
+            return {mapping.get(key, key): moved(item) for key, item in value.items()}
+        return value
+
+    if isinstance(snapshot.get("runHistory"), list):
+        snapshot["runHistory"] = moved(snapshot["runHistory"])
+
+
+def _rekey_candidate(candidate: CLIGraph, mapping: Mapping[str, str]) -> None:
+    """The staged graph under the new ids _renumber_tab_local_nodes gave
+    its snapshot (in place, the node order kept): each node's id, the
+    edges' ends, and the node references in its params."""
+    if not mapping:
+        return
+    nodes: dict[str, dict[str, Any]] = {}
+    for node_id, node in candidate.nodes.items():
+        new_id = mapping.get(node_id, node_id)
+        node = _moved_node_references(node, mapping)
+        node["id"] = new_id
+        nodes[new_id] = node
+    candidate.nodes = nodes
+    for edge in candidate.edges:
+        for key in ("source", "target"):
+            if edge.get(key) in mapping:
+                edge[key] = mapping[edge[key]]
+
+
+def _renumber_project_records(project: dict[str, Any], mapping: Mapping[str, str]) -> None:
+    """A renumbered project's records keyed by node id follow its nodes:
+    its pins' anchors and its Updates (by _NODE_REFERENCE_KEYS), and the
+    nodes the live graph had (``_backendNodeIds``)."""
+    if not mapping:
+        return
+    for key in ("pins", "agentNotes"):
+        if key in project:
+            project[key] = _moved_node_references(project[key], mapping)
+    if isinstance(project.get("_backendNodeIds"), list):
+        project["_backendNodeIds"] = sorted({mapping.get(node_id, node_id) for node_id in project["_backendNodeIds"]})
+    writers = project.get(_TAB_LOCAL_WRITERS)
+    if isinstance(writers, dict):
+        # The window that saved each one still holds it (under the old id
+        # until it adopts the new one): it alone can delete it.
+        project[_TAB_LOCAL_WRITERS] = {mapping.get(node_id, node_id): tab for node_id, tab in writers.items()}
+
+
+def _renumber_node_records(project_id: str | None, mapping: Mapping[str, str]) -> None:
+    """After a renumber's commit (an open, the boot): the records kept
+    outside the project by node id follow the nodes too (review 18
+    handoff-reopen LOW-2). World Labs recovery checkpoints and paid-start
+    holds ((runId, nodeId), one write each: Run History's Recover and the
+    node's guards find them by the new id, and its moved run record still
+    matches), the node's last-run error (the card and agents' look), and
+    which run's result landed on it (node_result_runs). Proposals, run
+    approvals and pins never name a tab-local id (agents never see one; pins
+    move with the project), and an agent's undo notes only runs, which an
+    open waits for. Best effort: a journal that can't be written keeps the
+    old id (printed), as before this round."""
+    if not mapping:
+        return
+    for name, store in (("World Labs recovery checkpoints", provider_recovery_store),
+                        ("World Labs start holds", provider_start_guard)):
+        try:
+            store.renumber_nodes(mapping)
+        except Exception as exc:  # noqa: BLE001 - the canvas is committed; the record keeps its old id
+            print(f"[main] couldn't move {name} to the new node ids: {exc}", flush=True)
+    node_errors.renumber(project_id, mapping)
+    node_result_runs.renumber(project_id, mapping)
+
+
+def _renumber_staged_project(project: dict[str, Any], candidate: CLIGraph) -> dict[str, str]:
+    """Before a stored project becomes Nebula's live graph (an open; PR #199
+    round 17, review 15 HIGH-1): every node with a tab-local id gets a
+    backend id, in the stored project (snapshot, run history, records) and
+    in the staged graph, so the live graph never holds one
+    (_require_backend_node_ids at the commit). Numbered past the project's
+    counter and every id it has ever used, and the counter is stored with
+    it. Returns {old: new} ({} when every id was already Nebula's, and then
+    nothing changes)."""
+    floor = max(candidate._counter, int(project.get("_nodeCounter", 0) or 0))
+    mapping, counter = _renumber_tab_local_nodes(project["snapshot"], floor)
+    if mapping:
+        _rekey_candidate(candidate, mapping)
+        _renumber_project_records(project, mapping)
+        candidate._counter = max(candidate._counter, counter)
+        project["_nodeCounter"] = candidate._counter
+    return mapping
+
+
+def _require_backend_node_ids(snapshot: Mapping[str, Any]) -> None:
+    """The invariant (PR #199 rounds 16 and 17): Nebula's live graph, and a
+    copy the recover route writes, hold only backend node ids (``nN``), so
+    every node's typing reaches the server. Checked just before each commit
+    (recover, and every switch: _commit_project_workspace): a change that
+    let a local id through fails loudly (500, nothing written) instead of
+    losing the person's later edits."""
+    # One rule with the live graph's own check (CLIGraph's require_backend_ids,
+    # review 16 renumber-everywhere NIT-1).
+    require_backend_ids([node.get("id") if isinstance(node, Mapping) else node
+                         for node in snapshot.get("nodes") or []])
+
+
+# The ids this boot's load of state.json gave nodes that didn't have Nebula's
+# ({old: new}; CLIGraph.renumbered_on_load), and, when the canvas is a
+# project's, the replacement that reloads it in a tab from before this boot
+# (_boot_first_sync). Both ride on each socket's first graphSync only until
+# the next canvas replacement or the person's first read of that project
+# (review 16 renumber-everywhere NIT-3): a tab loaded after that holds the
+# new ids and the new revision already.
+_boot_renumbered: dict[str, str] = {}
+_boot_replacement: dict[str, Any] = {}
+
+
+def _boot_first_sync() -> dict[str, Any]:
+    """What a socket's first graphSync adds after a boot renumber (PR #199
+    round 18, review 16 MEDIUM-1). For a project's canvas: ``graphReplaced``,
+    ``projectSwitch`` (Nebula's own, ``actor`` {"kind": "system"}, from and
+    to the open project, ``previousRevision`` the revision before this boot)
+    and ``renumbered``, the shape of an agent's reopen of the open project,
+    under the new ``workspaceRevision``: a tab from before the boot follows
+    it, hands off what it hadn't saved (the handoff learns the ids) and
+    loads the project again. Without a project, ``renumbered`` alone."""
+    if _boot_replacement:
+        # A reopen of the open project like the others (GM r29 of PR #199,
+        # 3): the boot closes no proposal (a restart's own closing is said by
+        # proposalSync on the person's hello and the Updates' "Closed: Nebula
+        # restarted").
+        return {"graphReplaced": True, "projectSwitch": copy.deepcopy(_boot_replacement["projectSwitch"]),
+                "renumbered": dict(_boot_renumbered), "proposalsKept": True}
+    return {"renumbered": dict(_boot_renumbered)} if _boot_renumbered else {}
+
+
+def _end_boot_replacement(project_id: str | None = None) -> None:
+    """The boot's renumbering stops riding on first syncs: at the next canvas
+    replacement (no ``project_id``), or at the person's read of the project
+    it reloads."""
+    if project_id is not None and _boot_replacement.get("projectId") not in (None, project_id):
+        return
+    _boot_replacement.clear()
+    _boot_renumbered.clear()
+
+
+@app.on_event("startup")
+async def _renumber_live_canvas_at_boot() -> None:
+    """A state.json from before the live graph refused tab-local ids (PR #199
+    round 17, review 15 HIGH-1): CLIGraph.load gave those nodes Nebula's
+    ids. The canvas's own project gets the same ids (its snapshot, run
+    history and records), so the next read of it still lays the live graph
+    over the same nodes, and state.json is written with them.
+
+    Round 18 (review 16 MEDIUM-1): the project's copy of each such node is
+    the newer one (the tab autosaved its typing there and never pushed it),
+    so its settings, name and place go onto the live graph before anything
+    reads it; the new ids are numbered past every id the project ever used
+    (_ids_ever_used); and the workspace revision moves, with a handoff for
+    the project at the old one (holding the ids), so a tab from before the
+    boot reloads the project as after an agent's reopen (_boot_first_sync)
+    and its next autosave can't write the old ids back. Best effort: a
+    failure is printed, and the project is renumbered at its next open."""
+    mapping = dict(getattr(cli_graph, "renumbered_on_load", None) or {})
+    _boot_replacement.clear()
+    _boot_renumbered.clear()
+    if not mapping:
+        return
+    _boot_renumbered.update(mapping)
+    try:
+        with project_store.transaction() as catalog:
+            owner = cli_graph.owner
+            project_id = catalog.get("activeProjectId") if owner is OWNER_UNKNOWN else owner
+            project = catalog["projects"].get(project_id) if isinstance(project_id, str) else None
+            if project is not None:
+                mapping = _boot_ids_past_the_project(project, mapping)
+                _boot_renumbered.clear()
+                _boot_renumbered.update(mapping)
+                _apply_node_renumbering(project["snapshot"], mapping)
+                _renumber_project_records(project, mapping)
+                _take_the_projects_values(project, mapping)
+                project["_backendNodeIds"] = sorted({*(project.get("_backendNodeIds") or []), *mapping.values()})
+                project["_nodeCounter"] = max(int(project.get("_nodeCounter", 0) or 0), cli_graph._counter)
+                before = catalog["workspaceRevision"]
+                catalog["workspaceRevision"] = uuid4().hex
+                handoffs = _switch_handoffs(catalog)
+                catalog.pop("handoff", None)
+                handoffs.pop(project_id, None)
+                handoffs[project_id] = before
+                while len(handoffs) > _MAX_SWITCH_HANDOFFS:
+                    handoffs.pop(next(iter(handoffs)))
+                catalog["handoffs"] = handoffs
+                # The baseline is the project's copy, the values just taken
+                # (review 17 MEDIUM-1): the tab's last autosave of each node.
+                project[_HANDOFF_RENUMBERED] = {"revision": before, "map": dict(mapping),
+                                                "base": _renumbered_base(project, mapping)}
+                cli_graph._maybe_persist()
+                project_store.commit(catalog)
+                _renumber_node_records(project_id, mapping)
+                _boot_replacement.update({"projectId": project_id, "projectSwitch": {
+                    "actor": dict(_SYSTEM_ACTOR), "previousProjectId": project_id,
+                    "previousProjectName": project["name"], "previousRevision": before,
+                    "projectId": project_id, "projectName": project["name"], "created": False}})
+            else:
+                cli_graph._maybe_persist()
+                _renumber_node_records(project_id if isinstance(project_id, str) else None, mapping)
+        print(f"[main] gave {counted(len(mapping), 'node')} Nebula ids at boot: {mapping}", flush=True)
+    except Exception as exc:  # noqa: BLE001 - the open renumbers the project again
+        _boot_replacement.clear()
+        cli_graph._maybe_persist()
+        print(f"[main] couldn't move the open project to the ids given at boot: {exc}", flush=True)
+
+
+def _boot_ids_past_the_project(project: Mapping[str, Any], mapping: Mapping[str, str]) -> dict[str, str]:
+    """The boot's {old: new} with every new id past each id the project has
+    ever used (its counter, nodes, run history and references; review 16
+    MEDIUM-1): load() could number only past state.json's. The live graph
+    moves with it (_rekey_candidate)."""
+    used = max(int(project.get("_nodeCounter", 0) or 0), _ids_ever_used(project["snapshot"]))
+    given = [int(new[1:]) for new in mapping.values() if _BACKEND_NODE_ID.fullmatch(new)]
+    if not given or min(given) > used:
+        return dict(mapping)
+    counter = max(used, cli_graph._counter, _highest_backend_id(list(cli_graph.nodes)))
+    again: dict[str, str] = {}
+    for new in mapping.values():
+        counter += 1
+        again[new] = f"n{counter}"
+    _rekey_candidate(cli_graph, again)
+    cli_graph._counter = counter
+    return {old: again.get(new, new) for old, new in mapping.items()}
+
+
+def _take_the_projects_values(project: Mapping[str, Any], mapping: Mapping[str, str]) -> None:
+    """Each renumbered node's settings, name and place from the project's
+    copy (already under the new ids) onto the live graph, in memory: the
+    tab autosaved its typing into the project and never pushed it (its id
+    wasn't Nebula's), so the project's copy is the person's newest."""
+    stored = {node.get("id"): node for node in project["snapshot"].get("nodes") or [] if isinstance(node, dict)}
+    for new in mapping.values():
+        live, theirs = cli_graph.nodes.get(new), stored.get(new)
+        data = theirs.get("data") if isinstance(theirs, dict) else None
+        if live is None or not isinstance(data, dict) or data.get("definitionId") != live.get("definitionId"):
+            continue
+        if isinstance(data.get("params"), dict):
+            live["params"] = copy.deepcopy(data["params"])
+            cli_graph.nodes[new] = live = cli_graph_module._normalized_scene(live)
+        if isinstance(data.get("label"), str) and data["label"]:
+            live["label"] = data["label"]
+        else:
+            live.pop("label", None)
+        position = theirs.get("position")
+        if isinstance(position, dict):
+            try:
+                x, y = float(position.get("x", 0)), float(position.get("y", 0))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(x) and math.isfinite(y):
+                live["position"] = {"x": x, "y": y}
+
+
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
                             warnings: list[str] | None = None,
                             ingress: _IngressVerdict | None = None,
                             size_checked: bool = True,
                             dropped_ports: list[dict[str, Any]] | None = None,
-                            stray_log: list[str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
+                            stray_log: list[str] | None = None,
+                            dropped_wires: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
@@ -16382,6 +18178,15 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     each said in ``warnings`` and listed in ``dropped_ports`` (PR #198 review
     5, L3; _stray_port_report), in GM's load-case line ("…while loading the
     project."); ``stray_log`` gets the Agent log's lines (_stray_log_lines).
+    ``dropped_wires`` (the recover route only: a kept tab's wires, PR #199
+    round 16): a connection the server's rules refuse (a missing node or
+    port, a type the input can't take, an input past its connection limit, a
+    duplicate, a loop) is left out and listed there (_dropped_wire, by the
+    shared kinds), instead of refusing the whole snapshot with a 400;
+    without it, it refuses. With it, every connection gets the live connect
+    route's check, one touching a node whose definition was removed too,
+    and a stray shot connection is listed as well (round 17, review 15
+    NIT-4).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -16489,7 +18294,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                 node_registry.get(staged_node["definitionId"]), staged_node.get("label"))
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
-        if match := re.fullmatch(r"n(\d+)", node_id):
+        if match := _BACKEND_NODE_ID.fullmatch(node_id):
             candidate._counter = max(candidate._counter, int(match.group(1)))
 
     edge_ids: set[str] = set()
@@ -16505,6 +18310,13 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail=f"edges[{index}] requires valid endpoints and handles")
         source, source_handle, target, target_handle = values
         if source not in candidate.nodes or target not in candidate.nodes:
+            if dropped_wires is not None:
+                dropped_edges.add(index)
+                gone = " and ".join(node_id for node_id in (source, target) if node_id not in candidate.nodes)
+                dropped_wires.append(_dropped_wire(edge_id, values, "missing",
+                                                   f"Connection {edge_id} references a node not in the copy ({gone})",
+                                                   candidate))
+                continue
             raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
         rekeyed = (port_reports.get(source) or {}).get("rekeyed", {}).get(source_handle)
         if rekeyed:
@@ -16513,6 +18325,12 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             result["edges"][index]["sourceHandle"] = rekeyed
         signature = (source, source_handle, target, target_handle)
         if signature in signatures:
+            if dropped_wires is not None:
+                dropped_edges.add(index)
+                dropped_wires.append(_dropped_wire(edge_id, signature, "duplicate",
+                                                   f"Connection {edge_id} repeats {source}:{source_handle} -> "
+                                                   f"{target}:{target_handle}, already in the copy", candidate))
+                continue
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
         if _orphaned_shot_wire(candidate, source, source_handle):
@@ -16520,9 +18338,28 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             _note_stray_wire(port_reports, source, source_handle,
                              _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
                                                 candidate.nodes[source].get("label")))
+            if dropped_wires is not None:
+                # Never left out silently (review 15 NIT-4): a port absent.
+                dropped_wires.append(_dropped_wire(edge_id, signature, "port",
+                                                   f"Shot port {source_handle} on {source} has no shot that owns it",
+                                                   candidate))
             continue
-        if source in known and target in known:
+        if dropped_wires is not None:
+            # The live connect route's check, for every connection: one that
+            # touches a node whose definition was removed is checked too, and
+            # left out (review 15 NIT-4), as connecting it now is refused.
+            if issue := _connect_issue(source, source_handle, target, target_handle, graph=candidate, saved=True):
+                dropped_edges.add(index)
+                kind = issue.cause if issue.cause in DROPPED_CONNECTION_KINDS else "port"
+                dropped_wires.append(_dropped_wire(edge_id, signature, kind, issue.message, candidate))
+                continue
+        elif source in known and target in known:
             _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
+        if dropped_wires is not None and _wire_closes_loop(candidate.edges, source, target):
+            dropped_edges.add(index)
+            dropped_wires.append(_dropped_wire(edge_id, signature, "loop", f"Connection {edge_id} ({source} -> "
+                                               f"{target}) would connect the node back to itself", candidate))
+            continue
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     if dropped_edges:
         result["edges"] = [edge for index, edge in enumerate(result["edges"]) if index not in dropped_edges]
@@ -16594,8 +18431,28 @@ async def _save_live_project(project_id: str | None) -> None:
             project_store.commit(catalog)
 
 
+def _canvas_is(project_id: str | None, active: str | None) -> bool:
+    """Whether the live canvas is project ``project_id`` (``active``: the
+    project the catalog has open). state.json records it (CLIGraph.owner);
+    a canvas saved before it did is the open project's, as before."""
+    owner = cli_graph.owner
+    if owner is OWNER_UNKNOWN:
+        return project_id == active
+    return owner is not OWNER_UNPROVEN and owner == project_id
+
+
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
-    """Overlay CLI changes while retaining frontend-only data and run recipes."""
+    """Overlay CLI changes while retaining frontend-only data and run recipes.
+
+    Only onto the project the live canvas is: never one project's canvas
+    into another's (review 1 of PR #199, H1: a restore opened another
+    project and the next listing saved the canvas into it). A canvas that
+    doesn't record its project (OWNER_UNKNOWN) is the open one's, and
+    callers pass the open project. Returns False, changing nothing, for any
+    other project."""
+    owner = cli_graph.owner
+    if owner is not OWNER_UNKNOWN and owner != project.get("id"):
+        return False
     previous = project["snapshot"]
     updated = _overlaid_snapshot(project, exported)
     changed = updated != previous
@@ -16636,6 +18493,1647 @@ def _overlaid_snapshot(project: dict[str, Any], exported: dict[str, Any]) -> dic
     return {**previous, "nodes": merged_nodes, "edges": merged_edges}
 
 
+RECOVERED_CANVAS_NAME = project_store_module.RECOVERED_CANVAS_NAME
+
+
+def _set_canvas_owner(owner: Any, copy_note: Mapping[str, Any] | None = None) -> None:
+    """Record which project the live canvas is, in state.json first
+    (strictly: a failed write raises, before any catalog commit, so the two
+    files never disagree about a project that was committed). ``copy_note``
+    ({name, agent}): the canvas is the copy an agent's change was made on,
+    saved with it (CLIGraph.copy_note; review 10 of PR #199, L-1)."""
+    note = {"of": owner, "name": copy_note.get("name"), "agent": copy_note.get("agent")} if copy_note else None
+    if cli_graph.owner == owner and cli_graph.owner is not OWNER_UNKNOWN and note is None:
+        return
+    previous, previous_note = cli_graph.owner, cli_graph.copy_note
+    cli_graph.owner = owner
+    cli_graph.copy_note = note
+    if cli_graph._persist_path is not None:
+        try:
+            cli_graph.save(cli_graph._persist_path)
+        except Exception as exc:
+            cli_graph.owner, cli_graph.copy_note = previous, previous_note
+            raise ProjectStoreError("The live canvas could not be saved; nothing changed") from exc
+
+
+def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migrated: bool = False,
+                      name: str = RECOVERED_CANVAS_NAME) -> dict[str, Any]:
+    """File the live canvas as a new project, ``name``, and open it: the
+    same graph and ids, recorded as that project's in state.json before the
+    caller commits the catalog. For a canvas no project in the catalog is
+    (the unfiled canvas of a first launch, ``migrated``, or one whose
+    project a restore couldn't bring back)."""
+    project = make_project(name, {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+    _set_canvas_owner(project["id"])
+    _overlay_live_project(project, exported)
+    catalog["projects"][project["id"]] = project
+    catalog["activeProjectId"] = project["id"]
+    catalog["workspaceRevision"] = uuid4().hex
+    if migrated:
+        catalog["migratedProjectId"] = project["id"]
+    return project
+
+
+def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
+    """What the live canvas is filed as (GM r3 of PR #199): the project's
+    own name when it is free, else "Recovered <project>" (GM r23 a; then
+    " copy", " copy 2": GM r29, 2, project_store.lost_row_name) when which
+    project it was is known and that project's name can be read (in
+    Recently deleted, or in the restore that couldn't bring it back); else
+    "Recovered canvas", then "Recovered canvas 2"."""
+    name = None
+    copy = _copy_records(catalog).get(owner) if isinstance(owner, str) else None
+    copy_name = copy["name"] if copy else None
+    if copy_name:
+        # A copy an agent's change was made on (GM's rule (a)): its own name.
+        return copy_name
+    if isinstance(owner, str):
+        trashed = (catalog.get("trash") or {}).get(owner)
+        if isinstance(trashed, dict):
+            name = trashed.get("name")
+        else:
+            latest = project_store.latest_restore() or {}
+            if latest.get("openProjectMissing") == owner:
+                name = latest.get("openProjectName")
+    if not isinstance(name, str) or not name.strip():
+        # "Recovered canvas", then "Recovered canvas 2" and on (GM r5).
+        return project_store_module.recovered_canvas_name(catalog)
+    # GM r14, 4: the lost row's own name when it is free again, else a
+    # recovered copy's name (GM r29, 2: never "Recovered Recovered canvas").
+    return project_store_module.lost_row_name(name, catalog)
+
+
+def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | None:
+    """Which limit filing the live canvas as a new project would pass
+    ("projects" or "storage"), or None when there is room. Checked before
+    anything is written (state.json included), so a full list never makes
+    the listing fail or the canvas change owner (review 2 of PR #199, L4);
+    prepare checks it exactly at the commit."""
+    if len(catalog["projects"]) >= project_store_module.MAX_PROJECTS:
+        return "projects"
+    try:
+        signature = project_store.signature()
+    except ProjectStoreError:
+        signature = None
+    canvas = len(json.dumps({"nodes": exported["nodes"], "edges": exported["edges"]}, ensure_ascii=False,
+                            separators=(",", ":"), default=str).encode("utf-8"))
+    if (signature[2] if signature else 0) + canvas + 64 * 1024 > project_store_module.MAX_CATALOG_BYTES:
+        return "storage"
+    return None
+
+
+# The live canvas couldn't be filed as its own project because the list is
+# at a limit (review 2 of PR #199, L4): {reason, from, since, journaled}. It
+# is still state.json's canvas and no project is open, so nothing replaces or
+# overlays it (the person can't see it until it is saved: GM r6); making a project is refused until there is room and opening one holds it aside first (canvas-held/),
+# and the next listing with room files it. Kept beside the catalog
+# (ProjectStore.canvas_waiting), so `since` and the one journal event hold
+# across restarts (review 3, L-5); this is only its cache in this process.
+# After a waiting canvas is filed, the record says so instead ({saved: {id,
+# name, at}}) for CANVAS_SAVED_SECONDS, for the person's "saved" toast.
+# (the store it was read from, the record): read again for another store.
+_canvas_waiting_cache: tuple[Any, dict[str, Any] | None] | None = None
+CANVAS_SAVED_SECONDS = 600
+
+
+def _forget_canvas_waiting_cache() -> None:
+    """Read the waiting record and the held canvases from disk again (a new
+    process does; tests)."""
+    global _canvas_waiting_cache, _canvas_held_cache
+    _canvas_waiting_cache = None
+    _canvas_held_cache = None
+
+
+# GM's rule (a) for PR #199 (review 8, HIGH-1): while the person's canvas
+# waits, every agent write first files it untouched, never opened, and the
+# write goes on a new canvas (a clear or a load) or a copy of it (any other).
+# What protects it lives in the catalog (project_store.canvas_pending_of),
+# written in the same commit as the filing (review 9, M-1): ``fresh``, the
+# project filed from the waiting canvas and that canvas's digest (an agent's
+# write closes it first while it is open, unchanged, and no tab of the
+# person's has been on it: GM r11, 2); ``copies``, the canvases an agent's
+# change was made on, by the id each is filed under.
+
+
+def _canvas_pending(catalog: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """The catalog's pending record (read now when not given)."""
+    if catalog is None:
+        try:
+            catalog = project_store.read_unlocked()
+        except ProjectStoreError:
+            return {"fresh": None, "copies": {}}
+    return project_store_module.canvas_pending_of(catalog)
+
+
+def _mark_fresh_filing(catalog: dict[str, Any], project_id: str | None) -> None:
+    """In the filing's own transaction: the live canvas waiting to be saved
+    is filed as ``project_id`` (None: no such project now). Until the canvas
+    changes or the person's tab is on it, it is still the person's canvas."""
+    pending = project_store_module.canvas_pending_of(catalog)
+    fresh = {"projectId": project_id, "digest": _fresh_digest(), "filed": True} if project_id else None
+    project_store_module.set_canvas_pending_in(catalog, {**pending, "fresh": fresh})
+
+
+def _fresh_filing_open(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The project filed from the person's waiting canvas (or protected again
+    after a restore), when it is open and the live canvas; else None. Only
+    the person's own act ends it (GM r13, 1: their own open of it, or their
+    first own edit there; _end_protection): a change to the canvas doesn't,
+    as a tab's sync echo is one too (the protect saves the live canvas into
+    the project before it closes it, so nothing on it is lost)."""
+    fresh = project_store_module.canvas_pending_of(catalog).get("fresh")
+    if not fresh:
+        return None
+    project_id = fresh["projectId"]
+    if cli_graph.owner != project_id or catalog["activeProjectId"] != project_id \
+            or project_id not in catalog["projects"]:
+        return None
+    return catalog["projects"][project_id]
+
+
+def _copy_records(catalog: Mapping[str, Any] | None = None) -> dict[str, dict[str, Any]]:
+    """Every copy an agent's change was made on, by the id it is filed under:
+    the catalog's records (canvasPending.copies), and the note each copy
+    carries itself (state.json's for the live canvas, a held copy's own), for
+    one whose catalog record the damage took (review 10 of PR #199, L-1):
+    never filed as "Recovered canvas N" or said as the person's."""
+    copies = dict(_canvas_pending(catalog)["copies"])
+    notes = [cli_graph_module.copy_note_of(cli_graph.copy_note, cli_graph.owner)]
+    notes += [cli_graph_module.copy_note_of({**entry["copy"], "of": entry.get("from")}, entry.get("from"))
+              for entry in _held_canvases() if isinstance(entry.get("copy"), dict)]
+    for note in notes:
+        if note is not None:
+            copies.setdefault(note["of"], {"name": note["name"], "agent": note["agent"], "mark": None, "boot": None})
+    return copies
+
+
+def _alive_copy_ids() -> set[Any]:
+    """The copies that still exist: the live canvas, or one held aside from it."""
+    return {cli_graph.owner, *(entry.get("from") for entry in _held_canvases())}
+
+
+def _set_canvas_copies(catalog: dict[str, Any], *, add: tuple[str, dict[str, Any]] | None = None,
+                       drop: Iterable[Any] = (), prune: bool = False) -> None:
+    """In the caller's transaction: add a copy's record, drop the copies
+    filed, and (``prune``) the ones that no longer exist (an emptied copy is
+    never filed: review 9, nit 3)."""
+    pending = project_store_module.canvas_pending_of(catalog)
+    copies = dict(pending["copies"])
+    for copy_id in drop:
+        copies.pop(copy_id, None)
+    if prune:
+        alive = _alive_copy_ids()
+        copies = {key: value for key, value in copies.items() if key in alive}
+    if add is not None:
+        copies[add[0]] = add[1]
+    project_store_module.set_canvas_pending_in(catalog, {**pending, "copies": copies})
+
+
+def _canvas_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
+    """The name the copy an agent's change was made on takes: Nebula's
+    duplicate naming (GM r10, 1; project_store.duplicate_name), counting the
+    names promised to copies that still exist (an emptied copy is never
+    filed, so it takes no number)."""
+    alive = _alive_copy_ids()
+    taken = [record["name"] for copy_id, record in _copy_records(catalog).items() if copy_id in alive]
+    return project_store_module.duplicate_name(source_name, catalog, taken)
+
+
+# The last project switch (an open or a create) and who made it: "person"
+# (the person's own, from their tab) or "agent" (an agent, the CLI, a script:
+# _switch_actor). In memory: a new process has made none (review 10 of PR
+# #199, HIGH-2: a tab that follows an agent's switch never ends the protection).
+_last_project_switch: dict[str, Any] = {}
+
+
+def _note_project_switch(project_id: str, actor: Mapping[str, Any] | None) -> None:
+    """After an open's or a create's commit: who switched the open project."""
+    _last_project_switch.clear()
+    _last_project_switch.update({"projectId": project_id, "by": "agent" if actor is not None else "person"})
+
+
+async def _person_tab_viewing(project_id: Any, opened_by: Any = None) -> None:
+    """The person's tab shows ``project_id`` because the person opened it
+    there themselves (its socket's `viewing` frame with ``openedBy:
+    "person"``, sent only on a socket its hello promoted, and only for a
+    screen the person reached by their own open: never one the tab reached
+    by following an agent's switch). That is one of the two person acts that
+    end the protection of the project filed from their waiting canvas (GM
+    r13, 1). Refused when the last switch to the project was an agent's
+    (review 10 of PR #199, HIGH-2), whatever the tab says. Nothing an agent
+    sends reaches this: an agent's socket is never promoted, and no HTTP
+    route ends it."""
+    if not isinstance(project_id, str) or opened_by != "person":
+        return
+    if _last_project_switch.get("by") == "agent" and _last_project_switch.get("projectId") == project_id:
+        print(f"[projects] the person's tab is on {project_id}, but an agent opened it: still protected", flush=True)
+        return
+    await _end_protection(project_id, "the person opened it")
+
+
+async def _person_tab_open(project_id: Any) -> None:
+    """The person opened ``project_id``, the project their tab already had
+    loaded, so no open request went out (its socket's `personOpen` frame):
+    their own open (GM r13, 1), after an agent's switch to it too. It is the
+    open project's last switch from now on."""
+    if not isinstance(project_id, str) or project_id != _open_project_id():
+        return
+    _note_project_switch(project_id, None)
+    await _end_protection(project_id, "the person opened it")
+
+
+async def _person_tab_input(project_id: Any) -> None:
+    """The person's own first edit in ``project_id`` (its socket's
+    `personInput` frame: a real input event on their verified tab, never a
+    sync, an agent's write or viewing alone): the other person act that ends
+    the protection (GM r13, 1), wherever the tab came from, a followed
+    switch included."""
+    if isinstance(project_id, str):
+        await _end_protection(project_id, "the person edited it")
+
+
+async def _end_protection(project_id: str, why: str) -> None:
+    """The project filed from the person's waiting canvas is their working
+    project again: its protection ends for good, in a commit."""
+    try:
+        fresh = _canvas_pending().get("fresh")
+        if not fresh or fresh.get("projectId") != project_id:
+            return
+        with project_store.transaction() as catalog:
+            pending = project_store_module.canvas_pending_of(catalog)
+            fresh = pending.get("fresh")
+            if not fresh or fresh.get("projectId") != project_id or catalog["activeProjectId"] != project_id:
+                return
+            project_store_module.set_canvas_pending_in(catalog, {**pending, "fresh": None})
+            project_store.commit(catalog)
+    except Exception as exc:  # noqa: BLE001 - never ends the tab's socket
+        # Kept: the tab says it again on its next connect or project change.
+        print(f"[projects] couldn't end the protection of {project_id}: {exc}", flush=True)
+        return
+    print(f"[projects] {why} ({project_id}): it is their working project again", flush=True)
+
+
+# Projects just filed from an agent's copy, for the bookkeeping after the
+# commit (_note_canvas_settled, _note_held_filed): {project id: copy record}.
+_copy_filings: dict[str, dict[str, Any]] = {}
+
+
+# The waiting canvases held aside (review 5 of PR #199, M-3; GM's held
+# model, 2026-10-28): before an open, a create, or (below the limit) an
+# agent's clear or graph load replaces a waiting live canvas, it is kept
+# whole in its own file, projects/canvas-held/<projectId>.json (and its .bak), fsynced with its folder,
+# and only that copy is ever filed as the person's canvas (_file_held_canvases,
+# on the next listing with room), each on its own. (the store, the list).
+_canvas_held_cache: tuple[Any, list[dict[str, Any]]] | None = None
+
+# GM (b) of the held model, verbatim: an agent's clear or graph load while
+# the canvas waits at the project limit (409, code canvas_waiting), so no
+# second canvas with no project is left that couldn't be saved either.
+CANVAS_WAITING_REFUSAL = ("The project limit is reached, so a new canvas can't be saved. "
+                          "Open an existing project to work in, or ask the person to delete a project.")
+# The size limit's, GM's round 5 review (b) line, verbatim.
+CANVAS_WAITING_REFUSAL_STORAGE = ("Nebula's project list is full, so a new canvas can't be saved. "
+                                  "Open an existing project to work in, or ask the person to permanently delete a "
+                                  "project in Recently deleted.")
+# Every other agent write to the waiting canvas at the limit (review 6 of PR
+# #199, M-1; GM's answer 1 to review 6, verbatim): an add, a delete, an
+# apply, a restore, a run.
+CANVAS_CHANGE_REFUSAL = ("The open canvas isn't saved as a project yet because the project limit is reached, so it "
+                         "can't be changed. Open an existing project to work in, or ask the person to delete a project.")
+# GM: "Same shape for 'the project list is full'". Its way out is the size
+# cap's own, from GM's (b) line above: only a delete for good frees it.
+CANVAS_CHANGE_REFUSAL_STORAGE = ("The open canvas isn't saved as a project yet because Nebula's project list is full, "
+                                 "so it can't be changed. Open an existing project to work in, or ask the person to "
+                                 "permanently delete a project in Recently deleted.")
+CANVAS_WAITING_CODE = "canvas_waiting"
+
+
+def _canvas_waiting_detail(reason: str, action: str) -> str:
+    if action in ("clear", "replace"):
+        return CANVAS_WAITING_REFUSAL if reason == "projects" else CANVAS_WAITING_REFUSAL_STORAGE
+    return CANVAS_CHANGE_REFUSAL if reason == "projects" else CANVAS_CHANGE_REFUSAL_STORAGE
+
+
+class CanvasWaitingRefusal(HTTPException):
+    """409: a write would change the live canvas while it waits to be saved
+    as its own project and the list has no room to keep it aside and a new
+    canvas too (``reason``: projects | storage; ``action``: what the write
+    does, CANVAS_ACTIONS). The lines are the agents': the person's tab never
+    reaches this (a waiting canvas has no project open, so the tab is on
+    Projects home, where clear and load aren't offered; GM r11 #3 dropped
+    the person's own lines as unreachable copy)."""
+
+    def __init__(self, reason: str, action: str = "replace") -> None:
+        super().__init__(status_code=409, detail=_canvas_waiting_detail(reason, action))
+        self.reason = reason
+        self.action = action
+
+
+def _canvas_waiting_body(exc: CanvasWaitingRefusal) -> dict[str, Any]:
+    return {"detail": exc.detail, "code": CANVAS_WAITING_CODE, "reason": exc.reason, "action": exc.action,
+            "projectLimit": project_store_module.MAX_PROJECTS}
+
+
+@app.exception_handler(CanvasWaitingRefusal)
+async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
+    return JSONResponse(status_code=409, content=_canvas_waiting_body(exc))
+
+
+# GM r16 on PR #199 (MCP): while the person's tab keeps edits Nebula
+# couldn't save after it restored its project list (kept mode, GM r15),
+# the tab neither sends nor shows any canvas change. An agent's write or
+# project switch would land on a canvas the person can't see, and the
+# person's [Save as a project] then opens their edits over it, so both
+# (and runs) are refused with this code until the person saves them as a
+# project or discards them (Discard is the person's alone), or the tab has
+# been closed for KEPT_GRACE_SECONDS (after a restart, KEPT_GRACE_SECONDS +
+# KEPT_BOOT_SLACK_SECONDS from the new backend's start). Renaming a project, trashing one that
+# isn't open and restoring from Recently deleted still pass.
+CANVAS_KEPT_CODE = "canvas_kept_in_tab"
+# Curly ’ (GM r17 on PR #199, the limit wording): agents relay it to the person.
+CANVAS_KEPT_IN_TAB_DETAIL = (
+    "The person’s tab is keeping edits Nebula couldn’t save before it restored its project list, so the canvas "
+    "can’t be changed, nothing can be run and projects can’t be switched until they save those edits as a project "
+    "or discard them. Renaming a project, trashing one that isn’t open and restoring from Recently deleted still "
+    "work. Tell the person; try again after they click Save as a project or Discard edits.")
+
+
+class CanvasKeptRefusal(HTTPException):
+    """409 canvas_kept_in_tab: an agent's canvas write or project switch
+    while a person's tab keeps unsaved edits (ConnectionManager.kept_in_tab)."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=409, detail=CANVAS_KEPT_IN_TAB_DETAIL)
+
+
+def _canvas_kept_body() -> dict[str, Any]:
+    return {"detail": CANVAS_KEPT_IN_TAB_DETAIL, "code": CANVAS_KEPT_CODE}
+
+
+@app.exception_handler(CanvasKeptRefusal)
+async def canvas_kept_refusal(request, exc: CanvasKeptRefusal):
+    return JSONResponse(status_code=409, content=_canvas_kept_body())
+
+
+def _refuse_agent_while_kept(action: str) -> None:
+    """The kept tab's guard: agents only (the person's own requests pass,
+    their [Save as a project] among them)."""
+    if not manager.kept_in_tab() or is_person(current_request_headers()):
+        return
+    print(f"[projects] refused an agent's {action}: the person's tab keeps unsaved edits", flush=True)
+    raise CanvasKeptRefusal()
+
+
+def _held_canvases() -> list[dict[str, Any]]:
+    global _canvas_held_cache
+    cached = _canvas_held_cache
+    if cached is None or cached[0] is not project_store:
+        cached = _canvas_held_cache = (project_store, project_store.canvas_held())
+        _journal_held_unreadable()
+    return list(cached[1])
+
+
+def _held_distinct() -> list[dict[str, Any]]:
+    """The held canvases that aren't the live canvas itself (a copy held by
+    an open whose rollback failed: memory is that canvas, state.json the
+    other project's; review 7 of PR #199, L-1), for every count that also
+    counts the live canvas: one canvas holds one place, is named once, and
+    is filed once."""
+    held = _held_canvases()
+    if not held or not (cli_graph.nodes or cli_graph.edges):
+        return held
+    digest = _canvas_digest(cli_graph)
+    return [entry for entry in held if entry.get("digest") != digest]
+
+
+def _journal_held_unreadable() -> None:
+    """A held canvas couldn't be read (or saved) and may be lost
+    (review 6 of PR #199, L-1): journaled once (`project.canvasHeldUnreadable`),
+    so agents watching see it; the listing tells the person
+    (`canvasHeldUnreadable`). Never fails the caller."""
+    try:
+        damage = project_store.take_held_damage()
+        if damage is None:
+            return
+        count = damage.get("count")
+        _journal("project.canvasHeldUnreadable", data=dict(damage),
+                 summary=(f"couldn't read {'some' if count is None else count} of the canvases held aside to be "
+                          f"saved as projects; the damaged file is kept"), actor={"kind": "system"})
+    except Exception as exc:  # noqa: BLE001 - bookkeeping
+        print(f"[projects] could not journal the unreadable held canvases: {exc}", flush=True)
+
+
+def _held_unreadable_view() -> dict[str, Any] | None:
+    """The listing's `canvasHeldUnreadable` ({count (null: unknown), kept,
+    at}) while recent: held canvases that couldn't be read or saved."""
+    _held_canvases()
+    try:
+        return project_store.canvas_held_unreadable()
+    except Exception:  # noqa: BLE001 - the listing goes on without it
+        return None
+
+
+# No shared cap on the held canvases (review 7 of PR #199, L-3: one refused
+# the person's every open once it filled). Each held canvas is capped like
+# a project, MAX_PROJECT_BYTES measured as a project's snapshot, and only
+# for agents: the person's open, create, clear and load always hold it
+# (GM: a canvas over the save limit is filed with saving paused, as a
+# project stored over it opens). An agent's write that would hold a canvas
+# past it is refused (409 canvas_held_full) with GM's line, verbatim.
+CANVAS_HELD_TOO_BIG_DETAIL = ("This canvas is too big for Nebula to keep aside, so nothing was changed. Work in an "
+                              "existing project, or make the canvas smaller first.")
+CANVAS_HELD_FULL_CODE = "canvas_held_full"
+
+
+class CanvasHeldFull(HTTPException):
+    def __init__(self, size: int) -> None:
+        super().__init__(status_code=409, detail=CANVAS_HELD_TOO_BIG_DETAIL)
+        self.size = size
+
+
+def _canvas_held_full_body(exc: CanvasHeldFull) -> dict[str, Any]:
+    return {"detail": exc.detail, "code": CANVAS_HELD_FULL_CODE, "scope": "canvas", "sizeBytes": exc.size,
+            "limitBytes": MAX_PROJECT_BYTES}
+
+
+@app.exception_handler(CanvasHeldFull)
+async def canvas_held_full(request, exc: CanvasHeldFull):
+    return JSONResponse(status_code=409, content=_canvas_held_full_body(exc))
+
+
+def _held_snapshot_bytes(entry: dict[str, Any]) -> int:
+    """A held canvas's size as the project it is filed as measures (the cap)."""
+    return project_size.snapshot_bytes({**empty_snapshot(), "nodes": entry["nodes"], "edges": entry["edges"]})
+
+
+def _add_held(entry: dict[str, Any]) -> None:
+    """Keep one held canvas on disk first (raises OSError), then in the cache."""
+    global _canvas_held_cache
+    project_store.hold_canvas(entry)
+    _canvas_held_cache = (project_store, [*_held_canvases(), entry])
+
+
+def _drop_held(project_ids: set[str]) -> None:
+    """Held canvases leave, on disk first (raises OSError), then the cache."""
+    global _canvas_held_cache
+    if not project_ids:
+        return
+    project_store.drop_held(project_ids)
+    _canvas_held_cache = (project_store, [entry for entry in _held_canvases() if entry["projectId"] not in project_ids])
+
+
+def _canvas_digest(graph: CLIGraph) -> str:
+    """What the live graph holds, as a digest: a held copy with the same one
+    is that canvas (a crash came between its hold and the replacement)."""
+    return hashlib.sha256(json.dumps({"nodes": graph.nodes, "edges": graph.edges}, sort_keys=True,
+                                     default=str).encode("utf-8")).hexdigest()
+
+
+def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict[str, Any]:
+    """Hold the waiting live canvas aside, whole (``exported``: its nodes and
+    connections as a project stores them, taken in this step), before
+    anything replaces it, in its own file. Its project id is chosen now, so
+    a crash after the filing's commit never files it twice. A canvas held
+    already (the same digest: an open whose rollback failed, then tried
+    again; review 7 of PR #199, L-1) isn't held twice: that hold is it.
+    ``capped`` (an agent's write): refused past MAX_PROJECT_BYTES
+    (CanvasHeldFull); the person's own act is never refused for its size.
+    Raises ProjectStoreError when it can't be kept on disk: nothing
+    replaces the canvas then."""
+    digest = _canvas_digest(cli_graph)
+    if same := next((entry for entry in _held_canvases() if entry.get("digest") == digest), None):
+        print("[projects] the waiting canvas is held aside already: not held twice", flush=True)
+        return same
+    waiting = _canvas_not_filed_now() or {}
+    owner = cli_graph.owner
+    entry = {"projectId": uuid4().hex, "from": owner if isinstance(owner, str) else None,
+             "unproven": owner is OWNER_UNPROVEN, "reason": waiting.get("reason") or "projects",
+             "since": waiting.get("since") or project_now(), "heldAt": project_now(),
+             "digest": digest, "counter": int(cli_graph._counter),
+             "nodes": copy.deepcopy(exported["nodes"]), "edges": copy.deepcopy(exported["edges"])}
+    # Its content's own digest (review 8 of PR #199, L-1): checked before a
+    # salvaged copy is filed, and again at the filing.
+    entry["itemsDigest"] = project_store_module.held_items_digest(entry["nodes"], entry["edges"])
+    # An agent's copy held aside keeps its own name and agent (L-1 of review
+    # 10): filed as the agent's whatever the catalog still says of it.
+    if copied := cli_graph_module.copy_note_of(cli_graph.copy_note, owner):
+        entry["copy"] = {"name": copied["name"], "agent": copied["agent"]}
+    if capped and (size := _held_snapshot_bytes(entry)) > MAX_PROJECT_BYTES:
+        print(f"[projects] refused to hold the waiting canvas aside for an agent: it is {size} bytes, over a "
+              f"project's {MAX_PROJECT_BYTES}; nothing replaced it", flush=True)
+        raise CanvasHeldFull(size)
+    try:
+        _add_held(entry)
+    except OSError as exc:
+        print(f"[projects] could not hold the waiting canvas aside: {exc}; nothing replaced it", flush=True)
+        raise ProjectStoreError("The canvas you had open couldn't be kept aside, so nothing replaced it") from exc
+    print(f"[projects] held the waiting canvas aside ({len(entry['nodes'])} nodes; it was {owner!r}): it is saved "
+          f"as its own project once there is room", flush=True)
+    return entry
+
+
+def _held_settled(entry: dict[str, Any] | None) -> None:
+    """After the replacement landed: the live canvas isn't the waiting one any
+    more (its held copy is), so the live wait's record goes."""
+    if entry is not None and _canvas_not_filed_now() is not None:
+        _write_canvas_waiting(None)
+
+
+def _disk_canvas_digest() -> str | None:
+    """The digest of the canvas state.json holds, None when it can't be read.
+    The live graph's own when nothing persists it (tests)."""
+    path = cli_graph._persist_path
+    if path is None:
+        return _canvas_digest(cli_graph)
+    try:
+        disk = CLIGraph()
+        disk.load(path)
+    except Exception:  # noqa: BLE001 - unknown: the held copy stays
+        return None
+    return _canvas_digest(disk)
+
+
+def _drop_held_copies_of_live() -> None:
+    """A held copy that is the live canvas itself (a crash came between its
+    hold and the replacement, or the replacement failed: a hold is never
+    taken back, review 6 of PR #199, L-2): the live canvas is the one that
+    counts, so the copy goes and the canvas is filed or held once. Only when
+    state.json holds that canvas too: after a failed open whose rollback
+    failed as well (507), memory is the waiting canvas and state.json the
+    other project's, and the held copy is the only one on disk."""
+    held = _held_canvases()
+    if not held:
+        return
+    digest = _canvas_digest(cli_graph)
+    if not any(entry.get("digest") == digest for entry in held):
+        return
+    if _disk_canvas_digest() != digest:
+        print("[projects] a held canvas is the live canvas, but state.json holds another: the held copy stays",
+              flush=True)
+        return
+    same = {entry["projectId"] for entry in held if entry.get("digest") == digest}
+    if same:
+        print("[projects] a held canvas is the live canvas itself (its replacement never landed): kept once",
+              flush=True)
+        try:
+            _drop_held(same)
+        except OSError as exc:
+            print(f"[projects] could not drop the held copy of the live canvas: {exc}", flush=True)
+
+
+def _hold_if_waiting(settled: tuple[str, Any] | None, exported: dict[str, Any]) -> dict[str, Any] | None:
+    """An open or a create replaces the live canvas. While it waits to be
+    saved as its own project (the list at a limit), it is held aside first
+    (GM's held model: refusing every open locked the person out of every
+    project until they deleted one). Returns the hold, for _held_settled
+    once the replacement landed. A failed replacement keeps it (review 6 of
+    PR #199, L-2): the next settle drops it by its digest
+    (_drop_held_copies_of_live) when the live canvas is still that one."""
+    if settled and settled[0] == "waiting":
+        return _hold_live_canvas(exported, capped=not _is_person_request())
+    return None
+
+
+def _live_canvas_unsettled(catalog: dict[str, Any]) -> bool:
+    """Whether the live canvas waits by the facts, whatever any record says
+    (review 7 of PR #199, M-1): it holds something, and its owner (a
+    project id, or unproven) is neither the open project nor in the list,
+    so the next settle would file it as its own project. A catalog restore
+    leaves it so until something settles it, and the waiting record only a
+    settle writes."""
+    return _settle_would_file(catalog)
+
+
+def _settle_in_step() -> tuple[str, Any] | None:
+    """Settle the live canvas now, in the caller's step, as a listing would
+    (review 7 of PR #199, M-1): filed as its own project when there is
+    room, else marked waiting with no project open, committed either way.
+    So no request ever acts on a restored catalog with the live canvas
+    unsettled: an agent's write right after a restore finds it saved (and
+    goes on, on that project, as after a listing) or waiting (and refused
+    at the limit). Inside a held catalog transaction (a nested one would
+    lose a commit) it refuses with the busy line (507), never a false
+    limit (review 8 of PR #199, N-2); no guard call runs inside one today.
+    The filing's broadcast is the fence's, after the route
+    (_canvas_guard_note's ``filed``)."""
+    if getattr(project_store._local, "depth", 0):
+        raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
+    exported = _graph_canvas_export(cli_graph)
+    with project_store.transaction() as catalog:
+        if not _live_canvas_unsettled(catalog):
+            return ("settled", None)
+        revision_read = catalog["workspaceRevision"]
+        settled = _settle_live_canvas(catalog, exported)
+        if settled is not None and (settled[0] != "waiting" or catalog["workspaceRevision"] != revision_read):
+            try:
+                project_store.commit(catalog)
+            except ProjectLimitError as exc:
+                if not settled or settled[0] != "filed":
+                    raise
+                filed, previous_owner = settled[1]
+                catalog["projects"].pop(filed["id"], None)
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+                _set_canvas_owner(previous_owner)
+                _mark_canvas_not_filed(exc.limit, previous_owner)
+                settled = ("waiting", exc.limit)
+                project_store.commit(catalog)
+            except Exception:
+                _undo_canvas_filing(settled)
+                raise
+    _note_canvas_settled(settled)
+    if settled and settled[0] == "filed":
+        note = _canvas_guard_note.get()
+        if note is not None:
+            note["filed"] = settled[1][0]["id"]
+    print(f"[projects] settled the live canvas before a write (it waited unsettled after a restore): "
+          f"{settled[0] if settled else 'agreed'}", flush=True)
+    return settled or ("settled", None)
+
+
+def _waiting_canvas_plan() -> tuple[str, Any] | None:
+    """What a write that changes the canvas must do first while the live
+    canvas waits to be saved as its own project: None (it doesn't wait),
+    ("refuse", the limit) when the list has no room for one more canvas
+    with no project either (GM (b) of the held model: that new canvas
+    couldn't be saved, and a second one waiting would be filed as the
+    person's), or ("hold", the canvas as a project stores it).
+
+    Whether it waits is read from the canvas itself, not only the record a
+    settle writes (review 7 of PR #199, M-1): a canvas left unsettled by a
+    restore is settled here first (_settle_in_step). Synchronous: the
+    route's step holds."""
+    if not (cli_graph.nodes or cli_graph.edges):
+        return None
+    if _canvas_not_filed_now() is None:
+        try:
+            catalog = project_store.read_unlocked()
+        except ProjectStoreError:
+            return None
+        if not _live_canvas_unsettled(catalog):
+            return None
+        _settle_in_step()
+        if _canvas_not_filed_now() is None:
+            return None
+    exported = _graph_canvas_export(cli_graph)
+    try:
+        catalog = project_store.read_unlocked()
+    except ProjectStoreError:
+        return "refuse", (_canvas_not_filed_now() or {}).get("reason") or "projects"
+    if len(catalog["projects"]) + len(_held_distinct()) >= project_store_module.MAX_PROJECTS:
+        return "refuse", "projects"
+    if (limit := _filing_room(catalog, exported)) is not None:
+        return "refuse", limit
+    return "hold", exported
+
+
+def _canvas_agent_name() -> str | None:
+    """The agent's name for the person's Agent log line, None for "An agent"."""
+    actor = _switch_actor() or {}
+    name = actor.get("name")
+    return name if isinstance(name, str) and name and name != "An agent" else None
+
+
+def _canvas_agent() -> dict[str, Any]:
+    """Who the person's Agent log line is about: {agent: name or None} and,
+    when the request names an agent, its row's {agentId, color} (the cursor's,
+    agent_presence.identify), so the row is the agent's (GM r7: filtering the
+    log to Codex shows what Codex tried)."""
+    found: dict[str, Any] = {"agent": _canvas_agent_name()}
+    try:
+        identity = identify_agent(current_request_headers())
+    except Exception:  # noqa: BLE001 - the line still goes, as Nebula's
+        identity = None
+    if identity is not None:
+        found.update({"agent": identity.name, "agentId": identity.id, "color": identity.color})
+    return found
+
+
+async def _refuse_a_waiting_canvas_change(action: str) -> None:
+    """Before the step of a clear (``action`` "clear") or a graph load
+    ("replace"): at the limit, refused (409 canvas_waiting) with nothing
+    changed. An agent's write was refused or held at the fence already
+    (_fence_waiting_canvas); this is the person's own clear or load, and a
+    canvas that came to wait after the fence. The step checks again
+    (_guard_waiting_canvas), with no await between."""
+    plan = _waiting_canvas_plan()
+    if plan is None or plan[0] != "refuse":
+        return
+    if _switch_actor() is not None:
+        await _broadcast_projects_changed("canvasHoldRefused", None, canvasHeld={"action": action, **_canvas_agent()})
+    print(f"[projects] refused to {action} the canvas: it waits to be saved as a project and the list is at its "
+          f"{plan[1]} limit", flush=True)
+    raise CanvasWaitingRefusal(plan[1], action)
+
+
+CANVAS_SAVED_FOR_AGENT = {
+    "clear": "Nebula saved the open canvas as its own project, “{name}”, and cleared a new canvas.",
+    "replace": "Nebula saved the open canvas as its own project, “{name}”, and loaded the graph into a new canvas.",
+    "change": "Nebula saved the open canvas as its own project, “{name}”, and made your change on a copy of it.",
+}
+
+
+# GM r15: when the canvas already was that project (a listing filed
+# it, or a restore protected the person's project again), it is kept, not
+# saved: the "saved as its own project" forms stay for a canvas that wasn't
+# a project yet.
+CANVAS_KEPT_FOR_AGENT = {
+    "clear": "Nebula kept “{name}” as it was and cleared a new canvas.",
+    "replace": "Nebula kept “{name}” as it was and loaded the graph into a new canvas.",
+    "change": "Nebula kept “{name}” as it was and made your change on a copy of it.",
+}
+
+
+def canvas_saved_for_agent(action: str, name: str, file_name: str | None = None, kept: bool = False) -> str:
+    """GM's agent reply when its write saved or kept the person's canvas
+    first (rule (a); "kept" when it already was that project, GM r15); a load
+    names its file when the caller knows it (graph_file_client)."""
+    if action == "replace" and file_name:
+        if kept:
+            return f"Nebula kept “{name}” as it was and loaded “{file_name}” into a new canvas."
+        return f"Nebula saved the open canvas as its own project, “{name}”, and loaded “{file_name}” into a new canvas."
+    lines = CANVAS_KEPT_FOR_AGENT if kept else CANVAS_SAVED_FOR_AGENT
+    return lines.get(action, lines["change"]).format(name=name)
+
+
+# The last project an agent's write closed to keep the person's canvas in it
+# (_protect_persons_canvas): {id, projectId, name, action, agent, copy}, on
+# every graphSync from then
+# (export_graph_for_frontend), like the restore notice's id.
+_persons_canvas_saved: dict[str, Any] = {}
+
+
+def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
+    """An agent's write while the live canvas is the person's canvas waiting
+    to be saved as a project (GM's rule (a), review 8 of PR #199, HIGH-1):
+    the waiting canvas (its record, or a restore that left it unsettled) or
+    the project a settle filed and opened from it, unchanged since. The
+    person's canvas is filed untouched as its own project and never opened
+    (or that project closed), in this step, and the write goes on a new
+    canvas with no project (a clear or a load: owner None) or on a copy of
+    the canvas (any other write: owned by the copy's own id, filed under
+    "<name> copy" by the next settle). So the agent never changes the
+    project the person's canvas went into, and no clear or load forgets that
+    project's undo history (it isn't the open project when they run).
+
+    Returns {saved: {id, name}, copy: the copy's name or None}; None when
+    there is nothing to protect, or no room to file it by size (the caller's
+    hold path then holds it aside) or at the projects limit (the caller's
+    plan marks it waiting and refuses). Past a project's size it refuses
+    (CanvasHeldFull). Synchronous: no await from the check to the
+    write; never inside a catalog transaction (ProjectStoreError: N-2)."""
+    if not (cli_graph.nodes or cli_graph.edges):
+        return None
+    owner = cli_graph.owner
+    try:
+        catalog = project_store.read_unlocked()
+    except ProjectStoreError:
+        return None
+    if isinstance(owner, str) and owner in _copy_records(catalog):
+        # The agent's own copy: settled as any canvas (filed and opened when
+        # there is room), and the write lands on it.
+        return None
+    fresh = _fresh_filing_open(catalog)
+    if fresh is None and _canvas_not_filed_now() is None and not _live_canvas_unsettled(catalog):
+        return None
+    if getattr(project_store._local, "depth", 0):
+        raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
+    exported = _graph_canvas_export(cli_graph)
+    copy_id = None if action in ("clear", "replace") else uuid4().hex
+    # The per-canvas cap, agents only (review 7, L-3): a canvas bigger than
+    # a project can be saved is never filed or copied for an agent's write;
+    # a clear or load of the project already filed closes it, copying nothing.
+    if (copy_id or fresh is None) and (size := _held_snapshot_bytes(exported)) > MAX_PROJECT_BYTES:
+        print(f"[projects] refused an agent's {action}: the person's canvas is {size} bytes, over a project's "
+              f"{MAX_PROJECT_BYTES}; nothing changed", flush=True)
+        raise CanvasHeldFull(size)
+    filed = None
+    with project_store.transaction() as catalog:
+        previous_owner = cli_graph.owner
+        if _fresh_filing_open(catalog) is None:
+            # The person's canvas isn't a project yet (it waits, or a restore
+            # left it unsettled): filed, opened and protected in a commit of
+            # its own first, as a listing files it (review 11 of PR #199,
+            # MEDIUM-1). The agent's write below is the next commit, so the
+            # catalog.json.bak it rotates holds the filing: a second damage
+            # right after it restores a list with the person's canvas in it.
+            if not (_canvas_not_filed_now() is not None or _live_canvas_unsettled(catalog)):
+                return None
+            if len(catalog["projects"]) + len(_held_distinct()) + 1 > project_store_module.MAX_PROJECTS:
+                # At the limit: the plan marks it waiting and refuses, as before.
+                return None
+            if _filing_room(catalog, exported) is not None:
+                return None
+            _drop_held_copies_of_live()
+            filed_project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, previous_owner))
+            filed = ("filed", (filed_project, previous_owner))
+            # Its protection in the same commit as the filing (review 9,
+            # M-1): state.json says this project owns the live canvas now
+            # (_file_live_canvas), so a crash before the agent's write
+            # leaves it open and protected, as a listing's filing does.
+            _mark_fresh_filing(catalog, filed_project["id"])
+            try:
+                project_store.commit(catalog)
+            except Exception:
+                _undo_canvas_filing(filed)
+                raise
+    if filed is not None:
+        _note_canvas_settled(filed)
+    with project_store.transaction() as catalog:
+        fresh = _fresh_filing_open(catalog)
+        if fresh is None:
+            # Something moved between the two commits (the filing stays, open
+            # and protected): nothing of the agent's is done.
+            raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
+        # Made from the person's waiting canvas in this protection (this
+        # write's own filing, or a listing's just before): "saved as its own
+        # project". A project protected again after a restore already was
+        # one: "kept" (GM r15 on PR #199).
+        was_filed = filed is not None or bool((project_store_module.canvas_pending_of(catalog)["fresh"] or {}).get("filed"))
+        # Closed in this commit; its protection stays with it (review 9,
+        # M-1): if the owner write below fails, the next settle opens it
+        # again still protected, and an agent's next write closes it again.
+        project = fresh
+        # The live canvas is this project's: saved into it first, so a
+        # change no person act ended the protection for (a tab's sync echo)
+        # is kept in it (GM r13, 1).
+        _overlay_live_project(project, exported)
+        catalog["activeProjectId"] = None
+        catalog["workspaceRevision"] = uuid4().hex
+        copy_name = _canvas_copy_name(project["name"], catalog) if copy_id else None
+        copy_note = None
+        agent = _canvas_agent().get("agent")
+        agent = agent if isinstance(agent, str) and agent else None
+        if copy_id:
+            # The copy's name and agent in the same commit: never a copy filed
+            # as "Recovered canvas N" or said as the person's.
+            copy_note = {"name": copy_name, "agent": agent}
+            _set_canvas_copies(catalog, prune=True, add=(copy_id, {
+                **copy_note, "mark": canvas_undo_book.mark(), "boot": BACKEND_BOOT_ID}))
+        project_store.commit(catalog)
+    # The project is committed, closed and still protected; the live canvas
+    # becomes the new canvas or the copy. If state.json can't say so, the
+    # write stops here (507), and the next settle opens the project again,
+    # protected as it was (M-1). The copy carries its own name and agent in
+    # state.json too (L-1 of review 10): a catalog the damage took them from
+    # still names it as the agent's.
+    _set_canvas_owner(copy_id, copy_note)
+    # The open project closed under any tab showing it (one that followed an
+    # agent there): each sync says so, and what the agent did, so that tab
+    # goes to Projects home with GM's line (GM r14, 3).
+    _persons_canvas_saved.clear()
+    _persons_canvas_saved.update({"id": uuid4().hex, "projectId": project["id"], "name": project["name"],
+                                  "action": action if action in ("clear", "replace") else "change",
+                                  "agent": agent, "copy": copy_name})
+    _canvas_settled_off_waiting()
+    note = _canvas_guard_note.get()
+    if note is not None:
+        note["filed"] = project["id"]
+    kept = not was_filed
+    print(f"[projects] an agent's {action} of the person's canvas: it was "
+          f"{'kept as' if kept else 'saved as'} \"{project['name']}\" {project['id']} first (not opened), and the "
+          f"{action} goes on {'a copy, ' + repr(copy_name) if copy_id else 'a new canvas'}", flush=True)
+    # `kept`: the canvas was already that project before this protection (a
+    # project a restore protected again), so the replies say "kept" (GM r15).
+    return {"saved": {"id": project["id"], "name": project["name"]}, "copy": copy_name, "kept": kept}
+
+
+def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
+    """In the step of a write that changes a waiting canvas (``action``,
+    CANVAS_ACTIONS): the canvas is held aside (on disk) and no longer the
+    live canvas's (owner None, so the canvas the write leaves is the ordinary
+    unfiled one, never filed as the person's), or refused at the limit.
+    Returns the hold, for _undo_waiting_canvas_guard on failure. A hold is
+    never taken back (review 6 of PR #199, L-2): if the write fails, the
+    copy equal to the live canvas goes at the next settle, by its digest.
+
+    An agent's write first files the person's canvas untouched (GM's rule
+    (a): _protect_persons_canvas); only a canvas that can't be filed for its
+    size is held aside, as before."""
+    if not _is_person_request():
+        note = _canvas_guard_note.get()
+        if note is not None and note.get("saved"):
+            return None
+        protected = _protect_persons_canvas(action)
+        if protected is not None:
+            if note is not None:
+                note.update(protected)
+            return None
+    plan = _waiting_canvas_plan()
+    if plan is None:
+        return None
+    if plan[0] == "refuse":
+        raise CanvasWaitingRefusal(plan[1], action)
+    hold = dict(_hold_live_canvas(plan[1], capped=not _is_person_request()))
+    previous = cli_graph.owner
+    # A failed owner write leaves the canvas waiting, its copy held: the
+    # next settle drops the copy by its digest (L-2: never released here).
+    _set_canvas_owner(None)
+    hold["_previousOwner"] = previous
+    return hold
+
+
+def _undo_waiting_canvas_guard(hold: dict[str, Any] | None) -> None:
+    """The clear or load failed before the canvas changed: the live canvas
+    is the waiting one again (its owner back). The hold stays: the next
+    settle drops it by its digest when the live canvas is still that canvas,
+    on disk too (L-2)."""
+    if hold is None:
+        return
+    try:
+        _set_canvas_owner(hold.get("_previousOwner"))
+    except ProjectStoreError as exc:
+        # The held copy is then the person's canvas: the live one has no project.
+        print(f"[projects] could not give the waiting canvas its owner back: {exc}; its held copy stays", flush=True)
+
+
+def _fence_waiting_canvas(action: str) -> None:
+    """The one guard every agent graph write passes while the live canvas
+    waits to be saved as a project (review 6 of PR #199, M-1): the fence
+    runs it before the route (project_workspace_fence), an in-route route in
+    its write step (_refuse_tab_write_without_revision), and every route
+    that awaits runs it again right before it writes (_refuse_if_graph_moved;
+    review 7, N-4: a restore that lands between the fence and the write).
+    Whether the canvas waits is read from the canvas itself (review 7, M-1;
+    _waiting_canvas_plan). At the limit the write is refused (409
+    canvas_waiting); below it the canvas is held aside first and the write
+    goes on, on a canvas that has no project. The person's own writes pass:
+    the person can't reach a waiting canvas (GM r6), a tab's write is
+    refused by its revision, and the person's clear or load keeps its own
+    guard in the route. Records what it did for the person's Agent log line
+    (_tell_canvas_guarded). Synchronous: no await between the check and the
+    hold."""
+    note = _canvas_guard_note.get()
+    if note is None or note.get("held") or note.get("refused") or note.get("saved"):
+        return
+    if is_person(current_request_headers()):
+        return
+    _refuse_agent_while_kept(action)
+    try:
+        hold = _guard_waiting_canvas(action)
+    except CanvasWaitingRefusal as exc:
+        note.update({"refused": exc.reason, "action": action, **_canvas_agent()})
+        print(f"[projects] refused an agent's {action} of the canvas: it waits to be saved as a project and the "
+              f"list is at its {exc.reason} limit", flush=True)
+        raise
+    if note.get("saved"):
+        note.update({"action": action, **_canvas_agent()})
+        return
+    if hold is None:
+        return
+    # The live canvas is no longer the waiting one: its held copy is. At
+    # once, so a write that comes while this one runs passes, never holds twice.
+    _held_settled(hold)
+    note.update({"held": True, "action": action, **_canvas_agent()})
+
+
+async def _tell_canvas_settled(note: dict[str, Any]) -> None:
+    """A write's guard settled the live canvas by filing it (_settle_in_step):
+    other tabs list again and see the new project, as after a listing."""
+    project_id = note.get("filed")
+    if not project_id or note.get("filedTold"):
+        return
+    note["filedTold"] = True
+    await _broadcast_projects_changed("canvasFiled", project_id)
+
+
+_HELD_PAST = {"clear": "cleared", "replace": "replaced", "change": "changed"}
+
+
+async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
+    """The person's Agent log line for what _fence_waiting_canvas did (GM):
+    "Codex tried to change the canvas you had open. Nebula stopped it …"
+    (canvasHoldRefused) or "Codex changed the canvas. The one you had open is
+    kept …" (canvasHeld), as the agent's row. No toast."""
+    if note.get("told") or not (note.get("refused") or note.get("held") or note.get("saved")):
+        return
+    note["told"] = True
+    action = note.get("action") or "change"
+    who = {key: note[key] for key in ("agent", "agentId", "color") if key in note}
+    if note.get("saved"):
+        # GM's rule (a): the person's canvas was saved first, untouched.
+        await _broadcast_projects_changed("canvasHeld", None, canvasHeld={
+            "action": _HELD_PAST.get(action, action), "savedAs": note["saved"]["name"],
+            **({"copy": True} if note.get("copy") else {}), **({"kept": True} if note.get("kept") else {}), **who})
+    elif note.get("refused"):
+        await _broadcast_projects_changed("canvasHoldRefused", None, canvasHeld={"action": action, **who})
+    else:
+        await _broadcast_projects_changed("canvasHeld", None, canvasHeld={"action": _HELD_PAST.get(action, action), **who})
+
+
+async def _note_waiting_canvas_guarded(hold: dict[str, Any] | None, action: str) -> bool:
+    """After the clear or load landed: the live wait's record goes (its held
+    copy waits instead), and an agent's change is one line in the person's
+    Agent log (GM). Whether a canvas was held, here or at the fence."""
+    fenced = bool((_canvas_guard_note.get() or {}).get("held"))
+    if hold is None:
+        return fenced
+    _held_settled(hold)
+    if _switch_actor() is not None:
+        await _broadcast_projects_changed("canvasHeld", None, canvasHeld={"action": action, **_canvas_agent()})
+    return True
+
+
+def _held_room(catalog: dict[str, Any], entry: dict[str, Any], adding_bytes: int) -> str | None:
+    """Which limit filing ``entry`` as a project would pass, or None."""
+    if len(catalog["projects"]) >= project_store_module.MAX_PROJECTS:
+        return "projects"
+    try:
+        signature = project_store.signature()
+    except ProjectStoreError:
+        signature = None
+    size = len(json.dumps({"nodes": entry["nodes"], "edges": entry["edges"]}, ensure_ascii=False,
+                          separators=(",", ":"), default=str).encode("utf-8"))
+    if (signature[2] if signature else 0) + adding_bytes + size + 64 * 1024 > project_store_module.MAX_CATALOG_BYTES:
+        return "storage"
+    return None
+
+
+def _live_canvas_is_saved_project(catalog: dict[str, Any]) -> bool:
+    """Whether the live canvas is the open project's, on disk too (its
+    filing's state.json write landed): a held copy with its digest is then
+    that project already (review 7 of PR #199, L-1)."""
+    active = catalog.get("activeProjectId")
+    return (active is not None and cli_graph.owner == active and active in catalog["projects"]
+            and _disk_canvas_digest() == _canvas_digest(cli_graph))
+
+
+def _file_held_canvases(catalog: dict[str, Any], *, copies: bool | None = None, adding: int = 0
+                        ) -> list[tuple[dict[str, Any] | None, dict[str, Any]]]:
+    """File each held canvas, oldest first, as its own project while there is
+    room ("Recovered <project>", then " copy", " copy 2"; or "Recovered
+    canvas", "Recovered canvas 2"), never
+    opened: the live canvas is another. A held canvas whose project id the
+    catalog already has (or deleted for good) was filed by a commit that
+    landed before its hold could go, and one that is the live canvas now
+    saved as a project (the same digest: review 7 of PR #199, L-1) is that
+    project already: (None, entry), dropped after, never filed twice. Each
+    is filed in its own try (review 7, M-2): one that can't be is set aside
+    (``.unfileable-…``) and said, never failing the listing. The caller
+    commits, then calls _note_held_filed. The person's canvases go before
+    the agents' copies (GM r12, 2); ``copies`` False files only the person's,
+    True only the copies; ``adding``, the bytes filed in this step already."""
+    filed: list[tuple[dict[str, Any] | None, dict[str, Any]]] = []
+    purged = catalog.get("purged") or {}
+    live_digest = _canvas_digest(cli_graph) if (cli_graph.nodes or cli_graph.edges) else None
+    live_saved: bool | None = None
+    records = _copy_records(catalog)
+    held = _held_canvases()
+    is_copy = {entry["projectId"]: isinstance(entry.get("from"), str) and entry["from"] in records for entry in held}
+    held = [entry for entry in held if not is_copy[entry["projectId"]]] + [entry for entry in held if is_copy[entry["projectId"]]]
+    if copies is not None:
+        held = [entry for entry in held if is_copy[entry["projectId"]] == copies]
+    for entry in held:
+        project_id = entry["projectId"]
+        if project_id in catalog["projects"] or project_id in (catalog.get("trash") or {}) or project_id in purged:
+            filed.append((None, entry))
+            continue
+        if live_digest is not None and entry.get("digest") == live_digest:
+            if live_saved is None:
+                live_saved = _live_canvas_is_saved_project(catalog)
+            if live_saved:
+                print(f"[projects] a held canvas is the open project's canvas already: not saved twice", flush=True)
+                filed.append((None, entry))
+                continue
+        if _held_room(catalog, entry, adding) is not None:
+            break
+        if project_store_module.held_items_intact(entry) is False:
+            # Its content isn't what was held (review 8, L-1): kept aside and said.
+            print(f"[projects] the held canvas {project_id} doesn't match what was held: kept aside, not saved",
+                  flush=True)
+            _set_aside_unfileable(project_id)
+            continue
+        try:
+            owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
+            project = make_project(_filed_canvas_name(catalog, owner),
+                                   {**empty_snapshot(), "nodes": copy.deepcopy(entry["nodes"]),
+                                    "edges": copy.deepcopy(entry["edges"])})
+            project["id"] = project_id
+            project["_backendNodeIds"] = sorted(node["id"] for node in entry["nodes"])
+            project["_backendEdgeIds"] = sorted(edge["id"] for edge in entry["edges"])
+            project["_nodeCounter"] = int(entry.get("counter", 0))
+            size = len(json.dumps(project, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
+        except Exception as exc:  # noqa: BLE001 - one canvas never fails the listing
+            print(f"[projects] couldn't save the held canvas {project_id} as a project ({exc}): kept aside",
+                  flush=True)
+            _set_aside_unfileable(project_id)
+            continue
+        catalog["projects"][project_id] = project
+        adding += size
+        filed.append((project, entry))
+        copied = _copy_records(catalog).get(owner) if isinstance(owner, str) else None
+        if copied is not None:
+            # An agent's copy held aside, filed: its record goes in this commit.
+            _copy_filings[project_id] = copied
+            _set_canvas_copies(catalog, drop=[owner])
+        print(f"[projects] saved the held canvas as its own project \"{project['name']}\" {project_id}", flush=True)
+    return filed
+
+
+def _set_aside_unfileable(project_id: str) -> None:
+    """A held canvas that can't be saved as a project leaves the held list,
+    its files kept aside and said (canvasHeldUnreadable; review 7, M-2)."""
+    global _canvas_held_cache
+    try:
+        project_store.set_aside_unfileable_held(project_id)
+    except Exception as exc:  # noqa: BLE001 - it stays held, said in the log
+        print(f"[projects] could not set the held canvas {project_id} aside: {exc}", flush=True)
+        return
+    _canvas_held_cache = (project_store, [entry for entry in _held_canvases() if entry["projectId"] != project_id])
+    _journal_held_unreadable()
+
+
+def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) -> None:
+    """After the commit that filed held canvases landed: they leave the held
+    list, each filing goes in the restore it came from and the journal
+    (`project.canvasFiled`), and the last leaves {saved} for the person's
+    toast (unless a live canvas waits too: its record stays). Never fails
+    the route."""
+    if not filed:
+        return
+    done = {entry["projectId"] for _project, entry in filed}
+    try:
+        _drop_held(done)
+    except OSError as exc:
+        print(f"[projects] could not drop the held canvases just saved: {exc} (the next listing does)", flush=True)
+    saved: list[dict[str, Any]] = []
+    try:
+        for project, entry in filed:
+            if project is None:
+                continue
+            owner = OWNER_UNPROVEN if entry.get("unproven") else entry.get("from")
+            notice = project_store.restore_notice()
+            restore_id = notice["id"] if _restore_of(notice, owner) else None
+            _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
+                                                  "from": entry.get("from"), "restoreId": restore_id, "held": True},
+                     summary=f'saved the canvas held aside as its own project "{project["name"]}"',
+                     actor={"kind": "system"})
+            if not _note_on_restore_notice(project, owner):
+                saved.append(project)
+        if saved and _canvas_not_filed_now() is None:
+            _note_canvases_saved(saved)
+    except Exception as exc:  # noqa: BLE001 - bookkeeping on a commit that landed
+        print(f"[projects] could not note the held canvases saved: {exc}", flush=True)
+    finally:
+        for project, _entry in filed:
+            if project is not None:
+                _copy_filings.pop(project["id"], None)
+
+
+def _note_on_restore_notice(project: dict[str, Any], owner: Any) -> bool:
+    """GM's answer 1 to review 8 (one saved line): while the restore notice
+    shows (not dismissed), it names every canvas filed, and no toast does.
+    The restore's own canvas is its ``recoveredCanvas``; any other canvas
+    filed while it shows joins ``alsoFiled``. False when no notice shows:
+    the caller's toast says it."""
+    notice = project_store.restore_notice()
+    if notice is None:
+        return False
+    row = _saved_row(project)
+    if row.get("agentCopy"):
+        # An agent's copy has its own line (GM r11, 4), never the person's.
+        copies = [dict(item) for item in notice.get("agentCopies") or [] if isinstance(item, dict)]
+        if not any(item.get("id") == row["id"] for item in copies):
+            project_store.note_restore(notice["id"], agentCopies=[*copies, row])
+        return True
+    if not notice.get("recoveredCanvas") and _restore_of(notice, owner):
+        project_store.note_restore(notice["id"], recoveredCanvas=row, canvasNotFiled=None)
+    else:
+        also = [dict(item) for item in notice.get("alsoFiled") or [] if isinstance(item, dict)]
+        if not any(item.get("id") == row["id"] for item in also) and \
+                (notice.get("recoveredCanvas") or {}).get("id") != row["id"]:
+            project_store.note_restore(notice["id"], alsoFiled=[*also, row])
+    return True
+
+
+# Filings this close together are one listing's (the live canvas, then the
+# held ones): one toast names them all (review 6 of PR #199, N-2).
+CANVAS_SAVED_TOGETHER_SECONDS = 5
+
+
+def _note_canvases_saved(projects: list[dict[str, Any]]) -> None:
+    """Leave {saved} for the person's toast: the last project filed (its id
+    keys the toast) and every canvas filed with it (`filed`), adding to a
+    {saved} written moments ago by the same listing."""
+    if not projects:
+        return
+    earlier = _canvas_saved_now()
+    filed: list[dict[str, str]] = []
+    if earlier is not None:
+        try:
+            from datetime import datetime as _datetime, timezone as _timezone
+
+            age = (_datetime.now(_timezone.utc) - _datetime.fromisoformat(earlier["at"])).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            age = None
+        if age is not None and 0 <= age <= CANVAS_SAVED_TOGETHER_SECONDS:
+            filed = list(earlier.get("filed") or [{"id": earlier["id"], "name": earlier["name"]}])
+    seen = {row["id"] for row in filed}
+    filed += [_saved_row(project) for project in projects if project["id"] not in seen]
+    last = projects[-1]
+    # A filing after a restore notice named the canvas it saved: "Another
+    # canvas you had open…" (GM's answer 1 to review 8).
+    latest = project_store.latest_restore() or {}
+    another = bool(latest.get("recoveredCanvas") or latest.get("alsoFiled"))
+    _write_canvas_waiting({"saved": {**_saved_row(last), "at": project_now(), "filed": filed,
+                                     **({"another": True} if another else {})}})
+
+
+def _saved_row(project: dict[str, Any]) -> dict[str, Any]:
+    """A filed canvas as the person's saved line names it: {id, name}, and
+    ``overSaveLimit`` when the project is over the save limit (GM: its line
+    says new changes won't save until it's smaller; a held canvas the
+    person's act held is never refused for its size)."""
+    row: dict[str, Any] = {"id": project["id"], "name": project["name"]}
+    # When it was saved: the person's lines name canvases in that order,
+    # which is also their number order (GM r10).
+    if isinstance(project.get("createdAt"), str):
+        row["filedAt"] = project["createdAt"]
+    copied = _copy_filings.get(project["id"])
+    if copied is not None:
+        # An agent's copy (GM r11, 4): named as the agent's, never as "a
+        # canvas you had open". ``agent`` None: "An agent’s".
+        row["agentCopy"] = {"agent": copied.get("agent")}
+    try:
+        if project_size.snapshot_bytes(project.get("snapshot") or {}) > MAX_PROJECT_BYTES:
+            row["overSaveLimit"] = True
+    except Exception:  # noqa: BLE001 - unknown: the plain line
+        pass
+    return row
+
+
+def _canvas_waiting_record() -> dict[str, Any] | None:
+    global _canvas_waiting_cache
+    cached = _canvas_waiting_cache
+    if cached is None or cached[0] is not project_store:
+        cached = _canvas_waiting_cache = (project_store, project_store.canvas_waiting())
+    return cached[1]
+
+
+def _write_canvas_waiting(value: dict[str, Any] | None) -> None:
+    """Keep the waiting record (the cache now, the file as well as it can:
+    a failed write is logged, never fails the route that settled the canvas)."""
+    global _canvas_waiting_cache
+    if value is None and _canvas_waiting_record() is None:
+        return
+    _canvas_waiting_cache = (project_store, value)
+    try:
+        project_store.set_canvas_waiting(value)
+    except OSError as exc:
+        print(f"[projects] could not keep the live canvas's waiting state: {exc}", flush=True)
+
+
+def _canvas_not_filed_now() -> dict[str, Any] | None:
+    """The live canvas waiting to be filed, or None."""
+    record = _canvas_waiting_record()
+    return record if record and record.get("reason") in ("projects", "storage") else None
+
+
+def _canvas_saved_now() -> dict[str, Any] | None:
+    """The project a waiting canvas was filed as, while that is recent."""
+    record = _canvas_waiting_record()
+    from datetime import datetime as _datetime, timezone as _timezone
+
+    saved = record.get("saved") if record else None
+    if not isinstance(saved, dict) or not isinstance(saved.get("at"), str):
+        return None
+    try:
+        age = (_datetime.now(_timezone.utc) - _datetime.fromisoformat(saved["at"])).total_seconds()
+    except ValueError:
+        return None
+    return saved if 0 <= age <= CANVAS_SAVED_SECONDS else None
+
+
+def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = True, held: int = 0,
+                           deletes: int | None = None, projects: int | None = None) -> str:
+    """The agents' line for a canvas waiting to be saved as a project (the
+    person's is GM's waiting line, frontend catalogRestoreCopy.ts): the live
+    one (``live``), and ``held`` more held aside (GM's held model). Never
+    says the person can reach it: the Projects home can't show a canvas that
+    isn't a project (GM r6; review 4, M-1). ``room_now``: the list has room
+    again (an agent's delete, and no listing since: review 4, N-2).
+    ``deletes``: how many projects must go before every waiting canvas is
+    saved; more than one (the list past its limit, as after an Undo that
+    passed it, or several canvases waiting) is said with the number and
+    ``projects``, the list's count (GM r17 on PR #199)."""
+    if live and held:
+        which = (f"The canvas the person had open isn't a saved project, and {held} earlier "
+                 f"{'canvas is' if held == 1 else 'canvases are'} held aside the same way")
+    elif live:
+        which = "The canvas the person had open isn't a saved project"
+    else:
+        which = (f"{'A canvas' if held == 1 else f'{held} canvases'} the person had open "
+                 f"{'is' if held == 1 else 'are'} held aside, not saved as {'a project' if held == 1 else 'projects'} "
+                 "yet,")
+    if room_now:
+        # Only a listing files them (_file_held_canvases; review 6, N-1).
+        return (f"{which}, but the project list has room now: the next listing (the person's Projects home, "
+                "`nebula projects`, list_projects) saves each as its own project. Nothing in them is lost. The "
+                "person can't see or open them until then.")
+    limit = project_store_module.MAX_PROJECTS
+    if reason == "projects" and deletes is not None and deletes > 1:
+        # GM r18 on PR #199, verbatim: "The project list has 4 projects,
+        # over the limit of 3. Move 2 to Recently deleted to make room." At
+        # the limit itself (several canvases waiting), the same pattern.
+        if projects is not None and projects > limit:
+            room = (f"The project list has {counted(projects, 'project')}, over the limit of {limit}. "
+                    f"Move {deletes} to Recently deleted to make room.")
+        else:
+            room = (f"The project list is at its limit of {counted(limit, 'project')}. "
+                    f"Move {deletes} to Recently deleted to make room.")
+        head = f"{which} and couldn't be saved as one. {room} The next listing then saves each as its own project."
+    elif reason == "projects":
+        room = (f"the project list is at its limit of {counted(limit, 'project')}. Moving a project "
+                "to Recently deleted frees a slot")
+    else:
+        room = ("the project list is full (its size limit). Only deleting a project for good (removing it from "
+                "Recently deleted) frees room; moving one to Recently deleted doesn't")
+    now = ("No project is open, and the person can't see or open this canvas until it is saved. " if live else
+           "The person can't see or open a held canvas until it is saved. ")
+    if not (reason == "projects" and deletes is not None and deletes > 1):
+        head = f"{which} and couldn't be saved as one: {room}, and the next listing then saves each as its own project."
+    return (f"{head} "
+            f"Nothing in {'it' if int(live) + held == 1 else 'them'} is lost, also across "
+            f"restarts. {now}Opening an existing project works: a waiting canvas is held aside first, whole, and "
+            "saved from that copy. Making a new project is refused (413) until there is room. While the live canvas "
+            "waits at the limit, every change to it is refused (409, code canvas_waiting): adding, removing or "
+            "editing nodes and connections, applying, restoring, running, clearing it or loading a graph onto it. Below "
+            "the limit a change holds it aside first and then goes ahead on a canvas that has no project and is "
+            "never saved: open or make a project to keep your work. A canvas bigger than a project can be saved is "
+            "never held for an agent: that change is refused (409, code canvas_held_full). Freeing room is the person's choice: tell "
+            "them, don't delete projects to make room.")
+
+
+def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """`canvasNotFiled` as the listing, start_here and `nebula context` carry
+    it: the live canvas waiting, and the canvases held aside (``held``).
+    ``room_now`` (start_here, which doesn't settle the canvas): the list has
+    room for them again, so the next listing, open or create saves them."""
+    waiting = _canvas_not_filed_now()
+    held = _held_distinct() if waiting is not None else _held_canvases()
+    if waiting is None and not held:
+        return None
+    first = waiting or held[0]
+    unreadable = _held_unreadable_view()
+    copies = _copy_records(catalog)
+    # Each canvas that waits, in the order they are saved (GM r12, 2): the
+    # person's first (held ones oldest first, then the live one), then the
+    # agents' copies. The name of the project it was, when that is known (the
+    # person's line names up to 3: review 6, N-2); an agent's copy is marked
+    # `agentCopy` (GM r11, 4): the person's line never calls it "the canvas
+    # you had open". At the project limit each says how many projects the
+    # person deletes before it is saved (`deletes`), so each line has its
+    # own true count.
+    rows = [_waiting_canvas_row(entry.get("from"), catalog, copies) for entry in held] \
+        + ([_waiting_canvas_row(waiting.get("from"), catalog, copies)] if waiting is not None else [])
+    rows = [row for row in rows if not row.get("agentCopy")] + [row for row in rows if row.get("agentCopy")]
+    if catalog is not None and first["reason"] == "projects":
+        for place, row in enumerate(rows, start=1):
+            row["deletes"] = max(1, len(catalog["projects"]) + place - project_store_module.MAX_PROJECTS)
+    total_deletes = (max(1, len(catalog["projects"]) + len(held) + (1 if waiting is not None else 0)
+                         - project_store_module.MAX_PROJECTS)
+                     if catalog is not None and first["reason"] == "projects" else None)
+    return {"reason": first["reason"], "from": first.get("from"), "since": first.get("since"),
+            "projectLimit": project_store_module.MAX_PROJECTS, "live": waiting is not None, "held": len(held),
+            "canvases": rows,
+            **({"heldUnreadable": unreadable} if unreadable else {}),
+            **({"roomNow": True} if room_now else {}),
+            # How many projects the person deletes before every canvas that
+            # waits is saved (GM's answer 3: the plural line's real number).
+            **({"deletes": total_deletes} if total_deletes is not None else {}),
+            "note": _canvas_not_filed_note(first["reason"], room_now=room_now, live=waiting is not None,
+                                           held=len(held), deletes=total_deletes,
+                                           projects=len(catalog["projects"]) if catalog is not None else None)}
+
+
+def _waiting_canvas_row(owner: Any, catalog: dict[str, Any] | None, copies: Mapping[str, Any]) -> dict[str, Any]:
+    """One waiting canvas as `canvasNotFiled.canvases` lists it: {name}, and
+    `agentCopy: {agent}` when it is an agent's copy of the person's canvas."""
+    copied = copies.get(owner) if isinstance(owner, str) else None
+    if copied is not None:
+        return {"name": None, "agentCopy": {"agent": copied.get("agent")}}
+    return {"name": _waiting_canvas_name(owner, catalog)}
+
+
+def _waiting_canvas_name(owner: Any, catalog: dict[str, Any] | None) -> str | None:
+    """The name of the project a waiting canvas was, when it can be read (in
+    Recently deleted, or the restore that couldn't bring it back), else None."""
+    if not isinstance(owner, str):
+        return None
+    trashed = ((catalog or {}).get("trash") or {}).get(owner)
+    name = trashed.get("name") if isinstance(trashed, dict) else None
+    if not isinstance(name, str):
+        latest = project_store.latest_restore() or {}
+        name = latest.get("openProjectName") if latest.get("openProjectMissing") == owner else None
+    return name if isinstance(name, str) and name.strip() else None
+
+
+async def _canvas_has_room_now(catalog: dict[str, Any]) -> bool:
+    """Whether a waiting canvas would be saved by the next listing: the list
+    has room for it again (an agent deleted a project, and nothing listed
+    since). start_here reads, never settles, so it says so instead of the
+    refusal that no longer holds (review 4, N-2)."""
+    if _canvas_not_filed_now() is None:
+        held = _held_canvases()
+        return bool(held) and _held_room(catalog, held[0], 0) is None
+    try:
+        exported = await _projects_live_export()
+    except Exception:  # noqa: BLE001 - unknown: say it waits, as before
+        return False
+    return _filing_room(catalog, exported) is None
+
+
+def _mark_canvas_not_filed(limit: str, owner: Any) -> None:
+    """Note that the live canvas (``owner``'s) couldn't be filed: the list
+    is at its ``limit``. Logged once per limit, and journaled once by the
+    next _note_canvas_settled (``journaled``), across restarts."""
+    current = _canvas_not_filed_now()
+    first = current is None or current.get("reason") != limit
+    if first:
+        print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}) and the list is "
+              f"at its {limit} limit: it waits, unfiled and unchanged, until there is room", flush=True)
+    value = {"reason": limit, "from": owner if isinstance(owner, str) else None,
+             "since": project_now() if first else (current or {}).get("since"),
+             "journaled": False if first else bool((current or {}).get("journaled"))}
+    if value != current:
+        _write_canvas_waiting(value)
+
+
+def _canvas_settled_off_waiting(project: dict[str, Any] | None = None) -> None:
+    """The live canvas is a project again (filed, its own, or empty): no
+    waiting record. A waiting canvas just filed as ``project`` leaves
+    {saved} for the person's toast."""
+    if project is not None and _canvas_not_filed_now() is not None:
+        _note_canvases_saved([project])
+        return
+    if _canvas_not_filed_now() is not None:
+        _write_canvas_waiting(None)
+
+
+def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tuple[str, Any] | None:
+    """Make the catalog's open project the one the live canvas is, before
+    anything saves the canvas into a project or replaces it (review 1 of PR
+    #199, H1). The two disagree after a restore, or a crash between the two
+    files of a switch, a create or a delete. Returns None when they agree,
+    else (what it did, more):
+    - "opened": the canvas's own project (still in the list);
+    - "filed": the canvas as its own project (its project isn't in the list,
+      or which it is can't be known); more is (the project, the owner before);
+    - "waiting": it couldn't be filed, the list is at a limit; more is the
+      limit; no project is open;
+    - "closed": no project open (an empty canvas that isn't the open one).
+    The caller commits (the workspace revision changes, so open tabs
+    reload), then calls _note_canvas_settled."""
+    owner = cli_graph.owner
+    active = catalog["activeProjectId"]
+    if owner is OWNER_UNKNOWN or owner == active:
+        _canvas_settled_off_waiting()
+        return None
+    if isinstance(owner, str) and owner in catalog["projects"]:
+        catalog["activeProjectId"] = owner
+        catalog["workspaceRevision"] = uuid4().hex
+        node_errors.use_project(owner)
+        _canvas_settled_off_waiting()
+        print(f"[projects] the live canvas is project {owner}, not the open {active}: opening it", flush=True)
+        return "opened", None
+    if cli_graph.nodes or cli_graph.edges:
+        _drop_held_copies_of_live()
+        limit = _filing_room(catalog, exported)
+        if limit is not None:
+            _mark_canvas_not_filed(limit, owner)
+            if active is not None:
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+            return "waiting", limit
+        # Read before the filing: its owner write ends the canvas's own copy note.
+        copied = _copy_records(catalog).get(owner) if isinstance(owner, str) else None
+        project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, owner))
+        if copied is not None:
+            # An agent's copy: filed and opened as the agent's, unprotected;
+            # its record leaves in this commit.
+            _copy_filings[project["id"]] = copied
+            _set_canvas_copies(catalog, drop=[owner], prune=True)
+        else:
+            # The person's canvas: protected in this same commit (review 9,
+            # M-1), so no failed write or crash after it leaves the project
+            # open and unprotected. Copies that no longer exist go too (nit 3).
+            _mark_fresh_filing(catalog, project["id"])
+            _set_canvas_copies(catalog, prune=True)
+        print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}): "
+              f"filed as \"{project['name']}\" {project['id']}", flush=True)
+        return "filed", (project, owner)
+    _set_canvas_owner(None)
+    _canvas_settled_off_waiting()
+    if active is None:
+        return None
+    catalog["activeProjectId"] = None
+    catalog["workspaceRevision"] = uuid4().hex
+    print(f"[projects] the live canvas is empty and isn't the open project {active}: none is open", flush=True)
+    return "closed", None
+
+
+def _restore_of(notice: Mapping[str, Any] | None, owner: Any) -> bool:
+    """Whether filing (or not filing) the live canvas whose owner was
+    ``owner`` is the doing of the restore ``notice`` records: it opened no
+    project, and the canvas is the project it couldn't bring back, or was
+    unproven when it ran. A later filing (a crash window weeks on) is not
+    (review 2 of PR #199, L5 i)."""
+    if not notice or notice.get("openFrom") != "none" or notice.get("recoveredCanvas"):
+        return False
+    if isinstance(owner, str):
+        return notice.get("openProjectMissing") == owner
+    return owner is OWNER_UNPROVEN and notice.get("canvasOwner") is None and not notice.get("openProjectMissing")
+
+
+def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
+    """After the commit that settled the live canvas (every route that
+    settles it: the listing, create, open and delete; review 2 of PR #199,
+    L5): a filing goes in the restore record it came from (the notice and
+    the agents' note say so) and is journaled (`project.canvasFiled`); a
+    canvas that couldn't be filed is journaled once
+    (`project.canvasNotFiled`) and noted on its restore. Never fails the
+    route."""
+    if not settled or settled[0] not in ("filed", "waiting"):
+        return
+    try:
+        notice = project_store.restore_notice()
+        if settled[0] == "filed":
+            project, owner = settled[1]
+            copied = _copy_filings.get(project["id"])
+            copy = copied is not None
+            if copy and cli_graph.owner == project["id"]:
+                # The agent's edits on the copy were made with no project
+                # open: their undo goes with the copy into its project, only
+                # those made since the copy (review 9, nit 4).
+                since = copied.get("mark") if copied.get("boot") == BACKEND_BOOT_ID else None
+                canvas_undo_book.rehome(None, project["id"], project["name"], since=since)
+            restore_id = notice["id"] if _restore_of(notice, owner) and not copy else None
+            # After its commit landed: the restore notice names it while it
+            # shows (GM's answer 1 to review 8), else a waiting canvas
+            # leaves {saved} for the toast.
+            if _note_on_restore_notice(project, owner):
+                _canvas_settled_off_waiting()
+            else:
+                _canvas_settled_off_waiting(project)
+            _journal("project.canvasFiled", data={"projectId": project["id"], "name": project["name"],
+                                                  "from": owner if isinstance(owner, str) else None,
+                                                  "restoreId": restore_id},
+                     summary=f'saved the live canvas as its own project "{project["name"]}"', actor={"kind": "system"})
+            _copy_filings.pop(project["id"], None)
+            return
+        waiting = _canvas_not_filed_now()
+        if waiting is None or waiting.get("journaled"):
+            return
+        _write_canvas_waiting({**waiting, "journaled": True})
+        owner = cli_graph.owner
+        restore_id = notice["id"] if _restore_of(notice, owner) else None
+        if restore_id:
+            project_store.note_restore(restore_id, canvasNotFiled={"reason": settled[1]})
+        _journal("project.canvasNotFiled", data={"reason": settled[1], "from": waiting.get("from"),
+                                                 "since": waiting.get("since"), "restoreId": restore_id},
+                 summary=f"couldn't save the live canvas as its own project: the project list is at its {settled[1]} limit",
+                 actor={"kind": "system"})
+    except Exception as exc:  # noqa: BLE001 - bookkeeping on a commit that landed
+        print(f"[projects] could not note how the live canvas was settled: {exc}", flush=True)
+
+
+def _settle_would_file(catalog: dict[str, Any]) -> bool:
+    """Whether _settle_live_canvas would file the live canvas as a new
+    project (it isn't a project in the list, and holds something)."""
+    owner = cli_graph.owner
+    if owner is OWNER_UNKNOWN or owner == catalog["activeProjectId"]:
+        return False
+    if isinstance(owner, str) and owner in catalog["projects"]:
+        return False
+    return bool(cli_graph.nodes or cli_graph.edges)
+
+
+def _refuse_a_create_past_the_limit(catalog: dict[str, Any]) -> None:
+    """A create adds its own project, and first files the live canvas when
+    that isn't a project: both must fit, checked before anything is filed
+    or written (review 3 of PR #199, L-4: one below the limit filed the
+    canvas, then refused the create, and left state.json owning a project
+    that never existed). Refused with the limit's 413; nothing changes, and
+    the next listing files the canvas (there is room for it alone)."""
+    adding = 1 + (1 if _settle_would_file(catalog) else 0) + len(_held_distinct())
+    if len(catalog["projects"]) + adding > project_store_module.MAX_PROJECTS:
+        raise ProjectLimitError("Project limit reached", "projects")
+
+
+def _undo_canvas_filing(settled: tuple[str, Any] | None) -> None:
+    """A route filed the live canvas, then failed before its commit landed:
+    the canvas is its earlier project's again (state.json too), so state.json
+    never owns a project that doesn't exist (review 3 of PR #199, L-4)."""
+    if not settled or settled[0] != "filed":
+        return
+    _project, previous_owner = settled[1]
+    try:
+        _set_canvas_owner(previous_owner)
+    except ProjectStoreError as exc:
+        # The next listing settles it again: an owner the list lacks is filed.
+        print(f"[projects] could not give the live canvas its owner back after a failed filing: {exc}", flush=True)
+
+
 def _graph_canvas_export(graph: CLIGraph) -> dict[str, list[dict[str, Any]]]:
     """``graph``'s nodes and wires as the canvas gets them
     (export_graph_for_frontend's shape), without its side effects: for
@@ -16660,7 +20158,7 @@ def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]]
     """(the open project, its snapshot with ``graph`` on its canvas), or None
     with no project open."""
     active = project_store.workspace().get("activeProjectId")
-    project = _open_project_record(active) if active else None
+    project = _open_project_record(active) if active and _canvas_is(active, active) else None
     if project is None:
         return None
     return project, _overlaid_snapshot(project, _graph_canvas_export(graph))
@@ -16770,8 +20268,9 @@ def _project_replacement_guard(action: str = "switch projects", *, person: str |
     person's own line for the run refusal (refusal_copy), where GM wrote one
     (Clear, round 11); agents keep the specific text either way."""
     _reject_graph_replacement_during_paid_start(action)
+    _refuse_agent_while_kept(action)
     if execution_runs.has_active():
-        specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+        specific = _run_detail(action)
         if person is None:
             raise HTTPException(status_code=409, detail=specific)
         raise refusal_copy.refusal(409, specific, person, route="canvas")
@@ -16785,8 +20284,16 @@ CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop i
 
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
-    """Prepare both disk writes before adopting any new live graph in memory."""
+    """Prepare both disk writes before adopting any new live graph in memory.
+    The ratchet (PR #199 round 17, review 15 HIGH-1): the live graph never
+    holds a node id that isn't Nebula's, so this fails loudly (500, nothing
+    written) on one; open_saved_project renumbers before it gets here."""
+    _require_backend_node_ids({"nodes": [{**node, "id": node_id} for node_id, node in candidate.nodes.items()]})
     previous = cli_graph.clone()
+    # The canvas becomes the project now open, recorded with it in state.json
+    # before the catalog says so (a crash between the two leaves a canvas
+    # that names its project: _settle_live_canvas).
+    candidate.owner = catalog["activeProjectId"]
     temporary = project_store.prepare(catalog)
     additions = []
     graph_written = False
@@ -16808,11 +20315,12 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
         raise ProjectStoreError("Project switch could not be saved; the live canvas was preserved") from exc
     finally:
         temporary.unlink(missing_ok=True)
-    cli_graph.nodes = copy.deepcopy(candidate.nodes)
-    cli_graph.edges = copy.deepcopy(candidate.edges)
-    cli_graph._counter = candidate._counter
+    cli_graph.adopt(candidate)
     # The incoming project's nodes' last run errors, kept while it was closed.
     node_errors.use_project(catalog["activeProjectId"])
+    # The selection the person's tab published was the other project's
+    # (review 15 kept-wires-ui LOW-1): agents read none until it publishes again.
+    selection_context.clear()
 
 
 @app.get("/api/projects")
@@ -16820,48 +20328,157 @@ async def list_projects() -> dict[str, Any]:
     exported = await _projects_live_export()
     with project_store.transaction() as catalog:
         changed = False
+        revision_read = catalog["workspaceRevision"]
         adopted: str | None = None
         filed_from: tuple[str, int] | None = None
+        # The person's canvases are saved before an agent's copy (GM r12, 2:
+        # so each waiting line's count stays true): when the live canvas is
+        # an agent's copy, the person's canvases held aside go first.
+        live_copy = isinstance(cli_graph.owner, str) and cli_graph.owner not in catalog["projects"] \
+            and cli_graph.owner in _copy_records(catalog)
+        persons_first = _file_held_canvases(catalog, copies=False) if live_copy else []
+        # The open project is the one the live canvas is, or the canvas is
+        # filed as its own (review 1 of PR #199, H1).
+        settled = _settle_live_canvas(catalog, exported)
+        changed = settled is not None and (settled[0] != "waiting" or catalog["workspaceRevision"] != revision_read)
         if not catalog["projects"] and cli_graph.nodes:
+            # The unfiled canvas of a first launch (or from before projects).
             filed_from = (catalog["workspaceRevision"], canvas_undo_book.epoch(None))
-            snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
-            project = make_project("Recovered canvas", snapshot)
-            _overlay_live_project(project, exported)
-            catalog["projects"][project["id"]] = project
-            catalog["activeProjectId"] = project["id"]
-            catalog["workspaceRevision"] = uuid4().hex
-            catalog["migratedProjectId"] = project["id"]
+            project = _file_live_canvas(catalog, exported, migrated=True)
             changed = True
             adopted = project["id"]
         elif active := catalog["activeProjectId"]:
-            changed = _overlay_live_project(catalog["projects"][active], exported)
+            changed = _overlay_live_project(catalog["projects"][active], exported) or changed
         for project in catalog["projects"].values():
             if needs_cover(project):  # saved before covers existed
                 refresh_metadata(project, touch=False)
                 changed = True
         expired = purge_expired_trash(catalog)
         changed = expired or changed
+        # The canvases held aside while they waited (GM's held model), each
+        # its own project once there is room.
+        done = {entry["projectId"] for _project, entry in persons_first}
+        added = sum(len(json.dumps(project, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
+                    for project, _entry in persons_first if project is not None)
+        held_filed = persons_first + [row for row in _file_held_canvases(catalog, adding=added)
+                                      if row[1]["projectId"] not in done]
+        changed = bool(held_filed) or changed
         if changed:
-            project_store.commit(catalog)
+            try:
+                project_store.commit(catalog)
+            except ProjectLimitError as exc:
+                held_backstop = any(project is not None for project, _entry in held_filed)
+                if not held_backstop and (not settled or settled[0] != "filed"):
+                    raise
+                # The room check let it through but the commit is past a
+                # limit: held canvases filed now stay held, and a filed live
+                # canvas is undone (state.json too) and stays live and
+                # unfiled; the listing goes on without them (L4's backstop).
+                for project, _entry in held_filed:
+                    if project is not None:
+                        catalog["projects"].pop(project["id"], None)
+                held_filed = [(None, entry) for project, entry in held_filed if project is None]
+                if settled and settled[0] == "filed":
+                    filed, previous_owner = settled[1]
+                    catalog["projects"].pop(filed["id"], None)
+                    catalog["activeProjectId"] = None
+                    catalog["workspaceRevision"] = uuid4().hex
+                    if catalog.get("migratedProjectId") == filed["id"]:
+                        catalog.pop("migratedProjectId", None)
+                    _set_canvas_owner(previous_owner)
+                    _mark_canvas_not_filed(exc.limit, previous_owner)
+                    settled = ("waiting", exc.limit)
+                project_store.commit(catalog)
         if adopted is not None:
             # In the commit's step: the same live graph, now this project's.
             _adopt_run_canvases(adopted)
             if filed_from is not None:
                 _note_canvas_filed(*filed_from, _workspace_context())
+        _note_canvas_settled(settled)
+        _note_held_filed(held_filed)
         listing = {
-            "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
+            "projects": sorted((_listed_project(project, catalog) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
             # The canvas reloads instead of loading a project when it differs
             # from its own (frontend/src/store/projectStore.ts).
             "paramsVersion": PARAMS_VERSION,
+            # How many projects the list may hold, for the person's lines
+            # that name it (the waiting lines).
+            "projectLimit": project_store_module.MAX_PROJECTS,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
+            # What holds opening or switching projects now, or null (the
+            # open route's guards, read: GET /api/projects/open-hold).
+            "openHold": _hold_or_none(catalog),
         }
+        if waiting := _canvas_not_filed_view(catalog=catalog):
+            # The live canvas isn't a project and couldn't be filed: the list
+            # is at a limit (review 2 of PR #199, L4). No project is open.
+            # With the agents' note (review 3, L-5): the person's waiting
+            # line shows whether or not a restore notice is open.
+            listing["canvasNotFiled"] = waiting
+        elif saved := _canvas_saved_now():
+            # A waiting canvas was filed (GM r5: the person's "saved" toast).
+            listing["canvasSaved"] = dict(saved)
+        if unreadable := _held_unreadable_view():
+            # A held canvas couldn't be read or saved and may be lost
+            # (review 6 of PR #199, L-1): the person's line, for a week.
+            listing["canvasHeldUnreadable"] = unreadable
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
+    # A restore of a damaged catalog the person hasn't closed the notice of
+    # (ProjectStore.restore_notice): the Projects home shows GM's line,
+    # agents read `note` and where the damaged file is kept.
+    if restore := _catalog_restore_view(project_store.restore_notice(), catalog):
+        listing["catalogRestore"] = restore
     if expired:
         # Trash past its 30 days took its question sets with it.
         agent_questions.keep_projects(kept)
+    if settled and settled[0] == "filed":
+        # Other tabs list again and see the new project.
+        await _broadcast_projects_changed("canvasFiled", settled[1][0]["id"])
+    for project, _entry in held_filed:
+        if project is not None:
+            await _broadcast_projects_changed("canvasFiled", project["id"])
     return listing
+
+
+@app.post("/api/projects/catalog-restore/dismiss")
+async def dismiss_catalog_restore(body: dict[str, Any]) -> dict[str, Any]:
+    """The person closed the restore notice on the Projects home (×): it
+    isn't shown again. The person's only: an agent closing it would keep the
+    person from ever reading it. ``dismissed`` is false when ``id`` isn't the
+    restore the notice shows (already closed, or a newer one came)."""
+    if not _is_person_request():
+        raise _person_only_refusal("Only the person closes the project list's restore notice.")
+    record_id = body.get("id") if isinstance(body, dict) else None
+    if not isinstance(record_id, str) or not record_id:
+        raise HTTPException(status_code=400, detail="id must be the restore's id (GET /api/projects catalogRestore.id)")
+    return {"dismissed": project_store.dismiss_restore(record_id)}
+
+
+@app.post("/api/projects/canvas-held-unreadable/dismiss")
+async def dismiss_canvas_held_unreadable(body: dict[str, Any]) -> dict[str, Any]:
+    """The person closed the notice that canvases held aside couldn't be
+    read (×, GM r9: a one-time report). The person's only, like the restore
+    notice's ×. ``at`` is the listing's ``canvasHeldUnreadable.at``;
+    ``dismissed`` is false when it isn't the note shown."""
+    if not _is_person_request():
+        raise _person_only_refusal("Only the person closes the notice about canvases that couldn't be read.")
+    at = body.get("at") if isinstance(body, dict) else None
+    if not isinstance(at, str) or not at:
+        raise HTTPException(status_code=400, detail="at must be the note's time (GET /api/projects canvasHeldUnreadable.at)")
+    _held_canvases()
+    return {"dismissed": project_store.dismiss_held_unreadable(at)}
+
+
+@app.get("/api/projects/open-hold")
+async def get_open_hold() -> dict[str, Any]:
+    """What holds opening or switching projects now (the open route's own
+    guards, read with no side effect: no fence, no journal write, no retry),
+    for the person's tab (it locks Open before the press) and agents:
+    {"hold": {state, nodeId, nodeName, projectId, projectName, count,
+    fields, detail} | null} (_graph_replacement_hold)."""
+    return {"hold": _graph_replacement_hold()}
 
 
 @app.get("/api/projects/{project_id}")
@@ -16876,11 +20493,17 @@ async def get_saved_project(project_id: str, view: str | None = None) -> dict[st
         project = _project_id_or_404(project_id, catalog)
         if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
             project_store.commit(catalog)
+        if view is None and _is_person_request():
+            # The person's tab loaded it: from here on it holds the new ids.
+            _end_boot_replacement(project_id)
         if view == "agent":
             from services.project_view import agent_project
 
-            return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
+            read = agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
                                  secrets=_agent_key_secrets())
+            if (source := _recovered_source(project, catalog)) is not None:
+                read.update(source)  # a recovered copy's source, as list_projects reads it
+            return read
         return public_project(project)
 
 
@@ -16899,7 +20522,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
     catalog = project_store.read()
     project = _project_id_or_404(project_id, catalog)
     is_open = catalog["activeProjectId"] == project_id
-    snapshot = _overlaid_snapshot(project, exported) if is_open else project["snapshot"]
+    snapshot = _overlaid_snapshot(project, exported) if is_open and _canvas_is(project_id, project_id) else project["snapshot"]
     found = project_size.breakdown(snapshot)
     size, limit = found["bytes"], MAX_PROJECT_BYTES
     all_defs = node_registry.get_all()
@@ -16973,9 +20596,19 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         # The source may have been deleted in another window while this tab
         # held unsaved edits to it. Those edits still deserve a copy.
-        source = catalog["projects"].get(source_id) or (catalog.get("trash") or {}).get(source_id) or {
-            "id": source_id, "name": "Deleted project", "snapshot": empty_snapshot(),
-        }
+        # A restore while the tab held them can take the source's row too
+        # (review 11 of PR #199, HIGH-1): the tab says the name it showed.
+        shown = body.get("sourceName")
+        # Cut to a project name's length (NAME_LIMIT code points); the copy's
+        # own name is fitted by recovered_name.
+        shown = shown.strip()[:project_store_module.NAME_LIMIT] if isinstance(shown, str) and shown.strip() else None
+        held = catalog["projects"].get(source_id) or (catalog.get("trash") or {}).get(source_id)
+        source = held or {"id": source_id, "snapshot": empty_snapshot(), "name": shown or "Deleted project"}
+        # What the copy was made from (GM r29 of PR #199, 2): the source's
+        # name as Nebula held it, or the name the tab showed when the row is
+        # gone, else none. The tab's reload line names this, never a source
+        # read from the copy's name.
+        recovered_from = {"id": source_id, "name": held["name"] if held else shown}
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
         verdict.require(body)
@@ -16983,49 +20616,122 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         if existing := catalog["projects"].get(recovery_id):
             if existing.get("_recoveryFingerprint") != fingerprint:
                 raise HTTPException(status_code=409, detail="Recovery ID already belongs to a different snapshot")
-            return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
+            # A retry answers as the first save did: the same ids, the same
+            # left-out wires and the same source.
+            return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"],
+                    "renumbered": copy.deepcopy(existing.get("_recoveryRenumbered") or {}),
+                    "droppedWires": copy.deepcopy(existing.get("_recoveryDroppedWires") or []),
+                    "sourceName": _recovered_source_name(existing)}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
         # The body's check covered its snapshot; staging doesn't walk it twice.
+        # A kept tab's wires arrive only here (GM r21 on PR #199, 3): one the
+        # server's rules refuse is left out and reported, never the whole save.
+        dropped_wires: list[dict[str, Any]] = []
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
-                                                      ingress=verdict.part("snapshot"))
+                                                      ingress=verdict.part("snapshot"), dropped_wires=dropped_wires)
         # A recovered copy keeps only the placeholders the live graph has (never a tab's own).
         _live_pending_flags(snapshot["nodes"], cli_graph.nodes if catalog["activeProjectId"] == source["id"] else {})
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
+        # The nodes a kept tab added or duplicated get backend ids (review 14
+        # HIGH-1 of PR #199): numbered on past the source's counter, so the
+        # copy's later nodes never take one of them. The tab adopts them from
+        # `renumbered`; agents only ever see the copy's nN ids.
+        # Past every id the copy, its run history and the source's records
+        # have ever used, even with the source gone (review 15 LOW-1): a
+        # renumbered node never takes a deleted node's id and its run records.
+        renumbered, counter = _renumber_tab_local_nodes(
+            snapshot, max(candidate._counter, int(source.get("_nodeCounter", 0) or 0),
+                          _ids_ever_used(source["snapshot"]),
+                          _highest_backend_id(source.get("pins"), source.get("agentNotes"))))
+        # The left-out connections by the copy's ids, as the tab holds them
+        # after `renumbered` (an end not in the copy stays null, its tab id
+        # in sourceWas / targetWas), and their agents' sentences too.
+        for wire in dropped_wires:
+            for key in ("source", "target"):
+                wire[key] = renumbered.get(wire[key], wire[key])
+            for old_id, new_id in renumbered.items():
+                wire["detail"] = wire["detail"].replace(old_id, new_id)
         try:
             project = make_project(body.get("name") or _recovered_copy_name(source["name"], catalog), snapshot)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         project.update({
             "id": recovery_id, "lastOpenedAt": None, "_recoveryFingerprint": fingerprint,
-            "_recoverySourceId": source["id"], "_nodeCounter": max(candidate._counter, source.get("_nodeCounter", 0)),
+            "_recoverySourceId": source["id"], "_nodeCounter": counter,
             "_backendNodeIds": [], "_backendEdgeIds": [],
             "_paramsVersion": params_version,
+            "_recoveryRenumbered": renumbered, "_recoveryDroppedWires": dropped_wires[:_MAX_DROPPED_WIRES],
+            "recoveredFrom": recovered_from,
         })
         upgrade_project(project)
+        _require_backend_node_ids(project["snapshot"])
         catalog["projects"][recovery_id] = project
-        project_store.commit(catalog)
-        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
-    _journal_project_change("project.created", result["project"])  # before any await (round 8 of PR #114)
+        try:
+            project_store.commit(catalog)
+        except ProjectLimitError as exc:
+            # The tab's line names the limit and how many there are (GM r22 on PR #199).
+            if exc.limit == "projects":
+                exc.project_count = len(catalog["projects"]) - 1
+            raise
+        result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
+                  "renumbered": copy.deepcopy(renumbered), "droppedWires": copy.deepcopy(project["_recoveryDroppedWires"]),
+                  "sourceName": _recovered_source_name(project)}
+        recovered = _recovered_source(project, catalog)
+    _journal_project_change("project.created", result["project"],
+                            dropped_wires=result["droppedWires"],
+                            recovered=recovered)  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
     return result
 
 
+def _recovered_source_name(project: Mapping[str, Any]) -> str | None:
+    """The name of the project a recovered copy was made from, as its record
+    keeps it (``recoveredFrom``), or None when it isn't known (a copy from
+    before GM r29 of PR #199, or a source whose name nobody had): the line
+    then says only what is true. Never read from the copy's own name."""
+    found = project.get("recoveredFrom")
+    name = found.get("name") if isinstance(found, Mapping) else None
+    return name if isinstance(name, str) and name else None
+
+
+def _recovered_source(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A recovered copy's source as agents read it (PR #199 round 21, review
+    19 agents-docs LOW-2), never from the copy's name: ``sourceName`` the
+    source's name as the copy's record keeps it (``recoveredFrom``; null
+    when unknown, and null while the source is neither in the list nor in
+    Recently deleted: agents can't read a project gone for good, so they
+    aren't told its name), ``sourceProjectId`` its id while it is still in
+    the list, else null. None for a project that isn't a recovered copy."""
+    found = project.get("recoveredFrom")
+    source_id = found.get("id") if isinstance(found, Mapping) else project.get("_recoverySourceId")
+    if not isinstance(source_id, str) or not source_id:
+        return None
+    listed = source_id in (catalog.get("projects") or {})
+    readable = listed or source_id in (catalog.get("trash") or {})
+    return {"sourceName": _recovered_source_name(project) if readable else None,
+            "sourceProjectId": source_id if listed else None}
+
+
+def _listed_project(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """A row of GET /api/projects: the project's metadata, and for a
+    recovered copy its source (_recovered_source)."""
+    row = project_metadata(project)
+    if (source := _recovered_source(project, catalog)) is not None:
+        row.update(source)
+    return row
+
+
 def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
-    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5):
-    "<project> (recovered)", then "(recovered 2)", 3 and so on, one past the
-    highest the project's copies have (in Projects or the trash), so a new
-    copy never takes an earlier copy's name."""
-    stem = f"{source_name[:100]} (recovered"
-    pattern = re.compile(re.escape(stem) + r"(?: (\d+))?\)")
-    highest = 0
-    for listing in (catalog.get("projects") or {}, catalog.get("trash") or {}):
-        for project in listing.values():
-            match = pattern.fullmatch(str((project or {}).get("name") or ""))
-            if match:
-                highest = max(highest, int(match.group(1) or 1))
-    return f"{stem})" if highest == 0 else f"{stem} {highest + 1})"
+    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
+    r29 2 of PR #199; project_store.recovered_name): "Recovered <project>"
+    when it is free, else that plus " copy", then " copy 2", the lowest
+    free. No number in the project's name is read: "Shot" gives "Recovered
+    Shot" beside "Recovered Shot 7". A recovered copy of "Recovered Alpha"
+    is "Recovered Alpha copy". A copy filed earlier is in the list, so a
+    second recovery right after the first gets its own name."""
+    return project_store_module.recovered_name(source_name, catalog)
 
 
 def _switch_actor() -> dict[str, Any] | None:
@@ -17059,6 +20765,174 @@ def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
     return handoffs
 
 
+# On a project an open renumbered while a handoff is kept for it (a reopen in
+# place; review 16 HIGH-1 of PR #199): {"revision": the handoff's, "map":
+# {old: new}, "base": {new: {params, label, position}}}. It lasts as long as
+# that handoff and ends with it. ``base`` (round 19, review 17 MEDIUM-1) is
+# each renamed node as the open (or the boot) loaded it: the tab's last
+# autosave of it, which the handoff compares the tab's copy with, so only
+# what the person changed since counts as unsent.
+_HANDOFF_RENUMBERED = "_handoffRenumbered"
+
+
+def _renumbered_base(project: Mapping[str, Any], mapping: Mapping[str, str]) -> dict[str, dict[str, Any]]:
+    """Each renamed node's settings, name and place in the project's stored
+    copy (already under the new ids): the handoff's baseline. With its run
+    result (``result``, _run_result) and the result landings Nebula had seen
+    then (``resultSeq``, node_result_runs.seq; review 18 handoff-reopen
+    MEDIUM-3)."""
+    wanted = set(mapping.values())
+    base: dict[str, dict[str, Any]] = {}
+    for node in (project.get("snapshot") or {}).get("nodes") or []:
+        if not isinstance(node, dict) or node.get("id") not in wanted:
+            continue
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        base[node["id"]] = {**_handoff_node_values(node, data.get("label")),
+                            "result": _run_result(data), "resultSeq": node_result_runs.seq,
+                            RESULT_LANDED_KEY: _landing_stamp(data.get(RESULT_LANDED_KEY))}
+    return base
+
+
+# A node's run result (review 18 handoff-reopen MEDIUM-3): what a run wrote on
+# it, one unit. These keys, and every key starting "error" (the failure's
+# text, line, category, provider) or "batch" (an iterator's previews and
+# their run). Progress, the run's start time and streaming previews are the
+# tab's while a run goes (an open waits for runs), never part of it.
+_RUN_RESULT_KEYS = frozenset({"state", "outputs", "runNotes", "outputFreshness", "withheldPorts",
+                              "skipReason", "skipGateNodeId"})
+_RUN_RESULT_PREFIXES = ("error", "batch")
+
+
+def _run_result(data: Mapping[str, Any]) -> dict[str, Any]:
+    """A node's run result (_RUN_RESULT_KEYS), copied; a key it lacks is left out."""
+    return {key: copy.deepcopy(value) for key, value in data.items()
+            if key in _RUN_RESULT_KEYS or key.startswith(_RUN_RESULT_PREFIXES)}
+
+
+def _with_run_result(node: Mapping[str, Any], result: Mapping[str, Any]) -> dict[str, Any]:
+    """``node`` (copied) with its run result replaced by ``result``, whole."""
+    moved = copy.deepcopy(dict(node))
+    data = {key: value for key, value in (moved.get("data") or {}).items()
+            if key not in _RUN_RESULT_KEYS and not key.startswith(_RUN_RESULT_PREFIXES)}
+    moved["data"] = {**data, **copy.deepcopy(dict(result))}
+    return moved
+
+
+def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any] | None:
+    """The tab's run record that gave ``node_id`` its result: the newest (by
+    startedAt) in its run history that ran it (its outputs, its skip, or its
+    target). {id, startedAt, finishedAt (epoch ms: startedAt plus
+    durationSec; None when the record has no start time)}."""
+    best: dict[str, Any] | None = None
+    for record in snapshot.get("runHistory") or []:
+        if not isinstance(record, dict) or not isinstance(record.get("id"), str) or not record["id"]:
+            continue
+        results = record.get("resultOutputs") if isinstance(record.get("resultOutputs"), dict) else {}
+        skipped = record.get("skippedNodes") if isinstance(record.get("skippedNodes"), dict) else {}
+        if node_id not in results and node_id not in skipped and record.get("targetNodeId") != node_id:
+            continue
+        timed = _landing_stamp(record.get("startedAt"))
+        started = timed or 0
+        took = record.get("durationSec") if isinstance(record.get("durationSec"), (int, float)) \
+            and not isinstance(record.get("durationSec"), bool) and math.isfinite(record["durationSec"]) else 0
+        if best is None or started >= best["startedAt"]:
+            best = {"id": record["id"], "startedAt": started,
+                    "finishedAt": started + max(took, 0) * 1000 if timed is not None else None}
+    return best
+
+
+def _has_run_result(result: Mapping[str, Any]) -> bool:
+    """Whether a run result unit (_run_result) holds a result at all: an
+    output, a failure or a skip."""
+    return bool(result.get("outputs")) or bool(result.get("skipReason")) or any(
+        value for key, value in result.items() if key.startswith("error"))
+
+
+def _tab_result_is_newer(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None, *,
+                         stamp: float | None = None, stored_has_result: bool = True) -> bool:
+    """Whether the tab's result for ``node_id`` came from a newer run than
+    Nebula's result on it (PR #199 round 21, review 19 LOW-3).
+
+    - No run record behind the tab's result: Nebula's stands.
+    - Nebula saw the tab's run land in this process (node_result_runs) and
+      its own: the run order decides.
+    - Otherwise the tab record's finish time against when Nebula's result
+      landed: ``stamp`` (the landing stamp kept with the stored result,
+      RESULT_LANDED_KEY, which survives a restart) or a landing seen in this
+      process, the later of the two. Equal times: Nebula's stands.
+    - A side with no time (a result saved before the stamp existed, a tab
+      record with no start time): the side with one wins. Neither has one:
+      Nebula's stands, unless it holds no result (``stored_has_result``),
+      then the tab's."""
+    if tab_run is None:
+        return False
+    landed = node_result_runs.entries(project_id, node_id)
+    if any(entry["runId"] == tab_run["id"] for entry in landed):
+        return landed[-1]["runId"] == tab_run["id"]
+    times = [at for at in (_landing_stamp(stamp), _landing_stamp(landed[-1]["at"]) if landed else None)
+             if at is not None]
+    ours = max(times) if times else None
+    theirs = _landing_stamp(tab_run.get("finishedAt"))
+    if theirs is None and ours is None:
+        return not stored_has_result
+    if ours is None:
+        return True
+    if theirs is None:
+        return False
+    return theirs > ours
+
+
+def _handoff_node_values(node: Mapping[str, Any], label: Any) -> dict[str, Any]:
+    """A node's settings, name (None for the model's own) and place, as the
+    handoff compares them."""
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    position = node.get("position")
+    return {"params": copy.deepcopy(params), "label": label or None,
+            "position": copy.deepcopy(position) if isinstance(position, dict) else None}
+
+
+def _keep_handoff_renumbering(catalog: dict[str, Any], project_id: str, mapping: Mapping[str, str]) -> None:
+    """After an open's _begin_switch: the open's {old: new} goes with the
+    handoff kept for ``project_id`` (a reopen in place), with each renamed
+    node as the open loaded it (``base``), or none is kept."""
+    project = catalog["projects"][project_id]
+    revision = _switch_handoffs(catalog).get(project_id)
+    if revision is not None and mapping:
+        project[_HANDOFF_RENUMBERED] = {"revision": revision, "map": dict(mapping),
+                                        "base": _renumbered_base(project, mapping)}
+    else:
+        project.pop(_HANDOFF_RENUMBERED, None)
+
+
+def _handoff_renumbering(project: Mapping[str, Any], revision: str) -> dict[str, str]:
+    """The {old: new} an open gave the nodes of the project a handoff at
+    ``revision`` is for, else {}."""
+    kept = project.get(_HANDOFF_RENUMBERED)
+    if not isinstance(kept, dict) or kept.get("revision") != revision or not isinstance(kept.get("map"), dict):
+        return {}
+    return {old: new for old, new in kept["map"].items()
+            if isinstance(old, str) and isinstance(new, str) and _BACKEND_NODE_ID.fullmatch(new)}
+
+
+def _handoff_renumbering_base(project: Mapping[str, Any], revision: str) -> dict[str, Any]:
+    """The kept ``base`` ({new: {params, label, position}}) of the handoff at
+    ``revision``, the stored dict itself (a handoff moves it on), else {}."""
+    kept = project.get(_HANDOFF_RENUMBERED)
+    if not isinstance(kept, dict) or kept.get("revision") != revision or not isinstance(kept.get("base"), dict):
+        return {}
+    return kept["base"]
+
+
+def _drop_ended_handoff_renumbering(catalog: dict[str, Any]) -> None:
+    """A handoff's renumbering ends with the handoff (_begin_switch)."""
+    handoffs = _switch_handoffs(catalog)
+    for project_id, project in (catalog.get("projects") or {}).items():
+        kept = project.get(_HANDOFF_RENUMBERED) if isinstance(project, dict) else None
+        if kept is not None and (not isinstance(kept, dict) or handoffs.get(project_id) != kept.get("revision")):
+            project.pop(_HANDOFF_RENUMBERED, None)
+
+
 def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
                   opening: str | None = None) -> dict[str, Any] | None:
     """Note what was open before a switch. For a switch the person didn't
@@ -17077,6 +20951,7 @@ def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
     catalog.pop("handoff", None)
     if actor is None:
         catalog.pop("handoffs", None)
+        _drop_ended_handoff_renumbering(catalog)
         return None
     if opening is not None:
         handoffs.pop(opening, None)
@@ -17089,6 +20964,7 @@ def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
         catalog["handoffs"] = handoffs
     else:
         catalog.pop("handoffs", None)
+    _drop_ended_handoff_renumbering(catalog)
     return {
         "actor": actor,
         "previousProjectId": previous_id if previous is not None else None,
@@ -17105,14 +20981,14 @@ def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, cre
     return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
 
 
-async def _broadcast_projects_changed(change: str, project_id: str | None = None) -> None:
+async def _broadcast_projects_changed(change: str, project_id: str | None = None, **more: Any) -> None:
     """Tell open tabs the saved-project list changed (a project made, opened,
     saved, renamed, given a cover, deleted, restored or deleted for good),
     whoever changed it: an agent, the CLI, another tab. The Projects screen
     lists again (frontend projectStore); graphSync only follows the open
     project, and most of these don't touch it."""
     try:
-        await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id})
+        await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id, **more})
     except Exception:  # noqa: BLE001 - the catalog is saved; a tab lists it again on its next visit to Projects
         pass
 
@@ -17126,7 +21002,9 @@ _PROJECT_SUMMARIES = {
 
 
 def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_name: str | None = None,
-                            was_open: bool | None = None) -> None:
+                            was_open: bool | None = None,
+                            dropped_wires: Sequence[Mapping[str, Any]] = (),
+                            recovered: Mapping[str, Any] | None = None) -> None:
     """Journal a project made, renamed, deleted or restored (``project.*``),
     in the name of whoever asked, so wait_for_canvas_change and `nebula
     watch` see the person's changes and other agents'. Next to
@@ -17141,7 +21019,22 @@ def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_n
         data["wasOpen"] = was_open
     if kind == "project.created" and isinstance(project.get("createdBy"), dict):
         data["createdBy"] = project["createdBy"].get("name")
-    _journal(kind, data=data, summary=_PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or ""))
+    if kind == "project.created" and recovered is not None:
+        # A recovered copy (the recover route): its source, as list_projects
+        # reads it (_recovered_source), never read from the copy's name.
+        data.update({"sourceName": recovered.get("sourceName"), "sourceProjectId": recovered.get("sourceProjectId")})
+    summary = _PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or "")
+    if dropped_wires:
+        # A kept tab's connections the server's rules refused (the recover
+        # route): the recover answer's entries (_dropped_wire), at most ten
+        # within the event's size; the count says them all.
+        data["droppedWireCount"] = len(dropped_wires)
+        # The recover answer's entries (the same fields), each string cut to
+        # what the journal keeps.
+        data["droppedWires"] = [{key: value[:160] if isinstance(value, str) else value
+                                 for key, value in wire.items()} for wire in dropped_wires[:10]]
+        summary += f"; left out {counted(len(dropped_wires), 'connection')} it couldn't keep"
+    _journal(kind, data=data, summary=summary)
 
 
 @app.post("/api/projects")
@@ -17154,30 +21047,45 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         _project_replacement_guard()
         # API callers need not visit the menu first. Never erase a legacy
         # live canvas merely because no catalog migration request preceded it.
-        if not catalog["projects"] and cli_graph.nodes:
-            recovered = make_project("Recovered canvas", {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
-            _overlay_live_project(recovered, exported)
-            catalog["projects"][recovered["id"]] = recovered
-            catalog["activeProjectId"] = recovered["id"]
-            catalog["migratedProjectId"] = recovered["id"]
-            # Unreachable with a run registered (the guard above refuses), but
-            # the same filing as list_projects', so the same bookkeeping.
-            _adopt_run_canvases(recovered["id"])
-        if active := catalog["activeProjectId"]:
-            _overlay_live_project(catalog["projects"][active], exported)
+        # Never replace a canvas that isn't the open project's without
+        # keeping it (review 1 of PR #199, H1): its own project, or filed,
+        # or held aside while it can't be filed (the list is at a limit).
+        _refuse_a_create_past_the_limit(catalog)
+        settled = _settle_live_canvas(catalog, exported)
+        hold = None
         try:
-            project = make_project(body.get("name", "Untitled project"))
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if actor is not None and actor.get("kind") == "agent":
-            project["createdBy"] = {"kind": "agent", "name": actor.get("name") or "An agent"}
-        start = _begin_switch(catalog, actor)
-        catalog["projects"][project["id"]] = project
-        catalog["activeProjectId"] = project["id"]
-        catalog["workspaceRevision"] = uuid4().hex
-        _commit_project_workspace(catalog, CLIGraph())
+            # A waiting canvas is held aside, whole and on disk, before the
+            # replacement (GM's held model; review 5 of PR #199, M-3).
+            hold = _hold_if_waiting(settled, exported)
+            if not catalog["projects"] and cli_graph.nodes:
+                recovered = _file_live_canvas(catalog, exported, migrated=True)
+                # Unreachable with a run registered (the guard above refuses), but
+                # the same filing as list_projects', so the same bookkeeping.
+                _adopt_run_canvases(recovered["id"])
+            if active := catalog["activeProjectId"]:
+                _overlay_live_project(catalog["projects"][active], exported)
+            try:
+                project = make_project(body.get("name", "Untitled project"))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if actor is not None and actor.get("kind") == "agent":
+                project["createdBy"] = {"kind": "agent", "name": actor.get("name") or "An agent"}
+            start = _begin_switch(catalog, actor)
+            catalog["projects"][project["id"]] = project
+            catalog["activeProjectId"] = project["id"]
+            catalog["workspaceRevision"] = uuid4().hex
+            _commit_project_workspace(catalog, CLIGraph())
+        except BaseException:
+            # The hold stays, even when the rollback failed too (507): the
+            # next settle drops it by its digest only while the live canvas,
+            # on disk too, is that canvas (review 6 of PR #199, L-2).
+            _undo_canvas_filing(settled)
+            raise
         revision = catalog["workspaceRevision"]
         _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
+        _note_canvas_settled(settled)
+        _held_settled(hold)
+        _note_project_switch(project["id"], actor)
     # In the step that made it, before any await (round 8 of PR #114); its
     # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
     _journal_project_change("project.created", project)
@@ -17250,35 +21158,106 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
         _project_revision(body or {}, catalog)
-        _project_replacement_guard()
+        try:
+            # The run refusal has the person's line too (CLEAR_DURING_RUN_PERSON:
+            # its words hold for an open), agents keep the specific text.
+            _project_replacement_guard(person=CLEAR_DURING_RUN_PERSON)
+        except CanvasKeptRefusal:
+            raise
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                raise
+            # The verdict at refusal time (PR #199 round 21): the tab shows
+            # the state's line from it, never from the words.
+            raise _with_hold(exc, _hold_or_none(catalog)) from exc
         project = _project_id_or_404(project_id, catalog)
-        if active := catalog["activeProjectId"]:
-            _overlay_live_project(catalog["projects"][active], exported)
-        historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
-        warnings: list[str] = []
-        dropped_ports: list[dict[str, Any]] = []
-        stray_log: list[str] = []
-        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings,
-                                                                 ingress=verdict, size_checked=False,
-                                                                 dropped_ports=dropped_ports, stray_log=stray_log)
-        candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
-        project["lastOpenedAt"] = project_now()
-        start = _begin_switch(catalog, actor, opening=project_id)
-        catalog["activeProjectId"] = project_id
-        catalog["workspaceRevision"] = uuid4().hex
-        _commit_project_workspace(catalog, candidate)
+        # The canvas this open replaces is kept: its own project, or filed
+        # (H1), or held aside while it can't be filed (the list is at a limit).
+        settled = _settle_live_canvas(catalog, exported)
+        # A reopen of the project already open, whose canvas is the live one
+        # (settled: the catalog and the canvas agree), by the person's
+        # Projects > Open or an agent's open of it: its open proposals stay
+        # (GM r29 of PR #199, 3; _proposals_after_reopen).
+        reopen_in_place = settled is None and catalog["activeProjectId"] == project_id
+        hold = None
+        try:
+            # A waiting canvas is held aside, whole and on disk, before the
+            # replacement (GM's held model; review 5 of PR #199, M-3).
+            hold = _hold_if_waiting(settled, exported)
+            if active := catalog["activeProjectId"]:
+                _overlay_live_project(catalog["projects"][active], exported)
+            historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
+            warnings: list[str] = []
+            dropped_ports: list[dict[str, Any]] = []
+            stray_log: list[str] = []
+            project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical,
+                                                                     warnings=warnings, ingress=verdict,
+                                                                     size_checked=False, dropped_ports=dropped_ports,
+                                                                     stray_log=stray_log)
+            candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
+            # The live graph never holds a tab-local id (review 15 HIGH-1 of
+            # PR #199): a node Duplicate, Paste or a kept tab made gets a
+            # backend id now, in the stored project too, and the tab adopts
+            # it from `renumbered` (the answer, and the graphSync for a tab
+            # that follows someone else's open).
+            renumbered = _renumber_staged_project(project, candidate)
+            project["lastOpenedAt"] = project_now()
+            previous_revision = catalog["workspaceRevision"]
+            start = _begin_switch(catalog, actor, opening=project_id)
+            if actor is None and reopen_in_place:
+                # The person's reopen of the project they show (review 18
+                # handoff-reopen LOW-1): their other windows on it follow, as
+                # after an agent's reopen. Each keeps a handoff at the
+                # revision before (one for this project; the person's open
+                # still ends every other), so a window's unsaved edits land
+                # in the project under the same rules (the baseline, explicit
+                # deletes), and the sync names the opener's window.
+                catalog["handoffs"] = {project_id: previous_revision}
+                tab = _persons_tab_id()
+                start = {"actor": {"kind": "person", **({"tab": tab} if tab else {})},
+                         "previousProjectId": project_id, "previousProjectName": project["name"],
+                         "previousRevision": previous_revision}
+            # Every node of the opened project is on the live graph now, the
+            # renumbered ones too (review 16 HIGH-1 and NIT-2): a handoff, and
+            # the next overlay, read this list for which nodes Nebula holds.
+            project["_backendNodeIds"] = sorted(candidate.nodes)
+            project["_backendEdgeIds"] = sorted({str(edge.get("id")) for edge in candidate.edges if edge.get("id")})
+            # A reopen in place keeps a handoff for this same project: the
+            # tab's last save still holds the old ids, so the handoff learns
+            # the open's {old: new} (_save_handoff applies it).
+            _keep_handoff_renumbering(catalog, project_id, renumbered)
+            catalog["activeProjectId"] = project_id
+            catalog["workspaceRevision"] = uuid4().hex
+            _commit_project_workspace(catalog, candidate)
+        except BaseException:
+            # The hold stays, even when the rollback failed too (507): the
+            # next settle drops it by its digest only while the live canvas,
+            # on disk too, is that canvas (review 6 of PR #199, L-2).
+            _undo_canvas_filing(settled)
+            raise
         revision = catalog["workspaceRevision"]
         _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
+        _note_canvas_settled(settled)
+        _held_settled(hold)
+        _note_project_switch(project_id, actor)
+    _renumber_node_records(project_id, renumbered)
+    # The person's own reopen in place says nothing in the agents' activity
+    # line (_switch_notice's publish_action is for a switch they didn't make).
+    notice = (_switch_notice(start, project, created=False) if actor is not None
+              else {**start, "projectId": project_id, "projectName": project["name"], "created": False}
+              if start is not None else None)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
-                                project_switch=_switch_notice(start, project, created=False),
+                                project_switch=notice,
+                                renumbered=renumbered, proposals_kept=reopen_in_place,
                                 **({"dropped_ports": dropped_ports} if dropped_ports else {}))
     await _say_stray_ports(stray_log)
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections, a scene's shot output no shot owns and
     # its connections); the snapshot is saved migrated, so this is said once.
+    # `renumbered`: the nodes that got Nebula's ids at this open ({old: new}).
     return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
-            "warnings": warnings,
+            "warnings": warnings, "renumbered": copy.deepcopy(renumbered),
             "paramsVersion": PARAMS_VERSION}
 
 
@@ -17294,10 +21273,15 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    removed = result.pop("_removed", None)
     if result.pop("_liveChanged", False):
         # An agent reopened the project the tab showed: the handoff's typing
         # went onto the live graph too (review 20 M-1). The tab's own echo.
         await _broadcast_graph_sync(edit=True)
+    if removed:
+        # A renumbered node the person deleted before the handoff (review 17
+        # reopen LOW-2): its pins and proposals, as for any delete.
+        await _announce_removed_nodes(removed)
     if "previousName" in result and result["previousName"] != result["project"]["name"]:
         # Before any await (round 8 of PR #114).
         _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
@@ -17319,16 +21303,27 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # switches (_begin_switch). The project may be the open one
             # again: an agent reopened the project the tab was showing,
             # which reloads it from what was saved.
-            merged = _save_handoff(project, body["snapshot"], ingress=ingress,
-                                   pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"))
+            landed = _save_handoff(project, body["snapshot"], ingress=ingress,
+                                   pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"),
+                                   renumbered=_handoff_renumbering(project, handoff),
+                                   base=_handoff_renumbering_base(project, handoff),
+                                   deleted_ids=body.get("deletedNodeIds"))
             refresh_metadata(project)
             project_store.commit(catalog)
-            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(project, merged)
+            removed: list[dict[str, Any]] = []
+            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(
+                project, landed.merged, deleted=landed.deleted, removed=removed, results=landed.results)
+            _journal_handoff_results(project, landed.result_runs)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
-                    "handoff": True, **({"_liveChanged": True} if live else {})}
+                    "handoff": True, **({"_liveChanged": True} if live else {}),
+                    **({"_removed": removed} if removed else {}),
+                    # Deletes it ignored and kept (review 19 reopen LOW-4): the
+                    # tab shows a line for them.
+                    **({"deletesKept": landed.kept_deletes} if landed.kept_deletes else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
-            if catalog["activeProjectId"] != project_id:
+            if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
+                # The backend's canvas isn't this project (H1): the tab reloads.
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
@@ -17336,7 +21331,12 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             _live_pending_flags(staged["nodes"], cli_graph.nodes)
+            _live_result_stamps(staged["nodes"], cli_graph.nodes)
             project["snapshot"] = staged
+            # Which window saved each tab-local node (review 18 handoff-reopen
+            # MEDIUM-1). This save's own rule is unchanged: the last window's
+            # autosave is the project.
+            _note_tab_local_writers(project, _persons_tab_id())
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
             project["_nodeCounter"] = cli_graph._counter
@@ -17370,6 +21370,46 @@ def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[
             data.pop(pending_nodes.PENDING_KEY, None)
         else:
             data[pending_nodes.PENDING_KEY] = flag
+
+
+def _live_result_stamps(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
+    """A save keeps each node's landing stamp (RESULT_LANDED_KEY) as the live
+    graph has it, as it keeps the placeholder flag: only a result landing
+    sets one, so a tab that lost it, or holds an old one, never changes it."""
+    for node in nodes:
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict):
+            continue
+        stamp = _landing_stamp((live.get(node.get("id")) or {}).get(RESULT_LANDED_KEY))
+        if stamp is None:
+            data.pop(RESULT_LANDED_KEY, None)
+        else:
+            data[RESULT_LANDED_KEY] = stamp
+
+
+def _stored_landing_stamp(project: Mapping[str, Any], node_id: str, kept: Mapping[str, Any]) -> float | None:
+    """When Nebula's result on ``node_id`` landed, as kept with it: the
+    stored copy's stamp, or the live node's when the live canvas is this
+    project (an agent's run after the open lands there first), the later."""
+    times = [_landing_stamp((kept.get("data") or {}).get(RESULT_LANDED_KEY))]
+    live = cli_graph.nodes.get(node_id)
+    if (live is not None and cli_graph.owner == project.get("id")
+            and live.get("definitionId") == (kept.get("data") or {}).get("definitionId")):
+        times.append(_landing_stamp(live.get(RESULT_LANDED_KEY)))
+    found = [at for at in times if at is not None]
+    return max(found) if found else None
+
+
+def _tab_run_landed_at(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None) -> float | None:
+    """The stamp a result taken from the tab gets: when Nebula saw its run's
+    result land on the node in this process, else the tab record's finish
+    time, else none."""
+    if tab_run is None:
+        return None
+    for entry in reversed(node_result_runs.entries(project_id, node_id)):
+        if entry["runId"] == tab_run["id"] and _landing_stamp(entry.get("at")) is not None:
+            return float(entry["at"])
+    return _landing_stamp(tab_run.get("finishedAt"))
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -17410,10 +21450,61 @@ def _refuse_handoff_pending_not_from_the_tab(pending_params: Any, pending_labels
     entry or undo."""
     if not pending_params and not pending_labels:
         return
+    if not _from_persons_tab():
+        raise _handoff_refused(HANDOFF_WHY["agent"])
+
+
+def _from_persons_tab() -> bool:
+    """Whether this request is the person's own canvas tab: the person's
+    token and X-Nebula-Tab (every write the tab sends carries both)."""
+    return _persons_tab_id() is not None
+
+
+def _persons_tab_id() -> str | None:
+    """The X-Nebula-Tab of a request from the person's own canvas tab (the
+    person's token too), else None. Each window has its own."""
     headers = current_request_headers() or {}
     tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
-    if not (_is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab)):
-        raise _handoff_refused(HANDOFF_WHY["agent"])
+    return tab if _is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab) else None
+
+
+# Which of the person's windows saved each tab-local node of a project
+# ({nodeId: X-Nebula-Tab}; review 18 handoff-reopen MEDIUM-1). A tab-local
+# node (Duplicate, Paste) exists only in the window that made it: no other
+# window ever receives it, so only that window can say it was deleted
+# (_save_handoff's ``deletedNodeIds``). Written by the person's tab's
+# autosave and handoff for every node whose id isn't Nebula's; an entry
+# follows its node through a renumber (_renumber_project_records) and goes
+# when the node leaves the project. A save without the tab's header (an
+# agent's browser, a script) records no writer, and a node with none can't
+# be deleted by a handoff.
+_TAB_LOCAL_WRITERS = "_tabLocalWriters"
+
+
+def _note_tab_local_writers(project: dict[str, Any], tab: str | None, others: Container[str] = ()) -> None:
+    """After a save stored ``project``'s snapshot: ``tab`` (the saving
+    window, None for any other caller) saved each node there whose id isn't
+    Nebula's, except ``others`` (nodes the save kept from another window);
+    every other entry is kept while its node is in the project."""
+    writers = project.get(_TAB_LOCAL_WRITERS) if isinstance(project.get(_TAB_LOCAL_WRITERS), dict) else {}
+    present = [node.get("id") for node in project["snapshot"].get("nodes") or [] if isinstance(node, dict)]
+    kept = {node_id: writer for node_id, writer in writers.items() if node_id in set(present)}
+    for node_id in present:
+        if isinstance(node_id, str) and not _BACKEND_NODE_ID.fullmatch(node_id) and node_id not in others:
+            if tab is not None:
+                kept[node_id] = tab
+            else:
+                kept.pop(node_id, None)
+    if kept:
+        project[_TAB_LOCAL_WRITERS] = kept
+    else:
+        project.pop(_TAB_LOCAL_WRITERS, None)
+
+
+def _tab_local_writer(project: Mapping[str, Any], node_id: str) -> str | None:
+    writers = project.get(_TAB_LOCAL_WRITERS)
+    writer = writers.get(node_id) if isinstance(writers, dict) else None
+    return writer if isinstance(writer, str) else None
 
 
 def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str, list[str]], set[str]]:
@@ -17461,8 +21552,24 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
     return merged
 
 
+class _HandoffLanded(NamedTuple):
+    """What a handoff's save merged ({nodeId: (keys, name merged, moved)}),
+    the renumbered nodes the person deleted before it (their new ids), and
+    the nodes whose run result the tab's copy gave (review 18 MEDIUM-3)."""
+    merged: dict[str, tuple[list[str], bool, bool]]
+    deleted: list[str]
+    results: list[str] = []
+    # The run each taken result came from (the tab's record id, or None).
+    result_runs: dict[str, str | None] = {}
+    # The listed deletes this save ignored and kept (their new ids): the
+    # window sending it isn't the one that saved the node last.
+    kept_deletes: list[str] = []
+
+
 def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
-                  pending_params: Any = None, pending_labels: Any = None) -> dict[str, tuple[list[str], bool]]:
+                  pending_params: Any = None, pending_labels: Any = None,
+                  renumbered: Mapping[str, str] | None = None,
+                  base: dict[str, Any] | None = None, deleted_ids: Any = None) -> _HandoffLanded:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -17480,25 +21587,111 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     anyone but the person's tab) refuses the whole save with 409, so the tab
     keeps it as a copy.
 
-    Answers the merged nodes ({nodeId: (keys, name merged)}), so a project
-    that is the open one again (an agent reopened it) gets them onto the live
-    graph too (_apply_handoff_live, round 21, review 20 M-1).
+    Answers the merged nodes ({nodeId: (keys, name merged, moved)}) and the
+    deleted ones, so a project that is the open one again (an agent reopened
+    it) gets them onto the live graph too (_apply_handoff_live, round 21,
+    review 20 M-1).
+
+    ``renumbered`` ({old: new}; PR #199 round 18, review 16 HIGH-1): the ids
+    the open that kept this handoff gave the project's tab-local nodes (a
+    reopen in place). The tab's snapshot was taken before it, so it may
+    still hold the old ids: it is moved first (_apply_node_renumbering: ids,
+    wires, run history, references, and the keys of the unsent lists), so a
+    duplicated or pasted node lands once, as its new id, not twice. A
+    snapshot the tab already moved (it holds the new id) lands the same way.
+
+    The tab never sent such a node's values (its id wasn't Nebula's), so
+    from the person's tab its unsent values are what differs from ``base``
+    ({new: {params, label, position}}, the node as the open or the boot
+    loaded it; round 19, review 17 MEDIUM-1): each setting whose value
+    differs, its name if it differs, its place if it differs, plus anything
+    the unsent lists name. Everything else keeps the stored copy, and the
+    live graph keeps what an agent wrote to the new id after the open, as
+    for any other node: the person's change wins on the keys they changed,
+    an agent's change on any other key stands. ``base`` moves on to what
+    landed, so a later handoff counts only newer changes.
+
+    A delete is said, never read from an omission (review 18 handoff-reopen
+    MEDIUM-1): ``deleted_ids`` (the body's ``deletedNodeIds``) lists the
+    tab-local nodes the tab deleted, by the id it had (the old one) or the
+    new one. A renumbered node is deleted (from the stored copy, and by
+    _apply_handoff_live from the live graph, as the person's delete) only
+    when it is listed, the tab's snapshot holds it under neither id, and the
+    tab sending it is the window that saved it (_TAB_LOCAL_WRITERS). Any
+    other listed id is ignored, not refused: the rest of the save still
+    lands and the node stays. A node the save leaves out stays: another
+    window never had it. Likewise a stored tab-local node another window
+    saved stays when this one leaves it out. A node an agent added after the
+    open is in no map, so it stays.
+
+    Run results (review 18 handoff-reopen MEDIUM-3): each node's run result
+    (_run_result: outputs, state, notes, error, batch previews) moves as one
+    unit, as the product of a run, from the person's tab only. For a
+    renumbered node: the tab's unit when it differs from ``base`` and no
+    result landed on the node since (node_result_runs); when one did, the
+    newer run wins (_tab_result_is_newer). For any other node Nebula holds,
+    the tab's unit when it differs from the stored one and came from the
+    newer run. ``results`` names the nodes whose unit came from the tab.
     """
     _refuse_handoff_pending_not_from_the_tab(pending_params, pending_labels)
+    tab = _persons_tab_id()
+    persons_tab = tab is not None
+    base = base if base is not None else {}
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
+    if deleted_ids is not None and (not isinstance(deleted_ids, list)
+                                    or not all(isinstance(item, str) and item for item in deleted_ids)):
+        raise _handoff_refused(HANDOFF_WHY["unreadable"])
+    renamed: set[str] = set()
+    deleted: set[str] = set()
+    kept_deletes: set[str] = set()
+    if renumbered:
+        if isinstance(raw, dict):
+            held = {node.get("id") for node in raw.get("nodes") or [] if isinstance(node, dict)}
+            renamed = {new for old, new in renumbered.items() if old in held or new in held}
+            if persons_tab and deleted_ids:
+                asked = {renumbered.get(node_id, node_id) for node_id in deleted_ids}
+                said = {new for old, new in renumbered.items() if new in asked and old not in held and new not in held}
+                deleted = {new for new in said if _tab_local_writer(project, new) == tab}
+                # Said by a window that isn't the one that saved the node
+                # last: ignored, and the answer says so (deletesKept), so a
+                # refused delete is never silent.
+                kept_deletes = said - deleted
+            _apply_node_renumbering(raw, renumbered)
+        pending_params = _renumbered_keys(pending_params, renumbered)
+        pending_labels = _renumbered_keys(pending_labels, renumbered)
     unsent_params, unsent_labels = _handoff_pending(pending_params, pending_labels)
     staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
+    # A landing stamp is Nebula's (RESULT_LANDED_KEY): never the tab's copy of one.
+    _live_result_stamps(staged["nodes"], {})
     backend_nodes = set(project.get("_backendNodeIds") or [])
     # Placeholders are the backend's: a node only the tab held never is one.
     _live_pending_flags([node for node in staged["nodes"] if node["id"] not in backend_nodes], {})
     backend_edges = set(project.get("_backendEdgeIds") or [])
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
     staged_nodes = {node["id"]: node for node in staged["nodes"]}
+    moved: set[str] = set()
+    landed_values: dict[str, dict[str, Any]] = {}
+    for node_id in sorted(renamed & set(staged_nodes) & backend_nodes if persons_tab else ()):
+        # The renumbered node: what the person changed since the open loaded
+        # it (only from the person's tab, as the unsent lists are: anyone
+        # else's save keeps the stored copy).
+        tab_node = staged_nodes[node_id]
+        theirs = _handoff_node_values(tab_node, (tab_node.get("data") or {}).get("label"))
+        was = base.get(node_id) if isinstance(base.get(node_id), dict) else {}
+        was_params = was.get("params") if isinstance(was.get("params"), dict) else {}
+        keys = [key for key, value in theirs["params"].items() if key not in was_params or was_params[key] != value]
+        if keys:
+            unsent_params[node_id] = list(dict.fromkeys([*unsent_params.get(node_id, []), *keys]))
+        if theirs["label"] != was.get("label"):
+            unsent_labels.add(node_id)
+        if theirs["position"] != was.get("position"):
+            moved.add(node_id)
+        landed_values[node_id] = theirs
     merged: dict[str, dict[str, Any]] = {}
-    for node_id in [*unsent_params, *(key for key in unsent_labels if key not in unsent_params)]:
+    for node_id in dict.fromkeys([*unsent_params, *sorted(unsent_labels), *sorted(moved)]):
         tab_node = staged_nodes.get(node_id)
         if tab_node is None:
             raise _handoff_refused(HANDOFF_WHY["removed"])
@@ -17509,31 +21702,171 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
             raise _handoff_refused(HANDOFF_WHY["type"])
         merged[node_id] = _merge_handoff_node(kept, tab_node, (candidate.nodes.get(node_id) or {}).get("label"),
                                               unsent_params.get(node_id, []), node_id in unsent_labels)
+        if node_id in moved and isinstance(tab_node.get("position"), dict):
+            # Its moves never reached Nebula either.
+            merged[node_id]["position"] = copy.deepcopy(tab_node["position"])
+    results: list[str] = []
+    result_runs: dict[str, str | None] = {}
+    for node_id in sorted(set(staged_nodes) & backend_nodes & set(stored_nodes) if persons_tab else ()):
+        tab_node, kept_node = staged_nodes[node_id], merged.get(node_id) or stored_nodes[node_id]
+        if (tab_node.get("data") or {}).get("definitionId") != (kept_node.get("data") or {}).get("definitionId"):
+            continue
+        theirs = _run_result(tab_node.get("data") or {})
+        kept_result = _run_result(kept_node.get("data") or {})
+        stamp = _stored_landing_stamp(project, node_id, kept_node)
+        if node_id in landed_values:
+            landed_values[node_id] = {**landed_values[node_id], "result": theirs, "resultSeq": node_result_runs.seq,
+                                      RESULT_LANDED_KEY: stamp}
+        if theirs == kept_result:
+            continue
+        was = base.get(node_id) if node_id in renamed and isinstance(base.get(node_id), dict) else None
+        tab_run = _tab_result_run(staged, node_id)
+        stored_has_result = _has_run_result(kept_result)
+        if was is not None and "result" in was:
+            if theirs == was["result"]:
+                continue  # the tab's result is the one the open loaded: Nebula's side moved
+            since = was.get("resultSeq") if isinstance(was.get("resultSeq"), int) else 0
+            # A result landed on the node since the open: one Nebula saw in
+            # this process, or a landing stamp the open didn't load (it
+            # survives a restart, the in-memory landings don't).
+            landed_since = (any(entry["seq"] > since for entry in node_result_runs.entries(project["id"], node_id))
+                            or stamp != _landing_stamp(was.get(RESULT_LANDED_KEY)))
+            if landed_since and not _tab_result_is_newer(project["id"], node_id, tab_run, stamp=stamp,
+                                                         stored_has_result=stored_has_result):
+                continue
+        elif not _tab_result_is_newer(project["id"], node_id, tab_run, stamp=stamp,
+                                      stored_has_result=stored_has_result):
+            continue
+        merged[node_id] = _with_run_result(kept_node, theirs)
+        # The tab's result is stamped with when its run's result landed: as
+        # Nebula saw it in this process, else the tab record's finish time.
+        taken_at = _tab_run_landed_at(project["id"], node_id, tab_run)
+        if taken_at is None:
+            merged[node_id]["data"].pop(RESULT_LANDED_KEY, None)
+        else:
+            merged[node_id]["data"][RESULT_LANDED_KEY] = taken_at
+        if node_id in landed_values:
+            landed_values[node_id][RESULT_LANDED_KEY] = taken_at
+        results.append(node_id)
+        result_runs[node_id] = tab_run["id"] if tab_run else None
     nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
              for node in staged["nodes"]]
     listed = {node["id"] for node in nodes}
-    nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
+    nodes += [node for node in stored["nodes"]
+              if node["id"] in backend_nodes and node["id"] not in listed and node["id"] not in deleted]
+    # A tab-local node another window saved, which this one never had.
+    foreign = {node["id"] for node in stored["nodes"]
+               if node["id"] not in backend_nodes and node["id"] not in listed
+               and _tab_local_writer(project, node["id"]) not in (None, tab)}
+    nodes += [node for node in stored["nodes"] if node["id"] in foreign]
     kept = {node["id"] for node in nodes}
     stored_edges = {edge["id"]: edge for edge in stored["edges"]}
     edges = [stored_edges.get(edge["id"], edge) if edge["id"] in backend_edges else edge for edge in staged["edges"]]
     listed_edges = {edge["id"] for edge in edges}
-    edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
+    edges += [edge for edge in stored["edges"] if edge["id"] not in listed_edges and (
+        edge["id"] in backend_edges or edge["source"] in foreign or edge["target"] in foreign)]
     edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
     project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
-    return {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels) for node_id in merged}
+    _note_tab_local_writers(project, tab, others=foreign)
+    # The baseline moves on to what landed: a later handoff (the tab's last
+    # save after one in flight) counts only what changed since.
+    base.update(landed_values)
+    for node_id in deleted:
+        base.pop(node_id, None)
+    return _HandoffLanded(
+        {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels, node_id in moved) for node_id in merged},
+        sorted(deleted), results, result_runs, sorted(kept_deletes))
 
 
-def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool]]) -> bool:
+def _journal_handoff_results(project: Mapping[str, Any], result_runs: Mapping[str, str | None]) -> None:
+    """A handoff's newer tab result replaced a node's result (PR #199 round
+    21, review 19 agents-docs NIT-2): journaled as the person's
+    (``node.result``: the node, the project, and the run the result came
+    from), so agents reading the journal know their result was replaced. No
+    Agent log line: the Agent log is agents' actions, this one is the
+    person's own (GM r32). Never fails the save."""
+    stored = {node.get("id"): node for node in (project.get("snapshot") or {}).get("nodes") or []
+              if isinstance(node, dict)}
+    for node_id, run_id in result_runs.items():
+        try:
+            data = (stored.get(node_id) or {}).get("data") or {}
+            definition_id = str(data.get("definitionId") or "")
+            name = node_route.node_name(node_registry.get_all().get(definition_id, {}), data.get("label"),
+                                        definition_id or node_id)
+            ran = f" from run {run_id}" if run_id else ""
+            _journal("node.result", node_id=node_id,
+                     data={"projectId": project.get("id"), "runId": run_id, "replaced": True},
+                     summary=f"kept the result of their newer run{ran} on {name} ({node_id})",
+                     project_id=project.get("id"))
+        except Exception:  # noqa: BLE001 - the save landed; the journal line is extra
+            pass
+
+
+def _renumbered_keys(listed: Any, renumbered: Mapping[str, str]) -> Any:
+    """A handoff's unsent list ({nodeId: …}) under the open's new ids; a
+    value that isn't a list of that shape is left for _handoff_pending."""
+    if not isinstance(listed, dict):
+        return listed
+    moved: dict[Any, Any] = {}
+    for key, value in listed.items():
+        new = renumbered.get(key, key) if isinstance(key, str) else key
+        if new in moved and isinstance(moved[new], dict) and isinstance(value, dict):
+            moved[new] = {**moved[new], **value}  # the old and the new id both listed: one node
+        else:
+            moved[new] = value
+    return moved
+
+
+def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool, bool]], *,
+                        deleted: Sequence[str] = (), removed: list[dict[str, Any]] | None = None,
+                        results: Sequence[str] = ()) -> bool:
     """The handoff's merged keys and names onto the live graph, for a project
     that is the open one again (round 21 of PR #195, review 20 M-1): an
     agent's reopen of the project the tab showed reloaded the live graph from
     what was saved, and every read of the open project lays the live graph
     over the stored copy, so the typing kept only in the stored copy was lost
     at the next read. Same step as the save (no await). Answers whether the
-    live graph changed (the route then broadcasts a graphSync)."""
+    live graph changed (the route then broadcasts a graphSync).
+
+    Only what the person changed is written and journaled as theirs (round
+    19, review 17 MEDIUM-1): ``merged`` holds only those keys, names and
+    places. ``deleted``: renumbered nodes the person deleted before the
+    handoff (review 17 reopen LOW-2), removed from the live graph and
+    journaled as the person's delete (``node.removed``); their removal
+    entries go into ``removed`` for the route to announce. One that can't be
+    deleted (a paid start holds it) stays, and the next read keeps it.
+
+    ``results``: nodes whose run result the tab's copy gave (review 18
+    handoff-reopen MEDIUM-3). Its outputs go onto the live node and its
+    failure onto the node's error record (the card's and agents' read), or
+    the error is forgotten when the tab's result has none: every read lays
+    the live node over the stored copy, so a result kept only there was lost
+    at the next read. Run output, not anyone's edit: nothing is journaled."""
     stored = {node["id"]: node for node in project["snapshot"]["nodes"]}
     changed = False
-    for node_id, (keys, label) in merged.items():
+    for node_id in results:
+        live, node = cli_graph.nodes.get(node_id), stored.get(node_id)
+        data = (node or {}).get("data") or {}
+        if live is None or live.get("definitionId") != data.get("definitionId"):
+            continue
+        outputs = data.get("outputs") if isinstance(data.get("outputs"), dict) else {}
+        stamp = _landing_stamp(data.get(RESULT_LANDED_KEY))
+        if stamp is None:
+            live.pop(RESULT_LANDED_KEY, None)
+        else:
+            live[RESULT_LANDED_KEY] = stamp
+        if live.get("outputs") != outputs:
+            live["outputs"] = copy.deepcopy(outputs)
+            cli_graph._maybe_persist()
+            changed = True
+        if data.get("error"):
+            node_errors.record(node_id, str(data["error"]), friendly=data.get("errorFriendly"),
+                               category=data.get("errorCategory"), person=data.get("errorPerson"),
+                               provider_text=bool(data.get("errorProviderText")), provider=data.get("errorProvider"))
+        else:
+            node_errors.forget(node_id)
+        changed = True
+    for node_id, (keys, label, placed) in merged.items():
         live = cli_graph.nodes.get(node_id)
         node = stored.get(node_id)
         if live is None or node is None:
@@ -17548,12 +21881,44 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
             cli_graph.update_params(node_id, update)
         if label:
             cli_graph.set_label(node_id, data.get("label") or None)
+        position = node.get("position")
+        moved_live = False
+        if placed and isinstance(position, dict) and position != live.get("position"):
+            try:
+                cli_graph.update_positions({node_id: position})
+                moved_live = True
+            except (KeyError, TypeError, ValueError):
+                pass
+        changed = changed or moved_live
         changes = param_changes(before, cli_graph.nodes[node_id].get("params") or {})
         if changes:
             _person_touched([node_id])
             _journal("node.params", node_id=node_id, data=changes,
                      summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
         changed = changed or bool(update) or label
+    gone: list[dict[str, Any]] = []
+    for node_id in deleted:
+        live = cli_graph.nodes.get(node_id)
+        if live is None:
+            continue
+        try:
+            _ensure_node_deletable(node_id, live)
+        except HTTPException:
+            continue
+        name = _node_label(node_id)
+        try:
+            cli_graph.remove_node(node_id)
+        except ValueError:
+            continue
+        gone.append({"id": node_id, "name": name, "definitionId": str(live.get("definitionId") or ""),
+                     "position": copy.deepcopy(live.get("position"))})
+    if gone:
+        _note_scene_deletes([{"id": item["id"], "definitionId": item["definitionId"]} for item in gone])
+        entries = _remove_side_effects(gone, lambda item: f"{item['name']} ({item['id']}) was deleted")
+        _journal_removed_nodes(entries, note="", pin_reason=lambda item: f"{item['name']} was deleted")
+        if removed is not None:
+            removed.extend(entries)
+        changed = True
     return changed
 
 
@@ -17693,38 +22058,52 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
     itself, pins included, can be restored until the trash expires.
     """
     body = body or {}
+    exported = await _projects_live_export()
     with project_store.transaction() as catalog, ExitStack() as fences:
         _project_id_or_404(project_id, catalog)
         _project_revision(body, catalog, required=True)
         deleting_active = catalog["activeProjectId"] == project_id
+        settled = None
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
-        trashed = move_to_trash(catalog, project_id,
-                                actor_record(actor_for_headers(current_request_headers())))
+            # The canvas a delete empties is kept: in the project when it is
+            # that one (so Recently deleted has its latest), or its own, or
+            # filed (H1). Settling may change what is open.
+            settled = _settle_live_canvas(catalog, exported)
+            if settled is not None:
+                deleting_active = catalog["activeProjectId"] == project_id
+            if deleting_active:
+                _overlay_live_project(catalog["projects"][project_id], exported)
+        try:
+            trashed = move_to_trash(catalog, project_id,
+                                    actor_record(actor_for_headers(current_request_headers())))
+            if deleting_active:
+                catalog["activeProjectId"] = None
+                catalog["workspaceRevision"] = uuid4().hex
+                # The canvas becomes the unfiled one, empty, its ids starting
+                # again at n1, so the unfiled canvas's id epoch moves, in this
+                # step (round 11 of PR #114). Before the commit, on disk first,
+                # and back if the commit fails (round 20 of PR #195, M2): a
+                # crash in between leaves a moved revision over the old canvas,
+                # never the new canvas under an old revision.
+                previous_epoch = canvas_undo_book.advance_epoch(None)
+                try:
+                    _commit_project_workspace(catalog, CLIGraph())
+                except BaseException:
+                    canvas_undo_book.restore_epoch(None, previous_epoch)
+                    raise
+            else:
+                project_store.commit(catalog)
+        except BaseException:
+            _undo_canvas_filing(settled)
+            raise
         if deleting_active:
-            catalog["activeProjectId"] = None
-            catalog["workspaceRevision"] = uuid4().hex
-            # The canvas becomes the unfiled one, empty, its ids starting again
-            # at n1, so the unfiled canvas's id epoch moves, in this step
-            # (round 11 of PR #114): a write or run noted on an earlier
-            # unfiled canvas isn't this one. Before the commit, on disk first,
-            # and back if the commit fails (round 20 of PR #195, M2, as a
-            # clear and an import): a crash in between leaves a moved
-            # revision over the old canvas, never the new canvas under an old
-            # revision.
-            previous_epoch = canvas_undo_book.advance_epoch(None)
-            try:
-                _commit_project_workspace(catalog, CLIGraph())
-            except BaseException:
-                canvas_undo_book.restore_epoch(None, previous_epoch)
-                raise
             node_removals.forget_project(None)
             _forget_canvas_undo("the open project was deleted since, so the canvas started again", project_id=None,
                                 advance=False)
             _note_canvas_change()  # who, for a stale writer's workspace_moved refusal
-        else:
-            project_store.commit(catalog)
+        _note_canvas_settled(settled)
         result = {
             "deletedProjectId": project_id,
             "trashedProject": trash_metadata(trashed),
@@ -17759,9 +22138,17 @@ def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
 # need the workspace revision: a gone entry is a plain 404.
 @app.post("/api/projects/{project_id}/restore")
 async def restore_saved_project(project_id: str) -> dict[str, Any]:
+    if _canvas_not_filed_now() is not None or _held_distinct():
+        # A canvas waits to be saved: it takes any place a delete freed
+        # first, as the listing the person's tab makes after a delete does
+        # (review 8 of PR #199, L-2: a restore never takes the place a
+        # waiting canvas waits on). The restore then may pass the limit.
+        await list_projects()
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
         _trashed_or_404(project_id, catalog)
+        # Past the project limit too (RESTORE_MAY_PASS_THE_PROJECT_LIMIT;
+        # Justin, 2026-10-29): prepare counts only projects new to the list.
         project = restore_from_trash(catalog, project_id)
         project_store.commit(catalog)
         result = {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
@@ -17882,6 +22269,16 @@ async def export_graph_for_frontend() -> dict:
     # about this canvas, and it adopts this one (review 20, L-4/L-5).
     if not canvas_undo_book.restored:
         workspace["canvasRevisionRestored"] = False
+    # The restore notice showing now (GM r11, 5): a tab whose revision moved
+    # because Nebula restored its project list says so, not "another window".
+    notice = project_store.restore_notice()
+    if notice is not None and isinstance(notice.get("id"), str):
+        workspace["catalogRestore"] = notice["id"]
+    # The open project an agent's write closed to keep the person's canvas in
+    # it: a tab that showed it goes to Projects home, with no "another window"
+    # line (review 10's HIGH-2 follow-up).
+    if _persons_canvas_saved:
+        workspace["personsCanvasSaved"] = dict(_persons_canvas_saved)
     # The open project's nodes' last errors (ids restart in each project).
     node_errors.use_project(workspace["activeProjectId"])
     if not state["nodes"]:

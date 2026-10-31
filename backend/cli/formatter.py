@@ -9,6 +9,7 @@ from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
+from services.wording import counted
 from services import node_categories
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
@@ -280,11 +281,11 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
         preview = ", ".join(node_names[:3])
         if len(node_names) > 3:
             preview += ", ..."
-        uses = f"{count} nodes ({preview})" if count else "no node uses it"
+        uses = f"{counted(count, 'node')} ({preview})" if count else "no node uses it"
         if configured_map.get(key_name) is True:
             configured.append(f"  {key_name:<25}{'set':<10}{uses}")
         else:
-            missing.append(f"  {key_name:<25}{'':10}{count} nodes unavailable")
+            missing.append(f"  {key_name:<25}{'':10}{counted(count, 'node')} unavailable")
 
     lines: list[str] = []
     if configured:
@@ -376,6 +377,10 @@ def format_selection(selection: dict[str, Any]) -> str:
     """Format the bounded live canvas selection for human and agent callers."""
     nodes = selection.get("nodes", [])
     if not nodes:
+        # Only a duplicate or a paste selected (review 17 drops-locks-ui
+        # MEDIUM-1): the note still says so.
+        if selection.get("tabOnlyNote"):
+            return "No live canvas nodes selected.\n\n" + str(selection["tabOnlyNote"])
         return "No live canvas nodes selected."
 
     lines = [f"SELECTED NODES ({len(nodes)}):"]
@@ -406,6 +411,10 @@ def format_selection(selection: dict[str, Any]) -> str:
     if missing:
         lines.append("")
         lines.append("Ignored stale IDs: " + ", ".join(str(node_id) for node_id in missing))
+    if selection.get("tabOnlyNote"):
+        # A duplicated or pasted node only the person's tab has (PR #199 round 18).
+        lines.append("")
+        lines.append(str(selection["tabOnlyNote"]))
     return "\n".join(lines)
 
 
@@ -438,6 +447,52 @@ def format_price_line(detail: dict[str, Any]) -> str | None:
     return "PRICE: no list price at default settings"
 
 
+# What an older copy decided in a catalog restore, by name (start_here's
+# catalogRestore; `nebula projects` prints the same).
+_RESTORE_ROWS = (
+    ("reverted", "Went back to the copy's version"),
+    ("cameBack", "Deleted after the copy, now back"),
+    ("backInTrash", "Restored after the copy, in Recently deleted again"),
+)
+
+
+def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False) -> list[str]:
+    """One line per kind of outcome a catalog restore reported, with names.
+    ``canvas_block``: the CANVAS NOT SAVED block follows, so the waiting
+    canvas is left to it (GM r23 e on PR #199: said once)."""
+    lines = []
+    for key, label in _RESTORE_ROWS:
+        listed = [row for row in restore.get(key) or [] if isinstance(row, dict)]
+        # Only what still holds (rows marked current: false moved since).
+        rows = [row for row in listed if row.get("current") is not False]
+        count = max(restore.get(f"{key}Count") or 0, len(listed)) - (len(listed) - len(rows))
+        if count <= 0:
+            continue
+        names = ", ".join(str(row.get("name")) for row in rows)
+        more = count - len(rows)
+        lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
+    if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
+        # GM r19 on PR #199, 6a: only unread project records may be missing.
+        from services.catalog_recovery import restore_said_more
+
+        # GM r22 on PR #199, 1: "no project is missing" only when nothing
+        # else is said (the person's rule), never beside a left-out project.
+        if restore.get("damagedRecordsUnread") is False and restore_said_more(restore):
+            lines.append("  Damaged file not read whole, after its project records: every record in it was read")
+        elif restore.get("damagedRecordsUnread") is False:
+            lines.append("  Damaged file not read whole, after its projects: no project is missing")
+        else:
+            lines.append("  Damaged file not read whole: changes after the copy may be missing")
+    recovered = restore.get("recoveredCanvas")
+    if isinstance(recovered, dict) and recovered.get("id") and recovered.get("current") is not False:
+        lines.append(f"  Live canvas saved as its own project: {recovered.get('nameNow') or recovered.get('name')} "
+                     f"({recovered['id']})")
+    waiting = restore.get("canvasNotFiled")
+    if isinstance(waiting, dict) and waiting.get("current") is not False and not canvas_block:
+        lines.append(f"  Live canvas not saved as a project yet: the list is at its {waiting.get('reason')} limit")
+    return lines
+
+
 def format_start(start: dict[str, Any]) -> str:
     """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
     the canvas, pins, proposals, boards, the nodes that run here with prices,
@@ -448,13 +503,25 @@ def format_start(start: dict[str, Any]) -> str:
     from services import node_categories
 
     lines: list[str] = []
+    restore = start.get("catalogRestore") or {}
+    waiting = start.get("canvasNotFiled") or {}
+    if restore.get("note"):
+        # Nebula restored a damaged project list (services/project_store.py).
+        lines.append(f"PROJECT LIST RESTORED: {restore['note']}")
+        lines.extend(catalog_restore_lines(restore, canvas_block=bool(waiting.get("note"))))
+    if waiting.get("note"):
+        # The live canvas isn't a project and the list had no room to save it.
+        state = "room now" if waiting.get("roomNow") else f"{waiting.get('reason')} limit"
+        lines.append(f"CANVAS NOT SAVED AS A PROJECT ({state}): {waiting['note']}")
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"
     title = f"{project.get('name')} ({project.get('id')})" if project else "no project open"
-    lines.append(f"CANVAS: {title}, {canvas.get('nodeCount', 0)} nodes, {watching}")
+    lines.append(f"CANVAS: {title}, {counted(canvas.get('nodeCount', 0), 'node')}, {watching}")
     selection = canvas.get("selection") or []
     lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
+    if canvas.get("tabOnlyNote"):
+        lines.append(f"  {canvas['tabOnlyNote']}")
     for agent in canvas.get("agents") or []:
         target = agent.get("target") or {}
         at = target.get("nodeId") or (f"({target.get('x')},{target.get('y')})" if target else "?")
@@ -502,7 +569,7 @@ def format_start(start: dict[str, Any]) -> str:
         analyzed = "analyzed" if row.get("analyzed") else "not analyzed"
         direction = f" — {row['direction']}" if row.get("direction") else ""
         lines.append(f"  {row.get('id')}  {row.get('name')} [{row.get('where')}] "
-                     f"{row.get('images', 0)} images, {analyzed}{direction}")
+                     f"{counted(row.get('images', 0), 'image')}, {analyzed}{direction}")
     if boards.get("more"):
         lines.append(f"  ({boards['more']})")
     if boards.get("read"):
@@ -667,6 +734,9 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
 
     selection = snapshot.get("selection") or []
     lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
+    if snapshot.get("tabOnlyNote"):
+        # Nodes only the person's tab has (review 17 drops-locks-ui MEDIUM-1).
+        lines.append(f"  {snapshot['tabOnlyNote']}")
 
     pins = [pin for pin in snapshot.get("pins") or [] if isinstance(pin, dict)]
     if pins:
@@ -809,7 +879,21 @@ def format_event(event: dict[str, Any]) -> str:
     kind = str(event.get("kind") or "")
     data = event.get("data") or {}
     summary = str(event.get("summary") or kind)
-    if kind == "canvas.replaced":
+    if kind == "canvas.replaced" and data.get("proposalsKept"):
+        # A reopen of the open project (GM r29 of PR #199, 3): its ids stay.
+        # GM r32 (6): "open proposals still open" only when any were open
+        # (an event from before the count says it as before), and the nodes
+        # that got Nebula ids, counted.
+        parts = ["node ids kept"]
+        if not isinstance(data.get("proposalsOpen"), int) or data["proposalsOpen"] > 0:
+            parts.append("open proposals still open")
+        renamed = data.get("renumberedCount")
+        if not isinstance(renamed, int):
+            renamed = len(data["renumbered"]) if isinstance(data.get("renumbered"), dict) else 0
+        if renamed:
+            parts.append("1 node got a Nebula id" if renamed == 1 else f"{renamed} nodes got Nebula ids")
+        summary = f"Reopened the open project — {', '.join(parts)}; run nebula look"
+    elif kind == "canvas.replaced":
         summary = f"Canvas replaced ({data.get('reason') or 'import'}) — node ids restarted; run nebula look"
     elif kind == "canvas.cleared":
         summary = "Cleared the canvas — run nebula look"
@@ -953,11 +1037,28 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     return "\n".join(lines)
 
 
+def saved_canvas_message(result: Any) -> str | None:
+    """GM's agent reply when Nebula saved the person's canvas as its own
+    project before this write (PR #199, GM's rule (a)): the reply's
+    `savedCanvas.message`, or None. Every printer of a canvas write prints it
+    after its action line (review 9, M-2), so an agent on the CLI learns
+    what the JSON says: a project was made, and where its write went."""
+    saved = result.get("savedCanvas") if isinstance(result, dict) else None
+    message = saved.get("message") if isinstance(saved, dict) else None
+    return message if isinstance(message, str) and message.strip() else None
+
+
+def with_saved_canvas(line: str, result: Any) -> str:
+    """``line``, then GM's saved-canvas reply on its own line when there is one."""
+    message = saved_canvas_message(result)
+    return f"{line}\n{message}" if message else line
+
+
 def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
     """`nebula apply`'s result: what changed, then each new node's id for the
     next command, then how to undo it (a steps plan prints one undo line for
     all its steps instead, so `undo=False` there)."""
-    lines = [f"Applied: {result.get('summary') or 'no change'}."]
+    lines = [with_saved_canvas(f"Applied: {result.get('summary') or 'no change'}.", result)]
     refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
     for node in result.get("added") or []:
         node_id = str(node.get("id") or "")

@@ -186,9 +186,11 @@ def _node_entry(node: Mapping[str, Any]) -> dict[str, Any]:
 
 def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | None, caller_id: str | None,
                 via: str) -> dict[str, Any]:
-    """The project, whether a browser is watching, the selection, other
-    agents' cursors, and the nodes: up to FULL_NODES in full (selected first,
-    then on screen), then the rest by id and name, as the budget allows."""
+    """The project, whether a browser is watching, the selection (with
+    ``tabOnlyCount`` and ``tabOnlyNote`` when it holds nodes only the
+    person's tab has), other agents' cursors, and the nodes: up to
+    FULL_NODES in full (selected first, then on screen), then the rest by id
+    and name, as the budget allows."""
     budget = BUDGETS["canvas"] * CHARS_PER_TOKEN
     selection = [str(node_id) for node_id in snapshot.get("selection") or []]
     agents = [
@@ -206,6 +208,9 @@ def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | Non
         "project": dict(project) if project else None,
         "view": {"stale": bool((snapshot.get("view") or {}).get("stale", True))},
         "selection": selection,
+        # Nodes the person selected that only their tab has (a duplicate or
+        # a paste): counted, never listed (review 17 agents-docs LOW-2).
+        **{key: snapshot[key] for key in ("tabOnlyCount", "tabOnlyNote") if snapshot.get(key)},
         "agents": agents,
         "nodeCount": total,
         "nodes": [],
@@ -427,6 +432,61 @@ def next_part(events: Mapping[str, Any], *, via: str) -> dict[str, Any]:
             "point": hints["point"], "pins": hints["pin"]}
 
 
+# Rows of a catalog restore's added-back projects shown in start_here.
+RESTORE_ROWS = 5
+
+
+def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
+    """A restore of the damaged project list the person hasn't closed yet
+    (main._catalog_restore_view): first in the answer, before the canvas, so
+    an agent reads it before acting on project ids from earlier. Short: the
+    note, the source and its time, the damaged file, and a few names of what
+    was added back and of what the copy decided (reverted, cameBack,
+    backInTrash); list_projects has `catalogRestore` in full. Only what
+    still holds (a row marked `current: false` is left out, and its count
+    with it: GM's stale-lines rule, which the note follows too)."""
+    def holding(key: str) -> list[Mapping[str, Any]]:
+        return [row for row in view.get(key) or [] if isinstance(row, Mapping) and row.get("current") is not False]
+
+    def rows(key: str) -> list[dict[str, Any]]:
+        return [{"id": row.get("id"), "name": _cut(row.get("name"), NAME_CHARS)} for row in holding(key)[:RESTORE_ROWS]]
+
+    def count(key: str) -> int:
+        listed = [row for row in view.get(key) or [] if isinstance(row, Mapping)]
+        recorded = view.get(f"{key}Count")
+        recorded = recorded if isinstance(recorded, int) else len(listed)
+        return max(0, max(recorded, len(listed)) - (len(listed) - len(holding(key))))
+
+    part = {"at": view.get("at"), "kind": view.get("kind"), "source": view.get("source"),
+            "copyAt": view.get("copyAt"), "damagedFile": view.get("damagedFile"), "addedBack": rows("addedBack"),
+            "addedBackCount": count("addedBack"), "notAddedBackCount": count("notAddedBack"),
+            "damagedReadWhole": view.get("damagedReadWhole"),
+            # PR #199 round 16: the CLI's context line reads it, as `nebula
+            # projects` does (without it, "may be missing" showed beside a
+            # note saying every record was read).
+            "damagedRecordsUnread": view.get("damagedRecordsUnread")}
+    for key in ("reverted", "cameBack", "backInTrash"):
+        if count(key):
+            part[key], part[f"{key}Count"] = rows(key), count(key)
+    canvas = view.get("recoveredCanvas")
+    if isinstance(canvas, Mapping) and canvas.get("current") is not False:
+        part["recoveredCanvas"] = {"id": canvas.get("id"),
+                                   "name": _cut(canvas.get("nameNow") or canvas.get("name"), NAME_CHARS)}
+    waiting = view.get("canvasNotFiled")
+    if isinstance(waiting, Mapping) and waiting.get("current") is not False:
+        part["canvasNotFiled"] = {"reason": waiting.get("reason")}
+    part["note"] = _cut(view.get("note"), 700)
+    return part
+
+
 def build(**parts: dict[str, Any]) -> dict[str, Any]:
-    """The answer, its parts in the documented order."""
-    return {name: parts[name] for name in BUDGETS}
+    """The answer, its parts in the documented order. ``catalogRestore``
+    leads when there is one (catalog_restore_part), then ``canvasNotFiled``
+    (main._canvas_not_filed_view); neither has a budget of its own, and
+    together they stay under 500 tokens."""
+    lead = {"catalogRestore": parts["catalogRestore"]} if parts.get("catalogRestore") else {}
+    if parts.get("canvasNotFiled"):
+        # The live canvas waiting to be filed (the list at a limit), whether
+        # or not a restore notice is open (review 3 of PR #199, L-5).
+        lead["canvasNotFiled"] = parts["canvasNotFiled"]
+    return {**lead, **{name: parts[name] for name in BUDGETS}}

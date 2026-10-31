@@ -36,6 +36,29 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
+When Nebula has restored a damaged project list and the person hasn't
+closed its notice yet, a `catalogRestore` part leads the answer, before
+`canvas` (see [A damaged project list](#a-damaged-project-list)): `note`,
+`kind`, `source` and `copyAt`, `damagedFile`, up to 5 `addedBack` rows
+({id, name}), the counts, and, when the copy decided something, up to 5
+`reverted`, `cameBack` and `backInTrash` rows with their counts,
+`recoveredCanvas`, and `damagedReadWhole`, only the rows that still hold (a
+project restored, deleted or deleted for good since drops its row and its
+count). It has no budget of its own and stays under about 300 tokens. Then,
+while the live canvas isn't a saved project because the list is at a limit,
+whether or not a restore notice is open, a `canvasNotFiled` part
+(`{reason, from, since, projectLimit, live, held, canvases, heldUnreadable,
+roomNow, note}`, about 200 tokens; `held` counts canvases held aside to be
+saved later, `canvases` names each one that waits when the project it was
+is known): `note` says what frees room for that limit, and once room is
+free (`roomNow: true`) that the next listing saves it. Nothing in the canvas
+is lost, but the person can't see or open it until it is saved: never say
+it is open or that they can reach it. While the live canvas waits at the
+limit, every change you send to it is refused (409, `code:
+"canvas_waiting"`); open an existing project to work in. Tell the person;
+don't free room yourself. `nebula context` prints it as `CANVAS NOT SAVED
+AS A PROJECT`.
+
 No private note, image note, board note or pin reply history goes in. The
 route is `GET /api/agent/start` (`?via=cli` words the hints for the CLI);
 `nebula context` prints the same, and `nebula context --json` prints it as
@@ -333,11 +356,83 @@ The server exposes these tools for building and running (see
   they typed before the switch is saved into the project they left, and
   when you reopened the project they were showing, onto the reopened canvas
   too. If that save fails it is kept as a new project named after the
-  project left, "<project left> (recovered)" (then "(recovered 2)", 3 and
-  so on: a new copy each time, never an earlier one), and a line says so
+  project left, "Recovered <project left>" (then "Recovered <project
+  left> copy", "copy 2" and so on: a new copy each time, never an earlier
+  one; a number in the project's name is never read; a long name is cut
+  short so the whole name fits a project name's 120 characters, counted as
+  characters, not bytes), and a line says so
   with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
+  Node ids can change at an open. Nebula's canvas only ever holds its own
+  ids (`n1`, `n2`, …). The person's Duplicate and Paste make nodes with ids
+  only their tab knows until the project is next opened; that open gives
+  each a Nebula id, numbered past every id the project and its run history
+  have used, in the saved project too (its connections, run history,
+  pins and any node that names it, such as a video timeline's items). The
+  open answers `renumbered` (`{old: new}`, `{}` when nothing changed), and
+  the `canvas.replaced` event says it too (`data.renumbered`,
+  `data.renumberedCount`, "gave 1 node new ids"). `nebula watch` prints a
+  reopen of the open project as "Reopened the open project — node ids
+  kept", adding "open proposals still open" only when any were
+  (`data.proposalsOpen`) and "1 node got a Nebula id" or "2 nodes got
+  Nebula ids" when nodes were renumbered. The person can reopen the project they have open themselves
+  (Projects, Open, while a duplicate or paste has no Nebula id yet): that is
+  the person's own open, so `canvas.replaced` comes in their name with the
+  same `renumbered`, and their tab saves before it, so nothing waits to
+  arrive. Their other windows on that project follow it quietly and hand
+  off what they hadn't saved, as after your reopen. When you reopen the
+  project the person has open, the node is never doubled, and what their
+  tab hadn't saved yet still arrives on the node's new id (the handoff
+  learns the new ids). A node's run result (output, failure, notes) moves
+  as one piece: the newer run's stands. Nebula stamps when a result lands
+  on a node (`resultLandedAt`, epoch ms, kept with the node on the live
+  canvas and in the saved project, so it survives a restart). When Nebula
+  saw both runs land since it started, their order decides; otherwise the
+  tab's run record's finish time is compared with that stamp. Equal times
+  keep Nebula's result. A side with no time (a result saved before the
+  stamp existed, a run record with no start time) loses: the side with a
+  time wins, and when neither has one Nebula's result stands unless it has
+  none. A tab result no run record backs never replaces Nebula's. When the
+  person's newer result does replace the one on a node, the journal says so
+  in their name: `node.result` (`data: {projectId, runId, replaced: true}`;
+  `nebula watch` shows "kept the result of their newer run from run … on
+  …"), with no Agent log line (it is the person's own). A node one of the
+  person's windows made is deleted only when that window says so: a window
+  that never had it, or a save that leaves it out, keeps it and your edits.
+  A delete said by a window that isn't the one that saved the node is
+  ignored, and the save's answer lists the node in `deletesKept`, so the
+  person's tab says it stayed. Every reopen of the
+  project already open (yours, the person's, or Nebula's own at boot after
+  an upgrade gave a node its id) keeps the open proposals open, with the
+  same ids: their nodes keep their ids, so nothing they were made against
+  changed. What the person's save before the open, or their tab's handoff
+  after yours, changed on a node a proposal touches is treated like any
+  edit: the proposal stays open, and Accept checks it as always (a value
+  it sets changed since: "No longer fits"). The proposals stay open in
+  `get_proposal`, `start_here`, `nebula proposals` and `nebula context`,
+  and approved runs that haven't started stay approved. Opening another
+  project, making one, a load and a Clear still close them. What holds for your own
+  edits to the new id after the open: of a renumbered node, the handoff
+  takes only what differs from the node as the open loaded it (each setting
+  whose value differs from that, its name if it differs, its place if it
+  differs), so the person's change wins on what they changed, and your
+  edit to any other setting, its name or its place stands. If the person
+  changed the same setting, their value wins. A renumbered node the
+  person's tab no longer holds under either id was deleted by them before
+  the save reached Nebula: it is removed, as their delete (`node.removed`
+  in their name), but a node you added after the open stays.
+  Until that open, such a node isn't on the canvas you read: a project read
+  shows it under its tab id, and the selection never offers it (see
+  `tabOnlyCount` below). An upgrade that finds such an id on the canvas at
+  boot gives it a Nebula id the same way, with the values the person last
+  saved, and reloads the person's tab. Loading a graph file (`nebula load`, POST /api/graph/import)
+  gives every node a new id the same way (`idMap`, and `renumbered` for the
+  ones that changed). An id you read before an open, a load or a project
+  switch may be stale: an edit to a node that isn't on the canvas answers
+  404 "Node n7 not found. Node ids can change when a project is opened
+  again …: read the canvas again for the current ids." Read again
+  (look_at_canvas, `nebula graph`) and use the ids you see.
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
@@ -346,7 +441,11 @@ The server exposes these tools for building and running (see
   cleared the canvas while you were editing “Text” for “Hero prompt”. That
   change wasn't saved." (a count from 4 settings, or settings on several
   nodes). Each `list_projects` row has the
-  card's `cover` ({source, images}).
+  card's `cover` ({source, images}). After Nebula restored a damaged project
+  list, `list_projects` also has `catalogRestore` until the person closes the
+  notice ([A damaged project list](#a-damaged-project-list)), `canvasNotFiled`
+  (with its `note`) while the live canvas waits to be saved as a project, and
+  `canvasSaved` for a while once it is.
 - `list_project_covers` / `set_project_cover`: the images a project's card
   can show (`images`, `pinned`, `pinnedBy`, `cover`) and setting its cover to
   one of them (or `""` for the automatic one). An agent sets it while the
@@ -420,7 +519,9 @@ The server exposes these tools for building and running (see
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
-  characters, Styles, projects), and bring one back with the same id.
+  characters, Styles, projects), and bring one back with the same id. A
+  project restore may pass the project limit; after one, `new_project` is
+  still refused (413, `limit: "projects"`, `projectLimit`).
   `list_trash` takes `kind` (`moodboard`, `character`, `style` or `project`),
   and `scope` (`global`, or `project` with `project_id`, an id or
   `"current"`; `project_id` alone means `project`) as the route does. See
@@ -583,7 +684,21 @@ There is no answer or dismiss tool either: only the person answers questions.
 
 Selection is ephemeral. It is not written into `.nebula` graph files or
 `~/.nebula/state.json`. Unknown or deleted node IDs are reported only as stale
-IDs and are never presented as live handles.
+IDs and are never presented as live handles. A node only the person's tab has
+(a duplicate or a paste, until the project is opened again) is never listed at
+all, not even as stale: the selection says only how many there are
+(`tabOnlyCount`, and `tabOnlyNote`: "The person also selected 1 node only their
+tab has (a duplicate or a paste): it has no id agents can use until the project
+is opened again.", without "also" when nothing else is selected). Every read
+that shows the selection carries both: `get_selected_nodes` (`nebula
+selection`), `look_at_canvas` (`nebula look`, beside `selection`),
+`start_here` (`nebula context`, in `canvas`) and a chat turn's selection
+context, which print the note, also when it is the only thing selected.
+The `selection.changed` event carries them too, so selecting only a
+duplicate reads "selected 1 node only their tab has", never "cleared the
+selection"; swapping one such node for another with the same count changes
+nothing you can see, so no event comes. Don't ask about or change such a
+node; tell the person it gets an id when the project is opened again.
 
 The same context is available without MCP through:
 
@@ -682,11 +797,11 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal connected it |
-| `selection.changed` | the selected set changed | `nodeIds`, `count` |
+| `selection.changed` | the selected set changed, or how many selected nodes only the person's tab has ("selected 1 node only their tab has") | `nodeIds`, `count`; `tabOnlyCount`, `tabOnlyNote` when there are such nodes |
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
-| `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
+| `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids (the summary says "1 open proposal stayed open") |
 | `canvas.cleared` | Clear canvas | |
 | `project.cover` | a project's cover was pinned, changed or set back to automatic, by the person, an agent, or an accepted proposal (its summary ends "(accepted from <agent>)") | `projectId`, `projectName`, `cover` (the url, or null for automatic) |
 | `commons.corrected` / `commons.region` / `commons.membership` | the person curated a Commons reference: a correction, a region drawn or changed, a membership's role, why or inbox place; or accepted an agent's [Commons proposal](#commons-curation) (the summary ends "(accepted from <agent>)") | `assetId`; `fieldPath`, `op` for a correction; `regionId`, `change` (`["added"]` or the fields changed) for a region; `membershipId`, `collectionId`, `change` (`["accepted"]` or the fields) for a membership. Never Commons text (no values, labels or whys) |
@@ -703,6 +818,10 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
+| `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
+| `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "Recovered <project>" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null), `held` (true: saved from the copy held aside when a project opened over it, or a clear or load replaced it) |
+| `project.canvasHeldUnreadable` | A canvas held aside (`projects/canvas-held/`) couldn't be read from either copy, or couldn't be saved as a project, and may be lost; its files are kept beside them; by `system`, once | `count` (null: unknown), `kept` (the kept files' names), `at` |
+| `project.canvasNotFiled` | It couldn't be saved as its own project: the list is at a limit. No project is open; making one is refused until there is room, and opening one holds the canvas aside first; by `system`, once per wait (across restarts), and again only if the limit it waits on changes | `reason` (`projects` or `storage`), `from`, `restoreId`, `since` (when the wait began) |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
@@ -1681,7 +1800,8 @@ limit, so don't also post an update to announce the proposal. The view's
 "Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
 Code", "Expired" (on time, even when nobody reads proposals), "No longer
 fits" (a node it needs was deleted, the canvas was cleared or replaced by an
-import or another project, or what it changes was edited since), or
+import or another project, or what it changes was edited since; a reopen of
+the project already open keeps it waiting), or
 "Closed: Nebula restarted" (proposals live in memory; settled the next time
 the list is read: `list_notes`, the person's tab reconnecting, a project
 switch). The socket sends `agentNotes` op `added` and then `resolved` for
@@ -1818,7 +1938,10 @@ Rules:
   3 open per agent and 12 in total (429 beyond); a 160-character
   note. Proposals expire after 15 minutes.
 - Deleting a node a proposal refers to invalidates it; so do import, opening
-  another project and Clear canvas. If the canvas changed so that a
+  or making another project and Clear canvas. Reopening the project already
+  open (yours, the person's, or Nebula's own at boot) doesn't: its open
+  proposals stay open with the same ids, and the graphSync says so
+  (`proposalsKept: true` beside `graphReplaced`). If the canvas changed so that a
   proposal no longer fits, Accept fails with 409 and the proposal closes as
   invalidated.
 - Proposals live in memory only and are lost on restart.
@@ -3012,6 +3135,504 @@ the shared outside budget, until the person revokes it, which deletes the
 file. Apps connected before token files keep the token in their config until
 they are revoked and connected again.
 
+### A damaged project list
+
+Every project lives whole in `projects/catalog.json` (name, dates, cover,
+pins, Updates, snapshot): there are no per-project folders. Nebula keeps two
+copies beside it:
+
+- `catalog.json.bak`: the catalog each commit replaced, kept as a hard link
+  made just before the rename, and only when it is the file that commit's
+  transaction read and validated. So it is one commit behind, and the newest
+  change is only in `catalog.json`; a restore takes it back from there when
+  that part of the file still reads. Where hard links don't work (a
+  `NEBULA_STATE_DIR` on exFAT, FAT, or some network and FUSE mounts), every
+  commit writes `.bak` as a full copy of what it committed instead.
+- `catalog.json.bak.1`: a real copy, rewritten on the first commit after it
+  is an hour old. So it is at least an hour behind `.bak`, and can be days
+  old after a pause.
+
+The live canvas (`state.json`) records which project it is (`projectId`),
+so nothing saves one project's canvas into another.
+
+When `catalog.json` won't parse or validate (or holds a value Nebula can't
+write back, such as `NaN`), or is missing while a copy exists, the next read
+restores it under the store's lock. An HTTP request reads a catalog that
+changed outside this process in a worker thread first, and a reader on the
+event loop (a canvas event, a `/ws` connect, the journal) hands the restore
+to that same worker thread and answers what it read before. While that
+thread is reading the file, a loop reader doesn't parse it too, so neither
+the loop nor a run waits for a restore (measured with a catalog cut in half:
+31 MB and 102 MB both held the loop 0 s, against 3.3 s and 14.1 s before).
+A transaction (a save, a create) still waits on the lock while another
+Nebula process restores the same folder. The restore:
+
+1. reads both copies and starts from `.bak` unless `.bak.1` holds the
+   newer catalog by its own dates and, when both carry one, a later commit
+   number (`commitSeq`, which every commit raises by one), not by its name.
+   A date ahead of the restore's own clock is judged by file order: in the
+   newer of two files it counts as now (a clock that ran ahead and was then
+   corrected wrote the newest files with those dates, and they must still
+   win), in the older it never counts (a copy saved by a clock that ran
+   ahead isn't "newer" for it), here and in step 2. A whole record that
+   loses to an older copy's by dates gets a `reverted` row with `by:
+   "dates"`, and its version stays in the kept damaged file;
+2. takes from the damaged file every project record that still reads whole:
+   added back when the copy lacks it (to Recently deleted when it was
+   there), and replacing the copy's unless the copy's is newer by its dates
+   (a file older than its copy never rolls a project back). A record is
+   filed under its own `id`, checked against its key and the copy, so a
+   damaged key, id or section name never files it under another id or
+   reports it as deleted. In a file that doesn't parse, a record is found
+   by its key, by its own leading `{"id":"<id>"`, and by its key followed
+   by its own `"id"` with the same id when the damage took the opening
+   brace between them. So one flipped bit in any structural byte (a brace,
+   a bracket, a colon, a comma or a quote: tested for all 8 bits of each)
+   never reverts a project to the copy's version without a `reverted` row
+   saying so, and never files it under another id. A record whose key and
+   id both changed, landing one character off a copy record, keeps the
+   copy's version (reported). A record in Recently deleted's group that
+   has no `deletedAt` (its key changed) is never reported as in Recently
+   deleted again. A record cut short
+   is still noticed where nothing else says a record sits there (right
+   after another cut record) when it opens as a record does (`id`, `name`,
+   `createdAt`), so it is reported by name; nothing nested deeper than a
+   record (a node's params, a snapshot) is ever counted as a project: a
+   record's depth is counted both forward from it and from the last point
+   known to sit between records, and where the damage makes neither
+   readable it isn't taken. A project deleted for good (`purged`,
+   remembered for a week, in each catalog's head and in
+   `projects/catalog-purged.json`, so a delete for good survives a damaged
+   head even when it was the last commit) stays deleted when the file that
+   says so is the newest that says anything of that id. Every commit writes
+   `catalog-purged.json` before it renames `catalog.json` into place
+   (`{version, commit, purged, previous: {commit, purged}}`): a crash
+   between the two leaves it one commit ahead, and each of its two layers
+   is true of the commit it names, so it is placed in the files' order by
+   its commit number. If it can't be written, the commit still lands, the
+   log says "could not keep catalog-purged.json", and a later restore lets
+   the copies of later commits decide the projects they hold (a project
+   made again with the same id is never deleted by it); the restore says
+   `purgedFileBehind: true`. An older damaged file (all its dates before the
+   delete) never brings it back:
+   a record in a newer file (the same id made again, as a retried recovery
+   does) wins. File order decides, never a record's `createdAt`: a clock
+   that ran ahead when the project was made writes a `createdAt` after the
+   delete, and its `keptDeleted` row then says `createdAfterDelete: true`.
+   Everything else the copy holds stays, and what that decided is reported
+   (`reverted`, `cameBack`, `backInTrash`, `keptDeleted`);
+3. opens the project the live canvas is, if it came back, and otherwise
+   none: never the copy's open project. The next listing (or open, create
+   or delete) then saves a live canvas that is no project in the list as
+   its own project, under the project's own name when it is known and free
+   again (nothing in the list or Recently deleted uses it), else
+   "Recovered <project>", otherwise "Recovered canvas" ("Recovered canvas
+   2" and on: Nebula's own count of canvases it couldn't name)
+   (`recoveredCanvas`). Nebula never reads a number in a name. A recovered
+   copy is "Recovered <project>" when that is free, else that name plus
+   " copy", then " copy 2", " copy 3", the lowest free: the next recovery
+   of "Shot" is "Recovered Shot" even with a "Recovered Shot 7" in the list
+   (a different name), and "Shot 7" with "Recovered Shot 7" taken gives
+   "Recovered Shot 7 copy". The only number Nebula raises is its own
+   "copy N": a duplicate is "X copy", then "X copy 2", and "X copy 2"
+   gives "X copy 3"; a recovered "Shot 7 copy" is "Recovered Shot 7 copy",
+   then "Recovered Shot 7 copy 2". A name that starts with "Recovered"
+   never gets a second one: "Recovered Alpha" gives "Recovered Alpha copy",
+   "Recovered Alpha copy 2" gives "Recovered Alpha copy 3", and "Recovered
+   X 2" gives "Recovered X 2 copy" (that 2 is the name's own). A name from
+   before this rule ("X (recovered)"), with or without a number after
+   "recovered", is Nebula's old "Recovered X": its recovered copy is
+   "Recovered X", then "Recovered X copy". Names in Recently deleted and names already given to copies not
+   saved yet are taken, so two recoveries at once get two names. A project's own name counts as free only when no project in the
+   list or in Recently deleted has it: a "Beta" still in Recently deleted
+   makes the canvas "Recovered Beta". Agents always see a project's real
+   name, as the person does.
+   When the list is at its project limit (500) or its size limit (the
+   whole list is capped at 128 MiB; only a delete for good frees that) it
+   can't. Nothing in the canvas is lost (Nebula keeps it, across restarts
+   too), but no project is open and the person can't see or open it until
+   it is saved. The listing and `start_here` carry `canvasNotFiled`
+   (`{reason: projects | storage, from, since, projectLimit, roomNow,
+   note}`; `since` and the one `project.canvasNotFiled` event hold across
+   restarts, in `projects/canvas-waiting.json` and its `.bak` copy, so a
+   damaged or missing record doesn't restart the wait) whether or not a
+   restore notice is open; `note` says what frees room for that limit, and
+   `roomNow` is true once room is free and the next listing will save it.
+   Every listing carries `projectLimit` (500). Opening a project works:
+   the waiting canvas is first held aside, whole, in its own file,
+   `projects/canvas-held/<projectId>.json` (and its `.bak`, each carrying a
+   check of its entry), fsynced before the open writes anything, with its
+   project id chosen then, and only that copy is
+   ever saved as its own project, each held canvas separately, on the next
+   listing with room (`canvasNotFiled.held` counts them, `live` says
+   whether the live canvas waits too). A crash between the hold and the
+   open leaves one canvas, saved once, and a canvas already held (an open
+   tried again after a failure) is never held or saved twice. Making a project is refused (413,
+   `limit`) while it can't be saved too. A restore from Recently deleted is
+   never refused by the project limit: it may pass it (Justin, 2026-10-29),
+   for example an Undo after the waiting canvas took the slot the delete
+   freed. A restore with a canvas still waiting saves that canvas into any
+   freed place first, as a listing would, so it never takes the place a
+   waiting canvas waits on. A list past the limit that way is like any other (a
+   damaged project list restored from a copy of it comes back whole too:
+   a restore adds no new project): making a
+   project is still refused (413, `limit: "projects"`, `projectLimit`; MCP's
+   `new_project` and `open_project` say it whole: "Project limit reached
+   (413, {"limit": "projects", "projectLimit": 500})") until enough are
+   deleted. A canvas waiting on a list past the limit needs more than one
+   delete: `canvasNotFiled.deletes` (and each row's own) counts them, and the
+   `note` names the numbers ("The project list has 502 projects, over the
+   limit of 500. Move 3 to Recently deleted to make room."); the
+   person reads "Delete 3 projects and Nebula will save it." (at the limit
+   itself, "Delete a project and Nebula will save it."). Every agent write to the live canvas while it waits goes through
+   one guard at the graph-write fence (every route marked as a graph write:
+   adding, removing or changing nodes and connections, `apply`, `restore`, runs,
+   uploads that add a node, a clear, a graph load), and again in the write
+   step of a route that waits on something first. Whether the canvas waits
+   is read from the canvas itself, so right after a restore, before anything
+   has listed the projects, your first write is guarded too. Below the limit
+   (there is room for the person's canvas), Nebula first saves the person's
+   canvas, untouched, as its own project and doesn't open it; your write
+   never changes that project. A clear or a load then works on a new canvas
+   with no project; any other write (adding, removing or changing nodes,
+   `apply`, a run) works on a copy of the canvas, which the next listing (or
+   your next write) saves as its own project, "<name> copy" ("<name> copy
+   2" and on), opened, and your later writes land on it. The same holds
+   when a listing (yours, or the load client's own list before it loads)
+   has just saved and opened the waiting canvas: until the person opens
+   that project themselves or makes their first own edit there, it is the
+   person's, so a clear or load closes it (saving the live canvas into it
+   first) and starts a new canvas, and an edit works on a copy. Only the
+   person's tab ends that, for good, on their person-promoted canvas socket:
+   `{type: "viewing", projectId, openedBy: "person"}` for a project the
+   person opened in that tab (refused when the last switch to it was an
+   agent's), `{type: "personOpen", projectId}` when they open the project
+   their tab already shows, or `{type: "personInput", projectId}` on their
+   first own edit there. A tab that follows your open of the project never
+   ends it, and neither does your open, socket or HTTP call, your write, or
+   the tab writing back what it was sent. What protects it is in the
+   catalog itself (`canvasPending`, written at the top of `catalog.json`
+   before `activeProjectId`: `fresh` `{projectId, digest}` and the agents'
+   `copies` by id, `{name, agent, mark, boot}`), written in the same commit
+   as the filing, so a failed write or a crash after it never leaves the
+   project open and unprotected. A restore keeps what the copy and the
+   damaged file's head still say, and a restore that couldn't read the
+   damaged file whole protects the project it reopens again when it is the
+   live canvas's (a damaged record fails safe: at worst your next write
+   goes on a copy). A copy also carries its own name and agent with the
+   canvas (state.json's `projectCopy`; a held copy's entry, `copy`), so a
+   damaged catalog never saves it as the person's. The reply says so
+   (`savedCanvas`, `{id, name, copy (the copy's name, edits only), copyWaits
+   (when the copy can't be saved now: `projects` or `storage`), message}`;
+   `message` is "Nebula saved the open canvas as its own project, “X”, and
+   cleared a new canvas." / "…and loaded “file.json” into a new canvas."
+   (HTTP without a file: "…and loaded the graph into a new canvas.") /
+   "…and made your change on a copy of it."; when the canvas already was a
+   project before it was protected (one a restore protected again), `kept:
+   true` and the line says it was kept: "Nebula kept “My film” as it was and
+   cleared a new canvas." / "…and loaded “file.json” into a new canvas."
+   (HTTP: "…and loaded the graph into a new canvas.") / "…and made your
+   change on a copy of it."; `nebula load` and the MCP
+   `load_graph_file` reply with the same line and `project: null`; every CLI
+   printer prints `message` under its own line, and `nebula clear` prints it
+   in place of its Undo sentence). If only the person's canvas fits, the
+   copy waits like any canvas, the reply adds "The copy isn’t saved as a
+   project yet because the project limit is reached." (or "…because
+   Nebula’s project list is full."), and your next write is refused at the
+   limit. The person sees the copy as yours: `canvasNotFiled.canvases` marks
+   it `agentCopy: {agent}`, and their line is "Codex’s copy of your canvas
+   isn’t saved as a project yet…". The person's canvases are saved before
+   an agent's copy, and `canvasNotFiled.canvases` lists them in that order;
+   at the project limit each row's `deletes` says how many projects must go
+   before it is saved (`canvasNotFiled.deletes` is the last row's). A write sent while the project list is
+   in a transaction is refused as busy (507, `code: "project_store"`, "The
+   project list is busy, so nothing was changed. Try again."), never as the
+   limit. At the limit it is
+   refused, changing nothing (409, `code: "canvas_waiting"`, `reason`,
+   `action` (`change`, `clear` or `replace`), `projectLimit`). A clear or a
+   load says "The project limit is reached, so a new canvas can't be saved.
+   Open an existing project to work in, or ask the person to delete a
+   project." (the size limit: "Nebula's project list is full, so a new
+   canvas can't be saved. Open an existing project to work in, or ask the
+   person to permanently delete a project in Recently deleted."); any other
+   change says "The open canvas isn't saved as a project yet because the
+   project limit is reached, so it can't be changed. Open an existing
+   project to work in, or ask the person to delete a project." (the size
+   limit: "… because Nebula's project list is full, so it can't be changed.
+   Open an existing project to work in, or ask the person to permanently
+   delete a project in Recently deleted."). Every MCP tool passes it on with
+   "(409, canvas_waiting)" at the end; the CLI adds "(canvas_waiting)".
+   When the canvas can't be saved now for another reason (storage), it is
+   held aside first and the write works (a clear or load says `heldCanvas:
+   true`); the canvas it leaves has no project and is never saved as the
+   person's (open or make a project to keep your work). The person's own
+   writes are never blocked. Each saved-first, held or refused change is one
+   line in the person's Agent log, on your row (your name and colour):
+   "Codex changed a copy of the canvas you had open. The original was saved
+   as its own project, “X”." / "Codex cleared the canvas. The one you had
+   open was saved as its own project, “X”." (a load: "replaced"); for a
+   project that was kept: "Codex made its changes on a copy of “X”. “X” is
+   kept as it was." / "Codex cleared the canvas. “X” is kept as its own
+   project." (a load: "replaced"). There is no cap on the held canvases together.
+   Your write that would hold a canvas bigger than a project can be saved
+   (16 MiB, measured as a project) is refused (409, `code:
+   "canvas_held_full"`, `scope: "canvas"`, `sizeBytes`, `limitBytes`) with
+   "This canvas is too big for Nebula to keep aside, so nothing was changed.
+   Work in an existing project, or make the canvas smaller first.", changing
+   nothing; MCP tools add "(409, canvas_held_full)" and the CLI
+   "(canvas_held_full)".
+   While the person's tab keeps edits Nebula couldn't save before it
+   restored its project list (the tab shows "Nebula restored its project
+   list before your latest edits were saved. They’re kept in this tab."
+   with Save as a project and Discard edits), the tab neither sends nor shows canvas
+   changes. The person can still type, move, delete, duplicate, arrange and
+   clear on that tab, and undo those (never past what was saved): only that
+   tab sees them until they save them as a project or discard them. Every
+   canvas change, run and project switch of yours (add, set, connect,
+   delete, clear, load, apply, run, `open_project`, `new_project`, deleting
+   the open project) is refused (409, `code: "canvas_kept_in_tab"`) with
+   "The person’s tab is keeping edits Nebula couldn’t save before it
+   restored its project list, so the canvas can’t be changed, nothing can be
+   run and projects can’t be switched until they save those edits as a
+   project or discard them. Renaming a project, trashing one that isn’t open
+   and restoring from Recently deleted still work. Tell the person; try
+   again after they click Save as a project or Discard edits." Reads still
+   answer. MCP tools add "(409,
+   canvas_kept_in_tab)" and the CLI "(canvas_kept_in_tab)". It ends when
+   the person saves those edits as a project (the tab then opens the saved
+   project) or discards them. Discard is the person's alone, and agents
+   have no way to discard the person's edits: it opens whatever saved copy
+   of that canvas exists (the project it showed, when that is still in the
+   list, else the canvas's own saved copy, such as “Recovered canvas”), and
+   goes to Projects only when none exists (for example when the canvas
+   couldn't be saved at the project limit). While the tab keeps edits,
+   Nebula answers no selection and no view to every reader
+   (GET /api/canvas/selection, look_at_canvas, start_here, `nebula
+   selection`, `nebula look`, a chat turn's selection context): what the tab
+   published before kept mode is no longer what the person has selected,
+   and a kept tab publishes nothing. A project switch and a project-list
+   restore also forget the published selection until the tab sends it
+   again. Save as a project files the
+   tab's canvas as a new project: nodes the person added or duplicated
+   while kept get Nebula's own ids then (`n12`, `n13`, …, numbered on past
+   every id the project and its run history have used), so you never see
+   the tab's local ids; after the copy opens, read it (look_at_canvas,
+   `nebula look`) and use the ids you see. The copy is named “Recovered
+   <project>”, then “Recovered <project> copy”, “copy 2” and on (no
+   number in the project's name is read). The recover answer's
+   `sourceName` is the name of the project the copy was made from, as
+   Nebula held it (or, when that project's row is gone, the name the tab
+   showed; null when neither is known), and the copy's record keeps it
+   (`recoveredFrom: {id, name}`), so a retry answers the same: the
+   person's line names that, never a source read from the copy's name.
+   You read the source too, never from the copy's name: a recovered copy's
+   `project.created` event, its `list_projects` row (`nebula projects`
+   prints "recovered copy of …") and `get_project` carry `sourceName` (the
+   name the copy's record keeps; null when unknown, and null once the source
+   is deleted for good, since you can't read that project; a source in
+   Recently deleted is still named) and `sourceProjectId` (the source's id
+   while it is still in the list, else null).
+   Connections the person drew while kept arrive only in that save; one
+   Nebula's rules refuse is left out of the copy and said, never the whole
+   save refused: the recover answer and the `project.created` event carry
+   `droppedWires` and `droppedWireCount`. Each entry is `{id, source,
+   sourceHandle, target, targetHandle, sourceWas, targetWas, sourceName,
+   targetName, sourcePort, targetPort, sourceType, targetType, limit, kind,
+   detail}`: the ends by the copy's ids (an end whose node isn't in the
+   copy is null, with the tab's id in `sourceWas` / `targetWas`), the
+   nodes' names and the ports' labels as the canvas shows them (null when
+   absent), the output's and the input's data types, `limit` (how many the
+   input takes, for `kind` `limit`), and `detail`, a sentence for you.
+   `kind` is one of `loop` (it connected the node to itself), `duplicate`
+   (the same connection was there already), `missing` (a node isn't in the
+   copy), `port` (a port isn't there: a stray shot output, or a node whose
+   definition was removed), `type` (the input can't take that type) or
+   `limit` (the input has as many as it takes). The kinds and the rule for
+   which types connect are one file the tab and Nebula share
+   (`backend/data/port_rules.json`, the same bytes as the frontend's
+   `src/lib/portRules.json`). The tab writes the person's own line from
+   these fields; there is no person line in the entry.
+   When the tab's socket closes while it still keeps edits (a network blip,
+   a reload, or the tab closed), kept mode holds for that tab for about 10
+   seconds more, so a tab that reconnects and says it again carries on with
+   no gap; after that it ends. Each closed tab holds its own: one tab saying
+   it no longer keeps edits never ends another's, and a closed tab's time
+   that ran out is never counted while another kept tab stays connected. A
+   tab that said it no longer keeps edits before closing holds nothing.
+   Nebula also remembers, in its state folder, how many tabs kept edits:
+   when Nebula starts again, kept mode holds for each of them for about 15
+   seconds (the 10, plus the tab's 3-second reconnect and its hello); a tab
+   that comes back and says it carries on, one that never does ends when
+   its time runs out, and the record goes then even if nothing asks. That
+   wait only helps a tab that can reconnect as the person: the dev launcher
+   keeps the person token across a restart, so its tab comes back as the
+   person and carries kept mode on; a plain backend launch makes a new
+   person token, so a tab open across that restart can't say it as the
+   person, and your changes go through once the 15 seconds run out. Only
+   the person's own tab can start, carry on or end it (its socket says so
+   after its hello with the person token); an agent's socket can't. A
+   record Nebula can't remove (or a folder where it goes) holds kept mode
+   once at most, and is ignored after that; one in a state folder Nebula
+   can't write is ignored at once (no run could have written it there).
+   The person's own open, create, clear and load always
+   hold it, whatever its size: such a canvas is saved over the save limit and
+   opens with saving paused. A person request that reaches the refusal gets
+   the same lines (the person's tab never does: a waiting canvas has no
+   project open, so the tab is on Projects home, where clear and load
+   aren't offered).
+   Each held canvas is read on its own: a copy that doesn't read whole (its
+   nodes and connections are checked item by item, and its check must
+   match) loses to the other and is kept as
+   `<projectId>.json.damaged-<UTC time>-<id>` before anything rewrites it
+   (the held canvas also carries `itemsDigest`, a SHA-256 of its nodes and
+   connections written with it: a canvas whose content no longer matches it
+   when it is about to be saved is kept aside as `….unfileable-…` and said,
+   never saved with other content; held canvases from before it are saved
+   only when both copies agree), a
+   damaged entry whose canvas still reads is still saved, one that can't be
+   saved as a project is kept as `….unfileable-…` and said, and one damaged
+   canvas never costs another or fails a listing. The `canvas-held.json` of
+   earlier versions is moved into `canvas-held/` once (kept as
+   `canvas-held.json.migrated-<UTC time>-<id>`; a cut copy still gives its
+   complete leading entries). Kept held files (`damaged`, `unfileable`,
+   `migrated`) are pruned by the same bound as the catalog's damaged copies
+   (below), never one the note names. When a held canvas may be lost the
+   listing says so for a week (`canvasHeldUnreadable`, `{count (null:
+   unknown), kept, at}`, also in `canvasNotFiled.heldUnreadable`, and one
+   `project.canvasHeldUnreadable` event), until the person closes its notice
+   (×; `POST /api/projects/canvas-held-unreadable/dismiss {at}`, the
+   person's only, 403 for agents; a new loss is a new note, counting only
+   itself, and the files kept before stay named; a note that doesn't read
+   names every kept file there is, so none is pruned). While the
+   restore notice shows, that line is part of it. For 10 minutes after,
+   the listing carries `canvasSaved` (`{id, name, at, filed, overSaveLimit,
+   another}`: `filed` names every canvas saved together, each once,
+   `overSaveLimit` marks one saved over the save limit, and `another` that
+   a restore notice named a canvas before it). While the restore notice
+   shows, it names every canvas saved (`recoveredCanvas`, then `alsoFiled`
+   rows, `{id, name, filedAt, overSaveLimit}`, in the order saved; an
+   agent's copy goes in `agentCopies`, `agentCopy: {agent}`, its own line:
+   "Codex’s changes were saved as their own project, “X copy”.") and no
+   toast does; a later filing on its own gets the toast (an agent's copy
+   says it the same way). Every graphSync carries the open restore notice's
+   id (`catalogRestore`): a tab whose workspace revision moved because of
+   the restore goes to Projects home with no "another window" line;
+4. keeps the damaged file as `catalog.json.damaged-<UTC time>-<id>` beside it
+   (a hard link, or a copy), and any damaged copy as
+   `catalog.json.bak.damaged-…`, before it writes anything. Nebula deletes old
+   ones only past a bound, aged by the time in their name (when they were
+   kept): it keeps the newest 3 of each kind, any kept in the last 14 days
+   up to 10, and always the ones the open notice names;
+5. gives the workspace a new revision (open tabs reload; a run start that
+   read the old one is refused as out of date, 409, and starts nothing),
+   and records the restore once.
+
+With no good copy it rebuilds the list from the projects the damaged files
+still hold. It refuses as before (507, `code: "project_store"`), changing
+nothing, when they hold none (except a missing `catalog.json` whose copies are
+all damaged and empty, which starts from an empty list, as a missing catalog
+always did), when the rebuilt list would be past the size limit, and for a
+catalog saved by a newer Nebula (`version` above 1), which is not damage
+(the log names a version-1 `.bak` when there is one). A copy that says a
+newer version is treated as damaged, not refused, when something
+contradicts it: `catalog.json`'s own head says version 1 (a newer Nebula
+writes `catalog.json` first), or the other copy can do the restore (one bit
+turns version 1 into 3, 5 or 9). A `catalog.json` this process saved whose
+version changed in place (same inode, size and time) is damage too: a newer
+Nebula replaces the file. A file rewritten in place is noticed by its
+change time (ctime), and one that keeps even that by its bytes (a
+checksum), and is read strictly.
+
+Upgrade day: a `state.json` saved before it recorded `projectId`, beside a
+catalog already damaged at startup. When the damaged file's head still says
+which project was open, the canvas is that project's (as an intact catalog
+would have said), so the restore opens it and the canvas goes back into it.
+When the head doesn't read (a file cut before it, or a catalog saved before
+the head came first), which project the canvas is can't be proven: no
+project opens and the canvas is saved as "Recovered canvas", beside the
+copy's version of the project. Nothing is lost either way.
+
+Agents learn about it three ways: `catalogRestore` in `start_here` (first)
+and in `list_projects` / `GET /api/projects`, until the person closes the
+Projects home notice; and a `project.catalogRestored` event (filing the
+canvas adds `project.canvasFiled`, or `project.canvasNotFiled`).
+`catalogRestore` is `{id, at, kind, reason, source, copyAt, damagedFile,
+setAside, addedBack, addedBackCount, updatedFromDisk, updatedFromDiskCount,
+notAddedBack, notAddedBackCount, reverted, revertedCount, cameBack,
+cameBackCount, backInTrash, backInTrashCount, keptDeleted, keptDeletedCount,
+projectCount, trashCount, openProject, openFrom, openProjectMissing,
+openProjectName, recoveredCanvas, alsoFiled, canvasNotFiled, damagedReadWhole,
+damagedRecordsUnread?, notAddedBackLimitCount?, projectLimit?, note}`:
+
+- `kind` is `restored` (from the copy named in `source`, saved at `copyAt`)
+  or `rebuilt` (`source` null); `reason` is `corrupt` (not JSON, or a value
+  that can't be written back), `invalid` (the wrong shape) or `missing`;
+- `addedBack` and `updatedFromDisk` rows are `{id, name, trashed}`;
+- `notAddedBack` rows are `{id, reason, name?, trashed?}` (`incomplete`: the
+  damage cut it off, `invalid`, `limit`, `size`), and stay only in the
+  damaged file. A restore adds no project back past the project limit:
+  `notAddedBackLimitCount` counts the readable ones it left out for that
+  (`projectLimit` is the limit), and `note` says so on its own line
+  (`"Delta" and "Epsilon" weren't added back because the project list is
+  at its limit of 500 projects. They're still in the damaged file, which
+  was kept.`), as the person's notice does. As there, the open project
+  is said once: when the note says the open canvas was saved as its own
+  project or waits on the limit (`openProjectMissing` is that project),
+  the left-out line names, and counts, only the others;
+- `reverted` rows (`{id, name, trashed, liveCanvas?, by?}`) went back to the
+  copy's version because their newer record couldn't be read whole, or
+  (`by: "dates"`) because the older copy's dates were later; `liveCanvas`
+  marks the open project, whose nodes and connections came back from the live
+  canvas. `cameBack` rows (`{id, name, how}`, `how` `trashed` or `deleted`)
+  were deleted after the copy and are back from it. `backInTrash` rows were
+  restored from Recently deleted after the copy and are there again.
+  `keptDeleted` rows were dropped by a delete for good newer than them;
+- `openFrom` says how the open project was chosen (`canvas`, `damaged file`
+  or `none`); `openProjectMissing` is the project that was open when it
+  didn't come back, `openProjectName` its name when a file had it;
+- `recoveredCanvas` (`{id, name}`) is set only when this restore is why the
+  canvas was saved as its own project; a later filing (a crash between two
+  files weeks on) is its own `project.canvasFiled` event. `alsoFiled` rows
+  (`{id, name, overSaveLimit?}`) are the other canvases saved as projects
+  while the notice showed (a held canvas, an agent's copy), which the notice
+  names with it;
+- every row is marked `current: false` once it no longer holds (its project
+  was restored, deleted or deleted for good since; `recoveredCanvas` once
+  that project is gone, with `nameNow` after a rename; `canvasNotFiled`
+  once the canvas is saved), `noLongerHold` counts them, and `note` and
+  `start_here` leave them out, as the person's notice does;
+- `damagedReadWhole` is true when the damaged `catalog.json` was read to its
+  end with every key, id and section name intact. When false (cut, zeroed,
+  a key or section name damaged), what it held past the damage is unknown:
+  changes made after the copy may be missing without a row saying so, the
+  note says that, and the person's notice says so instead of "No projects
+  were missing."
+- `damagedRecordsUnread` (restores since PR #199 round 15; left out of older
+  ones) is true when the damaged file held project records Nebula couldn't
+  read: a record in the `projects` group (or in a group that can't be told)
+  failed, or the file can't be shown to have closed its `projects` group
+  before the damage. Damage only after the `projects` group closed (a cut
+  `trash` group, junk at the end) is not read whole, but lost no project:
+  false; lost Recently deleted entries are logged, not in the notice. Read
+  whole: false. With false, `note` says "no project is missing" only when it
+  says nothing else about projects, as the person's notice says "No projects
+  were missing."; beside a project added back, left out, reverted or back,
+  or a canvas saved or waiting, it says the damage came after the project
+  records, so every record in it was read.
+
+A restore while Nebula runs reaches open canvases at once: a `graphSync`
+carrying the restore notice's id (`catalogRestore`) and a `projectsChanged`
+(`catalogRestored`). A canvas holding edits it hadn't saved keeps them where
+the person is, with [Save as a project] and [Discard edits]; nothing they type is
+refused or put back. While it does, your canvas changes, runs and project
+switches are refused (409 `canvas_kept_in_tab`, above). A restore at startup is journaled once the server starts, so
+`project.catalogRestored` reaches `nebula watch` for it too.
+
+Project ids read before a restore may be stale: list the projects again.
+Only the person closes the notice (`POST /api/projects/catalog-restore/dismiss
+{id}`; an agent gets 403). The backend log prints each step, and
+`projects/catalog-restore.json` keeps the last 10 restores for support.
+
 ### Recently deleted
 
 Deleting a moodboard, a character, a Style or a project doesn't remove it. It
@@ -3026,7 +3647,10 @@ unnamed client) and when. Agents may delete boards, characters and Styles
 - `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
-  back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash` (with
+  back is a no-op (200, `alreadyRestored: true`). A project restore may pass
+  the project limit (the limit applies to new projects: Justin, 2026-10-29);
+  after one, making a project is still refused (413, `limit: "projects"`,
+  `projectLimit`) until the list is back under it. MCP: `list_trash` (with
   `kind`, `scope` and `project_id`), `restore_from_trash`. CLI: `nebula trash list`
   (`--kind`, `--scope`, `--project`: list_trash's three; `--json` prints its
   result), `nebula trash restore [kind] <id>`.
@@ -3111,8 +3735,28 @@ its own `detail`:
 | Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
 | Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
 
+What holds opening or switching projects is one verdict, the open's own
+guards read with no side effect: `GET /api/projects/open-hold` answers
+`{"hold": null}` or `{"hold": {state, nodeId, nodeName, projectId,
+projectName, count, fields, detail}}`, `GET /api/projects` carries the same
+as `openHold`, and the open's 409 carries it as `hold` beside `detail`.
+`list_projects` adds `openHold` with a `note` ("Opening or switching
+projects is held: <detail>"), and `nebula projects` prints that note.
+`state` is, in the order the guards read them: `active` (a World Labs paid
+start is settling), `ambiguity` (a World Labs start needs the person's
+check), `recovery` (a kept World Labs recovery ID, any project's; Run
+History's Forget ID clears it), `params` (a World Labs node's settings hold
+an ID; `fields` names the fields), `bootstrap` (Nebula couldn't save its
+World Labs safeguards; a restart clears it) or `run` (a run is going).
+`nodeId` and `nodeName` name the held node, `projectId` and `projectName`
+the project it belongs to (by the held record's run, or, for a record
+Nebula seeded from a canvas, the project whose node holds the same World
+Labs ID; null when that can't be known, never guessed from a node id),
+`count` the records for `recovery` and `ambiguity`, and
+`detail` is the refusal's text. Reading it changes nothing.
+
 The person reads "A run is still going. Wait for it to finish or stop it
-first." for a Clear or a loaded graph (PR #198 review 4, N2: an import from
+first." for a Clear, an open or a loaded graph (PR #198 review 4, N2: an import from
 the File menu during a run used to show the agent's text).
 
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
@@ -3423,7 +4067,7 @@ under the id replaces nothing. A pin goes back only onto the model it was
 on (`pinsLeft` reason `its node came back as another model` otherwise). A
 proposal is tagged only by deletes in its own project, as a (removal, node)
 pair, and a clear, an import or a project switch drops the earlier deletes'
-tags: undoing a delete from before one of those can't reopen the proposal,
+tags (a reopen of the project already open keeps them: its node ids stay): undoing a delete from before one of those can't reopen the proposal,
 and `notReopened` says so ("the canvas was cleared since", "the canvas was
 replaced since"). Pins never show the removal ids or anchors undo keeps
 (`detachedBy` and the rest stay in Nebula's own copy); agents undo their own
@@ -3859,9 +4503,9 @@ other stops on the outdated-workspace banner with its Reload, whose Try
 again keeps the person's scene edits as a recovered project, even ones the
 autosave had already sent). Once that copy is saved, a neutral notice takes
 the banner's place on Projects: "Your latest edits were saved as their own
-project, “Recovered canvas (recovered)”.", with [Open] (opens that copy)
-and ×. The copy is an ordinary project in `list_projects`, named after
-the project with "(recovered)" after it.
+project, “Recovered Delta”.", with [Open] (opens that copy)
+and ×. The copy is an ordinary project in `list_projects`, named
+"Recovered <project>" (then "Recovered <project> copy", "copy 2" and on).
 
 A scene save refused 400 or 413 can't succeed as it is, whichever save it
 was: an ordinary one, the quiet try a stopped save makes when the writer

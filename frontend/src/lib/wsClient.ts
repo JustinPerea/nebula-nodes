@@ -29,7 +29,8 @@ export type AgentCursorAnchor =
 /** graphSync.projectSwitch: who opened or made a project, and what was open
  * before (backend main.py _switch_notice). */
 export interface ProjectSwitch {
-  actor: { kind: 'agent' | 'anonymous' | string; name?: string; color?: string };
+  /** `tab`: the person's reopen in place, from that tab (its X-Nebula-Tab). */
+  actor: { kind: 'agent' | 'anonymous' | 'system' | 'person' | string; name?: string; color?: string; tab?: string };
   projectId: string;
   projectName: string;
   previousProjectId: string | null;
@@ -148,6 +149,18 @@ export interface ProjectsChangedEvent {
   change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
   /** Null when several went at once (emptying Recently deleted). */
   projectId: string | null;
+  /** change 'canvasHeld' / 'canvasHoldRefused' (review 5 of PR #199, M-3;
+   * review 6, M-1): an agent's write held the waiting canvas aside (action
+   * 'cleared' | 'replaced' | 'changed'), or was refused at the limit
+   * ('clear' | 'replace' | 'change'); agent null when unnamed. `agentId` and
+   * `color` (the agent's cursor's) make the Agent log row the agent's (N-3). */
+  canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string;
+    /** GM's rule (a): the person's canvas was saved first as this project,
+     * untouched; `copy` when the agent's write changed a copy of it. */
+    savedAs?: string; copy?: boolean;
+    /** GM r15 on PR #199: the canvas already was that project, so it
+     * was kept as it was (not "saved as its own project"). */
+    kept?: boolean };
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */
@@ -324,6 +337,12 @@ export type ExecutionEvent = (
       empty: boolean;
       /** Explicit committed graph import; ordinary updates remain merges. */
       graphReplaced?: boolean;
+      /** A reopen of the project already open (the person's, an agent's, the
+       * boot's) kept its open proposals (GM r29 on PR #199, 3): with
+       * graphReplaced, the tab keeps them and their held runs. */
+      proposalsKept?: boolean;
+      /** The backend process that sent it (a restart gives a new one). */
+      bootId?: string;
       /** Existing nodes this change put somewhere new; the canvas takes their positions. */
       moved?: string[];
       /** The person's canvas finished an agent's arrange: not an edit, it joins
@@ -390,8 +409,66 @@ class WebSocketClient {
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'hello', personToken }));
+        // After the hello on the same socket, so the backend reads it from
+        // the person's promoted socket (it ignores it from any other).
+        this.greeted = socket;
+        this.sendViewing(socket);
       }
     });
+  }
+
+  /** The project this tab shows on its canvas because the person opened it
+   * there themselves (null: none, Projects home, or a project the tab
+   * reached by following an agent's switch), as the person's tab says it to
+   * the backend: the person's own open ends the protection of a project
+   * filed from their waiting canvas (GM r13 on PR #199, 1). Sent after every
+   * hello, and on change, with `openedBy: 'person'`; undefined until the
+   * store says it. */
+  private viewing: string | null | undefined = undefined;
+  private greeted: WebSocket | null = null;
+  /** The person's own acts not yet said on a promoted socket (GM r13, 1):
+   * their open of the project already loaded (no request goes out for it)
+   * and their first own edit in a project. Each is said once. */
+  private personActs: { type: 'personOpen' | 'personInput'; projectId: string }[] = [];
+
+  setViewing(projectId: string | null): void {
+    if (this.viewing === projectId) return;
+    this.viewing = projectId;
+    if (this.ws) this.sendViewing(this.ws);
+  }
+
+  /** Whether this tab keeps edits Nebula couldn't save after a restore
+   * (GM r15 on PR #199): the backend refuses agents' canvas writes and
+   * project switches meanwhile (409 canvas_kept_in_tab, GM r16). Said on
+   * the promoted socket after every hello, and on change. */
+  private keptEdits = false;
+
+  setKeptEdits(kept: boolean): void {
+    if (this.keptEdits === kept) return;
+    this.keptEdits = kept;
+    const socket = this.ws;
+    if (socket && this.greeted === socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'keptEdits', kept }));
+    }
+  }
+
+  /** One of the person's own acts in `projectId`, said on the person's
+   * promoted socket (now, or after its next hello). */
+  notePersonAct(type: 'personOpen' | 'personInput', projectId: string): void {
+    this.personActs = [...this.personActs.filter((act) => act.type !== type), { type, projectId }];
+    if (this.ws) this.sendViewing(this.ws);
+  }
+
+  private sendViewing(socket: WebSocket): void {
+    if (this.greeted !== socket || this.ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+    if (this.keptEdits) socket.send(JSON.stringify({ type: 'keptEdits', kept: true }));
+    if (this.viewing !== undefined) {
+      socket.send(JSON.stringify(this.viewing === null ? { type: 'viewing', projectId: null }
+        : { type: 'viewing', projectId: this.viewing, openedBy: 'person' }));
+    }
+    const acts = this.personActs;
+    this.personActs = [];
+    for (const act of acts) socket.send(JSON.stringify(act));
   }
 
   private personConnected(): void {

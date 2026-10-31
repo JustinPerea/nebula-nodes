@@ -1,4 +1,10 @@
 import '@testing-library/jest-dom';
+import * as restoreCopy from '../src/components/projects/catalogRestoreCopy';
+import { primeRestoreCopyForTests } from '../src/components/projects/restoreCopyLoader';
+
+// Review 13 of PR #199 (LOW-1): the restore copy loads lazily in the app;
+// tests read it at once, as if loaded (restoreCopyLoader's own test unprimes it).
+primeRestoreCopyForTests(restoreCopy);
 
 // JSDOM does not implement document.elementsFromPoint. Define a no-op stub so
 // vi.spyOn can intercept it in tests that mock the return value. Guarded so

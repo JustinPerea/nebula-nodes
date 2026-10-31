@@ -173,7 +173,47 @@ def canvas_project(tmp_path, monkeypatch) -> str:
         catalog["activeProjectId"] = project["id"]
         store.commit(catalog)
     monkeypatch.setattr(main, "project_store", store)
+    # The live canvas is this project's (state.json's projectId), so nothing
+    # files or closes it on the next listing (H1 of PR #199's review 1).
+    monkeypatch.setattr(main.cli_graph, "owner", project["id"])
     return project["id"]
+
+
+@pytest.fixture(autouse=True)
+def canvas_owner_per_test(monkeypatch):
+    """Each test starts with the shared live canvas's project unknown (as a
+    state.json saved before PR #199), so a project one test opened on the
+    shared canvas never decides which project another test's catalog opens."""
+    import sys
+
+    main = sys.modules.get("main")
+    graph = getattr(main, "cli_graph", None) if main is not None else None
+    if graph is not None and hasattr(graph, "owner"):
+        from services.cli_graph import OWNER_UNKNOWN
+
+        monkeypatch.setattr(graph, "owner", OWNER_UNKNOWN)
+
+
+@pytest.fixture(autouse=True)
+def no_kept_grace_between_tests():
+    """Each test starts and ends with no kept-mode grace left by a kept tab's
+    socket that closed (main.KEPT_GRACE_SECONDS): the manager lives for the
+    process, so a test that closed a kept tab held agents back in the next
+    test for 10 s."""
+    import sys
+
+    def clear() -> None:
+        manager = getattr(sys.modules.get("main"), "manager", None)
+        if manager is not None and hasattr(manager, "clear_kept"):
+            # The graces and the state dir's kept marker (a later test's
+            # startup would start a restart's grace from it).
+            manager.clear_kept()
+        elif manager is not None and hasattr(manager, "kept_grace_until"):
+            manager.kept_grace_until = None
+
+    clear()
+    yield
+    clear()
 
 
 @pytest.fixture

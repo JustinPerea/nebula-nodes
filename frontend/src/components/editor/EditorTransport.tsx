@@ -205,7 +205,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <Gauge className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Speed</span>
         </button>
-        <button className="editor-transport__tool" type="button" onClick={handleCut} {...lock.act({ disabled: clips.length === 0, title: 'Cut at playhead (B)' })}>
+        <button className="editor-transport__tool" type="button" onClick={handleCut} {...lock.act({ disabled: clips.length === 0, title: 'Cut at playhead (B)', kept: 'edit-video' })}>
           <Split className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Cut</span>
         </button>
@@ -220,7 +220,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <label className="editor-transport__label">Speed</label>
           <input ref={speedSliderRef} className="editor-transport__range" type="range" min={0.25} max={4} step={0.05}
             value={clipSpeed(selectedClip)}
-            {...lock.act()}
+            {...lock.act({ kept: 'edit-video' })}
             onChange={(e) => {
               const newSpeed = parseFloat(e.target.value);
               if (newSpeed <= 0) return;
@@ -233,17 +233,17 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
               updateClip(editNode.id, selectedClip.id, { duration });
             }} />
           <span className="editor-transport__value">{clipSpeed(selectedClip).toFixed(2)}×</span>
-          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act({ kept: 'edit-video' })} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(0.5, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
           }}>0.5×</button>
-          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act({ kept: 'edit-video' })} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(1, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
           }}>1×</button>
-          <button className="editor-transport__preset" type="button" {...lock.act()} onClick={() => {
+          <button className="editor-transport__preset" type="button" {...lock.act({ kept: 'edit-video' })} onClick={() => {
             const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
             const { duration } = clampSpeedToFloor(2, sourceRange);
             updateClip(editNode.id, selectedClip.id, { duration });
@@ -252,7 +252,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           <label className="editor-transport__label">Vol</label>
           <input ref={volSliderRef} className="editor-transport__range" type="range" min={0} max={1} step={0.05}
             value={selectedClip.mute ? 0 : selectedClip.volume}
-            {...lock.act({ disabled: selectedClip.mute })}
+            {...lock.act({ disabled: selectedClip.mute, kept: 'edit-video' })}
             onChange={(e) => updateClip(editNode.id, selectedClip.id, { volume: parseFloat(e.target.value) })} />
           <span className="editor-transport__value">
             {Math.round((selectedClip.mute ? 0 : selectedClip.volume) * 100)}%
@@ -261,7 +261,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
             type="button"
             className="editor-transport__btn editor-transport__btn--icon"
             onClick={() => updateClip(editNode.id, selectedClip.id, { mute: !selectedClip.mute })}
-            {...lock.act()}
+            {...lock.act({ kept: 'edit-video' })}
             aria-pressed={selectedClip.mute}
             aria-label={selectedClip.mute ? 'Unmute clip' : 'Mute clip'}
           >
@@ -307,7 +307,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         type="button"
         className="editor-transport__btn editor-transport__btn--render"
         onClick={handleRender}
-        {...lock.act({ disabled: isRendering || clips.length === 0, offline: true })}
+        {...lock.act({ disabled: isRendering || clips.length === 0, offline: true, kept: 'edit-video' })}
       >
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
         <span>{isRendering ? 'Rendering...' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
@@ -317,7 +317,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
           type="button"
           className="editor-transport__btn editor-transport__btn--export"
           onClick={() => setExportOpen((open) => !open)}
-          {...lock.act({ disabled: clips.length === 0, offline: true })}
+          {...lock.act({ disabled: clips.length === 0, offline: true, kept: 'edit-video' })}
         >
           <Download className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Export…</span>
@@ -370,7 +370,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
                 <button type="button" onClick={renderJob.reset}>New export</button>
               </div>
             ) : (
-              <button type="button" className="final-export__start" onClick={handleFinalExport} {...lock.act({ offline: true })}>
+              <button type="button" className="final-export__start" onClick={handleFinalExport} {...lock.act({ offline: true, kept: 'edit-video' })}>
                 Export {exportFormat.toUpperCase()}
               </button>
             )}

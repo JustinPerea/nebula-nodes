@@ -1,3 +1,4 @@
+import { ReopenHoldCallout } from './ReopenHoldCallout';
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CircleHelp,
@@ -128,13 +129,17 @@ export function WorkspaceRail() {
             active={leftDock === 'assets'}
             onClick={() => toggleDock('assets')}
           />
-          <RailItem
-            label="Open run history"
-            onboardingTarget="history"
-            icon={History}
-            active={leftDock === 'history'}
-            onClick={() => toggleDock('history')}
-          />
+          {/* The held-reopen line's Forget ID form sits beside Run History (GM r32, 2). */}
+          <div className="workspace-rail__anchor">
+            <RailItem
+              label="Open run history"
+              onboardingTarget="history"
+              icon={History}
+              active={leftDock === 'history'}
+              onClick={() => toggleDock('history')}
+            />
+            <ReopenHoldCallout place="runHistory" />
+          </div>
           <RailItem
             label="Search commands and nodes"
             icon={Search}

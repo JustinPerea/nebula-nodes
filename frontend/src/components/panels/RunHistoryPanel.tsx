@@ -176,7 +176,7 @@ export function RunHistoryPanel() {
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
                         // Review 7, L5: canvasLock's order (run, then
                         // following, then offline); GM, round 15 of PR #114's title.
-                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE }, { run: isExecuting })}
+                        {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting })}
                         // GM, round 14: its name says which ID it forgets;
                         // its row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordNodeName(nodes, checkpoint.nodeId, true))}
@@ -262,10 +262,10 @@ export function RunHistoryPanel() {
                           else void rerunHistoryRecord(r.id);
                         }}
                         // L6 (GM r9 answer 3): one order, as the toolbar's:
-                        // the run, then following, then offline (lib/canvasLock).
+                        // kept, then the run, following, offline (lib/canvasLock; GM r19 on PR #199).
                         // Offline, its own verb (PR #200 review 3 LOW-1; GM
                         // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
-                        {...lockedAction(lock, { title: recoveryReplayReady
+                        {...lockedAction(lock, { kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun', title: recoveryReplayReady
                           ? 'Resume this run from its saved checkpoint'
                           : 'Run this again with the same nodes and settings',
                         offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
@@ -284,7 +284,7 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...lockedAction(lock, { disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
+                          {...lockedAction(lock, { kept: 'rerun', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
                             : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}

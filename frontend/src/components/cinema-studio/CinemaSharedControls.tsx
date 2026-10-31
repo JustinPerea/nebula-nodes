@@ -91,11 +91,11 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               offline (GM - Design, PR #198 round 5) and while following an
               agent's switch (the canvas lock, #195 round 23). */}
           <fieldset className="cinema-offline-lock" disabled={lock.locked} {...lock.mark}
-            title={lockedAction(lock).title}>
+            title={lockedAction(lock, { kept: 'live' }).title}>
           <section className="cinema-shared-controls__section">
             <label htmlFor={`${controlId}-model`} className="cinema-shared-controls__label">Base model</label>
             <select id={`${controlId}-model`} className="cinema-shared-controls__select" value={scene.base.model}
-              onChange={(event) => setBase(event.target.value)} {...lock.act({ offline: true })}>
+              onChange={(event) => setBase(event.target.value)} {...lock.act({ kept: 'scene', offline: true })}>
               {!model && <option value={scene.base.model}>{scene.base.model || 'No model selected'}</option>}
               {BASE_MODELS.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
             </select>
@@ -104,7 +104,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
           <section className="cinema-shared-controls__section">
             <label htmlFor={`${controlId}-aspect`} className="cinema-shared-controls__label">Aspect ratio</label>
             <select id={`${controlId}-aspect`} className="cinema-shared-controls__select" value={scene.aspectRatio}
-              onChange={(event) => setAspect(event.target.value)} {...lock.act({ offline: true })}>
+              onChange={(event) => setAspect(event.target.value)} {...lock.act({ kept: 'scene', offline: true })}>
               {!ASPECT_RATIOS.includes(scene.aspectRatio) && <option value={scene.aspectRatio}>{scene.aspectRatio || 'No aspect ratio selected'}</option>}
               {ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
             </select>
@@ -123,12 +123,12 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               {characterRefs.map((url, index) => (
                 <div key={`${url}-${index}`} className="cinema-shared-controls__ref">
                   <img src={backendAssetUrlSync(url)} alt={`Character reference ${index + 1}`} draggable={false} />
-                  <button type="button" className="cinema-shared-controls__ref-remove" {...lockedAction(lock, { title: 'Remove reference' })}
+                  <button type="button" className="cinema-shared-controls__ref-remove" {...lockedAction(lock, { kept: 'scene', title: 'Remove reference' })}
                     aria-label={`Remove character reference ${index + 1}`} onClick={() => removeCharacterRef(url)}>×</button>
                 </div>
               ))}
               <button type="button" className="cinema-shared-controls__ref-add" onClick={() => refInputRef.current?.click()}
-                aria-label="Attach character references" {...lock.act({ offline: true })}>+</button>
+                aria-label="Attach character references" {...lock.act({ kept: 'scene', offline: true })}>+</button>
               <input ref={refInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp"
                 // Its + takes the lock; the field itself too, so nothing opens it while locked (review 2 L-5).
                 aria-label="Character reference images" multiple hidden disabled={lock.locked} onChange={(event) => {
@@ -165,7 +165,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               <div className="cinema-reference-upload__actions">
                 {upload.status === 'error' && upload.canRetry && (
                   <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
-                    {...lockedAction(lock, { offline: true })}>Retry</button>
+                    {...lockedAction(lock, { kept: 'scene', offline: true })}>Retry</button>
                 )}
                 <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
               </div>

@@ -6,6 +6,7 @@ import { ConnectionPopup } from '../src/components/ConnectionPopup';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { setCanvasKept } from '../src/lib/keptCanvas';
 
 const flow = vi.hoisted(() => ({ screenToFlowPosition: vi.fn() }));
 const reads = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -437,5 +438,26 @@ describe('ConnectionPopup while offline (round 16)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText("Couldn't confirm the connected step. Check the canvas before trying again.")).toBeNull();
     resetBackendConnectionForTests();
+  });
+});
+
+describe('PR #199 round 16 (GM r21, 3): the popup while the canvas is kept', () => {
+  afterEach(() => { setCanvasKept(false); });
+
+  it('a tab-local origin takes the store’s add-and-connect (one kept step), and a refusal closes the popup', async () => {
+    const local = node('3f2a-local', 'nano-banana');
+    local.data.state = 'complete';
+    local.data.outputs = { image: { type: 'Image', value: sourceValue } };
+    useGraphStore.setState((state) => ({ nodes: [...state.nodes, local] }));
+    setCanvasKept(true);
+    openPopup({ position, nodeId: '3f2a-local', handleId: 'image', handleType: 'source' });
+    const item = searchFor('veo-3');
+    await act(async () => { fireEvent.click(item); });
+    expect(addConnected).toHaveBeenCalledWith('veo-3', expect.any(Object), expect.objectContaining({
+      source: '3f2a-local', sourceHandle: 'image', target: '', newNodeIs: 'target' }));
+    expect(addNode).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+    // Refused by the wire rules (null): the canvas notice says why; the popup goes.
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

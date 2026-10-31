@@ -43,6 +43,9 @@ export const REVIEWED_NEUTRAL: Array<{ file?: string; name: RegExp }> = [
   { name: /^\s*clear (?:the )?(?:search|filters?|selection)\b/i },
   { file: 'components/commons/CommonsFilters.tsx', name: /^clear$/ },
   { file: 'components/create-studio/ResultsGallery.tsx', name: /^Clear$/ },
+  // PR #199: the restore notice's "Open Recently deleted" opens that list on
+  // the Projects home; it deletes nothing.
+  { file: 'components/projects/ProjectHome.tsx', name: /^Open Recently deleted$/ },
 ];
 
 const RED_WORDS = 'danger|destructive|delete|purge|trash|discard|clear|wipe|revoke|forget|bin|disconnect|uninstall';

@@ -630,8 +630,9 @@ export function agentNameList(names: string[]): string {
   return joinedList(agents);
 }
 
-/** "A", "A and B", "A, B and C": the lists' shared join. */
-function joinedList(parts: string[]): string {
+/** "A", "A and B", "A, B and C": the lists' shared join (also the kept
+ * refusals' "images and masks", lib/keptWires). */
+export function joinedList(parts: string[]): string {
   return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 

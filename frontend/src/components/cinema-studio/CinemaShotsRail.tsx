@@ -178,18 +178,18 @@ export function CinemaShotsRail({
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} earlier`}
-                  {...lockedAction(lock, { disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
+                  {...lockedAction(lock, { kept: 'scene', disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
                   aria-label={`Move Shot ${idx + 1} later`}
-                  {...lockedAction(lock, { disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
+                  {...lockedAction(lock, { kept: 'scene', disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
                 aria-label={`Remove Shot ${idx + 1}`}
                 // M2: a run that holds the shot says so first, over following
                 // and offline (lib/canvasLock's order).
-                {...lockedAction(lock, { title: 'Remove shot', offline: 'remove shots' }, { verb: OFFLINE_VERBS.removeShots, run: Boolean(block),
+                {...lockedAction(lock, { kept: 'scene', title: 'Remove shot', offline: 'remove shots' }, { verb: OFFLINE_VERBS.removeShots, run: Boolean(block),
                   runTitle: block ? shotRemovalBlockTitle(block, `Shot ${idx + 1}`) : undefined })}
                 onClick={() => handleRemove(shot.id, idx)}>×</button>
             </div>
@@ -197,7 +197,7 @@ export function CinemaShotsRail({
         );
       })}
       <button ref={addRef} type="button" className="cinema-shots-rail__add"
-        {...lockedAction(lock, { offline: 'add shots' }, { verb: OFFLINE_VERBS.addShots, neutral: true })}
+        {...lockedAction(lock, { kept: 'scene', offline: 'add shots' }, { verb: OFFLINE_VERBS.addShots, neutral: true })}
         onClick={() => { if (!refuseCanvasEdit()) onAddShot(); }}>
         + Add shot
       </button>

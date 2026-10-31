@@ -47,7 +47,7 @@ import type { NodeData } from '../types';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
-import { refuseCanvasEdit, useCanvasLock } from '../lib/canvasLock';
+import { refuseTabOnlyEdit, useCanvasLock } from '../lib/canvasLock';
 
 const nodeTypes = CANVAS_NODE_TYPES;
 const edgeTypes = CANVAS_EDGE_TYPES;
@@ -512,6 +512,12 @@ export function Canvas() {
     connectionSucceededRef.current = false;
     if (!info || !info.nodeId || !info.handleId) return;
     if (connectionSucceeded) return;
+    // GM r26, 3: a drop on a handle the canvas refused (useIsValidConnection:
+    // a wrong kind or a loop) says why, on kept and normal tabs alike; a
+    // silent drop looks like a missed one.
+    // A drop the canvas refused on a handle says why (GM r26, 3), a handle
+    // of the same kind included (GM r28, 1), and opens nothing.
+    if (useGraphStore.getState().sayRefusedDrop(info, connectionState)) return;
     if (connectionState.toHandle || connectionState.toNode || connectionState.isValid !== null) return;
 
     const point = getEventClientPoint(event);
@@ -537,7 +543,10 @@ export function Canvas() {
       // Nothing lands while following or offline: files, a character, a
       // moodboard or a library node (fix round 6 of PR #200; the store's edit
       // gate refused the node drops too, the handler now says so itself).
-      if (refuseCanvasEdit()) return;
+      // While kept (GM r19 on PR #199, 5) a library node lands on this tab
+      // only; files refuse in canvasFileDrop, and a character or moodboard
+      // (backend assets) in the store's kept gate, each with its kept line.
+      if (refuseTabOnlyEdit()) return;
       setFitFirstNodes(false);
 
       // Files from the desktop: every one is handled (lib/canvasFileDrop.ts).

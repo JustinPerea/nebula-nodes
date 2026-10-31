@@ -65,10 +65,10 @@ describe('GM (LOCKED): a delete answered with a 500', () => {
 
 describe('GM derived: runs and Create while following', () => {
   it('a whole-canvas run, one node, several nodes, an unknown agent', () => {
-    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Couldn't run the canvas. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Couldn't run “Hero”. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas', 3)).toBe("Couldn't run 3 nodes. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine(null, null, 'Second canvas', 2)).toBe("Couldn't run 2 nodes. An agent is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Couldn’t run the canvas. Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Couldn’t run “Hero”. Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas', 3)).toBe("Couldn’t run 3 nodes. Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, null, 'Second canvas', 2)).toBe("Couldn’t run 2 nodes. An agent is opening “Second canvas”.");
   });
 
   it('G1: Create says it in its own error style, never "Nebula is opening another project." bare', () => {

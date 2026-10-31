@@ -308,7 +308,7 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld, kept: 'proposal',
               title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
             onClick={() => {
               if (settled()) void reject(current.view.id);
@@ -320,7 +320,7 @@ export function ProposalBar() {
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
+            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld, kept: 'proposal',
               title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
             onClick={() => {
               if (settled()) void accept(current.view.id);

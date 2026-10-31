@@ -20,7 +20,7 @@ const graphWrites = vi.hoisted(() => ({
   hanging: [] as Array<() => void>,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
-  connect: vi.fn(), disconnect: vi.fn(),
+  connect: vi.fn(), disconnect: vi.fn(), setViewing: vi.fn(),
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);
   }; }),

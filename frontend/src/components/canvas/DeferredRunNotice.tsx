@@ -33,8 +33,8 @@ export function DeferredRunNotice() {
         <button
           type="button"
           className="proposal-bar__button proposal-bar__button--primary"
-          // Review 7, L5: canvasLock's order (run, then following, then offline).
-          {...lock.act({}, { run: isExecuting || runStarting })}
+          // Review 7, L5: canvasLock's order (kept, then the run, following, offline: GM r19 on PR #199).
+          {...lock.act({ kept: 'run' }, { run: isExecuting || runStarting })}
           onClick={() => void runDeferred()}
         >
           <Play size={13} aria-hidden="true" />

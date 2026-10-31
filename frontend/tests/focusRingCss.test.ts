@@ -232,6 +232,16 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // Projects home: a target the page moves focus to (tabindex -1: the heading
+  // after a notice's ×, the held edits' saved line) is not a control; it never
+  // shows a ring, from the keyboard either (GM - Design r6, bug 4).
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus': 'programmatic focus target, not a control (GM r6)',
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus-visible': 'programmatic focus target, not a control (GM r6)',
+  // The canvas root takes focus after Projects > Open returns to the canvas
+  // (PR #199 review 19, item 6), so focus doesn't fall to <body>. It is not in
+  // the Tab order and not a control; a ring around the whole canvas would
+  // read as a selection. Its nodes and controls keep their own rings.
+  "App.css::.react-flow[tabindex='-1']:focus": 'programmatic focus target (the canvas root), not a control',
 };
 
 function focusSelectors(rule: Rule): string[] {

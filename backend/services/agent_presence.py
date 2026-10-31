@@ -260,6 +260,20 @@ class AgentPresence:
         self._agents: dict[str, dict[str, Any]] = {}
         self._view: dict[str, Any] | None = None
         self._view_at: float = 0.0
+        # While this says so, the browser's view isn't read (PR #199 round
+        # 17, review 15 kept-wires-ui LOW-1): a tab keeping edits Nebula
+        # couldn't save shows a canvas that isn't the server's, and reports
+        # no view; the one it reported before is stale. main sets it to
+        # ConnectionManager.kept_in_tab.
+        self.hide_view: Callable[[], bool] | None = None
+
+    def _shown_view(self) -> dict[str, Any] | None:
+        """The browser's last view, or None while it is hidden."""
+        try:
+            hidden = bool(self.hide_view and self.hide_view())
+        except Exception:  # noqa: BLE001 - a read never fails on the gate; it hides
+            hidden = True
+        return None if hidden else self._view
 
     # -- cursors --------------------------------------------------------
     def point(
@@ -338,7 +352,7 @@ class AgentPresence:
         current = self._agents.get(identity.id)
         if current is not None:
             return dict(current["target"]), "cursor"
-        view = self._view or {}
+        view = self._shown_view() or {}
         viewport, screen = view.get("viewport"), view.get("screen")
         if viewport and screen:
             zoom = viewport["zoom"]
@@ -367,7 +381,7 @@ class AgentPresence:
 
     def last_point(self, node_id: str) -> dict[str, float] | None:
         """Where the browser last drew a node (its centre), for pointing at a deleted node."""
-        reported = ((self._view or {}).get("nodes") or {}).get(node_id)
+        reported = ((self._shown_view() or {}).get("nodes") or {}).get(node_id)
         if reported is None:
             return None
         return {
@@ -473,9 +487,10 @@ class AgentPresence:
         graph_nodes: Mapping[str, Any] = getattr(graph, "nodes", {})
         graph_edges = list(getattr(graph, "edges", []))
         definitions = registry.get_all()
-        view = self._view or {}
+        shown = self._shown_view()
+        view = shown or {}
         view_nodes: Mapping[str, Any] = view.get("nodes", {})
-        age = round(now - self._view_at, 1) if self._view else None
+        age = round(now - self._view_at, 1) if shown else None
 
         visible_area = None
         viewport = view.get("viewport")
@@ -514,7 +529,7 @@ class AgentPresence:
 
         return {
             "view": {
-                "reported": self._view is not None,
+                "reported": shown is not None,
                 "secondsAgo": age,
                 "stale": age is None or age > VIEW_STALE_SECONDS,
                 "viewport": viewport,

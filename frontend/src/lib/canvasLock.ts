@@ -4,6 +4,7 @@ import { isBackendOffline, refuseEditWhileOffline } from './backendConnection';
 import { OFFLINE_MARK, OFFLINE_NEUTRAL, offlineReason, useBackendOffline, type OfflineVerb } from './useBackendOffline';
 import { RUN_LOCK_REASON } from './cinemaScene';
 import { offlineDisabledReason } from './errorCopy';
+import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept, useKeptCanvas, type KeptAction } from './keptCanvas';
 
 /**
  * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
@@ -22,18 +23,52 @@ import { offlineDisabledReason } from './errorCopy';
  *
  * PR #198 review 6, M2 (GM r9 answer 3): this tab's own run is a third
  * reason, for the controls it locks too (a run, a delete, a duplicate, an
- * undo). One order everywhere: the run, then following, then offline, then
- * the control's own title. A control the run lock wins on says only the
+ * undo). One order everywhere (PR #199 put kept before it: see below): the
+ * run, then following, then offline, then the control's own title. A control the run lock wins on says only the
  * run's line and carries neither mark, so a press never pulses the project
  * bar or the banner for a reason its tooltip doesn't give.
+ *
+ * PR #199 (GM r16, 4; GM r19, 4): the canvas kept in this tab after a
+ * restore is a reason only the person can fix ([Save as a project], or
+ * discarding the kept edits), so it goes first, before the reasons that clear
+ * by themselves: kept, then the run, following, offline and the control's own
+ * state (a missing key, when one is a reason, goes before kept). Otherwise the
+ * person waits out a run or a reconnect only to be refused. A control that
+ * only changes this tab's canvas (`kept: 'live'`) stays on, under the run,
+ * following and offline as before.
  */
 export const FOLLOWING_MARK = 'data-following-disabled';
+/** GM r16 on PR #199, 4: a control disabled because the canvas is kept in
+ * this tab after a restore (lib/keptCanvas). The same disabled look; a
+ * press pulses the kept line. */
+export const KEPT_MARK = 'data-kept-disabled';
+
+/**
+ * GM r26 (4) on PR #199: a node duplicated or pasted on a normal tab keeps a
+ * tab-local id (not `nN`) until the project is next opened, so no agent can
+ * address it yet: Ask and Note on a selection holding one are locked, in
+ * the shared lock's disabled look, with GM's lines naming what unlocks them
+ * today. While kept, the kept lines win (kept comes first in `act`).
+ * STOPGAP: the bulk-create PR (Duplicate and Paste making real nodes at
+ * once) deletes TAB_LOCAL_MARK, TAB_LOCAL_LINES and every `tabLocal` use.
+ */
+export const TAB_LOCAL_MARK = 'data-tab-local-disabled';
+export type TabLocalAction = 'ask' | 'note';
+export const TAB_LOCAL_LINES: Record<TabLocalAction, string> = {
+  ask: 'You can ask an agent about this node after you reopen the project.',
+  note: 'You can leave a note on this node after you reopen the project.',
+};
+
 
 export interface CanvasLock {
-  /** Read-only: following an agent's switch, or offline. */
+  /** Read-only: following an agent's switch, or offline. Fields stay
+   * editable while the canvas is only kept: typing joins the kept edits. */
   locked: boolean;
   following: FollowingSwitch | null;
   offline: boolean;
+  /** The canvas is kept in this tab after a restore (GM r15): every
+   * control that writes or spends is disabled (`act`), typing isn't. */
+  kept: boolean;
   /** The marks a control disabled by the lock carries: the not-allowed
    * cursor and the dimming (App.css), and a press pulses the project bar
    * (following) or the offline banner. Empty when unlocked. */
@@ -44,17 +79,32 @@ export interface CanvasLock {
    * in place of its own (fix round 1 of PR #200, answer 1). `run` (PR #198):
    * the run lock holds it now (the caller reads isExecuting, or a wider
    * condition such as a run that is starting, so a card that draws no run
-   * lock never re-renders when a run starts); its line then wins. */
-  act(own?: LockOwn, options?: RunLock): ActProps;
+   * lock never re-renders when a run starts); its line then wins over
+   * following and offline. Kept (PR #199, GM r19, 4) comes first of all:
+   * GM's kept line for the control's `kept` action, unless it is 'live'. */
+  act(own: LockOwn, options?: RunLock): ActProps;
   /** The tooltip `act` gives, for a control that isn't disabled by it (a
    * read-only field). */
-  title(own?: LockOwn): string | undefined;
+  title(own?: LockTitleOwn): string | undefined;
 }
 
-export interface LockOwn {
+/** A control's own state for `title`. */
+export interface LockTitleOwn {
   disabled?: boolean;
   title?: string;
   offline?: string | true;
+}
+
+/** A control's own state for `act`: `kept` names which of GM's kept lines
+ * it shows (PR #199, r16, 4; r17: every control names its own, so the
+ * field is required), or 'live' for a control that only changes this tab's
+ * canvas (r17, r18: typing, Duplicate, Delete, Arrange, Undo), which the
+ * kept state leaves on. */
+export interface LockOwn extends LockTitleOwn {
+  kept: KeptAction | 'live';
+  /** GM r26 (4), a stopgap (above): the control acts on a node with a
+   * tab-local id, so it is locked with that line, after kept. */
+  tabLocal?: TabLocalAction;
 }
 
 /** The run lock's hold on one control (M2): `runTitle` when a run holds it
@@ -66,6 +116,8 @@ export interface ActProps {
   title: string | undefined;
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
+  'data-kept-disabled'?: '';
+  'data-tab-local-disabled'?: '';
 }
 
 /**
@@ -78,9 +130,11 @@ export interface ActProps {
  * (OFFLINE_NEUTRAL: an orange Generate, an Export), as offlineAction does.
  * Following plus offline keeps the following tooltip (GM round 22, A).
  */
-export function lockedAction(lock: CanvasLock, own: LockOwn = {},
+export function lockedAction(lock: CanvasLock, own: LockOwn,
   options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
+  // Kept first (GM r19, 4): the offline line never replaces the kept line.
+  if (props[KEPT_MARK] !== undefined) return props;
   if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
   // Create's and Remotion's actions keep their own title offline for now
@@ -91,36 +145,43 @@ export function lockedAction(lock: CanvasLock, own: LockOwn = {},
   return props;
 }
 
-/** The lock for a following and an offline state (the hook's own logic). */
-export function canvasLockOf(following: FollowingSwitch | null, offline: boolean): CanvasLock {
+/** The lock for a following, an offline and a kept state (the hook's own logic). */
+export function canvasLockOf(following: FollowingSwitch | null, offline: boolean, kept = false): CanvasLock {
   const mark: Record<string, ''> = {};
   if (following) mark[FOLLOWING_MARK] = '';
   if (offline) mark[OFFLINE_MARK] = '';
   const locked = Boolean(following) || offline;
-  const title = (own: LockOwn = {}) => (following ? waitToOpenTooltip(following.projectName)
+  const title = (own: LockTitleOwn = {}) => (following ? waitToOpenTooltip(following.projectName)
     : offline && own.offline ? offlineDisabledReason(own.offline === true ? undefined : own.offline) : own.title);
   return {
-    locked, following, offline, mark, title,
-    act: (own = {}, options = {}) => (options.run
-      // The run's line first, alone (PR #198 M2, N1).
-      ? { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON }
-      : {
-        ...mark,
-        disabled: locked || Boolean(own.disabled),
-        title: title(own),
-      }),
+    locked, following, offline, kept, mark, title,
+    act: (own, options = {}) => {
+      // Kept first (GM r19, 4): its own line and its mark only (a press
+      // pulses the kept line). A control that only changes this tab's
+      // canvas stays on.
+      if (kept && own.kept !== 'live') return { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) };
+      // GM r26 (4), a stopgap the bulk-create PR deletes: a node with a
+      // tab-local id waits for the project's next open. Only the person
+      // fixes it, so it goes before the reasons that clear by themselves.
+      if (own?.tabLocal) return { [TAB_LOCAL_MARK]: '', disabled: true, title: TAB_LOCAL_LINES[own.tabLocal] };
+      // Then the run's line, alone (PR #198 M2, N1).
+      if (options.run) return { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON };
+      // Then following and offline (their marks and lines).
+      return { ...mark, disabled: locked || Boolean(own.disabled), title: title(own) };
+    },
   };
 }
 
 export function useCanvasLock(): CanvasLock {
   const following = useFollowingSwitch();
   const offline = useBackendOffline();
-  return useMemo(() => canvasLockOf(following, offline), [following, offline]);
+  const kept = useKeptCanvas();
+  return useMemo(() => canvasLockOf(following, offline, kept), [following, offline, kept]);
 }
 
 /** The lock as it is now, outside React (a store's action, a handler). */
 export function canvasLockNow(): CanvasLock {
-  return canvasLockOf(followingSwitch(), isBackendOffline());
+  return canvasLockOf(followingSwitch(), isBackendOffline(), isCanvasKept());
 }
 
 /**
@@ -131,5 +192,21 @@ export function canvasLockNow(): CanvasLock {
  * nothing.
  */
 export function refuseCanvasEdit(): boolean {
-  return refuseEditWhileFollowing() || refuseEditWhileOffline();
+  // And while the canvas is kept in this tab after a restore (PR #199),
+  // first, as `act` orders it (GM r19, 4): only the tab-only edits join the
+  // kept edits (refuseTabOnlyEdit, the store's gates).
+  return refuseEditWhileKept() || refuseEditWhileFollowing() || refuseEditWhileOffline();
+}
+
+/**
+ * PR #199 (GM r18): the gate for an edit that only changes this tab's
+ * canvas, as typing does (a param written with updateNodeData: an applied
+ * rewrite, a mask). Refused while following or offline, as refuseCanvasEdit;
+ * while the canvas is kept it goes through (the store's KEPT_TAB_ONLY gate
+ * keeps it on this tab), except while [Save as a project] is on its way.
+ */
+export function refuseTabOnlyEdit(): boolean {
+  if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return true;
+  if (isCanvasKept() && !keptCanvasTakesTyping()) return refuseEditWhileKept();
+  return false;
 }
