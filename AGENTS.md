@@ -2,6 +2,23 @@
 
 AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 308 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and mirrored in `backend/data/node_definitions.json`, which the backend and every script read. `scripts/export-node-defs.ts` writes the JSON from the TS, but four existing nodes (`gemini-tts`, `veo-3`, `gemini-omni-flash`, `quiver-arrow-generate`) carry JSON-only fixes it would undo, so check its diff before keeping it. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
+## Where tests run
+
+- Run the full suites in a Claude Code cloud session or in GitHub CI on a pushed branch. That covers the backend's pytest, the frontend's vitest, lint and build, and the contract scripts. On a machine you share with other agents, such as the maintainer's Mac, run only the focused tests for what you changed. Outside contributors without either can run [CONTRIBUTING.md's checks](CONTRIBUTING.md#development-checks) locally.
+- A cloud session installs what CI installs on its own. `.claude/settings.json` runs `scripts/cloud-session-setup.sh` whenever a session starts, resumes, clears, compacts or forks, through `scripts/cloud-session-setup.mjs`, which does nothing outside a Linux cloud session (on Windows too). It installs at start and resume. After a clear, compaction or fork it only puts the venv back on `PATH`, so nothing is reinstalled under work in progress; it says when the dependencies changed since the last install.
+  - The script does nothing unless `CLAUDE_CODE_REMOTE` is `true` (Claude Code sets it only in cloud sessions) and the machine is Linux.
+  - It makes `backend/.venv` and runs `npm ci` in `frontend`, then puts the venv first on `PATH`, so CI's own commands work as written. Its first lines in the session say what's ready.
+  - Run the checks one after another there, not at once (the backend suite, the frontend suite, lint and build, the contract scripts): together they compete for the session's 4 vCPUs, and tests that wait on timing fail.
+  - Cloud sessions run as root, which ignores file permissions. A test that takes a file's read or write permission away with chmod carries `@pytest.mark.unprivileged` and skips as root; CI runs it as a normal user. `backend/tests/test_unprivileged_marker.py` fails on any such test left unmarked.
+  - A cloud session may have no GitHub write access ("GitHub access to this repository is not enabled for this session", a 403 on a PR comment), so report results in the session itself.
+  - A cloud session with several repositories, or a project's cloud thread, doesn't run repository hooks. In such a session only, run `CLAUDE_CODE_REMOTE=true bash scripts/cloud-session-setup.sh` by hand from this repository's root. Bash commands don't keep `PATH` from one call to the next, so start each backend command with the `export PATH=... &&` it prints, or call `backend/.venv/bin/python` directly.
+- These stay on the maintainer's Mac:
+  - driving the person's live canvas with the `nebula` CLI, and the person's own Nebula instance and `~/.nebula`;
+  - the desktop app (Electron, the Keychain);
+  - paid generation runs and anything that needs the person's own keys;
+  - optional local model nodes;
+  - Flora MCP work and the Codex runner.
+
 ## Standing task: Flora gap audit
 
 We also produce content in Flora (app.flora.ai, via the `user-flora` MCP). Flora's catalog (~369 models) is a scouting list for Nebula's roadmap.
