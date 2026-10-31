@@ -204,6 +204,7 @@ from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_out
                                       update_detail as asset_update_detail, update_text as asset_update_text)
 # Each canvas proposal's Update too (Justin's Q112 a).
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
+from services.canvas_proposals import MAX_RUN as PROPOSAL_MAX_RUN
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
 from services.agent_questions import (
     CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
@@ -2734,16 +2735,30 @@ def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
 
 
 def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Budget]:
-    """The budgets a run counted against ``key`` is checked against."""
+    """The budgets a run counted against ``key`` is checked against: the
+    daily total every key shares first, then the key's own."""
     caps = agent_spend.caps_from_settings(settings)
     spent = agent_spend_ledger.spent(key)
+    daily = agent_spend_ledger.spent_daily()
     if not agent_spend.is_outside(key):
-        return agent_spend.session_budgets(key, spent, caps)
+        return agent_spend.session_budgets(key, spent, caps, daily_spent=daily)
     connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):]) if key.startswith(agent_spend.APP_PREFIX) else None
     return agent_spend.session_budgets(
         key, spent, caps, outside_spent=agent_spend_ledger.spent_outside(),
         app_name=connected["name"] if connected else None,
-        app_daily_usd=connected["dailyUsd"] if connected else None)
+        app_daily_usd=connected["dailyUsd"] if connected else None, daily_spent=daily)
+
+
+class _WaitForOk(Exception):
+    """A run that isn't the person's would pass the daily total, on a route
+    that turns it into a proposal (``propose`` in _require_spend_approval):
+    the route opens one (_propose_waiting_run) and answers that the run waits
+    for the person's OK. Nothing was counted."""
+
+    def __init__(self, decision: agent_spend.Decision, run_ids: list[str]) -> None:
+        super().__init__(decision.refusal or "")
+        self.decision = decision
+        self.run_ids = run_ids
 
 
 @dataclass
@@ -2841,7 +2856,7 @@ async def _require_run_spend_approval(
             _refuse_if_graph_moved(fence)
         approval = _check_run_approval(approval_id, *(approval_scope or (nodes, edges)))
         _require_spend_approval(nodes, edges, run_id=run_id, measured=measured, **kwargs)
-    except (HTTPException, PersonGateError):
+    except (HTTPException, PersonGateError, _WaitForOk):
         canvas_events.forget_run(run_id)
         raise
     if approval is not None:
@@ -2972,6 +2987,7 @@ def _require_spend_approval(
     nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any],
     measured: input_sizes.Measured | None, how_to_ask: str | None = None,
     run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
+    propose: bool = False,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
@@ -2989,7 +3005,13 @@ def _require_spend_approval(
     can't bill a Krea node differently from the canvas (``on_canvas`` False:
     nodes that only exist for this run, like /api/quick's, which start on the
     API token): run routes take params in the request, so the billing-mode
-    check on edits alone wouldn't hold."""
+    check on edits alone wouldn't hold.
+
+    A run that would pass the daily total is refused like the others, except
+    with ``propose`` (a route that runs canvas nodes, ``run_ids``): then it
+    raises _WaitForOk and the route makes it a proposal. The check and the
+    count are one step (SpendLedger.reserve), so two runs that each fit
+    can't both pass a total they pass together."""
     headers = current_request_headers()
     if _is_person_request():
         return
@@ -3010,7 +3032,10 @@ def _require_spend_approval(
     # synchronous check by the caller (_measure_run_inputs).
     if measured is None:
         raise RuntimeError("_require_spend_approval needs the run's measured inputs (_measure_run_inputs)")
-    decision = agent_spend.decide(
+    size_inputs = {node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
+                                    for source, handle in sources])
+                   for node_id, (port, sources) in measured.connected.items()}
+    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
         items, [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=definitions,
         budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes, sizes=measured.sizes,
@@ -3018,15 +3043,65 @@ def _require_spend_approval(
         # What is connected to a port with more than one input, by name, for the refusal to list.
         # Named from this run's own nodes (/api/execute and a shot price the
         # request's nodes, which needn't match the open canvas): _run_node_name.
-        size_inputs={node_id: (port, [(_run_node_name(source, run_nodes), source, handle)
-                                      for source, handle in sources])
-                     for node_id, (port, sources) in measured.connected.items()},
-    )
+        size_inputs=size_inputs,
+    ))
     if decision.refusal:
+        if decision.wait is not None and propose and run_ids:
+            raise _WaitForOk(decision, list(run_ids))
         raise _person_only_refusal(decision.refusal)
-    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     if run_id is not None and (decision.per_node or decision.plan_per_node):
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
+
+
+# Who a waiting run's proposal is from when the caller didn't name itself
+# (a script, a canvas tab not opened from the link): the name Nebula gives
+# such a caller everywhere else (canvas_events.actor_label).
+_UNNAMED_CALLER = AgentIdentity(id="unnamed", name="Unnamed client", color="#8C8C8C", verified=False)
+
+
+def _waiting_answer(wait: agent_spend.DailyWait, proposal_id: str, *, run_id: str | None = None) -> JSONResponse:
+    """202: the run didn't start; it waits for the person's OK as proposal
+    ``proposal_id``. ``message`` is GM's line for agents, with the numbers
+    exact beside it (``dailyTotal``)."""
+    numbers = wait.as_dict()
+    body: dict[str, Any] = {
+        "status": "waiting",
+        "proposalId": proposal_id,
+        "message": wait.agent_line(proposal_id),
+        "dailyTotal": {key: numbers[key] for key in ("limitUsd", "usedUsd", "leftUsd", "runUsd")},
+        **({"alsoNeeds": wait.also} if wait.also else {}),
+        **({"runId": run_id} if run_id else {}),
+    }
+    return JSONResponse(status_code=202, content=body)
+
+
+async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | None = None) -> JSONResponse:
+    """A run that isn't the person's would pass the daily total: it becomes a
+    proposal to run the same canvas nodes, which the person accepts on the
+    canvas (Accept runs it, as the person's), and the caller hears that it
+    waits (GM - Design, 2026-10-31). The same caller asking again for the
+    same nodes is pointed at the proposal it already has. A run Nebula can't
+    make a proposal of (more nodes than a proposal runs, a node not on the
+    canvas, too many proposals open) is refused as before, saying why."""
+    wait = held.decision.wait
+    assert wait is not None
+    refusal = held.decision.refusal or ""
+    run_ids = list(dict.fromkeys(held.run_ids))
+    identity = identify_agent(current_request_headers()) or _UNNAMED_CALLER
+    project_id = _workspace_context()["activeProjectId"]
+    if len(run_ids) > PROPOSAL_MAX_RUN or any(node_id not in cli_graph.nodes for node_id in run_ids):
+        raise _person_only_refusal(refusal)
+    for proposal in canvas_proposals.open_list():
+        if (proposal.wait and proposal.agent.id == identity.id and list(proposal.spec.run) == run_ids
+                and proposal.project_id == project_id):
+            return _waiting_answer(wait, proposal.id, run_id=run_id)
+    details = {**wait.as_dict(), "nodeIds": run_ids, "names": [_node_label(node_id) for node_id in run_ids]}
+    try:
+        proposal, _view, _still_open = await _open_canvas_proposal(
+            identity, ProposalSpec(note=wait.bar_line(), run=tuple(run_ids)), fence, models={}, wait=details)
+    except HTTPException as exc:
+        raise _person_only_refusal(f"{refusal} Nebula couldn't send it as a proposal: {exc.detail}") from exc
+    return _waiting_answer(wait, proposal.id, run_id=run_id)
 
 
 def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
@@ -4721,7 +4796,8 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     # "app": an outside app's own line, which also counts inside "shared".
     budget = "chat" if not agent_spend.is_outside(key) else "app" if key.startswith(agent_spend.APP_PREFIX) else "shared"
     result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
-                              "spent": view(agent_spend_ledger.spent(key))}
+                              "spent": view(agent_spend_ledger.spent(key)),
+                              "dailyTotal": _daily_total_view(caps)}
     if budget != "chat":
         result["window"] = "24h"
         result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
@@ -4733,8 +4809,18 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     return result
 
 
+def _daily_total_view(caps: Mapping[str, Any]) -> dict[str, Any]:
+    """The daily total: its limit (None for no limit), what everything that
+    isn't the person spent in the last 24 hours, and what's left, exact."""
+    limit = caps.get(agent_spend.DAILY_TOTAL_KEY)
+    used = round(agent_spend_ledger.spent_daily().total, 6)
+    return {"limitUsd": limit, "usedUsd": used,
+            "leftUsd": None if limit is None else max(0.0, round(limit - used, 6)), "window": "24h"}
+
+
 def _outside_view() -> dict[str, Any]:
-    """The outside agents' last 24 hours and each connected app's share, for Settings."""
+    """The outside agents' last 24 hours and each connected app's share, for
+    Settings, and the daily total's (``daily``)."""
     outside = agent_spend_ledger.spent_outside()
     apps = []
     for connected in app_token_store.list():
@@ -4745,7 +4831,7 @@ def _outside_view() -> dict[str, Any]:
         spent = agent_spend_ledger.spent(f"{agent_spend.PERSONAL_AGENT_PREFIX}{agent_id}")
         personal.append({"id": agent_id, "name": name, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
     return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
-            "personal": personal}
+            "personal": personal, "daily": {"spentUsd": round(agent_spend_ledger.spent_daily().total, 4)}}
 
 
 @app.get("/api/agent/spend/apps")
@@ -7902,6 +7988,108 @@ def _proposal_layout_hints() -> tuple[dict[str, dict[str, Any]], dict[str, float
     return known, (snapshot.get("view") or {}).get("visibleArea")
 
 
+async def _open_canvas_proposal(
+    identity: AgentIdentity, spec: ProposalSpec, fence: Any, *, models: Mapping[tuple[str, str], Any],
+    wait: dict[str, Any] | None = None,
+) -> tuple[Proposal, dict[str, Any], list[dict[str, Any]]]:
+    """Stage, open and announce a canvas proposal made for ``identity``: what
+    POST /api/canvas/proposals does after reading the request, and what a run
+    the daily total holds does (_propose_waiting_run, with ``wait``). Returns
+    the proposal, its view and the agent's other open proposals here that
+    can't run."""
+    _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
+    try:
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
+    except HTTPException as exc:
+        # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
+        raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
+                            detail=exc.detail) from exc
+    known, visible_area = _proposal_layout_hints()
+    positions = place_new_nodes(spec, known, visible_area)
+    measured = await _measure_proposal_inputs(candidate, run_ids)
+    _refuse_if_graph_moved(fence)
+    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
+    run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
+    existing = {
+        node_id: {
+            "name": f"{_node_label(node_id)} ({node_id})",
+            "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
+        }
+        for node_id in spec.references
+    }
+    try:
+        proposal = canvas_proposals.create(
+            agent=identity,
+            project_id=_workspace_context()["activeProjectId"],
+            spec=spec,
+            positions=positions,
+            cost=cost,
+            existing=existing,
+            run_fingerprint=run_fingerprint,
+        )
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    if wait is not None:
+        # A run the daily total holds (_propose_waiting_run): its reasons and
+        # numbers, in the step that made it, so every view and its Update
+        # carry them.
+        proposal.wait = wait
+    # The canvas it was made on, in the step that made it (review 20 L-3).
+    proposal.canvas_revision = _canvas_revision()
+    # Which node it reads under each id, so only a delete of that very node tags it (second review).
+    proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
+    first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
+    _journal(  # in the step that made it, before any await (round 8 of PR #114)
+        "proposal.created",
+        node_id=first_reference,
+        data={
+            "proposalId": proposal.id,
+            "note": spec.note,
+            "adds": len(spec.nodes),
+            "wires": len(spec.edges),
+            "sets": len(spec.params),
+            "runs": len(spec.run),
+            "paidRuns": cost["paidRuns"],
+            **({"waiting": wait} if wait is not None else {}),
+        },
+        summary=f'proposed {proposal.id}: "{spec.note}"',
+    )
+    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
+    view = _proposal_view(proposal)
+    # The agent's other open proposals here that can't run: Justin (Q109)
+    # keeps them, and the agent is told to withdraw one this replaces.
+    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
+    if not proposal.is_open:
+        # It closed while its Update was being written (see
+        # _post_canvas_update): the canvas already heard proposalClosed, so
+        # it never gets it as open (Accept would only fail). The agent reads
+        # the real status, and its reason, in the view; agent_wording gives a
+        # closed one no readiness warning, but still names the agent's others.
+        return proposal, view, still_open
+    # The accept key goes only to the person's canvas sockets.
+    try:
+        await manager.broadcast_browser({
+            "type": "proposalOpened",
+            "proposal": view,
+            "acceptKey": proposal.accept_key,
+            # Exactly what Accept will write, for the person's decision bar.
+            "personValues": canvas_proposals.person_values(proposal),
+        })
+    except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
+        pass
+    if first_reference is not None:
+        target: dict[str, Any] = {"nodeId": first_reference}
+    elif spec.nodes:
+        spot = positions[spec.nodes[0].ref]
+        target = {"x": spot["x"] + 120.0, "y": spot["y"] + 40.0}
+    else:
+        target = None
+    if target is not None:
+        await _show_agent(target, action="click", say=spec.note,
+                          did=_did("Proposed", target.get("nodeId")))
+    return proposal, view, still_open
+
+
 @app.post("/api/canvas/proposals", status_code=201)
 async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     """An agent proposes a change; the person sees ghosts and accepts or rejects it.
@@ -7938,90 +8126,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
                           before=current.get("params") or {}, must_exist=True)
     models = await _look_up_models(_spec_models_wanted(spec))
-    _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
-    try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
-    except HTTPException as exc:
-        # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
-        raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
-                            detail=exc.detail) from exc
-    known, visible_area = _proposal_layout_hints()
-    positions = place_new_nodes(spec, known, visible_area)
-    measured = await _measure_proposal_inputs(candidate, run_ids)
-    _refuse_if_graph_moved(fence)
-    cost = _proposal_cost(candidate, id_map, run_ids, measured=measured)
-    run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
-    existing = {
-        node_id: {
-            "name": f"{_node_label(node_id)} ({node_id})",
-            "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
-        }
-        for node_id in spec.references
-    }
-    try:
-        proposal = canvas_proposals.create(
-            agent=identity,
-            project_id=_workspace_context()["activeProjectId"],
-            spec=spec,
-            positions=positions,
-            cost=cost,
-            existing=existing,
-            run_fingerprint=run_fingerprint,
-        )
-    except ProposalError as exc:
-        raise _proposal_http_error(exc) from exc
-    # The canvas it was made on, in the step that made it (review 20 L-3).
-    proposal.canvas_revision = _canvas_revision()
-    # Which node it reads under each id, so only a delete of that very node tags it (second review).
-    proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
-    first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
-    _journal(  # in the step that made it, before any await (round 8 of PR #114)
-        "proposal.created",
-        node_id=first_reference,
-        data={
-            "proposalId": proposal.id,
-            "note": spec.note,
-            "adds": len(spec.nodes),
-            "wires": len(spec.edges),
-            "sets": len(spec.params),
-            "runs": len(spec.run),
-            "paidRuns": cost["paidRuns"],
-        },
-        summary=f'proposed {proposal.id}: "{spec.note}"',
-    )
-    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
-    view = _proposal_view(proposal)
-    # The agent's other open proposals here that can't run: Justin (Q109)
-    # keeps them, and the agent is told to withdraw one this replaces.
-    still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
-    if not proposal.is_open:
-        # It closed while its Update was being written (see
-        # _post_canvas_update): the canvas already heard proposalClosed, so
-        # it never gets it as open (Accept would only fail). The agent reads
-        # the real status, and its reason, in the view; agent_wording gives a
-        # closed one no readiness warning, but still names the agent's others.
-        return agent_wording({"proposal": view, **({"stillOpen": still_open} if still_open else {})})
-    # The accept key goes only to the person's canvas sockets.
-    try:
-        await manager.broadcast_browser({
-            "type": "proposalOpened",
-            "proposal": view,
-            "acceptKey": proposal.accept_key,
-            # Exactly what Accept will write, for the person's decision bar.
-            "personValues": canvas_proposals.person_values(proposal),
-        })
-    except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
-        pass
-    if first_reference is not None:
-        target: dict[str, Any] = {"nodeId": first_reference}
-    elif spec.nodes:
-        spot = positions[spec.nodes[0].ref]
-        target = {"x": spot["x"] + 120.0, "y": spot["y"] + 40.0}
-    else:
-        target = None
-    if target is not None:
-        await _show_agent(target, action="click", say=spec.note,
-                          did=_did("Proposed", target.get("nodeId")))
+    _proposal, view, still_open = await _open_canvas_proposal(identity, spec, fence, models=models)
     # Nodes of the run that can't run here, so the agent can say so or pick
     # another model before the person accepts (the canvas shows it too), and
     # the call that withdraws this one or an earlier one this replaces.
@@ -10513,9 +10618,15 @@ async def execute(request: ExecuteRequest) -> dict:
     # The placeholders it runs turn normal, and an agent's run is kept, only
     # once it registered (_admit_registered_run): a run refused at the last
     # fence leaves both as they were (round 21, the #114 merge).
-    await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
-                                      approval_scope=(requested_nodes, requested_edges),
-                                      run_ids=_end_node_ids(nodes, edges), settings=settings, fence=fence)
+    try:
+        await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
+                                          approval_scope=(requested_nodes, requested_edges),
+                                          run_ids=_end_node_ids(nodes, edges), settings=settings, fence=fence,
+                                          propose=True)
+    except _WaitForOk as held:
+        # Over the daily total: nothing ran; it waits for the person's OK
+        # (a tab not opened from the link sees the proposal, locked).
+        return await _propose_waiting_run(held, fence, run_id=run_id)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -10702,10 +10813,14 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
-                                      approval_scope=(requested_nodes, requested_edges),
-                                      run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
-                                      settings=settings, fence=fence)
+    try:
+        await _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
+                                          approval_scope=(requested_nodes, requested_edges),
+                                          run_ids=[request.target_node_id] if not skips else _end_node_ids(sub_nodes, sub_edges),
+                                          settings=settings, fence=fence, propose=True)
+    except _WaitForOk as held:
+        # Over the daily total: nothing ran; it waits for the person's OK.
+        return await _propose_waiting_run(held, fence, run_id=run_id)
     # Placeholders turn normal and an agent's run is kept once it registered
     # (_admit_registered_run, as in execute).
 
@@ -18037,8 +18152,12 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Its nodes were read from the live graph before that await, and its
     # outputs land there by node id: only on the canvas it was asked on.
     _refuse_if_graph_moved(fence)
-    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings, measured=measured,
-                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
+    try:
+        _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings, measured=measured,
+                                run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges), propose=True)
+    except _WaitForOk as held:
+        # Over the daily total: nothing ran; it waits for the person's OK.
+        return await _propose_waiting_run(held, fence)
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
     try:
@@ -19656,11 +19775,11 @@ def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any],
            f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
            "(MCP: moodboard_analyze with estimate_only).")
     key, label = _spend_session(current_request_headers())
-    decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-                                  budgets=_spend_budgets(key, settings), how_to_ask=ask)
+    decision, at = agent_spend_ledger.reserve(key, label, lambda: agent_spend.decide(
+        items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
+        budgets=_spend_budgets(key, settings), how_to_ask=ask))
     if decision.refusal:
         raise _person_only_refusal(decision.refusal)
-    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     node = str(items[0]["definitionId"])
     shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
     if not decision.charge or not shares:

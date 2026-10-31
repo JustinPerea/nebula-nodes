@@ -10,6 +10,8 @@ import {
   ghostPosition,
   ghostRows,
   notReadyWarning,
+  WAITING_FOR_OK,
+  waitLineId,
   wireEnd,
   wirePath,
   type ProposalView,
@@ -158,6 +160,9 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
   const cards = useRef(new Map<string, HTMLDivElement>());
   const paths = useRef(new Map<number, SVGPathElement>());
   const rings = useRef(new Map<string, HTMLDivElement>());
+  // Each node a held run waits on (view.wait.nodeIds): its status and line.
+  const waits = useRef(new Map<string, HTMLDivElement>());
+  const barShowsIt = useCanvasProposalsStore((s) => s.shownId === view.id);
   const scale = useRef<SpringState>({ x: prefersReducedMotion() ? 1 : ENTER_FROM, y: 0, vx: 0, vy: 0 });
   // The same ⚠ a real node shows, from the saved keys; failing that, the
   // backend's reason this run node can't run (a route, a sign-in).
@@ -198,6 +203,19 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
         el.style.transform = `translate(${x - 6}px, ${y - 6}px)`;
         el.style.width = `${(node.measured?.width ?? 0) + 12}px`;
         el.style.height = `${(node.measured?.height ?? 0) + 12}px`;
+        el.dataset.placed = 'true';
+      }
+      for (const nodeId of view.wait?.nodeIds ?? []) {
+        const el = waits.current.get(nodeId);
+        const node = lookup.get(nodeId);
+        if (!el) continue;
+        if (!node) {
+          el.dataset.placed = 'false';
+          continue;
+        }
+        const { x, y } = node.internals.positionAbsolute;
+        el.style.transform = `translate(${x}px, ${y}px)`;
+        el.style.width = `${node.measured?.width ?? 0}px`;
         el.dataset.placed = 'true';
       }
     };
@@ -272,6 +290,29 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
           <span className="proposal-ring__tag" title={changeTag(entry.values?.params[change.nodeId] ?? change.changes, 400)}>
             proposed: {changeTag(entry.values?.params[change.nodeId] ?? change.changes)}
           </span>
+        </div>
+      ))}
+      {view.wait?.nodeIds.map((nodeId) => (
+        // GM - Design (2026-10-31): on each waiting node, the status and its
+        // line; it points at the bar's line while the bar shows this one.
+        <div
+          key={`wait-${nodeId}`}
+          ref={(el) => {
+            if (el) {
+              waits.current.set(nodeId, el);
+              apply.current();
+            } else {
+              waits.current.delete(nodeId);
+            }
+          }}
+          className="proposal-wait"
+          data-node={nodeId}
+        >
+          <p className="proposal-wait__tag" role="status"
+            aria-describedby={barShowsIt ? waitLineId(view.id) : undefined}>
+            <span className="proposal-wait__status">{WAITING_FOR_OK}</span>
+            <span className="proposal-wait__line">{view.wait?.cardLine}</span>
+          </p>
         </div>
       ))}
       {view.nodes.map((node) => (

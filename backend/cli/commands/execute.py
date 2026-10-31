@@ -13,6 +13,8 @@ MAX_RESULT_WAIT = 300.0
 
 EXIT_RUNNING = 2
 EXIT_CANCELLED = 3
+# Over the person's daily total: it didn't run, and waits for their OK as a proposal.
+EXIT_WAITING = 4
 
 
 def _report(result: dict[str, Any]) -> int:
@@ -23,6 +25,10 @@ def _report(result: dict[str, Any]) -> int:
         # update was late. Never a reason to run it again.
         print(f"note: {result.get('canvasSyncDetail') or 'The run started; open canvases catch up shortly.'}",
               file=sys.stderr)
+    if status == "waiting":
+        print(result.get("message") or f"Waiting for the person\u2019s OK. Sent as proposal {result.get('proposalId')}. "
+              "Check it with nebula proposals.")
+        return EXIT_WAITING
     if status == "running":
         print(
             f"Still running after {result.get('elapsed', 0)}s (run {run_id}). It keeps going, and its "

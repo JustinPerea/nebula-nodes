@@ -190,7 +190,7 @@ def spending_limits_off(monkeypatch):
     monkeypatch.setattr(agent_spend, "threshold_from_settings", lambda settings: None)
     monkeypatch.setattr(agent_spend, "caps_from_settings",
                         lambda settings: {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None,
-                                          "models": {}})
+                                          "dailyTotalUsd": None, "models": {}})
 
 
 @pytest.fixture

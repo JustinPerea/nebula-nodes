@@ -8,6 +8,7 @@ import {
 } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
+import { DailyTotalRow } from './DailyTotalRow';
 import { failureMessage } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
 
@@ -117,6 +118,8 @@ export function AgentSpendSection() {
         so these limits don&rsquo;t bind it.
       </p>
       <div className="settings-list">
+        <DailyTotalRow limits={limits} spentUsd={outside.view ? outside.view.daily?.spentUsd ?? 0 : null}
+          disabled={pending} onChange={save} />
         <div className="settings-pref">
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-session">Per chat session</label>

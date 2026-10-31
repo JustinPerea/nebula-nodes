@@ -589,6 +589,48 @@ body.app-slava-restraint .settings-apps__token .settings-hint { margin: 0; }
 body.app-slava-restraint .settings-apps__token-row { display: flex; align-items: center; gap: var(--sr-space-2); }
 body.app-slava-restraint .settings-apps__token-row .settings-folder__input { flex: 1; height: 28px; }
 body.app-slava-restraint .settings-agent-spent { color: var(--sr-ink); }
+
+/* The daily total (GM - Design, 2026-10-31): a thin neutral meter across the
+   row, only with a limit and something spent. Neutral at every level: the
+   usage line carries the state. */
+body.app-slava-restraint .settings-daily__meter {
+  grid-column: 1 / -1;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--sr-edge-strong);
+}
+body.app-slava-restraint .settings-daily__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--sr-ink-light);
+  transform: scaleX(var(--daily-fill, 0));
+  transform-origin: left center;
+  transition: transform var(--settings-spring);
+}
+body.app-slava-restraint .settings-daily__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 7px;
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-meta);
+  font: var(--sr-type-label) var(--sr-ui);
+}
+body.app-slava-restraint .settings-daily__field:has(.settings-daily__input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
+body.app-slava-restraint .settings-daily__input {
+  width: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sr-ink);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
 body.app-slava-restraint .settings-apps .settings-apps__client { flex: 1 1 100%; }
 body.app-slava-restraint .settings-apps__app-name { display: inline-flex; align-items: center; gap: 7px; }
 body.app-slava-restraint .settings-apps__colors { display: inline-flex; align-items: center; gap: 5px; flex: 1 1 100%; }
@@ -836,7 +878,8 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   body.app-slava-restraint .settings-notice { animation: none; }
   body.app-slava-restraint .settings-tabs__pill,
   body.app-slava-restraint .settings-switch::before,
-  body.app-slava-restraint .settings-pref--link svg { transition: none; }
+  body.app-slava-restraint .settings-pref--link svg,
+  body.app-slava-restraint .settings-daily__meter-fill { transition: none; }
   body.app-slava-restraint .settings-row__dot--busy { animation: none; border-top-color: var(--sr-ink-light); opacity: 0.6; }
 }
 

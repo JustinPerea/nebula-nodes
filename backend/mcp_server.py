@@ -1578,6 +1578,11 @@ def run_no_record_next(run_id: Any) -> str:
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     """The run as agents need it: status, outputs per node, errors, and previews."""
     status = payload.get("status")
+    if status == "waiting":
+        # Over the person's daily total: nothing ran, and it waits for their
+        # OK as a proposal (GM's line in `message`, the numbers exact).
+        return [_json.dumps({key: payload[key] for key in ("status", "proposalId", "message", "dailyTotal",
+                                                            "alsoNeeds") if key in payload})]
     shown: dict[str, Any] = {key: payload[key] for key in ("status", "runId", "targetNodeId", "elapsed",
                                                             "duration", "nodesExecuted", "error",
                                                             "source", "startedBy", "nodes", "neverStarted", "noRecord",
@@ -1629,7 +1634,12 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A node priced
+    usually send the same nodes as propose_change with `run`. One that would
+    pass the person's daily total (everything that isn't them shares it, over
+    the last 24 hours) isn't refused: Nebula sends it as a proposal and
+    answers status "waiting" with `proposalId`, `message` (say it to the
+    person as it is) and `dailyTotal` (limitUsd, usedUsd, leftUsd, runUsd).
+    Nothing ran; get_proposal tells you when they decide. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this
@@ -1751,7 +1761,12 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     also counts inside "shared"). `kreaPlanRuns` counts runs billed to the
     Krea plan (its limit is 10 until the person sets one; 0 means every plan
     run needs a proposal). Runs over a limit must go through propose_change,
-    and so does billing any Krea node differently from the canvas."""
+    and so does billing any Krea node differently from the canvas.
+    `dailyTotal` is the daily total everything that isn't the person shares
+    over the last 24 hours (agent chats, agents outside Nebula, scripts, tabs
+    not opened from the link): `limitUsd` ($5 until the person picks another,
+    null for no limit), `usedUsd` and `leftUsd`, exact. A run that would pass
+    it waits for their OK as a proposal. Only the person changes it."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

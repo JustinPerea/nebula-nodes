@@ -25,6 +25,14 @@ def run(client: NebulaClient) -> None:
     spent = view.get("spent") or {}
     budget = view.get("budget")
     print("Spending limits (set by the person in Settings > Preferences):")
+    daily = view.get("dailyTotal") or {}
+    if daily:
+        # The umbrella every agent, script and unlinked tab shares, exact.
+        daily_cap = daily.get("limitUsd")
+        line = f"  Daily total, everything that isn't the person, last 24 hours: {_usd(daily_cap)}"
+        line += (f", {_usd(daily.get('usedUsd', 0))} used, {_usd(daily.get('leftUsd', 0))} left"
+                 if daily_cap is not None else f" ({_usd(daily.get('usedUsd', 0))} used)")
+        print(line)
     print(f"  Per run:      {_usd(limits.get('perRunUsd'))}")
     used = spent.get("totalUsd", 0)
     plan_cap = limits.get("kreaPlanRuns")
@@ -60,4 +68,5 @@ def run(client: NebulaClient) -> None:
                          f"{_usd(model_used)} used")
         print(f"  {model}: {', '.join(parts)}")
     print("\nAmounts are upper estimates at list prices. Nodes without a published price always need")
-    print("a proposal. Over a limit: `nebula propose --run <node>` and the person decides.")
+    print("a proposal. Over a limit: `nebula propose --run <node>` and the person decides. A run that")
+    print("would pass the daily total is sent as a proposal for you and waits for the person's OK.")

@@ -311,6 +311,7 @@ const CLEARED: Record<string, string> = {
   'styles/slava-restraint.css::body.app-slava-restraint .chat-panel__textarea': 'body.app-slava-restraint .chat-panel__textarea:focus-visible',
   'styles/settings.css::body.app-slava-restraint .settings-search input': 'body.app-slava-restraint .settings-search:has(input:focus-visible)',
   'styles/settings.css::body.app-slava-restraint .settings-key__input': 'body.app-slava-restraint .settings-key:has(.settings-key__input:focus-visible)',
+  'styles/settings.css::body.app-slava-restraint .settings-daily__input': 'body.app-slava-restraint .settings-daily__field:has(.settings-daily__input:focus-visible)',
   'styles/settings.css::body.app-slava-restraint .settings-sa__paste': 'body.app-slava-restraint .settings-sa__paste:focus',
   'styles/settings.css::body.app-slava-restraint .settings-folder__input': 'body.app-slava-restraint .settings-folder__input:focus',
   // The text card's body (see NO_OUTLINE): the caret and the selected card show it.

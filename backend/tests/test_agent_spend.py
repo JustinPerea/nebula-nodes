@@ -1137,4 +1137,5 @@ def test_a_personal_agent_token_spends_in_the_shared_outside_budget(monkeypatch)
     assert key == "outside:personal:claude" and label == "Claude (your setup)"
     assert key.startswith(agent_spend.PERSONAL_AGENT_PREFIX) and agent_spend.is_outside(key)
     budgets = main._spend_budgets(key, {})
-    assert [b.who for b in budgets] == ["agents outside Nebula chats"]
+    # The daily total every key shares comes first (it is the umbrella).
+    assert [b.who for b in budgets] == ["everything that isn't the person", "agents outside Nebula chats"]

@@ -44,6 +44,7 @@ from services.agent_presence import AgentIdentity
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
 from services.selection_context import _safe_value as safe_value
+from services.node_names import node_name_list
 
 PROPOSAL_TTL_SECONDS = 900
 MAX_OPEN_PER_AGENT = 3
@@ -809,6 +810,10 @@ class Proposal:
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.
     lineage: dict[str, str] = field(default_factory=dict)
+    # A run the daily total held (main._propose_waiting_run): its reasons,
+    # exact numbers and the waiting nodes (agent_spend.DailyWait.as_dict plus
+    # ``nodeIds`` and ``names``). None for a proposal an agent made.
+    wait: dict[str, Any] | None = None
 
     @property
     def references(self) -> set[str]:
@@ -1106,6 +1111,7 @@ class ProposalBook:
             "idMap": dict(proposal.id_map) if proposal.id_map else None,
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
             "update": dict(proposal.update) if proposal.update else None,
+            **({"wait": copy.deepcopy(proposal.wait)} if proposal.wait else {}),
         }
 
     def person_values(self, proposal: Proposal) -> dict[str, Any]:
@@ -1189,8 +1195,14 @@ def change_count(spec: ProposalSpec) -> int:
 
 def update_text(proposal: Proposal) -> str:
     """The Update's line, from a fixed template: never the agent's note
-    (that is the bar's), as an asset proposal's never is."""
+    (that is the bar's), as an asset proposal's never is. A run the daily
+    total holds says so (GM - Design, 2026-10-31): "Claude Code wants to run
+    “Writer” and “Editor”. This would pass the $5 daily total, which has
+    $0.20 left.", its nodes by the shared name-list helper."""
     agent = proposal.agent.name
+    if proposal.wait:
+        names = [str(name) for name in proposal.wait.get("names") or []]
+        return f"{agent} wants to run {node_name_list(names)}. {proposal.wait.get('barLine', '')}".rstrip()
     count = change_count(proposal.spec)
     if count == 0:
         return f"{agent} proposes a run on the canvas"
