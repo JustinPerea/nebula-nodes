@@ -738,20 +738,20 @@ def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
             "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
         assert recovered.status_code == 200, recovered.text
         names.append(recovered.json()["project"]["name"])
-    assert names == ["Recovered Delta", "Recovered Delta 2"]
+    assert names == ["Recovered Delta", "Recovered Delta copy"]  # GM r29, 2
     listing = client.get("/api/projects", headers=CODEX).json()
-    assert {"Recovered Delta", "Recovered Delta 2"} <= {project["name"] for project in listing["projects"]}
+    assert {"Recovered Delta", "Recovered Delta copy"} <= {project["name"] for project in listing["projects"]}
 
 
 @pytest.mark.parametrize("source, taken, expected", [
     ("Delta", (), "Recovered Delta"),
-    ("Delta", ("Recovered Delta",), "Recovered Delta 2"),
-    ("Recovered Delta", ("Recovered Delta",), "Recovered Delta 2"),  # a copy of a copy: one family
-    ("Delta", ("Recovered Delta", "Recovered Delta 3"), "Recovered Delta 2"),  # a freed number used again
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
-    # A name from before the rule is the family's first ("Recovered Delta"):
-    # its recovered copy is the second (GM r25, 5).
-    ("Delta (recovered)", (), "Recovered Delta 2"),
+    # GM r29, 2: " copy", then " copy 2"; no number in a name is read.
+    ("Delta", ("Recovered Delta",), "Recovered Delta copy"),
+    ("Recovered Delta", ("Recovered Delta",), "Recovered Delta copy"),  # never a second "Recovered"
+    ("Delta", ("Recovered Delta", "Recovered Delta copy 2"), "Recovered Delta copy"),  # the lowest free
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
+    # A name from before the rule is Nebula's old "Recovered Delta".
+    ("Delta (recovered)", (), "Recovered Delta"),
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r23a_the_family_rules_hold_in_the_new_shape(source, taken, expected):

@@ -257,7 +257,7 @@ describe('in the region', () => {
 
   it('nothing else in the stack order moves (top to bottom)', () => {
     expect([...NOTICE_SLOTS]).toEqual([
-      // PR #199 review 11 (GM r15, Q11): the kept-edits line sits under the project switch.
+      // PR #199 review 11 (GM r15): the kept-edits line sits under the project switch.
       'proposal', 'run-later', 'person-required', 'project-switch', 'kept-edits', 'save-paused', 'project-home',
       // Review 7, L3: a line beside an Undo has its own slot above the late count.
       // GM r28 (PR #198 round 19): the scenes' stop lines, a state above every event.

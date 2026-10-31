@@ -1,3 +1,5 @@
+import { tabWord } from '../../lib/tabWord';
+
 /**
  * The restore lines the entry chunk needs (review 13 of PR #199, LOW-1):
  * the store's and the kept line's. Everything else of catalogRestoreCopy
@@ -22,7 +24,7 @@ export function editsRecoveredToast(name: string): string {
 
 /** GM r14, 3 (and r12, 1): the second half of a kept-in-this-tab line, for
  * edits a closed project never got. */
-export const LATEST_EDITS_KEPT = "Your latest edits weren’t saved yet. They’re kept in this tab.";
+export const LATEST_EDITS_KEPT = `Your latest edits weren’t saved yet. They’re kept in this ${tabWord()}.`;
 /** GM r14, 3: added where the tab can't go home by itself. */
 export const RELOAD_TO_CONTINUE = 'Reload projects to continue.';
 
@@ -30,7 +32,7 @@ export const RELOAD_TO_CONTINUE = 'Reload projects to continue.';
  * person's canvas when its write closed the project the tab showed ("An
  * agent" when unknown). `name` is that project's: it was kept, untouched.
  * The same words are the person's Agent log row for a canvas that already
- * was a project (GM r15, Q10). */
+ * was a project (GM r15). */
 export function agentClosedLine(agent: string | null | undefined, action: 'clear' | 'replace' | 'change', name: string): string {
   const who = agent && agent.trim() ? agent.trim() : 'An agent';
   if (action === 'clear') return `${who} cleared the canvas. ${quoted(name)} is kept as its own project.`;
@@ -52,7 +54,7 @@ export const RESTORE_COPY_FALLBACK = 'Nebula restored its project list.';
  * lose the edits). It lives here, in the entry chunk, so it never depends
  * on the chunk whose load failed (scripts/check-kept-guard-chunk.mjs). The
  * same words as projectStore's RESTORED_LIST_UNSAVED. */
-export const RESTORE_COPY_FALLBACK_KEPT = 'Nebula restored its project list before your latest edits were saved. They’re kept in this tab.';
+export const RESTORE_COPY_FALLBACK_KEPT = `Nebula restored its project list before your latest edits were saved. They’re kept in this ${tabWord()}.`;
 
 /** The fallback line for the notice: the full sentence while kept. */
 export function restoreCopyFallback(kept: boolean): string {

@@ -217,18 +217,20 @@ class SelectionContextStore:
             if edge.get("source") in selected or edge.get("target") in selected
         ]
 
-        return {
+        read = {
             "selectedNodeIds": valid_ids,
             "count": len(valid_ids),
             "requestedCount": len(ids),
             "missingNodeIds": missing_ids,
             "nodes": nodes,
             "connections": connections,
-            **({"tabOnlyCount": tab_only, "tabOnlyNote": tab_only_note(tab_only, also=bool(valid_ids))}
-               if tab_only else {}),
+            **({"tabOnlyCount": tab_only} if tab_only else {}),
             "updatedAt": self._updated_at,
             "ephemeral": True,
         }
+        if tab_only:
+            read["tabOnlyNote"] = selection_tab_only_note(read)
+        return read
 
 
 def tab_only_note(count: int, *, also: bool = True) -> str:
@@ -236,6 +238,14 @@ def tab_only_note(count: int, *, also: bool = True) -> str:
     the selection holds nodes agents can see too."""
     return TAB_ONLY_NOTE.format(count=f"{count} node" if count == 1 else f"{count} nodes",
                                 also="also " if also else "")
+
+
+def selection_tab_only_note(read: dict[str, Any]) -> str:
+    """The tab-only note of a selection read, the one rule for "also" that the
+    read (``tabOnlyNote``) and the chat and ACP prompt
+    (selection_prompt_context) both use: "also" when the read lists nodes
+    agents can see (``selectedNodeIds``)."""
+    return tab_only_note(int(read.get("tabOnlyCount") or 0), also=bool(read.get("selectedNodeIds")))
 
 
 def tab_only_fields(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -290,7 +300,7 @@ def selection_prompt_context(snapshot: dict[str, Any]) -> str:
             "- Ignored stale/non-canonical IDs: " + ", ".join(str(node_id) for node_id in missing)
         )
     if snapshot.get("tabOnlyCount"):
-        lines.append(f"- {tab_only_note(int(snapshot['tabOnlyCount']), also=bool(nodes))}")
+        lines.append(f"- {selection_tab_only_note(snapshot)}")
     return "\n".join(lines)
 
 

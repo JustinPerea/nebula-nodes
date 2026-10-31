@@ -507,13 +507,13 @@ export interface UndoNotice {
   copy?: NoticeCopy;
   /** A part of `text` shown in mono (a model id, GM round 15 of PR #114). */
   mono?: string;
-  /** The kept tab's own step the button acts on (GM r18 on PR #199, Q3):
+  /** The kept tab's own step the button acts on (GM r18 on PR #199):
    * set instead of `entry` while the canvas is kept in this tab. */
   keptStep?: KeptStep;
 }
 
 /**
- * GM r18 on PR #199, Q3: while the canvas is kept in this tab (lib/keptCanvas),
+ * GM r18 on PR #199: while the canvas is kept in this tab (lib/keptCanvas),
  * moves, deletes, a clear, duplicates and Arrange change only this tab, and
  * Undo walks these steps only: its own history, started empty when the canvas
  * was kept, so it never steps back into the history Nebula saved. Each step
@@ -2601,6 +2601,26 @@ const labelsSavedBefore = new Map<string, string>();
 export interface HandoffPending {
   params: Record<string, Record<string, unknown>>;
   labels: Record<string, string>;
+  /** The nodes only this tab had (a duplicate, a paste) that it deleted since
+   * the project loaded (review 18 MEDIUM-1 of PR #199): Nebula deletes only
+   * these, and only for the tab that saved them; a node a handoff leaves out
+   * is never a delete. Their ids as this tab had them. */
+  deleted: string[];
+}
+
+/** Every node only this tab has had since the project loaded, and those
+ * Nebula gave its own ids since (adopted: gone under the old id, but not
+ * deleted). Their difference with the canvas is what this tab deleted. */
+const tabLocalSeen = new Set<string>();
+const tabLocalAdopted = new Set<string>();
+function resetTabLocalDeletes(): void {
+  tabLocalSeen.clear();
+  tabLocalAdopted.clear();
+}
+/** The tab-local nodes this tab deleted since the project loaded. */
+export function tabLocalDeletes(nodes: Node<NodeData>[] = useGraphStore.getState().nodes): string[] {
+  const present = new Set(nodes.map((node) => node.id));
+  return [...tabLocalSeen].filter((id) => !present.has(id) && !tabLocalAdopted.has(id));
 }
 
 function handoffPending(nodes: Node<NodeData>[]): HandoffPending {
@@ -2617,7 +2637,7 @@ function handoffPending(nodes: Node<NodeData>[]): HandoffPending {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     if (node && typeof node.data.label === 'string') labels[nodeId] = node.data.label;
   }
-  return { params, labels };
+  return { params, labels, deleted: tabLocalDeletes(nodes) };
 }
 
 /** Whether a sync's backend nodes are the ones on the canvas now: the same
@@ -2893,13 +2913,13 @@ function forgetParkedParamSaves(): void {
   takeParkedParamSaves();
 }
 
-/** GM r15 on PR #199, Q11 (review 11, HIGH-1): the canvas is kept in this
+/** GM r15 on PR #199 (review 11, HIGH-1): the canvas is kept in this
  * tab. Parked saves stop waiting for a resend (one would be refused and put
  * back); typing stays on the canvas only (updateNodeData, pushNodeParams). */
 export function keepCanvasLocally(): void {
   const already = isCanvasKept();
   setCanvasKept(true);
-  // The kept tab's own Undo starts empty (GM r18, Q3): it never reaches
+  // The kept tab's own Undo starts empty (GM r18): it never reaches
   // the steps before, which Nebula saved.
   if (!already) useGraphStore.setState({ keptUndo: [], keptRedo: [] });
   forgetParkedParamSaves();
@@ -2922,7 +2942,7 @@ export function releaseKeptCanvas(): void {
 }
 
 function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Promise<void> {
-  // Kept in this tab (GM r15, Q11): nothing is sent; the typing waits for
+  // Kept in this tab (GM r15): nothing is sent; the typing waits for
   // [Save as a project] with the rest of the canvas.
   if (isCanvasKept()) return Promise.resolve();
   const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
@@ -6050,7 +6070,7 @@ export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void
 }
 
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
-  // Kept in this tab (GM r18, Q3): a move stays on this tab until [Save as a project].
+  // Kept in this tab (GM r18): a move stays on this tab until [Save as a project].
   if (isCanvasKept()) return;
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
@@ -9949,6 +9969,8 @@ wsClient.subscribe((event) => {
  * copy (PR #199 round 16), and an open, a restore or a restart that
  * renumbered the canvas this tab shows (round 17). */
 export function adoptRenumberedSelection(renumbered: Record<string, string>, selected: string[], inspected: string | null): void {
+  // Given Nebula's ids: gone under the old ones, never deleted (review 18 MEDIUM-1).
+  for (const id of Object.keys(renumbered)) tabLocalAdopted.add(id);
   const graph = useGraphStore.getState();
   const present = new Set(graph.nodes.map((node) => node.id));
   const adopt = (id: string) => { const next = renumbered[id] ?? id; return present.has(next) ? next : null; };
@@ -11876,7 +11898,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // rapid typing in a text-input doesn't hammer the backend — the final
     // value is what matters. Execution state updates (outputs/state/progress)
     // don't need to sync.
-    // Kept in this tab after a restore (GM r15 on PR #199, Q11): the typing
+    // Kept in this tab after a restore (GM r15 on PR #199): the typing
     // stays on the canvas only, for [Save as a project]; nothing is sent.
     if (isParamChange && CLI_ID_RE.test(nodeId) && !isCanvasKept()) {
       const currentNode = get().nodes.find((node) => node.id === nodeId);
@@ -13716,6 +13738,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   loadProjectGraph: (nodes, edges, history, options) => {
+    // A project loaded: what this tab deleted is counted from here.
+    resetTabLocalDeletes();
     // Validate before revoking any current owner or draft. Corrupt project data
     // must never turn a previously protected paid run into an unowned one.
     let restoredHistory: RunRecord[];
@@ -14545,8 +14569,8 @@ function followingChanges<C extends { type: string }>(changes: C[]): C[] {
   return kept;
 }
 
-/** The same while the canvas is kept in this tab after a restore (GM r15,
- * Q11): a move, removal or add would need Nebula, so it is refused and the
+/** The same while the canvas is kept in this tab after a restore (GM r15):
+ * a move, removal or add would need Nebula, so it is refused and the
  * kept line pulses; selection and measured sizes pass. */
 function keptCanvasChanges<C extends { type: string }>(changes: C[]): C[] {
   if (!isCanvasKept()) return changes;
@@ -14622,7 +14646,7 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
       blocks: ((_nodeId: string, data: Partial<NodeData>) => 'params' in data || 'label' in data) as FollowGate['blocks'] } },
 };
 
-// -- GM r18 on PR #199, Q3: the kept tab is a scratch canvas -----------------
+// -- GM r18 on PR #199: the kept tab is a scratch canvas -----------------
 // Moves, deletes, a clear, duplicates and Arrange change only this tab while
 // the canvas is kept; [Save as a project] files the canvas as it then is.
 // Undo and Redo walk the kept tab's own steps (KeptStep), which start empty
@@ -14758,7 +14782,7 @@ function pushKeptStep(step: KeptStep, undoNotice?: UndoNotice | null): void {
 
 /** Undo or Redo while kept: the kept tab's own steps only. With none left,
  * nothing happens; the steps before the canvas was kept are Nebula's saved
- * history, which a kept tab never steps into (GM r18, Q3). */
+ * history, which a kept tab never steps into (GM r18). */
 function keptStepHistory(action: 'undo' | 'redo'): void {
   const state = useGraphStore.getState();
   const step = (action === 'undo' ? state.keptUndo : state.keptRedo).at(-1);
@@ -14791,7 +14815,7 @@ function keptRemove(nodeIds: string[], edgeIds: string[] = []): void {
   pushKeptStep(step, keptDeleteNotice(step, 'undo') ?? undefined);
 }
 
-/** Clear canvas while kept (GM r18, Q3): every node and wire leaves this
+/** Clear canvas while kept (GM r18): every node and wire leaves this
  * tab's canvas as one step, which Undo brings back. Nothing is sent. */
 export function clearKeptCanvas(): boolean {
   if (!keptCanvasTakesTyping()) return refuseEditWhileKept();
@@ -15021,10 +15045,10 @@ function keptEdgesChange(changes: EdgeChange[], pass: (changes: EdgeChange[]) =>
 }
 
 /** The edits that only change this tab's canvas, which the kept state
- * (GM r15 on PR #199, Q11) lets through: typing (a param edit; the push
+ * (GM r15 on PR #199) lets through: typing (a param edit; the push
  * waits), a duplicate (GM r17: frontend-only copies, no graph request; the
  * project snapshot [Save as a project] files carries them), and, GM r18
- * (Q3), a delete (the person's, Create's result delete and the Delete key go
+ *, a delete (the person's, Create's result delete and the Delete key go
  * through onNodesChange, so keptNodesChange takes them). Undo, Redo, the
  * Delete key's deleteCanvasElements, duplicates and Arrange have their kept
  * versions in the gate below (they record kept steps). */
@@ -15199,7 +15223,7 @@ subscribeBackendConnection(() => {
 {
   const ungated = useGraphStore.getState();
   const gated: Partial<GraphState> = {};
-  // GM r18 on PR #199, Q3: the kept versions (see keptStepHistory and the rest).
+  // GM r18 on PR #199: the kept versions (see keptStepHistory and the rest).
   const keptLocal: Partial<Record<keyof GraphState, (...args: unknown[]) => unknown>> = {
     undo: () => keptStepHistory('undo'),
     redo: () => keptStepHistory('redo'),
@@ -15380,3 +15404,11 @@ useGraphStore.subscribe((state, previous) => {
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   (window as unknown as { __nebulaGraphStore?: typeof useGraphStore }).__nebulaGraphStore = useGraphStore;
 }
+
+// Review 18 MEDIUM-1 of PR #199: every node only this tab has, as it appears
+// (a duplicate, a paste, a project's own), so a handoff can name the ones
+// this tab deleted (tabLocalDeletes).
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes) return;
+  for (const node of state.nodes) if (isTabLocalNode(node.id)) tabLocalSeen.add(node.id);
+});

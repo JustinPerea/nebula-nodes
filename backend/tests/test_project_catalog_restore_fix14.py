@@ -1,10 +1,10 @@
 """PR #199 fix round 14 (GM r18).
 
-- Q4: the agents' note past the limit is GM's sentence, with the real
+- The limit wording: the agents' note past the limit is GM's sentence, with the real
   numbers: "The project list has 4 projects, over the limit of 3. Move 2 to
   Recently deleted to make room." (MCP and the CLI print the same note:
   test_project_catalog_restore_fix13).
-- Q5: a restore adds no record back past the project limit (reconcile).
+- Records past the limit: a restore adds no record back past the project limit (reconcile).
   The readable records it left out because of the limit are counted in the
   record (`notAddedBackLimitCount`, with `projectLimit`), and agents read
   the same fact as the person, in plain text; "could not be added back"

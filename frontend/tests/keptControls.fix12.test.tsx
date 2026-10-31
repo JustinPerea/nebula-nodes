@@ -24,7 +24,7 @@ import { setSelectionActionSlot } from '../src/lib/selectionActionSlot';
  * per control (the generic line is only a safety net nobody sees). What only
  * changes this tab's canvas stays live: typing, Duplicate (its copies are
  * this tab's own nodes), Settings (it opens the Inspector, whose param edits
- * are typing) and, GM r18 (Q3), Delete, Arrange, Clear canvas and Undo on
+ * are typing) and, GM r18, Delete, Arrange, Clear canvas and Undo on
  * the kept tab's own steps (tests/keptScratchCanvas.fix14.test.tsx); Copy,
  * Download, zoom, pan and the Agent log too. The lock reasons go run,
  * follow, offline, then kept (PR #198's run lock first); the keyboard shortcuts for the disabled actions are
@@ -58,7 +58,7 @@ afterEach(() => {
 const button = (name: RegExp) => screen.getByRole('button', { name });
 
 describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
-  it('disables Ask and Run with their own lines; Copy, Download, Duplicate, Arrange and Delete stay (GM r18, Q3)', () => {
+  it('disables Ask and Run with their own lines; Copy, Download, Duplicate, Arrange and Delete stay (GM r18)', () => {
     render(<SelectionToolbar />);
     expect(button(/^Run selected nodes$/)).not.toBeDisabled();
     act(() => setCanvasKept(true));
@@ -100,10 +100,10 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('settings')).toBe('You can change settings after you save it as a project.');
     expect(keptLockTitle('run')).toBe('You can run this after you save it as a project.');
-    // GM r18, Q1.
+    // GM r18.
     expect(keptLockTitle('unlock')).toBe('You can unlock nodes after you save it as a project.');
     expect(keptLockTitle('generate')).toBe('You can generate after you save it as a project.');
-    // GM r18, Q2: "your agent" when none is picked.
+    // GM r18: "your agent" when none is picked.
     expect(keptLockTitle('ask')).toBe('You can ask your agent after you save it as a project.');
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'codex' }));
     expect(keptLockTitle('ask')).toBe('You can ask Codex after you save it as a project.');
@@ -139,7 +139,7 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
   });
 });
 
-describe('GM r17, Q2: every control names its own kept line', () => {
+describe('GM r17: every control names its own kept line', () => {
   const root = join(__dirname, '../src/components');
   const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);

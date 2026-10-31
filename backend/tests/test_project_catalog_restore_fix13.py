@@ -3,11 +3,11 @@
 - Past the limit (an Undo that passed it, then a canvas waiting): the count
   is named. The listing's `deletes` (per canvas and in total) and the agents'
   `note` that MCP (start_here, list_projects) and the CLI (`nebula projects`,
-  `nebula context`) print say, GM r18 (Q4), "The project list has 4
+  `nebula context`) print say, GM r18, "The project list has 4
   projects, over the limit of 3. Move 2 to Recently deleted to make room.";
   at the limit itself
   the line is as before ("Moving a project …").
-- Q4: MCP new_project past the limit carries the limit and its number, as
+- GM r17: MCP new_project past the limit carries the limit and its number, as
   the HTTP body does; the 409 canvas_kept_in_tab detail uses ’.
 """
 from __future__ import annotations

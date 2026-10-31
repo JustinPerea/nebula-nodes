@@ -168,7 +168,7 @@ describe('H1: the handoff names what Nebula may not have', () => {
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     expect(handoffs()).toContain('Typed');
-    expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {} });
+    expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {}, deleted: [] });
   });
 
   it('a rename still on its way: the name', async () => {
@@ -177,7 +177,7 @@ describe('H1: the handoff names what Nebula may not have', () => {
     await flush();
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    expect(pendingOf()).toEqual({ params: {}, labels: { n1: 'Hero shot' } });
+    expect(pendingOf()).toEqual({ params: {}, labels: { n1: 'Hero shot' }, deleted: [] });
   });
 
   it('a rename draft open in the title: saved into the project left, as clicking away would', async () => {
@@ -186,7 +186,7 @@ describe('H1: the handoff names what Nebula may not have', () => {
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     const sent = vi.mocked(projects.saveProject).mock.calls.find(([id]) => id === 'alpha');
     expect((sent?.[1] as { nodes: Array<{ data: { label: string } }> }).nodes[0].data.label).toBe('Draft name');
-    expect(pendingOf()).toEqual({ params: {}, labels: { n1: 'Draft name' } });
+    expect(pendingOf()).toEqual({ params: {}, labels: { n1: 'Draft name' }, deleted: [] });
   });
 });
 
@@ -261,6 +261,6 @@ describe('Round 21 (review 20, M-1): an agent reopens the project the tab shows'
     // Round 22 (review 21, L-c): the labels again. The "leak" was the app's:
     // a rename draft an earlier test folded into its switch stayed in
     // labelsInFlight for good; it goes once handed off now.
-    expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {} });
+    expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {}, deleted: [] });
   });
 });

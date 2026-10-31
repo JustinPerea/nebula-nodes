@@ -13,7 +13,7 @@ export const SAVE_KEPT_OFFLINE = 'You can save it as a project when Nebula recon
 export const DISCARD_KEPT_OFFLINE = 'You can discard the kept edits when Nebula reconnects.';
 
 /**
- * GM r15 on PR #199, Q11 (review 11, HIGH-1): the line a restore (or an
+ * GM r15 on PR #199 (review 11, HIGH-1): the line a restore (or an
  * agent's write that closed the project) leaves where the person is, when
  * the tab's latest edits weren't saved: GM r12, 1's "Nebula restored its
  * project list before your latest edits were saved. They're kept in this

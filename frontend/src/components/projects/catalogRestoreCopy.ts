@@ -29,7 +29,7 @@ const REBUILT = "Nebula’s project list was damaged and there was no good copy,
 const KEPT = 'The damaged file was kept.';
 
 
-/** GM r18 on PR #199, Q5, verbatim: readable records the restore left out
+/** GM r18 on PR #199, verbatim: readable records the restore left out
  * because the list was at its project limit (reconcile adds none past it).
  * Named up to RESTORE_NAMED_MAX (`names`, from namesFor), counted from 4:
  * "“Alpha” and “Beta” weren’t added back because you’ve reached the limit of
@@ -342,7 +342,7 @@ const KEPT_BOTH = 'The damaged files were kept.';
 export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced' | 'changed',
   savedAs?: string | null, copy = false, kept = false): string {
   const who = agent || 'An agent';
-  // GM r15 on PR #199, Q10: the canvas already was a project, so it was
+  // GM r15 on PR #199: the canvas already was a project, so it was
   // kept as it was, not "saved as its own project" (r14's words).
   if (savedAs && kept) {
     return agentClosedLine(agent, copy || action === 'changed' ? 'change' : action === 'cleared' ? 'clear' : 'replace', savedAs);
@@ -607,7 +607,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const failedListed = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
   const failedOut = (restore.notAddedBack ?? []).length - failedListed.length;
   const recordedNotAdded = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
-  // GM r18, Q5: readable records left out because the list was at its
+  // GM r18: readable records left out because the list was at its
   // project limit have their own line; the rest (records Nebula couldn't
   // read or add) keep "couldn’t be added back".
   const isLimit = (row: { reason?: string }) => row.reason === 'limit';
@@ -735,7 +735,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   if (held) outcomes.push(canvasHeldUnreadableLine(held.count, false));
   // Only when the file really is kept AND something may be lost (as the
   // restore found it: it stays when the lines that called for it go). The
-  // left-out line says "which was kept" itself (GM r18, Q5), so not twice.
+  // left-out line says "which was kept" itself (GM r18), so not twice.
   const restoreKept = kept && leftOut === 0 && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
     || Boolean(restore.canvasNotFiled) || filedSince || unreadRecords);
   const closing = held ? (kept ? KEPT_BOTH : KEPT) : restoreKept ? KEPT : null;

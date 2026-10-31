@@ -347,7 +347,7 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, 
             return None
         reply = result(imported, None, new=False)
         reply["savedCanvas"] = {"id": saved.get("id"), "name": saved["name"], **({"kept": True} if saved.get("kept") else {})}
-        # GM r15 (Q10): "kept" when the canvas already was that project.
+        # GM r15: "kept" when the canvas already was that project.
         reply["note"] = (f"Nebula kept “{saved['name']}” as it was and loaded “{name}” into a new canvas."
                          if saved.get("kept") else
                          f"Nebula saved the open canvas as its own project, “{saved['name']}”, "

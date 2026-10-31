@@ -40,7 +40,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
   // own "Deleted the node." (Create Studio's result delete) keeps its Undo.
   const notice = messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry)) ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);
-  // While the canvas is kept in this tab (GM r18 on PR #199, Q3), the button
+  // While the canvas is kept in this tab (GM r18 on PR #199), the button
   // acts on the kept tab's own step only; a notice for a step of the history
   // Nebula saved shows no button then, since a kept tab never steps into it.
   const kept = useKeptCanvas();

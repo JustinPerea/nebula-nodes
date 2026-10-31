@@ -1507,7 +1507,7 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
 @contextlib.contextmanager
 def _limit_said_whole() -> Iterator[None]:
     """A store limit's refusal (413) reaches the agent whole, as HTTP gives
-    it (review 5 of PR #199, L-2; GM r17, Q4: new_project too): the bare
+    it (review 5 of PR #199, L-2; GM r17: new_project too): the bare
     detail left out which limit and how many projects it holds."""
     try:
         yield
@@ -1554,7 +1554,9 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     and offers them a way back. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "Recovered
-    <project left>", then "Recovered <project left> 2" and so on). Refused while a run is going.
+    <project left>", then "Recovered <project left> copy", "copy 2" and so
+    on). Refused while a run is going. Open proposals close (another
+    project's canvas).
     Refused at the project limit with the whole refusal, as HTTP answers it:
     "Project limit reached (413, {"limit": "projects", "projectLimit": N})".
     """
@@ -1567,10 +1569,14 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
 
     The project that was open is saved as it is. The person's canvas follows,
     names you, and offers them a way back. Opening the project that is already
-    open reloads it from what was saved; what they had typed there still lands. Their canvas is read-only until the
+    open reloads it from what was saved; what they had typed there still lands,
+    and open proposals stay open with the same ids (their nodes keep their
+    ids; the edit rule still applies at Accept). Opening another project
+    closes them. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
     that fails, as a new project named after the project left, "Recovered
-    <project left>", then "Recovered <project left> 2" and so on). Refused while a run is going.
+    <project left>", then "Recovered <project left> copy", "copy 2" and so
+    on; a number in the name is never read). Refused while a run is going.
     A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
     is held aside first, whole, and saved as its own project once there is
     room, so opening works then too.

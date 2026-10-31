@@ -1,12 +1,12 @@
 /**
  * The canvas kept in this tab after Nebula restored its project list (or an
  * agent's write closed the project the tab showed) before the tab's latest
- * edits were saved (GM r15 on PR #199, Q11; review 11, HIGH-1). The tab's
+ * edits were saved (GM r15 on PR #199; review 11, HIGH-1). The tab's
  * project and revision are gone from the backend, so every write would be
  * refused and a refused param save was put back: the typing was lost.
  *
  * While kept, nothing is sent and nothing is put back: the person can keep
- * typing (param edits stay on the canvas only) and, GM r18 (Q3), use the tab
+ * typing (param edits stay on the canvas only) and, GM r18, use the tab
  * as a scratch canvas: move, delete, duplicate, Arrange, Clear canvas, and
  * Undo and Redo over those steps only (graphStore's KeptStep); GM r19 and
  * r21 add typing, renames, added nodes and connections (checked here by the
@@ -58,7 +58,7 @@ export function useKeptCanvas(): boolean {
  * kept says unlocks it, one line per control. `other` is only a safety net
  * nobody should see: every control names its own (canvasLock's `act` takes
  * a `kept` for each, and a test walks the sources). */
-// GM r18 (Q3): delete, arrange, clear and undo are the kept tab's own now
+// GM r18: delete, arrange, clear and undo are the kept tab's own now
 // (live, no line), as duplicate and settings became in r17.
 // GM r19 (2): Forget ID has its own verb. GM r20: the routes that replace
 // the canvas (Projects, another project, a new one, Load, Import) name both
@@ -87,7 +87,7 @@ const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   // GM r27 (1), verbatim: a note's Delete.
   'delete-note': 'You can delete the note after you save it as a project.',
   settings: 'You can change settings after you save it as a project.',
-  // The builder's, in GM's form (GM r18, Q1: the pattern stays).
+  // The builder's, in GM's form (GM r18: the pattern stays).
   'add-node': 'You can add nodes after you save it as a project.',
   // GM r22, 4, verbatim: the asset adds (they point at server assets) and
   // the character test panel, each in its own verb.
@@ -104,19 +104,19 @@ const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   open: 'You can open another project after you save it as a project or discard the kept edits.',
   create: 'You can create a project after you save it as a project or discard the kept edits.',
   proposal: 'You can answer proposals after you save it as a project.',
-  // GM r18, Q1, verbatim.
+  // GM r18, verbatim.
   unlock: 'You can unlock nodes after you save it as a project.',
   // GM r19, 2, verbatim: Forget ID's own verb (it writes the node's recovery).
   forget: 'You can forget the ID after you save it as a project.',
   'edit-video': 'You can edit the video after you save it as a project.',
-  // The verb of the buttons it covers ("Generate", "Generate all"): GM r18, Q1.
+  // The verb of the buttons it covers ("Generate", "Generate all"): GM r18.
   generate: 'You can generate after you save it as a project.',
   scene: 'You can change the scene after you save it as a project.',
   other: 'You can do this after you save it as a project.',
 };
 
 /** The agent the chat talks to (ChatPanel's saved choice): Ask's line names
- * it, unquoted (GM r18, Q2: product names). "your agent" when none is
+ * it, unquoted (GM r18: product names). "your agent" when none is
  * picked, or for a personal agent. */
 export function keptAskAgentName(): string {
   try {
@@ -127,7 +127,7 @@ export function keptAskAgentName(): string {
   return 'your agent';
 }
 
-/** A kept control's tooltip (GM r17, Q2). */
+/** A kept control's tooltip (GM r17). */
 export function keptLockTitle(action: KeptAction): string {
   if (action === 'ask') return `You can ask ${keptAskAgentName()} after you save it as a project.`;
   return KEPT_LINES[action];
@@ -141,7 +141,7 @@ export const KEPT_GENERIC_LINE = KEPT_LINES.other;
  * bar's Clear reaches it without importing the store's kept history. */
 let keptClearer: (() => boolean) | null = null;
 export function setKeptCanvasClearer(clear: () => boolean): void { keptClearer = clear; }
-/** Clear canvas while kept (GM r18 on PR #199, Q3): one step on this tab
+/** Clear canvas while kept (GM r18 on PR #199): one step on this tab
  * that Undo brings back; nothing is sent. False when nothing was cleared. */
 export function clearKeptTab(): boolean { return keptClearer ? keptClearer() : false; }
 

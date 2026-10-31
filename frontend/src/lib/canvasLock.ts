@@ -66,7 +66,7 @@ export interface CanvasLock {
   locked: boolean;
   following: FollowingSwitch | null;
   offline: boolean;
-  /** The canvas is kept in this tab after a restore (GM r15, Q11): every
+  /** The canvas is kept in this tab after a restore (GM r15): every
    * control that writes or spends is disabled (`act`), typing isn't. */
   kept: boolean;
   /** The marks a control disabled by the lock carries: the not-allowed
@@ -96,7 +96,7 @@ export interface LockTitleOwn {
 }
 
 /** A control's own state for `act`: `kept` names which of GM's kept lines
- * it shows (PR #199, r16, 4; r17, Q2: every control names its own, so the
+ * it shows (PR #199, r16, 4; r17: every control names its own, so the
  * field is required), or 'live' for a control that only changes this tab's
  * canvas (r17, r18: typing, Duplicate, Delete, Arrange, Undo), which the
  * kept state leaves on. */
@@ -199,7 +199,7 @@ export function refuseCanvasEdit(): boolean {
 }
 
 /**
- * PR #199 (GM r18, Q3): the gate for an edit that only changes this tab's
+ * PR #199 (GM r18): the gate for an edit that only changes this tab's
  * canvas, as typing does (a param written with updateNodeData: an applied
  * rewrite, a mask). Refused while following or offline, as refuseCanvasEdit;
  * while the canvas is kept it goes through (the store's KEPT_TAB_ONLY gate

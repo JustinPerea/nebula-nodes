@@ -65,7 +65,7 @@ export interface CatalogRestore {
   notAddedBack?: { id: string; reason: string; name?: string; trashed?: boolean }[];
   notAddedBackCount: number;
   /** Of those, the readable ones left out because the list was at its
-   * project limit (reason "limit"), and that limit (GM r18 on PR #199, Q5). */
+   * project limit (reason "limit"), and that limit (GM r18 on PR #199). */
   notAddedBackLimitCount?: number;
   projectLimit?: number;
   /** What the copy decided (review 1 of PR #199, M1): (a) back to the copy's
@@ -189,11 +189,13 @@ export const openProject = (id: string, workspaceRevision: string) =>
  * settings and renames Nebula may not have; Nebula merges exactly those onto
  * its copy of the project left (backend `_save_handoff`). */
 export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string,
-  pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string> }) =>
+  pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string>; deleted?: string[] }) =>
   request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', {
     snapshot, workspaceRevision,
     ...(pending && Object.keys(pending.params).length > 0 ? { pendingParams: pending.params } : {}),
     ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
+    // Review 18 MEDIUM-1: the tab-local nodes this tab deleted; nothing else is a delete.
+    ...(pending?.deleted?.length ? { deletedNodeIds: pending.deleted } : {}),
   })).then((result) => result.project);
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
@@ -239,10 +241,14 @@ export interface DroppedWire {
 /** The copy, with what the route changed on the way in (PR #199 round 16):
  * `renumbered` maps each tab-local node id to the backend id the copy gave
  * it, and `droppedWires` the wires its rules refused. */
-export type RecoveredProject = SavedProject & { renumbered?: Record<string, string>; droppedWires?: DroppedWire[] };
+export type RecoveredProject = SavedProject & { renumbered?: Record<string, string>; droppedWires?: DroppedWire[];
+  /** The project the copy was made from, as Nebula stored it with the copy
+   * (GM r29 on PR #199, 2): the reload line names it, never a name read
+   * back out of the copy's own. */
+  sourceName?: string };
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
   sourceName?: string) =>
-  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
+  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown; sourceName?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
     json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}) }))
     .then((result): RecoveredProject => {
       const renumbered = result.renumbered && typeof result.renumbered === 'object' && !Array.isArray(result.renumbered)
@@ -252,5 +258,7 @@ export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapsho
         ? (result.droppedWires as unknown[]).filter((wire): wire is DroppedWire => Boolean(wire) && typeof wire === 'object'
           && ['string', 'object'].includes(typeof (wire as DroppedWire).source)
           && ['string', 'object'].includes(typeof (wire as DroppedWire).target)) : undefined;
-      return { ...result.project, ...(renumbered ? { renumbered } : {}), ...(droppedWires?.length ? { droppedWires } : {}) };
+      const recoveredFrom = typeof result.sourceName === 'string' && result.sourceName ? result.sourceName : undefined;
+      return { ...result.project, ...(renumbered ? { renumbered } : {}), ...(droppedWires?.length ? { droppedWires } : {}),
+        ...(recoveredFrom ? { sourceName: recoveredFrom } : {}) };
     });

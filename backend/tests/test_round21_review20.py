@@ -196,7 +196,8 @@ def test_G5_recovered_copies_are_numbered(api):
         answer = _recover(api, f"{index:032x}")
         assert answer.status_code == 200, answer.text
         names.append(answer.json()["project"]["name"])
-    assert names == ["Recovered Active", "Recovered Active 2", "Recovered Active 3"]
+    # GM r29 of PR #199, 2: " copy", then " copy 2".
+    assert names == ["Recovered Active", "Recovered Active copy", "Recovered Active copy 2"]
 
 
 def test_G5_a_retry_of_the_same_copy_is_the_same_copy(api):

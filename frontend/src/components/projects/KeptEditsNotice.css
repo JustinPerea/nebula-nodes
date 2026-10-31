@@ -1,4 +1,4 @@
-/* The canvas kept in this tab (GM r15 on PR #199, Q11): the line stays
+/* The canvas kept in this tab (GM r15 on PR #199): the line stays
    until [Save as a project] files the edits. A refused edit meanwhile (a
    move, an add, a run) nudges it once, on the repo's k 500 / c 36 spring
    sampled as linear() (the same curve as the opening bar's pulse). */

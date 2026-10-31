@@ -1,6 +1,6 @@
 /**
  * Fix round 11 of PR #199 (review 11; GM r14 and r15).
- * - HIGH-1 and GM r15, Q11: a restore while the person types keeps the
+ * - HIGH-1 and GM r15: a restore while the person types keeps the
  *   canvas where they are, with GM r12, 1's line and [Save as a project] in
  *   the canvas notice region. Nothing typed is reverted or sent; typing goes
  *   on and joins the kept edits; the button files everything typed up to the
@@ -10,7 +10,7 @@
  * - GM r14, 3: an agent's write that closed the project the tab showed: its
  *   line on Projects home, or kept in the tab with the edits not saved.
  * - LOW-2: a restore (or a reconnect) lets the person's next edit say
- *   `personInput` again. GM r15, Q10: the person's log row says "kept".
+ *   `personInput` again. GM r15: the person's log row says "kept".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -155,7 +155,7 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
-describe('review 11, HIGH-1 and GM r15, Q11: a restore while the person types', () => {
+describe('review 11, HIGH-1 and GM r15: a restore while the person types', () => {
   it('keeps the canvas where the person is, with the line, and puts nothing typed back', async () => {
     expect(getProjectContext()?.id).toBe('alpha');
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -388,7 +388,7 @@ describe("review 11, LOW-2: a restore lets the person's next edit say `personInp
   });
 });
 
-describe('GM r15, Q10: the person\'s log row when the canvas already was a project', () => {
+describe('GM r15: the person\'s log row when the canvas already was a project', () => {
   it.each([
     ['changed', true, 'Codex made its changes on a copy of “My film”. “My film” is kept as it was.'],
     ['cleared', false, 'Codex cleared the canvas. “My film” is kept as its own project.'],

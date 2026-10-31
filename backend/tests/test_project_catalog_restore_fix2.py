@@ -626,7 +626,7 @@ def test_naming_the_filed_canvas_takes_its_projects_name_and_numbers_a_second_co
     alpha = _create(client, "Alpha")
     _add_text(client, "a1")
     client.get("/api/projects", headers=PERSON)
-    for expected in ("Recovered Alpha", "Recovered Alpha 2"):
+    for expected in ("Recovered Alpha", "Recovered Alpha copy"):  # GM r29 of PR #199, 2
         with store.transaction() as catalog:
             entry = catalog["projects"].pop(alpha, None) or catalog["trash"][alpha]
             catalog["trash"][alpha] = {**entry, "deletedAt": store_module.now()}

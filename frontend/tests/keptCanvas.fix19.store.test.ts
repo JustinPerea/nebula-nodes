@@ -264,7 +264,7 @@ describe('GM r28, 1: a drop on a handle of the same kind', () => {
 });
 
 describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what to do', () => {
-  it('“Nebula opened “P”, but this window couldn’t follow it. Open it from Projects.”', async () => {
+  it('“Nebula opened “P”, but this tab couldn’t follow it.”', async () => {
     vi.mocked(projects.listProjects).mockRejectedValue(new Error('down'));
     const n1 = useGraphStore.getState().nodes.find((node) => node.id === 'n1')!;
     emit({ type: 'graphSync', workspaceRevision: 'rev-boot', paramsVersion: GRAPH_PARAMS_VERSION, empty: false,
@@ -273,7 +273,8 @@ describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what
         previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'system' }, created: false },
       nodes: [{ ...n1 }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
-    expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this window couldn’t follow it. Open it from Projects.');
+    // GM r29, 1 (round 20): on Projects the line ends at the failure, beside [Open “…”]; the tab says “tab”.
+    expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this tab couldn’t follow it.');
     expect(followingSwitch()).toBeNull();
   });
 
@@ -286,7 +287,7 @@ describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what
         previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'agent', name: 'Codex' }, created: false },
       nodes: [{ ...n1 }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
-    expect(useProjectStore.getState().error).toMatch(/^Codex opened “Glass campaign”, but this window couldn’t follow it\./);
+    expect(useProjectStore.getState().error).toMatch(/^Codex opened “Glass campaign”, but this tab couldn’t follow it\./);
   });
 });
 

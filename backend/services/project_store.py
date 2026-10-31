@@ -370,30 +370,32 @@ def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) 
 
 RECOVERED_CANVAS_NAME = "Recovered canvas"
 
-# Nebula's three name families (GM r14 of PR #199, 4): a canvas filed when
-# which project it was isn't known ("Recovered canvas", "Recovered canvas 2"),
-# a recovered copy ("Recovered Alpha", "Recovered Alpha 2"; GM r23 a on PR
-# #199: person-facing names hold no parentheses, and pair with "Recovered
-# canvas") and a duplicate ("Alpha copy", "Alpha copy 2"). One rule for all
-# three: a name already in the family gets the next free number in it (never
-# "Recovered Recovered canvas" or "Alpha copy copy"), and a number freed is
-# used again. A name made from one in another family names its source, so
-# families sit together: a copy of "Recovered Alpha" is "Recovered Alpha
-# copy", then "Recovered Alpha copy 2" (GM r16 on PR #199, 1).
-_NAME_FAMILIES: dict[str, tuple[re.Pattern[str], Callable[[str, int], str]]] = {
-    "canvas": (re.compile(rf"(?P<stem>{re.escape(RECOVERED_CANVAS_NAME)})(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
-               lambda stem, n: stem if n == 1 else f"{stem} {n}"),
-    "recovered": (re.compile(r"Recovered (?P<stem>.+?)(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
-                  lambda stem, n: f"Recovered {stem}" if n == 1 else f"Recovered {stem} {n}"),
-    "copy": (re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
-             lambda stem, n: f"{stem} copy" if n == 1 else f"{stem} copy {n}"),
-}
-
+# Nebula's copy names (GM r29 of PR #199, 2): Nebula never reads a number in
+# someone else's name. Three kinds of name:
+# - a duplicate: "Alpha copy", then "Alpha copy 2" (the Mac Finder's form);
+# - a recovered copy: "Recovered <name>" when that is free, else that name
+#   plus " copy", then " copy 2", " copy 3" (the lowest free);
+# - a canvas filed when which project it was isn't known: "Recovered canvas",
+#   then "Recovered canvas 2" (GM r5, r10), Nebula's own whole name.
+# The only number Nebula raises in a name is its own "copy N": a name ending
+# in " copy" or " copy N" is a copy Nebula named. Any other number belongs to
+# the name ("Shot 7", "Recovered Shot 7", "Delta 1") and is never read.
+#
+# Matching agrees on every character with the frontend's copy
+# (recoveredNames.ts): DOTALL here, the "s" flag there, so "." takes U+2028,
+# U+2029 and every other character a name can hold (a name holds no
+# character below U+0020); the digits are ASCII [0-9] only, so "Shot ٧" and
+# "Shot ７" are names, not numbers.
+_COPY = re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9][0-9]+))?", re.DOTALL)
 
 # A recovered copy's name before GM r23 a ("Alpha (recovered)", "Alpha
-# (recovered 2)"): still read as that family, so its next copy is "Recovered
-# Alpha", never "Recovered Alpha (recovered)".
-_LEGACY_RECOVERED = re.compile(r"(?P<stem>.+?) \(recovered(?: (?P<n>[2-9]|[1-9][0-9]+))?\)")
+# (recovered 2)"): Nebula's old form of "Recovered Alpha". The whole suffix
+# was Nebula's word; its number is never read, so both give "Recovered Alpha".
+_LEGACY_RECOVERED = re.compile(r"(?P<stem>.+?) \(recovered(?: [0-9]+)?\)", re.DOTALL)
+
+# Nebula's word for a recovered copy: a name that starts with it is already
+# one, and never gets a second "Recovered".
+_RECOVERED_WORD = "Recovered"
 
 
 def _names_in_use(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> set[str]:
@@ -405,134 +407,92 @@ def _names_in_use(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> set[
     return names | {str(name) for name in taken}
 
 
-def _family_stem(name: str, family: str) -> str | None:
-    """``name``'s stem in ``family`` when it is that family's name, else
-    None. "Recovered canvas" is the canvas family's (never a recovered copy
-    of "canvas"); a name can be in two families ("Recovered Alpha copy": a
-    copy of "Recovered Alpha", or a recovered copy of "Alpha copy"), and is
-    numbered in whichever family the new name is made in."""
-    if family == "recovered" and _family_stem(name, "canvas") is not None:
-        return None
-    match = _NAME_FAMILIES[family][0].fullmatch(name)
-    if match is None and family == "recovered":
-        # A name from before GM r23 a ("Alpha (recovered 2)") is the same family's.
-        match = _LEGACY_RECOVERED.fullmatch(name)
-    return match.group("stem") if match else None
+# The longest project name (project_name), counted in code points: Python's
+# len, and Array.from(name).length in the frontend, never UTF-16 units.
+NAME_LIMIT = 120
+
+# The spaces a cut leaves at the end of a shortened stem, which go (_fit):
+# every character project_name's strip() removes that a name can hold (none
+# is below U+0020). Spelled out so the frontend uses exactly this set.
+CUT_SPACES = "\u0020\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
 
 
-def name_family(name: str) -> tuple[str, str] | None:
-    """(family, stem) when ``name`` is already in one of the three families,
-    else None, the canvas family first, then the one its last word makes
-    ("Recovered Alpha copy" is a copy, "Recovered Alpha 3" a recovered
-    copy). "Recovered canvas 2" is the canvas family's, "Recovered Alpha 3"
-    the recovered family's with stem "Alpha", "Alpha copy" the copy's."""
-    for family in ("canvas", "copy", "recovered"):
-        stem = _family_stem(name, family)
-        if stem is not None:
-            return family, stem
-    return None
+def _fit(stem: str, suffix: str = "") -> str:
+    """``stem`` then ``suffix``, the stem cut short so the whole name fits
+    NAME_LIMIT code points; the spaces the cut leaves at the end of the stem
+    (CUT_SPACES) go, so a cut never gives "Alpha  copy" or a name that ends
+    in a space. The suffix is never cut. A cut can split a character drawn
+    from several code points (an emoji sequence, a letter and its accent):
+    the name stays valid."""
+    if len(stem) + len(suffix) <= NAME_LIMIT:
+        return stem + suffix
+    return stem[:NAME_LIMIT - len(suffix)].rstrip(CUT_SPACES) + suffix
 
 
-def _family_number(name: str, family: str) -> tuple[str, int] | None:
-    """(stem, number) when ``name`` is in ``family``: the number its last
-    word gives (1 when there is none: "Alpha copy", "Recovered Alpha")."""
-    stem = _family_stem(name, family)
-    if stem is None:
-        return None
-    match = _NAME_FAMILIES[family][0].fullmatch(name) or (
-        _LEGACY_RECOVERED.fullmatch(name) if family == "recovered" else None)
-    number = match.group("n") if match else None
-    return stem, int(number) if number else 1
+def _copy_form(stem: str, number: int) -> str:
+    """The copy name numbered ``number`` of ``stem``, fitted (_fit): with a
+    long stem, "copy 10" may stand on a shorter cut than "copy"."""
+    return _fit(stem, " copy" if number == 1 else f" copy {number}")
 
 
-def _next_free(family: str, stem: str, names: set[str], above: int = 0) -> str:
-    """The family's name for ``stem`` with the lowest free number above ``above``."""
-    form = _NAME_FAMILIES[family][1]
-    number = above + 1
-    while form(stem, number) in names:
+def _copy_of(name: str, names: set[str]) -> str:
+    """The lowest free copy name of ``name``. A name that is already a copy
+    Nebula named ("X copy", "X copy 2") goes on above its own copy number,
+    never "copy copy": "X copy 2" gives "X copy 3". Any other gives "X copy",
+    then "X copy 2"."""
+    match = _COPY.fullmatch(name)
+    stem, number = (match.group("stem"), int(match.group("n") or 1)) if match else (name, 0)
+    number += 1
+    while _copy_form(stem, number) in names:
         number += 1
-    return form(stem, number)
+    return _copy_form(stem, number)
 
 
-def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
-    """The next free name in ``family`` for something made from
-    ``source_name`` (GM r14, 4; GM r25, 5 of PR #199). One rule:
+def _first_free(first: str, names: set[str]) -> str:
+    """``first`` when it is free, else its lowest free copy name."""
+    return first if first not in names else _copy_of(first, names)
 
-    - A source already in the family takes the family's next free number
-      above its own: "Alpha copy" gives "Alpha copy 2", "Recovered Alpha
-      copy 2" gives "Recovered Alpha copy 3", "Recovered Delta" gives
-      "Recovered Delta 2". Never the family's word twice, never a second
-      number.
-    - Any other source takes the family's first name when it is free
-      ("Alpha copy", "Recovered Alpha"; a number in the source is part of
-      its name: "Shot 7 copy"; recovered_name gives "Recovered Shot 7
-      copy", GM r27 2). When that is taken, the
-      first name is the source in the family, and the rule above applies
-      to it: "Alpha copy 2", "Recovered Alpha copy 3" for "Alpha copy 2"
-      with "Recovered Alpha copy 2" taken (never "copy 2 2").
 
-    Free: no project in the list or Recently deleted and nothing in
-    ``taken`` has it, so a number freed is used again."""
+def recovered_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
+    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM r29
+    2 of PR #199): "Recovered <name>" when that is free, else that name plus
+    " copy", then " copy 2", " copy 3", the lowest free. Nebula never reads a
+    number in the name: the next recovery of "Shot" is "Recovered Shot" even
+    with "Recovered Shot 7" in the list (a different name); "Shot 7" with
+    "Recovered Shot 7" taken gives "Recovered Shot 7 copy".
+
+    - A name that starts with "Recovered" (Nebula's word) is never given a
+      second one: it starts from its own name, taken as it is the source, so
+      "Recovered Alpha" gives "Recovered Alpha copy" and "Recovered X 2" gives
+      "Recovered X 2 copy". "Recovered canvas" is no different.
+    - A copy Nebula named ("Shot 7 copy", "Recovered Alpha copy 2") raises
+      only its own copy number: "Recovered Shot 7 copy", then "Recovered Shot
+      7 copy 2"; "Recovered Alpha copy 2" gives "Recovered Alpha copy 3".
+    - An old "X (recovered)" or "X (recovered 2)" is Nebula's old form of
+      "Recovered X": it starts from "Recovered X", its number never read.
+
+    Free: no project in the list or Recently deleted and nothing in ``taken``
+    has it. Every name fits NAME_LIMIT code points (_fit): a long name is
+    cut at its end, so "Recovered " in front and " copy N" behind are whole."""
     names = _names_in_use(catalog, taken)
-    found = _family_number(source_name, family)
-    if found is None:
-        first = _NAME_FAMILIES[family][1](source_name[:100], 1)
-        if first not in names:
-            return first
-        found = _family_number(first, family)
-        if found is None:  # the family's form always reads back; a guard
-            return _next_free(family, source_name[:100], names, 1)
-    stem, number = found
-    return _next_free(family, stem, names, number)
-
-
-# A name ending in a number of its own ("Shot 7", "Take2"): one whose last
-# number Nebula didn't add after "copy" ("Alpha copy 2").
-_ENDS_IN_A_NUMBER = re.compile(r".*[0-9]")
-
-
-def _ends_in_its_own_number(name: str) -> bool:
-    return bool(_ENDS_IN_A_NUMBER.fullmatch(name)) and _family_number(name, "copy") is None
-
-
-def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
-    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r14, r23 a, r25 5 and r27 2 of PR #199): "Recovered <project>", then the
-    next free number (family_name's rule). A name already in a recovery
-    family gets the next free number above its own in that family:
-    "Recovered Alpha" gives "Recovered Alpha 2", "Recovered canvas 2" gives
-    "Recovered canvas 3", and an old "Alpha (recovered)" (the family's
-    first) gives "Recovered Alpha 2".
-
-    A name's own number is part of its name, and Nebula numbers only after
-    "copy" there (GM r27, 2): a project whose name ends in a number of its
-    own ("Shot 7") is recovered as "Recovered Shot 7 copy", then "Recovered
-    Shot 7 copy 2" (the copy family of "Recovered Shot 7"), never
-    "Recovered Shot 7" (read as the 7th "Recovered Shot") or "Recovered Shot
-    7 2". A number after "copy" is Nebula's and is raised: "Recovered Alpha
-    copy 2" gives "Recovered Alpha copy 3"."""
-    if _family_stem(source_name, "canvas") is not None:
-        return family_name(source_name, "canvas", catalog)
-    legacy = _LEGACY_RECOVERED.fullmatch(source_name)
-    stem = legacy.group("stem") if legacy else _family_stem(source_name, "recovered")
-    if stem is None and _ends_in_its_own_number(source_name):
-        return family_name(f"Recovered {source_name[:100]}", "copy", catalog)
-    if stem is not None and _ends_in_its_own_number(stem):
-        # "Recovered Take2", or an old "Shot 7 (recovered)": the family's
-        # number would follow the name's own.
-        return family_name(source_name if not legacy else f"Recovered {stem}", "copy", catalog)
-    return family_name(source_name, "recovered", catalog)
+    name = source_name
+    legacy = _LEGACY_RECOVERED.fullmatch(name)
+    if legacy:
+        # Its stem can end in spaces ("Alpha  (recovered)"): they go, as at a
+        # cut (CUT_SPACES), so the name never ends in one.
+        name = legacy.group("stem").rstrip(CUT_SPACES)
+    if name != _RECOVERED_WORD and not name.startswith(f"{_RECOVERED_WORD} "):
+        name = _fit(f"{_RECOVERED_WORD} {name}")
+    return _first_free(name, names)
 
 
 def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
     """The name a canvas whose project row is gone is filed under (GM r14,
     4; GM r16, 3): that row's own name when it is free, and free means no
     project in the list or in Recently deleted has it ("Beta" still in
-    Recently deleted gives "Recovered Beta"). Else it is a recovered copy
-    of that name (recovered_name): "Recovered canvas" gives "Recovered
-    canvas 2", "Recovered Alpha" gives "Recovered Alpha 2", and a name in
-    another family keeps it and names its source ("Alpha copy" gives
-    "Recovered Alpha copy", GM r16, 1)."""
+    Recently deleted gives "Recovered Beta"). Else it is a recovered copy of
+    that name (recovered_name): "Alpha copy" gives "Recovered Alpha copy",
+    "Recovered Alpha" gives "Recovered Alpha copy"."""
     if name not in _names_in_use(catalog):
         return name
     return recovered_name(name, catalog)
@@ -540,21 +500,28 @@ def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
 
 def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
     """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention; GM
-    r14, 4; GM r25, 5): "<name> copy", then "<name> copy 2" and on, the next
-    free number in the list, Recently deleted and ``taken`` (names already
-    promised to copies not yet filed); a copy's copy raises its number:
-    "Alpha copy" gives "Alpha copy 2", "Recovered Alpha copy 2" gives
-    "Recovered Alpha copy 3" (family_name). The one helper for every
-    duplicate: an agent's copy of the person's canvas (PR #199) and a future
-    Duplicate project."""
-    return family_name(source_name, "copy", catalog, taken)
+    r14, 4; GM r25, 5; GM r29, 2): "<name> copy", then "<name> copy 2" and
+    on, the lowest free in the list, Recently deleted and ``taken`` (names
+    already promised to copies not yet filed); a copy's copy raises its own
+    copy number: "Alpha copy" gives "Alpha copy 2", "Recovered Alpha copy 2"
+    gives "Recovered Alpha copy 3". Any other number is the name's own:
+    "Shot 7" gives "Shot 7 copy". The one helper for every duplicate: an
+    agent's copy of the person's canvas (PR #199) and a future Duplicate
+    project. A long name is cut short so the whole copy name, " copy N"
+    included, fits NAME_LIMIT code points (_fit)."""
+    return _copy_of(source_name, _names_in_use(catalog, taken))
 
 
-def recovered_canvas_name(catalog: Mapping[str, Any]) -> str:
+def recovered_canvas_name(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
     """The name of a live canvas filed when which project it was isn't
     known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2"
-    and on, the next free number (GM r14, 4)."""
-    return _next_free("canvas", RECOVERED_CANVAS_NAME, _names_in_use(catalog))  # the lowest free
+    and on, the lowest free (GM r14, 4). Nebula's own whole name and its own
+    count: no name is read for it."""
+    names = _names_in_use(catalog, taken)
+    number = 1
+    while (name := RECOVERED_CANVAS_NAME if number == 1 else f"{RECOVERED_CANVAS_NAME} {number}") in names:
+        number += 1
+    return name
 
 
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -672,7 +639,7 @@ def canvas_pending_of(catalog: Mapping[str, Any]) -> dict[str, Any]:
     # ``filed``: the project was made from the person's waiting canvas (a
     # listing's filing, or the agent's write filing it first); absent for a
     # project protected again after a restore, which already was a project
-    # (GM r15 on PR #199, Q10: its replies say "kept", not "saved").
+    # (GM r15 on PR #199: its replies say "kept", not "saved").
     return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"],
                                                  **({"filed": True} if fresh.get("filed") is True else {})},
             "copies": kept}
@@ -1549,7 +1516,7 @@ class ProjectStore:
             "notAddedBack": rows(merged.not_added), "notAddedBackCount": len(merged.not_added),
             # Readable records left out because the list was at its project
             # limit (reconcile adds none past it), and that limit: GM r18 on
-            # PR #199, Q5 (their own line, never "may be missing").
+            # PR #199 (their own line, never "may be missing").
             "notAddedBackLimitCount": sum(1 for row in merged.not_added if row.get("reason") == "limit"),
             "projectLimit": MAX_PROJECTS,
             "reverted": rows(merged.reverted), "revertedCount": len(merged.reverted),

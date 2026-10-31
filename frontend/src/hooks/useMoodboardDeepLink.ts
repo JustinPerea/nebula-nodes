@@ -34,7 +34,7 @@ function replaceHash(hash: string): void {
  * past the Projects screen into it; with no open project it waits for the
  * person to open one.
  *
- * Review 11 of PR #199, Q9: going past Projects counts as the person's own
+ * Review 11 of PR #199: going past Projects counts as the person's own
  * open of the project only when their navigation (loading the page with the
  * link, or changing the hash) is what opens it. Nothing an agent does sets
  * the hash with a hashchange (the Studio follows a board with replaceState,
@@ -45,7 +45,7 @@ function replaceHash(hash: string): void {
 export function useMoodboardDeepLink(): void {
   useEffect(() => {
     let pending = moodboardIdFromHash(window.location.hash);
-    // Whether the person's navigation still opens the project (Q9).
+    // Whether the person's navigation still opens the project.
     let persons = true;
 
     const openPending = () => {

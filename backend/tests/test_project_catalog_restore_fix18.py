@@ -500,19 +500,19 @@ def test_gm_r25_5_copy_names(source, taken, want):
 
 @pytest.mark.parametrize(("source", "taken", "want"), [
     ("X", (), "Recovered X"),
-    ("X", ("Recovered X",), "Recovered X 2"),
+    ("X", ("Recovered X",), "Recovered X copy"),  # GM r29, 2
     ("X copy", (), "Recovered X copy"),
     ("X copy 2", (), "Recovered X copy 2"),
     ("X copy 2", ("Recovered X copy 2",), "Recovered X copy 3"),
-    ("Recovered X", ("Recovered X",), "Recovered X 2"),
-    ("Recovered X 2", ("Recovered X 2",), "Recovered X 3"),
-    ("Recovered Delta", ("Recovered Delta", "Recovered Delta 2"), "Recovered Delta 3"),
+    ("Recovered X", ("Recovered X",), "Recovered X copy"),
+    ("Recovered X 2", ("Recovered X 2",), "Recovered X 2 copy"),
+    ("Recovered Delta", ("Recovered Delta", "Recovered Delta copy"), "Recovered Delta copy 2"),
     ("Recovered Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
-    ("Shot 7", (), "Recovered Shot 7 copy"),  # GM r27 2: Nebula numbers only after "copy"
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
-    ("Recovered canvas 2", ("Recovered canvas 2",), "Recovered canvas 3"),
-    ("X (recovered)", (), "Recovered X 2"),
-    ("X (recovered 2)", (), "Recovered X 3"),
+    ("Shot 7", (), "Recovered Shot 7"),  # GM r29 2: no number in a name is read
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
+    ("Recovered canvas 2", ("Recovered canvas 2",), "Recovered canvas 2 copy"),
+    ("X (recovered)", (), "Recovered X"),
+    ("X (recovered 2)", (), "Recovered X"),
 ])
 def test_gm_r25_5_recovered_names(source, taken, want):
     got = store_module.recovered_name(source, _named(source, *taken))
@@ -526,7 +526,7 @@ def test_gm_r25_5_every_backend_copy_follows_the_rule(app):
     assert main_module._canvas_copy_name("Recovered Alpha copy 2", catalog) == "Recovered Alpha copy 3"
     assert main_module._recovered_copy_name("Alpha copy 2", _named("Recovered Alpha copy 2")) == \
         "Recovered Alpha copy 3"
-    assert store_module.lost_row_name("Recovered Delta", _named("Recovered Delta")) == "Recovered Delta 2"
+    assert store_module.lost_row_name("Recovered Delta", _named("Recovered Delta")) == "Recovered Delta copy"
 
 
 # -- GM r26: no tab-local id offered to agents in the selection -------------------------------

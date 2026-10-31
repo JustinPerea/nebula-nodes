@@ -62,7 +62,7 @@ was at its project limit (still in the damaged file), which went back to the
 copy's version, came back after a delete, or are in Recently deleted again, whether
 the live canvas was saved as its own project ("Recovered <project>", or
 "Recovered canvas", "Recovered canvas 2" and on when which project it was is
-unknown), whether the
+unknown; never a number read from a name), whether the
 damaged file was read whole (if not, newer changes may be missing unlisted),
 and where the damaged file is kept (MCP: `catalogRestore` in `start_here` and
 `list_projects`; `project.catalogRestored` and `project.canvasFiled` events).
@@ -121,7 +121,7 @@ as with the dev launcher, carries it on; after a plain backend launch your
 changes go through once the 15 seconds run out). While it holds,
 `nebula selection` and `nebula look` show no selection and no view. Nodes
 they added while kept get Nebula's ids (`nN`) when they save, and the copy is
-named "Recovered <project>": after the copy opens, read the canvas again and
+named "Recovered <project>" (then "Recovered <project> copy", "copy 2"): after the copy opens, read the canvas again and
 use the ids you see. Connections Nebula's rules refuse are left out of the copy
 and listed in the `project.created` event (`droppedWires`): each entry has
 the ends by the copy's ids (an end not in the copy is null, its tab id in
@@ -137,7 +137,15 @@ the project they have open, the node is never doubled and what their tab
 hadn't saved arrives on the new id. Of a renumbered node, their tab's
 handoff takes only what differs from the node as the open loaded it, so
 your later edit to another setting, its name or its place stands; if they
-changed the same setting, theirs wins. Until that open, `nebula selection`,
+changed the same setting, theirs wins. A node's run result (its output,
+failure, notes) is the product of a run, not a setting: of the result on
+their tab and the one on Nebula's node, the newer run's stands, so your
+later run of the node keeps its result. A node one of their windows made
+is deleted only when that window says so; another window that never had
+it, or a save that leaves it out, keeps it and your edits. When the person
+reopens the project they show from Projects, their other windows on it
+follow quietly and hand off what they hadn't saved, as after your reopen.
+Until that open, `nebula selection`,
 `nebula look` and `nebula context` never list such a node, not even as
 stale: they say how many there are (`tabOnlyCount`, "The person selected 1
 node only their tab has …", "also" when other nodes are selected too), and
@@ -164,12 +172,22 @@ their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
 What they had typed is saved into the project left (also when you reopen the
 project already open); if that fails it is kept as a new project, "Recovered
-<project left>", then "Recovered <project left> 2" and so on. A name never
-gets a second number or a second "Recovered": a copy of "Recovered Alpha copy
-2" is "Recovered Alpha copy 3", and a recovered "Recovered Delta" is
-"Recovered Delta 2". A name's own number is part of it, and Nebula numbers
-only after "copy" then: "Shot 7" is recovered as "Recovered Shot 7 copy",
-then "Recovered Shot 7 copy 2".
+<project left>", then "Recovered <project left> copy", "copy 2" and so on.
+Nebula never reads a number in a name: the next recovery of "Shot" is
+"Recovered Shot" even beside a "Recovered Shot 7", and "Shot 7" with
+"Recovered Shot 7" taken gives "Recovered Shot 7 copy". The only number it
+raises is its own "copy N": "X copy 2" gives "X copy 3", a recovered "Shot 7
+copy" is "Recovered Shot 7 copy", then "Recovered Shot 7 copy 2". A name that
+starts with "Recovered" never gets a second one: "Recovered Alpha" gives
+"Recovered Alpha copy", and "Recovered Alpha copy 2" gives
+"Recovered Alpha copy 3". Names in Recently deleted count as taken. A long
+name is cut short so the whole name, "Recovered " or " copy N" included,
+fits a project name's 120 characters.
+Reopening the project already open (yours, the person's, or Nebula's own at
+boot) keeps the open proposals: they stay open with the same ids in `nebula
+proposals` and `nebula context`, since their nodes keep their ids. An edit
+the person's save or tab made meanwhile is checked at Accept, as any edit is.
+Opening or making another project closes them.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none
@@ -485,7 +503,8 @@ back. A proposal invalidated because a node it needs was deleted opens again,
 with the same id and expiry, if the delete is undone and it still fits
 (`nebula watch` prints `proposal.reopened`; `pin.reattached` when a pin goes
 back on its node). That holds only for the very node that was deleted: after
-a clear, an import or a project switch, undoing an earlier delete prints
+a clear, an import or a switch to another project (a reopen of the open one
+keeps its ids, and its proposals), undoing an earlier delete prints
 "Couldn't reopen …" (the canvas was cleared or replaced since), and a pin goes
 back only onto the model it was on.
 

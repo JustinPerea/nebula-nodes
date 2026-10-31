@@ -106,7 +106,7 @@ describe('the Projects lines that gave a reason in parentheses', () => {
       projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'alpha',
         previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      "Claude opened “beta”, but this window couldn’t follow it. Nebula didn't respond."));
+      "Claude opened “beta”, but this tab couldn’t follow it. Nebula didn't respond."));
     expect(useProjectStore.getState().error).not.toMatch(/[()]/);
   });
 });

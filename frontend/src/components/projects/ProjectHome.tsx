@@ -64,8 +64,15 @@ export interface ProjectHomeProps {
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'save' is [Save as a project] (GM r12 on PR #199, 1: the edits a
    * restore stopped, kept in this tab; the whole line), and
-   * 'none' hides Try again (the whole line). */
-  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula';
+   * 'none' hides Try again (the whole line). 'openFollowed' (GM r29 on
+   * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
+   * neutral box (nothing was lost) with [Open “<openFollowedName>”]. */
+  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed';
+  /** The project [Open “…”] opens, with retry 'openFollowed'. */
+  openFollowedName?: string | null;
+  /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
+   * item 2): its card says when it can (store/projectStore reopenHoldLine). */
+  reopenHold?: { id: string; line: string } | null;
   /** GM r12 item 5: where an update's recovered copy went, when the reload
    * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
    * [Restore] while it is in Recently deleted. */
@@ -104,7 +111,7 @@ export interface ProjectHomeProps {
    * shown until the person closes it with ×. */
   catalogRestore?: CatalogRestore | null;
   /** How many projects the list may hold (the listing's `projectLimit`): the
-   * restore notice's left-out line names it (GM r18 on PR #199, Q5). */
+   * restore notice's left-out line names it (GM r18 on PR #199). */
   projectLimit?: number;
   onDismissCatalogRestore?: () => void;
   /** The live canvas isn't a project and the list had no room to save it
@@ -233,7 +240,7 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean }) {
+function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover, lockLine = null }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; lockLine?: string | null }) {
   // GM r18: the icons disabled offline carry the offline mark (the
   // not-allowed cursor, and a press pulses the banner).
   const off = offlineMark(offline);
@@ -251,7 +258,8 @@ function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelet
 
   return (
     <article className="project-home__card" aria-label={project.name}>
-      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
+      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}
+        aria-describedby={lockLine ? `project-lock-${project.id}` : undefined}>
         <ProjectPreview key={coverImages(project).images.join('|') || 'placeholder'} project={project} />
         <span className="project-home__card-name">{project.name}</span>
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
@@ -274,6 +282,9 @@ function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelet
       </div>
       {/* An agent asking to change the cover the person pinned (Q60 a). */}
       <ProposalsFor kind="project" targetId={project.id} />
+      {/* Review 18 MEDIUM-2, GM r30 item 2: the open project's reopen can't go
+          yet; Open still goes back to the canvas, and this says when it can. */}
+      {lockLine && <p id={`project-lock-${project.id}`} className="project-home__card-lock" data-reopen-hold="">{lockLine}</p>}
       {choosingCover && loadCoverChoices && onPinCover && (
         <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
           onClose={() => { setChoosingCover(false); requestAnimationFrame(() => coverButton.current?.focus()); }} />
@@ -633,7 +644,7 @@ function useNoticeStackFocus(keys: NoticeKey[], stack: RefObject<HTMLElement | n
   };
 }
 
-export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo',
+export function ProjectHome({ projects, loading, busy, error, errorDetails = null, onCreate, onOpen, onRename, onDelete, onRetry, retry = 'redo', openFollowedName = null, reopenHold = null,
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   catalogRestore = null, onDismissCatalogRestore = noop, projectLimit,
@@ -736,7 +747,15 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
+          {showError && retry === 'openFollowed' ? <div {...track('error')}>
+            <div className="project-home__notice project-home__notice--copy" role="alert" tabIndex={-1} data-followed-notice="">
+              {errorDetails ? <div className="project-home__notice-text project-home__error-text"><span>{error}</span>
+                <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
+                : <span className="project-home__notice-text">{error}</span>}
+              <span className="project-home__notice-actions">
+                <button type="button" className="project-home__notice-restore" disabled={loading || busy} onClick={onRetry}>
+                  Open “{openFollowedName}”</button></span></div></div>
+          : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error!) : error}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? shortLine(error!) : error}</span>}
@@ -752,7 +771,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover}
+              lockLine={reopenHold?.id === project.id ? reopenHold.line : null} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

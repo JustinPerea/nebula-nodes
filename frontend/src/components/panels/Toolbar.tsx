@@ -179,7 +179,7 @@ export function Toolbar() {
   const handleClear = useCallback(async () => {
     // Offline is read-only (GM, round 14 of PR #114): no confirm, no request.
     if (refuseEditWhileOffline()) return;
-    // Kept in this tab (GM r18 on PR #199, Q3): the clear is this tab's own,
+    // Kept in this tab (GM r18 on PR #199): the clear is this tab's own,
     // one step that Undo brings back; nothing is sent.
     if (isCanvasKept()) {
       const count = useGraphStore.getState().nodes.length;

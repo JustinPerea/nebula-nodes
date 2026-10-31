@@ -1,11 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, type RefObject } from 'react';
 import { ModalPortal } from '../ModalPortal';
 import { sitsBehind } from '../../lib/modalFocus';
+import { tabWord } from '../../lib/tabWord';
 import '../../styles/prompt-dialog.css';
 
 /** GM r20 on PR #199, verbatim: [Discard edits]'s confirm. */
 export const DISCARD_KEPT_TITLE = 'Discard the kept edits?';
-export const DISCARD_KEPT_BODY = 'They’re only in this tab, so they can’t be brought back.';
+export const DISCARD_KEPT_BODY = `They’re only in this ${tabWord()}, so they can’t be brought back.`;
 export const DISCARD_EDITS = 'Discard edits';
 export const KEEP_THEM = 'Keep them';
 

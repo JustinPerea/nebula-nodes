@@ -188,6 +188,8 @@ body.app-slava-restraint .project-home__notices .project-home__notice,
 body.app-slava-restraint .project-home__notices .project-home__error { margin-bottom: 0; }
 body.app-slava-restraint .project-home__notice--copy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; }
 body.app-slava-restraint .project-home__notice-text { min-width: 0; overflow-wrap: anywhere; }
+/* Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen that can't go yet, under its card. */
+body.app-slava-restraint .project-home__card-lock { margin: 0; padding: 0 16px 12px; color: var(--sr-ink-meta); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__notice-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
 body.app-slava-restraint .project-home__notice-restore { min-height: 34px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
 body.app-slava-restraint .project-home__notice-restore:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); }

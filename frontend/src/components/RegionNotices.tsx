@@ -25,7 +25,7 @@ import '../styles/canvasProposals.css';
  * the scenes' stop lines, a state that stays until the stop ends (GM r28,
  * SceneStopLines).
  * The canvas kept in this tab after a restore, with [Save as a project]
- * (GM r15 on PR #199, Q11). A project over the save limit (Q118): its one
+ * (GM r15 on PR #199). A project over the save limit: its one
  * notice, and the "what's large" panel it and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {

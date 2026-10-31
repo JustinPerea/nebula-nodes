@@ -36,7 +36,7 @@ import { useProjectStore, resetProjectStoreForTests, subscribeProjectAutosave } 
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
-import { recoveredCopyFallbackName, recoveredSourceName } from '../src/lib/recoveredNames';
+import { recoveredCopyFallbackName } from '../src/lib/recoveredNames';
 import { setProjectContext } from '../src/lib/projectContext';
 import * as projects from '../src/lib/projects';
 import * as execution from '../src/lib/api';
@@ -92,19 +92,13 @@ afterEach(async () => {
 
 
 describe('lib/recoveredNames', () => {
-  it('reads the project a recovered copy was made from', () => {
-    expect(recoveredSourceName('Recovered Delta')).toBe('Delta');
-    expect(recoveredSourceName('Recovered Delta 2')).toBe('Delta');
-    expect(recoveredSourceName('Delta (recovered)')).toBe('Delta');
-    expect(recoveredSourceName('Recovered canvas')).toBeNull();
-    expect(recoveredSourceName('Recovered canvas 2')).toBeNull();
-    expect(recoveredSourceName('Delta')).toBeNull();
-  });
-
-  it('never a second “Recovered”: a recovered copy’s copy takes the next number', () => {
+  it('never a second “Recovered”: a recovered copy’s copy adds Nebula’s “copy”', () => {
     expect(recoveredCopyFallbackName('Delta')).toBe('Recovered Delta');
-    expect(recoveredCopyFallbackName('Recovered Delta')).toBe('Recovered Delta 2');
-    expect(recoveredCopyFallbackName('Recovered Delta 2')).toBe('Recovered Delta 3');
+    // GM r29, 2 (round 20): no number read in the name; Nebula's own " copy" next.
+    expect(recoveredCopyFallbackName('Recovered Delta', ['Recovered Delta'])).toBe('Recovered Delta copy');
+    expect(recoveredCopyFallbackName('Recovered Delta 2', ['Recovered Delta 2'])).toBe('Recovered Delta 2 copy');
+    // A source the list no longer has (a kept canvas after a restore) is free, as in Nebula's rule.
+    expect(recoveredCopyFallbackName('Recovered Alpha copy 2', ['Alpha', 'Beta'])).toBe('Recovered Alpha copy 2');
   });
 });
 
@@ -127,13 +121,13 @@ describe('review 16 kept-ui LOW-3: the reload line names the source project', ()
       'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
   });
 
-  it('a source no longer listed: read from the copy’s name by the shared helper', async () => {
+  it('a source no longer listed and not in the answer: the line names the copy, never a source read from its name (GM r29, 2)', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Recovered alpha' });
     editCanvas();
     useProjectStore.setState({ activeProject: null, projects: [] });
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
+      'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in “Recovered alpha”.'));
   });
 });
 

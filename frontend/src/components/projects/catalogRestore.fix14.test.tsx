@@ -1,5 +1,5 @@
 /**
- * Fix round 14 of PR #199 (GM r18, Q5): a restore adds no record back past
+ * Fix round 14 of PR #199 (GM r18): a restore adds no record back past
  * the project limit. Records Nebula could read but left out because of the
  * limit get their own line, which replaces "couldn’t be added back" for them:
  * named up to three (the shared name list), counted from four. "Changes made
@@ -27,7 +27,7 @@ function restore(leftOut: number, extra: Partial<CatalogRestore> = {}): CatalogR
   } as CatalogRestore;
 }
 
-describe('GM r18, Q5: records left out at the limit say so', () => {
+describe('GM r18: records left out at the limit say so', () => {
   it('two names, verbatim; no "may be missing", and "which was kept" is said once', () => {
     const notice = catalogRestoreNotice(restore(2));
     expect(notice.lines).toEqual([OPENING,

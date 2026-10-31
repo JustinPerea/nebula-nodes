@@ -7,7 +7,7 @@
   the restore notice's id (and `projectsChanged{catalogRestored}`).
 - LOW-1 and nit 4: a restore during the import (the boot read) is journaled
   at startup, and the protection it sets carries the canvas's real digest.
-- GM r15, Q10: a project protected again after a restore already was a
+- GM r15: a project protected again after a restore already was a
   project, so the agent's replies and the person's log row say "kept".
 - GM r14, 4: one naming rule for the three families ("Recovered canvas N",
   "Recovered X N", "X copy N"): never stacked, the next free number, a
@@ -257,7 +257,7 @@ def test_low1_a_restore_at_boot_is_journaled_at_startup_with_a_real_digest(tmp_p
     assert "filed" not in booted["fresh"]
 
 
-# -- GM r15, Q10: "kept" for a project that already was one --------------------------------
+# -- GM r15: "kept" for a project that already was one --------------------------------
 
 def _graph_file(tmp_path) -> Path:
     path = tmp_path / "file.json"
@@ -338,7 +338,7 @@ def test_q10_an_existing_project_protected_again_is_said_as_kept(app, monkeypatc
 
 
 def test_q10_the_persons_waiting_canvas_filed_by_a_listing_is_still_said_as_saved(app, monkeypatch):
-    """The other side of Q10: a canvas that wasn't a project before this
+    """The other side of "kept": a canvas that wasn't a project before this
     protection (filed from the person's waiting canvas) says "saved"."""
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
@@ -360,15 +360,16 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
+    # GM r29, 2: "Recovered <name>", then " copy", " copy 2"; no number read.
     ("Alpha", (), "Recovered Alpha"),
-    ("Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
-    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
-    ("Recovered Alpha 2", ("Recovered Alpha", "Recovered Alpha 2"), "Recovered Alpha 3"),
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
-    ("Recovered canvas 2", ("Recovered canvas", "Recovered canvas 2"), "Recovered canvas 3"),
-    # The next free number: a freed one is used again.
+    ("Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
+    ("Recovered Alpha 2", ("Recovered Alpha", "Recovered Alpha 2"), "Recovered Alpha 2 copy"),
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
+    ("Recovered canvas 2", ("Recovered canvas", "Recovered canvas 2"), "Recovered canvas 2 copy"),
+    # The lowest free: a freed one is used again.
     ("Alpha", ("Recovered Alpha 2",), "Recovered Alpha"),
-    ("Alpha", ("Recovered Alpha", "Recovered Alpha 3"), "Recovered Alpha 2"),
+    ("Alpha", ("Recovered Alpha", "Recovered Alpha copy 2"), "Recovered Alpha copy"),
 ])
 def test_r14_4_recovered_names_never_stack(source, names, want):
     assert store_module.recovered_name(source, _named(*names)) == want
@@ -395,10 +396,10 @@ def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash(
 @pytest.mark.parametrize(("lost", "names", "want"), [
     # Review 11, nit 2: no "Recovered Recovered canvas".
     ("Recovered canvas", (), "Recovered canvas"),
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),  # GM r29, 2
     ("Alpha", (), "Alpha"),
     ("Alpha", ("Alpha",), "Recovered Alpha"),
-    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
     # GM r16, 1: a recovered copy of a copy names its source.
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
@@ -421,7 +422,7 @@ def test_r14_4_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_n
     again = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "d" * 32,
         "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
-    assert again.json()["project"]["name"] == "Recovered Delta 2"
+    assert again.json()["project"]["name"] == "Recovered Delta copy"  # GM r29, 2
     nameless = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "c" * 32,
         "paramsVersion": main_module.PARAMS_VERSION})

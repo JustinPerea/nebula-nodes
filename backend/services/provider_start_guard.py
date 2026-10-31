@@ -9,7 +9,7 @@ import hashlib
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 from uuid import uuid4
 
 from services.provider_operation_policy import is_paid_start_guard_kind
@@ -576,6 +576,37 @@ class ProviderStartGuard:
                     return removed
             finally:
                 self._release_lifecycle(acknowledgement_run)
+
+    def renumber_nodes(self, mapping: Mapping[str, str]) -> int:
+        """Move each ambiguity hold whose node got a new id ({old: new}; a
+        renumber of tab-local ids, PR #199 review 18 handoff-reopen LOW-2)
+        to that id, its run and kind unchanged, in one write. A hold already
+        at the new key is never overwritten. Answers how many moved."""
+        if not mapping or self._path is None:
+            return 0  # no journal: nothing is kept to move
+        with self._lock:
+            with self._journal_lock():
+                self._reload_locked()
+                previous = dict(self._ambiguities)
+                moved: dict[tuple[str, str], dict[str, Any]] = {}
+                count = 0
+                for (kind, node_id), record in self._ambiguities.items():
+                    new = mapping.get(node_id)
+                    if (isinstance(new, str) and new and (kind, new) not in self._ambiguities
+                            and (kind, new) not in moved):
+                        moved[(kind, new)] = {**record, "nodeId": new}
+                        count += 1
+                    else:
+                        moved[(kind, node_id)] = record
+                if not count:
+                    return 0
+                self._ambiguities = moved
+                try:
+                    self._persist()
+                except ProviderStartPersistenceError:
+                    self._ambiguities = previous
+                    raise
+                return count
 
     def clear(self) -> None:
         """Durably clear ambiguity holds without touching active leases."""

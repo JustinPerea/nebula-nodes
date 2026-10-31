@@ -108,7 +108,7 @@ describe('GM r11, 5: after a restore, no "another window" line', () => {
     expect(RESTORED_LIST_RELOAD).toBe('Nebula restored its project list. Reload projects to continue.');
   });
 
-  it('edits not saved yet: kept where the person is, with the restore line (GM r15, Q11)', () => {
+  it('edits not saved yet: kept where the person is, with the restore line (GM r15)', () => {
     sync('r1');
     setPrompt('b');
     sync('r2', 'restore-new');

@@ -29,7 +29,8 @@ export type AgentCursorAnchor =
 /** graphSync.projectSwitch: who opened or made a project, and what was open
  * before (backend main.py _switch_notice). */
 export interface ProjectSwitch {
-  actor: { kind: 'agent' | 'anonymous' | string; name?: string; color?: string };
+  /** `tab`: the person's reopen in place, from that tab (its X-Nebula-Tab). */
+  actor: { kind: 'agent' | 'anonymous' | 'system' | 'person' | string; name?: string; color?: string; tab?: string };
   projectId: string;
   projectName: string;
   previousProjectId: string | null;
@@ -157,7 +158,7 @@ export interface ProjectsChangedEvent {
     /** GM's rule (a): the person's canvas was saved first as this project,
      * untouched; `copy` when the agent's write changed a copy of it. */
     savedAs?: string; copy?: boolean;
-    /** GM r15 on PR #199, Q10: the canvas already was that project, so it
+    /** GM r15 on PR #199: the canvas already was that project, so it
      * was kept as it was (not "saved as its own project"). */
     kept?: boolean };
 }
@@ -336,6 +337,12 @@ export type ExecutionEvent = (
       empty: boolean;
       /** Explicit committed graph import; ordinary updates remain merges. */
       graphReplaced?: boolean;
+      /** A reopen of the project already open (the person's, an agent's, the
+       * boot's) kept its open proposals (GM r29 on PR #199, 3): with
+       * graphReplaced, the tab keeps them and their held runs. */
+      proposalsKept?: boolean;
+      /** The backend process that sent it (a restart gives a new one). */
+      bootId?: string;
       /** Existing nodes this change put somewhere new; the canvas takes their positions. */
       moved?: string[];
       /** The person's canvas finished an agent's arrange: not an edit, it joins
@@ -431,7 +438,7 @@ class WebSocketClient {
   }
 
   /** Whether this tab keeps edits Nebula couldn't save after a restore
-   * (GM r15 on PR #199, Q11): the backend refuses agents' canvas writes and
+   * (GM r15 on PR #199): the backend refuses agents' canvas writes and
    * project switches meanwhile (409 canvas_kept_in_tab, GM r16). Said on
    * the promoted socket after every hello, and on change. */
   private keptEdits = false;

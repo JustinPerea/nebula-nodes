@@ -353,7 +353,7 @@ describe('review 16 MEDIUM-1: Nebula’s reopen after a boot renumbering', () =>
         previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'system' }, created: false },
       nodes: [{ ...n1 }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
-    expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this window couldn’t follow it. Open it from Projects.');
+    expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this tab couldn’t follow it.');
   });
 
   it('a run pressed while following names Nebula', async () => {

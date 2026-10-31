@@ -196,7 +196,7 @@ describe('GM r12, 1: the edits a restore stopped, kept in the tab, with [Save as
     socket()({ type: 'graphSync', workspaceRevision: 'r9', paramsVersion: GRAPH_PARAMS_VERSION, catalogRestore: 'new' } as never);
   }
 
-  it("GM's line, verbatim, kept where the person is (GM r15, Q11); closing the tab gets the unload warning", async () => {
+  it("GM's line, verbatim, kept where the person is (GM r15); closing the tab gets the unload warning", async () => {
     await stoppedByARestore();
     const state = useProjectStore.getState();
     expect(RESTORED_LIST_UNSAVED).toBe("Nebula restored its project list before your latest edits were saved. They’re kept in this tab.");

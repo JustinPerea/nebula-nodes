@@ -7,7 +7,7 @@ import { clearKeptCanvas, keepCanvasLocally, releaseKeptCanvas, useGraphStore } 
 import { clearKeptTab, resetKeptCanvasForTests, setKeptCanvasSaving, subscribeKeptPulse } from '../src/lib/keptCanvas';
 
 /**
- * GM r18 on PR #199, Q3: a kept tab is a full scratch canvas. Moves,
+ * GM r18 on PR #199: a kept tab is a full scratch canvas. Moves,
  * deletes, a clear, duplicates and Arrange change only this tab (nothing is
  * sent), and Undo and Redo walk the kept tab's own steps: they start empty
  * when the canvas is kept, so Undo never steps back into the history Nebula
@@ -59,7 +59,7 @@ function expectTabOnly() {
   expect(useGraphStore.getState().redoStack).toEqual([]);
 }
 
-describe('GM r18, Q3: delete, move and undo are the kept tab’s own', () => {
+describe('GM r18: delete, move and undo are the kept tab’s own', () => {
   it('Delete takes the node and its wires off this tab, with "Deleted the node." and Undo; Undo puts them back where they were', () => {
     useGraphStore.getState().deleteCanvasElements(['n2'], []);
     expect(ids()).toEqual(['n1', 'n3']);
@@ -135,7 +135,7 @@ describe('GM r18, Q3: delete, move and undo are the kept tab’s own', () => {
   });
 });
 
-describe('GM r18, Q3 guard: Undo never steps back into the history Nebula saved', () => {
+describe('GM r18 guard: Undo never steps back into the history Nebula saved', () => {
   it('undoing past the first kept edit stops there: the canvas stays, the saved steps stay', () => {
     useGraphStore.getState().deleteNode('n3');
     useGraphStore.getState().updateNodeData('n1', { params: { value: 'n1 typed' } });
@@ -168,7 +168,7 @@ describe('GM r18, Q3 guard: Undo never steps back into the history Nebula saved'
   });
 });
 
-describe('GM r18, Q3 guard: Clear canvas is undoable while kept', () => {
+describe('GM r18 guard: Clear canvas is undoable while kept', () => {
   it('a clear takes every node and wire off this tab as one step; Undo brings the kept edits back', () => {
     useGraphStore.getState().updateNodeData('n2', { params: { value: 'kept typing' } });
     expect(clearKeptCanvas()).toBe(true);

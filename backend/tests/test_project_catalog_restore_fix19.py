@@ -266,14 +266,19 @@ def test_low1_p8_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
 # -- reopen LOW-2: an unsaved delete stays a delete ---------------------------------------------
 
 def test_low2_p4_a_duplicate_the_person_deleted_before_the_handoff_stays_deleted(app):
+    """Round 20 (review 18 MEDIUM-1): the window that saved the duplicate
+    says the delete (``deletedNodeIds``, by the id it had)."""
     client, store, *_ = app
-    delta, tab, old_rev = _delta_with_a_duplicate(client)
+    delta, tab, _old = _delta_with_a_duplicate(client)
+    assert client.put(f"/api/projects/{delta}", headers=TAB,
+                      json={"workspaceRevision": _rev(client), "snapshot": tab}).status_code == 200
+    old_rev = _rev(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
     assert new in _export_ids(client)
     since = main_module.canvas_events.latest
     held = _held(tab)
     held["nodes"] = [node for node in held["nodes"] if node["id"] != DUP]
-    answer = _handoff(client, delta, old_rev, held)
+    answer = _handoff(client, delta, old_rev, held, deletedNodeIds=[DUP])
     assert answer.status_code == 200, answer.text
     assert _export_ids(client) == ["n1"]
     _agent_read_and_listing(client, delta)
@@ -338,8 +343,9 @@ def test_nit1_the_persons_read_of_another_project_doesnt_end_the_boot_replacemen
 
 def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     """The tab saves first (activate's flush: the late typing), then sends
-    POST /api/projects/{id}/open for the project it shows. No handoff is
-    kept: the person's own open ends every one."""
+    POST /api/projects/{id}/open for the project it shows. Round 20 (review
+    18 LOW-1): a handoff is kept for this project, for the person's other
+    windows, and the sync says the person reopened it in place."""
     client, store, *_ = app
     delta, tab, _old = _delta_with_a_duplicate(client)
     _autosave(client, delta, _held(tab, **{DUP: "dup typed late"}))  # the flush
@@ -355,15 +361,17 @@ def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     assert answer["workspaceRevision"] == _rev(client)
     assert _live(client)[new]["data"]["params"]["value"] == "dup typed late"
     assert sorted(_export_ids(client)) == ["n1", new]
-    # The sync every tab gets: a replacement with the ids, no projectSwitch (the person's own).
+    # The sync every tab gets: a replacement with the ids, and the person's
+    # reopen in place (round 20; no X-Nebula-Tab here, so no tab).
     syncs = [call.args[0] for call in main_module.manager.broadcast_raw.call_args_list
              if call.args and call.args[0].get("type") == "graphSync"]
     assert syncs and syncs[0]["graphReplaced"] is True and syncs[0]["renumbered"] == {DUP: new}
-    assert "projectSwitch" not in syncs[0]
+    switch = syncs[0]["projectSwitch"]
+    assert switch["actor"] == {"kind": "person"} and switch["projectId"] == switch["previousProjectId"] == delta
     # Agents see it: canvas.replaced in the person's name, with the ids.
     replaced = _events("canvas.replaced", since)
     assert replaced[-1]["actor"]["kind"] == "person" and replaced[-1]["data"]["renumbered"] == {DUP: new}
-    assert main_module._HANDOFF_RENUMBERED not in _on_disk(store, delta)
+    assert _on_disk(store, delta)[main_module._HANDOFF_RENUMBERED]["map"] == {DUP: new}
     # The tab's next autosave is at the new revision, by the new id.
     loaded = answer["project"]["snapshot"]
     next(node for node in loaded["nodes"] if node["id"] == new)["data"]["params"]["value"] = "after"
@@ -372,15 +380,17 @@ def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     assert _open(client, delta).json()["renumbered"] == {}
 
 
-def test_medium2_a_save_at_the_revision_before_the_persons_reopen_is_refused(app):
-    """No handoff: anything the tab didn't save before the open can't land
-    at the old revision (409), so the tab saves first."""
+def test_medium2_a_save_at_the_revision_before_the_persons_reopen_lands_as_a_handoff(app):
+    """Round 20 (review 18 LOW-1): the person's reopen in place keeps a
+    handoff as an agent's does, so a save at the old revision (another
+    window's) lands in the project under the handoff's rules, once."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
-    _open(client, delta)
+    new = _open(client, delta).json()["renumbered"][DUP]
     late = _handoff(client, delta, old_rev, _held(tab, **{DUP: "too late"}))
-    assert late.status_code == 409, late.text
-    assert len(_export_ids(client)) == 2
+    assert late.status_code == 200 and late.json()["handoff"] is True, late.text
+    assert sorted(_export_ids(client)) == ["n1", new]
+    assert _live(client)[new]["data"]["params"]["value"] == "too late"
 
 
 def test_medium2_a_reload_reads_the_project_and_renumbers_nothing(app):
@@ -572,7 +582,7 @@ def _made(case: dict) -> str:
 def test_gm_r27_2_copy_names(case):
     got = _made(case)
     assert got == case["expect"]
-    assert not got.startswith("Recovered Recovered") and "copy copy" not in got
+    assert not got.startswith("Recovered Recovered ") and "copy copy" not in got
 
 
 def test_gm_r27_2_the_cases_cover_every_shape():
@@ -584,12 +594,16 @@ def test_gm_r27_2_the_cases_cover_every_shape():
                   ("recovered", "X (recovered)"), ("recovered", "Delta")]:
         assert shape in shapes, shape
     shot = [case["expect"] for case in CASES if case["family"] == "recovered" and case["source"] == "Shot 7"]
-    assert shot[:3] == ["Recovered Shot 7 copy", "Recovered Shot 7 copy 2", "Recovered Shot 7 copy 3"]
+    # GM r29, 2: the name's own 7 is never read.
+    assert shot[:4] == ["Recovered Shot 7", "Recovered Shot 7 copy", "Recovered Shot 7 copy 2",
+                        "Recovered Shot 7 copy 3"]
 
 
 def test_gm_r27_2_every_backend_copy_follows_the_rule(app):
-    assert main_module._recovered_copy_name("Shot 7", _catalog("Shot 7", [])) == "Recovered Shot 7 copy"
-    assert store_module.lost_row_name("Shot 7", _catalog("Shot 7", [])) == "Recovered Shot 7 copy"
+    assert main_module._recovered_copy_name("Shot 7", _catalog("Shot 7", [])) == "Recovered Shot 7"
+    assert main_module._recovered_copy_name("Shot 7", _catalog("Shot 7", ["Recovered Shot 7"])) == \
+        "Recovered Shot 7 copy"
+    assert store_module.lost_row_name("Shot 7", _catalog("Shot 7", [])) == "Recovered Shot 7"
     assert main_module._canvas_copy_name("Shot 7", _catalog("Shot 7", ["Shot 7 copy"])) == "Shot 7 copy 2"
 
 

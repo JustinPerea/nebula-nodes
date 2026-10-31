@@ -357,7 +357,10 @@ The server exposes these tools for building and running (see
   when you reopened the project they were showing, onto the reopened canvas
   too. If that save fails it is kept as a new project named after the
   project left, "Recovered <project left>" (then "Recovered <project
-  left> 2", 3 and so on: a new copy each time, never an earlier one), and a line says so
+  left> copy", "copy 2" and so on: a new copy each time, never an earlier
+  one; a number in the project's name is never read; a long name is cut
+  short so the whole name fits a project name's 120 characters, counted as
+  characters, not bytes), and a line says so
   with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
@@ -373,9 +376,25 @@ The server exposes these tools for building and running (see
   (Projects, Open, while a duplicate or paste has no Nebula id yet): that is
   the person's own open, so `canvas.replaced` comes in their name with the
   same `renumbered`, and their tab saves before it, so nothing waits to
-  arrive. When you reopen the project the person has open, the node is
-  never doubled, and what their tab hadn't saved yet still arrives on the
-  node's new id (the handoff learns the new ids). What holds for your own
+  arrive. Their other windows on that project follow it quietly and hand
+  off what they hadn't saved, as after your reopen. When you reopen the
+  project the person has open, the node is never doubled, and what their
+  tab hadn't saved yet still arrives on the node's new id (the handoff
+  learns the new ids). A node's run result (output, failure, notes) moves
+  as one piece: the newer run's stands, so your later run of the node keeps
+  its result. A node one of the person's windows made is deleted only when
+  that window says so: a window that never had it, or a save that leaves it
+  out, keeps it and your edits. Every reopen of the
+  project already open (yours, the person's, or Nebula's own at boot after
+  an upgrade gave a node its id) keeps the open proposals open, with the
+  same ids: their nodes keep their ids, so nothing they were made against
+  changed. What the person's save before the open, or their tab's handoff
+  after yours, changed on a node a proposal touches is treated like any
+  edit: the proposal stays open, and Accept checks it as always (a value
+  it sets changed since: "No longer fits"). The proposals stay open in
+  `get_proposal`, `start_here`, `nebula proposals` and `nebula context`,
+  and approved runs that haven't started stay approved. Opening another
+  project, making one, a load and a Clear still close them. What holds for your own
   edits to the new id after the open: of a renumbered node, the handoff
   takes only what differs from the node as the open loaded it (each setting
   whose value differs from that, its name if it differs, its place if it
@@ -764,7 +783,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
-| `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
+| `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids (the summary says "1 open proposal stayed open") |
 | `canvas.cleared` | Clear canvas | |
 | `project.cover` | a project's cover was pinned, changed or set back to automatic, by the person, an agent, or an accepted proposal (its summary ends "(accepted from <agent>)") | `projectId`, `projectName`, `cover` (the url, or null for automatic) |
 | `commons.corrected` / `commons.region` / `commons.membership` | the person curated a Commons reference: a correction, a region drawn or changed, a membership's role, why or inbox place; or accepted an agent's [Commons proposal](#commons-curation) (the summary ends "(accepted from <agent>)") | `assetId`; `fieldPath`, `op` for a correction; `regionId`, `change` (`["added"]` or the fields changed) for a region; `membershipId`, `collectionId`, `change` (`["accepted"]` or the fields) for a membership. Never Commons text (no values, labels or whys) |
@@ -1763,7 +1782,8 @@ limit, so don't also post an update to announce the proposal. The view's
 "Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
 Code", "Expired" (on time, even when nobody reads proposals), "No longer
 fits" (a node it needs was deleted, the canvas was cleared or replaced by an
-import or another project, or what it changes was edited since), or
+import or another project, or what it changes was edited since; a reopen of
+the project already open keeps it waiting), or
 "Closed: Nebula restarted" (proposals live in memory; settled the next time
 the list is read: `list_notes`, the person's tab reconnecting, a project
 switch). The socket sends `agentNotes` op `added` and then `resolved` for
@@ -1900,7 +1920,10 @@ Rules:
   3 open per agent and 12 in total (429 beyond); a 160-character
   note. Proposals expire after 15 minutes.
 - Deleting a node a proposal refers to invalidates it; so do import, opening
-  another project and Clear canvas. If the canvas changed so that a
+  or making another project and Clear canvas. Reopening the project already
+  open (yours, the person's, or Nebula's own at boot) doesn't: its open
+  proposals stay open with the same ids, and the graphSync says so
+  (`proposalsKept: true` beside `graphReplaced`). If the canvas changed so that a
   proposal no longer fits, Accept fails with 409 and the proposal closes as
   invalidated.
 - Proposals live in memory only and are lost on restart.
@@ -3185,23 +3208,24 @@ Nebula process restores the same folder. The restore:
    or delete) then saves a live canvas that is no project in the list as
    its own project, under the project's own name when it is known and free
    again (nothing in the list or Recently deleted uses it), else
-   "Recovered <project>" ("Recovered <project> 2" and on for later
-   copies), otherwise "Recovered canvas" ("Recovered canvas 2" and on)
-   (`recoveredCanvas`). Names never stack: a name already in one of these
-   families ("Recovered X", "Recovered canvas", "X copy") takes the next
-   free number above its own in it ("Recovered X 2", "Recovered canvas 2",
-   "X copy 2"; "Recovered X 2" gives "Recovered X 3"), and a name never
-   gets a second number or a second "Recovered": a copy of "Recovered
-   Alpha copy 2" is "Recovered Alpha copy 3". A number in any other name
-   is part of the name, and Nebula numbers only after "copy" there: a copy
-   of "Shot 7" is "Shot 7 copy", then "Shot 7 copy 2"; its recovered copy
-   is "Recovered Shot 7 copy", then "Recovered Shot 7 copy 2".
-   A name made from one in another family names its source, so families
-   sit together: a copy of "Recovered X" is "Recovered X copy", then
-   "Recovered X copy 2"; a recovered "X copy" is "Recovered X copy", and
-   when that is taken, the next free number above it. A
-   name from before this rule ("X (recovered)") counts as "Recovered X"'s
-   family (its recovered copy is "Recovered X 2"). A project's own name counts as free only when no project in the
+   "Recovered <project>", otherwise "Recovered canvas" ("Recovered canvas
+   2" and on: Nebula's own count of canvases it couldn't name)
+   (`recoveredCanvas`). Nebula never reads a number in a name. A recovered
+   copy is "Recovered <project>" when that is free, else that name plus
+   " copy", then " copy 2", " copy 3", the lowest free: the next recovery
+   of "Shot" is "Recovered Shot" even with a "Recovered Shot 7" in the list
+   (a different name), and "Shot 7" with "Recovered Shot 7" taken gives
+   "Recovered Shot 7 copy". The only number Nebula raises is its own
+   "copy N": a duplicate is "X copy", then "X copy 2", and "X copy 2"
+   gives "X copy 3"; a recovered "Shot 7 copy" is "Recovered Shot 7 copy",
+   then "Recovered Shot 7 copy 2". A name that starts with "Recovered"
+   never gets a second one: "Recovered Alpha" gives "Recovered Alpha copy",
+   "Recovered Alpha copy 2" gives "Recovered Alpha copy 3", and "Recovered
+   X 2" gives "Recovered X 2 copy" (that 2 is the name's own). A name from
+   before this rule ("X (recovered)"), with or without a number after
+   "recovered", is Nebula's old "Recovered X": its recovered copy is
+   "Recovered X", then "Recovered X copy". Names in Recently deleted and names already given to copies not
+   saved yet are taken, so two recoveries at once get two names. A project's own name counts as free only when no project in the
    list or in Recently deleted has it: a "Beta" still in Recently deleted
    makes the canvas "Recovered Beta". Agents always see a project's real
    name, as the person does.
@@ -3376,7 +3400,13 @@ Nebula process restores the same folder. The restore:
    every id the project and its run history have used), so you never see
    the tab's local ids; after the copy opens, read it (look_at_canvas,
    `nebula look`) and use the ids you see. The copy is named “Recovered
-   <project>” (“Recovered <project> 2” and on).
+   <project>”, then “Recovered <project> copy”, “copy 2” and on (no
+   number in the project's name is read). The recover answer's
+   `sourceName` is the name of the project the copy was made from, as
+   Nebula held it (or, when that project's row is gone, the name the tab
+   showed; null when neither is known), and the copy's record keeps it
+   (`recoveredFrom: {id, name}`), so a retry answers the same: the
+   person's line names that, never a source read from the copy's name.
    Connections the person drew while kept arrive only in that save; one
    Nebula's rules refuse is left out of the copy and said, never the whole
    save refused: the recover answer and the `project.created` event carry
@@ -3992,7 +4022,7 @@ under the id replaces nothing. A pin goes back only onto the model it was
 on (`pinsLeft` reason `its node came back as another model` otherwise). A
 proposal is tagged only by deletes in its own project, as a (removal, node)
 pair, and a clear, an import or a project switch drops the earlier deletes'
-tags: undoing a delete from before one of those can't reopen the proposal,
+tags (a reopen of the project already open keeps them: its node ids stay): undoing a delete from before one of those can't reopen the proposal,
 and `notReopened` says so ("the canvas was cleared since", "the canvas was
 replaced since"). Pins never show the removal ids or anchors undo keeps
 (`detachedBy` and the rest stay in Nebula's own copy); agents undo their own
@@ -4430,7 +4460,7 @@ autosave had already sent). Once that copy is saved, a neutral notice takes
 the banner's place on Projects: "Your latest edits were saved as their own
 project, “Recovered Delta”.", with [Open] (opens that copy)
 and ×. The copy is an ordinary project in `list_projects`, named
-"Recovered <project>" ("Recovered <project> 2" and on).
+"Recovered <project>" (then "Recovered <project> copy", "copy 2" and on).
 
 A scene save refused 400 or 413 can't succeed as it is, whichever save it
 was: an ordinary one, the quiet try a stopped save makes when the writer

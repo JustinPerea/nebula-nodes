@@ -218,7 +218,7 @@ describe('L-c: a rename draft folded in at an agent\'s switch is handed off once
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     const first = vi.mocked(projects.saveProject).mock.calls.filter(([id]) => id === 'alpha');
-    expect(first.map(([, , , pending]) => pending)).toEqual([{ params: {}, labels: { n1: 'Draft name' } }]);
+    expect(first.map(([, , , pending]) => pending)).toEqual([{ params: {}, labels: { n1: 'Draft name' }, deleted: [] }]);
     vi.mocked(projects.saveProject).mockClear();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('alpha'), summary('beta'), summary('gamma')],
       activeProjectId: 'gamma', workspaceRevision: 'rev-c' }));

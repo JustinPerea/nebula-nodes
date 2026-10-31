@@ -1,13 +1,13 @@
 /**
- * Fix round 11 of PR #199 (GM r14 and r15; review 11, Q9).
+ * Fix round 11 of PR #199 (GM r14 and r15; review 11).
  * - GM r14, 2: one canvas of the person's always gets "Delete a project";
  *   "Delete N projects" only when several of theirs wait; the size cap never
  *   gives a number.
  * - GM r14, 1 and 3: the saved toast, and the agent-closed line as a toast
  *   on Projects home.
- * - GM r15, Q11: the kept line with [Save as a project] in the canvas
+ * - GM r15: the kept line with [Save as a project] in the canvas
  *   notice region, until resolved.
- * - Q9: a `#moodboard/<id>` link that waited while the tab followed an
+ * - Review 11: a `#moodboard/<id>` link that waited while the tab followed an
  *   agent's switch doesn't count as the person's own open.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -67,7 +67,7 @@ describe("GM r14, 2: the person's line counts only when several of theirs wait",
   });
 });
 
-describe('GM r14, 1 and 3; GM r15, Q10: the lines, verbatim', () => {
+describe('GM r14, 1 and 3; GM r15: the lines, verbatim', () => {
   it('the saved toast', () => {
     expect(editsRecoveredToast('Alpha (recovered)')).toBe('Your latest edits were saved as their own project, “Alpha (recovered)”.');
   });
@@ -96,7 +96,7 @@ describe('GM r14, 1 and 3; GM r15, Q10: the lines, verbatim', () => {
   });
 });
 
-describe('GM r15, Q11: the kept line in the canvas notice region', () => {
+describe('GM r15: the kept line in the canvas notice region', () => {
   const kept = { sourceId: 'p1', sourceName: 'Delta', lead: null, saving: false, error: null };
 
   it('the line and [Save as a project]; no Dismiss; the click saves', () => {
@@ -128,7 +128,7 @@ describe('GM r15, Q11: the kept line in the canvas notice region', () => {
   });
 });
 
-describe('review 11, Q9: a #moodboard link counts only when the person\'s navigation opens the project', () => {
+describe('review 11: a #moodboard link counts only when the person\'s navigation opens the project', () => {
   const notePersonAct = vi.mocked(wsClient.notePersonAct);
 
   it("the link loaded with the page goes into the open project as the person's open", () => {

@@ -47,7 +47,7 @@ import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { projectErrorDetails, projectRetryOffer, useProjectStore } from './store/projectStore';
+import { projectErrorDetails, projectRetryOffer, reopenHold, reopenHoldLine, useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -286,6 +286,11 @@ export default function App() {
   const isCreate = viewMode === 'create';
   const isBrandShowcase = viewMode === 'brand-showcase';
   const homeSettings = useHomeSettingsDock(isHome);
+  // Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen in place
+  // that can't go yet (a run, a World Labs hold) says when it can, under its card.
+  const activeForHold = projects.activeProject;
+  const holdKind = useGraphStore(() => (activeForHold ? reopenHold(activeForHold.id) : null));
+  const reopenHoldNow = activeForHold && holdKind ? { id: activeForHold.id, line: reopenHoldLine(activeForHold.name, holdKind) } : null;
 
   let mainView;
   if (isHome) {
@@ -295,7 +300,9 @@ export default function App() {
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
       onRestore={(id, from) => void projects.restore(id, from)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
-      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
+      onRetry={() => void projects.retry()} retry={projectRetryOffer(projects)}
+      openFollowedName={projects.errorRetry?.action === 'openFollowed' ? projects.errorRetry.name : null}
+      reopenHold={reopenHoldNow} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle}
       loadCoverChoices={listCoverChoices} onPinCover={(id, url) => void projects.pinCover(id, url)}
       unsavedEdits={projects.unsavedEdits} editsSavedAs={projects.editsSavedAs}
       onDownloadEdits={() => void projects.downloadUnsavedEdits()}

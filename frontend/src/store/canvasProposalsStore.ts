@@ -239,7 +239,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // store's gates ask it first. Offline is read-only (round 15 of PR
     // #114): nothing is sent or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
-    // Kept in this tab after a restore (GM r15 on PR #199, Q11): only typing.
+    // Kept in this tab after a restore (GM r15 on PR #199): only typing.
     if (refuseEditWhileKept()) return;
     if (refuseEditWhileOffline()) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
@@ -347,12 +347,24 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   },
 }));
 
+/** The backend process the last graphSync came from (its `bootId`). */
+let lastSyncBoot: string | null = null;
+
 wsClient.subscribe((event) => {
   const store = useCanvasProposalsStore.getState();
   if (event.type === 'proposalSync') store.sync(event.proposals);
   else if (event.type === 'proposalOpened') store.open(event.proposal, event.acceptKey, event.personValues);
   else if (event.type === 'proposalClosed') store.close(event);
-  else if (event.type === 'graphSync' && event.graphReplaced) {
+  else if (event.type === 'graphSync') {
+    const boot = typeof event.bootId === 'string' && event.bootId ? event.bootId : null;
+    const restarted = boot !== null && lastSyncBoot !== null && boot !== lastSyncBoot;
+    if (boot !== null) lastSyncBoot = boot;
+    // A reopen of the same project keeps them (GM r29 on PR #199, 3): their
+    // nodes keep their ids, so nothing they were made against changed. Not
+    // across a restart: open proposals live in Nebula's memory, so the ones
+    // this tab holds from before it are gone (the boot's own reopen keeps
+    // whatever the new process has, which its proposalSync says).
+    if (!event.graphReplaced || (event.proposalsKept && !restarted)) return;
     // Another project or an import: the backend invalidated every proposal.
     store.clear();
     // Every held run goes, and every approval it held goes back (review 16, L-2).

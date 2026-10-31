@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Container, Iterable
+from typing import Any, Container, Iterable, Mapping
 
 from models.events import ErrorEvent, ExecutedEvent, ExecutingEvent, SkippedEvent
 
@@ -130,6 +130,23 @@ class NodeErrors:
         if moved:
             self._projects[new] = {**moved, **self._projects.get(new, {})}
             self._save()
+
+    def renumber(self, project_id: str | None, mapping: Mapping[str, str]) -> None:
+        """The project's nodes got new ids ({old: new}; a renumber of tab-local
+        ids, PR #199 review 18 handoff-reopen LOW-2): their errors move with
+        them. An error already kept under a new id stays."""
+        key = _project_key(project_id)
+        errors = self._projects.get(key)
+        if not errors or not any(node_id in mapping for node_id in errors):
+            return
+        moved: dict[str, dict[str, str]] = {}
+        for node_id, entry in errors.items():
+            new = mapping.get(node_id, node_id)
+            if new != node_id and new in errors:
+                continue
+            moved[new] = entry
+        self._projects[key] = moved
+        self._save()
 
     def keep_projects(self, project_ids: Container[str]) -> None:
         """Forget projects that no longer exist (deleted for good, trash emptied)."""

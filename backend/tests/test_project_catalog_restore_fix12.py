@@ -57,11 +57,11 @@ def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, 
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),  # GM r29, 2
     ("Alpha copy", (), "Recovered Alpha copy"),
     # GM r25, 5: never "copy 2 2"; the number is raised.
     ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
 ])
 def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, names, want):
     got = store_module.recovered_name(source, _named(*names))
@@ -73,11 +73,11 @@ def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, name
 
 @pytest.mark.parametrize(("lost", "names", "trash", "want"), [
     ("Beta", (), ("Beta",), "Recovered Beta"),
-    ("Beta", (), ("Beta", "Recovered Beta"), "Recovered Beta 2"),
-    ("Beta", ("Recovered Beta",), ("Beta",), "Recovered Beta 2"),
+    ("Beta", (), ("Beta", "Recovered Beta"), "Recovered Beta copy"),  # GM r29, 2
+    ("Beta", ("Recovered Beta",), ("Beta",), "Recovered Beta copy"),
     # Only the "Recovered" name is in Recently deleted: "Beta" itself is free.
     ("Beta", (), ("Recovered Beta",), "Beta"),
-    ("Recovered canvas", (), ("Recovered canvas",), "Recovered canvas 2"),
+    ("Recovered canvas", (), ("Recovered canvas",), "Recovered canvas copy"),
     ("Alpha copy", (), ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r16_3_a_lost_rows_name_is_free_only_when_recently_deleted_doesnt_have_it(lost, names, trash, want):
@@ -91,7 +91,7 @@ def test_r16_3_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_reco
     catalog = {"projects": {"a" * 32: {"name": "Alpha"}}, "trash": {owner: {"name": "Beta"}}}
     assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta"
     catalog["trash"]["c" * 32] = {"name": "Recovered Beta"}
-    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta 2"
+    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta copy"  # GM r29, 2
 
 
 # -- GM r16, 5: the backend's person-facing lines use ’ ---------------------------------------

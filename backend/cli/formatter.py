@@ -879,7 +879,10 @@ def format_event(event: dict[str, Any]) -> str:
     kind = str(event.get("kind") or "")
     data = event.get("data") or {}
     summary = str(event.get("summary") or kind)
-    if kind == "canvas.replaced":
+    if kind == "canvas.replaced" and data.get("proposalsKept"):
+        # A reopen of the open project (GM r29 of PR #199, 3): its ids stay.
+        summary = "Reopened the open project — node ids kept, open proposals still open; run nebula look"
+    elif kind == "canvas.replaced":
         summary = f"Canvas replaced ({data.get('reason') or 'import'}) — node ids restarted; run nebula look"
     elif kind == "canvas.cleared":
         summary = "Cleared the canvas — run nebula look"
