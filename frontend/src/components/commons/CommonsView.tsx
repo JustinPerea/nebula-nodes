@@ -34,13 +34,12 @@ import { clockTime } from '../../lib/clockTime';
 import { isOfflineRefusal, refuseEditWhileOffline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
-import { CommonsErrorLine } from './CommonsErrorLine';
+import { CommonsPageLines } from './CommonsPageLines';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { CommonsDraftsProvider } from './commonsDrafts';
 import { useCommonsDraft } from './commonsDraftsContext';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 import { useFocusHandover } from '../../hooks/useFocusHandover';
-import { PersonLockLine } from '../PersonLock';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -655,7 +654,6 @@ function CommonsViewBody() {
           >
             Add
           </button>
-          <PersonLockLine lock={addLock} place="control" className="commons-add__held-line" />
           {addOpen && !readOnly && !addLock.locked && (
             <div className="commons-add__menu" role="menu">
               <button
@@ -699,9 +697,8 @@ function CommonsViewBody() {
         />
       </WorkspaceHeader>
 
-      {(shownError || notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0) && (
-        <div className="commons-messages">
-          <CommonsErrorLine line={shownError} />
+      {/* Round 12 (GM r20 1): the banner row holds Add's lock line too, under the because line. */}
+      <CommonsPageLines line={shownError} lock={addLock} more={Boolean(notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0)}>
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert" data-line-box="">
               <span className="commons-notice__list">
@@ -711,8 +708,7 @@ function CommonsViewBody() {
           )}
           {!shownError && notice && <p className="commons-notice" role="status"><LineText text={notice} /></p>}
           <CommonsProposalsLine onOpen={reviewProposal} />
-        </div>
-      )}
+      </CommonsPageLines>
 
       {page && (
         <section className="commons-candidates" aria-label="Images on the page">

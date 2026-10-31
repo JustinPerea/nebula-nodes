@@ -3,8 +3,15 @@
  * PersonLockLine `place`). One rule: directly under the heading of what it covers. A group's
  * line under the group's heading, a whole tab's at the top of the tab, a form's or a single
  * control's right under the control it locks (a form's submit button).
+ *
+ * Round 12 (GM r20 1): 'page', a page's own line row (`data-page-lines`, the Commons' banner row
+ * below its header): a control in a toolbar row keeps the row's height, so its line goes to the
+ * page's one row for page-level lines, under that row's because line when one shows, else alone.
  */
-export type LockPlace = 'heading' | 'tab' | 'control';
+export type LockPlace = 'heading' | 'tab' | 'control' | 'page';
+
+/** The one row a page keeps for its page-level lines (components/commons/CommonsPageLines). */
+export const PAGE_LINES_ATTR = 'data-page-lines';
 
 export const LOCK_PLACE_ATTR = 'data-lock-place';
 
@@ -56,6 +63,18 @@ export function lockPlacementProblems(root: ParentNode = document): string[] {
         && controls.filter((control) => row.contains(control))
           .every((control) => control.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING);
       if (!under && !closesRow) problems.push(`${text}: not directly under the control it locks`);
+    } else if (place === 'page') {
+      // In the page's line row, after its lines (a because line first) and before nothing else
+      // it locks: no control sits ahead of it in the row.
+      const row = line.parentElement;
+      if (!row?.hasAttribute(PAGE_LINES_ATTR)) problems.push(`${text}: not in its page's line row`);
+      else {
+        for (let at = line.previousElementSibling; at; at = at.previousElementSibling) {
+          if (at.matches('button, input, select, textarea, a') || at.querySelector('button, input, select, textarea, a')) {
+            problems.push(`${text}: after a control in its page's line row`); break;
+          }
+        }
+      }
     } else {
       problems.push(`${text}: no place (${LOCK_PLACE_ATTR})`);
     }

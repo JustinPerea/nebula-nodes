@@ -163,7 +163,7 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
 });
 
 describe('Add on a held tab (GM r18)', () => {
-  it('Add is locked with its line under it, no empty-state line, and a drop is taken and sends nothing', async () => {
+  it('Add is locked with its line in the banner row, no empty-state line, and a drop is taken and sends nothing', async () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);
     await settle(200);
@@ -172,7 +172,10 @@ describe('Add on a held tab (GM r18)', () => {
     expect(add).toHaveAttribute('aria-disabled', 'true');
     const line = document.getElementById(add.getAttribute('aria-describedby')!.split(' ').pop()!)!;
     expect(line.textContent).toBe('You can add references when this tab is connected as you.');
-    expect(line.previousElementSibling).toBe(add);
+    // Round 12 (GM r20 1): in the banner row below the header, under the because line.
+    expect(line.parentElement?.hasAttribute('data-page-lines')).toBe(true);
+    // Any because line in the row comes before it (tests/presenceRound12.commonsRow).
+    for (let at = line.nextElementSibling; at; at = at.nextElementSibling) expect(at.hasAttribute('data-commons-line')).toBe(false);
     fireEvent.click(add);
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.body.textContent).not.toMatch(/No matches\. Drop images or videos here/);

@@ -1611,3 +1611,74 @@ and where its lines sit changed.
   answered, executed or run against a provider. Shots: `agent-presence/fu3k/` in the scratch
   folder, 11, no two alike; the Projects shot shows counts because the held tab's work loaded
   (the no-counts state is in the unit tests).
+
+## Round 12 (CI on 622c55d0; GM r20)
+
+### The focus ring on a locked control (section 0)
+- CI failed `tests/focusRingCss.test.ts` on `styles/disabled-buttons.css`: the round 11 lock
+  rules held `:focus` to the locked look, and the checkbox's look is an inset box-shadow, so the
+  sweep read it as a second focus ring. `:focus` is out of all three lock rules (button, field,
+  checkbox); hover and press still hold the look. A locked control stays focusable, so it takes
+  the shared `--sr-focus-outline` like any other. No exception was added to the sweep.
+  `tests/presenceRound11.lockLook` now fails any `[data-person-lock]` selector with `:focus`.
+- Checked in a real browser: on every screen the live check opens, each locked control gets
+  keyboard focus and must compute `2px solid` in `--sr-ink` with the same box-shadow focused as
+  not. Buttons (Providers, the Update card, the Commons' Add), selects (Preferences), text
+  fields and the switch (Storage) all pass; the switch keeps its 0.06 inset edge and gains the
+  outline. A control disabled for its own reason (Personal agents' Add with an empty draft)
+  takes no focus at all and is left out.
+
+### Add's lock line moves to the Commons' line row (GM r20 1)
+- `tests/presenceRound7.toolbar.test.ts` is back to its f93f2968 form (no diff). The header
+  holds no lock line.
+- `components/commons/CommonsPageLines` is the one row under the header for page-level lines:
+  the because line (or error) first, then Add's lock line as its own sentence, then the other
+  messages. With no because line the lock line takes the row alone; with nothing to show there
+  is no row. Add's `aria-describedby` points at the line. `PersonLockLine` has a fourth place,
+  `page`, and `lib/lockPlacement` checks it: inside the row (`data-page-lines`), after no
+  control in it.
+- The header measures 49 px at 1280, 1366 and 1440, with and without the line, and with the
+  line alone: `min-height: 48px` is met and the tallest child is 32 px plus 8 px padding each
+  side and a 1 px rule. A connected tab's header (no lock line, the same header markup as on
+  f93f2968) is 49 px too, so the line adds nothing to it.
+- `tests/lineRegistration.ratchet` counts `CommonsPageLines` as a component that registers its
+  line (it hands it to `CommonsErrorLine`).
+
+### One rule for the general notice (GM r20 3)
+- Shot 09 (round 11) was taken 0.9 s after a staged demote at a load average near 40, before
+  the handover settled. Recorded live each frame from the demote: the because line arrives
+  0.6-0.7 s after it (the held read answers after the 150 ms hold, under load), the registry
+  counts it one frame after its first observer entry, and the notice then leaves with its fade.
+  The notice and the because line were on screen together for 0.16 s and 0.27 s in two runs
+  (the last of it while fading), and never after 1.2 s. Once settled, only the because line
+  shows, in every run. No change to the registry or the demote path was needed.
+- `tests/presenceRound12.oneNotice` pins it: a demote, then the Commons, and after the handover
+  only the because line (with Add's lock line beside it); Personal agents' because line sends
+  the notice away; a lock line alone keeps it. Its ratchet fails whenever the notice shows
+  beside a registered because line in view, and a test shows it catching that. The live check
+  runs the same rule on every screen it opens.
+
+### The locked look (GM r20 4)
+- Waiting for review 10's measure (section 2), which hadn't arrived. Measured live: a locked
+  button's label is `rgba(255, 255, 255, 0.55)` (`--disabled-label`).
+
+### Tests and checks
+- New tests fail on 622c55d0: `presenceRound12.commonsRow` can't load, and the restored
+  toolbar ratchet and `focusRingCss` fail there. `presenceRound12.oneNotice` passes there,
+  since the rule already held once settled; it is a ratchet against regressions. Mutations
+  caught: the `page` place check, the row's render condition, the row's order, `:focus` back on
+  the checkbox rule, and the banner ignoring the because line.
+- The live check's harness: the "no banner" case stages offline by refusing this check's own
+  backend requests at the interception (a paused backend left the app online), and the
+  header check reads the box against the connected one.
+- Gates: tsc and eslint clean. Focused vitest (90 files: the 66 that read `styles/`,
+  `focusRingCss`, the presence ratchets, the copy ratchets and the lib tests naming a touched
+  file) on two workers: 1,267 of 1,278, 2 skipped, Errors 0. Eight failures were timeouts at a
+  load average of 30-50; one was real (`lineRegistration` didn't count the new row, fixed).
+  Alone, everything passed but three tests with their own 30 s and 120 s limits (the gated-route
+  scan, the person-only caller map, the GM r18 frame corpus), which pass with the limit raised
+  in a temporary copy (110 s, 71 s, 312 s at that load).
+- Live on 8795/5795 (8000-8010, 5173 and every other host blocked, canaries refused, keys
+  unset): 41 of 41 in the last full run. Shots: `agent-presence/fu3l/` in the scratch folder
+  (01 the held Commons with both lines, 02 Add's line alone, 03 after a demote, settled), no two
+  alike.

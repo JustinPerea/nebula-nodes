@@ -13,13 +13,18 @@ import { LOCK_LOOK_SELECTORS, lockPlacementProblems } from '../src/lib/lockPlace
 
 const css = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
 const rule = (selector: string) => {
-  const at = css.indexOf(`${selector},\n${selector}:is(:hover, :active, :focus)`);
+  // Round 12 (CI, tests/focusRingCss): hover and press hold the look; focus keeps the shared ring.
+  const at = css.indexOf(`${selector},\n${selector}:is(:hover, :active)`);
   return at < 0 ? null : css.slice(at, css.indexOf('}', at));
 };
 
 describe('a locked control looks locked (PR #204 round 11)', () => {
-  it('each lock look rule is in the sheet, held through hover, press and focus', () => {
+  it('each lock look rule is in the sheet, held through hover and press; focus keeps the shared ring', () => {
     for (const selector of LOCK_LOOK_SELECTORS) expect(rule(selector), selector).not.toBeNull();
+    // No lock rule names :focus (or :focus-visible): a locked control stays focusable, and a
+    // keyboard user sees the token ring on it.
+    const lockRules = css.slice(css.indexOf('PR #204 round 11 (review 9 MEDIUM-1'));
+    expect(lockRules).not.toMatch(/\[data-person-lock\][^{]*:focus/);
   });
 
   it('buttons: the shared grey label and edge, no fill, no press, the default cursor', () => {

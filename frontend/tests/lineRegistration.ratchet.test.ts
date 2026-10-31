@@ -1,7 +1,7 @@
 /**
  * PR #204 round 9 (review 7 MEDIUM-1): the one-notice rule reads registrations, not the page's
  * text. A line counts only if the surface renders it through a component that registers it
- * (components/LineText, or FailureLines, CommonsErrorLine and LineBox, which render through it). So this
+ * (components/LineText, or FailureLines, CommonsErrorLine, CommonsPageLines and LineBox, which render through it). So this
  * ratchet takes the place of the old scan's "every surface counts":
  *
  * 1. From the trace: every `// clears-on-promote:` site (the lines tests/clearsOnPromote.ratchet
@@ -30,7 +30,9 @@ function sourceFiles(dir = SRC, ext = /\.(ts|tsx)$/): string[] {
 }
 
 /** The components that register what they're handed, and the prop that holds the line. */
-export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLines: 'failure', CommonsErrorLine: 'line', LineBox: 'text' };
+export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLines: 'failure', CommonsErrorLine: 'line', LineBox: 'text',
+  // Round 12 (GM r20 1): the Commons' page-lines row, which hands its line to CommonsErrorLine.
+  CommonsPageLines: 'line' };
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
@@ -246,7 +248,7 @@ describe('PR #204 round 9: every line that can be not-connected registers itself
   });
 
   it('the registering components render through LineText', () => {
-    for (const file of ['components/failure/FailureLines.tsx', 'components/commons/CommonsErrorLine.tsx', 'components/LineBox.tsx']) {
+    for (const file of ['components/failure/FailureLines.tsx', 'components/commons/CommonsErrorLine.tsx', 'components/commons/CommonsPageLines.tsx', 'components/LineBox.tsx']) {
       expect(registeredExpressions(file, read(file)).length, file).toBeGreaterThan(0);
     }
     // Round 10 (review 8 MEDIUM-3): registered once, its words updated in place.
