@@ -12,14 +12,21 @@
  * --sr-edge-strong and --sr-accent exist verbatim.
  */
 
+/* The whole grid, in this one place (fix/moodboard-board-layout,
+   tests/studioGridAreas.test.ts): the top header, the offline row right under
+   it (GM, PR #198 r2; StudioOfflineRow, 0 tall until it opens), Composition's
+   toolbar as a row of its own under that (GM, PR #198 r3 a), then the player
+   and timeline beside the panel. */
 body.app-slava-restraint .remotion-editor-view {
   position: fixed;
   inset: 0;
   display: grid;
   grid-template-columns: 1fr 320px;
-  grid-template-rows: 48px 1fr 320px;
+  grid-template-rows: auto auto auto minmax(0, 1fr) 320px;
   grid-template-areas:
     "header header"
+    "offline offline"
+    "toolbar toolbar"
     "player panel"
     "timeline panel";
   background: var(--sr-canvas);
@@ -31,6 +38,24 @@ body.app-slava-restraint .remotion-editor-view__header { grid-area: header; disp
 body.app-slava-restraint .remotion-editor-view__player { grid-area: player; }
 body.app-slava-restraint .remotion-editor-view__timeline { grid-area: timeline; }
 body.app-slava-restraint .remotion-editor-view__panel { grid-area: panel; border-left: 1px solid var(--sr-edge-strong); background: var(--sr-glass-strong); overflow: auto; }
+body.app-slava-restraint .remotion-editor-view__toolbar {
+  grid-area: toolbar;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar,
+body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar__group {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
 
 body.app-slava-restraint .remotion-editor-view__back {
   background: none;
@@ -221,9 +246,11 @@ body.app-slava-restraint .remotion-editor-view__timeline {
   flex-direction: column;
 }
 
+/* Under the header, the offline row and the (here empty) toolbar row, so
+   the offline row still pushes it down. */
 body.app-slava-restraint .remotion-editor-view__empty-state {
   grid-column: 1 / -1;
-  grid-row: 1 / -1;
+  grid-row: 4 / -1;
   display: grid;
   place-items: center;
   padding: 40px;

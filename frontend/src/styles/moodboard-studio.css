@@ -5,15 +5,26 @@ body.app-slava-restraint .moodboard-studio-view {
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: 44px 1fr;
-  grid-template-columns: 250px 1fr;
-  grid-template-areas:
-    "toolbar toolbar"
-    "rail main";
   background: var(--sr-canvas);
   color: var(--sr-ink);
   font-family: var(--sr-ui);
   overflow: hidden;
+}
+
+/* The List view's grid, in this one place, the offline row included (right
+   under the top header, 0 tall until it opens: GM, PR #198 r2;
+   StudioOfflineRow). The Board view writes its own in moodboard-board.css;
+   the :not() keeps the two from ever matching the same element, so neither
+   template has to outrank the other (fix/moodboard-board-layout: a generic
+   template that did outrank the Board view's dropped its canvas and panel
+   into implicit tracks; tests/studioGridAreas.test.ts). */
+body.app-slava-restraint .moodboard-studio-view:not(.moodboard-studio-view--board) {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: 250px 1fr;
+  grid-template-areas:
+    "toolbar toolbar"
+    "offline offline"
+    "rail main";
 }
 
 body.app-slava-restraint .moodboard-studio-toolbar {
@@ -498,11 +509,12 @@ body.app-slava-restraint .panel--moodboard-library {
 }
 
 @media (max-width: 760px) {
-  body.app-slava-restraint .moodboard-studio-view {
+  body.app-slava-restraint .moodboard-studio-view:not(.moodboard-studio-view--board) {
     grid-template-columns: 1fr;
-    grid-template-rows: 44px auto 1fr;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     grid-template-areas:
       "toolbar"
+      "offline"
       "rail"
       "main";
   }

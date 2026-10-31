@@ -13,16 +13,20 @@ body.app-slava-restraint .commons-scope {
   font-size: 12px;
 }
 
+/* The whole grid, in this one place (fix/moodboard-board-layout,
+   tests/studioGridAreas.test.ts), the offline row included: right under the
+   top header, 0 tall until it opens (GM, PR #198 r2; StudioOfflineRow). */
 body.app-slava-restraint .commons-view {
   --commons-detail-w: 0px;
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: 44px auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   grid-template-columns: 250px minmax(0, 1fr) var(--commons-detail-w);
   grid-template-areas:
     "toolbar toolbar toolbar"
+    "offline offline offline"
     "messages messages messages"
     "candidates candidates candidates"
     "filters main detail";

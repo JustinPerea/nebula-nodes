@@ -98,10 +98,13 @@ describe('GM: the banner is a row of each studio\'s layout, under its top header
   });
 
   it('every studio\'s grid has the row; the floating studio offset is gone', () => {
-    const header = css('styles/workspace-header.css');
-    for (const view of ['cinema-studio-view', 'remotion-editor-view', 'character-studio-view', 'moodboard-studio-view',
-      'commons-view', 'create-view']) {
-      expect(header, view).toMatch(new RegExp(`\\.${view}\\.${view}[^{]*\\{[^}]*grid-template-areas:[^}]*offline`));
+    // Each studio's grid names the row in its own stylesheet, the one place
+    // its template is written (fix/moodboard-board-layout; the cascade check
+    // per view, variant and skin is tests/studioGridAreas.test.ts).
+    for (const [view, sheet] of [['cinema-studio-view', 'cinema-studio'], ['remotion-editor-view', 'remotion-editor'],
+      ['character-studio-view', 'character-studio'], ['moodboard-studio-view', 'moodboard-studio'],
+      ['moodboard-studio-view--board', 'moodboard-board'], ['commons-view', 'commons'], ['create-view', 'create-studio']]) {
+      expect(css(`styles/${sheet}.css`), view).toMatch(new RegExp(`\\.${view}[^{]*\\{[^}]*grid-template-areas:[^}]*offline`));
     }
     expect(css('App.css')).not.toMatch(/workspace-header-bottom/);
     expect(source('components/WorkspaceHeader.tsx')).not.toMatch(/usePublishedHeaderBottom/);
