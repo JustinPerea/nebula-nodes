@@ -80,8 +80,9 @@ class NebulaClient:
     def shared(self, call: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Run one of the reads and writes the MCP tools share (project_client)
         as this client: its identity headers, and a refusal printed as
-        `error: <detail>` with exit 1, as every other command does. Pass
-        via="cli" to calls that word a hint."""
+        `error: <detail>` with exit 1, as every other command does. A hint
+        is in `nebula` words: the identity headers say the CLI
+        (X-Nebula-Surface), which project_client reads."""
         import project_client
 
         try:
@@ -107,8 +108,10 @@ class NebulaClient:
 
     # -- Discovery --
     def get_start(self) -> dict[str, Any]:
-        """An agent's first call (services/agent_start.py), its hints in `nebula` words."""
-        return self._request("GET", "/api/agent/start", params={"via": "cli"})
+        """An agent's first call (services/agent_start.py), its hints in
+        `nebula` words: every request says it comes from the CLI
+        (_identity_headers' X-Nebula-Surface)."""
+        return self._request("GET", "/api/agent/start")
 
     def get_nodes(self) -> dict[str, Any]:
         return self._request("GET", "/api/nodes")

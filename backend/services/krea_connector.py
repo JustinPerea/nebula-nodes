@@ -343,7 +343,7 @@ class KreaConnector:
         async with self._lock:
             saved = self.vault.read() if self.vault else None
             if not saved or not saved.get("tokens"):
-                raise KreaNotConnectedError("Connect your Krea account first")
+                raise KreaNotConnectedError("Sign in to Krea in Settings first")
             revision = saved.get("connection_revision")
             if not isinstance(revision, str) or not revision:
                 raise ConnectorError("Stored Krea connection is invalid; reconnect")
@@ -357,7 +357,7 @@ class KreaConnector:
             if expected_revision is not None and (not saved or saved.get("connection_revision") != expected_revision):
                 raise ConnectorError("Krea connection changed; rerun with the current connection")
             if not saved or not saved.get("tokens"):
-                raise ConnectorError("Connect your Krea account first")
+                raise ConnectorError("Sign in to Krea in Settings first")
             tokens = saved["tokens"]
             if tokens.get("expires_at") is not None and tokens["expires_at"] <= time.time() + 60:
                 if not tokens.get("refresh_token"):

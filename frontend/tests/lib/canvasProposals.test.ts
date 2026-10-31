@@ -54,9 +54,7 @@ describe('proposalEstimateLabel', () => {
     ...view(), run: ['+k'], cost: { ...view().cost, estimate: { low, high, open } },
   }) as unknown as ProposalView;
 
-  it('decides "$0" by source: a sourced $0 is "$0", a closed estimate that rounds to zero "~$0" (GM, PR #203 r11 item 4; round 6 review NIT-1)', () => {
-    const sourced = { ...priced(0, 0), cost: { ...priced(0, 0).cost, estimate: { low: 0, high: 0, open: false, sourcedZero: true } } } as unknown as ProposalView;
-    expect(proposalEstimateLabel(sourced)).toBe('$0');
+  it('an estimate is the paid part only: one that rounds to zero is "~$0" (round 6 review NIT-1; a sourced $0 is free, never priced: GM, PR #203 r18 item 1)', () => {
     expect(proposalEstimateLabel(priced(0, 0))).toBe('~$0');
     expect(proposalEstimateLabel(priced(0.07, 0.07))).toBe('~$0.07');
     // An open run is an estimate: the shared formatter's form (PR #198).

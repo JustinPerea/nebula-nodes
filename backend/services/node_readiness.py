@@ -277,24 +277,26 @@ def instance_missing_line(
     wired: Any = (), name: str | None = None,
 ) -> str | None:
     """instance_missing in words for the person (error copy round 3f): the
-    node by its name, a key by its provider, never an env-var name or a ref
-    ("GPT Image 2 needs your OpenAI API key. Add it in Settings."). The
-    proposal bar and layer show it; agents keep instance_missing's text.
-    None when the node can run."""
+    node by its name in curly quotes (GM, PR #203 r20 item 3), a key by its
+    provider, never an env-var name or a ref ("“GPT Image 2” needs your
+    OpenAI API key. Add it in Settings."). The proposal bar and layer show
+    it; agents keep instance_missing's text. None when the node can run."""
     from execution.person_line import key_phrase
     from services import node_route
 
     need = instance_missing(definition, params, configured_keys, krea_signed_in, definitions, wired)
     if need is None:
         return None
-    title = name or node_route.node_name(definition, None, "This node")
-    sign_in = f"{title} needs your Krea account. Connect it in Settings."
+    named = name or node_route.node_name(definition, None, "")
+    title = f"“{named}”" if named else "This node"
+    # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+    sign_in = f"{title} needs your Krea plan. Sign in to Krea in Settings."
     configured = set(configured_keys)
     if node_route.has_routes(definition):
         routed = node_route.with_wired_blockers(definition, params, wired)
         if node_route.uses_krea_plan(definition, routed):
             return sign_in
-        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured})
+        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured}, title=title)
         if line:
             return line
     if need == KREA_SIGN_IN:

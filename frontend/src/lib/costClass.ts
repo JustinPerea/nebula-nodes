@@ -41,3 +41,24 @@ export function costClass(
   if (sourcedZero(estimate)) return 'free';
   return 'paid';
 }
+
+/** Each counted class's part of a cost chip, in the chips' order: "2 paid",
+ * "1 on Krea plan", "1 may cost". Free runs are never counted. */
+export function classCounts({ paid = 0, plan = 0, mayCost = 0 }: { paid?: number; plan?: number; mayCost?: number }): string[] {
+  return [paid > 0 ? `${paid} paid` : '', plan > 0 ? `${plan} on Krea plan` : '', mayCost > 0 ? `${mayCost} may cost` : '']
+    .filter(Boolean);
+}
+
+/**
+ * A cost chip from its parts, by one rule (GM, PR #203 r20): "+" joins
+ * money, "·" joins classes. `money` is the amount, already joined by "+" to
+ * any unpriced part ("$0.07 + unpriced": pricing formatChipEstimate), and
+ * `classes` are the counted classes (classCounts), so the chip reads
+ * "$0.07 + unpriced · 1 on Krea plan", "2 paid · 1 on Krea plan" or
+ * "~$0.13 · 1 may cost". Null with neither. The Run chip (runScope
+ * runChipLabel) and the Accept chip (canvasProposals acceptCountChip) are
+ * both written with it.
+ */
+export function costChip(money: string | null, classes: readonly string[]): string | null {
+  return [money ?? '', ...classes].filter(Boolean).join(' · ') || null;
+}

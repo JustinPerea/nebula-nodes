@@ -179,12 +179,15 @@ $0 and spend tracking never counts it as paid.
   (frontend) fail on a second reader. The proposal's cost has `mayCostRuns`
   and `mayCost` (names and the account) beside `paidRuns`.
   - Toolbar Run chip (GM r14 item 4): "1 may cost" alone, "2 paid · 1 may
-    cost" beside paid nodes with no list price, "~$0.13 + 1 may cost" beside
+    cost" beside paid nodes with no list price, "~$0.13 · 1 may cost" beside
     a priced part. A run on the Krea plan is counted the same way, apart
     from paid (GM r19 item 1): "2 paid · 1 on Krea plan", "1 on Krea plan"
-    alone, "~$0.13 + 1 on Krea plan · 1 may cost". A sourced $0 is free,
-    never in "N paid" (GM r18 item 1); a run of only those reads "$0" with
-    the tooltip "This costs nothing to run." alone.
+    alone. Every chip, the Run chip and the Accept chip, is written by one
+    rule (`costClass.costChip`, GM r20): "+" joins money, "·" joins
+    classes, so "$0.07 + unpriced · 1 on Krea plan". A sourced $0 is free,
+    never in "N paid" (GM r18 item 1), and shows no chip, as every free run
+    doesn't (GM r20 item 1); the Run button's tooltip still says "This
+    costs nothing to run.".
   - The Run buttons' title and screen-reader text (Toolbar, the selection
     toolbar) are "Runs 3 nodes." and then the Run chip's own tooltip,
     from the same formatter, with no per-node breakdown (GM r19 item 2;
@@ -197,7 +200,13 @@ $0 and spend tracking never counts it as paid.
     bare "Estimated cost" heading anywhere (`pricing.chipTitle` gives the
     sentence), and no "~" inside a sentence. Each reason for an unpriced
     part goes on its own line under line 1 ("“B” has no listed price."),
-    and Idol's sentence comes last: "“A” and “B” call paid providers.
+    except a reason line naming exactly line 1's nodes, which merges into
+    it (GM r20 item 2): "“Writer” and “Editor” call paid providers that
+    have no listed price." (another reason: "“A” calls a paid provider and
+    is priced from its input, which isn’t ready yet."). Line 1 with a
+    figure stays apart. The backend gives the same reasons, so the Accept
+    chip merges the same way (`pricing_cases.json` `classCases` pin
+    `reasons` and the `title`). Idol's sentence comes last: "“A” and “B” call paid providers.
     Estimated cost $0.13. Idol can use your Hugging Face credits." The
     order is the paid lead, the figure (paid nodes only), the reason lines
     (a plan run's "“Krea 2” runs on your Krea plan." among them), then
@@ -220,7 +229,19 @@ $0 and spend tracking never counts it as paid.
     Hugging Face credits", no provider tag, and the amount leads the line
     under it: "~$0.13 · List prices, not a quote · expires in 14:59".
   - The ghost card (GM r15 item 1): "may cost · Hugging Face" with the
-    token, "free · Hugging Face" without.
+    token, "free · Hugging Face" without. Its tag is in the node's cost
+    class (`canvas_proposals._ghost_cost`, review 10, NIT-3): the run
+    entry's when the proposal runs it, else the estimate's, so a sourced $0
+    ghost reads "free · fal.ai", never "paid".
+  - The CLI's `runs` line (`nebula propose`, `nebula proposal`) counts
+    each class on its own (review 10, MEDIUM-1; GM r21 item 1): "up to 1
+    paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices",
+    "1 run that may bill the person's own account (Idol)". A plan run is
+    never "free" and never in the figure, and a free run that calls a
+    provider names it ("1 free run (on fal.ai)"), never "runs locally".
+    The journal's `proposal.created` has `planRuns` and `mayCostRuns`
+    beside `paidRuns`. propose_change's description lists the classes
+    from one table, `model_pricing.CLASS_ENTRIES` (review 10, LOW-2).
   - Read with the keys set now, never frozen at propose time (review 7,
     NIT-5): `canvas_proposals.view` takes the keys and re-reads each
     key-billing run (`live_cost`, from the params it was priced with, kept
@@ -233,7 +254,8 @@ $0 and spend tracking never counts it as paid.
   - The person's run over an agent's Idol placeholder: without a token Idol
     is free and asks nothing on its own; with one it "may cost", the dialog
     asks, and its row's price reads "may cost" (`main._paid_placeholders`,
-    `placeholderRunConfirm`).
+    `placeholderRunConfirm`). A sourced $0's row reads "free" (the run
+    estimate's `free` ids; review 10, NIT-3).
   Idol adds nothing to any estimate (`model_pricing.estimate_run` skips
   every key-billing node, so the proposal's, the run's and the placeholder
   confirm's estimates all leave it out; review 8, LOW-2): not "$0", since
@@ -260,7 +282,21 @@ $0 and spend tracking never counts it as paid.
     in place (GM r19 item 6): other rows move with the spring, a row the
     person is in (focus in it, or its edit view open) changes its status
     where it stands and moves when they leave it, and a typed draft is
-    never touched.
+    never touched. A held row's own Save moves it and keeps focus on its
+    Manage button (review 10, copy MEDIUM-1). A key removed elsewhere while
+    its manage view is open turns it into the edit view, with focus in the
+    field if focus was in the row (GM r21 item 2). The Providers tab's
+    badge counts the sections as shown, held rows included (item 3). The
+    panel says each change made elsewhere once, politely: "Replicate key
+    saved." / "Replicate key removed." (item 4). The Krea key's row is
+    "Krea · API key" (item 7).
+  - A settings.json whose `apiKeys` isn't an object reads as no keys, and
+    is never overwritten with a guess (review 10, NIT-6): a PUT that writes
+    a key and a key's DELETE get 409 "Nothing was saved because Nebula
+    can’t read the keys saved in settings.json. Fix “apiKeys” in that file,
+    then try again."; a PUT that writes no key saves and keeps `apiKeys` as
+    it was. A file that isn't an object at all refuses every write the
+    same way.
 
 ## Request contract
 

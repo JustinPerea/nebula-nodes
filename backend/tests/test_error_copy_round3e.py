@@ -220,9 +220,9 @@ def test_the_krea_account_check_has_a_line(monkeypatch):
 
     monkeypatch.setattr(krea_connector, "is_krea_connected", lambda: False)
     errors = [e for e in validate_graph([_node("n1", "krea-moodboard-search")], [], {})
-              if "Connect your Krea account" in e.message]
-    assert errors and errors[0].message == "Connect your Krea account in Settings before running this recipe"
-    assert _clean(errors[0].person) == "Connect your Krea account in Settings, then run the node again."
+              if "Sign in to Krea in Settings" in e.message]
+    assert errors and errors[0].message == "Sign in to Krea in Settings before running this recipe"
+    assert _clean(errors[0].person) == "Sign in to Krea in Settings, then run the node again."
 
 
 def test_the_gemini_guardrail_shows_as_it_is():

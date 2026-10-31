@@ -85,6 +85,22 @@ function labelFor(key: string) {
   return PROVIDER_KEY_SPECS[key]?.label ?? key;
 }
 
+/** "Replicate key", and "Krea · API key" as it is: a row label that already
+ * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one. */
+function keyNoun(key: string) {
+  const label = labelFor(key);
+  return /\bkey$/i.test(label) ? label : `${label} key`;
+}
+
+/** What an open panel says, politely, when a key is set or removed
+ * somewhere else: the CLI, the API, another window (GM, PR #203 r21 item 4,
+ * verbatim: "Replicate key saved." / "Replicate key removed."; never "in
+ * another window", which may be false). Its own save's notice reads the
+ * same, with "Checking it now." after it. */
+export function keyChangedLine(key: string, set: boolean): string {
+  return `${keyNoun(key)} ${set ? 'saved' : 'removed'}.`;
+}
+
 // GM (PR #203 r2): a Hugging Face token is printable ASCII with no space.
 // Leading and trailing spaces, line breaks and invisible marks are trimmed
 // without a word (saveKey's keyText); any other stray character is refused by
@@ -145,7 +161,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
     useSettingsDraftStore.setState({ keyDrafts: drafts, openRow: openRow?.id === key ? null : openRow });
     confirm({ apiKeys: { ...(saved?.apiKeys ?? {}), [key]: maskKey(value) } });
     setPending(key, false);
-    notify(`${labelFor(key)} key saved. Checking it now.`, wasConfigured ? undefined : key);
+    notify(`${keyNoun(key)} saved. Checking it now.`, wasConfigured ? undefined : key);
     // Saving is the explicit action that checks credentials (see providerReadinessStore).
     void useProviderReadinessStore.getState().checkConnections();
     return true;
@@ -177,7 +193,7 @@ export function removeKey(key: string): Promise<boolean> {
     useSettingsDraftStore.setState({ openRow: openRow?.id === key ? null : openRow });
     confirm({ apiKeys });
     setPending(key, false);
-    notify(`${labelFor(key)} key removed.`);
+    notify(`${keyNoun(key)} removed.`);
     return true;
   });
 }

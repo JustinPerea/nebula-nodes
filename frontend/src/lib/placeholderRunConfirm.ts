@@ -151,6 +151,9 @@ export interface PlaceholderRunOptions {
 export const PRICE_NOT_LISTED = 'price not listed';
 export const PRICE_DEPENDS_ON_INPUT = 'price depends on its input';
 export const PRICE_ON_KREA_PLAN = 'on your Krea plan';
+/** A sourced $0's row: free, the word a free node's chip would use (GM, PR
+ * #203 r20 item 1), never "price not listed" (review 10, NIT-3). */
+export const PRICE_FREE = 'free';
 /** A may-cost row's price (GM, PR #203 r15 item 2): no dollar amount covers it. */
 export const PRICE_MAY_COST = 'may cost';
 
@@ -585,8 +588,8 @@ export function runPlaceholders(nodes: Node<NodeData>[], edges: Edge[], nodeId: 
 }
 
 /** A row's price (GM - Design, rounds 4 and 6, verbatim): the list price,
- * "on your Krea plan", "price depends on its input" (its size isn't known
- * yet), or "price not listed". `missing`: no dollar amount covers it, which
+ * "on your Krea plan", "free" (a sourced $0), "price depends on its input"
+ * (its size isn't known yet), or "price not listed". `missing`: no dollar amount covers it, which
  * makes the button plain "Run". Read by node id where the summary has them. */
 function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { text: string; missing: boolean } {
   const cost = summary.cost;
@@ -594,6 +597,8 @@ function rowPrice(nodeId: string, summary: RunScopeSummary, name: string): { tex
   if (line) return { text: formatUsdRange(line.low, line.high), missing: false };
   const has = (key: 'plan' | 'awaitingInput') => (cost?.ids ? cost.ids[key].includes(nodeId) : cost?.[key].includes(name));
   if (has('plan')) return { text: PRICE_ON_KREA_PLAN, missing: false };
+  // A sourced $0, by the one cost class (summarizeRunScope's `free`).
+  if (cost?.ids?.free ? cost.ids.free.includes(nodeId) : summary.free?.includes(name)) return { text: PRICE_FREE, missing: false };
   if (has('awaitingInput')) return { text: PRICE_DEPENDS_ON_INPUT, missing: true };
   return { text: PRICE_NOT_LISTED, missing: true };
 }
@@ -848,6 +853,8 @@ export interface RunEstimate {
   nodes: Record<string, { low: number; high: number }>;
   unpriced: string[];
   plan: string[];
+  /** The sourced $0 nodes, free by their own price. Absent from an older backend. */
+  free?: string[];
   plus: string[];
   unavailable: Record<string, string>;
   awaitingInput: string[];
@@ -885,7 +892,7 @@ function cleanEstimate(raw: unknown): RunEstimate | null {
     if (typeof why === 'string') unavailable[id] = why;
   }
   return { low: numberOr(value.low, null), high: numberOr(value.high, null), nodes,
-    unpriced: idList(value.unpriced), plan: idList(value.plan),
+    unpriced: idList(value.unpriced), plan: idList(value.plan), free: idList(value.free),
     plus: idList(value.plus), unavailable, awaitingInput: idList(value.awaitingInput) };
 }
 
@@ -928,7 +935,9 @@ export function withRunEstimate(summary: RunScopeSummary, estimate: RunEstimate,
     plus: estimate.plus,
     awaitingInput: estimate.awaitingInput.map(nameOf),
     sizeRefs: [],
-    ids: { unpriced: estimate.unpriced, plan: estimate.plan, awaitingInput: estimate.awaitingInput },
+    ids: { unpriced: estimate.unpriced, plan: estimate.plan, awaitingInput: estimate.awaitingInput,
+      // An older backend sends no `free`: the tab's own summary says which.
+      free: estimate.free ?? summary.cost?.ids?.free ?? [] },
     ...(Object.keys(unavailable).length ? { unavailable } : {}),
   };
   return { ...summary, cost };

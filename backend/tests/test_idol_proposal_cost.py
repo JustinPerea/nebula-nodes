@@ -90,12 +90,14 @@ def test_summarize_names_two_idol_runs_once():
     assert summary["freeRuns"] == 0
 
 
-def test_summarize_passes_a_sourced_zero_on_and_only_then():
+def test_summarize_never_calls_a_paid_estimate_sourced_zero():
+    """A sourced $0 is free and never priced (GM, PR #203 r18 item 1), so a
+    proposal's estimate covers paid nodes only and never says sourcedZero
+    (review 10 of PR #203, NIT-1: the branch that passed it on is gone)."""
     base = {"currency": "usd", "low": 0, "high": 0, "unpriced": [], "plan": [], "plus": []}
-    sourced = summarize_cost([_entry("+a", "paid")], up_to=False, estimate={**base, "sourcedZero": True})["estimate"]
-    assert sourced["sourcedZero"] is True
-    rounded = summarize_cost([_entry("+a", "paid")], up_to=False, estimate={**base, "sourcedZero": False})["estimate"]
-    assert "sourcedZero" not in rounded
+    for flag in (True, False):
+        estimate = summarize_cost([_entry("+a", "paid")], up_to=False, estimate={**base, "sourcedZero": flag})["estimate"]
+        assert "sourcedZero" not in estimate
 
 
 # -- estimate_run: a sourced $0 by its source ----------------------------------------
@@ -126,9 +128,9 @@ def test_estimate_run_with_nothing_priced_is_not_a_sourced_zero():
 
 def test_the_cli_names_a_may_cost_run_apart_from_paid():
     alone = {"paidRuns": 0, "mayCostRuns": 1, "mayCost": [{"name": "Idol", "account": "Hugging Face"}], "freeRuns": 0}
-    assert _cost_line(alone) == "1 run: 1 that may bill the person's own account (Idol)"
+    assert _cost_line(alone) == "1 run that may bill the person's own account (Idol)"
     mixed = {**alone, "paidRuns": 2, "providers": ["google"], "estimate": None}
-    assert _cost_line(mixed) == "2 paid runs (google), 1 that may bill the person's own account (Idol) — no list price"
+    assert _cost_line(mixed) == "2 paid runs (google) and 1 that may bill the person's own account (Idol), no list price"
 
 
 def test_the_cli_line_without_may_cost_is_unchanged():

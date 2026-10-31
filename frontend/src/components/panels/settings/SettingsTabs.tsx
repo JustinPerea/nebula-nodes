@@ -2,6 +2,7 @@ import { useRef, type KeyboardEvent } from 'react';
 import type { SettingsTab } from '../../../store/settingsDraftStore';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
+import { shownConnected } from './rowHelpers';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
@@ -11,11 +12,12 @@ const TABS: { id: SettingsTab; label: string }[] = [
 
 /** Three tabs with one sliding pill; arrow keys move between them (WAI-ARIA tabs pattern). */
 export function SettingsTabs({ tab, onChange }: { tab: SettingsTab; onChange: (tab: SettingsTab) => void }) {
-  const connected = useSettingsDraftStore((s) => (s.saved ? Object.values(s.saved.apiKeys).filter((value) => value.trim()).length : 0));
+  const apiKeys = useSettingsDraftStore((s) => s.saved?.apiKeys);
+  const held = useSettingsDraftStore((s) => s.heldRows);
   const kreaSignedIn = useUIStore((s) => s.settingsCache.kreaConnection?.status === 'connected');
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const index = TABS.findIndex((entry) => entry.id === tab);
-  const count = connected + (kreaSignedIn ? 1 : 0);
+  const count = shownConnected(apiKeys ?? {}, kreaSignedIn, held);
 
   function onKeyDown(event: KeyboardEvent) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;

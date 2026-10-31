@@ -80,6 +80,7 @@ from execution import provider_calls
 from services.settings import (
     load_settings,
     load_saved_settings,
+    saved_keys_readable,
     save_settings,
     get_api_key,
     validate_provider_keys,
@@ -6386,8 +6387,8 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
             options = node_readiness.detail(definition, context["keys"], context["krea"], definitions) or {}
             if options.get("note"):
                 notes.append(f"{row['id']}: {options['note']}")
-    look = "`nebula info <id>`" if via == "cli" else "describe_node"
-    propose = "`nebula propose`" if via == "cli" else "propose_change"
+    look = agent_words.worded("{describe}", via)
+    propose = agent_words.worded("{propose}", via)
     if any(row.get("runsWith") == "krea" for row in ready):
         notes.append(f"runsWith krea: runs on the signed-in Krea account. Billing a node differently (_kreaAuth) "
                      f"is the person's call: {propose} it.")
@@ -6430,14 +6431,15 @@ def _quick_propose_hint(definition_id: str, where: str) -> str:
 
 
 @app.get("/api/agent/start")
-async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]:
+async def agent_start_here(request: Request) -> dict[str, Any]:
     """An agent's first call: the canvas, open pins and proposals, every board,
     the node types that run here with prices, and the spend limits, each in
     its own budget (services/agent_start.py). MCP `start_here` and `nebula
-    context` print it; `via=cli` words its hints as `nebula` commands."""
-    if via not in agent_start.VIAS:
-        raise HTTPException(status_code=422, detail="via must be mcp or cli")
+    context` print it; the CLI's ``X-Nebula-Surface: cli``, the one signal
+    every CLI request sends (services/agent_words; review 10 of PR #203,
+    NIT-4), words its hints as `nebula` commands."""
     headers = current_request_headers()
+    via = agent_words.surface(headers)
     caller = identify_agent(headers)
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
@@ -8106,6 +8108,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             "sets": len(spec.params),
             "runs": len(spec.run),
             "paidRuns": cost["paidRuns"],
+            # Each class on its own, as the cost line counts them (review 10, MEDIUM-1).
+            "mayCostRuns": cost["mayCostRuns"],
+            "planRuns": cost["planRuns"],
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
@@ -9831,9 +9836,17 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # Do not mutate a loaded/shared object until the complete request is valid.
     # The file as saved, not as read: a save writes back every entry it wasn't
     # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
-    before = dict(load_settings().get("apiKeys") or {})
     current = copy.deepcopy(load_saved_settings())
-    if "apiKeys" in body and accepts_keys:
+    if not isinstance(current, dict):
+        raise HTTPException(409, SETTINGS_UNREADABLE)
+    before = dict(load_settings().get("apiKeys") or {})
+    writes_keys = "apiKeys" in body and accepts_keys and any(
+        node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
+    if writes_keys and not saved_keys_readable(current):
+        # Keys Nebula can't read stay as saved: a key added to them would be
+        # a guess at what they were (review 10 of PR #203, NIT-6).
+        raise HTTPException(409, KEYS_UNREADABLE)
+    if writes_keys:
         current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
         for k, v in body["apiKeys"].items():
             # A pasted key's spaces, line breaks and invisible marks at its
@@ -9904,8 +9917,13 @@ async def remove_settings_api_key(provider: str) -> dict:
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
     # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
-    before = dict(load_settings().get("apiKeys") or {})
     current = copy.deepcopy(load_saved_settings())
+    if not isinstance(current, dict):
+        raise HTTPException(409, SETTINGS_UNREADABLE)
+    before = dict(load_settings().get("apiKeys") or {})
+    if not saved_keys_readable(current):
+        # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
+        raise HTTPException(409, KEYS_UNREADABLE)
     current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
     current_keys.pop(provider, None)
     current["apiKeys"] = current_keys
@@ -9950,6 +9968,15 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     update_injected_keys(provider, node_route.key_text(key))
     await _broadcast_settings_changed(_changed_keys(before))
     return {"status": "updated"}
+
+
+# A settings.json whose `apiKeys` isn't an object, or that isn't an object at
+# all: Nebula reads no keys from it (services/settings.load_settings) and a
+# write never replaces what it holds with a guess (review 10 of PR #203,
+# NIT-6). Builder's wording, for GM.
+KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in settings.json. "
+                   "Fix “apiKeys” in that file, then try again.")
+SETTINGS_UNREADABLE = ("Nothing was saved because Nebula can’t read settings.json. Fix the file, then try again.")
 
 
 # A key with something in it that is empty once trimmed: no key at all, so
@@ -10403,6 +10430,9 @@ def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int
         "nodes": lines,
         "unpriced": list(estimate.get("unpriced") or []),
         "plan": list(estimate.get("plan") or []),
+        # The sourced $0 nodes: free, by their own price (GM, PR #203 r18
+        # item 1), so the dialog's row says so (review 10, NIT-3).
+        "free": list(estimate.get("free") or []),
         "plus": list(estimate.get("plus") or []),
         "unavailable": dict(estimate.get("unavailable") or {}),
         "awaitingInput": list(estimate.get("awaitingInput") or []),

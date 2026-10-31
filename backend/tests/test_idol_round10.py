@@ -63,6 +63,10 @@ def test_each_node_gets_the_shared_cost_class(case):
     assert result["sourcedZero"] is expected["sourcedZero"]
     for node in expected["plan"]:
         assert result["reasons"][node] == {"kind": "plan"}
+    # Each node's reason, as the frontend's tooltip groups them (GM, PR #203
+    # r20 item 2: the same reasons, so the merged line agrees; round 11).
+    if "reasons" in expected:
+        assert result["reasons"] == expected["reasons"]
 
 
 def test_a_sourced_zero_is_free_and_anything_else_priced_is_paid():
@@ -116,6 +120,9 @@ CLASS_PARTS = {
     "key_billing": {("services/node_route.py", "may_bill"), ("services/node_route.py", "key_billing_account"),
                     ("services/model_pricing.py", "cost_class")},
     "uses_krea_account": {("services/model_pricing.py", "cost_class")},
+    # The spend gate reads the one class too (review 10, NIT-5): may_bill is
+    # its documented twin, read by nothing outside the tests.
+    "may_bill": set(),
 }
 
 

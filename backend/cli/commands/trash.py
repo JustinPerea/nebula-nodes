@@ -59,7 +59,7 @@ def _where(client: NebulaClient, scope: str | None, project: str | None) -> str:
 def run_list(client: NebulaClient, *, kind: str | None = None, scope: str | None = None,
              project: str | None = None, as_json: bool = False, out: TextIO | None = None) -> int:
     out = out or sys.stdout
-    listing = client.shared(project_client.list_trash, kind=kind, scope=scope, project_id=project, via="cli")
+    listing = client.shared(project_client.list_trash, kind=kind, scope=scope, project_id=project)
     items = listing.get("items") or []
     if as_json:
         print(json.dumps(listing, indent=2, ensure_ascii=False), file=out)

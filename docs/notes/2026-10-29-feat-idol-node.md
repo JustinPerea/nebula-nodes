@@ -1343,3 +1343,179 @@ blocked), every Hugging Face host blocked; nothing was run or accepted.
 - The toolbar chip beside an unpriced part reads "$0.07 + unpriced + 1 on
   Krea plan" (the r14 "amount + N may cost" shape with the open suffix).
   Say if it should drop a "+".
+
+## Round 11 (2026-10-30): one chip rule, merged reasons, Krea's one verb, every class in the CLI (GM r20, r21, review 10)
+
+No live call to the Space or any provider. The live check ran on an
+isolated backend (8793) and Vite (5793) inside a macOS `sandbox-exec`
+profile that denies every outbound connection but localhost, with the dead
+proxy kept as well. Canaries: a sandboxed Python reaching api.x.ai,
+api.meshy.ai, api.ideogram.ai, huggingface.co and 1.1.1.1:443 got "Operation
+not permitted"; the backend's own key check (`/api/health/providers?refresh=true`
+with fake OpenAI, Google and Anthropic keys) answered "ConnectError: All
+connection attempts failed" for each. The browser couldn't run inside the
+sandbox (Chrome's own sandbox won't start nested), so it sends everything but
+127.0.0.1:5793/8793 to a dead proxy; its canaries to 8000, 5173, api.x.ai and
+api.meshy.ai were blocked. Nothing was run or accepted.
+
+### One chip rule (GM r20)
+
+- `costClass.costChip(money, classes)` writes every chip: "+" joins money
+  (the amount and "unpriced", from `formatChipEstimate`), "·" joins classes
+  (`classCounts`). The Run chip (`runChipLabel`) and the Accept chip
+  (`acceptCountChip`) both use it: "$0.07 + unpriced · 1 on Krea plan",
+  "2 paid · 1 on Krea plan", "~$0.13 · 1 may cost".
+- That last one changes r14 item 4's "~$0.13 + 1 may cost" by the same
+  rule; the user guide and idol.md say so. Question below.
+- A sourced $0 shows no chip, as a free run doesn't (r20 item 1). Its Run
+  button tooltip stays "This costs nothing to run."; a local free node's
+  says "No paid providers.", as before. The bar's `proposalEstimateLabel`
+  "$0" branch and the backend's `summarize_cost` `sourcedZero` branch were
+  dead (a sourced $0 is never priced) and are gone (review 10, NIT-1);
+  `classCases` pins `sourcedZero` beside a plan run (B4).
+
+### Merged reason lines (GM r20 item 2)
+
+- `costTitle` merges line 1 with the reason group naming exactly the paid
+  nodes: "“Writer” and “Editor” call paid providers that have no listed
+  price." Line 1 with a figure stays apart (the figure says more than the
+  names), and so does any group naming other nodes. With only the merged
+  line left, Idol's sentence joins it on the same line, as in the priced
+  shape.
+- noPrice uses GM's words (`PAID_NO_LISTED_PRICE`). Another kind uses
+  `PAID_AND`: "“A” calls a paid provider and is priced from its input,
+  which isn’t ready yet." That's builder's wording (question below).
+- The backend gives the same reasons; `classCases` now carry
+  `expected.reasons` and `expected.title`, read by both runners: the merged
+  pair, a sourced $0 beside an unpriced node (merged), and a left-out cost
+  beside a missing price (apart). `leftOut` is pinned (NIT-2).
+
+### Quoted names, Krea's one verb (GM r20 item 3, r21)
+
+- `node_readiness.instance_missing_line` quotes the name at the source, so
+  every bar and layer warning has it: "“Krea 2” needs your Krea plan. Sign
+  in to Krea in Settings." Route lines get the quoted title too
+  (`route_unavailable_line(title=)`). A node with no name keeps "This node",
+  unquoted. Agents keep `missing`; the HTTP and MCP answers carry the quoted
+  `person` beside it (MCP-SETUP says so).
+- "Sign in to Krea in Settings" everywhere that was "Connect your Krea
+  account": the engine's preflight message, the connector's not-connected
+  errors, MCP's Krea discovery hint (it still adds "Only the person can sign
+  in to Krea" when the detail says "sign in"), the Inspector, provider
+  readiness, the switcher ("“<Node>” runs on your Krea plan. Sign in to Krea
+  in Settings, or choose another provider.", r21 item 6) and the Krea guide.
+- The Krea key row is "Krea · API key" (r21 item 7). The key notices name a
+  label that already ends in "key" once: "Krea · API key saved.", never
+  "Krea · API key key saved." (`settingsWrites.keyNoun`; "Krea · usage key"
+  had the same doubling before).
+- "Add a Anthropic" is gone: the Settings fallback reads "Add your
+  Anthropic API credential in Settings."; the other lines that put an
+  article before a provider use `withArticle` ("an OpenAI", "an xAI").
+
+### The CLI and the other agent surfaces (review 10, MEDIUM-1, LOW-1, LOW-2, NIT-4)
+
+- `cli/formatter._cost_line` counts each class on its own, in GM r21 item
+  1's words: "up to 1 paid run (fal) and 1 on the person's Krea plan, $0.03
+  at list prices", "1 run on the person's Krea plan". A plan run is never
+  free, never "runs locally", never in the figure. A free run that calls a
+  provider names it from its entry's label ("1 free run (on fal.ai)").
+- The journal's `proposal.created` has `planRuns` and `mayCostRuns` beside
+  `paidRuns`. `start_here`, `nebula context` and `nebula look` print no run
+  cost, and MCP's propose_change and get_proposal answers carry the counts
+  as JSON, so nothing else needed a change.
+- propose_change's description lists the classes from
+  `model_pricing.CLASS_ENTRIES` (`<<COST_CLASSES>>`, filled in before the
+  tool registers); a test holds the table to the four classes and to the
+  keys `summarize_cost` writes.
+- The words: `agent_words.WORDS` holds `projects` and `withdraw` too, and
+  `main._start_node_notes`, `project_client` and `canvas_proposals`'
+  READY_NODES_*/WITHDRAW_* read it. `/api/agent/start` and project_client
+  read the CLI's `X-Nebula-Surface` header, the one signal; `via` is gone
+  from the route, the client and the commands.
+- `nebula run`'s refusal (the Idol gate and a spending limit) is pinned over
+  HTTP with and without the header (B14).
+
+### Cost class reads (review 10, LOW-3, NIT-3, NIT-5)
+
+- `cost_for`'s route-table branch reads the params as the router does, with
+  the connected inputs (`with_wired_blockers`): a connected end image or keyframes
+  takes FLUX 3 Video off the plan, as the estimate says (B6 pinned both
+  ways).
+- A ghost card's tag is in its cost class (`canvas_proposals._ghost_cost`):
+  the run entry's kind, else the estimate's class for the node alone.
+- The placeholder dialog's row for a sourced $0 reads "free"
+  (`PRICE_FREE`), from the run estimate's new `free` ids (and the tab's own
+  summary for an older backend).
+- The spend gate's `may_bill_nodes` reads `model_pricing.cost_class`; the
+  ratchet now lists `may_bill` with no reader outside the tests. A test
+  walks every registry node, each route's `_provider`, and three key sets,
+  and finds the gate and `node_route.may_bill` agree on all of them, so its
+  reach is unchanged.
+
+### Settings (review 10, copy MEDIUM-1, MEDIUM-2, NIT-6, NIT-7; GM r21 items 2 to 4)
+
+- Held rows live in `settingsDraftStore.heldRows`, so the tab badge counts
+  the sections as shown (`rowHelpers.shownConnected`, r21 item 3).
+- The person's own save from a held row moves it and puts focus on the
+  moved row's trigger when focus was in it (`focusRowAfterMove`; M21).
+- A key removed elsewhere while its manage view is open: `KeyRow` derives
+  the edit view in that render and the store follows. A held row (focus in
+  it) keeps its place and the field takes focus; any other row moves and
+  mounts already open, taking no focus. The redundant focus guard went:
+  the mutant on it was equivalent.
+- One polite live region (`[data-key-changes]`) says each change made
+  elsewhere once: "Replicate key saved." / "Replicate key removed.".
+- A non-object `apiKeys` reads as no keys and is never overwritten: a key
+  write and a key's DELETE get 409 KEYS_UNREADABLE, a save that writes no
+  key keeps it as saved; a file that isn't an object refuses every write
+  (SETTINGS_UNREADABLE). Builder's wording, question below.
+- The signal test covers a tab whose hello had a wrong token and a socket
+  that never said hello: neither hears `settingsChanged`.
+- The keyLink test renders once and pins each provider's own word (M7);
+  reduced motion is pinned (M20); the debug `console.log` is gone.
+
+### The bar (review 10, copy LOW-1)
+
+`.proposal-bar__actions` wraps, right-aligned. Live, at 700, 760, 1024 and
+1440 every button is inside the bar and none is clipped; at 760 and 700
+Accept takes its own line under Show and Reject.
+
+### Base check and mutants
+
+- On 5a237ba5 the new and changed tests fail: 27 backend, 24 frontend. The
+  ones that pass there pin behaviour already right: B14's two refusals,
+  B6's estimate class, the NIT-5 reach proof, the NIT-7 sockets, the plan-only
+  line 1, the Accept chip and the LOW-2 hold. Mutants kill them.
+- 42 mutants (19 frontend, 23 backend), with M1, M7, M20, M21, B4, B6 and
+  B14. First pass: 39 killed. R20 (a route line without the quoted title)
+  survived and got a test through `instance_missing_line`. F15 (the edit
+  focus guard) survived because it was redundant; it's gone. F14 (`Add key`'s
+  `aria-expanded={open !== null}`) is equivalent: the derived view means
+  "Add key" only shows with nothing open.
+
+### Gates
+
+tsc, lint, check-node-contracts, contract-inventory, the model reference
+and route tables checks, vite build and the budget, and the desktop tests
+(temp HOME) pass. The full vitest found one stale tooltip pin
+(`idolRound10.render.test.tsx`, the Accept chip before the merge); fixed,
+the rerun is 702 files, 9,001 tests, 0 failed, 0 errors. The full isolated
+backend: 12,818 passed, 2 failed on timing under load
+(`test_acp_session` event-loop stall 0.87 s against 0.75 s,
+`test_krea_mcp_server` stdio bridge deadline); both pass alone and with
+their files (117 passed), and passed in the earlier full run.
+
+### Questions for GM
+
+- The chip rule turns r14's "~$0.13 + 1 may cost" into "~$0.13 · 1 may
+  cost". OK?
+- The merge for kinds other than noPrice: "“A” calls a paid provider and is
+  priced from its input, which isn’t ready yet." OK, or keep those apart?
+- The two settings.json refusals: "Nothing was saved because Nebula can’t
+  read the keys saved in settings.json. Fix “apiKeys” in that file, then try
+  again." and "Nothing was saved because Nebula can’t read settings.json.
+  Fix the file, then try again."
+- Person lines still say "Add your Krea API token in Settings" while the
+  row says "Krea · API key". Follow the row?
+- The CLI's free part names where a provider call runs: "1 free run (on
+  fal.ai)", and beside other classes "2 free (1 on fal.ai)".

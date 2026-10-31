@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { costClass } from './costClass';
+import { classCounts, costChip, costClass } from './costClass';
 import {
   envKeyNames, hasRoutes, isDefaultTitle, keyBillingAccount, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable,
   selectRoute, withWiredBlockers,
@@ -16,7 +16,7 @@ import {
 import { cleanPending, pendingIncludedLine, runSkips, skipSummaryOf, type PendingSkipSummary } from './pendingNodes';
 import {
   AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ON_KREA_PLAN,
-  ROUTE_CANT_RUN, SIZE_UNREADABLE,
+  PAID_AND, PAID_NO_LISTED_PRICE, ROUTE_CANT_RUN, SIZE_UNREADABLE,
 } from './unpricedCopy';
 
 /** Why a paid node in a run adds to the "+ unpriced" chip (GM, PR #198 r7
@@ -68,7 +68,7 @@ export interface RunCost {
   /** `unpriced`, `plan` and `awaitingInput` by node id, for a reader that
    * needs each node's own (two nodes can share a name): the placeholder
    * dialog's rows (lib/placeholderRunConfirm.ts). */
-  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; unavailable?: Record<string, string> };
+  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; free?: string[]; unavailable?: Record<string, string> };
   /** The run's only provider calls are sourced $0 nodes (summary `free`), so
    * it is exact, not an estimate that rounds to zero (GM, PR #203 r11 item
    * 4: "$0" against "~$0"; r18 item 1: such a node is free, never paid).
@@ -351,7 +351,7 @@ export function summarizeRunScope(
   const free: string[] = [];
   const mayCost: NonNullable<RunScopeSummary['mayCost']> = [];
   const pricing = costContext?.pricing;
-  const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [] };
+  const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [], free: [] };
   const cost: RunCost = {
     low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], reasons: [], ids,
   };
@@ -474,6 +474,7 @@ export function summarizeRunScope(
       paid.pop();
       if (behindGates.has(node.id)) gated.pop();
       free.push(name);
+      ids.free!.push(node.id);
       continue;
     }
     if (!estimate || estimate.currency !== 'usd') {
@@ -533,23 +534,18 @@ export function repeatRun(summary: RunScopeSummary, passes: number): RunScopeSum
 /** The Run chip: "~$0.04", "$0.04–0.43", "$0.04 + unpriced" when part of
  * the run has no known price (GM, PR #198 r6), "<$0.01" for a non-zero
  * amount under a cent (r1: "$0" only ever means free), "N paid" when none
- * of it has a list price. Null when nothing is paid or may cost.
- * GM, PR #203 r11 item 2: a run that may bill the person's own account
- * (summary.mayCost) is counted apart, "1 may cost" alone and "2 paid · 1 may
- * cost" beside paid nodes with no list price; beside a priced part the chip
- * keeps its amount and the tooltip says it (runChipTitle). */
+ * of it has a list price. Null when nothing is paid, on the Krea plan or may
+ * cost: a free run shows no chip, a sourced $0 included (GM, PR #203 r20
+ * item 1; its tooltip "This costs nothing to run." stays on the Run
+ * button). A run that may bill the person's own account (summary.mayCost)
+ * and one on the Krea plan are counted apart, by the one chip rule
+ * (costChip: "+" joins money, "·" joins classes; GM r20): "1 may cost",
+ * "2 paid · 1 on Krea plan", "$0.07 + unpriced · 1 on Krea plan". */
 export function runChipLabel({ paid, cost, mayCost, plan }: RunScopeSummary): string | null {
-  // GM, PR #203 r19 item 1: a run on the Krea plan is counted apart from
-  // paid, "2 paid · 1 on Krea plan", and alone "1 on Krea plan".
-  const apart = [plan?.length ? `${plan.length} on Krea plan` : '', mayCost?.length ? `${mayCost.length} may cost` : '']
-    .filter(Boolean).join(' · ') || null;
-  // GM, PR #203 r11 item 4, by source: a run whose only provider calls are
-  // sourced $0 nodes is exact, "$0" (r18 item 1: they are free, never paid).
-  if (paid.length === 0) return apart ?? (cost?.sourcedZero ? '$0' : null);
-  if (!cost || cost.lines.length === 0) return [`${paid.length} paid`, apart].filter(Boolean).join(' · ');
-  const amount = formatChipEstimate(cost.low, cost.high, costOpen(cost));
-  // GM, PR #203 r14 item 4: beside a priced part, "~$0.13 + 1 may cost".
-  return apart ? `${amount} + ${apart}` : amount;
+  const counts = (paidCount: number) => classCounts({ paid: paidCount, plan: plan?.length, mayCost: mayCost?.length });
+  if (paid.length === 0) return costChip(null, counts(0));
+  if (!cost || cost.lines.length === 0) return costChip(null, counts(paid.length));
+  return costChip(formatChipEstimate(cost.low, cost.high, costOpen(cost)), counts(0));
 }
 
 /** "“Hero still” calls a paid provider." / "“A” and “B” call paid
@@ -599,8 +595,15 @@ export interface CostTitleParts {
 export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: CostTitleParts): string | undefined {
   const may = mayCostSentence(mayCost);
   const priced = paid.length > 0 && estimate ? estimateSentence(estimate.low, estimate.high, estimate.open) : '';
-  const lead = [paidSentence(paid), priced].filter(Boolean).join(' ');
-  const lines = reasonSentences(reasons);
+  const groups = reasonGroups(reasons);
+  // GM, PR #203 r20 item 2: line 1 and a reason line naming the same nodes
+  // are one sentence, "“Writer” and “Editor” call paid providers that have
+  // no listed price."; lines naming other nodes stay their own. Line 1 with
+  // a figure says more than the names, so it stays apart.
+  const same = priced ? -1 : groups.findIndex((group) => sameNames(group.names, paid));
+  const merged = same >= 0 ? mergedLead(groups.splice(same, 1)[0]) : null;
+  const lead = merged ?? [paidSentence(paid), priced].filter(Boolean).join(' ');
+  const lines = groups.map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
   if (!lead && lines.length === 0 && !may) return sourcedZero ? SOURCED_ZERO_TITLE : undefined;
   if (lines.length === 0) return [lead, may].filter(Boolean).join(' ') || undefined;
   return [lead, ...lines, may].filter(Boolean).join('\n') || undefined;
@@ -625,12 +628,31 @@ export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | n
   }).join(' ');
 }
 
-/** One sentence per reason (GM r7 item 3): the nodes sharing it named
+type ReasonGroup = { id: string; line: (names: string, several: boolean) => string; names: string[] };
+
+/** The same nodes, however they are ordered. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length === 0 || a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((name, index) => name === right[index]);
+}
+
+/** Line 1 merged with the reason line naming the same nodes, in that line's
+ * order (the canvas's). */
+function mergedLead({ id, line, names }: ReasonGroup): string {
+  const list = nodeNameList(names);
+  const several = namesSeveral(names);
+  if (id === 'noPrice') return PAID_NO_LISTED_PRICE(list, several);
+  return PAID_AND(list, several, line(list, several).slice(list.length + 1));
+}
+
+/** One group per reason (GM r7 item 3): the nodes sharing it named
  * together (errorCopy nodeNameList), ordered as the nodes appear on the
  * canvas: left to right, the way a graph reads, then top to bottom (a node
  * with no position keeps its place after those that have one). */
-function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
-  const groups = new Map<string, { line: (names: string, several: boolean) => string; names: string[] }>();
+function reasonGroups(reasons: NonNullable<RunCost['reasons']>): ReasonGroup[] {
+  const groups = new Map<string, ReasonGroup>();
   const placed = reasons.map((entry, index) => ({ ...entry, index }));
   placed.sort((a, b) => (a.at && b.at ? a.at.x - b.at.x || a.at.y - b.at.y || a.index - b.index
     : a.at ? -1 : b.at ? 1 : a.index - b.index));
@@ -658,11 +680,11 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
       // line, never a crash (review 9 of PR #203, NIT-2).
       default: id = 'noPrice'; line = NO_LISTED_PRICE; break;
     }
-    const group = groups.get(id) ?? { line, names: [] };
+    const group = groups.get(id) ?? { id, line, names: [] };
     group.names.push(name);
     groups.set(id, group);
   }
-  return [...groups.values()].map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
+  return [...groups.values()];
 }
 
 /** The Run chip's tooltip, from the same parts as its label (costTitle,

@@ -89,7 +89,8 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
     ]), 'key-a');
     render(<ProposalBar />);
     const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 on Krea plan' });
-    const tooltip = '“Writer” and “Editor” call paid providers.\n“Writer” and “Editor” have no listed price.\n'
+    // GM, PR #203 r20 item 2: line 1 and the reason naming the same nodes are one.
+    const tooltip = '“Writer” and “Editor” call paid providers that have no listed price.\n'
       + '“Krea 2” runs on your Krea plan.';
     expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', tooltip);
     // The same text, once: not in the name, read as the description.

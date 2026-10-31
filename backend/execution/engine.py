@@ -959,8 +959,9 @@ def validate_graph(
             if not is_krea_connected():
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="",
-                    message="Connect your Krea account in Settings before running this recipe",
-                    person="Connect your Krea account in Settings, then run the node again."))
+                    message="Sign in to Krea in Settings before running this recipe",
+                    # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+                    person="Sign in to Krea in Settings, then run the node again."))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never

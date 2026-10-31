@@ -1018,7 +1018,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       )}
       {usesKreaMcp && activeNodeData.keyStatus === 'missing' && !switchable && (
         <div className="inspector__notice inspector__notice--warning" role="status">
-          Krea sign-in required. Connect or check Krea in Settings.
+          Krea sign-in required. Sign in to Krea in Settings.
         </div>
       )}
 

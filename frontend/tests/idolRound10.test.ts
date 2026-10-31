@@ -48,7 +48,8 @@ const at = (id: string, definitionId: string, label: string, x: number, params: 
 
 type ClassCase = {
   name: string; nodes: Array<{ id: string; nodeId: string; params: Record<string, unknown> }>; apiKeys: Record<string, string>;
-  expected: { paid: string[]; plan: string[]; free: string[]; mayCost: string[]; low: number | null; high: number | null; sourcedZero: boolean };
+  expected: { paid: string[]; plan: string[]; free: string[]; mayCost: string[]; low: number | null; high: number | null; sourcedZero: boolean;
+    reasons?: Record<string, { kind: string; plus?: string }>; title?: string };
 };
 const fixture = pricingCases as unknown as {
   definitions: Record<string, ModelNodeDefinition>; pricing: PricingTable; classCases: ClassCase[];
@@ -90,6 +91,12 @@ describe('one cost class, as the backend gives it (GM r18 item 1, r19 item 1)', 
     for (const id of testCase.expected.plan) {
       expect(summary.cost!.reasons?.find((entry) => entry.name === id)?.reason).toEqual({ kind: 'plan' });
     }
+    // Each node's reason, as the backend's (round 11; GM r20 item 2), and the tooltip they write.
+    if (testCase.expected.reasons) {
+      const got = Object.fromEntries((summary.cost!.reasons ?? []).map((entry) => [entry.name, entry.reason]));
+      expect(got).toEqual(testCase.expected.reasons);
+    }
+    if (testCase.expected.title) expect(runChipTitle(summary)).toBe(testCase.expected.title);
     // Each node's class, from the one function.
     for (const node of testCase.nodes) {
       if (classOf(node.id) === 'free' && node.nodeId === 'zeroed') continue; // free by its price, read with the estimate
@@ -143,8 +150,8 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     expect(summary.plan).toEqual(['Krea 2']);
     expect(runChipLabel(summary)).toBe('2 paid · 1 on Krea plan · 1 may cost');
     // The paid lead, the figure (none here), the reason lines with the plan's, Idol's sentence.
-    expect(runChipTitle(summary)).toBe('“A” and “B” call paid providers.\n'
-      + '“A” and “B” have no listed price.\n'
+    // Line 1 and the reason line naming the same nodes are one (GM, PR #203 r20 item 2).
+    expect(runChipTitle(summary)).toBe('“A” and “B” call paid providers that have no listed price.\n'
       + '“Krea 2” runs on your Krea plan.\n'
       + 'Idol can use your Hugging Face credits.');
   });
@@ -153,7 +160,8 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     const graph = [at('n', 'nano-banana', 'Hero', 0), at('k', 'krea-2-generate', 'Krea 2', 100, PLAN)];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, { pricing, apiKeys: KEYS });
     const label = runChipLabel(summary)!;
-    expect(label).toMatch(/^~\$\d+\.\d\d \+ 1 on Krea plan$/);
+    // "+" joins money, "·" joins classes (GM, PR #203 r20).
+    expect(label).toMatch(/^~\$\d+\.\d\d · 1 on Krea plan$/);
     const title = runChipTitle(summary)!.split('\n');
     expect(title[0]).toMatch(/^“Hero” calls a paid provider\. Estimated cost \$/);
     expect(title.slice(1)).toEqual(['“Krea 2” runs on your Krea plan.']);
@@ -200,9 +208,9 @@ describe('a sourced $0 is free (GM r18 item 1)', () => {
   beforeAll(() => { for (const id of added) NODE_DEFINITIONS[id] = fixture.definitions[id]; });
   afterAll(() => { for (const id of added) delete NODE_DEFINITIONS[id]; });
 
-  it('alone: "$0", and the tooltip is only "This costs nothing to run."', () => {
+  it('alone: no chip, as any free run (GM r20 item 1), and the tooltip is only "This costs nothing to run."', () => {
     const summary = summarizeRunScope([at('z', 'zeroed', 'Zero', 0)], [], { kind: 'graph' }, { pricing: classPricing, apiKeys: { FAL_KEY: 'set' } });
-    expect([summary.paid, runChipLabel(summary), runChipTitle(summary)]).toEqual([[], '$0', 'This costs nothing to run.']);
+    expect([summary.paid, runChipLabel(summary), runChipTitle(summary)]).toEqual([[], null, 'This costs nothing to run.']);
     expect(describeRunScope(summary)).toBe('Runs 1 node.\nThis costs nothing to run.');
   });
 
@@ -274,7 +282,11 @@ const ALLOWED: Record<string, string[]> = {
   runChipTitle: ['components/SelectionToolbar.tsx:runSelection', 'components/panels/Toolbar.tsx:Toolbar', 'lib/runScope.ts:describeRunScope'],
   paidSentence: ['lib/runScope.ts:costTitle'],
   estimateSentence: ['lib/runScope.ts:costTitle'],
-  reasonSentences: ['lib/runScope.ts:costTitle'],
+  reasonGroups: ['lib/runScope.ts:costTitle'],
+  mergedLead: ['lib/runScope.ts:costTitle'],
+  // The chip rule (GM, PR #203 r20: "+" joins money, "·" joins classes): both chips, nothing else.
+  costChip: ['lib/canvasProposals.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
+  classCounts: ['lib/canvasProposals.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
   mayCostSentence: ['lib/canvasProposals.ts:proposalMayCostSentence', 'lib/runScope.ts:costTitle'],
   // Per-node figures: the costly-run confirm, the switcher's rows and the placeholder dialog's rows.
   formatUsdRange: ['lib/placeholderRunConfirm.ts:rowPrice', 'lib/providerSwitch.ts:price', 'lib/runScope.ts:runCostConfirmMessage'],
@@ -358,13 +370,13 @@ describe('a reason kind this tab doesn\'t know reads as no listed price (review 
         nodes: [{ ref: '+b', nodeId: null, definitionId: 'claude-chat', kind: 'paid', provider: null, label: '', price: null,
           reason: { kind: 'fromTheFuture' } }] },
     } as unknown as ProposalView;
-    expect(acceptChipTitle(view, () => null)).toBe('“B” calls a paid provider.\n“B” has no listed price.');
+    expect(acceptChipTitle(view, () => null)).toBe('“B” calls a paid provider that has no listed price.');
   });
 
   it('a summary with a reason kind runScope never wrote still reads', () => {
     const summary = { total: 1, paid: ['B'], cost: { low: 0, high: 0, lines: [], unpriced: ['B'], plan: [], plus: [], awaitingInput: [],
       sizeRefs: [], reasons: [{ name: 'B', reason: { kind: 'fromTheFuture' } }] } } as unknown as RunScopeSummary;
-    expect(runChipTitle(summary)).toBe('“B” calls a paid provider.\n“B” has no listed price.');
+    expect(runChipTitle(summary)).toBe('“B” calls a paid provider that has no listed price.');
   });
 });
 

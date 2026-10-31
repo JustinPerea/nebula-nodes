@@ -291,7 +291,8 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     chipName,
     blocked,
     message: unavailable?.message
-      ?? (signInNeeded ? `${definition.displayName} bills your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
+      // GM, PR #203 r21 item 6, verbatim: a run on the plan, never "billed".
+      ?? (signInNeeded ? `“${definition.displayName}” runs on your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({
       routeId, label: providerLabel(routeById(definition, routeId)?.provider),
       writes: billingWrites(definition, routeId, false),

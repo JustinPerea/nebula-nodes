@@ -128,7 +128,8 @@ describe('run cost', () => {
     expect(summary.paid).toEqual([]);
     expect(summary.free).toEqual(['Nano Banana']);
     expect(summary.cost?.lines).toEqual([]);
-    expect(runChipLabel(summary)).toBe('$0');
+    // No chip, as any free run (GM, PR #203 r20 item 1).
+    expect(runChipLabel(summary)).toBeNull();
     // GM, PR #203 r18 item 1: only "This costs nothing to run.", no paid lead.
     expect(runChipTitle(summary)).toBe('This costs nothing to run.');
     // A paid priced line beside it: not a sourced zero, and the free node isn't named.
@@ -168,13 +169,16 @@ describe('run cost', () => {
     // whether or not they have a list price, each reason on its own line,
     // Idol's sentence last; before the price table loads, the lead alone.
     expect(runChipLabel(unpricedPair)).toBe('2 paid · 1 may cost');
-    expect(runChipTitle(unpricedPair)).toBe('“Writer” and “Editor” call paid providers.\n'
-      + '“Writer” and “Editor” have no listed price.\nIdol can use your Hugging Face credits.');
+    // GM, PR #203 r20 item 2: line 1 and the reason line naming the same nodes are one.
+    // One line left, so Idol's sentence joins it, as in the priced shape below.
+    expect(runChipTitle(unpricedPair)).toBe('“Writer” and “Editor” call paid providers that have no listed price. '
+      + 'Idol can use your Hugging Face credits.');
     expect(runChipTitle({ ...unpricedPair, cost: undefined }))
       .toBe('“Writer” and “Editor” call paid providers. Idol can use your Hugging Face credits.');
     const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
-    // GM, PR #203 r14 item 4: "~$0.13 + 1 may cost", the tooltip in item 3's shape, no bare heading line.
-    expect(runChipLabel(withPrice)).toBe('~$0.05 + 1 may cost');
+    // GM, PR #203 r14 item 4, by r20's rule ("+" joins money, "·" joins
+    // classes): "~$0.13 · 1 may cost", the tooltip in item 3's shape.
+    expect(runChipLabel(withPrice)).toBe('~$0.05 · 1 may cost');
     expect(runChipTitle(withPrice)).toBe(
       `“${withPrice.paid[0]}” calls a paid provider. Estimated cost $0.05. Idol can use your Hugging Face credits.`);
     expect(runChipTitle(withPrice)).not.toMatch(/~|\n/);
@@ -303,7 +307,7 @@ describe('local nodes that call a provider, and wired price settings', () => {
     expect(vision.paid).toEqual(['QC']);
     expect(vision.cost?.unpriced).toEqual(['QC']);
     expect(runChipLabel(vision)).toBe('1 paid');
-    expect(describeRunScope(vision)).toContain('“QC” has no listed price.');
+    expect(describeRunScope(vision)).toContain('“QC” calls a paid provider that has no listed price.');
     for (const mode of ['heuristic', 'opencv']) {
       const local = summarizeRunScope([qc(mode)], [], { kind: 'graph' }, context);
       expect(local.paid).toEqual([]);
@@ -480,7 +484,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
     expect(runChipLabel(summary)).toBe('1 paid');
     const text = describeRunScope(summary);
-    expect(text).toContain('“Upscale” is priced from its input, which isn’t ready yet.');
+    expect(text).toContain('“Upscale” calls a paid provider and is priced from its input, which isn’t ready yet.');
     expect(text).not.toContain('no listed price');
     expect(runCostConfirmMessage(summary)).toContain('Priced when its input is known: Upscale');
   });
@@ -516,7 +520,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     expect(summary.cost!.sizeUnreadable).toEqual(['Upscale']);
     const text = describeRunScope(summary);
     expect(text).not.toContain('which isn’t ready yet');
-    expect(text).toContain('“Upscale” is priced by its input size, which Nebula couldn’t read.');
+    expect(text).toContain('“Upscale” calls a paid provider and is priced by its input size, which Nebula couldn’t read.');
     expect(runCostConfirmMessage(summary)).toContain("Nebula can't read the size of its input");
     expect(runCostConfirmMessage(summary)).not.toContain('Priced when its input is known');
   });
@@ -530,6 +534,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const summary = summarizeRunScope([upload({ filePath: 'https://images.example.com/x.png' }), seedvr, generator, second], edges,
       { kind: 'graph' }, { ...context, sizes: { 'https://images.example.com/x.png': null } });
     const text = describeRunScope(summary);
+    // The lead names 2 “Upscale” nodes, so neither reason line merges into it.
     expect(text).toContain('“Upscale” is priced from its input, which isn’t ready yet.');
     expect(text).toContain('“Upscale” is priced by its input size, which Nebula couldn’t read.');
   });

@@ -492,10 +492,14 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 /* The actions shrink to the bar on a narrow window (760 px; GM, PR #203 r19
-   item 8): never past its edge, never clipped. */
+   item 8): never past its edge, never clipped. Narrower still (a browser tab
+   has no minimum width), they wrap: Accept takes its own row under Show and
+   Reject (review 10, copy LOW-1). */
 .proposal-bar__actions {
   display: flex;
+  flex-wrap: wrap;
   flex-shrink: 1;
+  justify-content: flex-end;
   min-width: 0;
   max-width: 100%;
   margin-left: auto;

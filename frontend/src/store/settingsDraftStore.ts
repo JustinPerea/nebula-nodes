@@ -51,6 +51,11 @@ interface SettingsState {
   fieldDrafts: Partial<Record<'outputPath' | 'exportFolder', string>>;
   /** The provider row that's open, and whether it's open to manage or to enter a key. */
   openRow: { id: string; mode: 'manage' | 'edit' } | null;
+  /** Rows the person is in when a change made elsewhere lands, by id: the
+   * section each stays shown in (true: Connected) until they leave it (GM,
+   * PR #203 r19 item 6). ProvidersTab keeps it; the tab badge counts by it
+   * too, so the two agree while a row is held (r21 item 3). */
+  heldRows: Record<string, boolean>;
   tab: SettingsTab;
   /** Fields and keys with a write in flight, by key name or field name. */
   pending: Record<string, true>;
@@ -68,6 +73,7 @@ export const useSettingsDraftStore = create<SettingsState>(() => ({
   keyDrafts: {},
   fieldDrafts: {},
   openRow: null,
+  heldRows: {},
   tab: 'providers',
   pending: {},
   errors: {},

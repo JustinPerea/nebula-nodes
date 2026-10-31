@@ -360,6 +360,11 @@ nebula propose --note "Upscale the wide take" \
   --add +up=seedvr2-upscale --wire n9:image +up:image --rename +up="Wide, upscaled" --run +up --wait
 ```
 
+Its `runs` line counts each cost class on its own: "up to 1 paid run
+(fal) and 1 on the person's Krea plan, $0.03 at list prices". A run on the
+person's Krea plan is never free and never in the figure; "may bill the
+person's own account" is Idol with their token set.
+
 If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to

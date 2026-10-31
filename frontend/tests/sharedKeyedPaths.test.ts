@@ -51,21 +51,21 @@ afterEach(() => {
 });
 
 describe('the sourced $0 lives in the shared formatter', () => {
-  it('a keyed route priced at a sourced $0 is free and reads "$0", its tooltip only that (GM, PR #203 r18 item 1)', () => {
+  it('a keyed route priced at a sourced $0 is free with no chip, its tooltip only that (GM, PR #203 r18 item 1)', () => {
     const summary = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: { [KEY]: 'set' } });
     expect(summary.paid).toEqual([]);
     expect(summary.free).toEqual(['Synthetic']);
     expect(summary.cost?.sourcedZero).toBe(true);
-    expect(runChipLabel(summary)).toBe('$0');
+    // No chip, as any free run (GM, PR #203 r20 item 1); the tooltip stays.
+    expect(runChipLabel(summary)).toBeNull();
     expect(runChipTitle(summary)).toBe(SOURCED_ZERO_TITLE);
     expect(SOURCED_ZERO_TITLE).toBe('This costs nothing to run.');
   });
 
-  it('a proposal whose estimate is a sourced $0 reads "$0", one that rounds to it "~$0"', () => {
+  it('a proposal\'s estimate is its paid part only: one that rounds to zero reads "~$0"', () => {
     const estimate = { currency: 'usd' as const, low: 0, high: 0, open: false, unpriced: [], plan: [], plus: [] };
-    const view = (sourced: boolean) => ({ run: ['+s'], cost: { estimate: sourced ? { ...estimate, sourcedZero: true as const } : estimate } }) as unknown as ProposalView;
-    expect(proposalEstimateLabel(view(true))).toBe('$0');
-    expect(proposalEstimateLabel(view(false))).toBe('~$0');
+    const view = { run: ['+s'], cost: { estimate } } as unknown as ProposalView;
+    expect(proposalEstimateLabel(view)).toBe('~$0');
   });
 });
 

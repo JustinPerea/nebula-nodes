@@ -83,17 +83,18 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
     expect(runChipTitle(summary(low, high, open))).toBe(fullTitle(open, title));
   });
 
-  it('a sourced $0 reads "$0", titled "This costs nothing to run.", on the chip and the card; open, the reasons still say what is unpriced', () => {
-    // A sourced $0 is free, never paid (GM, PR #203 r18 item 1): only "This costs nothing to run."
+  it('a sourced $0 shows no chip, as any free run, titled "This costs nothing to run."; open, the reasons still say what is unpriced', () => {
+    // A sourced $0 is free, never paid (GM, PR #203 r18 item 1), and looks
+    // like any other free node (r20 item 1): no chip, only its tooltip.
     const sourced = { paid: [], free: ['Veo'], cost: { low: 0, high: 0, lines: [], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
-    expect(runChipLabel(sourced)).toBe('$0');
+    expect(runChipLabel(sourced)).toBeNull();
     expect(runChipTitle(sourced)).toBe('This costs nothing to run.');
-    expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: false, sourcedZero: true } } } as never)).toBe('$0');
     // An unpriced node beside it is paid, so the run is no sourced $0: the chip counts it.
     const open = { paid: ['Kling'], free: ['Veo'], cost: { ...sourced.cost, unpriced: ['Kling'], sourcedZero: undefined } } as unknown as RunScopeSummary;
     expect(runChipLabel(open)).toBe('1 paid');
-    expect(runChipTitle(open)).toBe('“Kling” calls a paid provider.\n“Kling” has no listed price.');
-    expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: true, sourcedZero: true } } } as never)).toBe('$0 + unpriced');
+    expect(runChipTitle(open)).toBe('“Kling” calls a paid provider that has no listed price.');
+    // A proposal's estimate is a paid part only: one that sums to zero is an estimate.
+    expect(proposalEstimateLabel({ run: ['n1'], cost: { estimate: { low: 0, high: 0, open: true } } } as never)).toBe('$0 + unpriced');
   });
 
   it('the proposal card shows the same chip', () => {

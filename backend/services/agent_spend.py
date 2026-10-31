@@ -883,10 +883,18 @@ MAY_BILL_GENERIC = ("the person's own key is set",
 def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Mapping[str, Any]],
                    api_keys: Mapping[str, Any]) -> list[str]:
     """The ids of the run's nodes that may bill the person's own provider
-    account (node_route.may_bill), in run order."""
-    return [str(item["id"]) for item in items
-            if node_route.may_bill(definitions.get(str(item.get("definitionId") or "")),
-                                   item.get("params") or {}, api_keys)]
+    account, in run order: the one cost class's "mayCost"
+    (model_pricing.cost_class), as every cost surface reads it (review 10 of
+    PR #203, NIT-5). Its reach is node_route.may_bill's, exactly:
+    cost_class returns a key-billing route's own class first
+    (tests/test_idol_round11.py proves the two agree on every node)."""
+    found = []
+    for item in items:
+        definition = definitions.get(str(item.get("definitionId") or ""))
+        if definition and model_pricing.cost_class(definition, item.get("params") or {},
+                                                   api_keys) == model_pricing.MAY_COST:
+            found.append(str(item["id"]))
+    return found
 
 
 def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapping[str, Mapping[str, Any]],

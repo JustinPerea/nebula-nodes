@@ -20,6 +20,20 @@ export function takeRowFocus(key: string): boolean {
   return true;
 }
 
+/** The keys and the Krea sign-in counted as connected, as the Providers tab
+ * shows them: a row held where it stood while the person is in it counts in
+ * the section it is shown in (GM, PR #203 r21 item 3), so the badge and
+ * "Connected · N" agree. */
+export function shownConnected(apiKeys: Readonly<Record<string, string>>, kreaSignedIn: boolean,
+  held: Readonly<Record<string, boolean>>): number {
+  const ids = new Set([...Object.keys(apiKeys).filter((key) => apiKeys[key]?.trim()), ...(kreaSignedIn ? [KREA_ROW] : [])]);
+  for (const [id, shown] of Object.entries(held)) {
+    if (id === NOUS_ROW) continue;
+    if (shown) ids.add(id); else ids.delete(id);
+  }
+  return ids.size;
+}
+
 /** What the last check said about a saved key, in the row's own words. */
 export function keyStatus(key: string, health: ProviderHealthState): { tone: RowTone; status: string; statusTone?: 'ok' | 'warn' } {
   if (health.loading) return { tone: 'busy', status: 'Checking… nothing is generated' };

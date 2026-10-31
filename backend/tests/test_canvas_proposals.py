@@ -303,7 +303,7 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     need = "needs OPENAI_API_KEY in Settings > Providers"
     # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f).
     assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need,
-                                 "person": "GPT Image 2 needs your OpenAI API key. Add it in Settings."}]
+                                 "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings."}]
     assert {node["ref"]: node.get("missing") for node in cost["nodes"]} == {"+img": need, n1: None}
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "
@@ -1335,13 +1335,13 @@ def test_cli_proposal_json_and_formatting():
         "  adds     +up  Topaz Upscale  [paid · fal]  @(820,140)",
         "  connects n4.image → +up.image",
         "  sets     n4: prompt",
-        "  runs     +up — up to 1 paid run (fal) — no list price",
+        "  runs     +up — up to 1 paid run (fal), no list price",
         "Check the outcome: nebula proposal p_9a1c3e02 --wait",
     ]
     priced = {**view, "cost": {**view["cost"], "estimate": {"low": 0.0047, "high": 0.43, "open": True}}}
-    assert "— $0.0047–0.43+ at list prices" in format_proposal(priced, now_ms=1_000_000)
+    assert "(fal), $0.0047–0.43+ at list prices" in format_proposal(priced, now_ms=1_000_000)
     exact = {**view, "cost": {**view["cost"], "estimate": {"low": 0.067, "high": 0.067, "open": False}}}
-    assert "— $0.067 at list prices" in format_proposal(exact, now_ms=1_000_000)
+    assert "(fal), $0.067 at list prices" in format_proposal(exact, now_ms=1_000_000)
     event = {"seq": 3, "at": 0, "kind": "proposal.created", "actor": {"kind": "agent", "name": "Codex"},
              "data": {"proposalId": "p_9a1c3e02"}, "summary": 'proposed p_9a1c3e02: "Upscale"'}
     assert "nebula proposal p_9a1c3e02 --wait" in format_event(event)

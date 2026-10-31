@@ -79,12 +79,19 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
   }
 }
 
+/** "an OpenAI", "a fal.ai", "an xAI": a name with its article, for a line
+ * that puts one before a provider (review 10 of PR #203: "Add a Anthropic
+ * …"). A name read letter by letter from an x ("xAI") takes "an". */
+export function withArticle(name: string): string {
+  return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
+}
+
 export function keyReadiness(key: string, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
   const target: ProviderSetupTarget = { kind: 'api-key', key };
   const provider = PROVIDER_KEY_LABELS[key] ?? key;
   if (!cache.loaded) return { label: 'Connection not loaded', detail: 'Saved connection settings have not loaded yet.', tone: 'neutral', setupTarget: target };
   if (!cache.apiKeys[key]?.trim()) return { label: 'Setup required',
-    detail: `Add a ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
+    detail: `Add your ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
   if (health.loading) return { label: 'Checking connection', tone: 'neutral', setupTarget: target,
     detail: `${provider} saved credential is being checked without generating.` };
   const checked = checkedReadiness(provider, target, health);
@@ -103,7 +110,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     if (status === 'connected') return { label: 'Krea signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'Uses the signed-in Krea workspace and its compute units. This model is checked against that account when you explicitly run it.' };
     return { label: status === 'connecting' ? 'Finish Krea sign-in' : status === 'error' ? 'Connection unavailable' : 'Krea sign-in required',
-      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Connect or check Krea in Settings; an API token does not replace this connection.' };
+      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API token does not replace it.' };
   }
   if (def.apiProvider === 'nous') {
     const target: ProviderSetupTarget = { kind: 'external', provider: 'nous' };
@@ -132,7 +139,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     if (!paramCallsProvider(def, params)) {
       const own = Object.entries(via.byValue ?? {}).map(([value, route]) => `; ${via.param} ${value} calls ${route.provider} with ${route.anyKey.join(' or ')}`).join('');
       return { label: 'No API key required', tone: 'neutral',
-        detail: `This ${via.param} runs locally. Other ${via.param} values call a ${via.provider} model and need ${via.anyKey.join(', ')}${own}.` };
+        detail: `This ${via.param} runs locally. Other ${via.param} values call ${withArticle(via.provider)} model and need ${via.anyKey.join(', ')}${own}.` };
     }
     const value = paramValue(def, params);
     const route = paramRoute(via, value);
@@ -143,7 +150,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     const ready = keyReadiness(key, cache, health);
     const how = route.anyKey.length > 1 ? `the first of ${route.anyKey.join(', ')} that is set` : route.anyKey[0];
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
-      detail: `Calls a ${route.provider} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
+      detail: `Calls ${withArticle(route.provider)} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
   }
   const space = spaceReadiness(def, params, cache, health);
   if (space) return space;
@@ -278,10 +285,9 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
   }
   if (route.kind === 'fallback') {
     const directLabel = PROVIDER_KEY_LABELS[direct] ?? direct;
-    const article = /^[AEIOU]/i.test(directLabel) ? 'an' : 'a';
-    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${article} ${directLabel} key to run on ${directName} directly.` : ''}`;
+    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${withArticle(directLabel)} key to run on ${directName} directly.` : ''}`;
   }
   return directOk
-    ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with a ${fallbackKey}.`
+    ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with ${withArticle(fallbackKey)}.`
     : `Runs on ${fallbackCopy}.`;
 }

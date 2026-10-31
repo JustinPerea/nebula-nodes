@@ -120,8 +120,22 @@ def load_settings() -> dict[str, Any]:
     # LOW-1).
     if isinstance(settings, dict) and isinstance(settings.get("apiKeys"), dict):
         settings["apiKeys"] = read_keys(settings["apiKeys"])
+    elif isinstance(settings, dict):
+        # Keys Nebula can't read (an `apiKeys` that isn't an object): no key
+        # is set, for every reader, as a key that is empty once trimmed
+        # isn't. The file keeps them as saved: a write starts from
+        # load_saved_settings and never replaces them with a guess (review
+        # 10 of PR #203, NIT-6; main.KEYS_UNREADABLE).
+        settings["apiKeys"] = {}
 
     return settings
+
+
+def saved_keys_readable(saved: Any) -> bool:
+    """Whether the saved settings' `apiKeys` (load_saved_settings) is an
+    object a write can change key by key. A file that leaves it out has
+    none yet, which a write may fill."""
+    return isinstance(saved, dict) and isinstance(saved.get("apiKeys", {}), dict)
 
 
 def load_saved_settings() -> dict[str, Any]:

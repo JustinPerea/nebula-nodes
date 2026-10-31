@@ -46,10 +46,12 @@ Nebula can't see it.
 With a token set, an agent can't run Idol on its own, or anything that
 runs after it: it proposes the run, and you accept it on the canvas. The
 proposal says "may use your Hugging Face credits", its card reads "may cost ·
-Hugging Face", and the Run chip counts Idol as "may cost" ("~$0.13 + 1 may
+Hugging Face", and the Run chip counts Idol as "may cost" ("~$0.13 · 1 may
 cost" beside priced models), never as paid. Hover the Run chip or the Accept chip for the
 whole picture: the paid nodes first, then the estimate, a line for each node
-with no listed price or on your Krea plan, and Idol's sentence last. The Run
+with no listed price or on your Krea plan, and Idol's sentence last. When
+the paid nodes all share one reason, it's one sentence: "“Writer” and
+“Editor” call paid providers that have no listed price." The Run
 button's own tooltip, and what a screen reader hears for Run and Accept, is
 the same text. Neither adds anything for
 Idol to the estimate. Running an agent's unfinished

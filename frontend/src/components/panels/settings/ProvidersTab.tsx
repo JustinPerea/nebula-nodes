@@ -11,10 +11,11 @@ import { useUIStore } from '../../../store/uiStore';
 import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
 import { offlineMark, useBackendOffline } from '../../../lib/useBackendOffline';
 import { SETTINGS_SAVED_EVENT, settingsSavedDetail } from '../../../lib/settingsSignal';
+import { keyChangedLine } from '../../../lib/settingsWrites';
 import { KeyRow } from './KeyRow';
 import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
-import { KREA_ROW, NOUS_ROW } from './rowHelpers';
+import { focusRowAfterMove, KREA_ROW, NOUS_ROW } from './rowHelpers';
 import { useKreaConnection } from './useKreaConnection';
 
 const NODES = Object.values(NODE_DEFINITIONS);
@@ -78,10 +79,39 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   // GM, PR #203 r19 item 6: a change made elsewhere updates the panel in
   // place, but never moves a row the person is in (focus inside it, or its
   // edit view open): that row's status changes where it stands, and it moves
-  // once they leave it. `held` is the section each such row stays in.
-  const [held, setHeld] = useState<Record<string, boolean>>({});
+  // once they leave it. `held` is the section each such row stays in, kept
+  // in the store so the tab badge counts the rows as shown (r21 item 3).
+  const held = useSettingsDraftStore((s) => s.heldRows);
+  const setHeld = useCallback((next: (current: Record<string, boolean>) => Record<string, boolean>) => {
+    useSettingsDraftStore.setState((state) => {
+      const heldRows = next(state.heldRows);
+      return heldRows === state.heldRows ? state : { heldRows };
+    });
+  }, []);
+  // Nothing is held once the tab is gone (another tab, the panel closed).
+  useEffect(() => () => useSettingsDraftStore.setState({ heldRows: {} }), []);
   const openRow = useSettingsDraftStore((s) => s.openRow);
   const placedRef = useRef<Record<string, boolean>>({});
+  // GM, PR #203 r21 item 4: a key set or removed elsewhere is said once,
+  // politely ("Replicate key saved."), when the read it asked for lands.
+  const toAnnounce = useRef(new Set<string>());
+  const announcedFrom = useRef(saved.apiKeys);
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    if (announcedFrom.current === saved.apiKeys) return;
+    announcedFrom.current = saved.apiKeys;
+    // The backend names only the keys whose value changed (main._changed_keys).
+    const lines = [...toAnnounce.current].map((key) => keyChangedLine(key, isKeySet(saved.apiKeys, key)));
+    toAnnounce.current.clear();
+    if (lines.length === 0) return;
+    // Emptied first, so the same line said twice is read twice.
+    let said = 0;
+    const emptied = requestAnimationFrame(() => {
+      setAnnouncement('');
+      said = requestAnimationFrame(() => setAnnouncement(lines.join(' ')));
+    });
+    return () => { cancelAnimationFrame(emptied); cancelAnimationFrame(said); };
+  }, [saved.apiKeys]);
   const activeRows = useCallback((): Set<string> => {
     const active = new Set<string>();
     const open = useSettingsDraftStore.getState().openRow;
@@ -95,15 +125,26 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
     const heard = (event: Event) => {
       const detail = settingsSavedDetail(event);
       if (detail?.source === 'local') {
-        // The person's own save or removal moves its row at once.
+        // The person's own save or removal moves its row at once. A held
+        // row it moves keeps keyboard focus: the row that lands takes it, as
+        // a row their own save moves always does (review 10 of PR #203,
+        // copy MEDIUM-1). The DOM is still the one they acted in here.
         const own = new Set(detail.keys ?? []);
+        const current = useSettingsDraftStore.getState().heldRows;
+        const focused = typeof document !== 'undefined' ? document.activeElement : null;
+        for (const id of own) {
+          if (!Object.hasOwn(current, id)) continue;
+          const row = root.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
+          if (row && focused && row.contains(focused)) focusRowAfterMove(id);
+        }
         if (own.size) {
-          setHeld((current) => (Object.keys(current).some((id) => own.has(id))
-            ? Object.fromEntries(Object.entries(current).filter(([id]) => !own.has(id))) : current));
+          setHeld((held) => (Object.keys(held).some((id) => own.has(id))
+            ? Object.fromEntries(Object.entries(held).filter(([id]) => !own.has(id))) : held));
         }
         return;
       }
       if (detail?.source !== 'remote' && detail?.source !== 'reconnect') return;
+      for (const key of detail.keys ?? []) toAnnounce.current.add(key);
       // Before the read lands: hold each row the person is in where it is shown now.
       const hold: Record<string, boolean> = {};
       for (const id of activeRows()) if (id in placedRef.current) hold[id] = placedRef.current[id];
@@ -111,7 +152,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
     };
     window.addEventListener(SETTINGS_SAVED_EVENT, heard);
     return () => window.removeEventListener(SETTINGS_SAVED_EVENT, heard);
-  }, [activeRows]);
+  }, [activeRows, setHeld]);
   // Leaving a held row (focus out of it, its edit view closed) lets it move.
   const release = useCallback(() => {
     requestAnimationFrame(() => setHeld((current) => {
@@ -120,7 +161,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       const kept = Object.fromEntries(Object.entries(current).filter(([id]) => active.has(id)));
       return Object.keys(kept).length === Object.keys(current).length ? current : kept;
     }));
-  }, [activeRows]);
+  }, [activeRows, setHeld]);
   useEffect(() => { release(); }, [openRow, release]);
 
   const q = query.trim();
@@ -230,6 +271,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       )}
       </fieldset>
       <span className="settings-sr" role="status">{q ? `${plural(visible.length, 'provider')} match` : ''}</span>
+      <span className="settings-sr" role="status" aria-live="polite" data-key-changes="">{announcement}</span>
     </div>
   );
 }

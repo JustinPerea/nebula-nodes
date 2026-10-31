@@ -113,7 +113,11 @@ def _board(ctx, scope: str, board_id: str, name: str, *, updated: str = "2026-10
 
 
 def _get(ctx, via: str | None = None, headers=CLAUDE) -> dict:
-    response = ctx.client.get("/api/agent/start", params={"via": via} if via else None, headers=headers)
+    # The CLI says so on every request (X-Nebula-Surface), the one signal
+    # (services/agent_words; review 10 of PR #203, NIT-4).
+    if via == "cli":
+        headers = {**(headers or {}), "X-Nebula-Surface": "cli"}
+    response = ctx.client.get("/api/agent/start", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -376,9 +380,15 @@ def test_spend_for_an_app_gives_its_own_line_and_the_shared_budget():
     assert chat["limitUsd"] == 5.0 and chat["usedUsd"] == 0.5 and "sharedUsedUsd" not in chat
 
 
-def test_unknown_via_is_refused(start):
-    response = start.client.get("/api/agent/start", params={"via": "telnet"}, headers=CLAUDE)
-    assert response.status_code == 422
+def test_the_surface_header_is_the_one_signal(start):
+    """The hints follow X-Nebula-Surface only: a `via` query names nothing
+    (review 10 of PR #203, NIT-4), and a surface Nebula doesn't know reads
+    MCP words."""
+    assert "`nebula " not in json.dumps(_get(start)) and "`nebula " in json.dumps(_get(start, via="cli"))
+    for headers, params in (({**CLAUDE, "X-Nebula-Surface": "telnet"}, None), (CLAUDE, {"via": "cli"})):
+        response = start.client.get("/api/agent/start", params=params, headers=headers)
+        assert response.status_code == 200
+        assert "`nebula " not in response.text and "describe_node" in response.text
 
 
 def test_start_here_over_mcp_returns_the_route_as_compact_text(start, monkeypatch):

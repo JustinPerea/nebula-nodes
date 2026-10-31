@@ -203,9 +203,6 @@ export interface ProposalEstimate {
   unpriced: string[];
   plan: string[];
   plus: string[];
-  /** Every priced part is a sourced $0 (model_pricing.estimate_run), not an
-   * estimate that rounds to zero: the card writes "$0" (GM, PR #203 r11 item 4). */
-  sourcedZero?: true;
 }
 
 export interface ProposalPort {

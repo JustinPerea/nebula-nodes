@@ -326,13 +326,13 @@ def test_graph_validation_requires_selected_connection_and_legacy_wrappers_keep_
     from services import krea_connector
     account = GraphNode(id='account', definitionId=IMAGE_ID, params={'_kreaAuth': 'mcp'})
     monkeypatch.setattr(krea_connector, 'is_krea_connected', lambda: False)
-    assert any('Connect your Krea account' in error.message for error in validate_graph([account], [], {'KREA_API_TOKEN': 'fixture'}))
+    assert any('Sign in to Krea in Settings' in error.message for error in validate_graph([account], [], {'KREA_API_TOKEN': 'fixture'}))
     monkeypatch.setattr(krea_connector, 'is_krea_connected', lambda: True)
     assert not validate_graph([account], [], {})
     old = GraphNode(id='old', definitionId=IMAGE_ID, params={})
     assert any('Missing API key' in error.message for error in validate_graph([old], [], {}))
     legacy = GraphNode(id='legacy', definitionId='krea-image-style-reference', params={'_kreaAuth': 'mcp'})
-    assert all('Connect your Krea' not in error.message for error in validate_graph([legacy], [], {}))
+    assert all('Sign in to Krea' not in error.message for error in validate_graph([legacy], [], {}))
 
 
 @pytest.mark.asyncio

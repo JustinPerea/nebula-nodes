@@ -39,6 +39,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping
 
+from services import agent_words
 from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
 from services.canvas_pins import PinError, clean_text
@@ -513,6 +514,10 @@ def cost_for(
     from services import model_pricing, node_readiness, node_route
 
     if definition and node_route.has_routes(definition):
+        # The params as the router reads them, with the wired inputs (as the
+        # estimate beside it reads them): a wire can block the Krea plan
+        # route or unblock it (review 10 of PR #203, LOW-3).
+        params = node_route.with_wired_blockers(definition, params, wired or ())
         route = node_route.select_route(definition, params, api_keys)
         if route.kind == node_route.UNSET:
             why = node_route.route_unavailable(definition, params, api_keys) or {}
@@ -566,6 +571,31 @@ def cost_for(
 # The ghost card's tag for a run on the Krea plan, by the chip's words ("1 on
 # Krea plan"; GM, PR #203 r19 item 1): never "paid", never "billed".
 PLAN_LABEL = "on Krea plan"
+
+
+def _ghost_cost(node: Any, definition: Mapping[str, Any], definitions: Mapping[str, Mapping[str, Any]] | None,
+                api_keys: Mapping[str, Any], run_entry: Mapping[str, Any] | None,
+                edges: Iterable[Any]) -> dict[str, Any]:
+    """A ghost card's cost tag, in its cost class: the run entry's class
+    when the proposal runs it (the estimate's, which knows a sourced $0 is
+    free), else the class its own price gives it (model_pricing.estimate_run),
+    so the tag and the run entry never disagree (review 10 of PR #203, NIT-3).
+    Key-billing classes are read with the keys set now, in cost_for."""
+    from services import model_pricing
+
+    wired = sorted({str(edge.target_handle) for edge in edges
+                    if getattr(edge, "target", None) == node.ref and getattr(edge, "target_handle", None)})
+    cls = str((run_entry or {}).get("kind") or "") or None
+    if run_entry is None and definition:
+        try:
+            item = {"id": node.ref, "definitionId": node.definition_id, "params": dict(node.params or {})}
+            cls = model_pricing.estimate_run([item], model_pricing.load_pricing(), definitions or {}, api_keys,
+                                             wired={node.ref: wired})["classes"].get(node.ref)
+        except (OSError, ValueError, KeyError, model_pricing.PricingError):
+            cls = None
+    if cls not in model_pricing.CLASS_ENTRIES:
+        cls = None
+    return cost_for(definition, node.params, definitions, api_keys, wired=wired, cost_class=cls)
 
 
 def _class_entry(cls: str, definition: Mapping[str, Any] | None, provider: str | None) -> dict[str, Any]:
@@ -676,10 +706,6 @@ def summarize_cost(
             "plan": list(estimate.get("plan") or []),
             "plus": list(estimate.get("plus") or []),
         }
-        if estimate.get("sourcedZero"):
-            # Every priced part is a sourced $0, not an estimate that rounds
-            # to it (GM, PR #203 r11 item 4): the card writes "$0".
-            summary_estimate["sourcedZero"] = True
         if estimate.get("awaitingInput"):
             # Priced from their input's size, which isn't known until it exists.
             summary_estimate["awaitingInput"] = list(estimate["awaitingInput"])
@@ -699,22 +725,23 @@ def summarize_cost(
     }
 
 
-# Where each surface's agent finds a node that runs here. The HTTP answer
+# Where each surface's agent finds a node that runs here, the MCP and CLI
+# words from the one table (services/agent_words.WORDS). The HTTP answer
 # names the route; propose_change (MCP) and `nebula propose` (CLI) word the
 # warning again from cost.notReady for their own reader (agent_wording). The CLI names
 # `nebula nodes`, find_nodes' twin on the same route: by default it lists only
 # what runs here, and `nebula context`'s list is cut at its budget.
 READY_NODES_HTTP = "GET /api/agent/nodes"
-READY_NODES_MCP = "find_nodes"
-READY_NODES_CLI = "`nebula nodes`"
+READY_NODES_MCP = agent_words.WORDS[agent_words.MCP]["find"]
+READY_NODES_CLI = agent_words.WORDS[agent_words.CLI]["find"]
 
 # How each surface's agent withdraws a proposal ({id} is the proposal's id).
 # A proposal that can't run here is kept with its warning (Justin, Q109: "Keep
 # it with the warning, and tell the agent to withdraw it before proposing
 # something else"), so the warning and the reminder name the exact call.
 WITHDRAW_HTTP = "DELETE /api/canvas/proposals/{id}"
-WITHDRAW_MCP = 'withdraw_proposal(proposal_id="{id}")'
-WITHDRAW_CLI = "nebula proposal withdraw {id}"
+WITHDRAW_MCP = agent_words.WORDS[agent_words.MCP]["withdraw"]
+WITHDRAW_CLI = agent_words.WORDS[agent_words.CLI]["withdraw"]
 
 
 def cli_withdraw_form(agent_name: str | None) -> str:
@@ -1179,8 +1206,8 @@ class ProposalBook:
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),
-                "cost": cost_for(definition, node.params, definitions if isinstance(definitions, dict) else None,
-                                 api_keys),
+                "cost": _ghost_cost(node, definition, definitions if isinstance(definitions, dict) else None,
+                                    api_keys, node_costs.get(node.ref), spec.edges),
                 "runs": node.ref in spec.run,
                 "willRun": node.ref in node_costs,
                 "ports": _ports_for(node.ref, definition, spec.edges),

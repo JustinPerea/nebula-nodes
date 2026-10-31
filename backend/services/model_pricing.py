@@ -737,6 +737,31 @@ PLAN = "plan"
 MAY_COST = "mayCost"
 FREE = "free"
 
+# Each class as an agent reads it in a proposal's cost: the entry's `label`
+# (canvas_proposals.cost_for), the count it is in (summarize_cost) and what
+# it means. propose_change's tool description is written from this table
+# (mcp_server), so a class added here is in what an MCP agent reads (review
+# 10 of PR #203, LOW-2); tests/test_idol_round11.py checks it holds every
+# class cost_class returns.
+CLASS_ENTRIES: dict[str, dict[str, str]] = {
+    PAID: {"label": '"paid · <provider>"', "count": "paidRuns",
+           "means": "a provider call billed per run, summed in `cost.estimate` at its list price when it has one"},
+    PLAN: {"label": '"on Krea plan"', "count": "planRuns",
+           "means": "a run on the person's Krea plan, never paid and never in the estimate; its `reason` is "
+                    '{"kind": "plan"}'},
+    MAY_COST: {"label": '"may cost · <account>"', "count": "mayCostRuns",
+               "means": "may bill the person's own account with their key (Idol on Hugging Face with a token)"},
+    FREE: {"label": '"free · runs locally" or "free · <provider>"', "count": "freeRuns",
+           "means": "costs nothing: a local node, a key-billing route without its key (\"free · Hugging Face\"), "
+                    "or a provider call whose list price is $0 (`price` {\"low\": 0, \"high\": 0})"},
+}
+
+
+def class_entries_doc(indent: str = "    ") -> str:
+    """CLASS_ENTRIES as the lines of a tool description."""
+    return "\n".join(f"{indent}- `{kind}`, {entry['label']}, counted in `cost.{entry['count']}`: {entry['means']}."
+                     for kind, entry in CLASS_ENTRIES.items())
+
 
 def sourced_zero(estimate: Mapping[str, Any] | None) -> bool:
     """A node's own estimate (estimate_node) that is a sourced $0: priced in

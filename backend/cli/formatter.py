@@ -918,30 +918,68 @@ def _minutes(seconds: Any) -> str:
 
 
 def _cost_line(cost: dict[str, Any]) -> str:
-    paid = int(cost.get("paidRuns") or 0)
-    free = int(cost.get("freeRuns") or 0)
-    may = int(cost.get("mayCostRuns") or 0)
+    """What the proposed run spends, by cost class (model_pricing.cost_class,
+    canvas_proposals.summarize_cost): paid runs with their providers and the
+    list-price figure, runs that may bill the person's own account, runs on
+    their Krea plan, and free runs. GM, PR #203 r21 item 1: "up to 1 paid
+    run (fal) and 1 on the person's Krea plan, $0.03 at list prices". A plan
+    run is never "free", never "runs locally" and never in the figure; a
+    free run that calls a provider (a sourced $0, Idol without a token) says
+    which, never "runs locally" (review 10, MEDIUM-1)."""
     up_to = "up to " if cost.get("upTo") else ""
-    # A run on the person's own key that may bill their account past its
-    # free allowance (Idol with an HF token): never counted as paid.
-    may_cost = (f"{may} that may bill the person's own account ({', '.join(str(row.get('name')) for row in cost.get('mayCost') or [])})"
-                if may else "")
-    if paid == 0:
-        if may:
-            return f"{up_to}{may} run{'s' if may != 1 else ''}: {may_cost}" + (f" and {free} free" if free else "")
-        return f"{up_to}{free} free run{'s' if free != 1 else ''} (runs locally)"
-    providers = ", ".join(cost.get("providers") or [])
-    line = f"{up_to}{paid} paid run{'s' if paid != 1 else ''}" + (f" ({providers})" if providers else "")
+    paid = _count(cost.get("paidRuns"))
+    may = _count(cost.get("mayCostRuns"))
+    plan = _count(cost.get("planRuns"))
+    free = _count(cost.get("freeRuns"))
+    # The free runs that call a provider, by the entries' own labels
+    # ("free · fal.ai"; a local one is "free · runs locally").
+    called = [str(entry.get("label"))[len("free · "):] for entry in cost.get("nodes") or []
+              if isinstance(entry, dict) and entry.get("kind") == "free"
+              and str(entry.get("label") or "").startswith("free · ") and entry.get("label") != LOCAL_LABEL]
+    remote = min(len(called), free)
+    on = _and(list(dict.fromkeys(called)))
+    runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
+    alone = sum(1 for count in (paid, may, plan, free) if count) <= 1
+    parts: list[str] = []
+    if paid:
+        providers = ", ".join(cost.get("providers") or [])
+        parts.append(f"{paid} paid {runs(paid)}" + (f" ({providers})" if providers else ""))
     if may:
-        line += f", {may_cost}"
-    if free:
-        line += f" and {free} free"
+        names = ", ".join(str(row.get("name")) for row in cost.get("mayCost") or [])
+        parts.append(f"{may} {runs(may) + ' ' if alone else ''}that may bill the person's own account ({names})")
+    if plan:
+        parts.append(f"{plan} {runs(plan) + ' ' if alone else ''}on the person's Krea plan")
+    if free or not parts:
+        where = ("" if not remote else f" (on {on})" if remote == free else f" ({remote} on {on})")
+        local = " (runs locally)" if alone and not remote else ""
+        parts.append(f"{free} free{' ' + runs(free) if alone else ''}{where}{local}")
+    line = up_to + _and(parts)
+    if not paid:
+        return line
     estimate = cost.get("estimate")
     if not estimate or estimate.get("high") is None:
-        return line + " — no list price"
+        return line + ", no list price"
     low, high = float(estimate.get("low") or 0), float(estimate["high"])
     amount = _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
-    return line + f" — {amount}{'+' if estimate.get('open') else ''} at list prices"
+    return line + f", {amount}{'+' if estimate.get('open') else ''} at list prices"
+
+
+# A local node's cost entry (canvas_proposals.cost_for).
+LOCAL_LABEL = "free · runs locally"
+
+
+def _count(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _and(parts: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    if len(parts) <= 1:
+        return "".join(parts)
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
 
 def _usd(amount: float) -> str:

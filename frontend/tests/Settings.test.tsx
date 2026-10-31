@@ -318,7 +318,7 @@ describe('Settings — providers list and search', () => {
     expect(rowNames(list(/^Connected/))).toEqual(['OpenAI']);
     const toAdd = rowNames(list(/^Add a provider/));
     expect(toAdd).not.toContain('OpenAI');
-    expect(toAdd.indexOf('Krea · API token')).toBeLessThan(toAdd.indexOf('fal.ai'));
+    expect(toAdd.indexOf('Krea · API key')).toBeLessThan(toAdd.indexOf('fal.ai'));
     expect(toAdd.indexOf('fal.ai')).toBeLessThan(toAdd.indexOf('Ideogram'));
     expect(toAdd.indexOf('Ideogram')).toBeLessThan(toAdd.indexOf('Anthropic'));
     expect(within(row('fal.ai')).getByText(/^\d+ nodes: Kling V3, FLUX\.2,/)).toBeInTheDocument();
@@ -664,7 +664,6 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***zzzz', FAL_KEY: '***ffff' } });
     await act(async () => { remote(['OPENAI_API_KEY']); });
     await waitFor(() => expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument());
-    console.log('FALROW', row('fal.ai').textContent, JSON.stringify(useProviderReadinessStore.getState().providers));
     expect(within(row('fal.ai')).getByText('Connected')).toBeInTheDocument();
   });
 
@@ -680,23 +679,136 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
     expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument();
   });
 
-  it('names every provider\'s page the same way in the edit and the manage view (GM, PR #203 r19 item 5)', async () => {
-    const specs = PROVIDER_KEYS.filter((spec) => spec.input !== 'service-account');
-    await renderSettings({ apiKeys: {} });
-    for (const spec of specs) {
-      fireEvent.click(screen.getByRole('button', { name: `Add ${spec.label} key` }));
-      const link = within(row(spec.label)).getByRole('link', { name: spec.keyLink });
-      expect(link).toHaveAttribute('href', spec.url);
-      expect(link).toHaveTextContent(`${spec.keyLink} ↗`);
-      fireEvent.click(within(row(spec.label)).getByRole('button', { name: 'Cancel' }));
-    }
-    cleanup();
-    await renderSettings({ apiKeys: Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, '***abcd'])) });
-    for (const spec of PROVIDER_KEYS) {
-      fireEvent.click(screen.getByRole('button', { name: `Manage ${spec.label}` }));
-      expect(within(row(spec.label)).getByRole('link', { name: spec.keyLink })).toHaveAttribute('href', spec.url);
-      fireEvent.click(screen.getByRole('button', { name: `Manage ${spec.label}` }));
-    }
+  it('names every provider\'s page by the provider\'s own word, in the edit and the manage view (GM, PR #203 r19 item 5)', async () => {
+    // Every row has its name: "Open <provider> keys", or the provider's own
+    // word for it (review 10, copy NIT-2). One row per view is rendered: the
+    // views read the same field (review 10, NIT-8: one render per provider
+    // took 33 s under load).
+    for (const spec of PROVIDER_KEYS) expect(spec.keyLink, spec.key).toMatch(/^Open .+ (keys|tokens|service accounts)$/);
+    const own = Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, spec.keyLink]));
+    expect(own).toMatchObject({ REPLICATE_API_TOKEN: 'Open Replicate tokens', HF_TOKEN: 'Open Hugging Face tokens',
+      GOOGLE_VERTEX_CREDENTIALS: 'Open Google Cloud service accounts', OPENAI_API_KEY: 'Open OpenAI keys',
+      KREA_API_TOKEN: 'Open Krea keys', GOOGLE_API_KEY: 'Open Google AI Studio keys' });
+    await renderSettings({ apiKeys: { FAL_KEY: '***abcd' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
+    const edit = within(row('Replicate')).getByRole('link', { name: 'Open Replicate tokens' });
+    expect(edit).toHaveAttribute('href', 'https://replicate.com/account/api-tokens');
+    expect(edit).toHaveTextContent('Open Replicate tokens ↗');
+    fireEvent.click(screen.getByRole('button', { name: 'Manage fal.ai' }));
+    const manage = within(row('fal.ai')).getByRole('link', { name: 'Open fal.ai keys' });
+    expect(manage).toHaveAttribute('href', 'https://fal.ai/dashboard/keys');
+    expect(manage).toHaveTextContent('Open fal.ai keys ↗');
+  });
+
+  it('moves rows with the spring, and not under reduced motion (review 10, copy NIT-2)', async () => {
+    const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
+    expect(css).toMatch(/\.settings-row--moved\s*\{\s*animation:\s*settings-row-moved var\(--settings-spring\)/);
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.settings-row--moved\s*\{\s*animation:\s*none;\s*\}/);
+  });
+});
+
+describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 2 to 4; review 10)', () => {
+  const remote = (keys: string[]) => window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'remote', keys } }));
+  const badge = () => screen.getByRole('tab', { name: /^Providers/ }).querySelector('.settings-tabs__count')?.textContent ?? '0';
+  const heading = () => screen.getByRole('heading', { name: /^Connected · / }).textContent;
+
+  it('keeps keyboard focus when the person saves a row held by a change elsewhere (review 10, copy MEDIUM-1)', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
+    const input = await screen.findByLabelText('Replicate API key');
+    fireEvent.change(input, { target: { value: 'r8_mine_9999' } });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(heading()).toBe('Connected · 1'));
+    expect(rowNames(list(/^Add a provider/))).toContain('Replicate');
+    expect(screen.getByLabelText('Replicate API key')).toHaveFocus();
+    // Their own Save moves the row, and the row that lands takes focus.
+    await act(async () => { fireEvent.submit(screen.getByLabelText('Replicate API key').closest('form')!); });
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Replicate'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Manage Replicate' })).toHaveFocus());
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('turns a manage view into the edit view when its key is removed elsewhere, with focus in the field (GM r21 item 2)', async () => {
+    await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg', OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Google · Gemini API' }));
+    await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    await act(async () => { remote(['GOOGLE_API_KEY']); });
+    const field = await screen.findByLabelText('Google · Gemini API API key');
+    await waitFor(() => expect(field).toHaveFocus());
+    const google = row('Google · Gemini API');
+    // No saved key offered beside "Add key", no Remove, no "Add … in Settings" inside Settings.
+    expect(within(google).queryByRole('button', { name: 'Replace key' })).toBeNull();
+    expect(within(google).queryByRole('button', { name: /^Remove/ })).toBeNull();
+    expect(within(google).queryByRole('button', { name: 'Add Google · Gemini API key' })).toBeNull();
+    expect(google).not.toHaveTextContent('Saved key ending');
+    expect(google).not.toHaveTextContent('in Settings');
+    expect(within(google).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(useSettingsDraftStore.getState().openRow).toEqual({ id: 'GOOGLE_API_KEY', mode: 'edit' });
+  });
+
+  it('turns it into the edit view without taking focus when focus was elsewhere', async () => {
+    await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg', OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Google · Gemini API' }));
+    const search = screen.getByRole('searchbox', { name: 'Search providers and models' });
+    act(() => { search.focus(); });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    await act(async () => { remote(['GOOGLE_API_KEY']); });
+    await screen.findByLabelText('Google · Gemini API API key');
+    expect(search).toHaveFocus();
+    expect(within(row('Google · Gemini API')).queryByRole('button', { name: 'Replace key' })).toBeNull();
+  });
+
+  it('holds a row whose edit view is open while focus is elsewhere, and keeps its draft (review 10, copy LOW-2)', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
+    fireEvent.change(await screen.findByLabelText('Replicate API key'), { target: { value: 'r8_my_draft_typed' } });
+    act(() => { screen.getByRole('searchbox', { name: 'Search providers and models' }).focus(); });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(useSettingsDraftStore.getState().saved?.apiKeys.REPLICATE_API_TOKEN).toBe('***dddd'));
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
+    expect(rowNames(list(/^Add a provider/))).toContain('Replicate');
+    expect(screen.getByLabelText('Replicate API key')).toHaveValue('r8_my_draft_typed');
+  });
+
+  it('counts the tab badge by the sections as shown while a row is held (GM r21 item 3)', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    act(() => { screen.getByRole('button', { name: 'Add Replicate key' }).focus(); });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(within(row('Replicate')).getByRole('button', { name: 'Manage Replicate' })).toBeInTheDocument());
+    expect(heading()).toBe('Connected · 1');
+    expect(badge()).toBe('1');
+    act(() => { screen.getByRole('searchbox', { name: 'Search providers and models' }).focus(); });
+    await waitFor(() => expect(heading()).toBe('Connected · 2'));
+    expect(badge()).toBe('2');
+  });
+
+  it('says a key changed elsewhere once, politely, without saying where (GM r21 item 4)', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const said = () => document.querySelector('[data-key-changes]');
+    expect(said()).toHaveAttribute('aria-live', 'polite');
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate key saved\.$/));
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    await act(async () => { remote(['REPLICATE_API_TOKEN']); });
+    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate key removed\.$/));
+    // A change that names no key (favorites) says nothing new.
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' }, favorites: ['x'] });
+    await act(async () => { remote([]); });
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    expect(said()).toHaveTextContent(/^Replicate key removed\.$/);
+    expect(document.body).not.toHaveTextContent(/another window/);
+  });
+
+  it('labels the Krea row by its link’s word, "Krea · API key" (GM r21 item 7)', async () => {
+    await renderSettings();
+    expect(row('Krea · API key')).toBeInTheDocument();
+    expect(() => row('Krea · API token')).toThrow();
   });
 });
 

@@ -25,15 +25,23 @@ MCP = "mcp"
 CLI = "cli"
 
 # The calls a refusal or a hint names, by surface. A template names them as
-# {propose}, {describe}, {find} and {apply}.
+# {propose}, {describe}, {find}, {apply} and {projects}; {withdraw} is a whole
+# call with the proposal's id as {id} (canvas_proposals.withdraw_call).
+# Every surface's words for these calls live here: main._start_node_notes,
+# project_client and canvas_proposals' READY_NODES_* and WITHDRAW_* read this
+# table (review 10 of PR #203, NIT-4).
 WORDS: dict[str, dict[str, str]] = {
-    MCP: {"propose": "propose_change", "describe": "describe_node", "find": "find_nodes", "apply": "edit_canvas"},
+    MCP: {"propose": "propose_change", "describe": "describe_node", "find": "find_nodes", "apply": "edit_canvas",
+          "projects": "list_projects", "withdraw": 'withdraw_proposal(proposal_id="{id}")'},
     CLI: {"propose": "`nebula propose`", "describe": "`nebula info <id>`", "find": "`nebula nodes`",
-          "apply": "`nebula apply`"},
+          "apply": "`nebula apply`", "projects": "`nebula projects`", "withdraw": "nebula proposal withdraw {id}"},
 }
 
+# The calls named by a bare tool name, which cli_words can find in MCP-worded
+# text ({withdraw} is a whole call, never left in data for the CLI to reword).
+_NAMED = ("propose", "describe", "find", "apply", "projects")
 # Each MCP tool by its CLI command (WORDS, read the other way).
-_CLI_FOR_TOOL = {WORDS[MCP][name]: WORDS[CLI][name] for name in WORDS[MCP]}
+_CLI_FOR_TOOL = {WORDS[MCP][name]: WORDS[CLI][name] for name in _NAMED}
 # A tool name already beside its command ("propose_change (`nebula
 # propose`)") is left as it is.
 _TOOL = re.compile(r"(?<![`\w])(" + "|".join(map(re.escape, _CLI_FOR_TOOL)) + r")\b(?! \(`nebula )")

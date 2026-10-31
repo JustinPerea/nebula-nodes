@@ -59,7 +59,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   { key: 'HIGGSFIELD_API_KEY', label: 'Higgsfield', keyLink: 'Open Higgsfield keys', placeholder: 'hf_...', url: 'https://app.higgsfield.ai/settings',
     note: 'Image-to-video: DoP, Kling 2.1, Seedance' },
   { key: 'QUIVER_API_KEY', label: 'QuiverAI (Arrow)', keyLink: 'Open QuiverAI keys', placeholder: 'qvr-...', url: 'https://app.quiver.ai/settings/api-keys', brand: ['Quiver'] },
-  { key: 'KREA_API_TOKEN', label: 'Krea · API token', keyLink: 'Open Krea keys', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys',
+  { key: 'KREA_API_TOKEN', label: 'Krea · API key', keyLink: 'Open Krea keys', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys',
     brand: ['Krea'], highlights: ['krea-2-generate', 'krea-image-google-nano-banana-pro', 'krea-image-openai-gpt-image-2'] },
   { key: 'KREA_USAGE_KEY', label: 'Krea · usage key', keyLink: 'Open Krea keys', placeholder: 'Service key', url: 'https://www.krea.ai/api-keys',
     note: 'Workspace spend reporting (enterprise)' },

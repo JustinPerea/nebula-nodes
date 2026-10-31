@@ -728,7 +728,18 @@ def _with_identity_note(response: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
+def _cost_classes_doc(fn: Any) -> Any:
+    """Write the cost classes into a tool's description from the one table
+    (model_pricing.CLASS_ENTRIES; review 10 of PR #203, LOW-2), before the
+    tool is registered, so the two can't drift."""
+    from services.model_pricing import class_entries_doc
+
+    fn.__doc__ = (fn.__doc__ or "").replace("<<COST_CLASSES>>", class_entries_doc())
+    return fn
+
+
 @_tool(annotations=_EDIT)
+@_cost_classes_doc
 def propose_change(
     note: str,
     nodes: list[dict] | None = None,
@@ -770,18 +781,18 @@ def propose_change(
     A proposal can't move, arrange or remove nodes or connections; edit_canvas
     and remove_from_canvas do that directly.
 
-    Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
-    "free" (run locally) or "paid · <provider>" (the provider the run would
-    go through with the keys set, as its price is; a Krea copy on its
-    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), or, for a
-    node on the person's own allowance (Idol on Hugging Face), "may cost ·
-    Hugging Face" with their token set and "free · Hugging Face" without
-    (kind `mayCost` or `free`, counted in `cost.mayCostRuns` apart from
-    `paidRuns`). Those are read with the keys set when you look: a token
-    added or removed after you proposed changes them in get_proposal and
-    list_proposals, on each node and in the run's counts. `cost.estimate` sums
-    list prices in USD where Nebula has them (null when none do; `open` when
-    some paid node has none). `cost.notReady` lists the run's nodes that
+    Returns {"proposal": {...}} with `id`, `status`, and `cost`. Each run
+    node in `cost.nodes` has a `kind`, its cost class, and a `label`:
+<<COST_CLASSES>>
+    A provider is the one the run would go through with the keys set, as its
+    price is; a Krea copy on its maker's key names both: "paid · Grok Imagine
+    2.0 via xAI". Idol is `mayCost` with the person's Hugging Face token set
+    and `free` without; that is read with the keys set when you look: a token
+    added or removed after you proposed changes it in get_proposal and
+    list_proposals, on each node and in the run's counts. Read a `kind` or a
+    `reason` kind you don't know as paid with no listed price.
+    `cost.estimate` sums list prices in USD where Nebula has them (null when
+    none do; `open` when some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
     in find_nodes' words (`person` beside it is the canvas's line; read
     `missing`), and `warning` says so in a sentence: if the person
@@ -2655,9 +2666,10 @@ def _krea_call(method: str, path: str, ctx: Context | None, **kwargs: Any) -> di
     try:
         return _canvas_call(method, path, ctx, timeout=30.0, **kwargs)
     except NebulaAPIError as exc:
-        if exc.status in (400, 503) and "connect" in exc.detail.lower():
+        detail = exc.detail.lower()
+        if exc.status in (400, 503) and ("connect" in detail or "sign in" in detail):
             raise NebulaAPIError(
-                f"{exc.detail.rstrip('.')}. Only the person can connect Krea: ask them to open "
+                f"{exc.detail.rstrip('.')}. Only the person can sign in to Krea: ask them to open "
                 "Settings > Connections > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
         raise
 
@@ -2669,7 +2681,7 @@ def krea_discovery_tools(ctx: Context | None = None) -> dict[str, Any]:
     Krea's prompting guide, the account's styles and moodboards, node apps.
     Call one with krea_discover. None of them generates, uploads or spends;
     Krea generation goes through Krea graph nodes. If Krea isn't connected,
-    ask the person to connect it in Nebula (Settings > Connections > Krea)."""
+    ask the person to sign in to Krea in Nebula (Settings > Connections > Krea)."""
     allowed = _krea_allowed()
     payload = _krea_call("GET", "/api/krea/tools", ctx)
     tools = [tool for tool in payload.get("tools") or [] if isinstance(tool, dict) and tool.get("name") in allowed]

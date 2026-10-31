@@ -123,10 +123,10 @@ def test_engine_requires_the_connection_for_account_nodes_only(monkeypatch):
     from services import krea_connector
     monkeypatch.setattr(krea_connector, "is_krea_connected", lambda: False)
     for account in (node("krea-moodboard-search"), node("krea-style-train", _kreaAuth="mcp", name="x")):
-        assert any("Connect your Krea account" in e.message for e in validate_graph([account], [], {}))
+        assert any("Sign in to Krea in Settings" in e.message for e in validate_graph([account], [], {}))
     old = node("krea-style-search")
     messages = [e.message for e in validate_graph([old], [], {})]
-    assert any("Missing API key" in m for m in messages) and not any("Connect your Krea" in m for m in messages)
+    assert any("Missing API key" in m for m in messages) and not any("Sign in to Krea" in m for m in messages)
 
 
 @pytest.mark.asyncio

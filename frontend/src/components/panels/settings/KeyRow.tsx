@@ -41,7 +41,13 @@ function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removi
 /** `moved`: it changed section since the panel last drew (a key set or
  * removed elsewhere): it springs in where it lands (GM, PR #203 r19 item 6). */
 export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeySpec; configured: boolean; moved?: boolean }) {
-  const open = useSettingsDraftStore((s) => (s.openRow?.id === spec.key ? s.openRow.mode : null));
+  const stored = useSettingsDraftStore((s) => (s.openRow?.id === spec.key ? s.openRow.mode : null));
+  // GM, PR #203 r21 item 2: a key removed elsewhere while its manage view is
+  // open turns the view into the edit view, in this render (never a manage
+  // view offering a key that isn't there beside "Add key": review 10, copy
+  // MEDIUM-2); the store follows below.
+  const removedElsewhere = stored === 'manage' && !configured;
+  const open = removedElsewhere ? 'edit' : stored;
   const draft = useSettingsDraftStore((s) => s.keyDrafts[spec.key] ?? '');
   const pending = useSettingsDraftStore((s) => !!s.pending[spec.key]);
   const error = useSettingsDraftStore((s) => s.errors[spec.key]);
@@ -63,11 +69,20 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
     trigger.current?.scrollIntoView?.({ block: 'nearest' });
   }, [spec.key]);
 
+  useEffect(() => {
+    if (removedElsewhere) useSettingsDraftStore.setState({ openRow: { id: spec.key, mode: 'edit' } });
+  }, [removedElsewhere, spec.key]);
+
   // Closing the row unmounts whatever had focus inside it; hand focus back to its button.
   useEffect(() => {
     const before = wasOpen.current;
     wasOpen.current = open;
     if (open === 'manage' && before !== 'manage') firstAction.current?.focus();
+    // The edit view takes focus when it opens here. A manage view whose key
+    // was removed elsewhere becomes it in place only in a row the person is
+    // in (ProvidersTab holds that row where it stood), so focus goes to the
+    // field only if it was in the row (GM r21 item 2); any other row moves
+    // to its new section and mounts there already open, taking no focus.
     if (open === 'edit' && before !== 'edit') {
       document.getElementById(`settings-row-${spec.key}`)?.querySelector<HTMLElement>('[data-provider-key]')?.focus();
     }
@@ -119,7 +134,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
     <button ref={trigger} type="button" className="settings__button settings__button--ghost" onClick={cancelEdit}>Cancel</button>
   ) : (
     <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${spec.label} key`}
-      aria-expanded={false} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add key</button>
+      aria-expanded={open !== null} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add key</button>
   );
 
   return (

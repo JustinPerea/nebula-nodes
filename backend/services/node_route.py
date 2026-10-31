@@ -1838,19 +1838,22 @@ def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 
 def route_unavailable_line(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+    *, title: str | None = None,
 ) -> str | None:
     """route_unavailable's message as the canvas card says it (error copy
     round 3e, GM: no keys, ids or env-var names in what the person reads; a
     key by its provider, a setting by its label; round 3f: GM's rules for
     every card line). The message itself stays the agents' text. None when
-    the run can start."""
+    the run can start. ``title`` names the node as the line's reader sees it
+    (the proposal bar's “Name”, node_readiness.instance_missing_line); the
+    card names it by its type."""
     from execution.person_line import key_phrase, missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
     if found is None:
         return None
     route, alternatives, keyless = found
-    name = str(definition.get("displayName") or "This node")
+    name = title or str(definition.get("displayName") or "This node")
     spec = route_by_id(definition, route.route_id) if route.route_id else None
     others = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in alternatives]
     keyless_labels = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in keyless]

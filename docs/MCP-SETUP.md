@@ -37,7 +37,8 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
 No private note, image note, board note or pin reply history goes in. The
-route is `GET /api/agent/start` (`?via=cli` words the hints for the CLI);
+route is `GET /api/agent/start` (a request with `X-Nebula-Surface: cli`, which
+the CLI sends on every call, gets its hints in `nebula` words);
 `nebula context` prints the same, and `nebula context --json` prints it as
 it comes. Later turns use `look_at_canvas`, which stays the full snapshot.
 
@@ -753,7 +754,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `pin.resolved` | an agent answered a note | `pinId`, `text`, `reply` |
 | `pin.detached` | a pinned node was deleted, or an import/clear removed it | `pinId`, `anchor` (where the node was) |
 | `pin.reattached` | the undo of that delete (the person's Cmd+Z or Undo, or an agent's `undo_canvas_edit`) put the node back, and the note is on it again as before | `pinId`, `text`, `anchor` (`{nodeId}`) |
-| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
+| `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`, `mayCostRuns`, `planRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
@@ -1785,6 +1786,15 @@ the `propose_change` arguments:
 }
 ```
 
+`nebula propose` and `nebula proposal` print the run's cost on the `runs`
+line, each cost class counted on its own, as `cost` counts them: "up to 1
+paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices", "1
+run on the person's Krea plan", "1 paid run (openai), 1 that may bill the
+person's own account (Idol) and 1 free (on fal.ai), $0.011 at list prices".
+A run on the Krea plan is never free and never in the figure. A free run
+says where it runs: "(runs locally)", or the provider for a call whose list
+price is $0 ("(on fal.ai)").
+
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its
 card will show (the model's, without the gateway for a node whose provider
@@ -1842,8 +1852,10 @@ pointing at its own way to find a node that runs here: `find_nodes` for MCP,
 `nebula nodes` for the CLI (its twin), and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
-details), each in its `person` line ("GPT Image 2 needs your OpenAI API key.
-Add it in Settings.", round 3f; read `missing`, not that). Both re-check keys as the person adds them, so a line goes away
+details), each in its `person` line ("“GPT Image 2” needs your OpenAI API key.
+Add it in Settings.", round 3f, the name in curly quotes; a node on the Krea
+plan: "“Krea 2” needs your Krea plan. Sign in to Krea in Settings."; read
+`missing`, not that). Both re-check keys as the person adds them, so a line goes away
 once its key is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
@@ -2276,7 +2288,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   (or every key a copy can use: "Missing API key: XAI_API_KEY or
   KREA_API_TOKEN"), the card "Add your Krea API token in Settings, then
   run the node again."; a run on the plan that isn't signed in gets
-  "Connect your Krea account in Settings before running this recipe".
+  "Sign in to Krea in Settings before running this recipe".
   A run that would send one with nothing in it is refused before anything
   runs or is priced, on every run path, and before any dialog (the canvas
   reads the keys and the plan's sign-in first when it hasn't yet, and

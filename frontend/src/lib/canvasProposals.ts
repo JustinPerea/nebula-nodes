@@ -8,7 +8,7 @@ import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
-import { costClass } from './costClass';
+import { classCounts, costChip, costClass } from './costClass';
 import { keyBillingAccount, keyBillingLabel, keyPhrase, PROVIDER_PARAM } from './directRoute';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { nodeKeyStatus, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
@@ -246,8 +246,10 @@ export function notReadyBarLines(
   return lines;
 }
 
-/** The person's line ("GPT Image 2 needs your OpenAI API key. Add it in
- * Settings.", round 3f); from a backend older than 3f, find_nodes' words:
+/** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in
+ * Settings.", round 3f, the name quoted at its source since GM, PR #203 r20
+ * item 3: node_readiness.instance_missing_line); from a backend older than
+ * 3f, find_nodes' words:
  * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
   if (row.person?.trim()) return row.person.trim();
@@ -395,9 +397,8 @@ export function proposalMetaLine(view: ProposalView, countdownText: string): str
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;
-  // GM, PR #203 r11 item 4, by source: a sourced $0 (every priced row is 0)
-  // is exact, "$0"; an estimate that rounds to zero is "~$0".
-  if (!estimate.open && estimate.sourcedZero) return '$0';
+  // A sourced $0 is free and never priced (GM, PR #203 r18 item 1), so an
+  // estimate here is a paid part: one that rounds to zero is "~$0".
   return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
 
@@ -507,11 +508,9 @@ export function acceptChipTitle(
  * or Accept runs nothing. */
 export function acceptCountChip(view: ProposalView): string | null {
   if (view.run.length === 0 || runsNothing(view)) return null;
-  const paid = view.cost.paidRuns;
-  const plan = view.cost.planRuns ?? 0;
-  const may = view.cost.mayCostRuns ?? 0;
-  return [paid > 0 ? `${paid} paid` : '', plan > 0 ? `${plan} on Krea plan` : '', may > 0 ? `${may} may cost` : '']
-    .filter(Boolean).join(' · ') || null;
+  // The one chip rule (costChip, GM, PR #203 r20): classes joined by "·".
+  return costChip(null, classCounts({ paid: view.cost.paidRuns, plan: view.cost.planRuns ?? 0,
+    mayCost: view.cost.mayCostRuns ?? 0 }));
 }
 
 /** "3:05" until the proposal expires. */

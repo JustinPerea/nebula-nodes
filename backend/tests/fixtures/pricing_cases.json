@@ -730,6 +730,32 @@
         }
       ],
       "params": []
+    },
+    "zeroedplus": {
+      "id": "zeroedplus",
+      "displayName": "Fixture Sourced Zero Plus",
+      "category": "image-gen",
+      "apiProvider": "fal",
+      "apiEndpoint": "/fixture/zeroedplus",
+      "executionPattern": "sync",
+      "envKeyName": "FAL_KEY",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": []
     }
   },
   "pricing": {
@@ -1357,6 +1383,24 @@
           }
         ],
         "checked": "2026-10-30"
+      },
+      "zeroedplus": {
+        "currency": "usd",
+        "per": "image",
+        "rows": [
+          {
+            "match": {},
+            "price": 0
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-30",
+        "plus": "input images"
       }
     }
   },
@@ -3844,6 +3888,192 @@
         "low": null,
         "high": null,
         "sourcedZero": true
+      }
+    },
+    {
+      "name": "two paid nodes with no listed price share line 1",
+      "nodes": [
+        {
+          "id": "w",
+          "nodeId": "claude-chat",
+          "params": {}
+        },
+        {
+          "id": "e",
+          "nodeId": "claude-chat",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "ANTHROPIC_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "w",
+          "e"
+        ],
+        "plan": [],
+        "free": [],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": false,
+        "reasons": {
+          "w": {
+            "kind": "noPrice"
+          },
+          "e": {
+            "kind": "noPrice"
+          }
+        },
+        "title": "“w” and “e” call paid providers that have no listed price."
+      }
+    },
+    {
+      "name": "a cost left out and a missing price name other nodes, so their lines stay apart",
+      "nodes": [
+        {
+          "id": "x",
+          "nodeId": "edit",
+          "params": {}
+        },
+        {
+          "id": "w",
+          "nodeId": "claude-chat",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "OPENAI_API_KEY": "set",
+        "ANTHROPIC_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "x",
+          "w"
+        ],
+        "plan": [],
+        "free": [],
+        "mayCost": [],
+        "low": 0.05,
+        "high": 0.05,
+        "sourcedZero": false,
+        "reasons": {
+          "x": {
+            "kind": "leftOut",
+            "plus": "input images"
+          },
+          "w": {
+            "kind": "noPrice"
+          }
+        }
+      }
+    },
+    {
+      "name": "a sourced $0 beside a paid node with no listed price is free, and line 1 merges",
+      "nodes": [
+        {
+          "id": "z",
+          "nodeId": "zeroed",
+          "params": {}
+        },
+        {
+          "id": "w",
+          "nodeId": "claude-chat",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "ANTHROPIC_API_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "w"
+        ],
+        "plan": [],
+        "free": [
+          "z"
+        ],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": false,
+        "reasons": {
+          "w": {
+            "kind": "noPrice"
+          }
+        },
+        "title": "“w” calls a paid provider that has no listed price."
+      }
+    },
+    {
+      "name": "a $0 price that leaves a cost out is paid, never free",
+      "nodes": [
+        {
+          "id": "q",
+          "nodeId": "zeroedplus",
+          "params": {}
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "paid": [
+          "q"
+        ],
+        "plan": [],
+        "free": [],
+        "mayCost": [],
+        "low": 0,
+        "high": 0,
+        "sourcedZero": false,
+        "reasons": {
+          "q": {
+            "kind": "leftOut",
+            "plus": "input images"
+          }
+        }
+      }
+    },
+    {
+      "name": "a sourced $0 beside a run on the Krea plan is free, and the run is no sourced $0",
+      "nodes": [
+        {
+          "id": "z",
+          "nodeId": "zeroed",
+          "params": {}
+        },
+        {
+          "id": "k",
+          "nodeId": "table",
+          "params": {
+            "_provider": "krea",
+            "_kreaAuth": "mcp"
+          }
+        }
+      ],
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "paid": [],
+        "plan": [
+          "k"
+        ],
+        "free": [
+          "z"
+        ],
+        "mayCost": [],
+        "low": null,
+        "high": null,
+        "sourcedZero": false,
+        "reasons": {
+          "k": {
+            "kind": "plan"
+          }
+        }
       }
     }
   ]
