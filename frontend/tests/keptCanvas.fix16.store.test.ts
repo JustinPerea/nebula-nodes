@@ -216,12 +216,12 @@ describe('GM r21 (3) on PR #199: a connection drawn while kept is this tab’s o
     // Text into an image input.
     useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([]);
-    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes images, not text.');
+    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes images and masks, not text.');
     // A loop: n2's image into n3, then n3's image back into n2.
     useGraphStore.getState().onConnect({ source: 'n2', sourceHandle: 'image', target: 'n3', targetHandle: 'images' });
     useGraphStore.getState().onConnect({ source: 'n3', sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([['n2', 'image', 'n3', 'images']]);
-    expect(noticeText()).toBe('Couldn’t make that connection. It would connect the node back to itself.');
+    expect(noticeText()).toBe('Couldn’t connect to “References”. It would make a loop.');
     // "References" takes up to 10: the 11th is refused.
     for (let index = 10; index < 21; index += 1) {
       useGraphStore.getState().onConnect({ source: `n${index}`, sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
@@ -311,7 +311,7 @@ describe('review 14 of PR #199, HIGH-1: a node added while kept is the copy’s 
     await useProjectStore.getState().saveKeptEdits();
     // Round 17 (GM r23, 2): the tab's own line, naming the connection.
     expect(notices.at(-1)?.text).toBe('Your latest edits were saved as their own project, “Glass campaign (recovered)”. '
-      + 'Nebula left out the connection from “Hero prompt” to “Seedream 4.5” because “Seedream 4.5” takes one connection there.');
+      + 'Nebula left out the connection from “Hero prompt” to “Seedream 4.5” because “Seedream 4.5” takes only one connection there.');
   });
 });
 

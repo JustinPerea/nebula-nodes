@@ -369,7 +369,14 @@ The server exposes these tools for building and running (see
   pins and any node that names it, such as a video timeline's items). The
   open answers `renumbered` (`{old: new}`, `{}` when nothing changed), and
   the `canvas.replaced` event says it too (`data.renumbered`, "gave 1 node
-  new ids"). Loading a graph file (`nebula load`, POST /api/graph/import)
+  new ids"). Reopening the project the person has open is safe for
+  those nodes: what their tab hadn't saved yet still arrives (the handoff
+  learns the new ids), on the node's new id, and the node is never doubled.
+  Until that open, such a node isn't on the canvas you read: a project read
+  shows it under its tab id, and the selection never offers it (see
+  `tabOnlyCount` below). An upgrade that finds such an id on the canvas at
+  boot gives it a Nebula id the same way, with the values the person last
+  saved, and reloads the person's tab. Loading a graph file (`nebula load`, POST /api/graph/import)
   gives every node a new id the same way (`idMap`, and `renumbered` for the
   ones that changed). An id you read before an open, a load or a project
   switch may be stale: an edit to a node that isn't on the canvas answers
@@ -627,7 +634,14 @@ There is no answer or dismiss tool either: only the person answers questions.
 
 Selection is ephemeral. It is not written into `.nebula` graph files or
 `~/.nebula/state.json`. Unknown or deleted node IDs are reported only as stale
-IDs and are never presented as live handles.
+IDs and are never presented as live handles. A node only the person's tab has
+(a duplicate or a paste, until the project is opened again) is never listed at
+all, not even as stale: the selection says only how many there are
+(`tabOnlyCount`, and `tabOnlyNote`: "The person also selected 1 node only their
+tab has (a duplicate or a paste): it has no id agents can use until the project
+is opened again."), and a chat turn's selection context and `nebula selection`
+print that note. Don't ask about or change such a node; tell the person it
+gets an id when the project is opened again.
 
 The same context is available without MCP through:
 
@@ -3155,12 +3169,17 @@ Nebula process restores the same folder. The restore:
    copies), otherwise "Recovered canvas" ("Recovered canvas 2" and on)
    (`recoveredCanvas`). Names never stack: a name already in one of these
    families ("Recovered X", "Recovered canvas", "X copy") takes the next
-   free number in it ("Recovered X 2", "Recovered canvas 2", "X copy 2").
+   free number above its own in it ("Recovered X 2", "Recovered canvas 2",
+   "X copy 2"; "Recovered X 2" gives "Recovered X 3"), and a name never
+   gets a second number or a second "Recovered": a copy of "Recovered
+   Alpha copy 2" is "Recovered Alpha copy 3". A number in any other name
+   is part of the name ("Shot 7 copy", "Recovered Shot 7").
    A name made from one in another family names its source, so families
    sit together: a copy of "Recovered X" is "Recovered X copy", then
-   "Recovered X copy 2"; a recovered "X copy" is "Recovered X copy". A
+   "Recovered X copy 2"; a recovered "X copy" is "Recovered X copy", and
+   when that is taken, the next free number above it. A
    name from before this rule ("X (recovered)") counts as "Recovered X"'s
-   family. A project's own name counts as free only when no project in the
+   family (its recovered copy is "Recovered X 2"). A project's own name counts as free only when no project in the
    list or in Recently deleted has it: a "Beta" still in Recently deleted
    makes the canvas "Recovered Beta". Agents always see a project's real
    name, as the person does.
@@ -3376,7 +3395,8 @@ Nebula process restores the same folder. The restore:
    the person's own tab can start, carry on or end it (its socket says so
    after its hello with the person token); an agent's socket can't. A
    record Nebula can't remove (or a folder where it goes) holds kept mode
-   once at most, and is ignored after that.
+   once at most, and is ignored after that; one in a state folder Nebula
+   can't write is ignored at once (no run could have written it there).
    The person's own open, create, clear and load always
    hold it, whatever its size: such a canvas is saved over the save limit and
    opens with saving paused. A person request that reaches the refusal gets

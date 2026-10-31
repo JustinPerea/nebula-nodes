@@ -23,6 +23,9 @@ export interface FollowingSwitch {
   projectName: string;
   /** The agent's name as presence shows it; null when it isn't known. */
   agent: string | null;
+  /** Nebula's own switch (round 18 of PR #199: the boot's reload of the
+   * open project after it renumbered tab-local nodes): no agent is named. */
+  byNebula?: boolean;
 }
 
 let following: FollowingSwitch | null = null;
@@ -106,15 +109,16 @@ export function waitToOpenTooltip(project: string): string {
  * on its own). */
 export function followingReason(switching: FollowingSwitch | null): string {
   if (!switching) return 'Another project is opening.';
-  return `${switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
+  return `${switching.byNebula ? 'Nebula' : switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
 }
 
 /** GM's derived lines (round 21, confirmed): `node` names a one-node run;
  * `count` (2 or more) a run of several nodes ("Couldn't run <N> nodes.");
  * neither: a run of the whole canvas ("Couldn't run the canvas."). */
-export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number): string {
+export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number,
+  byNebula = false): string {
   const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
-  return `Couldn't run ${what}. ${followingReason({ agent, projectName: project })}`;
+  return `Couldn't run ${what}. ${followingReason({ agent, projectName: project, byNebula })}`;
 }
 
 /** Create's line while following (G1), in its normal error style: its own

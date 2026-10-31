@@ -1,8 +1,10 @@
 /**
  * Round 16 of PR #199 (GM r21 and r22; review 14), the kept tab's own side.
  * - GM r22 (3): the Discard confirm is modal: the page behind it is inert,
- *   its own kept notice included, while the notice region's other notices
- *   stay reachable; Escape closes it and focus goes back to [Discard edits].
+ *   its own kept notice included (and, GM r25 (4) of round 18, every notice
+ *   already showing, dimmed; one that arrives while it is open stays
+ *   reachable above it); Escape closes it and focus goes back to [Discard
+ *   edits].
  * - GM r22 (4): the locked adds' own verbs; the wire-drop popup is live.
  * - Review 14 kept-hold LOW-1 (one busy state) and LOW-2 (H19, the switch
  *   toast's way back held while kept); lock-order NIT-3 (following holds
@@ -64,7 +66,7 @@ describe('GM r22 (3): the Discard confirm is modal, with the page behind it iner
     </>);
   }
 
-  it('inert behind it (the kept notice too); the other notices stay reachable; Escape returns to [Discard edits]', async () => {
+  it('inert behind it (the kept notice and the notices already showing too); a newer notice is reachable; Escape returns to [Discard edits]', async () => {
     renderApp();
     const discard = screen.getByRole('button', { name: DISCARD_EDITS });
     discard.focus();
@@ -82,18 +84,22 @@ describe('GM r22 (3): the Discard confirm is modal, with the page behind it iner
     const notice = document.querySelector('[data-kept-edits]')!;
     expect(notice).toHaveAttribute('inert');
     expect(document.querySelector('[data-notice-region]')).not.toHaveAttribute('inert');
-    expect(screen.getByText('Other notice').closest('[inert]')).toBeNull();
-    // Tab from the dialog's last button goes to the other notice, never the kept one.
+    // GM r25 (4): a notice already showing goes under the scrim too.
+    expect(screen.getByText('Other notice').closest('[inert]')).not.toBeNull();
+    render(<InNoticeRegion slot="pin"><div><button type="button">Newer notice</button></div></InNoticeRegion>);
+    expect(screen.getByText('Newer notice').closest('[inert]')).toBeNull();
+    // Tab from the dialog's last button goes to the newer notice, never the kept one.
     const buttons = [...dialog.querySelectorAll('button')];
     buttons[buttons.length - 1].focus();
     fireEvent.keyDown(buttons[buttons.length - 1], { key: 'Tab' });
-    expect(screen.getByText('Other notice')).toHaveFocus();
+    expect(screen.getByText('Newer notice')).toHaveFocus();
     // Escape (from the dialog) closes it; focus goes back to [Discard edits].
     screen.getByRole('button', { name: KEEP_THEM }).focus();
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(app).not.toHaveAttribute('inert');
     expect(notice).not.toHaveAttribute('inert');
+    expect(screen.getByText('Other notice').closest('[inert]')).toBeNull();
     await waitFor(() => expect(screen.getByRole('button', { name: DISCARD_EDITS })).toHaveFocus());
   });
 });

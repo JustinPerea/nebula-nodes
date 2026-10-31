@@ -171,17 +171,20 @@ a {
 
 [data-offline-disabled],
 [data-following-disabled],
-[data-kept-disabled] {
+[data-kept-disabled],
+[data-tab-local-disabled] {
   cursor: not-allowed !important;
 }
 
 /* Round 22 (GM A): following an agent's switch is the same read-only state
    as offline (lib/canvasLock.ts), so it looks the same; and so do the
    controls disabled while the canvas is kept after a restore (GM r16 on
-   PR #199, 4). */
+   PR #199, 4), and Ask and Note on a node with a tab-local id (GM r26, 4,
+   lib/canvasLock TAB_LOCAL_MARK: a stopgap the bulk-create PR deletes). */
 [data-offline-disabled],
 [data-following-disabled],
-[data-kept-disabled] {
+[data-kept-disabled],
+[data-tab-local-disabled] {
   opacity: 0.6;
 }
 

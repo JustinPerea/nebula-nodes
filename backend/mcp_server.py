@@ -355,7 +355,10 @@ def get_selected_nodes(ctx: Context | None = None) -> dict[str, Any]:
 
     The result includes bounded, redacted parameters, available output ports,
     and connections touching the selection. Deleted/stale IDs are never
-    returned as live nodes.
+    returned as live nodes. A node only the person's tab has (a duplicate or
+    a paste, until the project is opened again) is never listed, not even as
+    stale: `tabOnlyCount` and `tabOnlyNote` say how many. Don't ask about or
+    change it; it gets an id when the project is opened again.
     """
     return _canvas_call("GET", "/api/canvas/selection", ctx)
 
@@ -1574,6 +1577,8 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     Nebula's ids at this open: the person's Duplicate and Paste make nodes
     only their tab knows until the next open. Read the canvas again then; an
     old id answers 404 "… read the canvas again for the current ids."
+    Reopening the project the person has open is safe for those nodes: what
+    their tab hadn't saved lands on the new id, never as a second node.
     """
     from urllib.parse import quote
 

@@ -96,7 +96,8 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
   });
 
   it("GM r17's and r18's lines, verbatim; Ask names the chat's agent, unquoted", () => {
-    expect(keptLockTitle('note')).toBe('You can add notes after you save it as a project.');
+    // GM r25 (3) replaced GM r17's "You can add notes…".
+    expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('settings')).toBe('You can change settings after you save it as a project.');
     expect(keptLockTitle('run')).toBe('You can run this after you save it as a project.');
     // GM r18, Q1.

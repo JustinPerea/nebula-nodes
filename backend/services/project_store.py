@@ -433,9 +433,22 @@ def name_family(name: str) -> tuple[str, str] | None:
     return None
 
 
-def _next_free(family: str, stem: str, names: set[str]) -> str:
+def _family_number(name: str, family: str) -> tuple[str, int] | None:
+    """(stem, number) when ``name`` is in ``family``: the number its last
+    word gives (1 when there is none: "Alpha copy", "Recovered Alpha")."""
+    stem = _family_stem(name, family)
+    if stem is None:
+        return None
+    match = _NAME_FAMILIES[family][0].fullmatch(name) or (
+        _LEGACY_RECOVERED.fullmatch(name) if family == "recovered" else None)
+    number = match.group("n") if match else None
+    return stem, int(number) if number else 1
+
+
+def _next_free(family: str, stem: str, names: set[str], above: int = 0) -> str:
+    """The family's name for ``stem`` with the lowest free number above ``above``."""
     form = _NAME_FAMILIES[family][1]
-    number = 1
+    number = above + 1
     while form(stem, number) in names:
         number += 1
     return form(stem, number)
@@ -443,24 +456,45 @@ def _next_free(family: str, stem: str, names: set[str]) -> str:
 
 def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
     """The next free name in ``family`` for something made from
-    ``source_name`` (GM r14, 4): from the source's own stem when the source
-    is already in that family (never the family's word twice), else from
-    its name. Free: no project in the list or Recently deleted and nothing
-    in ``taken`` has it, so a number freed is used again."""
+    ``source_name`` (GM r14, 4; GM r25, 5 of PR #199). One rule:
+
+    - A source already in the family takes the family's next free number
+      above its own: "Alpha copy" gives "Alpha copy 2", "Recovered Alpha
+      copy 2" gives "Recovered Alpha copy 3", "Recovered Delta" gives
+      "Recovered Delta 2". Never the family's word twice, never a second
+      number.
+    - Any other source takes the family's first name when it is free
+      ("Alpha copy", "Recovered Alpha"; a number in the source is part of
+      its name: "Shot 7 copy", "Recovered Shot 7"). When that is taken, the
+      first name is the source in the family, and the rule above applies
+      to it: "Alpha copy 2", "Recovered Alpha copy 3" for "Alpha copy 2"
+      with "Recovered Alpha copy 2" taken (never "copy 2 2").
+
+    Free: no project in the list or Recently deleted and nothing in
+    ``taken`` has it, so a number freed is used again."""
     names = _names_in_use(catalog, taken)
-    stem = _family_stem(source_name, family)
-    return _next_free(family, stem if stem is not None else source_name[:100], names)
+    found = _family_number(source_name, family)
+    if found is None:
+        first = _NAME_FAMILIES[family][1](source_name[:100], 1)
+        if first not in names:
+            return first
+        found = _family_number(first, family)
+        if found is None:  # the family's form always reads back; a guard
+            return _next_free(family, source_name[:100], names, 1)
+    stem, number = found
+    return _next_free(family, stem, names, number)
 
 
 def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
     """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r14 and r23 a of PR #199): "Recovered <project>", then "Recovered
-    <project> 2" and on, the next free number. A name already in a recovery
-    family gets the next free number in that family: "Recovered Alpha"
-    gives "Recovered Alpha 2", and "Recovered canvas" gives "Recovered
-    canvas 2"."""
-    if (stem := _family_stem(source_name, "canvas")) is not None:
-        return _next_free("canvas", stem, _names_in_use(catalog))
+    r14, r23 a and r25 5 of PR #199): "Recovered <project>", then the next
+    free number (family_name's rule). A name already in a recovery family
+    gets the next free number above its own in that family: "Recovered
+    Alpha" gives "Recovered Alpha 2", "Recovered canvas 2" gives "Recovered
+    canvas 3", and an old "Alpha (recovered)" (the family's first) gives
+    "Recovered Alpha 2"."""
+    if _family_stem(source_name, "canvas") is not None:
+        return family_name(source_name, "canvas", catalog)
     return family_name(source_name, "recovered", catalog)
 
 
@@ -480,11 +514,13 @@ def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
 
 def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
     """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention; GM
-    r14, 4): "<name> copy", then "<name> copy 2" and on, the next free number
-    in the list, Recently deleted and ``taken`` (names already promised to
-    copies not yet filed); "Alpha copy" gives "Alpha copy 2". The one helper
-    for every duplicate: an agent's copy of the person's canvas (PR #199) and
-    a future Duplicate project."""
+    r14, 4; GM r25, 5): "<name> copy", then "<name> copy 2" and on, the next
+    free number in the list, Recently deleted and ``taken`` (names already
+    promised to copies not yet filed); a copy's copy raises its number:
+    "Alpha copy" gives "Alpha copy 2", "Recovered Alpha copy 2" gives
+    "Recovered Alpha copy 3" (family_name). The one helper for every
+    duplicate: an agent's copy of the person's canvas (PR #199) and a future
+    Duplicate project."""
     return family_name(source_name, "copy", catalog, taken)
 
 
@@ -492,7 +528,7 @@ def recovered_canvas_name(catalog: Mapping[str, Any]) -> str:
     """The name of a live canvas filed when which project it was isn't
     known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2"
     and on, the next free number (GM r14, 4)."""
-    return _next_free("canvas", RECOVERED_CANVAS_NAME, _names_in_use(catalog))
+    return _next_free("canvas", RECOVERED_CANVAS_NAME, _names_in_use(catalog))  # the lowest free
 
 
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -59,7 +59,8 @@ def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, 
 @pytest.mark.parametrize(("source", "names", "want"), [
     ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
     ("Alpha copy", (), "Recovered Alpha copy"),
-    ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 2 2"),
+    # GM r25, 5: never "copy 2 2"; the number is raised.
+    ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
 ])
 def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, names, want):

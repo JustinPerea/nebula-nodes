@@ -25,6 +25,28 @@ SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
 # Python's Unicode \d, as the tab's CLI_ID_RE. The live graph holds only
 # these (main._require_backend_node_ids; load renumbers any other).
 BACKEND_NODE_ID = re.compile(r"n([0-9]+)")
+
+
+def _graph_ids(nodes: Mapping[str, Any]) -> list[Any]:
+    """A graph's node ids: its keys, and each node's own ``id``."""
+    return [*nodes, *(node.get("id", key) for key, node in nodes.items() if isinstance(node, Mapping))]
+
+
+class ForeignNodeIdError(RuntimeError):
+    """A write would put a node id that isn't Nebula's into the live graph."""
+
+
+def require_backend_ids(node_ids: Any) -> None:
+    """The live graph's invariant (PR #199 rounds 17 and 18, review 16
+    renumber-everywhere NIT-1), in one place: every id is a backend id
+    (``nN``), so every node's typing reaches the server. CLIGraph checks it
+    on every write that adopts or persists nodes (``_save_state``,
+    ``replace_with``, ``adopt``); only ``load()`` takes other ids, and it
+    renumbers them. A refusal is loud (nothing written, nothing adopted)."""
+    stray = [node_id for node_id in node_ids
+             if not (isinstance(node_id, str) and BACKEND_NODE_ID.fullmatch(node_id))]
+    if stray:
+        raise ForeignNodeIdError(f"Nebula's graph would hold node ids that aren't Nebula's: {stray[:5]}")
 # How far an explicit id (add_node's node_id) may sit above the counter. The
 # counter moves past a restored id, so an unbounded one (n999999999) would
 # make every later id too long for SHORT_ID_RE, and undo could never put
@@ -326,6 +348,7 @@ class CLIGraph:
         persistence is configured, a failed write propagates before live memory
         changes so an API cannot report a graph that restart would discard.
         """
+        require_backend_ids(_graph_ids(candidate.nodes))
         replacement_nodes = copy.deepcopy(candidate.nodes)
         replacement_edges = copy.deepcopy(candidate.edges)
         replacement_counter = candidate._counter
@@ -344,6 +367,16 @@ class CLIGraph:
         self.edges = replacement_edges
         self._counter = replacement_counter
         self.removed_shot_media = copy.deepcopy(candidate.removed_shot_media)
+
+    def adopt(self, candidate: "CLIGraph") -> None:
+        """Take a candidate's graph into memory as it is (its state.json was
+        already written: main's project switch commit). Its ids are checked
+        first (require_backend_ids)."""
+        require_backend_ids(_graph_ids(candidate.nodes))
+        self.nodes = copy.deepcopy(candidate.nodes)
+        self.edges = copy.deepcopy(candidate.edges)
+        self._counter = candidate._counter
+        self.owner = candidate.owner
 
     def clone(self) -> "CLIGraph":
         """Return a persistence-free deep copy suitable for staged mutation."""
@@ -407,6 +440,7 @@ class CLIGraph:
         owner: Any = OWNER_UNKNOWN,
         copy_note: dict[str, Any] | None = None,
     ) -> None:
+        require_backend_ids(_graph_ids(nodes))
         target = require_allowed_path(path)
         data: dict[str, Any] = {
             "nodes": list(nodes.values()),

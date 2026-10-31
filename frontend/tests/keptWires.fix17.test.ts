@@ -1,7 +1,8 @@
 /**
  * Round 17 of PR #199 (GM r23, 1 and 2; review 15 kept-wires-ui LOW-2,
  * LOW-3, NIT-2), the kept-wire rules as a library:
- * - the person's refusal is the tab's own line, from the types it knows;
+ * - the person's refusal is the tab's own line, from the types it knows
+ *   (round 18, GM r25 and r26: every type it takes, and the loop line);
  * - the connections Save as a project left out are said in the tab's words,
  *   naming each, and from 2 on counted, naming up to 3;
  * - one predicate decides "replaced" for the kept rules and onConnect, so a
@@ -28,16 +29,16 @@ const edge = (source: string, sourceHandle: string, target: string, targetHandle
   ({ id: `${source}-${target}-${targetHandle}-${Math.random()}`, source, sourceHandle, target, targetHandle });
 
 describe('GM r23 (1): a refused kept connection says what the input takes, in the tab’s words', () => {
-  it('the wrong kind: “Couldn’t connect to “References”. It takes images, not text.”', () => {
+  it('the wrong kind: “Couldn’t connect to “References”. It takes images and masks, not text.”', () => {
     const check = checkKeptWire({ source: 't', sourceHandle: 'text', target: 's', targetHandle: 'images' },
       [node('t', 'text-input'), node('s', 'seedream-4-5')], []);
-    expect(check).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It takes images, not text.' });
+    expect(check).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It takes images and masks, not text.' });
   });
 
   it('a loop and a several-input limit, each in one curly-apostrophe line', () => {
     const nodes = [node('a', 'seedream-4-5'), node('b', 'seedream-4-5')];
     expect(checkKeptWire({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, nodes,
-      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Couldn’t make that connection. It would connect the node back to itself.' });
+      [edge('a', 'image', 'b', 'images')])).toEqual({ ok: false, line: 'Couldn’t connect to “References”. It would make a loop.' });
     const ten = Array.from({ length: 10 }, (_, index) => edge(`i${index}`, 'image', 'a', 'images'));
     const images = Array.from({ length: 11 }, (_, index) => node(`i${index}`, 'image-input'));
     expect(checkKeptWire({ source: 'i10', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, [...nodes, ...images], ten))
@@ -80,7 +81,7 @@ describe('review 15 kept-wires-ui LOW-3: dynamic ports (W10, W11)', () => {
 
   it('the same dynamic ports hold the type rule: text into the universal node’s image input is refused', () => {
     expect(checkKeptWire({ source: 't', sourceHandle: 'text', target: 'u', targetHandle: 'input_image' },
-      [node('t', 'text-input'), universal], [])).toEqual({ ok: false, line: 'Couldn’t connect to “Input image”. It takes images, not text.' });
+      [node('t', 'text-input'), universal], [])).toEqual({ ok: false, line: 'Couldn’t connect to “Input image”. It takes images and masks, not text.' });
   });
 });
 
@@ -121,7 +122,7 @@ describe('GM r23 (2): the connections Save as a project left out, in the tab’s
     expect(droppedConnectionsLine([wire('missing', { target: null, targetWas: 'local-9', targetName: null })], (id) => (id === 'local-9' ? 'B' : null)))
       .toBe('Nebula left out the connection from “A” to “B” because “B” isn’t on the canvas.');
     expect(droppedConnectionsLine([wire('type', { sourceType: 'Text', targetType: 'Image' })]))
-      .toBe('Nebula left out the connection from “A” to “B” because “B” takes images, not text.');
+      .toBe('Nebula left out the connection from “A” to “B” because “B” takes images and masks, not text.');
   });
 
   it('a missing end the tab can’t name either: the connection is named by its other end', () => {

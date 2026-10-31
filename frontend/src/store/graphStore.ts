@@ -137,7 +137,7 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
-import { checkKeptWire, targetHandleAllowsMultiple } from '../lib/keptWires';
+import { checkKeptWire, refusedConnectionLine, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
@@ -1109,6 +1109,9 @@ interface GraphState {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection, options?: { skipUndo?: boolean }) => void;
+  /** A connection the canvas refused as it was dropped (a wrong kind, a
+   * loop): says why, on kept and normal tabs alike (GM r26, 3). */
+  sayRefusedConnection: (connection: Connection) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   /** Give a node a custom name. Blank, or the model's own name, restores the default. */
   renameNode: (nodeId: string, label: string) => void;
@@ -1647,7 +1650,11 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
           outputs: Object.fromEntries(Object.entries(data.outputs ?? {}).filter(
             ([portId]) => !portId.startsWith('shot_') || validHandleIds.has(portId),
           )),
-          dynamicInputPorts: data.dynamicInputPorts ?? [],
+          // The definition's inputs, as a loaded file gets them (graphFile):
+          // an empty list would hide them from the port lookups (review 16
+          // kept-ui LOW-1: a second Character ref replaced the first).
+          dynamicInputPorts: data.dynamicInputPorts?.length ? data.dynamicInputPorts
+            : (NODE_DEFINITIONS[data.definitionId]?.inputPorts ?? []),
           dynamicOutputPorts: outputPorts,
           dynamicParams: data.dynamicParams ?? [],
           providerMeta: data.providerMeta ?? {},
@@ -9944,6 +9951,11 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     ? Object.fromEntries(Object.entries(raw as Record<string, unknown>)
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== entry[1]))
     : {};
+  // The graphNotForThisTab check here is defence only (review 16 NIT-2,
+  // mutant F5, equivalent today): a switch's sync reaches this store after
+  // projectStore's subscribeFirst handler has cleared the project context,
+  // so applyGraphSyncNow would refuse it anyway. Kept so a renumbered sync
+  // for another canvas never removes this tab's nodes if that order changes.
   if (Object.keys(renumbered).length === 0 || graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
     return applyGraphSyncNow(event, options);
   }
@@ -11664,6 +11676,12 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const step = pushUndo(set, get);
     if (wireChanges.length > 0) applyCanvasEdgeChanges(wireChanges, set, get);
     changeCanvasNodes(nodes.map((id) => ({ id, type: 'remove' as const })), set, get, { step, keep: wireChanges.length > 0 });
+  },
+
+  sayRefusedConnection: (connection) => {
+    const state = get();
+    const line = refusedConnectionLine(connection, state.nodes, state.edges);
+    if (line) set((current) => noticeLine(current, line));
   },
 
   onConnect: (connection, options) => {
@@ -14479,7 +14497,7 @@ function refuseRunWhileFollowing(nodeIds: string[]): Promise<void> {
   const name = only ? (nodeTitle(NODE_DEFINITIONS[only.data.definitionId], only.data.label) || null) : null;
   // No ids: a run of the whole canvas; several: counted (GM round 21).
   useGraphStore.getState().notify(runWhileFollowingLine(name, following.agent, following.projectName,
-    ids.length >= 2 ? ids.length : undefined));
+    ids.length >= 2 ? ids.length : undefined, following.byNebula === true));
   return Promise.resolve();
 }
 const FOLLOW_RUN = (ids: (...args: never[]) => string[]): FollowGate => ({
@@ -14859,7 +14877,7 @@ function keptRecordWire(connection: Connection, run: () => void, added: Node<Nod
   const nodes = added ? [...before.nodes, added] : before.nodes;
   const check = checkKeptWire(connection, nodes, before.edges);
   if (!check.ok) {
-    // The line is whole: "Couldn’t connect to “References”. It takes images, not text." (GM r23, 1).
+    // The line is whole: "Couldn’t connect to “References”. It takes images and masks, not text." (GM r23, 1; GM r25, 1).
     if (check.line) useGraphStore.setState((state) => noticeLine(state, check.line));
     return false;
   }
@@ -15001,6 +15019,8 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   'beginUndoStep', 'cancelUndoStep', 'endUndoStep', 'noteOwnAdd', 'noteRenameDraft',
   // Notices.
   'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'dismissProviderRecoveryWarning',
+  // A refused drop's line (GM r26, 3): it says why, and changes nothing.
+  'sayRefusedConnection',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.

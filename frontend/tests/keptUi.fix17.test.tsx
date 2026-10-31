@@ -123,7 +123,8 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
     render(<SelectionToolbar />);
     const expected: [RegExp, string][] = [
       [/^Note for agents$/, 'You can leave a note after you save it as a project.'],
-      [/^Ask$/, 'You can ask an agent after you save it as a project.'],
+      // GM r25 (3): the one Ask line, the agent's name or "your agent".
+      [/^Ask$/, 'You can ask your agent after you save it as a project.'],
       [/^Run selected nodes$/, 'You can run nodes after you save it as a project.'],
     ];
     for (const [name, line] of expected) {
@@ -134,13 +135,11 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
     }
   });
 
-  it('the lines are declared with the other kept lines', () => {
-    expect(keptLockTitle('note-tab-only')).toBe('You can leave a note after you save it as a project.');
-    expect(keptLockTitle('ask-tab-only')).toBe('You can ask an agent after you save it as a project.');
+  it('the lines are declared with the other kept lines (GM r25, 3: one Ask and one Note line on any node)', () => {
+    expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('run-nodes')).toBe('You can run nodes after you save it as a project.');
-    // A named chat agent doesn't change the tab-only line: no agent can see the node yet.
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'claude' }));
-    expect(keptLockTitle('ask-tab-only')).toBe('You can ask an agent after you save it as a project.');
+    expect(keptLockTitle('ask')).toBe('You can ask Claude after you save it as a project.');
   });
 
   it('the bar has the same controls before and after the node gets its real id (no shift)', () => {
@@ -165,7 +164,7 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
     useGraphStore.setState({ nodes: [node('n1'), node(TAB_ONLY)] });
     act(() => setCanvasKept(true));
     render(<SelectionToolbar />);
-    expect(button(/^Ask$/)).toHaveAttribute('title', 'You can ask an agent after you save it as a project.');
+    expect(button(/^Ask$/)).toHaveAttribute('title', 'You can ask your agent after you save it as a project.');
     expect(screen.queryByRole('button', { name: /^Note for agents$/ })).toBeNull();
   });
 
@@ -185,7 +184,7 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
     const canvasCss = readFileSync(resolve(__dirname, '../src/styles/canvas.css'), 'utf8');
     expect(canvasCss).toMatch(/\.selection-toolbar__button--primary:disabled,\s*\.selection-toolbar__button--primary:disabled:hover \{[^}]*background: transparent;/);
     const appCss = readFileSync(resolve(__dirname, '../src/App.css'), 'utf8');
-    expect(appCss).toMatch(/\[data-kept-disabled\] \{\s*opacity: 0\.6;/);
+    expect(appCss).toMatch(/\[data-kept-disabled\],?\s*(\[data-tab-local-disabled\] )?\{\s*opacity: 0\.6;/);
   });
 });
 

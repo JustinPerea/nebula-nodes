@@ -131,7 +131,12 @@ the ends by the copy's ids (an end not in the copy is null, its tab id in
 **Node ids can change at an open.** The person's Duplicate and Paste make
 nodes only their tab knows; the next open of that project gives each a
 Nebula id (the open answers `renumbered`, `{old: new}`, and `nebula watch`
-shows "gave 1 node new ids"). `nebula load` gives every node a new id too
+shows "gave 1 node new ids"). Reopening the project they have open is safe:
+what their tab hadn't saved arrives on the new id, never as a second node.
+Until that open, `nebula selection` never lists such a node, not even as
+stale: it says how many there are (`tabOnlyCount`, "The person also selected 1
+node only their tab has …"), so don't ask about or change it.
+`nebula load` gives every node a new id too
 (`renumbered`). An id you read before may then be stale: an edit to it
 answers 404 "Node n7 not found. … read the canvas again for the current
 ids." Read the canvas again (`nebula graph`) and use the ids you see.
@@ -152,7 +157,10 @@ their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
 What they had typed is saved into the project left (also when you reopen the
 project already open); if that fails it is kept as a new project, "Recovered
-<project left>", then "Recovered <project left> 2" and so on.
+<project left>", then "Recovered <project left> 2" and so on. A name never
+gets a second number or a second "Recovered": a copy of "Recovered Alpha copy
+2" is "Recovered Alpha copy 3", and a recovered "Recovered Delta" is
+"Recovered Delta 2".
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none

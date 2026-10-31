@@ -78,12 +78,15 @@ export function SelectionToolbar() {
   const sizeRefs = runScope.cost?.sizeRefs;
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
-  // GM r23 (c) on PR #199: a node added while the canvas is kept has a
-  // tab-local id no agent can address until it is saved. Note and Ask both
-  // wait for that: while kept they show, locked, with their own lines (Note
-  // is never hidden then: hiding it shifted the bar when the node was saved).
-  const tabOnly = ids.some((id) => !isBackendNodeId(id));
-  const showNote = ids.length === 1 && (isBackendNodeId(ids[0]) || lock.kept);
+  // GM r25 (3) on PR #199: while kept, Ask and Note say one line on any
+  // node (saving unlocks both). GM r26 (4): on a normal tab a duplicated or
+  // pasted node keeps a tab-local id until the project is next opened, so a
+  // selection holding one locks both with their own lines (lib/canvasLock
+  // TAB_LOCAL_LINES). STOPGAP: the bulk-create PR deletes `tabLocal`. Note
+  // always shows for one node, locked or not, so the bar never shifts when
+  // the node gets its id.
+  const tabLocal = ids.some((id) => !isBackendNodeId(id));
+  const showNote = ids.length === 1;
   const runScopeId = useId();
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar
   // that unmounts first (the selection cleared) cancels that focus.
@@ -146,8 +149,7 @@ export function SelectionToolbar() {
       </span>
       <span className="selection-toolbar__divider" aria-hidden="true" />
       <button type="button" className="selection-toolbar__button" onClick={openAgent}
-        {...(tabOnly ? lock.act({ title: 'Ask agent about selection', kept: 'ask-tab-only' })
-          : lock.act({ title: 'Ask agent about selection', kept: 'ask' }))}>
+        {...lock.act({ title: 'Ask agent about selection', kept: 'ask', tabLocal: tabLocal ? 'ask' : undefined })}>
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
@@ -156,8 +158,7 @@ export function SelectionToolbar() {
           type="button"
           className="selection-toolbar__button"
           onClick={() => composeNote({ nodeId: ids[0] })}
-          {...(tabOnly ? lock.act({ title: 'Note for agents', kept: 'note-tab-only' })
-            : lock.act({ title: 'Note for agents', kept: 'note' }))}
+          {...lock.act({ title: 'Note for agents', kept: 'note', tabLocal: tabLocal ? 'note' : undefined })}
           aria-label="Note for agents"
         >
           <StickyNote size={17} aria-hidden="true" />

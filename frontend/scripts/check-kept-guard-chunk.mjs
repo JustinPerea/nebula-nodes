@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
  * the entry chunk, never in the lazy `catalogRestoreCopy` chunk (a chunk
  * that fails to load would take them with it):
  * - the kept unload guard (store/projectStore.ts registers it with
- *   `window.addEventListener('beforeunload', …)`), so a reload or a tab
+ *   `window.addEventListener('beforeunload', …)` and marks its kept branch
+ *   with the literal 'nebula-kept-unload-guard'), so a reload or a tab
  *   close asks first even when the copy chunk never arrived;
  * - the kept fallback line (restoreCopyCore RESTORE_COPY_FALLBACK_KEPT), the
  *   full sentence the notice says when that chunk failed while kept.
@@ -23,7 +24,11 @@ const distDir = process.argv[2]
 
 /** String literals minification keeps, each in its guard's own code path. */
 const MARKERS = [
-  { what: 'the kept unload guard', pattern: /addEventListener\((["'`])beforeunload\1/ },
+  // The kept guard's own literal (store/projectStore.ts KEPT_UNLOAD_MARK),
+  // beside its registration: any other beforeunload can't pass for it
+  // (review 16 kept-ui NIT-2).
+  { what: 'the kept unload guard', pattern: /nebula-kept-unload-guard/ },
+  { what: 'the unload guard registration', pattern: /addEventListener\((["'`])beforeunload\1/ },
   { what: 'the kept fallback line', pattern: /before your latest edits were saved\. They(?:’|\\u2019)re kept in this tab\./ },
 ];
 

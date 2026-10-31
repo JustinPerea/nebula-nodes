@@ -661,8 +661,10 @@ def test_kept_ui_low1_agents_read_no_selection_or_view_while_a_tab_keeps_edits(a
     chat = main_module.selection_context.snapshot(main_module.cli_graph, main_module.node_registry,
                                                   requested_ids=["n1"])
     assert chat["selectedNodeIds"] == []
-    # Kept mode ends: what was published before kept mode is read again
-    # only once the tab publishes it (here it does).
+    # Kept mode ends: the selection published before kept mode is read
+    # again at once, with no new publish (kept mode ends through Save, a
+    # switch, or Discard, an open, and both clear it); here the tab
+    # publishes it again anyway.
     _say_kept(tab, False, manager, kept_now=0)
     assert client.post("/api/canvas/selection", headers=PERSON, json={"nodeIds": ["n1"]}).status_code == 200
     assert client.get("/api/canvas/selection", headers=CODEX).json()["selectedNodeIds"] == ["n1"]
@@ -747,7 +749,9 @@ def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
     ("Recovered Delta", ("Recovered Delta",), "Recovered Delta 2"),  # a copy of a copy: one family
     ("Delta", ("Recovered Delta", "Recovered Delta 3"), "Recovered Delta 2"),  # a freed number used again
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
-    ("Delta (recovered)", (), "Recovered Delta"),  # a name from before the rule
+    # A name from before the rule is the family's first ("Recovered Delta"):
+    # its recovered copy is the second (GM r25, 5).
+    ("Delta (recovered)", (), "Recovered Delta 2"),
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r23a_the_family_rules_hold_in_the_new_shape(source, taken, expected):

@@ -43,6 +43,22 @@ export const FOLLOWING_MARK = 'data-following-disabled';
  * press pulses the kept line. */
 export const KEPT_MARK = 'data-kept-disabled';
 
+/**
+ * GM r26 (4) on PR #199: a node duplicated or pasted on a normal tab keeps a
+ * tab-local id (not `nN`) until the project is next opened, so no agent can
+ * address it yet: Ask and Note on a selection holding one are locked, in
+ * the shared lock's disabled look, with GM's lines naming what unlocks them
+ * today. While kept, the kept lines win (kept comes first in `act`).
+ * STOPGAP: the bulk-create PR (Duplicate and Paste making real nodes at
+ * once) deletes TAB_LOCAL_MARK, TAB_LOCAL_LINES and every `tabLocal` use.
+ */
+export const TAB_LOCAL_MARK = 'data-tab-local-disabled';
+export type TabLocalAction = 'ask' | 'note';
+export const TAB_LOCAL_LINES: Record<TabLocalAction, string> = {
+  ask: 'You can ask an agent about this node after you reopen the project.',
+  note: 'You can leave a note on this node after you reopen the project.',
+};
+
 
 export interface CanvasLock {
   /** Read-only: following an agent's switch, or offline. Fields stay
@@ -86,6 +102,9 @@ export interface LockTitleOwn {
  * kept state leaves on. */
 export interface LockOwn extends LockTitleOwn {
   kept: KeptAction | 'live';
+  /** GM r26 (4), a stopgap (above): the control acts on a node with a
+   * tab-local id, so it is locked with that line, after kept. */
+  tabLocal?: TabLocalAction;
 }
 
 /** The run lock's hold on one control (M2): `runTitle` when a run holds it
@@ -98,6 +117,7 @@ export interface ActProps {
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
   'data-kept-disabled'?: '';
+  'data-tab-local-disabled'?: '';
 }
 
 /**
@@ -140,6 +160,10 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
       // pulses the kept line). A control that only changes this tab's
       // canvas stays on.
       if (kept && own.kept !== 'live') return { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) };
+      // GM r26 (4), a stopgap the bulk-create PR deletes: a node with a
+      // tab-local id waits for the project's next open. Only the person
+      // fixes it, so it goes before the reasons that clear by themselves.
+      if (own?.tabLocal) return { [TAB_LOCAL_MARK]: '', disabled: true, title: TAB_LOCAL_LINES[own.tabLocal] };
       // Then the run's line, alone (PR #198 M2, N1).
       if (options.run) return { disabled: true, title: options.runTitle ?? RUN_LOCK_REASON };
       // Then following and offline (their marks and lines).

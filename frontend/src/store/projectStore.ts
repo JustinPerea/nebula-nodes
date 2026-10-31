@@ -18,6 +18,7 @@ import { holdsPersonCredential } from '../lib/personSession';
 import { backendParamsVersion, onParamsOutdated, reloadPage } from '../lib/paramsOutdated';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
+import { recoveredCopyFallbackName, recoveredSourceName } from '../lib/recoveredNames';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import type { CutOffSave } from '../lib/savingCutOff';
@@ -796,7 +797,9 @@ function pendingRecoveryOf(sourceProjectId: string, snapshot: ProjectSnapshot): 
  * and throws EditsRefused; once held, it is never sent again. */
 /** The copy the last recovery made (a whole new project in Projects): GM's
  * failed-handoff line names it and opens it (round 20). */
-let lastRecoveredCopy: { id: string; name: string } | null = null;
+/** The kept unload guard's returnValue (see the guard). */
+const KEPT_UNLOAD_MARK = 'nebula-kept-unload-guard';
+let lastRecoveredCopy: { id: string; name: string; sourceName?: string } | null = null;
 
 async function recoverPendingWork(): Promise<boolean> {
   const recovery = pendingRecovery;
@@ -809,7 +812,12 @@ async function recoverPendingWork(): Promise<boolean> {
   }
   try {
     const copy = await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
-    lastRecoveredCopy = copy && typeof copy.name === 'string' ? { id: copy.id ?? recovery.recoveryId, name: copy.name } : null;
+    // The project it was made from, by the name this tab listed it under
+    // (review 16 kept-ui LOW-3: the reload line names it; the copy's own name
+    // is "Recovered <name>", never parsed back by hand).
+    const sourceName = useProjectStore.getState().projects.find((item) => item.id === recovery.sourceProjectId)?.name;
+    lastRecoveredCopy = copy && typeof copy.name === 'string'
+      ? { id: copy.id ?? recovery.recoveryId, name: copy.name, ...(sourceName ? { sourceName } : {}) } : null;
   } catch (error) {
     if (pendingRecovery === recovery && refusedForGood(error)) {
       holdRefusedEdits(recovery, error);
@@ -1097,7 +1105,7 @@ async function saveKeptEdits(): Promise<void> {
     const byCopyId = new Map(Object.entries(renumbered).map(([was, now]) => [now, was]));
     const dropped = droppedConnectionsLine(saved?.droppedWires ?? [],
       (id) => namesBefore.get(id) || namesBefore.get(byCopyId.get(id) ?? '') || null);
-    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : `Recovered ${kept.sourceName}`,
+    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : recoveredCopyFallbackName(kept.sourceName),
       ...(dropped ? { dropped } : {}) };
   } catch (error) {
     setKeptCanvasSaving(false);
@@ -1253,7 +1261,9 @@ function reloadDueFor(backendVersion: number | null): 'reload' | 'reloaded' | 'u
 }
 function rememberCopyForUpdate(copy: FiledCopy): boolean {
   try {
-    window.sessionStorage.setItem(RECOVERED_FOR_UPDATE_KEY, JSON.stringify(copy));
+    // Only what the reload needs (the copy's own fields, not lastRecoveredCopy's sourceName).
+    window.sessionStorage.setItem(RECOVERED_FOR_UPDATE_KEY, JSON.stringify({ id: copy.id, name: copy.name,
+      ...(copy.dropped ? { dropped: copy.dropped } : {}) }));
     return true;
   } catch { return false; }
 }
@@ -1406,7 +1416,7 @@ function handleParamsVersionChange(backendVersion: number | null): Promise<void>
     const copy = recovered ? lastRecoveredCopy : null;
     if (copy && newer && !editsDownloaded && reloadDueFor(backendVersion) === 'reload' && rememberCopyForUpdate(copy)) {
       const source = useProjectStore.getState().activeProject?.name
-        ?? copy.name.replace(/ \(recovered\)$/, '');
+        ?? copy.sourceName ?? recoveredSourceName(copy.name) ?? copy.name;
       useProjectStore.setState({ error: reloadForUpdateLine(source), errorRetry: { action: 'reloadForUpdate', version: backendVersion } });
       return;
     }
@@ -1973,6 +1983,40 @@ async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot, las
  * Then the tab loads what's open now, shows its canvas (from Projects too:
  * new_project and open_project say the person's canvas follows), and says
  * who switched it. */
+/** A sync's `renumbered` ({old: new}: the ids an open gave tab-local
+ * nodes), cleaned; {} when it has none. */
+function renumberedOf(event: unknown): Record<string, string> {
+  const raw = (event as { renumbered?: unknown } | null)?.renumbered;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== entry[1]));
+}
+
+/** The snapshot with renumbered nodes under their new ids, the
+ * connections' ends and the run history with them (review 16 HIGH-1 and
+ * MEDIUM-1), as Nebula's own `_apply_node_renumbering` moves them: a run
+ * record names a node by id anywhere in it (its target, its snapshot, the
+ * keys of its outputs), and a tab-local id is a uuid nothing else equals. */
+export function remapSnapshotIds(snapshot: ProjectSnapshot, renumbered: Record<string, string>): ProjectSnapshot {
+  if (Object.keys(renumbered).length === 0) return snapshot;
+  const to = (id: string) => renumbered[id] ?? id;
+  const moved = (value: unknown): unknown => {
+    if (typeof value === 'string') return to(value);
+    if (Array.isArray(value)) return value.map(moved);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [to(key), moved(item)]));
+    }
+    return value;
+  };
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map((node) => (renumbered[node.id] ? { ...node, id: to(node.id) } : node)),
+    edges: snapshot.edges.map((edge) => (renumbered[edge.source] || renumbered[edge.target]
+      ? { ...edge, source: to(edge.source), target: to(edge.target) } : edge)),
+    ...(Array.isArray(snapshot.runHistory) ? { runHistory: moved(snapshot.runHistory) as ProjectSnapshot['runHistory'] } : {}),
+  };
+}
+
 async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
   snapshot: ProjectSnapshot | null, unsaved: boolean, cutOff: CutOffSave[] = [], pending?: HandoffPending): Promise<void> {
   // Round 20 (M1): read-only from the moment the tab sees the switch until
@@ -2069,6 +2113,10 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // loadWorkspace just read still has (PR #198 review 17 L1): offline, an
     // agent's delete of it arrived before this notice existed, so no relist
     // could drop it.
+    // Nebula's own reopen (the boot's) says nothing: the person did
+    // nothing and nothing changed project. A recovered copy is named by
+    // the canvas line (byAgent false above).
+    if (byNebula(latest())) return;
     useProjectStore.setState((state) => ({ switchNotice: wayBackIn({
       actorName: agentNameOf(latest()), created: landed.created === true && landed.projectId === (loaded?.id ?? landed.projectId),
       projectName: loaded?.name ?? landed.projectName,
@@ -2079,7 +2127,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
     const newest = latest();
-    const who = newest.actor?.name ?? 'Another app';
+    const who = byNebula(newest) ? 'Nebula' : newest.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
     const line = sentences(`${who} opened “${newest.projectName}”, but this window couldn't follow it.`,
       reasonSentence(error, true));
@@ -2100,8 +2148,15 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
 /** Round 20 (M1): the canvas is read-only while it follows (lib/canvasFollow.ts). */
 function startFollowing(notice: ProjectSwitch): void {
   const agent = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
-  setFollowingSwitch({ projectName: notice.projectName, agent });
+  setFollowingSwitch({ projectName: notice.projectName, agent, ...(byNebula(notice) ? { byNebula: true } : {}) });
 }
+
+/** Nebula's own switch: the first sync after a boot that renumbered the
+ * open project's tab-local nodes reopens it (round 18 of PR #199, review 16
+ * MEDIUM-1). The tab follows it as it follows an agent's reopen, so its run
+ * history, panels and next autosave take the new ids, but no agent is
+ * named, no toast says who opened it, and there's no way back. */
+const byNebula = (notice: ProjectSwitch) => notice.actor?.kind === 'system';
 
 /** `send`, again once Nebula is back whenever the offline gate refused it
  * (it was never sent). With `waitOnNoAnswer`, a request that found no
@@ -2786,8 +2841,18 @@ function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
     // Round 20 (M1): read-only from here until the new canvas is loaded.
     startFollowing(event.projectSwitch);
     const stopped = useGraphStore.getState().beginAgentSwitch();
-    const snapshot = captureProjectSnapshot();
-    const unsaved = JSON.stringify(snapshot) !== lastSaved || stopped.force;
+    const captured = captureProjectSnapshot();
+    const unsaved = JSON.stringify(captured) !== lastSaved || stopped.force;
+    // Review 16 HIGH-1: an agent that reopened the project this tab shows
+    // gave its tab-local nodes Nebula's ids; the handoff speaks of them by
+    // those ids, so Nebula merges the person's latest typing into the node it
+    // renumbered instead of adding the old one back beside it (Nebula maps
+    // the rest of the snapshot by the same map, so both ends agree).
+    const renumbered = renumberedOf(event);
+    // (The handoff's unsent values, `stopped.pending`, are only ever for
+    // nodes Nebula holds, nN ids, which an open never renumbers: nothing to
+    // map there.)
+    const snapshot = remapSnapshotIds(captured, renumbered);
     void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved, stopped.cutOff, stopped.pending);
     return;
   }
@@ -2934,7 +2999,11 @@ export function subscribeProjectAutosave(): () => void {
     // tab close or the browser's Back asks first, until kept mode ends.
     if (isCanvasKept()) {
       event.preventDefault();
-      event.returnValue = '';
+      // Any non-empty value still asks (browsers show their own text). This
+      // literal is the kept guard's own mark, which the build's chunk check
+      // finds in the entry chunk (scripts/check-kept-guard-chunk.mjs; review
+      // 16 kept-ui NIT-2: a beforeunload elsewhere can't pass for it).
+      event.returnValue = KEPT_UNLOAD_MARK;
       return;
     }
     // Review 9, M-3: a scene card's unsaved edits count too (they are

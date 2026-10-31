@@ -23,6 +23,9 @@ interface MenuItem {
   title?: string;
   /** This tab's run locks it now: the run's line wins (lib/canvasLock). */
   run?: boolean;
+  /** GM r26 (4), a stopgap the bulk-create PR deletes: it acts on a node
+   * with a tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
+  tabLocal?: 'note';
   action: () => void;
 }
 
@@ -129,8 +132,10 @@ export function ContextMenu() {
     {
       label: 'Leave a note for agents…',
       kept: 'note',
-      // Agents only see nodes the backend knows (ids like n4).
-      disabled: !isBackendNodeId(nodeId),
+      // Agents only see nodes the backend knows (ids like n4): a duplicated
+      // or pasted node waits for the project's next open (GM r26, 4; a
+      // stopgap the bulk-create PR deletes).
+      tabLocal: isBackendNodeId(nodeId) ? undefined : 'note',
       action: () => {
         composeNote({ nodeId });
         hideContextMenu();
@@ -176,7 +181,7 @@ export function ContextMenu() {
           key={item.label}
           className={`context-menu__item ${item.danger ? 'context-menu__item--danger' : ''}`}
           onClick={item.action}
-          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept }, { run: item.run })}
+          {...lock.act({ disabled: item.disabled, title: item.title, kept: item.kept, tabLocal: item.tabLocal }, { run: item.run })}
         >
           <span>{item.label}</span>
           {item.shortcut && <span className="context-menu__shortcut">{item.shortcut}</span>}

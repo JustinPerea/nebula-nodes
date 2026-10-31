@@ -17,14 +17,13 @@ export const KEEP_THEM = 'Keep them';
  * left, the destructive one on the right in the destructive style.
  *
  * GM r22 (3): it is modal (aria-modal) under the ModalPortal rule, so the
- * page behind it is inert, the kept notice that opened it included: the
- * notice region's other notices stay reachable above it (GM r25), but a
- * notice that owns the open confirm isn't one of them. Escape closes it and
- * focus goes back to [Discard edits] (`returnTo`).
+ * page behind it is inert. GM r25 (4): so is every notice already showing,
+ * the kept notice that opened it included, dimmed under the scrim
+ * (ModalPortal's shared hold); a notice that arrives while it is open lands
+ * above it, live. Escape closes it and focus goes back to [Discard edits]
+ * (`returnTo`).
  */
-export function KeptDiscardConfirm({ onKeep, onDiscard, owner, returnTo }: { onKeep: () => void; onDiscard: () => void;
-  /** The notice whose [Discard edits] opened it: inert while it is open. */
-  owner?: RefObject<HTMLElement | null>;
+export function KeptDiscardConfirm({ onKeep, onDiscard, returnTo }: { onKeep: () => void; onDiscard: () => void;
   /** Where focus goes when it closes ([Discard edits]). */
   returnTo?: RefObject<HTMLElement | null> }) {
   const headingId = useId();
@@ -37,7 +36,7 @@ export function KeptDiscardConfirm({ onKeep, onDiscard, owner, returnTo }: { onK
   const overlay = useRef<HTMLDivElement>(null);
   // Everything behind the confirm is inert and hidden from assistive
   // technology while it is open (the pattern of the app's other full modals,
-  // lib/modalFocus sitsBehind), and so is its own notice.
+  // lib/modalFocus sitsBehind). Its own notice is ModalPortal's (GM r25, 4).
   useLayoutEffect(() => {
     const own = overlay.current;
     if (!own) return undefined;
@@ -50,7 +49,6 @@ export function KeptDiscardConfirm({ onKeep, onDiscard, owner, returnTo }: { onK
     };
     const isolate = () => {
       for (const sibling of document.body.children) if (sitsBehind(sibling, own)) hide(sibling);
-      if (owner?.current) hide(owner.current);
     };
     isolate();
     const observer = new MutationObserver(isolate);
@@ -64,7 +62,7 @@ export function KeptDiscardConfirm({ onKeep, onDiscard, owner, returnTo }: { onK
         else element.setAttribute('aria-hidden', prior.hidden);
       }
     };
-  }, [owner]);
+  }, []);
 
   useEffect(() => {
     const back = returnTo?.current ?? document.activeElement;

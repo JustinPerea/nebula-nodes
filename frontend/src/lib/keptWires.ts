@@ -2,7 +2,8 @@ import type { Connection, Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { DynamicNodeData, NodeData, PortDataType } from '../types';
 import type { DroppedWire } from './projects';
-import { isPortCompatible } from './portCompatibility';
+import { joinedList } from './errorCopy';
+import { PORT_RULES, isPortCompatible } from './portCompatibility';
 
 /**
  * PR #199 round 16 (GM r21, 3): while the canvas is kept, a connection is
@@ -45,15 +46,12 @@ function inputPort(node: Node<NodeData>, handle: string | null | undefined): Por
  * one, the new one replacing the old: the store's onConnect and the kept
  * rules both ask this (review 15 kept-wires-ui LOW-2: a port marked
  * `multiple` with maxConnections 1 isn't replaced, so it refuses at its
- * limit instead). A dynamic node answers from its dynamic ports alone. */
+ * limit instead). The port is found as every lookup finds it: the node's
+ * dynamic ports, then its definition's (review 16 kept-ui LOW-1: a Cinema
+ * scene's empty dynamic input list made its Character refs take one). */
 export function targetHandleAllowsMultiple(node: Node<NodeData>, handleId: string | null | undefined): boolean {
   if (!handleId) return false;
-  const dynamicData = node.data as unknown as DynamicNodeData | undefined;
-  if (dynamicData?.isDynamic && dynamicData.dynamicInputPorts) {
-    return Boolean(dynamicData.dynamicInputPorts.find((p) => p.id === handleId)?.multiple);
-  }
-  const definition = NODE_DEFINITIONS[node.data.definitionId];
-  return Boolean(definition?.inputPorts.find((p) => p.id === handleId)?.multiple);
+  return Boolean(inputPort(node, handleId)?.multiple);
 }
 
 /** The server's `_input_connection_limit`: one unless the input takes
@@ -95,16 +93,22 @@ const TYPE_NAMES: Record<string, string> = {
 export const typeName = (type: string | null | undefined): string =>
   (type && TYPE_NAMES[type]) || (type ? type.toLowerCase() : 'something else');
 
-/** What an input takes, in the person's words: its own type ("images"), as
- * GM's example names a References input (an Image port the shared rule also
- * lets masks into). */
-export const takesTypes = (type: string | null | undefined): string => typeName(type);
+/** What an input takes, in the person's words (GM r25, 1): every type the
+ * shared rule lets into it, its own first, by the shared name-list join:
+ * an Image input "images and masks", a Text input "text", Any "anything". */
+export function takesTypes(type: string | null | undefined): string {
+  if (!type || type === PORT_RULES.any) return typeName(type);
+  const partners = PORT_RULES.alsoCompatible.flatMap(([a, b]) => (a === type ? [b] : b === type ? [a] : []));
+  return joinedList([...new Set([type, ...partners])].map(typeName));
+}
 
-/** Kept wires' refusals (GM r23, 1): "Couldn’t connect to “References”. It
- * takes images, not text." The loop and a missing port, which name no type,
- * say what happened. */
-export const KEPT_WIRE_LOOP = 'Couldn’t make that connection. It would connect the node back to itself.';
-export const KEPT_WIRE_NO_PORT = 'Couldn’t make that connection. That input or output isn’t on the node any more.';
+/** Connection refusals (GM r23, 1; GM r25, 1): "Couldn’t connect to
+ * “References”. It takes images and masks, not text." A loop (GM r26, 3):
+ * "Couldn’t connect to “Prompt”. It would make a loop." A missing port names
+ * no input, so it says what happened. */
+export const keptWireLoop = (into: PortShape | undefined) =>
+  `Couldn’t connect to “${portName(into, 'Input')}”. It would make a loop.`;
+export const KEPT_WIRE_NO_PORT = 'Couldn’t make that connection. That input or output isn’t on the node anymore.';
 export const keptWireWrongKind = (into: PortShape | undefined, out: PortShape | undefined) =>
   `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${takesTypes(into?.dataType)}, not ${typeName(out?.dataType)}.`;
 export const keptWireTooMany = (into: PortShape | undefined, limit: number) =>
@@ -139,8 +143,43 @@ export function checkKeptWire(connection: Connection, nodes: readonly Node<NodeD
   // input drops: an edge into the target never lies on a path from the
   // target back to the source in a graph without loops (review 15: the
   // filter that left it out was dead, mutants F11, W5 and W8).
-  if (wireMakesLoop(connection.source, connection.target, edges)) return { ok: false, line: KEPT_WIRE_LOOP };
+  if (wireMakesLoop(connection.source, connection.target, edges)) return { ok: false, line: keptWireLoop(into) };
   return { ok: true, duplicate: false };
+}
+
+/** The line for a connection the canvas refused as it was dropped (GM r26,
+ * 3: on kept and normal tabs alike, since a silent drop looks like a missed
+ * drop). useIsValidConnection refuses only a wrong kind, a loop or a port it
+ * can't find, so this says the same rules' line; a drop the rules would take
+ * (a limit or a duplicate is never refused at the drop) says nothing. */
+export function refusedConnectionLine(connection: Connection, nodes: readonly Node<NodeData>[], edges: readonly Edge[]): string {
+  const source = nodes.find((node) => node.id === connection.source);
+  const target = nodes.find((node) => node.id === connection.target);
+  if (!source || !target) return '';
+  const out = outputPort(source, connection.sourceHandle);
+  const into = inputPort(target, connection.targetHandle);
+  if (!out || !into) return KEPT_WIRE_NO_PORT;
+  if (!isPortCompatible(out.dataType, into.dataType)) return keptWireWrongKind(into, out);
+  if (wireMakesLoop(connection.source, connection.target, edges)) return keptWireLoop(into);
+  return '';
+}
+
+/** The connection a drop the canvas refused would have made (GM r26, 3):
+ * React Flow's final state names the handle it was dropped on; the drag
+ * began at `from` (an output when its handleType is 'source'). Null when the
+ * drop wasn't a refusal on a handle (a drop on empty space opens the
+ * connection popup instead). */
+export function refusedDropConnection(from: { nodeId: string; handleId: string; handleType: 'source' | 'target' },
+  state: { isValid: boolean | null; toHandle?: { nodeId: string; id?: string | null } | null }): Connection | null {
+  const to = state.toHandle;
+  if (state.isValid !== false || !to?.nodeId) return null;
+  const fromSource = from.handleType === 'source';
+  return {
+    source: fromSource ? from.nodeId : to.nodeId,
+    sourceHandle: fromSource ? from.handleId : (to.id ?? null),
+    target: fromSource ? to.nodeId : from.nodeId,
+    targetHandle: fromSource ? (to.id ?? null) : from.handleId,
+  };
 }
 
 /** The node a dropped connection's end names: the copy's name, else the
@@ -167,10 +206,10 @@ function droppedReason(wire: DroppedWire, from: string | null, to: string | null
       const name = sourceGone ? from : to;
       return name ? `“${name}” isn’t on the canvas` : `the node it ${sourceGone ? 'came from' : 'went to'} isn’t on the canvas`;
     }
-    case 'port': return to ? `“${to}” doesn’t have that input any more` : 'that input isn’t there any more';
+    case 'port': return to ? `“${to}” doesn’t have that input anymore` : 'that input isn’t there anymore';
     case 'limit': {
       const limit = typeof wire.limit === 'number' && wire.limit > 0 ? wire.limit : 1;
-      return `“${to ?? 'that node'}” takes ${limit === 1 ? 'one connection' : `up to ${limit} connections`} there`;
+      return `“${to ?? 'that node'}” takes ${limit === 1 ? 'only one connection' : `up to ${limit} connections`} there`;
     }
     default:
       return wire.targetType && wire.sourceType

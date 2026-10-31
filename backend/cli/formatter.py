@@ -407,6 +407,10 @@ def format_selection(selection: dict[str, Any]) -> str:
     if missing:
         lines.append("")
         lines.append("Ignored stale IDs: " + ", ".join(str(node_id) for node_id in missing))
+    if selection.get("tabOnlyNote"):
+        # A duplicated or pasted node only the person's tab has (PR #199 round 18).
+        lines.append("")
+        lines.append(str(selection["tabOnlyNote"]))
     return "\n".join(lines)
 
 

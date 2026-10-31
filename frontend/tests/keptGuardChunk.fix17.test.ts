@@ -13,7 +13,8 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = resolve(__dirname, '../scripts/check-kept-guard-chunk.mjs');
-const GUARD = 'window.addEventListener(`beforeunload`,s)';
+// Round 18 (review 16 kept-ui NIT-2): the guard's kept branch carries its own literal.
+const GUARD = 'let s=e=>{if(F()){e.preventDefault(),e.returnValue=`nebula-kept-unload-guard`;return}};window.addEventListener(`beforeunload`,s)';
 const KEPT_LINE = 'x=`Nebula restored its project list before your latest edits were saved. They’re kept in this tab.`';
 const made: string[] = [];
 
@@ -65,7 +66,7 @@ describe('the kept guard stays in the entry chunk', () => {
 
   it('reads the guard in any quote minification picks', () => {
     for (const quote of ['"', "'"]) {
-      const result = run(dist({ entry: `window.addEventListener(${quote}beforeunload${quote},s);${KEPT_LINE}`, copy: '' }));
+      const result = run(dist({ entry: `e.returnValue=${quote}nebula-kept-unload-guard${quote};window.addEventListener(${quote}beforeunload${quote},s);${KEPT_LINE}`, copy: '' }));
       expect(result.ok).toBe(true);
     }
   });

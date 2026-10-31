@@ -49,7 +49,6 @@ export function KeptEditsNotice() {
   const running = useGraphStore((state) => !state.canSwitchProject({ exceptSaves: true }));
   // The confirm belongs to the kept canvas it was asked for: it goes with it.
   const [confirmingFor, setConfirmingFor] = useState<typeof kept>(null);
-  const notice = useRef<HTMLDivElement>(null);
   const discardButton = useRef<HTMLButtonElement>(null);
   if (!kept || !onWorkspace) return null;
   const confirming = confirmingFor !== null && confirmingFor.sourceId === kept.sourceId;
@@ -64,7 +63,7 @@ export function KeptEditsNotice() {
   const saveHeld = held ? { ...held, ...(held.title ? {} : { title: SAVE_KEPT_OFFLINE }) } : { disabled: busy };
   const discardHeld = held ? { ...held, ...(held.title ? {} : { title: DISCARD_KEPT_OFFLINE }) } : { disabled: busy };
   return (
-    <div ref={notice} className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}
+    <div className={`canvas-undo-notice canvas-undo-notice--message kept-edits-notice${pulses > 0 ? ' kept-edits-notice--pulse' : ''}`}
       role="status" aria-live="polite" data-kept-edits="">
       <span key={pulses} className="canvas-undo-notice__text">
         {keptEditsLine(kept)}
@@ -76,7 +75,7 @@ export function KeptEditsNotice() {
       <button type="button" ref={discardButton} className="canvas-undo-notice__action kept-edits-notice__discard" {...discardHeld}
         aria-busy={kept.discarding || undefined} data-kept-discard-button=""
         onClick={() => setConfirming(true)}>{DISCARD_EDITS}</button>
-      {confirming && <KeptDiscardConfirm owner={notice} returnTo={discardButton} onKeep={() => setConfirming(false)}
+      {confirming && <KeptDiscardConfirm returnTo={discardButton} onKeep={() => setConfirming(false)}
         onDiscard={() => { setConfirming(false); void useProjectStore.getState().discardKeptEdits(); }} />}
     </div>
   );
