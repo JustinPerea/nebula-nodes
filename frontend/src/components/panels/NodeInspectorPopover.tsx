@@ -225,7 +225,9 @@ export function NodeInspectorPopover() {
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
     // Closed: the next open measures afresh (at 300 px, before any spare line).
-    if (!visible || !selectedNodeId) {
+    // A pinned one stays open with no node: its empty state (GM PR #205 r10
+    // items 2-3), so the screen agrees with the store.
+    if (!visible || (!selectedNodeId && !pinned)) {
       frameRef.current = null;
       return;
     }
@@ -247,12 +249,12 @@ export function NodeInspectorPopover() {
             };
           }
         }
-        const nextFrame = measurePinnedFrame(selectedNodeId, pinnedPreferenceRef.current);
+        const nextFrame = measurePinnedFrame(selectedNodeId ?? '', pinnedPreferenceRef.current);
         if (!frameEquals(frameRef.current, nextFrame)) {
           frameRef.current = nextFrame;
           setFrame(nextFrame);
         }
-      } else {
+      } else if (selectedNodeId) {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
           // What the body lacks at the height it has now. While the body fits,
@@ -329,7 +331,7 @@ export function NodeInspectorPopover() {
     )?.focus();
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
 
-  if (!visible || !selectedNodeId || !frame) return null;
+  if (!visible || (!selectedNodeId && !pinned) || !frame) return null;
 
   return createPortal(
     <div

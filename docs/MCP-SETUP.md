@@ -189,7 +189,7 @@ The server exposes these tools for building and running (see
   empty, with a warning). Under the 16 MB save limit the file replaces the
   open project's canvas (make a new project first, `new_project`, unless the
   person asked for that). A file over the limit opens as a new project named
-  after the file, as the person's Load canvas does (Q120): the import is
+  after the file, as the person's Load canvas does: the import is
   first asked to refuse it (`refuseOverSaveLimit`), the project is made as
   `new_project` makes one, and the file loads there (`newProjectForFile`,
   which loads only into an empty project); the project that was open is left
@@ -221,7 +221,10 @@ The server exposes these tools for building and running (see
   landed does. Nodes any Undo or Redo brings back (the person's step or an
   agent's, yours included) come back selected, replacing the selection, as a
   paste does: one selection, so the Inspector's node and its "…" pill move
-  to the node brought back (none when several come back). Either way it
+  to the node brought back (none when several come back: a pinned Inspector
+  stays pinned, saying "No node selected", as it does whenever the node it
+  shows leaves the canvas, by an Undo, a delete, yours included, or another
+  canvas opening). Either way it
   brings them back as Nebula last had them: your edit to a node (or a
   connection you made or took off) that Nebula took while the person's
   delete was on its way comes back with it, a connection only while the node
@@ -251,7 +254,10 @@ The server exposes these tools for building and running (see
   person's still on its way is no newer edit (the Cmd+Z applies beneath it).
   Your edits to a node that a waiting Cmd+Z holds are kept and show on the
   canvas once it lands, with their Agent log line and their own undo step (a
-  run's outputs too); if Nebula doesn't answer an undo within 15 s it fails
+  run's outputs too), in Nebula's order across every node it held. An edit
+  of yours the person typed into the same node after goes above their typing
+  as a step of its own, so their Cmd+Z never takes your edit off and yours
+  never brings their undone typing back; if Nebula doesn't answer an undo within 15 s it fails
   with "Couldn't undo that." and the reason, and the edits it held go out in
   order. An undo Nebula refuses leaves the canvas as Nebula's graph is. An
   edit or Cmd+Z still waiting when another project opens or a graph import

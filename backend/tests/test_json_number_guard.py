@@ -629,3 +629,16 @@ def test_unit_bodies_that_can_hold_a_number_are_still_checked(parts):
                               for index, part in enumerate(parts)])
     sent = _run(JsonNumberGuard(inner), _http_scope(None), receive)
     assert inner.calls == 0 and sent[0]["status"] == 422, sent
+
+
+# -- the engine's reason stays the agent's (GM PR #205 r10 item 4) -------------
+
+def test_an_agents_too_deep_graph_payload_keeps_the_engine_reason(api):
+    """The canvas words its own shape checks for the person (lib/graphFileShared.ts);
+    an agent's write still gets the engine's exact reason, which MCP and the CLI pass on."""
+    nested: object = "leaf"
+    for _ in range(70):
+        nested = {"next": nested}
+    response = api.client.post("/api/canvas/proposals", headers=AGENT, json={"note": "Deep", "nodes": [], "extra": nested})
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "graph payload is nested too deeply"

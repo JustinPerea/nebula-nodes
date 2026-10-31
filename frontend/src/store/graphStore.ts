@@ -338,7 +338,7 @@ function clearReplacedCanvasFocus(): void {
   const request = ui.canvasFocusRequest;
   if (!request) return;
   ui.clearCanvasNodeFocus(request.requestId);
-  if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+  if (ui.selectedNodeId === request.nodeId) ui.selectNode(null, { keepPin: true });
 }
 
 function markExecutionScopeQueued(
@@ -5934,21 +5934,34 @@ let heldLinkSeq = 0;
 /** The links the sync being handled made or extended (bindHeldLinks). */
 let heldLinksThisSync: HeldLink[] = [];
 
+/** Where each step an edit someone else made sits in Nebula's order
+ * (heldLinkSeq): a sync's own step takes its held links' place, else the
+ * next; a held change placed when its hold ends takes its link's (review 5
+ * of PR #205, LOW-3). Only these steps can sit above a held change placed
+ * under them: the person's own steps can't (MEDIUM-1). */
+const editStepSeq = new WeakMap<UndoEntry, number>();
+
 /** A step the sync just made (on top now, not before) is its links' step. */
 function bindHeldLinks(topBefore: UndoEntry | undefined): void {
   const links = heldLinksThisSync;
   heldLinksThisSync = [];
   const top = useGraphStore.getState().undoStack.at(-1);
-  if (!top || top === topBefore) return;
+  if (!top || top === topBefore || !isForeignEdit(top)) return;
+  editStepSeq.set(top, links.length > 0 ? Math.min(...links.map((link) => link.seq)) : ++heldLinkSeq);
   for (const link of links) link.step ??= top;
 }
 
-/** Sets `made` (a foreignEditStep for `link`'s edit) with the canvas. When
- * the link's own sync already made its step and it is still on the stack,
- * this change joins that step instead of making a second one; else a new
- * step goes under the steps later edits' syncs made (`later`), so Undo
- * keeps Nebula's order. */
-function setLinkStep(link: HeldLink, later: readonly HeldLink[], state: GraphState, nodes: Node<NodeData>[], edges: Edge[],
+/** Sets `made` (a foreignEditStep for `link`'s edit to held node `nodeId`)
+ * with the canvas, in Nebula's order: into the step the link's own sync
+ * made when it is still on the stack, else under the lowest step a later
+ * edit made (any node's), else on top. Only where every step above it is a
+ * later edit's, or one whose Undo leaves this node alone (review 5 of PR
+ * #205, MEDIUM-1, GM r10 item 1): a step the person took during the hold
+ * holds this node as it was without this change, so its Undo would take
+ * this change off too, and this change's Undo would bring the person's
+ * undone change back. Then it goes on top, its own step, and every Undo
+ * takes back only what it names. */
+function setLinkStep(link: HeldLink, nodeId: string, state: GraphState, nodes: Node<NodeData>[], edges: Edge[],
   made: Partial<GraphState>, set: GraphSet): void {
   const entry = made.undoStack?.at(-1);
   const step = link.step;
@@ -5956,25 +5969,45 @@ function setLinkStep(link: HeldLink, later: readonly HeldLink[], state: GraphSta
     set({ nodes, edges, ...made });
     return;
   }
-  if (!step || !isForeignEdit(step) || !state.undoStack.includes(step)) {
-    const at = Math.min(...later.map((each) => (each.step ? state.undoStack.indexOf(each.step) : -1)).filter((index) => index >= 0));
-    if (!Number.isFinite(at)) {
-      set({ nodes, edges, ...made });
-      return;
-    }
-    set({ nodes, edges, ...made, undoStack: [...state.undoStack.slice(0, at), entry, ...state.undoStack.slice(at)] });
+  const stack = state.undoStack;
+  const later = (each: UndoEntry) => (editStepSeq.get(each) ?? -Infinity) > link.seq;
+  // The person's typing is a snapshot of the whole canvas, so it holds
+  // every node; a slice step holds only what it names.
+  const leavesNode = (each: UndoEntry) => isSliceStep(each) && !(nodeId in each.before.nodes) && !(nodeId in each.after.nodes)
+    && !(isOwnAdd(each) && each.params?.some((change) => change.nodeId === nodeId));
+  const clearFrom = (from: number) => stack.slice(from).every((each) => later(each) || leavesNode(each));
+  const own = step ? stack.indexOf(step) : -1;
+  if (step && isForeignEdit(step) && own >= 0 && clearFrom(own + 1)) {
+    for (const [id, node] of Object.entries(entry.before.nodes)) if (!(id in step.before.nodes)) step.before.nodes[id] = node;
+    for (const [id, node] of Object.entries(entry.after.nodes)) step.after.nodes[id] = node;
+    for (const [key, edge] of Object.entries(entry.before.edges)) if (!(key in step.before.edges)) step.before.edges[key] = edge;
+    for (const [key, edge] of Object.entries(entry.after.edges)) step.after.edges[key] = edge;
+    set({ nodes, edges });
     return;
   }
-  for (const [id, node] of Object.entries(entry.before.nodes)) if (!(id in step.before.nodes)) step.before.nodes[id] = node;
-  for (const [id, node] of Object.entries(entry.after.nodes)) step.after.nodes[id] = node;
-  for (const [key, edge] of Object.entries(entry.before.edges)) if (!(key in step.before.edges)) step.before.edges[key] = edge;
-  for (const [key, edge] of Object.entries(entry.after.edges)) step.after.edges[key] = edge;
-  set({ nodes, edges });
+  editStepSeq.set(entry, link.seq);
+  const at = stack.findIndex((each, index) => later(each) && clearFrom(index));
+  if (at < 0) {
+    set({ nodes, edges, ...made });
+    return;
+  }
+  set({ nodes, edges, ...made, undoStack: [...stack.slice(0, at), entry, ...stack.slice(at)] });
+}
+
+/** The label a held node's synced copy takes (review 5 of PR #205, LOW-1;
+ * one rule for the newest copy, the earlier links and a Delete's chain):
+ * the person's rename still on its way, else the one on its way at that
+ * copy's sync (`renaming`). A sync can't have it yet, so its older label
+ * is nobody's change. */
+function heldLabel(nodeId: string, node: Node<NodeData>, renaming: string | undefined): Node<NodeData> {
+  const name = labelsInFlight.get(nodeId) ?? renaming;
+  return name !== undefined && node.data.label !== name ? { ...node, data: { ...node.data, label: name } } : node;
 }
 
 /** The same edit (its id), so its syncs fold into one link. Syncs with no
  * origin are nobody's to tell apart: back-to-back ones fold too (they make
- * no step either way). */
+ * no step either way), but never a run's write-back with another's
+ * (nextLinks). */
 function sameEdit(a: EditOrigin | undefined, b: EditOrigin | undefined): boolean {
   if (!a || !b) return !a && !b;
   return a.id !== undefined && a.id === b.id;
@@ -5988,9 +6021,12 @@ function nextLinks(prior: readonly HeldLink[], origin: EditOrigin | undefined, o
   if (own) return [...prior];
   const last = prior.at(-1);
   const named = renaming !== undefined ? { renaming } : {};
-  if (last && sameEdit(last.origin, origin)) {
+  // A run's write-back is its output, rebased under the person's steps; a
+  // sourceless sync next to it is someone's: each keeps its own link
+  // (review 5 of PR #205, LOW-2), so a fold keeps what both were.
+  if (last && sameEdit(last.origin, origin) && Boolean(last.runParams) === runParams) {
     return [...prior.slice(0, -1), { origin, node, edges, moved: moved || last.moved, there, seq: last.seq,
-      ...(runParams && last.runParams ? { runParams } : {}), ...named, ...(last.step ? { step: last.step } : {}) }];
+      ...(runParams ? { runParams } : {}), ...named, ...(last.step ? { step: last.step } : {}) }];
   }
   return [...prior, { origin, node, edges, moved, there, seq: ++heldLinkSeq, ...(runParams ? { runParams } : {}), ...named }];
 }
@@ -6053,7 +6089,7 @@ function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {
       nodes = state.nodes.filter((node) => node.id !== id);
       edges = state.edges.filter((edge) => edge.source !== id && edge.target !== id);
     } else {
-      const merged = mergeSyncedNode(copy.node, existing, copy.moved ? [id] : [], useUIStore.getState().settingsCache);
+      const merged = heldLabel(id, mergeSyncedNode(copy.node, existing, copy.moved ? [id] : [], useUIStore.getState().settingsCache), copy.renaming);
       nodes = existing ? state.nodes.map((node) => (node.id === id ? merged : node)) : [...state.nodes, merged];
       const present = new Set(nodes.map((node) => node.id));
       if (existing && options.wires) {
@@ -6074,7 +6110,7 @@ function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {
     // are none); one with no origin is someone's, and makes none (GM r7
     // item 1), as foreignEditStep does outside a hold.
     const last = copy.links?.at(-1);
-    if (last) setLinkStep(last, [], state, nodes, edges, foreignEditStep(state, nodes, edges, last.origin, false, copy.moved ? [id] : [], Boolean(last.runParams)), set);
+    if (last) setLinkStep(last, id, state, nodes, edges, foreignEditStep(state, nodes, edges, last.origin, false, copy.moved ? [id] : [], Boolean(last.runParams)), set);
     else set({ nodes, edges });
     noteSyncArrivals(state.nodes, nodes, set, get);
   }
@@ -6085,14 +6121,12 @@ function applyHeldCopies(ids: Iterable<string>, options: { wires?: boolean } = {
  * with its connections when they are this node's (as the newest takes them). */
 function placeEarlierLinks(id: string, copy: HeldCopy, set: GraphSet, get: GraphGet, wires: boolean): void {
   const links = (copy.links ?? []).filter((link) => link.node);
-  for (const [index, link] of links.slice(0, -1).entries()) {
+  for (const link of links.slice(0, -1)) {
     const state = get();
     const existing = state.nodes.find((node) => node.id === id);
     if (!existing) return;
-    const synced = mergeSyncedNode(link.node!, existing, link.moved ? [id] : [], useUIStore.getState().settingsCache);
     // A rename of the person's on its way at this sync stays theirs.
-    const renaming = labelsInFlight.get(id) ?? link.renaming;
-    const merged = renaming !== undefined ? { ...synced, data: { ...synced.data, label: renaming } } : synced;
+    const merged = heldLabel(id, mergeSyncedNode(link.node!, existing, link.moved ? [id] : [], useUIStore.getState().settingsCache), link.renaming);
     const nodes = state.nodes.map((node) => (node.id === id ? merged : node));
     const present = new Set(nodes.map((node) => node.id));
     // As the newest copy (applyHeldCopies): on a restore's hold the syncs
@@ -6100,7 +6134,7 @@ function placeEarlierLinks(id: string, copy: HeldCopy, set: GraphSet, get: Graph
     const edges = wires
       ? carriedEdges(state.edges, id, link.edges, link.there).filter((edge) => present.has(edge.source) && present.has(edge.target))
       : state.edges;
-    setLinkStep(link, links.slice(index + 1), state, nodes, edges, foreignEditStep(state, nodes, edges, link.origin, false, link.moved ? [id] : [], Boolean(link.runParams)), set);
+    setLinkStep(link, id, state, nodes, edges, foreignEditStep(state, nodes, edges, link.origin, false, link.moved ? [id] : [], Boolean(link.runParams)), set);
   }
 }
 
@@ -6285,7 +6319,8 @@ function changeCanvasNodes(
   // The node leaves the canvas now: the UI's selection doesn't keep naming it
   // (review 19, L1), so a failed delete never brings it back selected.
   const selectedInUi = useUIStore.getState().selectedNodeId;
-  if (selectedInUi && removedIds.includes(selectedInUi)) useUIStore.getState().selectNode(null);
+  // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+  if (selectedInUi && removedIds.includes(selectedInUi)) useUIStore.getState().selectNode(null, { keepPin: true });
   // Syncs leave them off until their delete answers (heldNodes); the newest
   // copy one carries is what comes back if the delete fails (M-2).
   const holds = new Map(cliRemovedIds.map((nodeId) => [nodeId, holdNode(nodeId, false)]));
@@ -6465,7 +6500,7 @@ function changeCanvasNodes(
     // GM (round 20, B): the node comes back unselected, in the UI's
     // selection too (the ring and the settings pill read selectedNodeId).
     const selectedInUi = useUIStore.getState().selectedNodeId;
-    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null);
+    if (selectedInUi && back.has(selectedInUi)) useUIStore.getState().selectNode(null, { keepPin: true });
     set((state) => {
       const present = new Set(state.nodes.map((node) => node.id));
       // Where it was, as it was; never selected (GM: "Don't select it").
@@ -9195,12 +9230,9 @@ function forgetRemoved(step: UndoEntry, kept: ReadonlySet<string>): void {
 function carrySyncedCopy(step: UndoEntry, nodeId: string, copy: HeldCopy | undefined): void {
   if (!copy?.node) return;
   const touches = (edge: Edge) => edge.source === nodeId || edge.target === nodeId;
-  const renaming = labelsInFlight.get(nodeId) ?? copy.renaming;
   const settings = useUIStore.getState().settingsCache;
-  const named = (node: Node<NodeData>, was: Node<NodeData>, moved: boolean, name = renaming): Node<NodeData> => {
-    const merged = mergeSyncedNode(node, was, moved ? [nodeId] : [], settings);
-    return createSnapshot([name !== undefined ? { ...merged, data: { ...merged.data, label: name } } : merged], []).nodes[0];
-  };
+  const named = (node: Node<NodeData>, was: Node<NodeData>, moved: boolean, renaming = copy.renaming): Node<NodeData> =>
+    createSnapshot([heldLabel(nodeId, mergeSyncedNode(node, was, moved ? [nodeId] : [], settings), renaming)], []).nodes[0];
   let chain: Omit<ForeignUnder, 'nodeId'>[] | null = null;
   for (let at: UndoEntry | undefined = step; at; ) {
     if (!isSliceStep(at)) {
@@ -9226,7 +9258,7 @@ function carrySyncedCopy(step: UndoEntry, nodeId: string, copy: HeldCopy | undef
           let edgesBefore = edgesAll.filter(touches);
           chain = links.map((link, k) => {
             const newest = k === links.length - 1;
-            const after = newest ? taken : named(link.node!, was, link.moved, labelsInFlight.get(nodeId) ?? link.renaming);
+            const after = newest ? taken : named(link.node!, was, link.moved, link.renaming);
             const edgesAfter = (newest ? edgesNow : carriedEdges(edgesAll, nodeId, link.edges, link.there)).filter(touches);
             const one = { origin: link.origin, ...(link.runParams ? { runParams: true } : {}), moved: link.moved, seq: link.seq, before, after, edgesBefore, edgesAfter };
             before = after;
@@ -9274,7 +9306,10 @@ function placeForeignUnder(step: UndoEntry, set: GraphSet, get: GraphGet): void 
       const alone = { ...get(), nodes: [each.before], edges: each.edgesBefore, undoStack: [], redoStack: [] } as GraphState;
       const made = foreignEditStep(alone, [each.after], each.edgesAfter, each.origin, false, each.moved ? [each.nodeId] : [], Boolean(each.runParams));
       const entry = made.undoStack?.at(-1);
-      if (entry) entries.push(entry);
+      if (entry) {
+        editStepSeq.set(entry, each.seq);
+        entries.push(entry);
+      }
     }
   } finally {
     landingsForNextStep = landings;
@@ -11820,7 +11855,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         // Nebula said what it made: nothing is left unresolved (a later
         // add-and-connect isn't refused for it: round 17's P-2).
         definiteOutcome = true;
-        return fail('The canvas changed while this request was pending. Check the current graph before trying again.');
+        return fail('The canvas changed before this could finish. Check it, then try again.');
       }
 
       const nodeId = node.id;
@@ -14119,7 +14154,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     currentRunId = restoredHistory.find((record) => record.status === 'running'
       && !record.createOrigin && !record.cinemaShot)?.id ?? null;
     useUIStore.setState({
-      selectedNodeId: null, inspectorPinned: false, canvasFocusRequest: null,
+      // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+      selectedNodeId: null, canvasFocusRequest: null,
       editorTargetNodeId: null, remotionEditorTargetNodeId: null, cinemaEditorNodeId: null,
       characterEditorId: null, moodboardEditorId: null, selectedClipId: null,
       selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,
@@ -15139,6 +15175,17 @@ subscribeBackendConnection(() => {
   };
   useGraphStore.setState(gated);
 }
+
+// GM PR #205 r10 items 2-3: however the node the Inspector shows leaves the
+// canvas (an Undo, a Delete, an agent's delete, a reopen), the Inspector
+// shows its empty state, and a pinned one stays pinned. One rule for every
+// way, so none can leave it naming a node that's gone.
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes) return;
+  const shown = useUIStore.getState().selectedNodeId;
+  if (!shown || state.nodes.some((node) => node.id === shown) || !previous.nodes.some((node) => node.id === shown)) return;
+  useUIStore.getState().selectNode(null, { keepPin: true });
+});
 
 // Every card title this tab shows is remembered past its node's removal, so
 // a World Labs record whose node left the canvas is still named by it (GM,

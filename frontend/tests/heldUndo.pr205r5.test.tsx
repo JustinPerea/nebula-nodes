@@ -475,7 +475,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
   });
 
   describe('GM r7 item 1: a sync with no origin is someone\'s, held or not', () => {
-    const someoneLine = 'This node was renamed “Reconnect” while Nebula was offline, so your rename to “Draft” wasn\'t saved.';
+    const someoneLine = 'This node was renamed “Reconnect” while Nebula was offline, so your rename to “Draft” wasn’t saved.';
     const expectSomeone = () => {
       expect(lastForeignToucher('n1')).toEqual({ kind: 'unknown' });
       expect(droppedRenameLine(lastForeignToucher('n1'), labelOf('n1')!, 'Draft')).toBe(someoneLine);
@@ -496,22 +496,24 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       expect(steps[0].after.nodes.n1?.data.params.value).toBe('CODEX');
     };
     // Undo puts back a step's whole node, as it does for every step (lib/canvasUndo
-    // applySlice): Codex's Undo takes the name back too, held or not. Asked as a question.
-    const undoCodexKeepsRename = async () => {
+    // applySlice): Codex's Undo takes the name back too, held or not.
+    const undoCodexStepWholeNode = async () => {
       expect([valueOf('n1'), labelOf('n1')]).toEqual(['CODEX', 'Reconnect']);
       expectSomeone();
       sameAsNebula();
       codexStepAlone();
       await undo();
       expect(notice()).toBe('Undid Codex’s edit.');
-      expect(valueOf('n1')).toBe('v0');
+      // The whole node: the reconnect's name goes back with Codex's value
+      // (the follow-up PR makes Undo revert only its step's own fields).
+      expect([valueOf('n1'), labelOf('n1')]).toEqual(['v0', 'n1']);
       sameAsNebula();
     };
 
     it('no hold: Codex sets a value, a reconnect renames: "someone" for the name, Codex\'s step holds only its value', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await codexThenReconnect();
-      await undoCodexKeepsRename();
+      await undoCodexStepWholeNode();
     });
 
     it('a Delete Nebula refuses: the same', async () => {
@@ -523,7 +525,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       await codexThenReconnect();
       await releaseAll();
       fake.override = null;
-      await undoCodexKeepsRename();
+      await undoCodexStepWholeNode();
     });
 
     it('a restore\'s hold (an Undo of a Delete on its way): the same', async () => {
@@ -531,7 +533,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       await restoreHeld();
       await codexThenReconnect();
       await releaseAll();
-      await undoCodexKeepsRename();
+      await undoCodexStepWholeNode();
     });
 
     it('a Delete that goes through: Undo brings both back; "someone" for the name; Codex\'s step holds only its value', async () => {

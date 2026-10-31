@@ -158,7 +158,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
       expect(DROPPED_REDO_TEXT).toBe('Nothing was redone. Your last change was still saving.');
     });
 
-    it('Q8: undos and a redo held on a delete, Codex edits, the answer: all dropped with the undo line', async () => {
+    it('case 8: undos and a redo held on a delete, Codex edits, the answer: all dropped with the undo line', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       type('n1', 'E1');
       act(() => { store().deleteNode('n2'); }); await settle();
@@ -195,7 +195,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
       sameAsBackend();
     });
 
-    it('Q7: three undos held on a delete, Codex edits, the answer: all dropped with the undo line', async () => {
+    it('case 7: three undos held on a delete, Codex edits, the answer: all dropped with the undo line', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       type('n1', 'E0');
       await settle(); await new Promise((r) => setTimeout(r, 1100));
@@ -341,7 +341,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
       sameAsBackend();
     });
 
-    it('Q12: two deletes echo-first, Cmd+Z x2, an agent edit between the echoes: both presses dropped', async () => {
+    it('case 12: two deletes echo-first, Cmd+Z x2, an agent edit between the echoes: both presses dropped', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       act(() => { store().deleteNode('n2'); }); await settle();
@@ -551,7 +551,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
   });
 
   describe('controls (outcomes unchanged), now with canvas = backend', () => {
-    it('Q9: a project switch refused while a delete is held, Codex edited: the held press is dropped', async () => {
+    it('case 9: a project switch refused while a delete is held, Codex edited: the held press is dropped', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n2'); }); await settle();
       await undo();
@@ -589,7 +589,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
       sameAsBackend();
     });
 
-    it('Q11: two deletes, Cmd+Z x2, an agent edit between the answers: both presses dropped', async () => {
+    it('case 11: two deletes, Cmd+Z x2, an agent edit between the answers: both presses dropped', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       act(() => { store().deleteNode('n2'); }); await settle();

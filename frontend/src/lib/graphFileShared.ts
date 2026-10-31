@@ -45,13 +45,43 @@ export const GRAPH_MAX_DEPTH = 64;
 export const GRAPH_MAX_VALUES = 1_000_000;
 
 /** A graph past one of those limits (a written line: the save or load alert
- * puts its own heading over it; error copy round 3e). */
+ * puts its own heading over it; error copy round 3e). One error, two fields
+ * (GM PR #205 r10 item 4): `reason`, the person's line, worded for where the
+ * check ran; `detail`, the engine's exact reason, for the log. */
 export class GraphStructureLimitError extends FailureNotice {
-  constructor(reason: string) {
+  readonly detail: string;
+
+  constructor(reason: string, detail = reason) {
     super('', reason);
     this.name = 'GraphStructureLimitError';
+    this.detail = detail;
   }
 }
+
+/** Where a shape check ran: a Save, or a file being opened (Load canvas, and
+ * whether Load canvas would open a downloaded edits file). */
+export type GraphCheckUse = 'save' | 'open';
+
+/** GM PR #205 r9 item 2: the node and connection limits, in the person's
+ * words ("edges" is ours). */
+export const tooManyNodesLine = (limit: number) => `The canvas has more than ${limit.toLocaleString()} nodes.`;
+export const tooManyEdgesLine = (limit: number) => `The canvas has more than ${limit.toLocaleString()} connections.`;
+
+/** GM PR #205 r10 item 4 and its addendum: the shape walk's reasons, which
+ * the person can't act on, as a cause they understand. Too many values or
+ * too deep: `complex`; a non-finite number or a circular value: `value`.
+ * A Save can be undone into shape; a file can't be fixed in Nebula, so its
+ * lines have no step. */
+const SHAPE_LINES: Record<GraphCheckUse, Record<'complex' | 'value', string>> = {
+  save: {
+    complex: 'It’s too complex to save. Undo your last change, then try again.',
+    value: 'Part of it holds a value Nebula can’t save. Undo your last change, then try again.',
+  },
+  open: {
+    complex: 'This file is too complex to open.',
+    value: 'Part of this file holds a value Nebula can’t read.',
+  },
+};
 
 /** True when JSON.stringify failed because the text is longer than the engine
  * lets a string be (#190). Chromium (V8, the desktop app's engine too) caps a
@@ -109,13 +139,14 @@ function* jsonChildValues(value: object): Generator<unknown> {
 /** Match the backend restore preflight without recursive JavaScript calls.
  * The enter/exit frames preserve JSON-tree depth semantics and reject cycles
  * in live state before JSON.stringify can throw after expensive asset work. */
-export function assertGraphComplexityWithinLimits(value: unknown): void {
+export function assertGraphComplexityWithinLimits(value: unknown, use: GraphCheckUse): void {
+  const refuse = (kind: 'complex' | 'value', detail: string) => new GraphStructureLimitError(SHAPE_LINES[use][kind], detail);
   if (isRecord(value)) {
     if (Array.isArray(value.nodes) && value.nodes.length > GRAPH_MAX_NODES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+      throw new GraphStructureLimitError(tooManyNodesLine(GRAPH_MAX_NODES), `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
     }
     if (Array.isArray(value.edges) && value.edges.length > GRAPH_MAX_EDGES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
+      throw new GraphStructureLimitError(tooManyEdgesLine(GRAPH_MAX_EDGES), `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
     }
   }
 
@@ -148,19 +179,17 @@ export function assertGraphComplexityWithinLimits(value: unknown): void {
     const current = frame.value;
     valueCount += 1;
     if (valueCount > GRAPH_MAX_VALUES) {
-      throw new GraphStructureLimitError(
-        `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`,
-      );
+      throw refuse('complex', `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`);
     }
     if (frame.depth > GRAPH_MAX_DEPTH) {
-      throw new GraphStructureLimitError(`Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+      throw refuse('complex', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
     }
     if (typeof current === 'number' && !Number.isFinite(current)) {
-      throw new GraphStructureLimitError('Graph contains a non-finite number.');
+      throw refuse('value', 'Graph contains a non-finite number.');
     }
     if (!current || typeof current !== 'object') continue;
     if (ancestors.has(current)) {
-      throw new GraphStructureLimitError('Graph contains a circular value that cannot be saved.');
+      throw refuse('value', 'Graph contains a circular value that cannot be saved.');
     }
 
     ancestors.add(current);
@@ -386,7 +415,7 @@ function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport
 export function editsFileReopens(text: string, file: unknown): boolean {
   if (new Blob([text]).size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) return false;
   try {
-    assertGraphComplexityWithinLimits(file);
+    assertGraphComplexityWithinLimits(file, 'open');
     return true;
   } catch (error) {
     if (error instanceof GraphStructureLimitError) return false;

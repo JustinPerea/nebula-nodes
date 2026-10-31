@@ -304,5 +304,13 @@ describe('GM PR #205 r8 item 4: forced colours', () => {
     act(() => { fireEvent.keyDown(field, { key: 'ArrowDown' }); });
     const row = screen.getByRole('option', { name: 'Save canvas' });
     for (const rule of forcedRules()) expect(rule.selectors.some((sel) => row.matches(sel) || row.querySelector(sel) !== null)).toBe(true);
+    // The title and the lock line each match the GrayText rule (review 5,
+    // NIT-1): forced colours replace the line's own colour, so it doesn't
+    // take the row's.
+    const locked = forcedRules().find((rule) => rule.decls.color === 'GrayText !important')!;
+    const line = row.querySelector('.command-palette__item-sub');
+    expect(line).not.toBeNull();
+    expect(locked.selectors.some((sel) => row.matches(sel))).toBe(true);
+    expect(locked.selectors.some((sel) => line!.matches(sel))).toBe(true);
   });
 });

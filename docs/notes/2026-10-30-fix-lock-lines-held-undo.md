@@ -158,8 +158,8 @@ and r40 (items 1 to 3), and review 24's NIT-1 and NIT-2.
   with "Nothing was undone. Your last change was still saving." when the
   answer lands. Before r18 the delete's step re-pushed above it and the
   press restored the node. Those tests (round12 H1, H5; round13 P11, P14,
-  P15, P16, the three-press test, H1 (L-5), P16 echo-first; round14 Q2b, Q7,
-  Q8, Q9, Q11, Q12; round15 M5 and the typing-between test; round16 P7) pin
+  P15, P16, the three-press test, H1 (L-5), P16 echo-first; round14's cases
+  2b, 7, 8, 9, 11 and 12; round15 M5 and the typing-between test; round16 P7) pin
   the drop. For GM (question 4).
 - Two other restored tests differ from their old text: E2's restore carries
   n1 as it was deleted (the later typing happened while it was off the
@@ -169,7 +169,7 @@ and r40 (items 1 to 3), and review 24's NIT-1 and NIT-2.
 - **Tests.** The 65 tests in the 7 files #195 rewrote are restored to the
   held behaviour: canvasDeleteInFlightUndo.round11 (11), heldUndoBound.round12
   (11; H10–H12 now read the 15 s line), heldUndo.round13 (21), round14 (12),
-  round15 (6), round16 (3; "control (r14 Q10)" is silent now), round18 (1,
+  round15 (6), round16 (3; the control for round 14's case 10 is silent now), round18 (1,
   adapted: no pre version). New `tests/heldUndoOnDelete.r39.test.tsx` (12):
   the main path for a Text node and for a Cinema scene (silent wait, one
   restore POST, "Restored the node."); a refused Delete, one node and two;
@@ -1152,3 +1152,164 @@ npm_config_update_notifier=false; the ones before it in this round didn't.
 2. Undo puts back a step's whole node. Should undoing an agent's step keep
    a later change someone else made to the same node (a reconnect's
    rename), for every kind of step?
+
+## 40. Review 5 MEDIUM-1: a held change never goes under the person's step (GM r10 item 1)
+
+- Round 5 joined a held node's change into the step its own sync made, or
+  put it under later edits' steps, even when the person had taken a step
+  on that node during the hold (typing). That step's snapshot lacks the
+  agent's change, so its Undo took the agent's rename off too, and the
+  agent's Undo brought the undone typing back.
+- `setLinkStep` now joins or inserts only where every step above the place
+  is a later edit's (`editStepSeq`: a step Nebula's later edit made) or a
+  slice step that leaves the node alone. The person's typing is a snapshot
+  of the whole canvas, so it holds every node, the held one included. Else
+  the change goes on top as its own step (GM r10 (a)): O1t gives
+  `[F(Claude) connection, own, F(Claude) rename]`, and the three Undos take
+  back the rename, the typing and the connection, each alone.
+- The slice-step clause is defensive: during a restore's hold the person's
+  add waits behind the restore (its OwnAdd lands after the hold), and every
+  agent step a sync makes has a seq. No test reaches it, and the mutants
+  that drop it (and the OwnAdd params check) survive.
+- Other splices checked: `placeForeignUnder` puts a Delete's chain directly
+  under the Delete's own step. That step's snapshot already carries the
+  agent's change (`carrySyncedCopy`), and the steps above it were taken
+  while the node was off the canvas, so none holds it. Unchanged.
+
+## 41. Review 5 LOW-1 to LOW-3
+
+- LOW-1: one rule for the person's rename in flight (`heldLabel`): the
+  newest copy, the earlier links and a Delete's chain each keep
+  `labelsInFlight`, else the rename on its way at that copy's sync. The
+  newest copy had no such rule, so Codex's value sync was credited with the
+  stale label and its Redo wrote it back.
+- LOW-2: a run's write-back never folds into a sourceless sync's link (nor
+  the reverse), so it stays nobody's and is rebased; a fold keeps
+  `runParams`.
+- LOW-3: `editStepSeq` orders steps across nodes too: a held change goes
+  under the lowest later step of any node, so two held nodes edited in
+  alternation give four steps in Nebula's order. The Delete chain's steps
+  and a sync's own step carry their seq the same way.
+- NIT-1: O9 (the newest chain step ends where the carried copy does, not at
+  its link's node) and O11 (the no-link gate: the person's own rename under
+  a restore stays theirs) are tests now. Section 38's "equivalent" was
+  wrong for both. O9 kills M9. With LOW-1's rule the newest copy keeps the
+  rename in flight, so O11 no longer differs under the gate's mutant: with
+  no links every sync was the person's own and nothing on the node differs
+  now, so the gate is near-equivalent again.
+- Mutants that survive and why: a sync's step with no held link taking no
+  seq (every sync during a hold makes a link for each held node, so that
+  branch only runs with no hold, where nothing is placed); the Delete
+  chain's steps taking no seq (no held change has been found to land under
+  one: the Delete's own step is above them and holds its node); the newest
+  copy's carried `renaming` (the rename's PUT waits behind the restore, so
+  `labelsInFlight` still has it at the hold's end).
+- NIT-2: `undoCodexKeepsRename` is `undoCodexStepWholeNode`, and it asserts
+  the name goes back with the value (whole-node Undo, GM's follow-up PR).
+- "wasn’t" in the three dropped-rename lines, and their tests.
+
+## 42. GM r9 item 2 and r10 item 4: the canvas lines
+
+- Size: "This canvas is N MB. Nebula opens canvases up to M MB."
+- Limits: "The canvas has more than N nodes." / "… N connections."
+- Skipped files: "Nebula saved the canvas without 1 of its files. It may be
+  missing when the graph is opened somewhere else." (and "without N … They
+  may be"). The rest of the line is kept as the brief says, so it still
+  says "graph" after "canvas": a question for GM below.
+- Pickers: "Nebula canvas" (Load) and "Nebula canvas bundle" (Save); the
+  extensions are the same.
+- The shape walk's four reasons (`assertGraphComplexityWithinLimits(value,
+  use)`): one `GraphStructureLimitError` with two fields, `reason` (the
+  person's line, by where the check ran) and `detail` (the engine's exact
+  words, which the console log now prints). Save: "It’s too complex to
+  save. Undo your last change, then try again." (values, depth) and "Part
+  of it holds a value Nebula can’t save. Undo your last change, then try
+  again." (non-finite, circular). Load: "This file is too complex to open."
+  and "Part of this file holds a value Nebula can’t read." `editsFileReopens`
+  runs the open check (it only reads true or false).
+- Where the checks run: Save canvas (save), Load canvas's plain file and
+  bundle (open), and the edits download's "will Load canvas open it". The
+  CLI import (`fetchCLIGraph`) runs none of them, so nothing changes there;
+  no check sits under another heading.
+- Not this error, but the same limits under "Nebula couldn’t load the
+  canvas.": a bundle's restore answers with the backend's own words
+  ("graph.json is nested too deeply", "… contains too many values", "…
+  contains a non-finite number", "… contains too many nodes", and the
+  other `graph.json …` checks). Left as they are; a question for GM.
+- Agents keep the engine's reasons: their writes get the backend's own
+  ("graph payload is nested too deeply", pinned by a new backend test), and
+  `load_graph_file` keeps its agent wording ("This graph is N MB …").
+- The other three: "The canvas changed before this could finish. Check
+  it, then try again.", "A canvas import interrupted the connection. Try
+  again when the import finishes.", "The upload stopped because a canvas
+  import started. Try it again or remove it." GraphFileActions' fallback
+  file name is "the canvas".
+
+## 43. GM r10 items 2–3: the pinned Inspector with no node
+
+- The pinned popover stays on the screen when no node is selected, and the
+  embedded Inspector draws its "No node selected" empty state, so the
+  screen agrees with the store.
+- One rule for every way the shown node goes: a store subscription clears
+  the UI's selection with the pin kept when the node leaves the canvas (an
+  Undo, an agent's delete, a sync). The person's Delete, a refused Delete's
+  put-back, a reopen (Load canvas, another project) and an agent's focus
+  request for a missing node keep the pin too now; before, they unpinned.
+  Clearing the selection the person's way (clicking the empty canvas)
+  still unpins.
+
+## 44. Lines NIT-1 and NIT-2
+
+- A test now checks that the lock line itself matches the forced-colours
+  GrayText rule, not only the row.
+- The "someone" shot: GM r9 item 1 kept the passive line, which has no word
+  "someone". The round 6 shot is named for what it shows
+  (`ll-r6-dropped-rename-unknown-passive-wasnt-1440.png`).
+
+## 45. Agents
+
+Agent-visible: the order and shape of the person's Undo steps for an
+agent's edit made during a hold (Nebula's order across nodes; an edit the
+person typed over is its own step above their typing). MCP-SETUP says so,
+and that a pinned Inspector keeps its pin with "No node selected". No tool,
+CLI command or answer shape changed; agents' error reasons are the
+engine's, as before.
+
+## Round 6 proof
+
+Full suites run in CI. On this Mac: tsc, lint, and the changed and related
+files at 2 workers, every npm and npx call with NO_UPDATE_NOTIFIER=1 and
+npm_config_update_notifier=false.
+
+- **tsc -b and lint** (with check:inline-styles and check:slava-css-scope):
+  clean, rerun after the last edit.
+- **Related vitest (276 files):** 4,269 of 4,269 passed, Errors 0, no
+  timeouts. The 8 files changed after that run: 154/154.
+- **Related backend (8 files, isolated):** 618 passed.
+- **New tests on ce621ab5:** 54 of 242 fail, each where it tests new
+  behaviour (the held step on top, the order across nodes, the newest
+  copy's rename, the run fold, the pinned Inspector, the canvas lines and
+  pickers). Those that pass there are guards over code only a mutant
+  breaks (O9, O11, the lock line's GrayText) and controls.
+- **Mutation (each guard's own files, clean baseline):** 39 mutants, 33
+  killed. The six survivors are explained in sections 40–42.
+- **Live** (8797/5797, isolated; the non-localhost canary aborted by
+  interception and the 8001 canary refused before anything else ran, 0
+  requests to 8000–8010/5173, nothing run or accepted against a provider):
+  18/18. restoretype 5/5 (stack [Claude, own, Claude]; Undo 1 takes off
+  the rename only, Undo 2 the typing, Undo 3 the connection; the canvas
+  matches Nebula after each), restorehold 2/2, pinseveral, pinpaste, both
+  limit lines, the pickers, the passive dropped-rename line.
+  - 10 shots in scratchpad/lock-lines/shots6/; md5 `uniq -d` is empty. In
+    the Save-limit shot the Brief card reads "[object Object]": the harness
+    put a too-deep value in its text to make the canvas too complex.
+
+## Round 6 questions for GM
+
+1. The skipped-files line now starts "Nebula saved the canvas without N of
+   its files." The rest of the line, kept from main, still says "graph".
+   Reword that part too?
+2. A bundle's restore details from the backend ("graph.json is nested too
+   deeply" and the like) still show under the load heading as they are.
+   Give them person lines, or keep them?
+3. The CLI import runs no shape checks, so it has no line for them.

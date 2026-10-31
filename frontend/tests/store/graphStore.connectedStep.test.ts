@@ -209,7 +209,7 @@ describe('connected next-step preparation', () => {
     expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['n1']);
     expect(useGraphStore.getState().edges).toEqual([]);
     expect(useGraphStore.getState().undoStack).toHaveLength(0);
-    expect(alert).toHaveBeenCalledWith(expect.stringContaining('canvas changed'));
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining('The canvas changed before this could finish. Check it, then try again.'));
   });
 
   it('permanently revokes a request when its source is deleted and restored before acknowledgement', async () => {

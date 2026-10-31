@@ -183,13 +183,13 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     expect(screen.getByText('Hero shot')).toBeInTheDocument();
     expect(renameNode).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(
-      'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.',
+      'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.',
       'info');
   });
 
   it.each([
-    ['Codex', 'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
-    [null, 'An agent renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn\'t saved.'],
+    ['Codex', 'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
+    [null, 'An agent renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
   ])('GM\'s exact line (agent %s)', (agent, line) => {
     expect(droppedRenameLine({ kind: 'agent', name: agent }, 'Hero shot', 'Brief draft')).toBe(line);
   });

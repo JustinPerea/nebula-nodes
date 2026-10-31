@@ -175,6 +175,20 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().runHistory).toBe(initialGraph.runHistory);
   });
 
+  // GM PR #205 r10 item 3: a reopen is one more way the shown node goes; a
+  // pinned Inspector stays pinned, with its empty state.
+  it('a Load keeps a pinned Inspector pinned, with no node in it', async () => {
+    useUIStore.setState({ viewMode: 'canvas', selectedNodeId: 'existing' });
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().setInspectorVisible(true);
+    mocks.apiFetch.mockResolvedValue(new Response(JSON.stringify({ nodes: [node('n8')], edges: [] }), { status: 200 }));
+    render(<><GraphFileActions /><CommandPalette /></>);
+    paletteCommand('Load canvas');
+    await waitFor(() => expect(useGraphStore.getState().nodes[0]?.id).toBe('n8'));
+    expect([useUIStore.getState().selectedNodeId, useUIStore.getState().inspectorPinned, useUIStore.getState().panels.inspector.visible])
+      .toEqual([null, true, true]);
+  });
+
   it('preserves graph and workspace on picker cancellation or backend rejection', async () => {
     // Error copy round 3f (GM): a canvas notice, never a window.alert.
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);

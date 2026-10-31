@@ -224,7 +224,7 @@ export function CanvasFocusController() {
     const graph = useGraphStore.getState();
     if (!graph.nodes.some((node) => node.id === request.nodeId)) {
       clearRequest(request.requestId);
-      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null, { keepPin: true });
       return;
     }
     if (!viewportInitialized || !internalNode?.measured.width || !internalNode.measured.height) return;

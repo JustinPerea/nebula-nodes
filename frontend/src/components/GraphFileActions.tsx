@@ -136,11 +136,12 @@ export function GraphFileActions() {
         show: leaving !== null });
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
-      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
+      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the canvas', asNewProject);
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
       useUIStore.setState({
-        viewMode: 'canvas', selectedNodeId: null, inspectorPinned: false,
+        // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+        viewMode: 'canvas', selectedNodeId: null,
         editorTargetNodeId: null, remotionEditorTargetNodeId: null, cinemaEditorNodeId: null,
         characterEditorId: null, moodboardEditorId: null, selectedClipId: null,
         selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,

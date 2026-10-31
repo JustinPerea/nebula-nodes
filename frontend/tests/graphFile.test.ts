@@ -10,8 +10,10 @@ import {
   GRAPH_BUNDLE_MAX_ASSET_MEMBERS,
   GRAPH_BUNDLE_MAX_IMPORT_BYTES,
   GRAPH_MAX_DEPTH,
+  GRAPH_MAX_EDGES,
   GRAPH_MAX_NODES,
   GRAPH_MAX_VALUES,
+  GraphStructureLimitError,
   inspectGraphFileWithinLimit,
   loadFromFile,
   loadViaInput,
@@ -418,7 +420,7 @@ describe('portable graph asset bounds', () => {
 
     expect(summary).toMatchObject({ included: 0, skipped: 1 });
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining(
-      'Graph saved without 1 of its files. It may be missing when the graph is opened somewhere else.',
+      'Nebula saved the canvas without 1 of its files. It may be missing when the graph is opened somewhere else.',
     ));
   });
 
@@ -508,7 +510,7 @@ describe('portable graph asset bounds', () => {
     await expect(saveToFile([node], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas. This graph is 528.0 MB. Nebula opens graphs up to 528 MB.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas. This canvas is 528.0 MB. Nebula opens canvases up to 528 MB.");
   });
 
   // GM - Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
@@ -577,7 +579,7 @@ describe('portable graph asset bounds', () => {
 
     await expect(saveToFile([], [])).resolves.toBeNull();
     expect(createUrl).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t save the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t save the canvas\. This canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
   });
 
   it('stores generated members without creating a restore-rejected compression ratio', async () => {
@@ -597,33 +599,68 @@ describe('portable graph asset bounds', () => {
 });
 
 describe('graph structural complexity', () => {
-  it('matches the backend node ceiling before walking individual nodes', () => {
-    expect(() => assertGraphComplexityWithinLimits({
-      nodes: new Array(GRAPH_MAX_NODES + 1).fill(null),
-      edges: [],
-    })).toThrow(`more than ${GRAPH_MAX_NODES.toLocaleString()} nodes`);
+  // GM PR #205 r10 item 4: the person's line for where the check ran, and
+  // the engine's exact reason kept for the log (one error, two fields).
+  const thrown = (value: unknown, use: 'save' | 'open') => {
+    try {
+      assertGraphComplexityWithinLimits(value, use);
+    } catch (error) {
+      expect(error).toBeInstanceOf(GraphStructureLimitError);
+      const { reason, detail } = error as GraphStructureLimitError;
+      return { reason, detail };
+    }
+    throw new Error('no limit error');
+  };
+  const nested = () => {
+    let value: unknown = 'leaf';
+    for (let index = 0; index < GRAPH_MAX_DEPTH + 1; index += 1) value = { next: value };
+    return value;
+  };
+  const circular = () => {
+    const value: Record<string, unknown> = {};
+    value.self = value;
+    return value;
+  };
+  const complexSave = 'It’s too complex to save. Undo your last change, then try again.';
+  const valueSave = 'Part of it holds a value Nebula can’t save. Undo your last change, then try again.';
+  const complexOpen = 'This file is too complex to open.';
+  const valueOpen = 'Part of this file holds a value Nebula can’t read.';
+
+  it('matches the backend node and edge ceilings before walking individual nodes, in the person\'s words', () => {
+    for (const use of ['save', 'open'] as const) {
+      expect(thrown({ nodes: new Array(GRAPH_MAX_NODES + 1).fill(null), edges: [] }, use)).toEqual({
+        reason: `The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
+        detail: `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
+      });
+      expect(thrown({ nodes: [], edges: new Array(GRAPH_MAX_EDGES + 1).fill(null) }, use)).toEqual({
+        reason: `The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`,
+        detail: `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`,
+      });
+    }
   });
 
   it('rejects a graph deeper than the backend restore ceiling without recursion', () => {
-    let nested: unknown = 'leaf';
-    for (let index = 0; index < GRAPH_MAX_DEPTH + 1; index += 1) {
-      nested = { next: nested };
-    }
-    expect(() => assertGraphComplexityWithinLimits(nested)).toThrow(
-      `more than ${GRAPH_MAX_DEPTH} levels deep`,
-    );
+    const detail = `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`;
+    expect(thrown(nested(), 'save')).toEqual({ reason: complexSave, detail });
+    expect(thrown(nested(), 'open')).toEqual({ reason: complexOpen, detail });
   });
 
   it('rejects circular live graph values before JSON serialization', () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
-    expect(() => assertGraphComplexityWithinLimits(circular)).toThrow('circular value');
+    const detail = 'Graph contains a circular value that cannot be saved.';
+    expect(thrown(circular(), 'save')).toEqual({ reason: valueSave, detail });
+    expect(thrown(circular(), 'open')).toEqual({ reason: valueOpen, detail });
+  });
+
+  it('rejects a non-finite number', () => {
+    const detail = 'Graph contains a non-finite number.';
+    expect(thrown({ nodes: [{ x: Infinity }], edges: [] }, 'save')).toEqual({ reason: valueSave, detail });
+    expect(thrown({ nodes: [{ x: Number.NaN }], edges: [] }, 'open')).toEqual({ reason: valueOpen, detail });
   });
 
   it('rejects a wide sparse live value at the backend value ceiling', () => {
-    expect(() => assertGraphComplexityWithinLimits(
-      new Array(GRAPH_MAX_VALUES + 1),
-    )).toThrow(`more than ${GRAPH_MAX_VALUES.toLocaleString()} values`);
+    const detail = `Graph contains more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`;
+    expect(thrown(new Array(GRAPH_MAX_VALUES + 1), 'save')).toEqual({ reason: complexSave, detail });
+    expect(thrown(new Array(GRAPH_MAX_VALUES + 1), 'open')).toEqual({ reason: complexOpen, detail });
   });
 });
 
@@ -645,7 +682,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
     delete (window as Window & { showOpenFilePicker?: unknown }).showOpenFilePicker;
   });
 
@@ -659,7 +696,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadViaInput()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This canvas is [\d.]+ MB\. Nebula opens canvases up to \d+ MB\.$/));
   });
 
   // Q118 (Justin, 2026-10-23): "Let Load graph open bigger .nebula files (up
@@ -687,7 +724,7 @@ describe('graph import memory ceiling', () => {
       slice: vi.fn().mockReturnValue(new Blob([new Uint8Array([0x7b, 0x22, 0x76, 0x65])])),
       arrayBuffer: fullRead,
     } as unknown as File;
-    await expect(inspectGraphFileWithinLimit(file)).rejects.toThrow(/Nebula opens graphs up to 528 MB\./);
+    await expect(inspectGraphFileWithinLimit(file)).rejects.toThrow(/Nebula opens canvases up to 528 MB\./);
     expect(fullRead).not.toHaveBeenCalled();
   });
 
@@ -697,7 +734,7 @@ describe('graph import memory ceiling', () => {
     const text = JSON.stringify({ version: 2, name: 'Many', createdAt: '2026-10-23T00:00:00.000Z',
       nodes: Array.from({ length: 10_001 }, (_, index) => ({ ...node, id: `n${index}` })), edges: [] });
     const selection = await inspectGraphFileWithinLimit(new File([text], 'Many.nebula'));
-    await expect(readGraphSelection(selection)).rejects.toThrow(/more than 10,000 nodes/);
+    await expect(readGraphSelection(selection)).rejects.toThrow('The canvas has more than 10,000 nodes.');
   });
 
   function zipSelection(): File {
@@ -912,7 +949,7 @@ describe('graph import memory ceiling', () => {
     });
 
     await expect(loadFromFile()).resolves.toBeNull();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('nested more than'));
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas. This file is too complex to open.');
   });
 
   it('keeps client-side envelope validation for legacy plain JSON files', async () => {
@@ -932,5 +969,87 @@ describe('graph import memory ceiling', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t load the canvas. This file is from a newer Nebula. Update Nebula, then open it again.");
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('Unsupported .nebula file version'));
+  });
+});
+
+// GM PR #205 r9 item 2, r10 item 4: the lines under the save and load
+// headings, by where the check ran; the log keeps the engine's reason.
+describe('the canvas limit lines on each surface', () => {
+  const textNode = (params: Record<string, unknown>) => ({
+    id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+    data: { label: 'Brief', definitionId: 'text-input', params, outputs: {}, state: 'idle' },
+  }) as Node<NodeData>;
+  const deep = () => {
+    let value: unknown = 'leaf';
+    for (let index = 0; index < GRAPH_MAX_DEPTH + 1; index += 1) value = { next: value };
+    return value;
+  };
+  const openFile = (file: Blob) => Object.defineProperty(window, 'showOpenFilePicker', {
+    configurable: true,
+    value: vi.fn().mockResolvedValue([{ getFile: vi.fn().mockResolvedValue(file) }]),
+  });
+
+  it('Save: a non-finite value says what the person can do; the log keeps the engine\'s reason', async () => {
+    const alertSpy = noticeSpy();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(saveToFile([textNode({ value: Infinity })], [])).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas. Part of it holds a value Nebula can’t save. Undo your last change, then try again.');
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', 'Graph contains a non-finite number.');
+  });
+
+  it('Save: a value nested too deep is too complex to save', async () => {
+    const alertSpy = noticeSpy();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(saveToFile([textNode({ value: deep() })], [])).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas. It’s too complex to save. Undo your last change, then try again.');
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+  });
+
+  it('Save: more nodes or connections than Nebula keeps', async () => {
+    const alertSpy = noticeSpy();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await saveToFile(new Array(GRAPH_MAX_NODES + 1).fill(textNode({})), []);
+    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+    await saveToFile([], new Array(GRAPH_MAX_EDGES + 1).fill({}));
+    expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`);
+  });
+
+  it('Load: a plain .nebula nested too deep is too complex to open, with no step', async () => {
+    const alertSpy = noticeSpy();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const text = JSON.stringify({ version: 2, name: 'Deep', createdAt: '2026-10-31T00:00:00.000Z',
+      nodes: [{ ...textNode({ value: deep() }) }], edges: [] });
+    openFile(new File([text], 'Deep.nebula', { type: 'application/json' }));
+    await expect(loadFromFile()).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas. This file is too complex to open.');
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+  });
+
+  it('Load: a bundle whose restored canvas holds a circular value Nebula can\'t read', async () => {
+    const alertSpy = noticeSpy();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const graph = { version: 3, name: 'Loop', createdAt: '2026-10-31T00:00:00.000Z', nodes: [textNode({ value: circular })], edges: [] };
+    vi.spyOn(backend, 'apiFetch').mockResolvedValue({ ok: true, status: 200, json: async () => ({ graph, urlMapping: {} }) } as Response);
+    openFile(new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0])], { type: 'application/zip' }));
+    await expect(loadFromFile()).resolves.toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas. Part of this file holds a value Nebula can’t read.');
+    expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', 'Graph contains a circular value that cannot be saved.');
+  });
+
+  it('the file pickers say "Nebula canvas" and "Nebula canvas bundle", with the same extensions', async () => {
+    const open = vi.fn().mockRejectedValue(Object.assign(new Error('cancel'), { name: 'AbortError' }));
+    Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: open });
+    await loadFromFile();
+    expect(open.mock.calls[0][0].types).toEqual([{ description: 'Nebula canvas',
+      accept: { 'application/zip': ['.nebula.zip', '.zip'], 'application/json': ['.nebula', '.json'] } }]);
+    const save = vi.fn().mockRejectedValue(Object.assign(new Error('cancel'), { name: 'AbortError' }));
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: save });
+    vi.stubGlobal('fetch', vi.fn());
+    await saveToFile([textNode({ value: 'x' })], []);
+    expect(save.mock.calls[0][0].types).toEqual([{ description: 'Nebula canvas bundle',
+      accept: { 'application/zip': ['.nebula.zip', '.zip'] } }]);
+    Reflect.deleteProperty(window, 'showSaveFilePicker');
   });
 });

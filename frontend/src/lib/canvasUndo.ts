@@ -711,12 +711,12 @@ export function acceptUndoLine(
  * renamed it: an agent, the person in another window, or unknown. */
 export function droppedRenameLine(source: ChangeSource, newName: string, draft: string): string {
   if (source.kind === 'you') {
-    return `You renamed this node \u201c${newName}\u201d in another window while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn't saved.`;
+    return `You renamed this node \u201c${newName}\u201d in another window while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn\u2019t saved.`;
   }
   if (source.kind === 'unknown') {
-    return `This node was renamed \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+    return `This node was renamed \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn\u2019t saved.`;
   }
-  return `${source.name ?? 'An agent'} renamed this node \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn't saved.`;
+  return `${source.name ?? 'An agent'} renamed this node \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn\u2019t saved.`;
 }
 
 /** The param keys `updated` sets to a value other than `was` has, with the

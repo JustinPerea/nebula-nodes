@@ -69,7 +69,7 @@ export function createCinemaUploadStore(storage: UploadStorage | null = browserS
       setUploads: (change) => save(change(get().uploads)),
       clear: () => save([]),
       interrupt: () => save(get().uploads.map((upload) => upload.status === 'uploading'
-        ? { ...upload, attempt: uuidv4(), status: 'error', error: 'Upload stopped because a graph import started. Retry or remove it.' }
+        ? { ...upload, attempt: uuidv4(), status: 'error', error: 'The upload stopped because a canvas import started. Try it again or remove it.' }
         : upload)),
       reconcileTargets: (nodes, knownTargets) => {
         const targets = new Map(nodes.filter((node) => node.data.definitionId === 'cinema-scene')
