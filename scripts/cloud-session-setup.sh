@@ -1,9 +1,9 @@
 #!/bin/bash
 # Installs what CI installs, so a Claude Code cloud session can run the same
-# suites. .claude/settings.json runs this whenever a session starts, resumes,
-# clears, compacts or forks. It does nothing outside the cloud: Claude Code
-# sets CLAUDE_CODE_REMOTE=true only in cloud sessions, and it refuses macOS
-# and any other machine that isn't Linux.
+# suites. .claude/settings.json runs it, through cloud-session-setup.mjs,
+# whenever a session starts, resumes, clears, compacts or forks. It does
+# nothing outside the cloud: Claude Code sets CLAUDE_CODE_REMOTE=true only in
+# cloud sessions, and it refuses macOS and any other machine that isn't Linux.
 #
 # Installs run at start and resume only. A clear, compaction or fork starts a
 # new session id with an empty env file, so then it only puts the venv back on
@@ -13,7 +13,9 @@
 # To run it by hand in a cloud session the hook didn't reach (several
 # repositories, a project thread), from the repository root:
 #   CLAUDE_CODE_REMOTE=true bash scripts/cloud-session-setup.sh
-# then run the `export PATH=...` line it prints.
+# Bash commands don't keep PATH from one call to the next, so start each
+# backend command with the `export PATH=... &&` it prints, or call
+# backend/.venv/bin/python directly.
 #
 # Each install is skipped while its inputs and this script are unchanged since
 # its last success. It always exits 0, so the session starts, and its stdout
@@ -112,19 +114,24 @@ pick_python() {
   fi
 }
 
+# Starts an empty venv folder holding only the marker. The marker goes in
+# before anything else, so a venv cut off halfway is still known as this
+# script's.
+fresh_venv_folder() {
+  rm -rf "$venv" && mkdir -p "$venv" && : > "$venv_owned"
+}
+
 make_venv() {
   local python
   python=$(pick_python)
-  # The marker goes in first, so a venv cut off halfway is still known as
-  # this script's; `-m venv` fills a folder that already exists.
-  mkdir -p "$venv" && : > "$venv_owned" || return 1
+  fresh_venv_folder || return 1
+  # `-m venv` fills a folder that already exists.
   if "$python" -m venv "$venv"; then
     return 0
   fi
   # Ubuntu's own python3 can lack ensurepip (python3-venv); uv can seed pip.
-  rm -rf "$venv"
-  if command -v uv >/dev/null 2>&1 && uv venv --quiet --seed --python "$python" "$venv"; then
-    : > "$venv_owned"
+  if command -v uv >/dev/null 2>&1 && fresh_venv_folder \
+    && uv venv --quiet --seed --allow-existing --python "$python" "$venv"; then
     return 0
   fi
   # Never leave a half-made venv behind.

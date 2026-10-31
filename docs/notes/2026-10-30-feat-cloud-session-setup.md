@@ -4,7 +4,8 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 
 ## What it does
 
-- `.claude/settings.json` has one SessionStart hook, with no matcher. It runs `bash` with `${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.sh` as its argument, in exec form. The hooks docs advise exec form for a path placeholder, so no shell (sh, Git Bash or PowerShell) parses the path.
+- `.claude/settings.json` has one SessionStart hook, with no matcher. It runs `node` with `${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.mjs` as its argument, in exec form. The hooks docs advise exec form for a path placeholder, so no shell (sh, Git Bash or PowerShell) parses the path.
+- The `.mjs` wrapper starts `bash scripts/cloud-session-setup.sh` only when `CLAUDE_CODE_REMOTE` is `true` and the platform is Linux, passing the hook's stdin and the script's stdout straight through. Review 4: a hook that ran `bash` directly fails at every start on native Windows without bash on PATH, or boots WSL with a Windows path it can't open. Node is the one runtime every checkout of this repo has.
 - The script exits at once unless both hold:
   - `CLAUDE_CODE_REMOTE` is exactly `true`. The Claude Code docs (env-vars, cloud-environments and hooks, read 2026-10-30) say cloud sessions set it and local ones never do.
   - `uname -s` is `Linux`.
@@ -37,7 +38,7 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
   - The stamp is removed before an install and written only after a successful one, so a failure installs again next time.
 - **Its own venv starts clean, as CI's does.** When requirements.txt or the script changes, a venv this script made is deleted and made again, so a package dropped from requirements.txt can't linger and let a test pass here that fails in CI. Review 3 caught the in-place install. npm ci already starts clean.
 - **It never deletes a venv it didn't make.**
-  - A venv this script makes gets a `.cloud-setup-owned` marker before anything goes into it, so a venv cut off halfway is still known as its own. A venv it fails to finish is removed.
+  - A venv this script makes gets a `.cloud-setup-owned` marker before anything goes into it, on both the `python -m venv` path and the `uv venv --seed --allow-existing` fallback, so a venv cut off halfway is still known as its own. A venv it fails to finish is removed.
   - Anyone else's venv without pip gets `python -m ensurepip` in place, or the backend reports FAILED and the venv is left as it is.
   - This guards a contributor on Linux who runs the manual command over their own uv-made venv.
 - **Python 3.12, as CI pins it.**
@@ -57,7 +58,9 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 ## Tests
 
 `backend/tests/test_cloud_session_setup.py` runs the real script on a PATH of stand-in commands and the few real tools it needs. The stand-ins are `uname`, `python3.12`, `uv`, the venv's `python`, `npm`, `node` and `apt-get`. They only record their calls. The tests check:
-- the settings hook entry (exec form, no matcher);
+- the settings hook entry (exec form through node, no matcher);
+- the wrapper: a no-op without `CLAUDE_CODE_REMOTE=true` or off Linux, and on Linux in the cloud the script with stdin and stdout passed through;
+- the marker in place before `python -m venv` or `uv venv` fills the folder;
 - the light path for clear, compact and fork: PATH only, no installs, and what it says;
 - the PATH line: written before the frontend finishes, and safe to source with a space, `$(...)` or `"` in the checkout path;
 - the manual run printing the PATH line;
@@ -110,6 +113,13 @@ Round 4:
 - a failed backend put on PATH mid-session;
 - a failed frontend not named;
 - no separate no-venv line.
+
+Round 5:
+- uv without the marker first;
+- no `--allow-existing`;
+- `python -m venv` without the marker first;
+- the wrapper ignoring the platform;
+- the wrapper ignoring `CLAUDE_CODE_REMOTE`, and dropping stdin and stdout. These two can only fail on Linux, so CI's backend job catches them.
 
 ## Verifying it in the cloud
 

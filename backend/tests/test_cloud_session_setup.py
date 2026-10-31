@@ -18,12 +18,15 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "cloud-session-setup.sh"
+WRAPPER = REPO / "scripts" / "cloud-session-setup.mjs"
+NODE = shutil.which("node")
 SETTINGS = REPO / ".claude" / "settings.json"
 BASH = shutil.which("bash")
 REAL_TOOLS = ("sha256sum", "mktemp", "tail", "dirname", "basename", "rm", "mkdir", "cp", "touch", "cat", "env", "flock", "sleep", "grep", "seq")
@@ -87,7 +90,9 @@ class Project:
         as Ubuntu's python3 does without ensurepip."""
         venv_python = self.tmp / f"venv-python-{name.replace('/', '_')}"
         _venv_python(venv_python, self.calls, cairo_after)
-        make = ('if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then mkdir -p "$3/bin"; '
+        make = ('if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then '
+                f'if [ -e "$3/.cloud-setup-owned" ]; then echo "marker: in place" >> "{self.calls}"; fi; '
+                'mkdir -p "$3/bin"; '
                 f'cp "{venv_python}" "$3/bin/python"; fi\n')
         _stub(
             self.bin / name if "/" not in name else Path(name),
@@ -103,7 +108,9 @@ class Project:
         _stub(
             self.bin / "uv",
             f'echo "uv $*" >> "{self.calls}"\n' + found
-            + 'if [ "$1" = "venv" ]; then d="${@: -1}"; mkdir -p "$d/bin"; '
+            + 'if [ "$1" = "venv" ]; then d="${@: -1}"; '
+            f'if [ -e "$d/.cloud-setup-owned" ]; then echo "marker: in place" >> "{self.calls}"; fi; '
+            'mkdir -p "$d/bin"; '
             f'cp "{venv_python}" "$d/bin/python"; fi\n',
         )
 
@@ -151,13 +158,39 @@ def test_settings_run_the_script_on_every_session_start():
     [hook] = entry["hooks"]
     assert hook["type"] == "command"
     # Exec form, as the hooks docs advise for a path placeholder: no shell
-    # (sh, Git Bash or PowerShell) parses the path.
-    assert hook["command"] == "bash"
-    assert hook["args"] == ["${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.sh"]
+    # (sh, Git Bash or PowerShell) parses the path. Node, not bash, so the
+    # hook is a no-op on Windows too.
+    assert hook["command"] == "node"
+    assert hook["args"] == ["${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.mjs"]
     # Claude Code cancels a SessionStart command after 600 s unless this says
     # otherwise; a cold install of both halves needs the headroom.
     assert 600 < hook["timeout"] <= 1800
     assert SCRIPT.is_file()
+
+
+@pytest.mark.skipif(NODE is None, reason="needs node")
+@pytest.mark.parametrize("remote", [None, "false", "true"])
+def test_the_hook_wrapper_starts_the_script_only_in_a_linux_cloud_session(tmp_path, remote):
+    """settings.json runs cloud-session-setup.mjs. It passes the hook's stdin
+    and the script's stdout straight through, and is a no-op otherwise."""
+    bin_dir = tmp_path / "bin"
+    calls = tmp_path / "calls.log"
+    _stub(bin_dir / "bash", f'echo "bash $* <$(cat)>" >> "{calls}"\necho "from the script"\n')
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_")}
+    env["PATH"] = str(bin_dir)
+    if remote is not None:
+        env["CLAUDE_CODE_REMOTE"] = remote
+    result = subprocess.run(
+        [NODE, str(WRAPPER)], env=env, input='{"source": "startup"}',
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    made = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    if remote == "true" and sys.platform.startswith("linux"):
+        assert made == [f'bash {SCRIPT} <{{"source": "startup"}}>']
+        assert result.stdout == "from the script\n"
+    else:
+        assert made == [] and result.stdout == ""
 
 
 @pytest.mark.parametrize("remote", [None, "", "false", "1", "TRUE", "yes"])
@@ -221,6 +254,9 @@ def test_a_new_venv_uses_python_3_12(tmp_path):
     result = project.run()
     made = project.made()
     assert "python3.12 -m venv backend/.venv" in made
+    # The marker is there before the venv is filled, so one cut off halfway
+    # is still known as the script's own.
+    assert "marker: in place" in made
     assert _pip_installs(made), made
     assert "backend: installed (Python 3.12.9)" in result.stdout
 
@@ -231,7 +267,8 @@ def test_without_ensurepip_uv_seeds_the_venv(tmp_path):
     project.uv(finds=None)
     result = project.run()
     made = project.made()
-    assert "uv venv --quiet --seed --python python3.12 backend/.venv" in made
+    assert "uv venv --quiet --seed --allow-existing --python python3.12 backend/.venv" in made
+    assert "marker: in place" in made
     assert _pip_installs(made), made
     assert "backend: installed" in result.stdout
 
