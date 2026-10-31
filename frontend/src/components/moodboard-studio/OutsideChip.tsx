@@ -1,13 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from '@xyflow/react';
 import type { NodeRect } from '../../lib/nodePlacement';
-import { insideView } from '../../lib/boardPlacement';
 import { storedImageView } from '../../lib/storedImage';
 import { BOTTOM_BAR_GAP, floatingBottomLimit } from '../../lib/bottomBar';
 import { isStudioShortcutTarget } from './studioKeys';
 import type { OutsideTiles } from './BoardCanvas';
 
-import { nearestEdge, outsideChipText, type ChipEdge } from './outsideChipText';
+import { nearestEdge, outsideChipText, seenIn, type ChipEdge } from './outsideChipText';
 
 
 
@@ -24,18 +23,30 @@ const EDGE = 12;
  * on the board's fit spring. No timer: it goes when pressed, when the person
  * pans or zooms the tiles into view, on Esc, or at the next paste (the
  * Studio replaces it). One polite announcement with the same words.
+ *
+ * "In view" is placement's own view (review 2, M2): `viewOf` is the board's
+ * live view rect, the pane less its inset and the toolbar, so a tile partly
+ * under the toolbar keeps the chip (GM r4 answer 2).
+ *
+ * Focus (GM r4 answer 6): Enter or Space sends it to the first tile (the
+ * board's `onShow`); Esc gives it back to where it was before the chip had
+ * it, or to the board; and if the chip goes for any other reason while it
+ * has focus, focus goes to the board. Never to the page body.
  */
-export function OutsideChip({ tiles, onShow, onDone }: {
+export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   tiles: OutsideTiles;
-  onShow: (rects: NodeRect[]) => void;
+  /** The view placement uses, in board coordinates, or null before the board has a size. */
+  viewOf: () => NodeRect | null;
+  onShow: (rects: NodeRect[], focus: boolean) => void;
   onDone: () => void;
+  focusBoard: () => void;
 }) {
+  // Read for their changes: the chip is drawn again on every pan, zoom or resize.
   const [tx, ty, zoom] = useStore((state) => state.transform);
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
-  const view: NodeRect | null = width > 0 && height > 0 && zoom > 0
-    ? { x: -tx / zoom, y: -ty / zoom, width: width / zoom, height: height / zoom } : null;
-  const inView = view !== null && tiles.rects.every((rect) => insideView(rect, view));
+  const view = width > 0 && height > 0 && zoom > 0 ? viewOf() : null;
+  const inView = view !== null && tiles.rects.every((rect) => seenIn(rect, view));
 
   // One polite announcement: the live region mounts empty and gets its words after.
   const [said, setSaid] = useState('');
@@ -73,17 +84,29 @@ export function OutsideChip({ tiles, onShow, onDone }: {
   }, []);
 
   const done = useRef(onDone);
-  useLayoutEffect(() => { done.current = onDone; });
+  const toBoard = useRef(focusBoard);
+  useLayoutEffect(() => { done.current = onDone; toBoard.current = focusBoard; });
+  // Where focus was before the chip took it, for Esc.
+  const before = useRef<HTMLElement | null>(null);
+  const hasFocus = () => chipRef.current !== null && document.activeElement === chipRef.current;
   // The person's own pan or zoom brought the tiles into view.
   useEffect(() => { if (inView) done.current(); }, [inView]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || !isStudioShortcutTarget(event.target, 'undo')) return;
+      if (hasFocus()) {
+        const back = before.current;
+        if (back && back.isConnected && back !== document.body) back.focus({ preventScroll: true });
+        else toBoard.current();
+      }
       done.current();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+  // Gone some other way (the tiles came into view, the next paste) while it
+  // had focus: the board takes it. Runs before the button leaves the page.
+  useLayoutEffect(() => () => { if (hasFocus()) toBoard.current(); }, []);
 
   if (inView || !view) return null;
   const first = tiles.rects[0];
@@ -101,7 +124,8 @@ export function OutsideChip({ tiles, onShow, onDone }: {
     <>
       <button ref={chipRef} type="button" className={`moodboard-board__outside-chip moodboard-board__outside-chip--${edge}`}
         style={along} aria-label={label}
-        onClick={() => { onShow(tiles.rects); onDone(); }}>
+        onFocus={(event) => { if (event.relatedTarget instanceof HTMLElement) before.current = event.relatedTarget; }}
+        onClick={() => { onShow(tiles.rects, hasFocus()); onDone(); }}>
         {(edge === 'left' || edge === 'top') && <span className="moodboard-board__outside-arrow" aria-hidden="true">{ARROWS[edge]}</span>}
         {thumb && <img className="moodboard-board__outside-thumb" src={thumb} alt="" draggable={false} />}
         <span>{text}</span>

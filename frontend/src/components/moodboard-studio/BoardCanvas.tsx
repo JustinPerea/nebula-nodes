@@ -42,6 +42,8 @@ export interface BoardCanvasProps {
    *  the board, else the middle of the view, and the view at paste time
    *  (Cmd+V, Justin decided 2026-10-31). The Studio's paste reads it. */
   pasteTarget?: MutableRefObject<(() => BoardTarget) | null>;
+  /** Spots held for files still uploading (GM r4 answer 1): drawn as placeholder tiles. */
+  placeholders?: BoardPlaceholder[];
   /** Tiles just added outside the view: the board shows its edge chip for them. */
   outside?: OutsideTiles | null;
   /** The chip went: pressed, the tiles came into view, Esc. */
@@ -56,15 +58,32 @@ export interface BoardTarget {
   aim: boolean;
 }
 
+/** A spot held on the board for a tile still on its way (a file uploading;
+ *  later a pasted link being fetched): where it sits and its size, in board
+ *  pixels. Drawn, taken into account by placement, never moved or saved. */
+export interface BoardPlaceholder {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** Tiles placed outside the view (GM, #210 answer 1): their rects, the first
- *  one's image for the chip's thumbnail, and how many. */
+ *  one's image for the chip's thumbnail (once uploaded), and how many. */
 export interface OutsideTiles {
   id: number;
   rects: NodeRect[];
   thumb: string | null;
 }
 
-const nodeTypes: NodeTypes = { card: BoardCardNode };
+/** A placeholder tile: the spot a file is uploading into. */
+function BoardPlaceholderNode() {
+  return <div className="moodboard-board__placeholder" />;
+}
+
+const nodeTypes: NodeTypes = { card: BoardCardNode, placeholder: BoardPlaceholderNode };
+const NO_PLACEHOLDERS: BoardPlaceholder[] = [];
 /** Arrow keys move the selected cards in 5 px steps; they go as one move this long after the last. */
 export const KEY_MOVE_SETTLE_MS = 400;
 const FIT_PADDING = 0.12;
@@ -74,6 +93,8 @@ const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
 /** Screen pixels kept clear inside the board's edges when placing new tiles. */
 const VIEW_INSET = 16;
+/** How long focus follows a tile the chip showed (its upload may still run). */
+const FOLLOW_FOCUS_MS = 10_000;
 // Props React Flow gets the same object for on every render: a new one (an
 // inline `[]` or `{}`) would make it update its store on each pointer move.
 const NO_EDGES: [] = [];
@@ -119,7 +140,7 @@ function BoardDots() {
 }
 
 function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pasteTarget: pasteTargetRef,
-  outside = null, onOutsideDone }: BoardCanvasProps) {
+  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -144,6 +165,14 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   const wide = useStore(useCallback((state: { transform: [number, number, number] }) => wideFrom(widths, state.transform[2]), [widths]));
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  // The cards and, after them, the placeholders (not selectable, not dragged).
+  const shown = useMemo<Node[]>(() => (placeholders.length === 0 ? nodes : [...nodes, ...placeholders.map((spot) => ({
+    id: spot.id, type: 'placeholder', position: { x: spot.x, y: spot.y }, width: spot.width, height: spot.height,
+    measured: { width: spot.width, height: spot.height }, draggable: false, selectable: false, focusable: true,
+    ariaLabel: 'Adding an image', data: {},
+  }))]), [nodes, placeholders]);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
   const imagesRef = useRef(images);
   imagesRef.current = images;
   const onMoveRef = useRef(onMove);
@@ -346,8 +375,35 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     return () => { if (pasteTargetRef.current === read) pasteTargetRef.current = null; };
   }, [pasteTargetRef]);
 
-  /** The chip's press: the tiles into view on the board's fit spring (a pan the person asked for). */
-  const showOutside = useCallback((rects: NodeRect[]) => {
+  /** Focus on the board itself (GM r4 answer 6: never the page body). */
+  const focusBoard = useCallback(() => { wrapperRef.current?.focus({ preventScroll: true }); }, []);
+
+  // After a chip press from the keyboard, focus follows the first pasted
+  // tile (GM r4 answer 6): onto it once it is drawn in view, and onto it
+  // again when its placeholder becomes the card (a new element). Only while
+  // focus would otherwise be on the board or nowhere, and for a short while.
+  const follow = useRef<{ x: number; y: number; until: number } | null>(null);
+  const focusFollowed = useCallback(() => {
+    const spot = follow.current;
+    if (!spot || Date.now() > spot.until) {
+      follow.current = null;
+      return true;
+    }
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== wrapperRef.current) return true;
+    const node = shownRef.current.find((item) => item.position.x === spot.x && item.position.y === spot.y);
+    const element = node ? wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`) : null;
+    if (!element) return false;
+    element.focus({ preventScroll: true });
+    return true;
+  }, []);
+  useEffect(() => { focusFollowed(); }, [shown, focusFollowed]);
+  useEffect(() => () => { follow.current = null; }, []);
+
+  /** The chip's press: the tiles into view on the board's fit spring (a pan
+   *  the person asked for; for a tile bigger than the view, a zoom out until
+   *  it is whole, GM r4 answer 9). With `focus`, focus goes to the first tile. */
+  const showOutside = useCallback((rects: NodeRect[], focus: boolean) => {
     const { width, height } = flowStore.getState();
     if (!width || !height || rects.length === 0) return;
     const x = Math.min(...rects.map((r) => r.x));
@@ -355,7 +411,17 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
       height: Math.max(...rects.map((r) => r.y + r.height)) - y };
     springTo(getViewportForBounds(bounds, width, height, MIN_ZOOM, 1, FIT_PADDING));
-  }, [flowStore, springTo]);
+    if (!focus) return;
+    // The board holds focus until the tile is drawn (it is culled until in view).
+    focusBoard();
+    follow.current = { x: rects[0].x, y: rects[0].y, until: Date.now() + FOLLOW_FOCUS_MS };
+    let frames = 0;
+    const tick = () => {
+      if (focusFollowed() || frames++ > 120) return;
+      window.requestAnimationFrame(tick);
+    };
+    window.requestAnimationFrame(tick);
+  }, [flowStore, springTo, focusBoard, focusFollowed]);
 
   const [dropping, setDropping] = useState(false);
   const carriesFiles = (event: ReactDragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -379,7 +445,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   };
 
   return (
-    <div ref={wrapperRef} className={`moodboard-board${dropping ? ' moodboard-board--drop' : ''}`}
+    <div ref={wrapperRef} className={`moodboard-board${dropping ? ' moodboard-board--drop' : ''}`} tabIndex={-1}
       onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
       {/* Behind the cards, for the reader's ripple while Analyze runs (PR10b). */}
@@ -387,7 +453,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
       <BoardWideContext.Provider value={wide}>
         <ReactFlow
           className="moodboard-board__flow"
-          nodes={nodes}
+          nodes={shown}
           edges={NO_EDGES}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
@@ -424,9 +490,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
         </ReactFlow>
       </BoardWideContext.Provider>
       {outside && onOutsideDone && (
-        <OutsideChip key={outside.id} tiles={outside} onShow={showOutside} onDone={onOutsideDone} />
+        <OutsideChip key={outside.id} tiles={outside} viewOf={viewRect} onShow={showOutside} onDone={onOutsideDone}
+          focusBoard={focusBoard} />
       )}
-      {nodes.length === 0 && (
+      {nodes.length === 0 && placeholders.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>
           <span className="moodboard-board__empty-hint">Drop images here. They land where you drop them.</span>

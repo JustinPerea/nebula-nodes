@@ -48,10 +48,10 @@ import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
 import { placeTiles } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
-import { BoardCanvas, type BoardMove, type BoardTarget, type OutsideTiles } from './BoardCanvas';
+import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
-import { LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages } from './pasteImages';
+import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
@@ -264,7 +264,16 @@ export function MoodboardStudioView() {
   const [outsideTiles, setOutsideTiles] = useState<OutsideTiles | null>(null);
   const outsideSeq = useRef(0);
   const dismissOutside = useCallback(() => setOutsideTiles(null), []);
-  useEffect(() => { setOutsideTiles(null); }, [key]);
+  // Placeholder tiles (GM r4 answer 1): each added file's spot, held from the
+  // moment it is placed until its upload fills it (or fails and it goes).
+  const [placeholders, setPlaceholders] = useState<BoardPlaceholder[]>([]);
+  const placeholdersRef = useRef<BoardPlaceholder[]>([]);
+  const placeholderSeq = useRef(0);
+  const changePlaceholders = (change: (current: BoardPlaceholder[]) => BoardPlaceholder[]) => {
+    placeholdersRef.current = change(placeholdersRef.current);
+    setPlaceholders(placeholdersRef.current);
+  };
+  useEffect(() => { placeholdersRef.current = []; setPlaceholders([]); }, [key]);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
   // The saved override comes with it, so Studio can say who wrote it.
@@ -293,27 +302,51 @@ export function MoodboardStudioView() {
   // (per board draft), and this tab's undo steps for the board.
   const view = useBoardCanvasStore((state) => state.view);
   const setView = useBoardCanvasStore((state) => state.setView);
+  // The chip goes on a board switch and on any view switch (GM r4 answer 8):
+  // back on the Board it would point at what List already showed.
+  useEffect(() => { setOutsideTiles(null); }, [key, view]);
   const selection = useBoardSelection(key);
   const selectedIds = view === 'board' ? selectedImageIds(draft.images, selection) : [];
-  const [toast, setToast] = useState<(BoardToast & { key: string }) | null>(null);
+  // `undoOf`: a removal's toast, whose Undo takes back that step.
+  type StudioToast = BoardToast & { key: string; undoOf?: string };
+  const [toast, setToast] = useState<StudioToast | null>(null);
+  // The toast up now, for lines decided after an await (an undo's answer).
+  const toastNow = useRef<StudioToast | null>(null);
   const toastSeq = useRef(0);
-  const showToast = useCallback((next: Omit<BoardToast, 'id'>) => {
+  const showToast = useCallback((next: Omit<BoardToast, 'id'> & { undoOf?: string }) => {
     toastSeq.current += 1;
-    setToast({ ...next, id: toastSeq.current, key });
+    toastNow.current = { ...next, id: toastSeq.current, key };
+    setToast(toastNow.current);
   }, [key]);
-  const dismissToast = useCallback(() => setToast(null), []);
+  const dismissToast = useCallback(() => { toastNow.current = null; setToast(null); }, []);
+  // A polite announcement with no line on screen: the live region is
+  // emptied, then given its words, so the same words twice are read twice.
+  const [spoken, setSpoken] = useState('');
+  const announce = (text: string) => {
+    setSpoken('');
+    window.requestAnimationFrame(() => setSpoken(text));
+  };
+  const liveToast = () => (toastNow.current && toastNow.current.key === key ? toastNow.current : null);
   // An info line (a paste's nothing-to-add or links line) never replaces a
   // toast with an action (GM, #210 review answer 1): it shows only when no
   // Undo or Redo is up, isn't queued, and is announced politely either way.
-  const [spoken, setSpoken] = useState('');
   const showInfoLine = (text: string) => {
-    const up = toast && toast.key === key ? toast : null;
-    if (up?.action) {
-      setSpoken('');
-      window.requestAnimationFrame(() => setSpoken(text));
+    if (liveToast()?.action) {
+      announce(text);
       return;
     }
     showToast({ text });
+  };
+  // "Undid…" is an info line too (GM r4 answer 5): it never replaces a live
+  // "Removed · Undo" toast, unless the step just undone is that toast's own
+  // (its Undo button, or Cmd+Z taking that removal back), whose offer is used up.
+  const showUndone = (next: Omit<BoardToast, 'id'>, stepId: string) => {
+    const up = liveToast();
+    if (up?.undoOf && up.undoOf !== stepId) {
+      announce(next.text);
+      return;
+    }
+    showToast(next);
   };
   const spokenLine = <span className="moodboard-board__sr-only" role="status" aria-live="polite">{spoken}</span>;
   // Undo steps are this board's, in this tab, at this epoch: a board switch,
@@ -684,34 +717,72 @@ export function MoodboardStudioView() {
   /** Files dropped, added or pasted on the Board view, sized from their
    *  aspect and placed by lib/boardPlacement (one helper for all three, GM's
    *  #210 rulings): never on top of a tile, in view when there's room, else
-   *  just outside it with the edge chip. One step, sent at once. */
+   *  just outside it with the edge chip. Placed in the view the person had
+   *  when they added them (GM r4 answer 1): a placeholder tile holds each
+   *  spot at once, while the upload runs, and the upload fills it where it
+   *  sits, as one step sent at once. A failed upload takes its placeholders
+   *  (and their chip) away. */
   const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
     if (files.length === 0 || !isCurrent()) return Promise.resolve();
     // Each new add replaces the last one's chip.
     setOutsideTiles(null);
     setUploading(true);
-    return Promise.all([uploadFiles(files), Promise.all(files.map((file) => readImageAspect(file)))])
-      .then(([urls, aspects]) => {
+    const uploads = uploadFiles(files);
+    // Read once the spots are held; until then a refusal waits here.
+    uploads.catch(() => {});
+    let held: BoardPlaceholder[] = [];
+    let chip: number | null = null;
+    const release = () => {
+      const ids = new Set(held.map((holder) => holder.id));
+      if (ids.size) changePlaceholders((current) => current.filter((holder) => !ids.has(holder.id)));
+      held = [];
+    };
+    return Promise.all(files.map((file) => readImageAspect(file)))
+      .then(async (aspects) => {
         if (!isCurrent()) return;
-        const placed = urls.map((url, index) => ({ url, aspect: aspects[index] })).filter((item) => item.url);
-        if (placed.length === 0) return;
-        const sizes = placed.map((item) => sizeFor(1, item.aspect));
-        const occupied = (draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
-          .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h })));
+        const sizes = aspects.map((aspect) => sizeFor(1, aspect));
+        // The board's tiles and the spots earlier adds still hold.
+        const occupied = [...(draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
+          .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h }))), ...placeholdersRef.current];
         const { spots, outside } = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
+        held = spots.map((spot, index) => {
+          placeholderSeq.current += 1;
+          return { id: `placeholder-${placeholderSeq.current}`, ...spot, width: sizes[index][0], height: sizes[index][1] };
+        });
+        const holders = held;
+        changePlaceholders((current) => [...current, ...holders]);
         if (outside.length > 0) {
           outsideSeq.current += 1;
-          setOutsideTiles({ id: outsideSeq.current, thumb: placed[outside[0]].url,
-            rects: outside.map((index) => ({ ...spots[index], width: sizes[index][0], height: sizes[index][1] })) });
+          chip = outsideSeq.current;
+          setOutsideTiles({ id: chip, thumb: null,
+            rects: outside.map((index) => ({ x: holders[index].x, y: holders[index].y, width: holders[index].width, height: holders[index].height })) });
         }
-        const ops: MoodboardOp[] = placed.map((item, index) => ({
-          op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: spots[index] }));
+        let urls: string[];
+        try {
+          urls = await uploads;
+        } catch (err) {
+          // The chip pointed at spots that are gone now.
+          const gone = chip;
+          if (gone !== null) setOutsideTiles((current) => (current?.id === gone ? null : current));
+          throw err;
+        } finally {
+          release();
+        }
+        if (!isCurrent()) return;
+        const placed = urls.map((url, index) => ({ url, aspect: aspects[index], at: { x: holders[index].x, y: holders[index].y } }))
+          .filter((item) => item.url);
+        if (placed.length === 0) return;
+        const thumb = urls[outside[0]];
+        const shown = chip;
+        if (shown !== null && thumb) setOutsideTiles((current) => (current?.id === shown ? { ...current, thumb } : current));
+        const ops: MoodboardOp[] = placed.map((item) => ({
+          op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: item.at }));
         const count = (draftNow()?.images ?? []).length;
         commitOps(ops, placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`, {
           now: true, aspects: Object.fromEntries(placed.map((item) => [item.url, item.aspect])) });
       })
       .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
-      .finally(() => { if (isCurrent()) setUploading(false); });
+      .finally(() => { release(); if (isCurrent()) setUploading(false); });
   };
 
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
@@ -744,7 +815,7 @@ export function MoodboardStudioView() {
     const images = draftNow()?.images ?? draft.images;
     const label = ids.length === 1 ? `Removed #${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
     const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
-    if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } } });
+    if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } }, undoOf: stepId });
   };
   const removeImage = (id: string) => removeImages([id]);
 
@@ -822,7 +893,7 @@ export function MoodboardStudioView() {
         });
         fieldSteps.release(top.id);
         undoStore.forget(key, top.id);
-        showToast({ text: `Undid: ${top.label}` });
+        showUndone({ text: `Undid: ${top.label}` }, top.id);
         return;
       }
     }
@@ -849,8 +920,10 @@ export function MoodboardStudioView() {
       else undoStore.reapplied(key, step.id, next);
       store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
       if (!isCurrent()) return;
-      showToast({ text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
-        action: direction === 'undo' && next.length ? { label: 'Redo', run: () => { void runUndo('redo'); } } : undefined });
+      const line = { text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
+        action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
+      if (direction === 'undo') showUndone(line, step.id);
+      else showToast(line);
     } catch (err) {
       undoStore.restoreTaken(key, step, from);
       // The step names its own action (the edit request's heading is the
@@ -907,28 +980,43 @@ export function MoodboardStudioView() {
   const pasteTarget = useRef<(() => BoardTarget) | null>(null);
   const pasteHandler = useRef<(event: ClipboardEvent) => void>(() => {});
   // One physical press is one paste (GM, #210 review answer 2): the paste
-  // events of a held Cmd/Ctrl+V's repeats are ignored, until the key is up.
-  // Edit > Paste (no keydown) and separate presses always add.
+  // events of a held Cmd/Ctrl+V's repeats are ignored. Only a repeat keydown
+  // of the paste key sets it; any other keydown, the window losing focus or
+  // the page being hidden clears it (a keyup that went elsewhere must not
+  // swallow a later Edit > Paste, review 2 L1). Edit > Paste (no keydown)
+  // and separate presses always add.
   const heldPaste = useRef(false);
   // The backstop if the shell's key events aren't reliable: files still
-  // uploading from an earlier paste, by size, type and bytes hash. A paste
-  // of an identical file while it uploads is ignored; a different one goes.
-  const pasteUploading = useRef(new Map<string, number>());
-  const pasteFiles = async (files: File[], target: BoardTarget | undefined) => {
-    const signatures = await Promise.all(files.map(fileSignature));
-    const fresh = files.filter((_, index) => !pasteUploading.current.has(signatures[index]));
-    if (fresh.length === 0) return;
-    const mine = signatures.filter((_, index) => fresh.includes(files[index]));
-    for (const signature of mine) pasteUploading.current.set(signature, (pasteUploading.current.get(signature) ?? 0) + 1);
-    try {
-      await (target ? dropFiles(fresh, target) : handleFiles(fresh));
-    } finally {
-      for (const signature of mine) {
-        const left = (pasteUploading.current.get(signature) ?? 1) - 1;
-        if (left > 0) pasteUploading.current.set(signature, left);
-        else pasteUploading.current.delete(signature);
+  // being added from an earlier paste, by size, type and bytes hash. A paste
+  // of an identical file meanwhile is ignored, silently on screen with a
+  // polite announcement (GM r4 answer 7); a different one goes. Pastes take
+  // their turn: each one's files are hashed and checked only after the paste
+  // before it has claimed its own, so two quick presses can't both pass.
+  const pasteAdding = useRef(new Set<string>());
+  const pasteTurn = useRef<Promise<unknown>>(Promise.resolve());
+  const pasteFiles = (files: File[], target: BoardTarget | undefined) => {
+    const claim = pasteTurn.current.then(async () => {
+      const signatures = await Promise.all(files.map(fileSignature));
+      const fresh: File[] = [];
+      const mine: string[] = [];
+      files.forEach((file, index) => {
+        if (pasteAdding.current.has(signatures[index])) return;
+        fresh.push(file);
+        mine.push(signatures[index]);
+      });
+      for (const signature of mine) pasteAdding.current.add(signature);
+      if (fresh.length < files.length) announce(ALREADY_BEING_ADDED);
+      return { fresh, mine };
+    });
+    pasteTurn.current = claim.catch(() => undefined);
+    return claim.then(async ({ fresh, mine }) => {
+      if (fresh.length === 0) return;
+      try {
+        await (target ? dropFiles(fresh, target) : handleFiles(fresh));
+      } finally {
+        for (const signature of mine) pasteAdding.current.delete(signature);
       }
-    }
+    });
   };
   useLayoutEffect(() => {
     pasteHandler.current = (event: ClipboardEvent) => {
@@ -953,18 +1041,28 @@ export function MoodboardStudioView() {
   });
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => pasteHandler.current(event);
-    const isPasteKey = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'v';
-    const onKeyDown = (event: KeyboardEvent) => { if (isPasteKey(event)) heldPaste.current = event.repeat; };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 'v' || event.key === 'Meta' || event.key === 'Control') heldPaste.current = false;
+    // By the key or its place (KeyV), so a non-Latin layout counts too.
+    const isV = (event: KeyboardEvent) => event.key.toLowerCase() === 'v' || event.code === 'KeyV';
+    const isPasteKey = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && !event.altKey && isV(event);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.repeat) heldPaste.current = false;
+      else if (isPasteKey(event)) heldPaste.current = true;
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (isV(event) || event.key === 'Meta' || event.key === 'Control') heldPaste.current = false;
+    };
+    const release = () => { heldPaste.current = false; };
     document.addEventListener('paste', onPaste);
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', release);
+    document.addEventListener('visibilitychange', release);
     return () => {
       document.removeEventListener('paste', onPaste);
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', release);
+      document.removeEventListener('visibilitychange', release);
     };
   }, []);
 
@@ -1375,7 +1473,7 @@ export function MoodboardStudioView() {
             <>
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} pasteTarget={pasteTarget}
+                uploading={uploading} pasteTarget={pasteTarget} placeholders={placeholders}
                 outside={outsideTiles} onOutsideDone={dismissOutside} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>

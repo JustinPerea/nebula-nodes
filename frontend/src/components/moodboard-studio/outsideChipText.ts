@@ -1,4 +1,7 @@
-/** The outside-the-view chip's words and edge (GM - Design, #210 answer 1); OutsideChip draws them. */
+/** The outside-the-view chip's words, edge and when it goes (GM - Design, #210 answers); OutsideChip draws them. */
+
+import type { NodeRect } from '../../lib/nodePlacement';
+import { insideView } from '../../lib/boardPlacement';
 
 export type ChipEdge = 'left' | 'right' | 'top' | 'bottom';
 
@@ -16,3 +19,11 @@ export function nearestEdge(point: { x: number; y: number }, width: number, heig
   if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? 'left' : 'right';
   return dy < 0 ? 'top' : 'bottom';
 }
+
+/** A tile is plainly seen when it is wholly in view, or (one bigger than the
+ *  view) when it covers the view's centre (GM r4 answer 9). */
+export const seenIn = (rect: NodeRect, view: NodeRect) => {
+  const cx = view.x + view.width / 2;
+  const cy = view.y + view.height / 2;
+  return insideView(rect, view) || (rect.x <= cx && cx <= rect.x + rect.width && rect.y <= cy && cy <= rect.y + rect.height);
+};

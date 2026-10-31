@@ -216,6 +216,8 @@ const OWN_RING: Record<string, string> = {
   // token's colour (--mb-board-select is white at 92 %), 2px, plus a 5px halo
   // that tells it from the selected card's plain 2px ring.
   'styles/moodboard-board.css::.react-flow__node-card:focus-visible .moodboard-card': 'card ring in the token colour, with a halo against selected',
+  // A placeholder tile (a file still uploading, #210) takes focus like a card, with the card's ring.
+  'styles/moodboard-board.css::.react-flow__node-placeholder:focus-visible .moodboard-board__placeholder': 'the card ring, on a placeholder tile',
   // The Jev demo card's question field: "pink focus" in the TypeSafe brand
   // colour Justin chose for v6. It sits on that card only.
   'styles/jev-result.css::body.app-slava-restraint .model-node--jev .model-node__jev-field .model-node__jev-input:focus': 'Jev brand border',
@@ -232,6 +234,8 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
+  'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
 };
 
 function focusSelectors(rule: Rule): string[] {

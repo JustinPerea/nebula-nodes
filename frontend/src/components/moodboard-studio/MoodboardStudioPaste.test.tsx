@@ -22,6 +22,7 @@ const board = vi.hoisted(() => ({
   point: { x: 900, y: 300 } as { x: number; y: number } | null,
   view: { x: -1000, y: -1000, width: 4000, height: 3000 } as { x: number; y: number; width: number; height: number } | null,
   outside: null as null | { id: number; rects: Array<{ x: number; y: number; width: number; height: number }>; thumb: string | null },
+  placeholders: [] as Array<{ id: string; x: number; y: number; width: number; height: number }>,
   onDropFiles: null as null | ((files: File[], target: { at: { x: number; y: number };
     view: { x: number; y: number; width: number; height: number } | null; aim: boolean }) => void),
 }));
@@ -50,9 +51,11 @@ vi.mock('./BoardCanvas', async () => {
       onDropFiles: NonNullable<typeof board.onDropFiles>;
       pasteTarget?: { current: (() => { at: { x: number; y: number }; view: typeof board.view; aim: boolean }) | null };
       outside?: typeof board.outside;
+      placeholders?: typeof board.placeholders;
     }) => {
       board.onDropFiles = props.onDropFiles;
       board.outside = props.outside ?? null;
+      board.placeholders = props.placeholders ?? [];
       const ref = props.pasteTarget;
       useEffect(() => {
         if (!ref) return undefined;
@@ -66,7 +69,7 @@ vi.mock('./BoardCanvas', async () => {
 });
 
 import { MoodboardStudioView } from './MoodboardStudioView';
-import { LINKS_NOT_ADDED, NOTHING_TO_PASTE, uriListLinks, webLinks } from './pasteImages';
+import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, uriListLinks, webLinks } from './pasteImages';
 import { placeTiles } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { setOpenProject } from '../../test/projectState';
@@ -103,6 +106,7 @@ beforeEach(() => {
   board.point = { x: 900, y: 300 };
   board.view = { x: -1000, y: -1000, width: 4000, height: 3000 };
   board.outside = null;
+  board.placeholders = [];
   board.onDropFiles = null;
   server.board = {
     id: 'g1', name: 'Global board', version: 1, notes: '', mode: 'look', strength: 0.7,
@@ -134,6 +138,7 @@ beforeEach(() => {
         images = [...images, ...op.images.map((img) => image(img.id!, { url: img.url,
           placements: 'at' in op && op.at ? [card(img.id!, op.at.x, op.at.y)] : [card(img.id!)] }))];
       }
+      if (op.op === 'remove') images = images.filter((img) => !op.images.includes(img.id));
       if (op.op === 'restore') images = clone(server.before.get(String((op.slices[0] as { tag: string }).tag))!);
     }
     server.board = { ...server.board, images, version: server.board.version + 1 };
@@ -614,5 +619,273 @@ describe('one physical press is one paste (GM, #210 review answer 2)', () => {
     // Once it has uploaded, the same image pasted again is added again.
     paste(clipboard({ files: [same()] }));
     await waitFor(() => expect(backend.apiFetch).toHaveBeenCalledTimes(3));
+  });
+});
+
+/** Uploads held until `open()`; `fail()` answers each held one with a refusal. */
+function holdUploads() {
+  let release: (ok: boolean) => void = () => {};
+  const gate = new Promise<boolean>((resolve) => { release = resolve; });
+  backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+    const ok = await gate;
+    if (!ok) refuse = { status: 500, body: { detail: 'nope' } };
+    return uploadResponse(path, init);
+  });
+  return { open: () => act(async () => { release(true); await gate; }), fail: () => act(async () => { release(false); await gate; }) };
+}
+const spokenLines = () => Array.from(document.querySelectorAll('.moodboard-board__sr-only[role="status"]')).map((el) => el.textContent);
+const immediateFrames = () => vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
+
+describe('a placeholder holds the spot while the upload runs (GM r4 answer 1)', () => {
+  it('lands at once where the view at paste time puts it; the upload fills it there, as one step', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    const at = { ...board.point! };
+    const view = { ...board.view! };
+    paste(clipboard({ files: [png('slow.png')] }));
+    const occupied = [{ x: 0, y: 0, width: 480, height: 270 }, { x: 520, y: 0, width: 480, height: 270 }];
+    const [w, h] = sizeFor(1, 1.5);
+    const expected = placeTiles({ at, sizes: [[w, h]], occupied, view }).spots[0];
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    expect(board.placeholders[0]).toMatchObject({ ...expected, width: w, height: h });
+    expect(server.edits).toHaveLength(0);
+    // The person pans away meanwhile: the spot stays where it was chosen, with no chip.
+    board.view = { x: 9000, y: 9000, width: 1000, height: 700 };
+    board.point = { x: 9500, y: 9300 };
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(addOps()[0].at).toEqual(expected);
+    expect(board.placeholders).toEqual([]);
+    expect(board.outside).toBeNull();
+    expect(server.edits).toHaveLength(1);
+    const entry = Object.values(useAssetStudioDraftStore.getState().entries).find((e) => e.savedId === 'g1')!;
+    const key = Object.keys(useAssetStudioDraftStore.getState().entries).find((k) => useAssetStudioDraftStore.getState().entries[k] === entry)!;
+    expect(useBoardUndoStore.getState().history(key, entry.epoch).done).toHaveLength(1);
+  });
+
+  it('a later paste never takes a spot a placeholder holds', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('one.png', 16)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    paste(clipboard({ files: [png('two.png', 24)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [a, b] = board.placeholders;
+    expect(a.x + a.width + 24 <= b.x || b.x + b.width + 24 <= a.x || a.y + a.height + 24 <= b.y || b.y + b.height + 24 <= a.y).toBe(true);
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+  });
+
+  it('a failed upload takes its placeholder away, and the chip that pointed at it', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    board.view = { x: 0, y: 0, width: 1000, height: 270 };
+    board.point = { x: 500, y: 135 };
+    paste(clipboard({ files: [png('refused.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    // The chip shows at paste time, before the upload; its thumbnail comes with the upload.
+    expect(board.outside?.rects).toEqual([{ x: board.placeholders[0].x, y: board.placeholders[0].y,
+      width: board.placeholders[0].width, height: board.placeholders[0].height }]);
+    expect(board.outside?.thumb).toBeNull();
+    await uploads.fail();
+    await waitFor(() => expect(board.placeholders).toEqual([]));
+    expect(board.outside).toBeNull();
+    expect(addOps()).toHaveLength(0);
+  });
+
+  it('the chip\'s thumbnail is the first file outside the view, not the first file', async () => {
+    await openStudio('board');
+    const [w, h] = sizeFor(1, 1.5);
+    // Room in view for exactly one tile, under the two cards.
+    board.view = { x: 0, y: 294, width: w, height: h };
+    board.point = { x: w / 2, y: 294 + h / 2 };
+    paste(clipboard({ files: [png('inside.png'), png('beyond.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    await waitFor(() => expect(board.outside?.thumb).toBe('/api/outputs/chat-uploads/beyond.png'));
+    expect(board.outside!.rects).toHaveLength(1);
+  });
+});
+
+describe('the chip goes', () => {
+  const chipUp = async () => {
+    board.view = { x: 0, y: 0, width: 1000, height: 270 };
+    board.point = { x: 500, y: 135 };
+    paste(clipboard({ files: [png('away.png')] }));
+    await waitFor(() => expect(board.outside).not.toBeNull());
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+  };
+
+  it('when Add images or a drop adds files', async () => {
+    await openStudio('board');
+    await chipUp();
+    act(() => { board.onDropFiles!([png('dropped.png')], { at: { x: 2000, y: 1500 }, view: { x: -1000, y: -1000, width: 4000, height: 3000 }, aim: true }); });
+    expect(board.outside).toBeNull();
+  });
+
+  it('on any view switch, and stays gone back on the Board (GM r4 answer 8)', async () => {
+    await openStudio('board');
+    await chipUp();
+    act(() => { useBoardCanvasStore.getState().setView('list'); });
+    act(() => { useBoardCanvasStore.getState().setView('board'); });
+    await screen.findByTestId('board-canvas');
+    expect(board.outside).toBeNull();
+  });
+
+  it('on a board switch', async () => {
+    await openStudio('board');
+    await chipUp();
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
+    await screen.findByTestId('board-canvas');
+    expect(board.outside).toBeNull();
+  });
+});
+
+describe('a held key whose keyup went elsewhere (review 2, L1)', () => {
+  const held = () => { keyV('keydown'); keyV('keydown', { repeat: true }); };
+  it('the window losing focus clears it: Edit > Paste then adds', async () => {
+    await openStudio('list');
+    held();
+    act(() => { window.dispatchEvent(new Event('blur')); });
+    paste(clipboard({ files: [png('menu.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['menu.png']));
+  });
+
+  it('the page being hidden clears it', async () => {
+    await openStudio('list');
+    held();
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    paste(clipboard({ files: [png('back.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['back.png']));
+  });
+
+  it('any keydown that is not a repeat clears it (Cmd held, V pressed again: no V keyup on macOS)', async () => {
+    await openStudio('list');
+    held();
+    press('Shift');
+    paste(clipboard({ files: [png('next.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['next.png']));
+  });
+
+  it('a repeat of another key keeps it', async () => {
+    await openStudio('list');
+    held();
+    press('Shift', { repeat: true });
+    expect(paste(clipboard({ files: [png('still.png')] })).defaultPrevented).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(server.uploads).toEqual([]);
+  });
+
+  it('with no key held, a repeat of another key blocks nothing', async () => {
+    await openStudio('list');
+    press('Shift', { repeat: true });
+    paste(clipboard({ files: [png('free.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['free.png']));
+  });
+
+  it('the Cmd key up clears it', async () => {
+    await openStudio('list');
+    held();
+    keyV('keyup', { key: 'Meta' });
+    paste(clipboard({ files: [png('meta.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['meta.png']));
+  });
+
+  it('a non-Latin layout counts by the key\'s place (KeyV)', async () => {
+    await openStudio('list');
+    keyV('keydown', { key: 'м', code: 'KeyV', repeat: true });
+    expect(paste(clipboard({ files: [png('cyr.png')] })).defaultPrevented).toBe(true);
+    keyV('keyup', { key: 'м', code: 'KeyV' });
+    paste(clipboard({ files: [png('cyr2.png')] }));
+    await waitFor(() => expect(server.uploads).toEqual(['cyr2.png']));
+  });
+});
+
+describe('the backstop takes turns (review 2, the race)', () => {
+  const same = () => new File([new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2])], 'same.png', { type: 'image/png' });
+  it('two quick presses of the same image add it once, and say so politely, with nothing on screen', async () => {
+    const raf = immediateFrames();
+    const uploads = holdUploads();
+    await openStudio('list');
+    // No await between them: the second is checked only after the first has claimed its file.
+    paste(clipboard({ files: [same()] }));
+    paste(clipboard({ files: [same()] }));
+    await waitFor(() => expect(spokenLines()).toContain(ALREADY_BEING_ADDED));
+    expect(screen.getAllByText(ALREADY_BEING_ADDED).every((el) => el.classList.contains('moodboard-board__sr-only'))).toBe(true);
+    await uploads.open();
+    await waitFor(() => expect(draftUrls()).toHaveLength(3));
+    expect(server.uploads).toEqual(['same.png']);
+    raf.mockRestore();
+  });
+
+  it('pastes take their turn: a slow hash never lets a later paste go first', async () => {
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    let calls = 0;
+    const spy = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      calls += 1;
+      // The first paste's file hashes slowly.
+      if (calls === 1) await new Promise((resolve) => setTimeout(resolve, 40));
+      return digest(algorithm as AlgorithmIdentifier, data as BufferSource);
+    });
+    await openStudio('board');
+    paste(clipboard({ files: [png('first.png', 40)] }));
+    paste(clipboard({ files: [png('second.png', 48)] }));
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    expect(server.uploads).toEqual(['first.png', 'second.png']);
+    spy.mockRestore();
+  });
+
+  it('a failed upload lets the same image go again', async () => {
+    const uploads = holdUploads();
+    await openStudio('list');
+    paste(clipboard({ files: [same()] }));
+    await waitFor(() => expect(server.uploads).toHaveLength(0));
+    await uploads.fail();
+    await screen.findByText("Couldn't upload same.png.");
+    refuse = null;
+    backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => uploadResponse(path, init));
+    paste(clipboard({ files: [same()] }));
+    await waitFor(() => expect(draftUrls()).toHaveLength(3));
+  });
+});
+
+describe('info lines in the toast slot', () => {
+  it('a new info line replaces an info line (only an action toast keeps its place)', async () => {
+    await openStudio('list');
+    paste(clipboard({ text: 'words' }));
+    await screen.findByText(NOTHING_TO_PASTE);
+    paste(clipboard({ text: 'https://example.com/a.png' }));
+    const shown = await screen.findByText(LINKS_NOT_ADDED);
+    expect(shown.classList.contains('moodboard-board__sr-only')).toBe(false);
+    expect(screen.queryAllByText(NOTHING_TO_PASTE).filter((el) => !el.classList.contains('moodboard-board__sr-only'))).toHaveLength(0);
+  });
+
+  it('"Undid…" never replaces a live "Removed · Undo" toast, unless it undid that removal (GM r4 answer 5)', async () => {
+    const raf = immediateFrames();
+    await openStudio('list');
+    act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
+    await screen.findByRole('button', { name: 'Undo' });
+    await waitFor(() => expect(draftUrls()).toHaveLength(1));
+    // Another step after the removal: a pasted file.
+    paste(clipboard({ files: [png('later.png')] }));
+    await waitFor(() => expect(draftUrls()).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByText('Uploading')).toBeNull());
+    // Cmd+Z takes the paste back: the removal's toast stays, the line is announced.
+    press('z', { metaKey: true });
+    await waitFor(() => expect(spokenLines()).toContain('Undid: Added #2'));
+    expect(screen.getByText('Removed #1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
+    // Cmd+Z again takes the removal back: its toast's offer is used up, so the line replaces it.
+    press('z', { metaKey: true });
+    await screen.findByText('Undid: Removed #1');
+    expect(screen.queryByText('Removed #1')).toBeNull();
+    raf.mockRestore();
+  });
+
+  it('the toast\'s own Undo replaces it with its "Undid…" line', async () => {
+    await openStudio('list');
+    act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
+    act(() => { screen.getByRole('button', { name: 'Undo' }).click(); });
+    await screen.findByText('Undid: Removed #1');
   });
 });

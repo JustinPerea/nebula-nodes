@@ -26,7 +26,16 @@ const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: v
     () => ({ x: 0, y: 0, width: 100, height: 100 })) }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
-  ReactFlow: (props: FlowProps) => { flow.props = props; return <div data-testid="flow">{props.children}</div>; },
+  // The nodes as React Flow draws them (focusable wrappers by id), so focus can land on one.
+  ReactFlow: (props: FlowProps) => {
+    flow.props = props;
+    return (
+      <div data-testid="flow">
+        {props.nodes.map((node) => <div key={node.id} className="react-flow__node" data-id={node.id} tabIndex={0} />)}
+        {props.children}
+      </div>
+    );
+  },
   Background: () => null,
   useReactFlow: () => ({
     screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x: x * 2, y: y * 2 }),
@@ -46,7 +55,9 @@ vi.mock('../../lib/viewportSpring', () => ({
 }));
 
 // The edge chip, recorded: the props the board hands it.
-const chip = vi.hoisted(() => ({ props: null as null | { tiles: unknown; onShow: (rects: Array<{ x: number; y: number; width: number; height: number }>) => void; onDone: () => void } }));
+type Rect = { x: number; y: number; width: number; height: number };
+const chip = vi.hoisted(() => ({ props: null as null | { tiles: unknown; viewOf: () => Rect | null;
+  onShow: (rects: Rect[], focus: boolean) => void; onDone: () => void; focusBoard: () => void } }));
 vi.mock('./OutsideChip', () => ({
   OutsideChip: (props: NonNullable<typeof chip.props>) => { chip.props = props; return <button type="button">chip</button>; },
 }));
@@ -280,10 +291,71 @@ describe('the outside-the-view chip on the board', () => {
     render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={done} />);
     expect(chip.props?.tiles).toBe(tiles);
     spring.calls = [];
-    act(() => { chip.props!.onShow(tiles.rects); });
+    act(() => { chip.props!.onShow(tiles.rects, false); });
     expect(spring.calls).toHaveLength(1);
     chip.props!.onDone();
     expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('judges "in view" by placement\'s own view: the board less the inset and the toolbar (review 2, M2)', () => {
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={(_f, target) => { targets.push(target); }}
+      outside={tiles} onOutsideDone={() => {}} />);
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    wrapper.getBoundingClientRect = () => ({ left: 10, top: 20, right: 610, bottom: 420, width: 600, height: 400 }) as DOMRect;
+    const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
+    bar.getBoundingClientRect = () => ({ left: 25, top: 370, right: 250, bottom: 405, width: 225, height: 35 }) as DOMRect;
+    fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+    expect(chip.props!.viewOf()).toEqual({ x: 52, y: 72, width: 1136, height: 636 });
+    expect(chip.props!.viewOf()).toEqual(targets[0].view);
+  });
+
+  it('a press from the keyboard sends focus to the board, then to the first tile once drawn, then to its card', async () => {
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    const holder = { id: 'placeholder-1', x: 3000, y: 100, width: 300, height: 200 };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[holder]} outside={tiles} onOutsideDone={() => {}} />);
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    act(() => { chip.props!.onShow(tiles.rects, true); });
+    expect(document.activeElement).toBe(wrapper);
+    await act(async () => { await new Promise((done) => window.requestAnimationFrame(() => done(null))); });
+    expect(document.activeElement?.getAttribute('data-id')).toBe('placeholder-1');
+    // The upload fills it: the placeholder goes and the card takes its spot.
+    const filled = [...images, image('i4', [card('new-c4', 3000, 100, { w: 300, h: 200 })])];
+    view.rerender(<BoardCanvas boardKey="k1" images={filled} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[]} outside={tiles} onOutsideDone={() => {}} />);
+    expect(document.activeElement?.getAttribute('data-id')).toBe('new-c4');
+  });
+
+  it('a press with the pointer moves no focus', () => {
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={() => {}} />);
+    const before = document.activeElement;
+    act(() => { chip.props!.onShow(tiles.rects, false); });
+    expect(document.activeElement).toBe(before);
+  });
+
+  it('focusBoard puts focus on the board itself, never the page body', () => {
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={() => {}} />);
+    act(() => { chip.props!.focusBoard(); });
+    expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
+  });
+});
+
+describe('placeholder tiles (GM r4 answer 1)', () => {
+  it('are drawn after the cards at their spot and size, never dragged or selected; the empty note stays away', () => {
+    const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200 }]} />);
+    const node = props().nodes.find((item) => item.id === 'placeholder-1')!;
+    expect(node).toMatchObject({ type: 'placeholder', position: { x: 40, y: 60 }, width: 300, height: 200,
+      draggable: false, selectable: false, ariaLabel: 'Adding an image' });
+    expect(view.container.querySelector('.moodboard-board__empty')).toBeNull();
+  });
+
+  it('none: the nodes are just the cards', () => {
+    mount();
+    expect(props().nodes.map((node) => node.id)).toEqual(['c1', 'c2', 'c3']);
   });
 
   it('is not drawn with nothing outside', () => {

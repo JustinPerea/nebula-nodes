@@ -30,10 +30,10 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
 **Placement: one helper, `lib/boardPlacement.ts`, for paste, Add images and drop (GM r2).**
 - A tile never lands on another. Every tile keeps `DROP_GAP` (24) from every other, the batch's earlier tiles included.
 - Paste and Add images (`aim: false`): each tile goes to the nearest free spot to the point (the pointer, or the middle of the view) where the whole tile fits in the visible board. The visible board is the board's rect at the current zoom, less a 16 px inset and less the toolbar row.
-- When nothing fits, the tile goes to `nearestFreeOutsideView`, the nearest free spot outside the view. It is reported for the edge chip, and the view never moves on its own.
-- Drop (`aim: true`): the first file stays where it was aimed if that is free. If it would cover a tile, it slides to the nearest free spot. Its other files follow the free-spot rule, with the chip if any land outside the view.
+- When nothing fits, the tile goes to `nearestFreeAnywhere` (named `nearestFreeOutsideView` until round 3), the nearest free spot with no view to stay in, so it can straddle the edge. It is reported for the edge chip, and the view never moves on its own.
+- Drop (`aim: true`): the first file stays where it was aimed if that is free. If it would cover a tile, it slides to the nearest free spot, even one partly past the view (round 3). That tile gets the chip only when it ends up wholly out of view. Its other files follow the free-spot rule, with the chip if any land not wholly in view.
 - Sizes are the real tile sizes: `sizeFor(1, aspect)` from the aspect read before upload.
-- The search is exact for the nearest spot. Candidate x and y values come from the wish, the tiles' edges with the gap, and the view's edges. Candidate edges come from the 60 tiles nearest the wish, which keeps a 300-tile board fast, and every candidate is checked against all tiles. Positions are whole pixels, clamped inside the view after rounding.
+- The search is exact on any board (round 3 replaced round 2's 60-nearest-tiles cap, review 2 M1). See round 3 below.
 - `BoardCanvas` hands every add a `BoardTarget` (`at`, `view`, `aim`): the drop handler, the Add images button and the `pasteTarget` ref.
 
 **The edge chip (GM r2 answer 1), `OutsideChip.tsx`.**
@@ -67,6 +67,48 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
 - The Board view grid breaks under `app-slava-restraint`: the board and side panel overlap, and the rail is 0 px tall. #209 fixes it. It shows in every Board shot.
 - The header title breaks inside the word ("Moodbo / ard"). That one goes on GM's follow-up list.
 
+## Round 3 (review 2, GM's r4 answers)
+
+**Exact placement on any board (review 2 M1).** Round 2 took candidate edges only from the 60 tiles nearest the wish. On a big irregular board the edges around the real gap in view belonged to other tiles, so a paste went outside with the chip although the view had room. Now the search reads rows. Each tile rules out an open rectangle of top-lefts (its box grown by the gap and the new tile's size). The nearest allowed point has its y on the wish's row or a rectangle's top or bottom, clamped into the view. On that row, its x is the wish's own or a side of the merged ruled-out span the wish falls in. Rows are tried nearest first and the search stops once a row is farther than the best spot. Only the rectangles over a row are read, found by binary search on y.
+- It is exact: a brute force over every whole pixel agrees on 40 random boards, in view and anywhere. Both of review 2's repros are tests (231 irregular tiles; a packed board whose only room is one 600 x 600 gap).
+- Speed, measured with `performance.now` on this Mac (scratchpad `timing.txt`): the worst 500-tile board (jittered, no room in view) takes 17 ms for five files and about 3.3 ms for one. A packed grid takes 2.7 ms for five, and open boards take 1.6 to 2.1 ms. The test pins a work counter (rows plus spans read): 265,103 for that worst case, under a bound of 300,000. A board with room near the pointer reads fewer than 50.
+- The view's edges need no candidates of their own: when the bound is what stops the point, the wish lies past it, and the clamped wish is that edge. That makes review 2's R9 moot. The far-right fallback is gone (R7): the row search always finds a spot when nothing bounds it.
+
+**One "in view" (review 2 M2, L4; GM r4 answer 2).** The chip judges "in view" with placement's own rect: `BoardCanvas` hands it `viewRect`, a live getter for the pane less the 16 px inset and less everything below the toolbar's top. A tile partly under the toolbar keeps the chip.
+
+**Placeholders (GM r4 answer 1).** A file pasted, added or dropped on the Board is placed in the view the person had at that moment. A placeholder tile holds the spot at once while the upload runs, and the upload fills it there. If the person pans away meanwhile, no chip comes later.
+- The placeholder is client-only (`BoardPlaceholder`: id, x, y, width, height), the shape a pasted link's spot will use. It is drawn as a React Flow node of type `placeholder`: not dragged, not selected, but focusable, labelled "Adding an image". Placement counts it as occupied.
+- It is never in the draft, so it is never saved. The undo step is the add the upload makes: one step per paste, as before. A failed upload removes its placeholders and the chip that pointed at them.
+- The tile's size comes from the aspect read before the upload (`readImageAspect`, local). So "at once" means after that read, not before it.
+- The chip shows at paste time, with no thumbnail until the upload answers.
+- The placeholder style is a faint fill and a 1 px ring, with no motion. Zoomed out it is hard to see. GM may want it stronger.
+
+**The chip.**
+- Focus (GM r4 answer 6). Enter or Space hands focus to the board, then to the first tile once it is drawn in view. If the placeholder becomes the card meanwhile, focus moves on to the card. Esc gives focus back to where it was before the chip had it, or to the board. If the chip goes any other way while it has focus, focus goes to the board. The board has `tabIndex={-1}` and the token focus ring.
+- It goes on any view switch (GM r4 answer 8), not only a board switch.
+- A tile bigger than the view (GM r4 answer 9): the chip also goes once the tile covers the view's centre (`seenIn`). Pressing it zooms out on the fit spring until the tile is whole.
+
+**Toasts (GM r4 answer 5).** "Undid…" is an info line. It never replaces a live "Removed · Undo" toast; it is announced instead. The exception is when the step undone is that removal itself, through the toast's Undo or Cmd+Z, because the toast's offer is used up. A removal's toast carries the step it undoes (`undoOf`). The toast's state is read from a ref, since an undo's line is decided after an await. The "Undid: X" labels go to GM for the wording batch.
+
+**Held key (review 2 L1).** Only a repeat keydown of the paste key sets the held state. Any keydown without repeat clears it, as do the window's blur and the page being hidden, so a keyup that went elsewhere can't swallow a later Edit > Paste. Cmd+V is also recognised by `code === 'KeyV'`, for non-Latin layouts.
+
+**Backstop (review 2's race; GM r4 answer 7).**
+- Pastes take turns. Each paste's files are hashed and checked only after the paste before it has claimed its own, so a slow hash can't let a later paste overtake.
+- Signatures are released when the add ends, upload failure included.
+- A dropped duplicate shows nothing on screen and is announced politely: "That image is already being added."
+- The count per signature became a Set (review 2's R21).
+
+**Mutants.** 42 of 42 killed (`scratchpad/paste/mut3/mutate.py`). Review 2's survivors:
+- R3 (the cap) and R7 (the fallback) are gone with the code they mutated. R9 is moot (see above). R21 is gone with the Set.
+- R11, R13, R15, R16, R17, R18 and R22 each have a killing test, as do the chip floor's `noticesTop`, its `floatingBottomLimit` and its reduced-motion CSS.
+
+**Live, round 3** (scratchpad `live3/drive-r3.mjs`, 17 of 17 checks).
+- Setup: the backend through `serve_isolated.py` on 8796; its blocked log holds only canary lines and "canary ok". Vite on 5796, with #209's style changes applied uncommitted (an 870 px board column) and reverted afterwards. The browser blocked shared ports and outside hosts, checked by a canary first.
+- M1: on a board of 80 tiles zoomed out to 0.117, three pasted files all landed in view with no chip.
+- M2: on a wall of 221 tiles, the pasted tile landed at y 828-875 with the toolbar's top at 847, inside the pane. The chip showed, above the toolbar. Enter put focus on that tile.
+- The placeholder held its spot during a 2.5 s upload, through a pan, and the card filled it there.
+- The shots show "This tab isn't connected as you". The tab used the Vite origin as its backend, so requests stayed same-origin; the moodboard routes don't need the person.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -76,7 +118,8 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
   - `MoodboardStudioView.tsx`: the paste listener, the held-key guard, the backstop, info-line priority, placement, and the chip state.
   - `BoardCanvas.tsx`: targets, the view rect, the toolbar as a bottom bar, and the chip.
   - `MoodboardStudioPaste.test.tsx` (new) and `BoardCanvas.test.tsx`.
-- `frontend/src/styles/moodboard-board.css`: the chip.
+- `frontend/src/styles/moodboard-board.css`: the chip, the placeholder tile, the board's focus ring.
+- `frontend/tests/focusRingCss.test.ts`: the placeholder's ring is listed with the card's.
 
 ## Docs
 

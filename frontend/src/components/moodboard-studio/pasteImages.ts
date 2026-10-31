@@ -19,6 +19,8 @@ export interface ClipboardImages {
 export const NOTHING_TO_PASTE = 'There’s no image on the clipboard to add.';
 /** The line when a paste holds only http(s) links (GM, #210 item 2): nothing is fetched or added. */
 export const LINKS_NOT_ADDED = 'Nebula can’t add images from links. Copy the image itself, then paste it.';
+/** Announced (politely, nothing on screen) when the backstop drops a file still being added (GM r4 answer 7). */
+export const ALREADY_BEING_ADDED = 'That image is already being added.';
 
 /** A file the drop path would take: an image type (BoardCanvas onDrop, MoodboardStudioView handleDrop). */
 const isImageFile = (file: File | null): file is File => file !== null && file.type.startsWith('image/');

@@ -102,6 +102,17 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
   background: var(--mb-board-bg);
 }
 
+/* Focus can rest on the board itself (the edge chip hands it there when no
+   tile can take it, GM #210 r4 answer 6): the token ring, inside its edge. */
+.moodboard-board:focus {
+  outline: none;
+}
+
+.moodboard-board:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: -2px;
+}
+
 .moodboard-board__underlay {
   position: absolute;
   inset: 0;
@@ -128,6 +139,32 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
 .moodboard-board__flow .react-flow__node-card:focus,
 .moodboard-board__flow .react-flow__node-card:focus-visible {
   outline: none;
+}
+
+/* A spot held for a file still uploading (GM, #210 r4 answer 1): the tile's
+   own size, an outline and a faint fill, no motion. It takes focus like a card. */
+.moodboard-board__flow .react-flow__node-placeholder {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.moodboard-board__flow .react-flow__node-placeholder:focus,
+.moodboard-board__flow .react-flow__node-placeholder:focus-visible {
+  outline: none;
+}
+
+.moodboard-board__placeholder {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px var(--mb-board-edge-strong);
+}
+
+.react-flow__node-placeholder:focus-visible .moodboard-board__placeholder {
+  box-shadow: 0 0 0 2px var(--mb-board-select), 0 0 0 5px rgba(255, 255, 255, 0.18);
 }
 
 .moodboard-card {

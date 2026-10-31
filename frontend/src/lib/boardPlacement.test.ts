@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insideView, nearestFreeOutsideView, placeTiles } from './boardPlacement';
+import { insideView, nearestFreeAnywhere, placeTiles } from './boardPlacement';
 import type { NodeRect } from './nodePlacement';
 
 // Where new tiles go on the Board view (GM - Design, #210 rulings): one helper
@@ -7,6 +7,9 @@ import type { NodeRect } from './nodePlacement';
 // else just outside it; a drop keeps its aim unless it would cover a tile.
 
 const GAP = 24;
+/** The rows and spans five files may read on the worst 500-tile board: measured at
+ *  265,103 (17 ms on an M-series Mac, about 3.5 ms a file; see the notes). */
+const WORK_BOUND = 300_000;
 const apart = (a: NodeRect, b: NodeRect) =>
   a.x + a.width + GAP <= b.x || b.x + b.width + GAP <= a.x || a.y + a.height + GAP <= b.y || b.y + b.height + GAP <= a.y;
 const rectsOf = (spots: Array<{ x: number; y: number }>, sizes: Array<[number, number]>) =>
@@ -78,10 +81,10 @@ describe('no room in view', () => {
     expect(placed).toEqual({ x: 400, y: 324, width: 200, height: 150 });
   });
 
-  it('nearestFreeOutsideView: the nearest free spot with no view to stay in', () => {
+  it('nearestFreeAnywhere: the nearest free spot with no view to stay in', () => {
     const crowd = [{ x: 0, y: 0, width: 100, height: 100 }];
-    expect(nearestFreeOutsideView({ x: 0, y: 0, width: 50, height: 50 }, crowd)).toEqual({ x: 0, y: -74 });
-    expect(nearestFreeOutsideView({ x: 500, y: 500, width: 50, height: 50 }, crowd)).toEqual({ x: 500, y: 500 });
+    expect(nearestFreeAnywhere({ x: 0, y: 0, width: 50, height: 50 }, crowd)).toEqual({ x: 0, y: -74 });
+    expect(nearestFreeAnywhere({ x: 500, y: 500, width: 50, height: 50 }, crowd)).toEqual({ x: 500, y: 500 });
   });
 
   it('a tile bigger than the view goes outside it', () => {
@@ -91,11 +94,11 @@ describe('no room in view', () => {
 });
 
 describe('a drop', () => {
-  it('lands where aimed when that is free, even partly past the view', () => {
+  it('lands where aimed when that is free, even partly past the view, with no chip (GM r4 answer 3)', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     const { spots, outside } = placeTiles({ at: { x: 990, y: 350 }, sizes: [[200, 100]], occupied: [], view, aim: true });
     expect(spots).toEqual([{ x: 890, y: 300 }]);
-    expect(outside).toEqual([0]);
+    expect(outside).toEqual([]);
   });
 
   it('slides to the nearest free spot when it would cover a tile', () => {
@@ -103,6 +106,34 @@ describe('a drop', () => {
     const { spots } = placeTiles({ at: { x: 200, y: 290 }, sizes: [[200, 100]], occupied: [tile], view: { x: -500, y: -500, width: 2000, height: 2000 }, aim: true });
     // A small nudge: down below the tile.
     expect(spots).toEqual([{ x: 100, y: 324 }]);
+  });
+
+  it('a nudge near the edge takes the nearest free spot even partly outside, with no chip (GM r4 answer 4)', () => {
+    // A tile at the view's right edge; the drop lands on it. Right of it is
+    // nearer than anywhere inside the view, and partly past the edge.
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    const tile = { x: 700, y: 0, width: 200, height: 700 };
+    const { spots, outside } = placeTiles({ at: { x: 960, y: 350 }, sizes: [[200, 100]], occupied: [tile], view, aim: true });
+    expect(spots).toEqual([{ x: 924, y: 300 }]);
+    expect(outside).toEqual([]);
+  });
+
+  it('a nudged aimed tile wholly out of view gets the chip', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    const tile = { x: -100, y: -100, width: 1200, height: 900 };
+    const { spots, outside } = placeTiles({ at: { x: 500, y: 650 }, sizes: [[200, 100]], occupied: [tile], view, aim: true });
+    expect(spots).toEqual([{ x: 400, y: 824 }]);
+    expect(outside).toEqual([0]);
+  });
+
+  it('an extra file of a drop partly past the edge gets the chip', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    const crowd = [{ x: 0, y: 0, width: 1000, height: 560 }];
+    const sizes: Array<[number, number]> = [[1000, 100], [200, 100]];
+    const { spots, outside } = placeTiles({ at: { x: 500, y: 640 }, sizes, occupied: crowd, view, aim: true });
+    expect(spots[0]).toEqual({ x: 0, y: 590 });
+    expect(insideView(rectsOf(spots, sizes)[1], view)).toBe(false);
+    expect(outside).toEqual([1]);
   });
 
   it('extra files fan out by the free-spot rule, inside the view', () => {
@@ -119,5 +150,133 @@ describe('a drop', () => {
     const sizes: Array<[number, number]> = [[200, 100], [200, 100]];
     const { spots } = placeTiles({ at: { x: 500, y: 350 }, sizes, occupied: [], view: { x: 0, y: 0, width: 1000, height: 700 }, aim: true });
     expect(spots[1]).not.toEqual(spots[0]);
+  });
+});
+
+// Review 2, M1: the search is exact on any board size (it used only the 60
+// tiles nearest the wish, so a big board's room in view was missed).
+describe('big boards', () => {
+  let seed = 1;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const isFree = (rect: NodeRect, occupied: NodeRect[]) => occupied.every((other) => apart(rect, other));
+  /** Jittered tiles over `area`, none overlapping, skipping `hole`, up to `count`. */
+  const board = (count: number, area: NodeRect, hole: NodeRect | null, start: number) => {
+    seed = start;
+    const tiles: NodeRect[] = [];
+    for (let tries = 0; tiles.length < count && tries < 40_000; tries += 1) {
+      const rect = { x: Math.round(area.x + rnd() * area.width), y: Math.round(area.y + rnd() * area.height),
+        width: 150 + Math.round(rnd() * 200), height: 120 + Math.round(rnd() * 200) };
+      if (hole && !(rect.x + rect.width + GAP <= hole.x || hole.x + hole.width + GAP <= rect.x
+        || rect.y + rect.height + GAP <= hole.y || hole.y + hole.height + GAP <= rect.y)) continue;
+      if (isFree(rect, tiles)) tiles.push(rect);
+    }
+    return tiles;
+  };
+
+  it('231 irregular tiles, zoomed out: three files all land in view (review 2 repro 1)', () => {
+    const view = { x: -3000, y: -2000, width: 6000, height: 4000 };
+    const occupied = board(231, { x: -3000, y: -2000, width: 6000, height: 4000 }, null, 99);
+    expect(occupied.length).toBe(231);
+    const sizes: Array<[number, number]> = [[300, 200], [200, 300], [250, 250]];
+    const { spots, outside } = placeTiles({ at: { x: -2000, y: 0 }, sizes, occupied, view });
+    expect(outside).toEqual([]);
+    expect(noOverlaps([...occupied, ...rectsOf(spots, sizes)])).toBe(true);
+  });
+
+  it('a jittered board whose only room in view is one 600 x 600 gap far from the pointer (review 2 repro 2)', () => {
+    // 360 x 260 cells, each with a 300 x 200 tile jittered by up to 36 px: at
+    // most 96 px between tiles, so no 300 x 200 tile fits anywhere but the
+    // gap, two by three cells cleared far from the pointer.
+    seed = 11;
+    const occupied: NodeRect[] = [];
+    for (let row = 0; row < 15; row += 1) for (let col = 0; col < 17; col += 1) {
+      if (col >= 13 && col <= 14 && row >= 6 && row <= 8) continue;
+      occupied.push({ x: col * 360 + Math.round(rnd() * 36), y: row * 260 + Math.round(rnd() * 36), width: 300, height: 200 });
+    }
+    expect(occupied.length).toBe(249);
+    expect(noOverlaps(occupied)).toBe(true);
+    const view = { x: 0, y: 0, width: 17 * 360, height: 15 * 260 };
+    const { spots, outside } = placeTiles({ at: { x: 200, y: 200 }, sizes: [[300, 200]], occupied, view });
+    expect(outside).toEqual([]);
+    const placed = rectsOf(spots, [[300, 200]])[0];
+    expect(isFree(placed, occupied)).toBe(true);
+    expect(insideView(placed, view)).toBe(true);
+    // In the gap.
+    expect(placed.x).toBeGreaterThanOrEqual(13 * 360 - 60);
+    expect(placed.y).toBeGreaterThanOrEqual(6 * 260 - 60);
+  });
+
+  it('a gap exactly one tile and two gaps wide takes the tile (spans that only meet leave that point free)', () => {
+    const left = { x: 0, y: 0, width: 100, height: 400 };
+    const right = { x: 100 + 24 + 50 + 24, y: 0, width: 100, height: 400 };
+    const view = { x: 0, y: 0, width: 298, height: 400 };
+    const { spots, outside } = placeTiles({ at: { x: 149, y: 200 }, sizes: [[50, 50]], occupied: [left, right], view });
+    expect(spots).toEqual([{ x: 124, y: 175 }]);
+    expect(outside).toEqual([]);
+  });
+
+  it('reads only the rows near the wish when there is room near it', () => {
+    // 500 tiles, the pointer over open ground beside them: a handful of rows.
+    const occupied: NodeRect[] = [];
+    for (let r = 0; r < 20; r += 1) for (let c = 0; c < 25; c += 1) occupied.push({ x: c * 324, y: r * 224, width: 300, height: 200 });
+    const work = { cells: 0 };
+    placeTiles({ at: { x: 4000, y: -600 }, sizes: [[300, 200]], occupied, view: { x: 0, y: -2000, width: 25 * 324, height: 7000 }, work });
+    expect(work.cells).toBeLessThan(50);
+  });
+
+  it('agrees with a brute force on random boards, in view and anywhere', () => {
+    const brute = (wish: NodeRect, occupied: NodeRect[], view: NodeRect | null) => {
+      let best = Infinity;
+      const reach = 400;
+      const x0 = view ? Math.ceil(view.x) : wish.x - reach;
+      const x1 = view ? Math.floor(view.x + view.width - wish.width) : wish.x + reach;
+      const y0 = view ? Math.ceil(view.y) : wish.y - reach;
+      const y1 = view ? Math.floor(view.y + view.height - wish.height) : wish.y + reach;
+      for (let x = x0; x <= x1; x += 1) for (let y = y0; y <= y1; y += 1) {
+        const d = (x - wish.x) ** 2 + (y - wish.y) ** 2;
+        if (d < best && isFree({ x, y, width: wish.width, height: wish.height }, occupied)) best = d;
+      }
+      return best;
+    };
+    seed = 3;
+    for (let trial = 0; trial < 40; trial += 1) {
+      const occupied: NodeRect[] = [];
+      const count = 3 + Math.floor(rnd() * 10);
+      for (let i = 0; i < count; i += 1) {
+        occupied.push({ x: Math.round(rnd() * 260), y: Math.round(rnd() * 200), width: 20 + Math.round(rnd() * 70), height: 20 + Math.round(rnd() * 70) });
+      }
+      const view = { x: 0.4, y: 0.6, width: 300.5, height: 240.25 };
+      const size: [number, number] = [30 + Math.round(rnd() * 40), 20 + Math.round(rnd() * 40)];
+      const at = { x: rnd() * 300, y: rnd() * 240 };
+      const wish = { x: Math.round(at.x - size[0] / 2), y: Math.round(at.y - size[1] / 2), width: size[0], height: size[1] };
+      const { spots, outside } = placeTiles({ at, sizes: [size], occupied, view });
+      const got = (spots[0].x - wish.x) ** 2 + (spots[0].y - wish.y) ** 2;
+      const inView = brute(wish, occupied, view);
+      expect(isFree({ ...spots[0], width: size[0], height: size[1] }, occupied)).toBe(true);
+      if (inView < Infinity) {
+        expect(outside).toEqual([]);
+        expect(got).toBe(inView);
+      } else {
+        expect(outside).toEqual([0]);
+        expect(got).toBe(brute(wish, occupied, null));
+      }
+    }
+  });
+
+  it('stays fast at 500 tiles: a bounded amount of work for five files', () => {
+    // The worst case measured: 500 jittered tiles with no room in view, so
+    // each file reads every row of the view, then the rows around it.
+    seed = 5;
+    const occupied: NodeRect[] = [];
+    for (let r = 0; r < 20; r += 1) for (let c = 0; c < 25; c += 1) {
+      occupied.push({ x: c * 360 + Math.round(rnd() * 36), y: r * 260 + Math.round(rnd() * 36), width: 300, height: 200 });
+    }
+    const view = { x: 0, y: 0, width: 25 * 360, height: 20 * 260 };
+    const work = { cells: 0 };
+    const sizes = Array.from({ length: 5 }, (_, i) => [300 - i * 20, 200 + i * 10] as [number, number]);
+    const { spots, outside } = placeTiles({ at: { x: 4500, y: 2600 }, sizes, occupied, view, work });
+    expect(outside).toEqual([0, 1, 2, 3, 4]);
+    expect(noOverlaps([...occupied, ...rectsOf(spots, sizes)])).toBe(true);
+    expect(work.cells).toBeLessThan(WORK_BOUND);
   });
 });
