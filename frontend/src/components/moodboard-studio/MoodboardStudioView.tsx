@@ -946,8 +946,8 @@ export function MoodboardStudioView() {
         return;
       }
       event.preventDefault();
-      // Only links: Nebula fetches none for a board (decision D6; Q161 is
-      // open), so it says so and adds nothing (GM, #210 item 2).
+      // Only links: Nebula fetches none for a board yet (decision D6; pasted
+      // links come in their own PR), so it says so and adds nothing (GM, #210 item 2).
       showInfoLine(links.length > 0 ? LINKS_NOT_ADDED : NOTHING_TO_PASTE);
     };
   });
