@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import '../../styles/personal-agents.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { useLockPending, useTabHeld } from '../../hooks/useTabHeld';
 import { HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { toolKindWord } from '../../lib/acpToolKind';
 
 export type PermissionStatus = 'pending' | 'sent' | 'allowed' | 'denied' | 'timed_out' | 'cancelled';
 
@@ -59,14 +60,18 @@ export function PermissionCard({ part, agentName, onDecision }: {
   const settled = part.status !== 'pending' && part.status !== 'sent';
   // Review 5 MEDIUM-2 (GM r9 1): an agent's ask with a decision on it, like a question. While
   // this tab isn't connected as the person, Allow once and Deny lock in place (aria-disabled,
-  // focusable, GM's line as their tooltip, the 150 ms rule) and unlock on the promote. The
-  // agent's own timeout keeps running.
+  // focusable, the 150 ms rule) and unlock on the promote. The agent's own timeout keeps
+  // running. GM r10 (1): GM's line shows on the card, on its own row under the buttons, so the
+  // buttons have no tooltip; they point at the line (aria-describedby).
   const tabHeld = useTabHeld() && open;
   const lockPending = useLockPending(tabHeld);
+  const lineId = useId();
+  const lockShown = tabHeld && !lockPending;
   const lockProps = tabHeld ? {
     'aria-disabled': true as const, 'data-held-pending': lockPending ? '' : undefined,
-    title: lockPending ? undefined : HELD_QUESTIONS_LINE,
+    'aria-describedby': lockShown ? lineId : undefined,
   } : {};
+  const kindWord = toolKindWord(part.toolKind);
   const decide = (decision: 'allow' | 'deny') => { if (!tabHeld) onDecision(part.requestId, decision); };
   return (
     <div className={`permission-card permission-card--${part.status}`} data-permission-status={part.status}
@@ -74,7 +79,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
       <div className="permission-card__head">
         <ShieldAlert className="permission-card__icon" size={14} strokeWidth={2} aria-hidden="true" focusable="false" />
         <span className="permission-card__who">{agentName} asks to</span>
-        <span className="permission-card__kind">{part.toolKind}</span>
+        {kindWord && <span className="permission-card__kind">{kindWord}</span>}
       </div>
       <div className="permission-card__title">{part.title}</div>
       {input && <pre className="permission-card__input">{input}</pre>}
@@ -83,7 +88,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
           This agent only offers &ldquo;always allow&rdquo;, which Nebula doesn&rsquo;t grant. You can deny it here.
         </p>
       )}
-      {open || part.status === 'sent' ? (
+      {open || part.status === 'sent' ? (<>
         <div className="permission-card__actions">
           {part.canAllow && (
             <button type="button" className={`permission-card__allow${tabHeld ? ' agent-notes-btn--held' : ''}`} disabled={!open || readOnly}
@@ -96,7 +101,8 @@ export function PermissionCard({ part, agentName, onDecision }: {
             {open ? `No answer in ${left}s denies it` : 'Sending…'}
           </span>
         </div>
-      ) : settled ? (
+        {lockShown && <p id={lineId} className="permission-card__held-line">{HELD_QUESTIONS_LINE}</p>}
+      </>) : settled ? (
         <div className="permission-card__outcome" role="status">{OUTCOME_TEXT[part.status as keyof typeof OUTCOME_TEXT]}</div>
       ) : null}
     </div>

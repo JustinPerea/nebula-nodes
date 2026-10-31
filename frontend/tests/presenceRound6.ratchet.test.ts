@@ -421,7 +421,7 @@ describe('review 4 MEDIUM-1: a store action that throws on is followed into the 
   it('mutant 1: CreateView\'s catch shows its line without notify: its caller drops the line', { timeout: 60_000 }, () => {
     const sources = realSources();
     const file = 'components/create-studio/CreateView.tsx';
-    sources[file] = sources[file].replace('runLine(failureMessage(error, GENERATE_HEADING), error);', 'console.warn(failureMessage(error, GENERATE_HEADING));');
+    sources[file] = sources[file].replace('runLine(isPersonRefusal(error) ? generateRefusedCopy(clusterAdded) : failureMessage(error, GENERATE_HEADING), error);', 'console.warn(failureMessage(error, GENERATE_HEADING));');
     expect(sources[file]).toContain('console.warn(failureMessage(error, GENERATE_HEADING));');
     const found = withSources(sources, () => callersOf(cluster()));
     expect(found.get(`${file}#handleGenerate`)?.outcome).toBe('drops');

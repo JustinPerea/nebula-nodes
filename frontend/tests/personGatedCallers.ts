@@ -487,12 +487,20 @@ function handlerOutcome(unit: Unit, handler: ts.Node): Outcome {
  * only a lost connection, so the function's own handling of `!res.ok` is what's read. */
 const ANSWERS_WITH_RESPONSE = new Set(['fetch', 'apiFetch', 'graphMutationFetch']);
 function answersWithResponse(at: ts.Node): boolean {
-  const n = climbPath(at);
+  return transportAround(at) !== null;
+}
+
+/** The fetch, apiFetch or graphMutationFetch call `at` is the path of: the path itself, or (round 8,
+ * review 6 gates LOW-4) a call that makes it (`apiFetch(presetsPath(), …)`), whose Response is the
+ * transport's, not the helper's. */
+function transportAround(at: ts.Node): ts.CallExpression | null {
+  let n = climbPath(at);
+  if (n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n) n = climbPath(n.parent);
   const call = n.parent;
-  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return false;
+  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return null;
   const callee = ts.isIdentifier(call.expression) ? call.expression.text
     : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '';
-  return ANSWERS_WITH_RESPONSE.has(callee);
+  return ANSWERS_WITH_RESPONSE.has(callee) ? call : null;
 }
 
 /** The call around a path literal (or the node itself when it is a call). */
@@ -625,8 +633,9 @@ function failureBranches(name: string, scope: ts.Node): ts.Node[][] {
  */
 export function outcomeAt(unit: Unit, at: ts.Node, responds = false): Outcome {
   if (unit.constant || isSelector(unit)) return 'passes';
-  const call = callAround(at);
-  if (call && (responds || answersWithResponse(at))) {
+  const transport = transportAround(at);
+  const call = transport ?? callAround(at);
+  if (call && (responds || transport)) {
     if (returnsCall(unit, call)) return 'passes';
     const bound = responseBinding(call);
     const branches = bound ? failureBranches(bound.name, bound.scope) : [];
@@ -917,11 +926,17 @@ const within = (node: ts.Node, scope: ts.Node) => node.pos >= scope.pos && node.
 const passedCache = new Set<string>();
 export function passedThrough(): Set<string> { return passedCache; }
 
-/** A store reached through a module that imports it (`export const useAlias = useA` in b.ts):
- * one hop (gates-security LOW-1, round 7). */
-function reachesStoreThroughAlias(from: Map<string, Taken> | undefined, store: string, imports: Map<string, Map<string, Taken>>): boolean {
+/** A store reached through modules that import it (`export const useAlias = useA` in b.ts, and
+ * round 8, review 6 gates NIT-1: `export const useC = useB` in c.ts), any number of hops. */
+function reachesStoreThroughAlias(from: Map<string, Taken> | undefined, store: string, imports: Map<string, Map<string, Taken>>,
+  seen = new Set<string>()): boolean {
   if (!from) return false;
-  for (const module of from.keys()) if (imports.get(module)?.has(store)) return true;
+  for (const module of from.keys()) {
+    if (seen.has(module)) continue;
+    seen.add(module);
+    if (imports.get(module)?.has(store)) return true;
+    if (reachesStoreThroughAlias(imports.get(module), store, imports, seen)) return true;
+  }
   return false;
 }
 
@@ -930,6 +945,9 @@ function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, sto
   if (taken.dynamic) return true;
   const parent = node.parent;
   if (ts.isElementAccessExpression(parent) && storeAction) return true; // `getState()['action']()`
+  // `const { action } = useStore.getState()` (round 8, review 6 gates NIT-1: round 7's follow of the
+  // destructured name never ran, as the store's file was only reached through a property).
+  if (storeAction && ts.isBindingElement(parent) && (parent.propertyName ?? parent.name) === node) return true;
   if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
     if (storeAction) return true; // `useGraphStore.getState().action()`, `(s) => s.action`
     return ts.isIdentifier(parent.expression) && (taken.namespaces.has(parent.expression.text)
@@ -938,16 +956,38 @@ function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, sto
   return taken.names.has(node.text);
 }
 
-const MARKED = /\/\/ clears-on-promote: [\w.-]+/;
-/** A node's own text and the comment that ends its last line: what a marker on it may be.
- * Round 7: never its leading trivia, which holds the line before it (a marker there belongs to
- * the statement it ends, and counted for the next function or branch too). */
-function ownText(node: ts.Node): string {
+const MARKED = /^\/\/ clears-on-promote: [\w.-]+/;
+/**
+ * The `//` comments a marker on a node may be: those inside it and the one that ends its last
+ * line. Round 7: never its leading trivia, which holds the line before it (a marker there belongs
+ * to the statement it ends, and counted for the next function or branch too). Round 8 (review 6
+ * held LOW-5, gates LOW-4): read from the scanner's comment ranges, never the node's text, so a
+ * marker's words in a string, a template, a block comment or a JSX comment (`{/* … *\/}`) aren't
+ * one. JSX text isn't trivia either: no comment is read at or after it.
+ */
+function lineComments(node: ts.Node): string[] {
   const source = node.getSourceFile().getFullText();
-  const trailing = ts.getTrailingCommentRanges(source, node.getEnd()) ?? [];
-  return node.getText() + trailing.map((range) => source.slice(range.pos, range.end)).join(' ');
+  const start = node.getStart();
+  const found = new Map<number, string>();
+  const add = (ranges: ts.CommentRange[] | undefined) => {
+    for (const range of ranges ?? []) {
+      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && range.pos >= start) found.set(range.pos, source.slice(range.pos, range.end));
+    }
+  };
+  const jsxText = (n: ts.Node) => n.kind === ts.SyntaxKind.JsxText || n.kind === ts.SyntaxKind.JsxTextAllWhiteSpaces;
+  const texts: ts.Node[] = [];
+  const walk = (n: ts.Node) => {
+    if (jsxText(n)) { texts.push(n); return; }
+    add(ts.getLeadingCommentRanges(source, n.pos));
+    add(ts.getTrailingCommentRanges(source, n.end));
+    for (const child of n.getChildren()) walk(child);
+  };
+  walk(node);
+  // A "comment" the scan found inside JSX text is the text itself.
+  for (const pos of [...found.keys()]) if (texts.some((text) => pos >= text.pos && pos < text.end)) found.delete(pos);
+  return [...found.values()];
 }
-const marked = (node: ts.Node): boolean => MARKED.test(ownText(node));
+const marked = (node: ts.Node): boolean => lineComments(node).some((comment) => MARKED.test(comment));
 
 /** The functions in `file` whose own body registers a line (a marked call). */
 const keepersCache = new Map<string, Set<string>>();

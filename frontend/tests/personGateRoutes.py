@@ -1,4 +1,4 @@
-"""Every backend route behind the person gate, read with ast (PR #204 rounds 6 and 7).
+"""Every backend route behind the person gate, read with ast (PR #204 rounds 6, 7 and 8).
 
 Run by tests/personGatedCallers.ts (gatedRoutes, unreadableRouteForms). Prints JSON:
 
@@ -17,7 +17,10 @@ lambda, decorator or Depends() dependency in those files:
 
 - a call of require_person, _person_only_refusal, stop_refusal or person_only, or one passed as a
   value (a callback, Depends(person_only));
-- PersonGateError or PERSON_REQUIRED written, outside services/person_gate.py;
+- outside services/person_gate.py: PersonGateError built or raised (an `except PersonGateError` or
+  an isinstance() isn't a gate, round 8), PERSON_REQUIRED written, or the refusal code
+  "person_required" written as a value (`{"code": "person_required"}`, `code="person_required"`,
+  or a string constant holding it: the chat socket's refusals, round 8);
 - Depends(...) on a gate in the route's dependencies=, a parameter default, its router's
   APIRouter(dependencies=[...]), an include_router(..., dependencies=[...]) that mounts it, or the
   app's FastAPI(dependencies=[...]);
@@ -36,7 +39,8 @@ Unreadable, listed and never skipped: a route decorator or add_*route call on an
 an app or a router it can read; a path or prefix it can't evaluate to a string; methods= it can't
 read (method "*"); dependencies= it can't read; an endpoint it can't find; include_router of
 something it can't read as a router, or onto something that isn't an app or router; an app or
-router mounted with mount(); an unknown decorator on an app or router; a middleware that reaches
+router mounted with mount() (and each route on it: its path is under the mount's); a handler that
+reads a gate out of a container by subscript (CHECKS["p"](...), round 8); an unknown decorator on an app or router; a middleware that reaches
 a gate (it would gate routes the list can't name); a file that doesn't parse.
 """
 from __future__ import annotations
@@ -47,7 +51,10 @@ import os
 import sys
 
 GATES = {"require_person", "_person_only_refusal", "stop_refusal", "person_only"}
-INLINE = {"PersonGateError", "PERSON_REQUIRED"}
+INLINE = {"PERSON_REQUIRED"}  # any use
+GATE_ERROR = "PersonGateError"  # built or raised only
+REFUSAL_CODE = "person_required"  # written as a value
+CONTAINERS = (ast.Dict, ast.List, ast.Tuple, ast.Set)
 VERBS = {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
 MULTI = {"api_route", "route"}  # methods= decides
 SOCKETS = {"websocket", "websocket_route"}
@@ -293,9 +300,14 @@ def expr_q(module: Module | None, node: ast.AST | None, cls: str | None, local: 
     return None
 
 
+LOCALS: dict[int, dict[str, str]] = {}
+
+
 def local_scope(module: Module, fn: ast.AST, cls: str | None) -> dict[str, str]:
     """Imports and plain aliases inside a function."""
-    local: dict[str, str] = {}
+    if id(fn) in LOCALS:
+        return LOCALS[id(fn)]
+    LOCALS[id(fn)] = local = {}
     for inner in walk(fn):
         if not isinstance(inner, (ast.Import, ast.ImportFrom, ast.Assign)):
             continue
@@ -369,23 +381,99 @@ def edges_from(module: Module, node: ast.AST, cls: str | None) -> set[str]:
     return out
 
 
-def inline_gate(module: Module, node: ast.AST) -> bool:
+def names_gate_error(module: Module, node: ast.AST | None, cls: str | None, local: dict[str, str]) -> bool:
+    if isinstance(node, ast.Name) and node.id == GATE_ERROR or isinstance(node, ast.Attribute) and node.attr == GATE_ERROR:
+        return True
+    q = expr_q(module, node, cls, local) if isinstance(node, (ast.Name, ast.Attribute)) else None
+    return bool(q) and q.split(".")[-1] == GATE_ERROR
+
+
+def is_refusal_code(module: Module, node: ast.AST | None, local: dict[str, str]) -> bool:
+    if not isinstance(node, (ast.Constant, ast.Name, ast.Attribute, ast.JoinedStr, ast.BinOp)):
+        return False
+    return eval_str(module, node, local) == REFUSAL_CODE
+
+
+def inline_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
+    """A gate written in the def itself: PersonGateError built or raised, PERSON_REQUIRED, or the
+    "person_required" refusal code as a value. Not in services/person_gate.py, which defines them."""
     if module.rel == GATE_FILE:
         return False
+    local = local_scope(module, node, cls)
     for root in roots_of(node):
         for inner in walk(root):
             if isinstance(inner, ast.Name) and inner.id in INLINE:
                 return True
             if isinstance(inner, ast.Attribute) and inner.attr in INLINE:
                 return True
+            if isinstance(inner, ast.Call) and names_gate_error(module, inner.func, cls, local):
+                return True
+            if isinstance(inner, ast.Raise) and names_gate_error(module, inner.exc, cls, local):
+                return True
+            if isinstance(inner, ast.Dict) and any(is_refusal_code(module, v, local) for v in inner.values):
+                return True
+            if isinstance(inner, ast.Call) and any(is_refusal_code(module, k.value, local) for k in inner.keywords):
+                return True
+    return False
+
+
+def holds_gate(module: Module | None, node: ast.AST | None, cls: str | None, local: dict[str, str],
+               literals: dict[str, ast.AST], depth: int = 0) -> bool:
+    """A container literal with a gate in it, or a name for one (module-level, or assigned in the def)."""
+    if module is None or node is None or depth > 10:
+        return False
+    if isinstance(node, ast.Subscript):
+        return holds_gate(module, node.value, cls, local, literals, depth + 1)
+    if isinstance(node, ast.Name) and node.id in literals:
+        return holds_gate(module, literals[node.id], cls, local, {}, depth + 1)
+    if isinstance(node, (ast.Name, ast.Attribute)):
+        entity = ENT.get(expr_q(module, node, cls, local) or "")
+        if entity is None or entity.kind != "alias" or not isinstance(entity.node, CONTAINERS):
+            return False
+        return holds_gate(entity.module, entity.node, None, {}, {}, depth + 1)
+    if isinstance(node, CONTAINERS):
+        for inner in ast.walk(node):
+            if isinstance(inner, (ast.Name, ast.Attribute)):
+                q = expr_q(module, inner, cls, local)
+                if is_gate(q) or q in GATED:
+                    return True
+    return False
+
+
+def subscript_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
+    """The def reads a gate out of a container by subscript (CHECKS["p"](...)): it can't tell
+    which entry runs, so the route is listed as unreadable."""
+    local = local_scope(module, node, cls)
+    literals = {inner.targets[0].id: inner.value for inner in walk(node)
+                if isinstance(inner, ast.Assign) and len(inner.targets) == 1 and isinstance(inner.targets[0], ast.Name)
+                and isinstance(inner.value, CONTAINERS)}
+    for root in roots_of(node):
+        for inner in walk(root):
+            if isinstance(inner, ast.Subscript) and holds_gate(module, inner.value, cls, local, literals):
+                return True
     return False
 
 
 GATED: set[str] = set()
+SUBSCRIPTED: set[str] = set()  # defs that reach a gate read by subscript
 
 
 def reaches(module: Module, node: ast.AST, cls: str | None) -> bool:
-    return inline_gate(module, node) or any(is_gate(t) or t in GATED for t in edges_of(module, node, cls))
+    return inline_gate(module, node, cls) or any(is_gate(t) or t in GATED for t in edges_of(module, node, cls))
+
+
+def reaches_subscript(module: Module, node: ast.AST, cls: str | None) -> bool:
+    return subscript_gate(module, node, cls) or any(t in SUBSCRIPTED for t in edges_of(module, node, cls))
+
+
+def spread(found: set[str], calls: dict[str, set[str]]) -> None:
+    grew = True
+    while grew:
+        grew = False
+        for q, out in calls.items():
+            if q not in found and out & found:
+                found.add(q)
+                grew = True
 
 
 def compute_gated() -> None:
@@ -393,15 +481,13 @@ def compute_gated() -> None:
     calls: dict[str, set[str]] = {}
     for q, entity in defs.items():
         calls[q] = edges_of(entity.module, entity.node, entity.cls)
-        if is_gate(q) or inline_gate(entity.module, entity.node) or any(is_gate(t) for t in calls[q]):
+        if is_gate(q) or inline_gate(entity.module, entity.node, entity.cls) or any(is_gate(t) for t in calls[q]):
             GATED.add(q)
-    grew = True
-    while grew:
-        grew = False
-        for q, out in calls.items():
-            if q not in GATED and out & GATED:
-                GATED.add(q)
-                grew = True
+    spread(GATED, calls)
+    for q, entity in defs.items():
+        if subscript_gate(entity.module, entity.node, entity.cls):
+            SUBSCRIPTED.add(q)
+    spread(SUBSCRIPTED, calls)
 
 
 def depends_on_gate(module: Module, node: ast.AST | None, local: dict[str, str] | None = None) -> bool:
@@ -474,6 +560,7 @@ class Reader:
         self.routes: list[dict] = []
         self.unreadable: list[dict] = []
         self.mounts: dict[str, list[tuple[str, str | None, bool]]] = {}  # router -> (parent, prefix, gated)
+        self.mounted: set[str] = set()  # apps and routers mounted with mount()
 
     def unread(self, module: Module, node: ast.AST, form: str, handler: str | None = None, method: str | None = None,
                path: str | None = None, gated: bool | None = None) -> None:
@@ -497,9 +584,11 @@ class Reader:
                     continue
                 parent_q, parent = self.owner(module, call.func.value, {})
                 if attr == "mount":
-                    child = ENT.get(expr_q(module, arg(call, 1, "app"), None, {}) or "")
+                    child_q = expr_q(module, arg(call, 1, "app"), None, {})
+                    child = ENT.get(child_q or "")
                     if child is not None and child.kind in ("app", "router"):
                         self.unread(module, call, "an app or router mounted with mount()")
+                        self.mounted.add(child_q)
                     continue
                 text = callee_text(call.func.value) or "?"
                 if parent is None:
@@ -529,7 +618,8 @@ class Reader:
         for parent_q, prefix, gated in sites:
             parent = ENT[parent_q]
             if parent.kind == "app":
-                out.append((prefix, gated or depends_on_gate(parent.module, keyword(parent.node, "dependencies"))))
+                outer = gated or depends_on_gate(parent.module, keyword(parent.node, "dependencies"))
+                out.append((None if parent_q in self.mounted else prefix, outer))
                 continue
             info = router_info(parent)
             for before, outer in self.mounts_of(parent_q, seen | {q}):
@@ -538,7 +628,8 @@ class Reader:
         return out
 
     def route(self, module: Module, site: ast.AST, owner_node: ast.AST, owner_local: dict[str, str], methods: list[str] | None,
-              path_node: ast.AST | None, deps: ast.AST | None, handler: str, handler_gated: bool, form: str) -> None:
+              path_node: ast.AST | None, deps: ast.AST | None, handler: str, handler_gated: bool, form: str,
+              subscripted: bool = False) -> None:
         owner_q, owner = self.owner(module, owner_node, owner_local)
         path = eval_str(module, path_node, owner_local)
         deps_gated = depends_on_gate(module, deps, owner_local)
@@ -555,6 +646,9 @@ class Reader:
             return
         if deps is not None and not deps_gated and not isinstance(deps, (ast.List, ast.Tuple)):
             self.unread(module, site, f"{form} with dependencies= it can't read", handler, ",".join(methods), path, gated)
+            return
+        if owner_q in self.mounted:
+            self.unread(module, site, f"{form} on an app or router mounted with mount()", handler, ",".join(methods), path, gated)
             return
         if owner.kind == "app":
             places = [("", depends_on_gate(owner.module, keyword(owner.node, "dependencies")))]
@@ -574,6 +668,9 @@ class Reader:
             if gated or outer:
                 for method in methods:
                     self.routes.append({"method": method, "path": before + own_prefix + path, "handler": handler})
+            elif subscripted:
+                self.unread(module, site, f"{form} whose handler reads a gate by subscript", handler, ",".join(methods),
+                            before + own_prefix + path, False)
 
     def methods_of(self, module: Module, node: ast.AST | None, default: str) -> list[str] | None:
         if node is None:
@@ -592,6 +689,7 @@ class Reader:
             cls = classes.get(id(fn))
             handler = f"{module.label}.{fn.name}"
             handler_gated: bool | None = None
+            subscripted = False
             for decorator in fn.decorator_list:
                 call = decorator if isinstance(decorator, ast.Call) else None
                 func = call.func if call else decorator
@@ -600,6 +698,7 @@ class Reader:
                 attr = func.attr
                 if handler_gated is None and (attr in ROUTE_ATTRS or attr in NOT_ROUTES):
                     handler_gated = reaches(module, fn, cls)
+                    subscripted = reaches_subscript(module, fn, cls)
                 if attr in NOT_ROUTES:
                     _, owner = self.owner(module, func.value, {})
                     if owner is not None and attr == "middleware" and handler_gated:
@@ -620,7 +719,7 @@ class Reader:
                 else:
                     methods = self.methods_of(module, keyword(call, "methods"), "GET")
                 self.route(module, decorator, func.value, {}, methods, arg(call, 0, "path"), keyword(call, "dependencies"),
-                           handler, bool(handler_gated), f"@{callee_text(func) or '?'}")
+                           handler, bool(handler_gated), f"@{callee_text(func) or '?'}", subscripted)
 
     def read_calls(self, module: Module) -> None:
         for call in walk(module.tree):
@@ -631,40 +730,42 @@ class Reader:
             if isinstance(func, ast.Attribute) and func.attr in ADD_ROUTE:
                 form = callee_text(func) or func.attr
                 endpoint = arg(call, 1, "endpoint")
-                handler, gated = self.endpoint(module, endpoint)
+                handler, gated, subscripted = self.endpoint(module, endpoint)
                 if handler is None:
                     self.unread(module, call, f"{form} with an endpoint it can't find", None, None, eval_str(module, arg(call, 0, "path")))
                     continue
                 methods = self.methods_of(module, keyword(call, "methods"), ADD_ROUTE[func.attr])
-                self.route(module, call, func.value, {}, methods, arg(call, 0, "path"), keyword(call, "dependencies"), handler, gated, form)
+                self.route(module, call, func.value, {}, methods, arg(call, 0, "path"), keyword(call, "dependencies"), handler, gated, form,
+                           subscripted)
             # app.post("/x")(endpoint): a route decorator used as a call
             elif isinstance(func, ast.Call) and isinstance(func.func, ast.Attribute) and func.func.attr in ROUTE_ATTRS and call.args:
                 _, owner = self.owner(module, func.func.value, {})
                 if owner is None:
                     continue
-                handler, gated = self.endpoint(module, call.args[0])
+                handler, gated, subscripted = self.endpoint(module, call.args[0])
                 if handler is None:
                     self.unread(module, call, f"{callee_text(func.func)}(...)(...) with an endpoint it can't find")
                     continue
                 attr = func.func.attr
                 methods = [attr.upper()] if attr in VERBS else ["WS"] if attr in SOCKETS else self.methods_of(module, keyword(func, "methods"), "GET")
                 self.route(module, call, func.func.value, {}, methods, arg(func, 0, "path"), keyword(func, "dependencies"), handler, gated,
-                           f"{callee_text(func.func)}(...)(...)")
+                           f"{callee_text(func.func)}(...)(...)", subscripted)
             # app.add_middleware(SomeMiddleware): its dispatch or __call__ reaching a gate
             elif isinstance(func, ast.Attribute) and func.attr == "add_middleware" and call.args:
                 target = expr_q(module, call.args[0], None, {})
                 if target and any(f"{target}.{name}" in GATED for name in ("dispatch", "__call__", "__init__")):
                     self.unread(module, call, "a middleware that reaches a gate", target.split(".")[-1], None, None, True)
 
-    def endpoint(self, module: Module, node: ast.AST | None) -> tuple[str | None, bool]:
+    def endpoint(self, module: Module, node: ast.AST | None) -> tuple[str | None, bool, bool]:
+        """(handler, gated, reads a gate by subscript)"""
         if isinstance(node, ast.Lambda):
-            return f"{module.label}.<lambda>", reaches(module, node, None)
+            return f"{module.label}.<lambda>", reaches(module, node, None), reaches_subscript(module, node, None)
         q = expr_q(module, node, None, {})
         entity = ENT.get(q or "")
         if entity is None or entity.kind != "def" or entity.module is None:
-            return None, False
+            return None, False, False
         name = getattr(entity.node, "name", (q or "").split(".")[-1])
-        return f"{entity.module.label}.{name}", q in GATED or is_gate(q)
+        return f"{entity.module.label}.{name}", q in GATED or is_gate(q), q in SUBSCRIPTED
 
 
 def main(argv: list[str]) -> None:

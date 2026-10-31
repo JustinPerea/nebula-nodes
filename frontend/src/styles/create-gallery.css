@@ -701,6 +701,9 @@ body.app-slava-restraint .lightbox {
   align-items: center;
   justify-content: center;
   padding: 40px;
+  /* Above the notice band (hooks/useNoticeClearance), with room for the counter under the media. */
+  --lightbox-pad-bottom: max(40px, calc(var(--notice-clearance, 0px) + 36px));
+  padding-bottom: var(--lightbox-pad-bottom);
   background: rgba(0, 0, 0, 0.82);
   backdrop-filter: blur(8px);
   animation: lightbox-fade 140ms ease-out;
@@ -716,12 +719,12 @@ body.app-slava-restraint .lightbox__stage {
   align-items: center;
   justify-content: center;
   max-width: 92vw;
-  max-height: 92vh;
+  max-height: min(92vh, calc(100vh - 40px - var(--lightbox-pad-bottom, 40px)));
 }
 
 body.app-slava-restraint .lightbox__media {
   max-width: 92vw;
-  max-height: 92vh;
+  max-height: min(92vh, calc(100vh - 40px - var(--lightbox-pad-bottom, 40px)));
   width: auto;
   height: auto;
   object-fit: contain;
@@ -769,7 +772,7 @@ body.app-slava-restraint .lightbox__nav--next { right: 20px; }
 
 body.app-slava-restraint .lightbox__counter {
   position: absolute;
-  bottom: 22px;
+  bottom: max(22px, calc(var(--notice-clearance, 0px) + 4px));
   left: 50%;
   transform: translateX(-50%);
   color: rgba(255, 255, 255, 0.8);

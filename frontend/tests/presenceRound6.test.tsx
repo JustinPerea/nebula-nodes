@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
  * PR #204 round 6 (GM r6, r7; review 4):
@@ -99,6 +99,8 @@ const look = (button: HTMLElement) => ({
   locked: button.getAttribute('aria-disabled'),
   pending: button.hasAttribute('data-held-pending'),
   title: button.getAttribute('title'),
+  // GM r10 (1), round 8: the reason is a line under the buttons, which point at it.
+  line: ((id) => (id ? document.getElementById(id)?.textContent ?? 'missing' : null))(button.getAttribute('aria-describedby')),
 });
 
 beforeEach(() => {
@@ -188,7 +190,7 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
     expect(document.activeElement).toBe(field);
     expect(field.selectionStart).toBe(4);
     for (const button of Object.values(buttons())) {
-      expect(look(button)).toEqual({ locked: 'true', pending: false, title: ANSWER_LOCK });
+      expect(look(button)).toEqual({ locked: 'true', pending: false, title: null, line: ANSWER_LOCK });
       expect(button).toBeEnabled(); // still focusable, where it was
     }
     fireEvent.click(buttons().send);
@@ -218,7 +220,7 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
     const after = buttons();
     expect(after.send).toBe(before.send);
     expect(after.dismiss).toBe(before.dismiss);
-    for (const button of Object.values(after)) expect(look(button)).toEqual({ locked: null, pending: false, title: null });
+    for (const button of Object.values(after)) expect(look(button)).toEqual({ locked: null, pending: false, title: null, line: null });
     expect(field.value).toBe('Wide, please');
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -228,9 +230,9 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
     act(() => { session.resetPersonSessionForTests({ unanswered: true }); });
     act(() => { useAgentQuestionsStore.getState().opened(SET as never, 'k_q'); });
     render(<AgentQuestionsForm setId="qs_2" onClose={() => {}} />);
-    expect(look(buttons().dismiss)).toEqual({ locked: 'true', pending: true, title: null });
+    expect(look(buttons().dismiss)).toEqual({ locked: 'true', pending: true, title: null, line: null });
     act(() => { vi.advanceTimersByTime(HELD_LOOK_DELAY_MS + 10); });
-    expect(look(buttons().dismiss)).toEqual({ locked: 'true', pending: false, title: ANSWER_LOCK });
+    expect(look(buttons().dismiss)).toEqual({ locked: 'true', pending: false, title: null, line: ANSWER_LOCK });
   });
 });
 
@@ -253,5 +255,30 @@ describe('review 4 NIT-3: the header\'s changes are read out politely', () => {
     await waitFor(() => expect(count.textContent).toBe('3 · all read'));
     watch.disconnect();
     expect([...new Set(seen)]).toEqual(['3 · all read']);
+  });
+});
+
+describe('round 8, review 6 LOW-6 (M20): an old Accept and Reject, now one Review, greys as Expired', () => {
+  const OLD = update('u_old', CURSOR, 'proposal', { proposal: { id: 'p_old', kind: 'canvas', targetId: 'p1', since: T + 3_000 },
+    actions: [{ label: 'Accept', op: { kind: 'proposal.accept', proposalId: 'p_old' } },
+      { label: 'Reject', op: { kind: 'proposal.reject', proposalId: 'p_old' } }] });
+  const entry = (list: HTMLElement) => within(list).getAllByRole('listitem')
+    .find((item) => item.textContent?.includes('Review') || item.textContent?.includes('Expired'))!;
+
+  it('its proposal no longer waiting: "Expired", and no Review to press', () => {
+    render(<AppAgentNotes />);
+    sync([OLD]);
+    const item = entry(openList());
+    expect(item.textContent).toContain('Expired');
+    expect(within(item).queryByRole('button', { name: 'Review' })).toBeNull();
+  });
+
+  it('its proposal still waiting: one Review, not Expired', () => {
+    act(() => { useCanvasProposalsStore.setState({ proposals: { p_old: { view: { id: 'p_old', status: 'closed', projectId: 'other' }, acceptKey: 'k', values: {} } } } as never); });
+    render(<AppAgentNotes />);
+    sync([OLD]);
+    const item = entry(openList());
+    expect(item.textContent).not.toContain('Expired');
+    expect(within(item).getAllByRole('button', { name: 'Review' })).toHaveLength(1);
   });
 });

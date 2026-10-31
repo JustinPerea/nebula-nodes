@@ -191,9 +191,12 @@ describe('review 5 MEDIUM-2, GM r9 (1): the permission card and the held state',
     act(() => reportPersonRequired());
     const allow = within(card).getByRole('button', { name: 'Allow once' });
     const deny = within(card).getByRole('button', { name: 'Deny' });
+    // GM r10 (1), round 8: the line is on the card under the buttons; they point at it.
+    const line = within(card).getByText(HELD_LINE);
     for (const button of [allow, deny]) {
       expect(button).toHaveAttribute('aria-disabled', 'true');
-      expect(button).toHaveAttribute('title', HELD_LINE);
+      expect(button).not.toHaveAttribute('title');
+      expect(button).toHaveAttribute('aria-describedby', line.id);
     }
     fireEvent.click(allow);
     fireEvent.click(deny);

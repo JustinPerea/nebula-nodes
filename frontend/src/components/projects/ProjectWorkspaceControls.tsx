@@ -7,7 +7,7 @@ import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { isBackendOffline, refuseEditWhileOffline } from '../../lib/backendConnection';
-import { settleDelay } from '../../lib/saveSettle';
+import { useSettleDelay } from '../../lib/saveSettle';
 import './ProjectWorkspaceControls.css';
 
 /** `onHome`: the screen's own way to Projects (the Commons asks first); `homeBusy`: it waits on a save. */
@@ -22,7 +22,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const nodeCount = useGraphStore((state) => state.nodes.length);
   const scenesUnsaved = useGraphStore((state) => Object.keys(state.unsavedScenes).length > 0);
   const settled = status === 'saved' && !scenesUnsaved;
-  const settledDelay = settleDelay(settled);
+  const settledDelay = useSettleDelay(settled);
   // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
   // banner says it); a retry couldn't reach Nebula anyway.
   const offline = useBackendOffline();

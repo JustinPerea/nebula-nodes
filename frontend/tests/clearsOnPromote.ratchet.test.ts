@@ -264,6 +264,16 @@ const NO_FRONTEND: Record<string, string> = {
   'PUT /api/presets/{preset_id}': 'no tab edits a style in place: Create saves a new one (POST) or deletes it',
 };
 
+/**
+ * Round 8 (review 6 gates LOW-5): a socket whose person-only refusals come back as frames
+ * (`{ code: "person_required", ref }`), not as answers to a request, so no catch or `!res.ok`
+ * branch is there to trace. Its sender reads the code where the frame arrives, and these tests
+ * pin what it does with it (the refused answer goes back, the line clears by its own ref).
+ */
+const SOCKETS: Record<string, { file: string; tests: string[] }> = {
+  'WS /ws/chat': { file: 'components/panels/ChatPanel.tsx', tests: ['presenceRound7.chat.test.tsx'] },
+};
+
 type Caller = string[] | { none: string };
 
 /** Round 5: each function that sends a gated route but doesn't keep its line with the mechanism
@@ -378,11 +388,20 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     for (const route of routes) {
       const key = `${route.method} ${route.path}`;
       const byPath = callersOf(route).size;
-      if (key in NO_FRONTEND) { if (byPath > 0 || key in COMPOSED) wrong.push(`${key}: listed as agent-only, but sent from the frontend`); }
+      if (key in SOCKETS) {
+        const { file, tests } = SOCKETS[key];
+        const sender = readFileSync(join(SRC, file), 'utf8');
+        if (!sender.includes(`'${route.path}'`)) wrong.push(`${key}: ${file} doesn't open it`);
+        if (!/\.code === PERSON_REQUIRED_CODE/.test(sender)) wrong.push(`${key}: ${file} doesn't read the refusal's code`);
+        for (const test of tests) {
+          if (!readFileSync(join(__dirname, test), 'utf8').includes('person_required')) wrong.push(`${key}: ${test} doesn't pin the refusal`);
+        }
+      }
+      else if (key in NO_FRONTEND) { if (byPath > 0 || key in COMPOSED) wrong.push(`${key}: listed as agent-only, but sent from the frontend`); }
       else if (key in COMPOSED) { if (byPath > 0) wrong.push(`${key}: composed, but found by its path`); }
       else if (byPath === 0) wrong.push(`${key}: no frontend caller found, and not listed`);
     }
-    for (const key of [...Object.keys(COMPOSED), ...Object.keys(NO_FRONTEND)]) if (!keys.includes(key)) wrong.push(`${key}: listed, but not gated`);
+    for (const key of [...Object.keys(COMPOSED), ...Object.keys(NO_FRONTEND), ...Object.keys(SOCKETS)]) if (!keys.includes(key)) wrong.push(`${key}: listed, but not gated`);
     expect(wrong).toEqual([]);
   });
 

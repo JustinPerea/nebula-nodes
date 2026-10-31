@@ -180,6 +180,20 @@ describe('Create lifecycle across view visits', () => {
     expect(mocks.store!.getState().messageNotice).toBeNull();
   });
 
+  it('GM r10 (3): the cluster refused only for this tab says GM\'s line, nodes not added', async () => {
+    mocks.author.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'person_required' }));
+    const view = render(<CreateView />);
+    fireEvent.click(view.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.'));
+  });
+
+  it('GM r10 (3): a start refused after the cluster was added doesn\'t say its nodes weren\'t added', async () => {
+    mocks.execute.mockImplementationOnce(() => { throw Object.assign(new Error('refused'), { code: 'person_required' }); });
+    const view = render(<CreateView />);
+    fireEvent.click(view.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula couldn’t start the generation. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.'));
+  });
+
   it('a new Generate takes back only its own line (another screen\'s notice stays)', async () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);

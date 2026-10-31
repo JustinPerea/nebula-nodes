@@ -28,7 +28,7 @@ import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
-import { FailureNotice, failureMessage, notConnectedBecause } from '../../lib/errorCopy';
+import { FailureNotice, failureMessage, generateRefusedCopy, notConnectedBecause } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
 import { isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 import { currentProject } from '../../lib/currentProject';
@@ -305,6 +305,7 @@ export function CreateView() {
     if (!store.reserveCreateGeneration(genId)) return;
     const ts = Date.now();
     const layoutY = Math.max(80, ...store.nodes.filter((node) => node.data._createOrigin).map((node) => node.position.y + 320));
+    let clusterAdded = false;
     try {
       const { modelNodeIds, allNodeIds } = await store.authorGenerationCluster({
         definitionId: currentModel.id,
@@ -321,6 +322,7 @@ export function CreateView() {
       if (modelNodeIds.length === 0 || allNodeIds.length === 0) {
         throw new FailureNotice(GENERATE_HEADING, "Its nodes weren't added to the canvas. Try again.");
       }
+      clusterAdded = true;
       // The shared execution store consumes the reservation atomically when it
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
@@ -331,7 +333,8 @@ export function CreateView() {
         // GM r8 (3), #204 r7: in the app's notice region, never the toolbar row. A cluster or
         // start refused only for this tab goes on the promote (notify registers it by the
         // refusal's own stamp: review 3 MEDIUM-1, #204 r5).
-        runLine(failureMessage(error, GENERATE_HEADING), error);
+        // GM r10 (3): refused only for this tab, GM's own line (Generate is one-shot).
+        runLine(isPersonRefusal(error) ? generateRefusedCopy(clusterAdded) : failureMessage(error, GENERATE_HEADING), error);
       }
     } finally {
       store.releaseCreateGeneration(genId);

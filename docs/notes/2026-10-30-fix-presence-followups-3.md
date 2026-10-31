@@ -711,12 +711,14 @@ The first full backend run on the merged tree failed 9 tests.
   menus and listboxes opened from it. The grep found no other refusal sentence in a toolbar
   row. Creator Studio's `styleNote` (a Style's applied/changed note) stays in the row: it is
   an info line, not a refusal or error.
-- **The 41 px narrowing (GM r8 4).** A demote and a promote remount the header, and "Saved"
-  replayed its fold (`--settled`'s animation, 41 px of label) from the start. `settleDelay`
+- **The 41 px narrowing (GM r8 4).** A header mounted long after the save replayed "Saved"'s
+  fold (`--settled`'s animation, 41 px of label) from the start. `settleDelay`
   (lib/saveSettle.ts) keeps when "Saved" settled across remounts and starts the animation
   that far in (a negative delay), so a header that comes back long after the save shows it
-  folded. The width is pinned across a demote and a promote in `presenceRound7.header.test.tsx`
-  and measured live.
+  folded. (Corrected in round 8, review 6 LOW-2: the cause written here first, "a demote and a
+  promote remount the header", didn't hold; they re-render it in place. What mounts a new
+  header is entering Creator Studio, which is where the narrowing was seen. The round 7 test
+  pinned the delay string, not a width; round 8 says what it pins.)
 - **GM r9 1, the permission card.** Allow once and Deny read the one held state and lock in
   place (aria-disabled, focusable, "You can answer this when this tab is connected as you.",
   the 150 ms rule); a press while held sends nothing, and the panel's handler refuses too.
@@ -780,6 +782,9 @@ The first full backend run on the merged tree failed 9 tests.
   `invalidated`). NIT-1: close_session carries its own ref too, and the send-time stamp is
   pinned. NIT-2: the replay's check (`retryBaseUrl !== baseUrl`) and its own stamp are pinned.
   NIT-3: the round 6 note is corrected above, and the cluster path consumes its kept states.
+  (Corrected in round 8, review 6 gates LOW-2: NIT-2 wasn't pinned by anything committed. The
+  test that killed its mutant was in a file never added; round 8 commits it in
+  `tests/lib/backend.round6.test.ts`.)
 - **Found in this round.** The trace read a marker in a node's leading trivia, so a marker
   ending the line before a function or a branch counted for it. It now reads a node's own
   text and the comment ending its last line (`ownText`); probe P12 pins it.
@@ -797,7 +802,9 @@ The first full backend run on the merged tree failed 9 tests.
     7 new backend tests, 2 fail there (the ref echo); the other 5 check what is left out.
   - Mutants: 50 of 51 frontend mutants are caught, and 3 of 3 backend ones. The one left is
     the chat panel's own unconfirmed check alone: the card's lock already stops every press,
-    so it can't be reached; with both removed, the tests fail. The first pass left five
+    so it can't be reached; with both removed, the tests fail. (Corrected in round 8: the
+    card's own guard alone survived too, review 6 M3; each of the pair covered the other.
+    Round 8 renders the card alone and kills it.) The first pass left five
     alive (close_session's ref, a scene retry for another refusal, the switch verb, the
     cluster's kept states, and two trace forwarder rules); each now has a test that kills
     it. Writing the forwarder probe found the leading-trivia leak above.
@@ -807,11 +814,18 @@ The first full backend run on the merged tree failed 9 tests.
     Four files were real: tests that still expected the old lines or lacked `notify` in a
     mock, and the new lib file missing from the ratchet's list. They are fixed. The 25 files
     rerun alone: 430 of 451 passed, the rest timeouts; those 18 files run one at a time: 335
-    of 335 passed.
+    of 335 passed. (Corrected in round 8, review 6 gates LOW-3: CI on e8e64f8c then failed on
+    one unhandled error, a store mock in `CreateView.reuse.test.tsx` without `notify`; this
+    count didn't report unhandled errors. c8876ef9 fixed the mock and asserts the line, and CI
+    is green on it. From round 8 on, vitest's Errors count is a gate and must be 0.)
   - build: 451,185 B raw, within budget. Backend: 12,354 passed in a full isolated run.
   - Live on 8795/5795: 21 of 21, 12 distinct shots (md5 checked). Staged, and flagged: the
-    isolated backend takes this tab's Save style and run starts (no gate on them), so their
-    refusals are answered in the page with the gate's 403; the demotes and promotes in the
+    refusals of this tab's Save style and run starts are answered in the page with the gate's
+    403. (Corrected in round 8, review 6 gates LOW-1: the backend here is configured as in real
+    use, with the person token set. Save style, a cluster and a run start from a caller that
+    isn't the person are refused only when they change who bills, carry a run approval or
+    break a spending limit; otherwise they go through, as for any agent. The because line
+    shows only for a Style that changes who bills. The shots show those refusals, staged); the demotes and promotes in the
     person's tab are the frontend's own `reportPersonRequired`/`notePersonPromoted`; the
     permission ask is delivered on the tab's own chat socket (no ACP agent here), and the
     chat turn before it stays in the page. In an early harness run, before the run starts
@@ -819,6 +833,186 @@ The first full backend run on the merged tree failed 9 tests.
     key (no keys there, nothing paid); a Style was saved to that scratch state once. Nothing
     was accepted, rejected, answered or dismissed.
   - Placement, measured: Styles ends at y 648 and the notice band starts at 656 in Creator
-    Studio (composer top 711); notices sit 774-820 on Canvas and Commons (bar clearance 72),
+    Studio (composer top 711); notices sit 774-820 on Canvas and "Commons" (bar clearance 72;
+    corrected in round 8: that shot showed the canvas, since the Commons was off in that
+    backend; round 8 turns it on and shoots it open),
     656-702 in Creator Studio (190), and 830-876 on Moodboard, Cinema and Projects (no bar).
   - The header's left group stayed 180 px through the demote and the promote.
+
+## Round 8 (review 6 on e8e64f8c; GM r10, r11; base c8876ef9)
+
+- **CI on round 7.** e8e64f8c failed CI on one unhandled error: `CreateView.reuse.test.tsx`
+  mocked the graph store without `notify`. c8876ef9 forwards it and asserts the line, and CI
+  is green there. vitest's Errors count is a gate from this round on.
+- **GM r11, the rule for the one notice, in the code (lib/notConnectedLine).** The general notice
+  steps out only beside a line that carries the fix itself. A line on the page is one of three
+  kinds: `fix` (a "because" line, or the general words "…Open the link Nebula printed when it
+  started…"), `defers` (the desktop app's dev setups, ending "The notice below says why."), or
+  `lock` ("You can … when this tab is connected as you."). Only `fix` takes the notice's place.
+  This settles review 6 MEDIUM-2 (the dev setups keep the notice) and LOW-3 (the held proposal
+  card's line is a lock line, so both show). `DEFERS_TO_NOTICE` names the dev ending once in
+  errorCopy.
+- **Review 6 MEDIUM-1: only a rendered line counts.** The derived state still reads the page's
+  text, kept rather than registration on purpose: about fifty files render these lines, and a
+  site that forgot to register would leave the notice out, while one that forgot to unregister
+  would hide it everywhere. A line counts only while it's rendered: not under `hidden`,
+  `aria-hidden` or `inert`, and `checkVisibility` (CSS display, visibility and opacity) in the
+  browser, computed styles in jsdom. The observer now watches `class`, `style` and `inert`, and
+  an animation's or transition's end (a line that fades in starts at opacity 0). On the
+  Commons, Settings and Chat stay mounted in a `display: none`, inert group; their lines no
+  longer count, so the notice shows there. Tested with the app's own group, and checked live.
+- **Review 6 NIT-2.** No walk of every text node per style change: while subscribed, a text
+  change finds the lines again (after a quick check that the page says "connected as you" at
+  all), and an attribute change only re-checks the lines already found. The answer is cached.
+- **Review 6 NIT-3.** The banner keeps one polite live region mounted, empty until there is
+  something to say. It says the notice's words when the notice comes, the line that took its
+  place when that line isn't a live region itself, and the words again when the notice comes
+  back: one change per swap, with no empty step between. The visible notice is no longer a
+  second live region.
+- **GM r10 1, the held cards.** The permission card shows "You can answer this when this tab is
+  connected as you." on its own row under Allow once and Deny; the buttons have no tooltip and
+  point at the line (`aria-describedby`); the countdown stays. The question form does the same
+  under Dismiss and Send. The general notice stays beside both (lock lines, GM r11).
+- **GM r10 5, Dismiss.** Both buttons are locked on a held tab and both take the app's shared
+  locked look (`agent-notes-btn--held`, in disabled-buttons.css's ghost list; Send also in the
+  filled list). A test pins both. Measured live: Dismiss's label goes from white at 0.92 to
+  0.55 and its edge from 0.12 to 0.06; Send's fill goes from 0.92 to 0.42 and its label to
+  near-black at 0.62. Dismiss takes the app's ghost-disabled look, the one every ghost button
+  uses; if GM finds it still reads live, that is a question about the shared look, not this
+  form, so it isn't changed here.
+- **GM r10 2, the tool kind.** One table (lib/acpToolKind) maps every ACP ToolKind
+  (agentclientprotocol.com, "Tool calls") to the card's tag: read → read, edit → edit, delete →
+  delete, move → move, search → search, execute → run, think → think, fetch → fetch,
+  switch_mode → switch mode, other → no tag. A kind ACP adds later gets no tag, never a raw
+  protocol word. Person-side only: agents send ACP's kinds and never see the tag.
+- **GM r10 3, Generate's line.** Generate is one-shot (review 6 confirmed: no retryOnPromote), so
+  refused only for this tab it says GM's line: "Nebula couldn’t start the generation. Its nodes
+  weren’t added to the canvas. This change needs your OK, and this tab isn’t connected as you.
+  Open the link Nebula printed when it started, then try again." (`generateRefusedCopy`; the
+  desktop app's forms follow personRequiredCopy). When the cluster was added and the start was
+  refused, the nodes are on the canvas, so that sentence is left out. Generate's other lines
+  keep the round 3f heading ("Couldn't start the generation."), straight apostrophes
+  included: GM's change named the refusal; flagged for GM if it was meant for every line.
+- **GM r10 4.** Round 7's 06-placement-commons showed the canvas: the Commons was off in that
+  backend. This round turns it on (in scratch, `NEBULA_COMMONS_CALL_BUDGET=0`, no keys) and
+  shoots it open.
+- **Review 6 MEDIUM-3: the model picker.** A centred modal, it stopped over the notice band.
+  `useNoticeClearance` gives a modal's overlay `--notice-clearance`, the line Styles and every
+  floating panel stop at (floatingBottomLimit: above the bar and the band, shown or not), and
+  the picker centres above it with its height capped to fit. The Lightbox (its media and the
+  counter) and the comparison do the same. Measured live for the picker; the Lightbox and the
+  comparison are covered by tests (no results exist in a keyless live state).
+- **Review 6 LOW-1.** "Saved"'s delay is taken once per settle (`useSettleDelay`, memoised on
+  `settled`), not on every render, so a re-render during the 2.6 s fold leaves it running.
+- **Review 6 LOW-2.** The cause in the round 7 notes is corrected above. The header test now
+  says it pins the fold resuming on a remount (a screen change), and a new test pins that a
+  demote and a promote leave the group's elements and markup unchanged. Measured live: the left group stays at
+  180 px entering Creator Studio long after the save, on a second entry, and through a demote
+  and a promote. In one earlier harness run the person's tab saved the project as it entered
+  Creator Studio, and the group went 282, 234, 221, then 180 px: a fresh save's own "Saved"
+  and fold, not a replay (that run didn't log the labels, so this is read from the save
+  request and the widths).
+- **Review 6 LOW-4: the toolbar ratchet.** It reads a component rendered in a row as the row
+  (found by name in the app, through `memo` aliases), and fails closed on one it can't find
+  (a package's component is fine: it renders only what the row passes it, which is read). It
+  reads JSX passed as an attribute and a self-closing row's attributes; treats
+  `notConnectedBecause`, `personRequiredCopy`, `markReadRefusedCopy`, `failureMessage`,
+  `failureCopy`, `failureUnder` and `generateRefusedCopy` calls as sentences; follows a neutral
+  name to its value (a local, a state's setter calls, the prop every use of its component
+  passes; a prop with no use fails closed), reading only the value's path, not a condition or
+  a key; and reads `aria-live="assertive"` and a role from an expression. The reviewer's six
+  forms are tests. The app's rows pass. Its timeout is 120 s (NIT-1).
+- **Review 6 held LOW-5 and gates LOW-4: markers.** The trace reads markers only from `//`
+  comments the scanner reports (leading and trailing comment ranges of the node's tokens),
+  never the node's text: a marker's words in a string, a template, a block comment, a JSX
+  comment or JSX text aren't one. A path made by a helper call (`apiFetch(presetsPath(), …)`)
+  is the transport's call, so its `!res.ok` branch is what's read. The reviewers' probes are
+  tests (Q1-Q15, R1-R12, and J1 for JSX text).
+- **Review 6 gates NIT-1: specific probes.** Every probe is pinned to its exact outcome (which
+  function the line drops at, how many paths are untraced), in presenceRound8.trace. Pinning
+  them showed two round 7 fixes had never run: a store action destructured from `getState()`
+  wasn't followed (the store's file was only reached through a property), and a store alias
+  two hops away wasn't either; both were passing by the fail-closed rule. Both are fixed. The
+  probe worlds are shared in tests/traceProbes.ts.
+- **Review 6 gates LOW-5: `/ws/chat` in the gated list.** Route discovery counts a literal
+  `"person_required"` refusal code (outside person_gate.py), so `WS /ws/chat` is in the snapshot
+  (67 routes). The trace's ratchet lists it as a socket: its refusals come back as frames, not
+  answers to a request, so the check is that ChatPanel opens it, reads the code, and that
+  presenceRound7.chat pins what it does. A gate read by subscript is listed as unreadable.
+- **Review 6 gates NIT-2.** `except PersonGateError` and `isinstance` aren't gates; only building
+  or raising one is. A mounted sub-app's routes are listed as unreadable, with probes.
+- **Review 6 gates NIT-4.** CI's frontend job sets up Python 3.12 (the backend job's pinned
+  action) before the tests that run the scanner.
+- **Review 6 gates LOW-2.** Review 5 NIT-2 is pinned in a committed test now
+  (`tests/lib/backend.round6.test.ts`): a promote between the lost first try and the replay
+  leaves the replay's refusal stamped after it, so it holds; and discovery that finds the same
+  backend sends nothing again, in the catch path and the proxy-503 path. The round 7 note is
+  corrected above.
+- **Review 6 LOW-6.** M3 (the card's own guard) is killed by rendering the card alone. M18
+  (Generate's line without its error) is killed by a refusal sent before the promote and
+  answered after it: the line goes at once. M20 (a legacy Review never Expired) is killed by
+  both states of the proposal. M9 is caught (the reviewer's rerun, M9b, and this round's run).
+- **Review 6 gates LOW-1, NIT-3.** The round 7 notes and the PR body now say what the backend
+  does in real use (above). The PR body's read-boundary item: a Commons asset proposal's
+  journal entries leave the note out, and `proposalClosed` is a `/ws` message every listener
+  gets, not a journal entry.
+- **MCP, CLI and docs.** No agent-visible behaviour changed this round: the tool-kind tag is the
+  tab's, the notice rule and the placement are the tab's, and `/ws/chat` joins the gated list
+  of the tests, not the server. MCP-SETUP already says Save style, cluster and run starts are
+  refused for a caller that isn't the person only for a billing change, a run approval or a
+  spending limit ("Who bills is the person's call", the billing-change list, and "Everything
+  else, including running nodes, is open to agents and held to the spending limits"); it is
+  unchanged. Still with Justin, not built: the proposal read boundary, and whether runs started
+  by anything that isn't the person should have a default daily dollar total.
+- **Live on 8795/5795** (isolated backend, every root in scratch, no keys, the Commons on with a
+  call budget of 0; 8000-8010 and 5173 blocked, canary refused): 26 of 27 in the full run, and
+  the one miss was the harness cutting the notice's text at 140 characters; Generate's section
+  run again with the whole text: 7 of 7, GM's line exactly. 7 shots, no two alike.
+  - Settings on a tab that isn't connected: two because lines ("load the connected apps", "load
+    your agents") show, the general notice steps out, and since both lines are alerts, the
+    notice's live region says nothing for them. On the Commons with Settings left open, the
+    group is `workspace-overlays--hidden` and inert, both lines are mounted and not on screen,
+    and the notice shows and is announced. The Commons screen with Settings left open and with
+    it closed is the same picture, pixel for pixel, so only the closed one is kept.
+  - 06-placement-commons is the Commons itself; the notice and a second toast sit at the
+    bottom. (The Commons' own "session expired" line shows: no Commons link in a scratch run.)
+  - The model picker ends at y 592 (CSS px, 1440x900) and the band starts at 648; the refused
+    Save's because line sits at 654-702, under it.
+  - The permission card's line sits at 445, under the buttons' row (439); the tag reads "run";
+    the countdown runs. The question form's line sits under Dismiss and Send; both locked.
+  - Staged, not real: the Generate refusal (the page answered the cluster POST with the gate's
+    403; its preflight went to the isolated backend), the demotes and promotes (the frontend's
+    own calls), the permission ask (over the tab's chat socket, no ACP agent), and the dev
+    setup's line (put on the page as Settings shows one). Nothing reached 8000-8010 or 5173
+    besides the canary; nothing was accepted, rejected, answered, dismissed, executed or run.
+  - Harness notes: the first runs failed to load (a cloned `node_modules` held a second copy
+    of itself, so the page had two Reacts); the copy was removed and the worktree's
+    `node_modules` is the shared link again.
+- **Tests on c8876ef9, with round 8's tests copied in.** The notice file fails 13 of 15 (the two
+  that pass pin what round 7 already did); the cards and placement files can't load (their
+  modules are new); the trace's exact outcomes fail 11 of 40; round 7's toolbar ratchet
+  misses the reviewer's six forms (7 probe tests fail); the routes: 14 of the new tests and
+  the snapshot; one each in the header (the structural test), the chat test, the socket ratchet,
+  two in the round 6 look test, two in CreateView.lifecycle, two in the banner test. The
+  Generate stamp test (M18), the legacy Review test (M20) and the three replay tests pass on
+  c8876ef9: they pin behaviour that existed and kill a mutant each.
+- **Mutations.** 60 frontend mutants (the notice rule and its visibility checks, the banner's
+  region, the cards, the tool kinds, Generate's line, the clearance, the save delay, every
+  toolbar and trace change, the replay, the socket entry) and 20 scanner mutants. The first
+  pass left four: the region's own copy counting as a line (a sequence test kills it now);
+  class and style not watched, and an attribute change not re-checking (the class/style test
+  toggled before the last swap's scan had run, so that scan did the work; it now waits for
+  the page to settle before each change); and `a && b` read as nothing in the toolbar ratchet
+  (a probe now). All 80 are caught.
+- **Gates.** tsc and lint are clean. vitest's full run had 8,913 tests in 705 files, beside
+  the backend suite and other lanes (load average 41 to 52): 8,657 passed, 256 failed in 87
+  files, 200 of them timeouts, and Errors 0. Three were real: the banner test still read the
+  notice as the live region (two tests), and the named-line ratchet didn't list
+  `generateRefusedCopy`; all three are fixed. Rerun on their own, the 87 files ran 1,425
+  tests: 1,240 passed and 185 failed, 127 of them timeouts; Errors 0. The 59 files with a
+  failure then ran one at a time on one worker: 56 passed in full, and 3 had one failure each
+  (two timeouts and a CommonsDetail wait), which passed when run again. Build: 453,007 B raw
+  (139,459 gzip), within budget. Backend: the first full isolated run hit its 100-minute
+  limit at about 80%; the second ran to the end, 12,352 passed and 2 failed, both event-loop
+  timing tests (an ACP open and an autosave), which passed on their own. No backend code
+  changed this round.

@@ -4,14 +4,15 @@ import { currentPersonBannerLine, onPersonRequired, personRequiredMessage, setPe
 import { clearsOnPromote } from '../lib/clearsOnPromote';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
-import { notConnectedLineShown, subscribeToLines } from '../lib/notConnectedLine';
+import { currentFixLine, subscribeToLines, type FixLine } from '../lib/notConnectedLine';
 
 const subscribeToNothing = () => () => {};
 
-/** notConnectedLineShown, kept current while `watching` (read again at most once a frame). */
-function useNotConnectedLineShown(watching: boolean): boolean {
+/** The rendered line that carries the fix itself (lib/notConnectedLine), kept current while
+ * `watching` (read again at most once a frame). */
+function useFixLine(watching: boolean): FixLine | null {
   return useSyncExternalStore(watching ? subscribeToLines : subscribeToNothing,
-    () => watching && notConnectedLineShown(), () => false);
+    () => (watching ? currentFixLine() : null), () => null);
 }
 
 export function PersonRequiredBanner() {
@@ -32,22 +33,33 @@ export function PersonRequiredBanner() {
     return () => { stopRequired(); stopSweep(); setPersonBannerLine(null); };
   }, []);
 
-  // GM r8 (1): while a specific line says it, the general notice steps out (and comes back when
-  // that line goes). The line stays set, so what defers to it (the note dialog) still does.
-  const specific = useNotConnectedLineShown(message !== null);
+  // GM r8 (1), r11: beside a line that carries the fix itself, the general notice steps out (and
+  // comes back when that line goes); beside a lock line or one that defers to it, it stays
+  // (lib/notConnectedLine). The line stays set, so what defers to it (the note dialog) still does.
+  const fixLine = useFixLine(message !== null);
+  const specific = fixLine !== null;
   // It leaves as it entered, a surface (fix round 7, GM r11 answer 2).
   const leave = useLeave(specific ? null : message);
-  if (!leave.shown) return null;
+  // Review 6 NIT-3: one polite live region, mounted while the app is, and empty until there is
+  // something to say. A notice that mounts with its text in place often goes unannounced, and a
+  // Settings row isn't a live region, so the swap is said here, once: the notice's words, or the
+  // line that took its place (unless that line already announces itself).
+  const announced = message === null ? '' : specific ? (fixLine.live ? '' : fixLine.text) : message;
 
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
-    <InNoticeRegion slot="person-required">
-      <div className="person-required" role="status" aria-live="polite" {...leave.props}>
-        <span>{leave.shown}</span>
-        <button type="button" className="person-required__dismiss" aria-label="Dismiss" onClick={() => setPersonBannerLine(null)}>
-          ×
-        </button>
-      </div>
-    </InNoticeRegion>
+    <>
+      <span className="person-required__announce" role="status" aria-live="polite">{announced}</span>
+      {leave.shown && (
+        <InNoticeRegion slot="person-required">
+          <div className="person-required" {...leave.props}>
+            <span>{leave.shown}</span>
+            <button type="button" className="person-required__dismiss" aria-label="Dismiss" onClick={() => setPersonBannerLine(null)}>
+              ×
+            </button>
+          </div>
+        </InNoticeRegion>
+      )}
+    </>
   );
 }

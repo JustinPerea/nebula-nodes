@@ -64,5 +64,6 @@
   {"method": "PUT", "path": "/api/settings", "handler": "main.update_settings"},
   {"method": "DELETE", "path": "/api/settings/api-keys/{provider}", "handler": "main.remove_settings_api_key"},
   {"method": "POST", "path": "/api/trash/empty", "handler": "main.empty_trash"},
-  {"method": "DELETE", "path": "/api/trash/{kind}/{item_id}", "handler": "main.purge_trashed"}
+  {"method": "DELETE", "path": "/api/trash/{kind}/{item_id}", "handler": "main.purge_trashed"},
+  {"method": "WS", "path": "/ws/chat", "handler": "main.chat_websocket"}
 ]

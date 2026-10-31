@@ -35,13 +35,16 @@ export function AgentQuestionsForm({
   const headingId = useId();
   // GM r7 (1): a form open when the tab stops being confirmed as the person (demoted, or held)
   // stays open with its draft and caret, and typing stays live; Send and Dismiss lock where
-  // they are (aria-disabled, still focusable, the reason as their tooltip, the 150 ms rule)
-  // and unlock in place on the promote. The store refuses them too (agentQuestionsStore).
+  // they are (aria-disabled, still focusable, the 150 ms rule) and unlock in place on the
+  // promote. The store refuses them too (agentQuestionsStore). GM r10 (1): the reason shows
+  // on its own row under the buttons, as on the permission card, and they point at it.
   const tabHeld = useTabHeld();
   const lockPending = useLockPending(tabHeld);
+  const lineId = useId();
+  const lockShown = tabHeld && !lockPending;
   const lockProps = tabHeld ? {
     'aria-disabled': true as const, 'data-held-pending': lockPending ? '' : undefined,
-    title: lockPending ? undefined : HELD_QUESTIONS_LINE,
+    'aria-describedby': lockShown ? lineId : undefined,
   } : {};
   const lockClass = tabHeld ? ' agent-notes-btn--held' : '';
 
@@ -165,6 +168,7 @@ export function AgentQuestionsForm({
         >
           Send
         </button>
+        {lockShown && <p id={lineId} className="agent-questions-form__held-line">{HELD_QUESTIONS_LINE}</p>}
       </div>
     </div>
   );

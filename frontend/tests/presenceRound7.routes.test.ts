@@ -39,8 +39,9 @@ describe('round 7: the real backend', () => {
     // personGateRoutes.snapshot.json is updated by hand (and the frontend callers are checked).
     const snapshot = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as GatedRoute[];
     const routes = gatedRoutes();
-    expect(routes.length).toBe(66);
-    expect(snapshot.length).toBe(66);
+    // 67 since round 8: WS /ws/chat, whose refusals send the "person_required" code (LOW-5).
+    expect(routes.length).toBe(67);
+    expect(snapshot.length).toBe(67);
     expect(sortKeys(routes)).toEqual(sortKeys(snapshot));
   });
 

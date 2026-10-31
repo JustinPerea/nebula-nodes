@@ -66,8 +66,10 @@ export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this win
 /** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
  * developer setups (a debug port, the dev renderer), where the banner already
  * gives the real fix. */
+/** The dev setups' ending: the line defers to the general notice for the fix (lib/notConnectedLine). */
+export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
-  + 'The notice below says why.';
+  + DEFERS_TO_NOTICE;
 
 /** Line 3 for where this page runs: `desktop` is personSession's
  * inDesktopShell() (the preload bridge), the flag the rest of the error copy
@@ -101,8 +103,20 @@ export const MARK_READ_REFUSED_DEV_COPY =
 export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
   if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
-  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? 'The notice below says why.' : 'Quit Nebula and open it again.';
+  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again.';
   return `Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`;
+}
+
+/**
+ * GM r10 (3), PR #204 round 8, verbatim for a tab: Generate refused only because this tab isn't
+ * the person's. Generate is one-shot (it never retries on the promote), so it keeps the r2
+ * general words (GM r6). "Its nodes weren’t added" only when the cluster itself was refused; a
+ * refused start after the cluster was added leaves that sentence out, since the nodes are there.
+ */
+export function generateRefusedCopy(clusterAdded: boolean, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  return `Nebula couldn’t start the generation. ${clusterAdded ? '' : 'Its nodes weren’t added to the canvas. '}`
+    + personRequiredCopy(desktop, reason);
 }
 
 export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
