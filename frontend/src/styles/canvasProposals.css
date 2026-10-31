@@ -382,10 +382,6 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   color: var(--sr-warning);
 }
 
-.proposal-bar__not-ready--more {
-  color: rgb(255 255 255 / 0.5);
-}
-
 .proposal-bar__summary {
   margin: 0;
   color: rgb(255 255 255 / 0.72);

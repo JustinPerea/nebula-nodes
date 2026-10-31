@@ -22,6 +22,7 @@ from __future__ import annotations
 import atexit
 import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Mapping
 import uuid
@@ -143,6 +144,27 @@ def empty_model_cache():
     model_cache.clear()
     yield
     model_cache.clear()
+
+
+def _forget_canvas_sockets() -> None:
+    manager = getattr(sys.modules.get("main"), "manager", None)
+    if manager is not None:
+        manager.active_connections.clear()
+        manager.browser_connections.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_canvas_sockets_between_tests():
+    """Each test starts and ends with no canvas or agent socket registered
+    (PR #203 round 13). main.manager lives for the process: a socket one test
+    left registered made `manager.canvas_open()` true for the next, so
+    test_cli_apply's arrange line said a canvas was open only in CI's part 1.
+    The /ws handler now unregisters however a socket ends; this keeps any
+    other leak from reaching another test. Reads main only once a test has
+    imported it."""
+    _forget_canvas_sockets()
+    yield
+    _forget_canvas_sockets()
 
 
 @pytest.fixture(autouse=True)

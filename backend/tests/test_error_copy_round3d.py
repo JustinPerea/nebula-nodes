@@ -505,7 +505,7 @@ async def test_krea_2_style_search_fields_the_account_cant_use() -> None:
 
     exc = await _araised(_account_style_search, _node("krea-style-search", {"user": "me", "liked": True,
                                                                              "filter": "user"}))
-    assert str(exc) == ("User, Liked only, Filter needs a Krea API token; the Krea account lists the styles "
+    assert str(exc) == ("User, Liked only, Filter needs a Krea API key; the Krea account lists the styles "
                         "available to you. Nothing was sent")
     assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API token” connection. "
                                 "The “Krea account” connection lists every style you can use. Nothing was sent to Krea.")
@@ -520,7 +520,7 @@ async def test_krea_3_training_settings_the_account_cant_use() -> None:
 
     node = _node("krea-style-train", {"max_train_steps": 100, "training_type": "Default"})
     exc = await _araised(_account_style_train, node, "mine", "flux_dev", ["https://e.com/a.png"], None)
-    assert str(exc) == ("Max steps, Type: Default needs a Krea API token; the Krea account trains with Krea's "
+    assert str(exc) == ("Max steps, Type: Default needs a Krea API key; the Krea account trains with Krea's "
                         "defaults. Nothing was sent")
     assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API token” connection. "
                                 "The “Krea account” connection trains with Krea's default settings. "
@@ -534,7 +534,7 @@ async def test_krea_4_the_api_token_only_renames_styles() -> None:
     node = _node("krea-library-manage", {"_kreaAuth": "api-token", "action": "delete-style", "item_id": "abc",
                                          "confirm_delete": "abc"})
     exc = await _araised(handle_krea_library_manage, node, {}, {"KREA_API_TOKEN": "fixture"})
-    assert str(exc) == ("Only renaming a style works with a Krea API token; use the Krea account for moodboards "
+    assert str(exc) == ("Only renaming a style works with a Krea API key; use the Krea account for moodboards "
                         "and deletes. Nothing was sent")
     assert person_line(exc) == ("The “API token” connection can only rename styles. To make moodboards or delete "
                                 "styles, switch to the “Krea account” connection. Nothing was sent to Krea.")
@@ -545,7 +545,7 @@ async def test_krea_5_job_history_on_the_account() -> None:
     from handlers.krea_workspace import handle_krea_job_history
 
     exc = await _araised(handle_krea_job_history, _node("krea-job-history", {"_kreaAuth": "mcp"}), {}, {})
-    assert str(exc) == ("Listing job history needs a Krea API token; the Krea account can fetch one job by ID. "
+    assert str(exc) == ("Listing job history needs a Krea API key; the Krea account can fetch one job by ID. "
                         "Nothing was sent")
     assert person_line(exc) == ("Job history needs the “API token” connection. The “Krea account” connection can "
                                 "look up one job by its ID. Nothing was sent to Krea.")

@@ -863,14 +863,24 @@ def key_billing_account(definition: Mapping[str, Any] | None, params: Mapping[st
     else its provider's PROVIDER_LABELS name. None for any other node.
     frontend directRoute.keyBillingAccount is the twin, from the same table
     (tests/fixtures/key_billing_cases.json pins both)."""
+    host = key_billing_host(definition, params, api_keys)
+    return None if host is None else PROVIDER_LABELS.get(host, host or "provider")
+
+
+def key_billing_host(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                     api_keys: Mapping[str, Any]) -> str | None:
+    """Where a key-billing run runs, as a provider id: "huggingface" for a
+    Space route, else its route's provider. The CLI tags a free run with it,
+    in the paid part's id style ("1 paid run (openai) and 1 free
+    (huggingface)"; GM, PR #203 r24 item 1), and key_billing_account names
+    it. None for any other node."""
     if key_billing(definition, params, api_keys) is None:
         return None
     route = select_route(definition or {}, params, api_keys)
     spec = route_by_id(definition or {}, route.route_id) if route.route_id else None
     if spec and spec.get("handler") == "hf-space":
-        return PROVIDER_LABELS["huggingface"]
-    provider = str(route.provider or "")
-    return PROVIDER_LABELS.get(provider, provider or "provider")
+        return "huggingface"
+    return str(route.provider or "")
 
 
 def key_billing_label(cost_class: str, account: str) -> str:

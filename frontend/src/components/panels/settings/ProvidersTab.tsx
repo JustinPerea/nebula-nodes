@@ -93,7 +93,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const openRow = useSettingsDraftStore((s) => s.openRow);
   const placedRef = useRef<Record<string, boolean>>({});
   // GM, PR #203 r21 item 4: a key set or removed elsewhere is said once,
-  // politely ("Replicate key saved."), when the read it asked for lands: the
+  // politely ("Replicate token saved."), when the read it asked for lands: the
   // first read to land after the latest signal (Settings drops every older
   // one), never a save of this tab's that lands first (review 11, copy
   // MEDIUM-1). This tab's own write's echo never reaches here
@@ -102,6 +102,26 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const announceAfter = useRef<number | null>(null);
   const reads = useSettingsDraftStore((s) => s.reads);
   const [announcement, setAnnouncement] = useState('');
+  // Lines not said yet, kept until they are (review 12, LOW-4): another
+  // read, or the person's own save, landing within the two frames below
+  // adds to them and never cancels them, and a window in the background
+  // (no frames run there) says every change once it is shown again.
+  const unsaid = useRef<string[]>([]);
+  const frame = useRef<number | null>(null);
+  const sayUnsaid = useCallback(() => {
+    if (frame.current !== null) return;
+    // Emptied first, so the same line said twice is read twice.
+    frame.current = requestAnimationFrame(() => {
+      setAnnouncement('');
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        const lines = unsaid.current;
+        unsaid.current = [];
+        if (lines.length) setAnnouncement(lines.join(' '));
+      });
+    });
+  }, []);
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
   useEffect(() => {
     if (announceAfter.current === null || reads <= announceAfter.current) return;
     announceAfter.current = null;
@@ -109,14 +129,9 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
     const lines = [...toAnnounce.current].map((key) => keyChangedLine(key, isKeySet(saved.apiKeys, key)));
     toAnnounce.current.clear();
     if (lines.length === 0) return;
-    // Emptied first, so the same line said twice is read twice.
-    let said = 0;
-    const emptied = requestAnimationFrame(() => {
-      setAnnouncement('');
-      said = requestAnimationFrame(() => setAnnouncement(lines.join(' ')));
-    });
-    return () => { cancelAnimationFrame(emptied); cancelAnimationFrame(said); };
-  }, [reads, saved.apiKeys]);
+    unsaid.current.push(...lines);
+    sayUnsaid();
+  }, [reads, saved.apiKeys, sayUnsaid]);
   const activeRows = useCallback((): Set<string> => {
     const active = new Set<string>();
     const open = useSettingsDraftStore.getState().openRow;

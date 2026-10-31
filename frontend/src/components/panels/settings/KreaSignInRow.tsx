@@ -82,7 +82,7 @@ function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
         <select id="settings-krea-default" className="settings__select" aria-label="Default Krea connection for new nodes"
           value={mode} disabled={pending}
           onChange={(event) => void saveField('kreaConnectionMode', event.target.value === 'mcp' ? 'mcp' : 'api-token')}>
-          <option value="api-token">API token · API balance</option>
+          <option value="api-token">API key · API balance</option>
           <option value="mcp">Krea sign-in · workspace compute</option>
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>

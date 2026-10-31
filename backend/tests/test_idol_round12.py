@@ -366,8 +366,8 @@ def test_a_free_run_is_tagged_as_a_paid_run_is():
 @pytest.mark.parametrize("entries,line", [
     ([_entry("free", "fal", "free · fal.ai")], "1 free run (fal)"),
     ([_entry("free", "fal", "free · fal.ai"), _entry("free", "speridlabs", "free · Hugging Face")],
-     "2 free runs (fal, speridlabs)"),
-    ([_entry("free", "fal", "free · fal.ai"), _entry("free", None, "free · runs locally")], "2 free runs (1 on fal)"),
+     "2 free runs (1 fal, 1 speridlabs)"),
+    ([_entry("free", "fal", "free · fal.ai"), _entry("free", None, "free · runs locally")], "2 free runs (1 fal, 1 local)"),
     ([_entry("free", None, "free · runs locally")], "1 free run (runs locally)"),
 ], ids=["one", "two-providers", "one-local", "local"])
 def test_the_free_tag_names_provider_ids(entries, line):
@@ -378,7 +378,8 @@ def test_an_idol_run_without_a_token_is_tagged_by_its_route():
     entry = canvas_proposals.cost_for(REGISTRY["speridlabs-idol"], {}, REGISTRY, {})
     assert (entry["kind"], entry["provider"], entry["label"]) == ("free", "speridlabs", "free · Hugging Face")
     cost = canvas_proposals.summarize_cost([{"ref": "+i", "nodeId": None, **entry}], up_to=False)
-    assert _cost_line(cost) == "1 free run (speridlabs)"
+    # Where it runs (GM r24 item 1): tests/test_idol_round13.py.
+    assert _cost_line(cost) == "1 free run (huggingface)"
 
 
 # -- "Krea API key" in person lines, as the row says (GM r22 item 4) -------------------------

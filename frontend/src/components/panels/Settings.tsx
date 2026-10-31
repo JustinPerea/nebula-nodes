@@ -115,7 +115,7 @@ export function Settings() {
     return () => { cancelled = true; };
   }, [visible, retryLoad]);
 
-  // A change made elsewhere (a second window, the CLI, the desktop app)
+  // A change made elsewhere (a second window, the desktop app, a script)
   // reaches an open panel in place (GM, PR #203 r19 item 6; review 9, keys
   // LOW-3): it reads the settings again, as an open does. Drafts live apart
   // (keyDrafts) and are never touched; a row the person is in stays where it

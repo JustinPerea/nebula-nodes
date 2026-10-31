@@ -914,7 +914,7 @@ async def _account_style_search(node: GraphNode) -> dict[str, Any]:
     if keys:
         unsupported = [{"user": "User", "liked": "Liked only", "filter": "Filter"}[key] for key in keys]
         raise with_person_line(
-            ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent"),
+            ValueError(f"{', '.join(unsupported)} needs a Krea API key; the Krea account lists the styles available to you. Nothing was sent"),
             f"To use {quoted_and([_label('krea-style-search', key) for key in keys])}, switch to the “API token” "
             f"connection. The “Krea account” connection lists every style you can use. {NOTHING_SENT_TO_KREA}")
     ids = {part.strip() for part in _clean_str(node.params.get("ids")).split(",") if part.strip()}
@@ -952,7 +952,7 @@ async def _account_style_train(node, name, model, image_values, emit) -> dict[st
                       f"{_option_label('krea-style-train', 'training_type', 'Default')}")
     if unsupported:
         raise with_person_line(
-            ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent"),
+            ValueError(f"{', '.join(unsupported)} needs a Krea API key; the Krea account trains with Krea's defaults. Nothing was sent"),
             f"To use {quoted_and(fields)}, switch to the “API token” connection. The “Krea account” connection "
             f"trains with Krea's default settings. {NOTHING_SENT_TO_KREA}")
     arguments: dict[str, Any] = {"name": name, "model": model, "train_type": training_type, "images": []}
@@ -1075,7 +1075,7 @@ async def handle_krea_library_manage(
     if _auth_mode(node) == "api-token":
         if action != "rename-style":
             raise with_person_line(
-                ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent"),
+                ValueError("Only renaming a style works with a Krea API key; use the Krea account for moodboards and deletes. Nothing was sent"),
                 "The “API token” connection can only rename styles. To make moodboards or delete styles, switch to "
                 f"the “Krea account” connection. {NOTHING_SENT_TO_KREA}")
         api_key = _api_key(api_keys)

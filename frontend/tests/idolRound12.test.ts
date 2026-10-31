@@ -47,8 +47,8 @@ describe('the provider’s own noun (GM r23; review 11, copy NIT-1)', () => {
     expect(keyChangedLine('HF_TOKEN', false)).toBe('Hugging Face token removed.');
   });
 
-  it('keeps every other row’s word: "Replicate key", "Krea · API key"', () => {
-    expect(keyChangedLine('REPLICATE_API_TOKEN', true)).toBe('Replicate key saved.');
+  it('keeps every other row’s word: "Replicate token" (GM r25 item 3), "Krea · API key"', () => {
+    expect(keyChangedLine('REPLICATE_API_TOKEN', true)).toBe('Replicate token saved.');
     expect(keyNoun('KREA_API_TOKEN')).toBe('Krea · API key');
     expect(keyNoun('OPENAI_API_KEY')).toBe('OpenAI key');
   });

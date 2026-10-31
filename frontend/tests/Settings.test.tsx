@@ -252,6 +252,10 @@ describe('Settings shell', () => {
       "Nebula isn't answering. Make sure it's running, then try again."],
     [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
     [new RequestFailedError("Couldn't load your API keys.", 400), "Try again, or reload if it keeps happening."],
+    // Review 12 of PR #203, LOW-3: a settings file the backend can't read says so, with its path
+    // (the backend's 409 line; it used to answer a cut-short file with a 500).
+    [new RequestFailedError("Couldn't load your API keys.", 409, { detail: 'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.' }),
+      'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.'],
   ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
     getSettingsMock.mockRejectedValueOnce(error);
     render(<Settings />);
@@ -677,7 +681,7 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
 
   it('a row with focus in it stays put until focus leaves it', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    const add = screen.getByRole('button', { name: 'Add Replicate key' });
+    const add = screen.getByRole('button', { name: 'Add Replicate token' });
     add.focus();
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
@@ -723,7 +727,7 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
       GOOGLE_VERTEX_CREDENTIALS: 'Open Google Cloud service accounts', OPENAI_API_KEY: 'Open OpenAI keys',
       KREA_API_TOKEN: 'Open Krea keys', GOOGLE_API_KEY: 'Open Google AI Studio keys' });
     await renderSettings({ apiKeys: { FAL_KEY: '***abcd' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate token' }));
     const edit = within(row('Replicate')).getByRole('link', { name: 'Open Replicate tokens' });
     expect(edit).toHaveAttribute('href', 'https://replicate.com/account/api-tokens');
     expect(edit).toHaveTextContent('Open Replicate tokens ↗');
@@ -748,16 +752,16 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
 
   it('keeps keyboard focus when the person saves a row held by a change elsewhere (review 10, copy MEDIUM-1)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
-    const input = await screen.findByLabelText('Replicate API key');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate token' }));
+    const input = await screen.findByLabelText('Replicate token');
     fireEvent.change(input, { target: { value: 'r8_mine_9999' } });
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
     await waitFor(() => expect(heading()).toBe('Connected · 1'));
     expect(rowNames(list(/^Add a provider/))).toContain('Replicate');
-    expect(screen.getByLabelText('Replicate API key')).toHaveFocus();
+    expect(screen.getByLabelText('Replicate token')).toHaveFocus();
     // Their own Save moves the row, and the row that lands takes focus.
-    await act(async () => { fireEvent.submit(screen.getByLabelText('Replicate API key').closest('form')!); });
+    await act(async () => { fireEvent.submit(screen.getByLabelText('Replicate token').closest('form')!); });
     await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Replicate'));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Manage Replicate' })).toHaveFocus());
     expect(document.activeElement).not.toBe(document.body);
@@ -769,7 +773,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     await act(async () => { remote(['GOOGLE_API_KEY']); });
-    const field = await screen.findByLabelText('Google · Gemini API API key');
+    const field = await screen.findByLabelText('Google · Gemini API key');
     await waitFor(() => expect(field).toHaveFocus());
     const google = row('Google · Gemini API');
     // No saved key offered beside "Add key", no Remove, no "Add … in Settings" inside Settings.
@@ -789,27 +793,27 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     act(() => { search.focus(); });
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     await act(async () => { remote(['GOOGLE_API_KEY']); });
-    await screen.findByLabelText('Google · Gemini API API key');
+    await screen.findByLabelText('Google · Gemini API key');
     expect(search).toHaveFocus();
     expect(within(row('Google · Gemini API')).queryByRole('button', { name: 'Replace key' })).toBeNull();
   });
 
   it('holds a row whose edit view is open while focus is elsewhere, and keeps its draft (review 10, copy LOW-2)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate key' }));
-    fireEvent.change(await screen.findByLabelText('Replicate API key'), { target: { value: 'r8_my_draft_typed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Replicate token' }));
+    fireEvent.change(await screen.findByLabelText('Replicate token'), { target: { value: 'r8_my_draft_typed' } });
     act(() => { screen.getByRole('searchbox', { name: 'Search providers and models' }).focus(); });
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
     await waitFor(() => expect(useSettingsDraftStore.getState().saved?.apiKeys.REPLICATE_API_TOKEN).toBe('***dddd'));
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)); });
     expect(rowNames(list(/^Add a provider/))).toContain('Replicate');
-    expect(screen.getByLabelText('Replicate API key')).toHaveValue('r8_my_draft_typed');
+    expect(screen.getByLabelText('Replicate token')).toHaveValue('r8_my_draft_typed');
   });
 
   it('counts the tab badge by the sections as shown while a row is held (GM r21 item 3)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    act(() => { screen.getByRole('button', { name: 'Add Replicate key' }).focus(); });
+    act(() => { screen.getByRole('button', { name: 'Add Replicate token' }).focus(); });
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
     await waitFor(() => expect(within(row('Replicate')).getByRole('button', { name: 'Manage Replicate' })).toBeInTheDocument());
@@ -826,15 +830,15 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(said()).toHaveAttribute('aria-live', 'polite');
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
-    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate key saved\.$/));
+    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate token saved\.$/));
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     await act(async () => { remote(['REPLICATE_API_TOKEN']); });
-    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate key removed\.$/));
+    await waitFor(() => expect(said()).toHaveTextContent(/^Replicate token removed\.$/));
     // A change that names no key (favorites) says nothing new.
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' }, favorites: ['x'] });
     await act(async () => { remote([]); });
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    expect(said()).toHaveTextContent(/^Replicate key removed\.$/);
+    expect(said()).toHaveTextContent(/^Replicate token removed\.$/);
     expect(document.body).not.toHaveTextContent(/another window/);
   });
 
@@ -924,15 +928,15 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1,
       apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123', REPLICATE_API_TOKEN: '***dddd' } });
     await saveHf();
-    // The CLI saves a Replicate key while this tab's write is in flight; then the echo of its own.
+    // Another window saves a Replicate token while this tab's write is in flight; then the echo of its own.
     await signal(['REPLICATE_API_TOKEN']);
     await signal(['HF_TOKEN'], TAB_ID);
     await act(async () => { answer.resolve({ status: 'saved' }); });
     await screen.findByText('Hugging Face token saved. Checking it now.');
-    await waitFor(() => expect(said()).toBe('Replicate key saved.'));
+    await waitFor(() => expect(said()).toBe('Replicate token saved.'));
     await frames();
     await frames();
-    expect(heard.lines).toEqual(['Replicate key saved.']);
+    expect(heard.lines).toEqual(['Replicate token saved.']);
     heard.stop();
   });
 
@@ -940,7 +944,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const heard = listen();
-    // The CLI saves a Replicate key; the read it asks for is still out when the person saves Hugging Face.
+    // Another window saves a Replicate token; the read it asks for is still out when the person saves Hugging Face.
     const before = deferred();
     getSettingsMock.mockReturnValueOnce(before.promise);
     await signal(['REPLICATE_API_TOKEN']);
@@ -957,10 +961,25 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     expect(heard.lines).toEqual([]);
     await act(async () => { answer.resolve({ status: 'saved' }); });
     await waitFor(() => expect(getSettingsMock.mock.calls.length).toBe(reads + 1));
-    await waitFor(() => expect(said()).toBe('Replicate key saved.'));
+    await waitFor(() => expect(said()).toBe('Replicate token saved.'));
     await frames();
-    expect(heard.lines).toEqual(['Replicate key saved.']);
+    expect(heard.lines).toEqual(['Replicate token saved.']);
     heard.stop();
+  });
+
+  // GM, PR #203 r24 item 4: Hugging Face's own noun on its buttons.
+  it('says “token” on the Hugging Face row’s buttons: Add token, Save token, Replace token', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const add = within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' });
+    expect(add.textContent).toBe('Add token');
+    fireEvent.click(add);
+    const input = await screen.findByLabelText('Hugging Face token');
+    expect(within(row('Hugging Face')).getByRole('button', { name: 'Save token' })).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: 'hf_fixture0123' } });
+    await act(async () => { fireEvent.submit(input.closest('form')!); });
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Hugging Face' }));
+    expect(await within(row('Hugging Face')).findByRole('button', { name: 'Replace token' })).toBeInTheDocument();
+    expect(within(row('OpenAI')).queryByRole('button', { name: 'Replace token' })).toBeNull();
   });
 
   it('a signal from another tab is that tab’s, never this one’s', async () => {
@@ -976,7 +995,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     await signal(['GOOGLE_API_KEY']);
-    const field = await screen.findByLabelText('Google · Gemini API API key');
+    const field = await screen.findByLabelText('Google · Gemini API key');
     await waitFor(() => expect(field).toHaveFocus());
     fireEvent.change(field, { target: { value: 'AIza-fixture-0001' } });
     await act(async () => { fireEvent.submit(field.closest('form')!); });
@@ -1013,6 +1032,69 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
   it('says the Krea sign-in row’s summary in GM’s words, with no period (GM r23)', async () => {
     await renderSettings();
     expect(row('Krea · sign-in').querySelector('.settings-row__summary')?.textContent).toBe('Uses your Krea plan instead of an API key');
+  });
+
+  // Review 12 of PR #203, LOW-4: every change made elsewhere is said once,
+  // none lost and none doubled, whatever lands within its two frames.
+  const frame = () => act(async () => { await new Promise((done) => requestAnimationFrame(done)); });
+  const timesSaid = (lines: string[], line: string) => lines.join(' ').split(line).length - 1;
+
+  it('says each of a burst of three changes made elsewhere once, a frame apart', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const heard = listen();
+    const keys = { OPENAI_API_KEY: '***aaaa' } as Record<string, string>;
+    for (const [key, value] of [['REPLICATE_API_TOKEN', '***dddd'], ['RUNWAY_API_KEY', '***eeee'], ['FAL_KEY', '***ffff']]) {
+      keys[key] = value;
+      getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { ...keys } });
+      await signal([key]);
+      await frame();
+    }
+    await frames();
+    await frames();
+    for (const line of ['Replicate token saved.', 'Runway key saved.', 'fal.ai key saved.']) expect(timesSaid(heard.lines, line), line).toBe(1);
+    heard.stop();
+  });
+
+  it('says a change made elsewhere once when the person’s own save lands within its two frames', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const heard = listen();
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
+    const input = await screen.findByLabelText('Hugging Face token');
+    fireEvent.change(input, { target: { value: 'hf_fixture0123' } });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
+    // The remote change's read lands, then the person's own save lands before a frame runs.
+    await signal(['REPLICATE_API_TOKEN']);
+    await act(async () => { fireEvent.submit(input.closest('form')!); await Promise.resolve(); await Promise.resolve(); });
+    await screen.findByText('Hugging Face token saved. Checking it now.');
+    await frames();
+    await frames();
+    await waitFor(() => expect(timesSaid(heard.lines, 'Replicate token saved.')).toBe(1));
+    await frames();
+    expect(timesSaid(heard.lines, 'Replicate token saved.')).toBe(1);
+    expect(timesSaid(heard.lines, 'Hugging Face token')).toBe(0);
+    heard.stop();
+  });
+
+  it('says every change a background window missed once it runs frames again', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const heard = listen();
+    // No frames run in a window in the background: hold them, then let them go.
+    const held: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => { held.push(callback); return held.length; });
+    const keys = { OPENAI_API_KEY: '***aaaa' } as Record<string, string>;
+    for (const [key, value] of [['RUNWAY_API_KEY', '***eeee'], ['REPLICATE_API_TOKEN', '***dddd']]) {
+      keys[key] = value;
+      getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { ...keys } });
+      await signal([key]);
+      await act(async () => { await Promise.resolve(); });
+    }
+    raf.mockRestore();
+    await act(async () => { while (held.length) held.shift()!(performance.now()); });
+    await frames();
+    await frames();
+    for (const line of ['Runway key saved.', 'Replicate token saved.']) expect(timesSaid(heard.lines, line), line).toBe(1);
+    heard.stop();
   });
 });
 
@@ -1122,8 +1204,33 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     await renderSettings();
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
-    expect(updateCredentialMock).not.toHaveBeenCalled();
+    // Only the backend's check ran: nothing was written to it.
+    expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', 'fixture-openai', { check: true }]]);
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+  });
+
+  // Review 12 of PR #203, LOW-3: both or neither. The backend refuses a key
+  // while it can't read the settings file, so the Keychain is never written.
+  const CANT_READ = 'Nothing was saved because Nebula can’t read ~/Library/Application Support/Nebula/settings.json. Fix the file, then try again.';
+  it('writes nothing to the Keychain when the backend can’t read the settings file, and says why', async () => {
+    const { credentials } = setupDesktopBridge();
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ }));
+    await renderSettings();
+    await addKey('OpenAI', 'fixture-openai');
+    expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
+    expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', 'fixture-openai', { check: true }]]);
+    expect(credentials.set).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+  });
+
+  it('clears nothing in the Keychain when the backend can’t read the settings file', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ }));
+    removeKey('OpenAI');
+    expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
+    expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', '', { check: true }]]);
+    expect(credentials.clear).not.toHaveBeenCalled();
   });
 
   it('warns about plaintext keys found in the settings file', async () => {

@@ -389,7 +389,6 @@ describe('every key link is "Open <provider> keys", the provider\'s own word, no
     const host = new URL(spec.url).host;
     if (host !== spec.label) expect(spec.keyLink).not.toContain(host);
     expect(spec.keyLink).not.toMatch(/https?:|\.com\b|key page/i);
-    if (spec.credential === 'token') expect(spec.keyLink).toMatch(/ tokens$/);
   });
 });
 

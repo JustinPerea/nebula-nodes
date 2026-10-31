@@ -274,7 +274,7 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
   const fallback = fallbackKeyNames(def)[0];
   const direct = directKeyNames(def)[0];
   if (!direct || !fallback) {
-    return `${label}${kreaToken ? ' API token · API balance' : (Array.isArray(def.envKeyName) && def.envKeyName.length > 1) ? ' route' : ''}.`;
+    return `${label}${kreaToken ? ' API key · API balance' : (Array.isArray(def.envKeyName) && def.envKeyName.length > 1) ? ' route' : ''}.`;
   }
   const directName = keyProviderName(direct);
   const fallbackName = keyProviderName(fallback);

@@ -592,6 +592,15 @@ export async function requestError(heading: string, response: Response,
     overSaveLimit: body.overSaveLimit, sizeBytes: body.sizeBytes });
 }
 
+/** The shared rule's line: up to 3 things are named, from 4 they are
+ * counted. Every list of names in a line reads it (nodeNameList,
+ * agentNameList, quotedNames), and so do the proposal bar's not-ready lines
+ * (canvasProposals.notReadyShown), so 4 is never "3 and 1 more". */
+export const NAMED_AT_MOST = 3;
+export function countsInstead(count: number): boolean {
+  return count > NAMED_AT_MOST;
+}
+
 /**
  * A list of node names in a line (GM - Design, 2026-10-27, r6 of PR #198 and
  * the follow-up to PR #195), shared by every line that names several nodes:
@@ -611,7 +620,7 @@ export async function requestError(heading: string, response: Response,
  * lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
-  if (names.length >= 4) return `${names.length} nodes`;
+  if (countsInstead(names.length)) return `${names.length} nodes`;
   const groups = new Map<string, number>();
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
   return joinedList([...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`)));
@@ -626,7 +635,7 @@ export function nodeNameList(names: string[]): string {
  */
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
-  if (agents.length >= 4) return `${agents.length} agents`;
+  if (countsInstead(agents.length)) return `${agents.length} agents`;
   return joinedList(agents);
 }
 
@@ -638,7 +647,7 @@ function joinedList(parts: string[]): string {
 /** The same rule for things that aren't nodes and whose names are their
  * own (shots): up to 3 quoted names, from 4 a count ("4 shots"). */
 export function quotedNames(names: readonly string[], counted: string): string {
-  if (names.length >= 4) return `${names.length} ${counted}`;
+  if (countsInstead(names.length)) return `${names.length} ${counted}`;
   const quoted = names.map((name) => `“${name}”`);
   return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
 }

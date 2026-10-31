@@ -13,7 +13,7 @@ Krea models. It saves as soon as you pick:
 
 - **Krea account · workspace compute** uses the signed-in MCP connection and the
   workspace selected during consent.
-- **API token · API balance** uses the existing Krea API key from Settings.
+- **API key · API balance** uses the existing Krea API key from Settings.
 
 Each Canvas/Create recipe saves its connection choice. Changing the default
 does not change existing nodes, saved recipes or earlier runs. Nodes saved

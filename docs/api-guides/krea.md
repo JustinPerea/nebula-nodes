@@ -2,8 +2,8 @@
 
 You can also [sign in to Krea through MCP](../KREA-MCP.md) in Settings.
 Gateway models save a choice between **Krea account · workspace compute** and
-**API token · API balance**. Old graphs and the legacy style tools retain API
-tokens. Connecting or checking the account never generates media.
+**API key · API balance**. Old graphs and the legacy style tools keep their API
+keys. Connecting or checking the account never generates media.
 
 Use Krea as a direct provider for image, video and audio models, including Krea 2, Nano Banana, GPT Image, Flux, Kling, Veo, Seedance, Hailuo, Runway, and ElevenLabs Music. Each model has its own node and model-specific controls. The catalog is generated from Krea's public OpenAPI document, checked **2026-10-09**: **34 image routes, 41 video routes and 5 audio routes**.
 

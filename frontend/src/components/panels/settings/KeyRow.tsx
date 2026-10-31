@@ -5,7 +5,7 @@ import { useUIStore } from '../../../store/uiStore';
 import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
 import { keyText } from '../../../lib/directRoute';
 import { keyReadiness } from '../../../lib/providerReadiness';
-import { unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalog';
+import { credentialName as nameOf, credentialNoun, unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalog';
 import { keyNoun, removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
@@ -60,11 +60,13 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   const firstAction = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
   const serviceAccount = spec.input === 'service-account';
-  // "Hugging Face token", "OpenAI API key": what screen readers hear.
-  const credentialName = `${spec.label} ${spec.credential ?? 'API key'}`;
-  // The provider's own noun on the buttons too, as its links and notices
-  // say it: "Add token", "Save token" for Hugging Face (GM, PR #203 r23).
-  const noun = spec.credential ?? 'key';
+  // "Hugging Face token", "OpenAI API key", "Krea · API key": what screen
+  // readers hear, the noun said once.
+  const credentialName = nameOf(spec);
+  // The provider's own noun on the buttons too, the word its link uses:
+  // "Add token", "Save token" for Hugging Face and Replicate (GM, PR #203
+  // r23; r25 item 3).
+  const noun = credentialNoun(spec);
 
   useEffect(() => {
     if (!takeRowFocus(spec.key)) return;

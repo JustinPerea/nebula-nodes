@@ -2,7 +2,7 @@ import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
-import { RequestFailedError } from './errorCopy';
+import { countsInstead, RequestFailedError } from './errorCopy';
 import { formatChipEstimate } from './pricing';
 import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
@@ -244,6 +244,22 @@ export function notReadyBarLines(
     lines.push({ key: row.ref, text: notReadyLine(row) });
   }
   return lines;
+}
+
+/**
+ * What the bar shows of its not-ready nodes, by the shared rule
+ * (errorCopy.countsInstead; GM, PR #203 r24): up to 3 nodes, a line each;
+ * from 4, one line that counts them ("4 nodes can’t run here yet."), and
+ * every node's line in the details ("See every node that can’t run"). The
+ * count is of nodes, whatever lines notReadyBarLines merged.
+ */
+export function notReadyShown(
+  rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
+  acceptLock: string | null,
+): { lines: Array<{ key: string; text: string }>; inDetails: Array<{ key: string; text: string }> } {
+  const lines = notReadyBarLines(rows, acceptLock);
+  if (!countsInstead(rows.length)) return { lines, inDetails: [] };
+  return { lines: [{ key: 'count', text: `${rows.length} nodes can’t run here yet.` }], inDetails: lines };
 }
 
 /** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in

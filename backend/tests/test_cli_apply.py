@@ -77,6 +77,11 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", None)
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
     monkeypatch.setattr(main_module.manager, "broadcast_browser", ignore)
+    # No canvas is open unless a test opens one: the arrange line reads
+    # manager.canvas_open() (PR #203 round 13; a socket another test left
+    # registered once made it say a canvas was open).
+    monkeypatch.setattr(main_module.manager, "active_connections", [])
+    monkeypatch.setattr(main_module.manager, "browser_connections", set())
 
     client = NebulaClient("http://testserver")
     client._client = TestClient(main_module.app)
@@ -345,6 +350,20 @@ def test_arrange_from_the_builder_and_in_the_reply(api):
         "  Arrange: No canvas is open, so the 2 new nodes stay where they were placed. "
         "The first canvas that opens lays them out.")
     assert out.getvalue().splitlines()[-1].startswith("  Undo: nebula undo ")
+
+
+def test_arrange_says_an_open_canvas_lays_them_out(api):
+    import main as main_module
+
+    class Tab:
+        headers: dict = {}
+
+    main_module.manager.active_connections.append(Tab())
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(add=["+a=text-input", "+b=text-input"], arrange="right"),
+                               out=out) == 0
+    assert out.getvalue().splitlines()[-2] == (
+        "  Arrange: The open canvas lays out the 2 new nodes once it has drawn them, and saves the positions.")
 
 
 def test_arrange_works_with_a_plan_file(api):

@@ -18,7 +18,36 @@ SETTINGS_PATH = Path(
         "NEBULA_SETTINGS_PATH",
         Path(__file__).resolve().parent.parent.parent / "settings.json",
     )
-)
+).expanduser()
+
+
+def settings_file() -> Path:
+    """The settings file this backend reads and writes, resolved here for
+    every reader, writer and the 409 lines alike. SETTINGS_PATH is expanded
+    where it is built, so a "~" in NEBULA_SETTINGS_PATH is the home folder,
+    never a folder named "~", for this and for every other reader of
+    SETTINGS_PATH (agent_profiles' deny rules; review 12 of PR #203,
+    LOW-2)."""
+    return Path(SETTINGS_PATH).resolve()
+
+
+class SettingsUnreadable(ValueError):
+    """The settings file isn't JSON Nebula can read (cut short, hand-edited).
+    A ValueError, as json.load's own error is, so every reader that failed
+    closed on it still does; the settings routes answer it with the 409
+    (main.SETTINGS_UNREADABLE; review 12, LOW-3)."""
+
+
+def _read_settings_file() -> Any:
+    """The file's JSON, or None when there is no file yet."""
+    path = settings_file()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SettingsUnreadable(str(path)) from exc
 
 # ---------------------------------------------------------------------------
 # Injected credentials (desktop mode)
@@ -98,14 +127,12 @@ def load_settings() -> dict[str, Any]:
     # Deep copy: callers mutate the nested dicts (apiKeys, routing), which
     # must never change DEFAULT_SETTINGS itself.
     settings = copy.deepcopy(DEFAULT_SETTINGS)
-    if SETTINGS_PATH.exists():
-        with open(SETTINGS_PATH, "r") as f:
-            saved = json.load(f)
-        if isinstance(saved, dict):
-            settings.update(saved)
-        else:
-            # Not a JSON object: returned as before, nothing to merge into.
-            settings = saved
+    saved = _read_settings_file()
+    if isinstance(saved, dict):
+        settings.update(saved)
+    elif saved is not None:
+        # Not a JSON object: returned as before, nothing to merge into.
+        settings = saved
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
     # Non-secret settings from the file (routing, outputPath, etc.) remain.
@@ -159,9 +186,23 @@ def saved_keys_writable(saved: Any) -> bool:
 
 def settings_file_path() -> str:
     """The settings file this backend reads and writes, as a full path:
-    NEBULA_SETTINGS_PATH when it is set, resolved (the 409 lines name it;
-    GM, PR #203 r22 item 3)."""
-    return str(Path(SETTINGS_PATH).expanduser().resolve())
+    NEBULA_SETTINGS_PATH when it is set, resolved (settings_file; the 409
+    lines name it; GM, PR #203 r22 item 3)."""
+    return str(settings_file())
+
+
+def settings_file_shown() -> str:
+    """settings_file_path as the 409 lines show it, to the person and to
+    agents alike: under the home folder it starts "~", so it wraps less
+    ("~/.nebula/settings.json"); anywhere else it stays absolute (GM, PR #203
+    r24 item 7)."""
+    path = Path(settings_file_path())
+    try:
+        home = Path.home().resolve()
+        rest = path.relative_to(home)
+    except (RuntimeError, KeyError, ValueError):
+        return str(path)
+    return "~" if not rest.parts else f"~{os.sep}{rest}"
 
 
 def load_saved_settings() -> dict[str, Any]:
@@ -173,13 +214,11 @@ def load_saved_settings() -> dict[str, Any]:
     is written back as it was (review 9 of PR #203, keys NIT-1). Readers use
     load_settings."""
     settings = copy.deepcopy(DEFAULT_SETTINGS)
-    if SETTINGS_PATH.exists():
-        with open(SETTINGS_PATH, "r") as f:
-            saved = json.load(f)
-        if isinstance(saved, dict):
-            settings.update(saved)
-        else:
-            settings = saved
+    saved = _read_settings_file()
+    if isinstance(saved, dict):
+        settings.update(saved)
+    elif saved is not None:
+        settings = saved
     return settings
 
 
@@ -210,7 +249,7 @@ def save_settings(settings: dict[str, Any]) -> None:
     if _INJECTED_KEYS:
         to_write["apiKeys"] = {}
 
-    with open(SETTINGS_PATH, "w") as f:
+    with open(settings_file(), "w", encoding="utf-8") as f:
         json.dump(to_write, f, indent=2)
         f.write("\n")
 

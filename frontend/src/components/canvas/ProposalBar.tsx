@@ -7,7 +7,7 @@ import {
   acceptLabel,
   countdown,
   ghostBoxes,
-  notReadyBarLines,
+  notReadyShown,
   acceptChipTitle,
   proposalChanges,
   proposalMetaLine,
@@ -28,7 +28,6 @@ import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
 /** Not-ready lines the bar shows before the rest move to the details. */
-const READINESS_LINES = 3;
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -193,14 +192,16 @@ export function ProposalBar() {
   const settled = () => !guarding.current;
   const changes = current ? proposalChanges(current.view, current.values) : [];
   const hasChangeLines = changes.some((group) => group.lines.length > 0);
-  const notReadyLines = notReadyBarLines(notReady, acceptLock);
-  const moreNotReady = notReadyLines.length > READINESS_LINES;
+  // Up to 3 nodes a line each; from 4 one count line, and every node's line
+  // in the details (the shared rule; GM, PR #203 r24).
+  const { lines: notReadyLines, inDetails: notReadyInDetails } = notReadyShown(notReady, acceptLock);
+  const moreNotReady = notReadyInDetails.length > 0;
   const hasDetails = hasChangeLines || noteClamped || moreNotReady;
   const detailsLabel = hasChangeLines
     ? (detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes')
     : noteClamped
       ? (detailsOpen ? 'Hide the note' : 'Read the whole note')
-      : (detailsOpen ? 'Hide the list' : "See every node that can't run");
+      : (detailsOpen ? 'Hide the list' : 'See every node that can’t run');
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -264,17 +265,12 @@ export function ProposalBar() {
             // Accept stays as the Run button does for a node without its
             // key: the run is refused at that node, before anything is spent.
             <ul className="proposal-bar__readiness" aria-label="Can't run here">
-              {notReadyLines.slice(0, READINESS_LINES).map((line) => (
+              {notReadyLines.map((line) => (
                 <li key={line.key} className="proposal-bar__not-ready">
                   <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
                   {line.text}
                 </li>
               ))}
-              {moreNotReady && (
-                <li className="proposal-bar__not-ready proposal-bar__not-ready--more">
-                  and {notReadyLines.length - READINESS_LINES} more in the details
-                </li>
-              )}
             </ul>
           )}
           <p className="proposal-bar__meta">{proposalMetaLine(current.view, countdown(current.view.expiresAt, now))}</p>
@@ -300,7 +296,7 @@ export function ProposalBar() {
               {moreNotReady && (
                 <section className="proposal-bar__group">
                   <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
-                  {notReadyLines.map((line) => (
+                  {notReadyInDetails.map((line) => (
                     <p key={line.key} className="proposal-bar__line">{line.text}</p>
                   ))}
                 </section>

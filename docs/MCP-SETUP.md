@@ -1798,11 +1798,18 @@ line, each cost class counted on its own, as `cost` counts them: "up to 1
 paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices", "1
 run on the person's Krea plan", "1 paid run (openai), 1 that may bill the
 person's own account (Idol) and 1 free (fal), $0.011 at list prices".
-A run on the Krea plan is never free and never in the figure. A free run
-says where it runs: "(runs locally)", or, for a call whose list price is $0,
-its provider tagged as a paid run's is ("1 free run (fal)" beside "1 paid
-run (google)"); when only some free runs call a provider, the tag counts
-them ("2 free (1 on fal)").
+A run on the Krea plan is never free and never in the figure. "run" goes on
+the first class only and carries through the rest, and a class that stands
+alone keeps it: "1 run on the person's Krea plan and 1 free (fal)", "1 free
+run (fal)". Each part is tagged one way, by where its runs go as ids: one
+place alone ("1 paid run (openai) and 1 free (huggingface)"), a count each
+when there are several, local last ("3 paid runs (2 anthropic, 1 krea) and
+2 free (1 fal, 1 local)").
+A free run goes where it runs: a cost entry's `runsOn` when it has one (a
+key-billing route's host, "huggingface" for Idol's Space; `provider` stays
+the route's maker, "speridlabs"), else its provider, else it runs locally.
+Free runs that are all local say "(runs locally)" when they are the whole
+run.
 
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its

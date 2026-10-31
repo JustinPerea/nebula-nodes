@@ -535,8 +535,12 @@ def cost_for(
             # Named by who it runs on and may bill: a Space's host (the one
             # cost class and its account, node_route; review 8, LOW-3).
             host = node_route.key_billing_account(definition, params, api_keys) or "provider"
+            # Where it runs, as an id ("huggingface"): the CLI's tag for it
+            # (GM, PR #203 r24 item 1). `provider` stays the route's maker.
+            runs_on = node_route.key_billing_host(definition, params, api_keys) or routed
             return {"kind": billing, "provider": routed, "label": node_route.key_billing_label(billing, host),
-                    "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host}
+                    "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host,
+                    **({"runsOn": runs_on} if runs_on else {})}
         return _class_entry(cost_class or billing, definition, routed)
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:

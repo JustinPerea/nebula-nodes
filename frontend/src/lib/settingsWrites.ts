@@ -3,7 +3,7 @@ import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
 import { RequestFailedError } from './errorCopy';
 import { keyText } from './directRoute';
 import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
-import { PROVIDER_KEY_SPECS } from './providerCatalog';
+import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
 import { useSettingsDraftStore, type SettingsDraft, type SettingsField } from '../store/settingsDraftStore';
 import { useUIStore } from '../store/uiStore';
@@ -97,21 +97,24 @@ function labelFor(key: string) {
   return PROVIDER_KEY_SPECS[key]?.label ?? key;
 }
 
-/** "Replicate key", and "Krea · API key" as it is: a row label that already
+/** "fal.ai key", and "Krea · API key" as it is: a row label that already
  * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one.
- * A provider whose credential has its own name says it, as its links do:
- * "Hugging Face token" (GM, PR #203 r23; the spec's `credential`). */
+ * Each provider says its own noun, the word its link uses
+ * (`credentialNoun`): "Hugging Face token", "Replicate token" (GM, PR #203
+ * r23; r25 item 3, every provider). */
 export function keyNoun(key: string) {
   const label = labelFor(key);
-  const credential = PROVIDER_KEY_SPECS[key]?.credential;
-  if (credential) return `${label} ${credential}`;
+  const spec = PROVIDER_KEY_SPECS[key];
+  const noun = spec ? credentialNoun(spec) : 'key';
+  if (noun !== 'key') return `${label} ${noun}`;
   return /\bkey$/i.test(label) ? label : `${label} key`;
 }
 
 /** What an open panel says, politely, when a key is set or removed
- * somewhere else: the CLI, the API, another window (GM, PR #203 r21 item 4,
- * verbatim: "Replicate key saved." / "Replicate key removed."; never "in
- * another window", which may be false). Its own save's notice reads the
+ * somewhere else: another window, the desktop app, a script with the
+ * person token (the CLI only reads keys). GM, PR #203 r21 item 4, with r25
+ * item 3's noun: "Replicate token saved." / "Replicate token removed.";
+ * never "in another window", which may be false. Its own save's notice reads the
  * same, with "Checking it now." after it. */
 export function keyChangedLine(key: string, set: boolean): string {
   return `${keyNoun(key)} ${set ? 'saved' : 'removed'}.`;
@@ -160,6 +163,10 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
     try {
       const bridge = desktopCredentials();
       if (bridge) {
+        // The backend's refusal first (a settings file it can't read): the
+        // key lands in both the Keychain and the backend, or in neither
+        // (review 12 of PR #203, LOW-3).
+        await updateCredential(key, value, { check: true });
         const result = await bridge.set(key, value);
         if (!result.ok) throw new Error('Credential storage failed');
         await updateCredential(key, value);
@@ -192,6 +199,7 @@ export function removeKey(key: string): Promise<boolean> {
     try {
       const bridge = desktopCredentials();
       if (bridge) {
+        await updateCredential(key, '', { check: true });
         const result = await bridge.clear(key);
         if (!result.ok) throw new Error('Credential removal failed');
         await updateCredential(key, '');

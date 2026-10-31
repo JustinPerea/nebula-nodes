@@ -163,7 +163,7 @@ async def handle_krea_job_history(node: GraphNode, inputs: dict[str, PortValueDi
         raise with_person_line(ValueError("Enter a valid Krea job ID"), "Enter a valid Krea job ID.")
     if not job_id and mode == "mcp":
         raise with_person_line(
-            ValueError("Listing job history needs a Krea API token; the Krea account can fetch one job by ID. Nothing was sent"),
+            ValueError("Listing job history needs a Krea API key; the Krea account can fetch one job by ID. Nothing was sent"),
             "Job history needs the “API token” connection. The “Krea account” connection can look up one job by "
             f"its ID. {NOTHING_SENT_TO_KREA}")
 

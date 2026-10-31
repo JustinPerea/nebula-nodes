@@ -198,8 +198,8 @@ def test_each_key_change_tells_every_socket_with_no_values(stored, monkeypatch):
 
 
 def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monkeypatch, person):
-    """The canvas's socket is open; another client (a second window, the CLI's
-    `nebula keys`, the desktop bridge) sets the token: the socket hears it."""
+    """The canvas's socket is open; another client (a second window, a script
+    with the person token, the desktop bridge) sets the token: the socket hears it."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"apiKeys": {}}), encoding="utf-8")
     monkeypatch.setattr(settings, "SETTINGS_PATH", path)

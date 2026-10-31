@@ -140,8 +140,8 @@ describe('articles and the key notices (review 10, copy MEDIUM-2; GM r21 item 4)
   });
 
   it('a key notice names the key once', () => {
-    expect(keyChangedLine('REPLICATE_API_TOKEN', true)).toBe('Replicate key saved.');
-    expect(keyChangedLine('REPLICATE_API_TOKEN', false)).toBe('Replicate key removed.');
+    expect(keyChangedLine('REPLICATE_API_TOKEN', true)).toBe('Replicate token saved.');
+    expect(keyChangedLine('REPLICATE_API_TOKEN', false)).toBe('Replicate token removed.');
     expect(keyChangedLine('KREA_API_TOKEN', true)).toBe('Krea · API key saved.');
     expect(keyChangedLine('KREA_USAGE_KEY', false)).toBe('Krea · usage key removed.');
   });

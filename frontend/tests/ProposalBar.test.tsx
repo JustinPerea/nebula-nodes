@@ -466,19 +466,44 @@ describe('ProposalBar', () => {
     expect(net.apiFetch).toHaveBeenCalled();
   });
 
-  it('keeps a reason the canvas cannot re-check, and moves a long list into the details', () => {
+  const notReadyOf = (count: number) => {
     const many = proposal('p_a');
+    many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d', '+e'].slice(0, count).map((ref) => ({
+      ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    return screen.getByRole('list', { name: "Can't run here" });
+  };
+
+  it('keeps a reason the canvas cannot re-check, a line for each of up to 3 nodes', () => {
+    const list = notReadyOf(3);
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['+a', '+b', '+c'].map((ref) =>
+      `⚠${ref}: FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})`));
+    expect(list.textContent).not.toContain('more');
+  });
+
+  // GM, PR #203 r24: the shared rule names up to 3 and counts from 4, so 4
+  // is never "3 and 1 more": one line, and every node in the details.
+  it.each([4, 5])('counts %i nodes in one line and lists every one in the details', (count) => {
+    const list = notReadyOf(count);
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([`⚠${count} nodes can’t run here yet.`]);
+    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
+    const details = screen.getByLabelText('What Accept writes');
+    for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
+  });
+
+  it('opens the list with "See every node that can’t run" when there is nothing else to show', () => {
+    const many = proposal('p_a');
+    many.nodes = [];
+    many.params = [];
     many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
       ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const list = screen.getByRole('list', { name: "Can't run here" });
-    expect(list.querySelectorAll('li')).toHaveLength(4);
-    expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
-    expect(list.textContent).toContain('and 1 more in the details');
-    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
-    expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
+    fireEvent.click(screen.getByRole('button', { name: 'See every node that can’t run' }));
+    expect(screen.getByLabelText('Details').textContent).toContain('(+d)');
   });
 
   it("wraps the agent's note and offers the rest in the details", () => {

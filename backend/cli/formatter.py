@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
@@ -931,31 +932,45 @@ def _cost_line(cost: dict[str, Any]) -> str:
     may = _count(cost.get("mayCostRuns"))
     plan = _count(cost.get("planRuns"))
     free = _count(cost.get("freeRuns"))
-    # The free runs that call a provider, tagged as the paid part is: by the
-    # provider each entry runs on ("1 free run (fal)" beside "1 paid run
-    # (google)"; GM, PR #203 r22 item 5). A local one is "free · runs
-    # locally" and has none.
-    called = [str(entry["provider"]) for entry in cost.get("nodes") or []
-              if isinstance(entry, dict) and entry.get("kind") == "free" and entry.get("provider")
-              and entry.get("label") != LOCAL_LABEL]
-    remote = min(len(called), free)
-    tags = ", ".join(sorted(set(called)))
+    entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, dict)]
+    # Each part is tagged one way (GM, PR #203 r22 item 5, r24 items 1 and
+    # 2): by where its runs go, as ids, with a count per id once there's more
+    # than one: "1 paid run (openai) and 1 free (huggingface)", "3 paid runs
+    # (2 anthropic, 1 krea) and 2 free (1 fal, 1 local)". A free run goes
+    # where it runs (a Space's "huggingface", `runsOn`), else to its
+    # provider, else it runs locally.
+    paid_ids = [str(entry["provider"]) for entry in entries
+                if entry.get("kind") not in ("plan", "mayCost", "free") and entry.get("provider")]
+    # Without an entry for each paid run (an older backend's cost): its
+    # providers, as before.
+    paid_tag = _tags(paid_ids, paid) if len(paid_ids) == paid else (
+        f" ({', '.join(cost.get('providers') or [])})" if cost.get("providers") else "")
+    free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "")
+                for entry in entries if entry.get("kind") == "free"]
+    free_ids = [where for where in free_ids if where][:free]
+    # "run" goes on the first class only and carries through the rest, and
+    # a class that stands alone keeps it (GM, PR #203 r25 item 1): "1 paid
+    # run (google), 1 on the person's Krea plan and 1 free (fal)", "1 run on
+    # the person's Krea plan and 1 free", "1 free run (fal)".
     runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
     alone = sum(1 for count in (paid, may, plan, free) if count) <= 1
     parts: list[str] = []
+    first = lambda count: runs(count) + " " if not parts else ""  # noqa: E731
     if paid:
-        providers = ", ".join(cost.get("providers") or [])
-        parts.append(f"{paid} paid {runs(paid)}" + (f" ({providers})" if providers else ""))
+        parts.append(f"{paid} paid {first(paid)}".rstrip() + paid_tag)
     if may:
         names = ", ".join(str(row.get("name")) for row in cost.get("mayCost") or [])
-        parts.append(f"{may} {runs(may) + ' ' if alone else ''}that may bill the person's own account ({names})")
+        parts.append(f"{may} {first(may)}that may bill the person's own account ({names})")
     if plan:
-        parts.append(f"{plan} {runs(plan) + ' ' if alone else ''}on the person's Krea plan")
+        parts.append(f"{plan} {first(plan)}on the person's Krea plan")
     if free or not parts:
-        # Some free runs local: how many call the tagged providers.
-        where = "" if not remote else f" ({tags})" if remote == free else f" ({remote} on {tags})"
-        local = " (runs locally)" if alone and not remote else ""
-        parts.append(f"{free} free{' ' + runs(free) if alone else ''}{where}{local}")
+        if set(free_ids) <= {"local"}:
+            # Every free run is local (or no entry says where): said only
+            # when they are the whole run.
+            where = " (runs locally)" if alone else ""
+        else:
+            where = _tags(free_ids, free)
+        parts.append(f"{free} free {first(free)}".rstrip() + where)
     line = up_to + _and(parts)
     if not paid:
         return line
@@ -969,6 +984,20 @@ def _cost_line(cost: dict[str, Any]) -> str:
 
 # A local node's cost entry (canvas_proposals.cost_for).
 LOCAL_LABEL = "free · runs locally"
+
+
+def _tags(ids: list[str], total: int) -> str:
+    """Where a part's runs go: "(fal)" when every run goes to one place,
+    "(1 fal, 1 local)" by count when they go to several (ids in order, local
+    last), and "" when none is known. A part with runs it can't place names
+    only the ones it can, by count."""
+    counts = Counter(ids)
+    if not counts:
+        return ""
+    if len(counts) == 1 and len(ids) == total:
+        return f" ({ids[0]})"
+    order = sorted(counts, key=lambda where: (where == "local", where))
+    return " (" + ", ".join(f"{counts[where]} {where}" for where in order) + ")"
 
 
 def _count(value: Any) -> int:

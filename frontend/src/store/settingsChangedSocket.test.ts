@@ -10,7 +10,7 @@ const send = (event: unknown) => handler?.(event as ExecutionEvent);
 
 /**
  * Review 8 of PR #203, NIT-3: a key change made anywhere (a second window,
- * the CLI, the desktop bridge) reaches this tab as `settingsChanged`, and the
+ * a script with the person token, the desktop bridge; the CLI only reads keys) reaches this tab as `settingsChanged`, and the
  * tab reads its settings again through the signal a save here sends, so
  * every cache that listens refreshes (App's settings cache, provider
  * readiness, the zoom manifest). GM, PR #203 r19 item 7: the signal names the

@@ -117,7 +117,9 @@ def test_a_proposal_counts_a_krea_plan_run_apart_from_paid(keyed):  # noqa: F811
 # uses_krea_account (the Krea plan). Everything that counts a node reads
 # model_pricing.cost_class.
 CLASS_PARTS = {
-    "key_billing": {("services/node_route.py", "may_bill"), ("services/node_route.py", "key_billing_account"),
+    # key_billing_host (round 13) is where a key-billing run runs, which
+    # key_billing_account names; it replaced key_billing_account's own read.
+    "key_billing": {("services/node_route.py", "may_bill"), ("services/node_route.py", "key_billing_host"),
                     ("services/model_pricing.py", "cost_class")},
     "uses_krea_account": {("services/model_pricing.py", "cost_class")},
     # The spend gate reads the one class too (review 10, NIT-5): may_bill is

@@ -1608,9 +1608,11 @@ every frontend command ran sandboxed with the notifier off.
 - MCP sends the person to "Settings > Providers > Krea", in the refusal and
   the docstring.
 - The Inspector's and readiness's Krea verb is pinned (F15, F18).
-- The CLI's free tag uses the provider id, as the paid part does: "1 free
-  run (fal)" beside "1 paid run (google)". When some free runs are local:
-  "2 free (1 on fal)".
+- The CLI's free tag uses the provider id, as the paid part does. (Corrected
+  in round 13: beside a paid run the code prints "1 paid run (google) and 1
+  free (fal)", which GM r25 item 1 confirms; "1 free run (fal)" is the free
+  part alone. Local runs beside a provider call read "2 free (1 fal, 1
+  local)" since r24.)
 
 ### Agent surfaces and the gate (review 11, HIGH-1, LOW-1, NIT-1 to NIT-8)
 
@@ -1708,3 +1710,270 @@ tables checks are current. No full suite ran on the Mac.
 - Four Krea handler errors still say "Krea API token" (styles, training,
   renaming, job history). They are worded on their own (error-copy
   rounds); change them to "Krea API key" in a wording pass?
+
+## Round 13 (2026-10-31): CI's two failures, every part tagged where it runs, one rule for long lists, an unreadable file never a 500 (GM r24, r25, review 12)
+
+Base 485fb5e0 (round 12 with main merged). No request to any host but
+localhost, control runs included. Backend tests, the frontend gates and the
+live backend and Vite ran inside the `sandbox-exec` profile that denies
+every outbound connection but localhost; a sandboxed canary reached none of
+the providers first. The browser can't run inside it, so CDP blocks
+8000-8010, 5173, hf.space, huggingface.co and the provider check, and sends
+everything else to a dead proxy; its canaries (8000, 5173, api.x.ai,
+api.meshy.ai, huggingface.co, api.krea.ai, api.replicate.com) were
+blocked, and they were the only requests off 127.0.0.1:5793/8793. Every
+npm and npx ran with the update notifier off. Fake keys only; nothing was
+run or accepted.
+
+### CI on 485fb5e0
+
+- **test_file_access::test_graph_import_content_is_checked_before_clearing_graph.**
+  The test was wrong, not the code. It asserts that nothing is called on
+  the client before the content check, with a `Mock` client. Round 12's
+  `graph_file_client` reads the client's own identity headers
+  (`_identity_headers()`, so `nebula load` says it is the CLI) before the
+  check. That is a local read that sends nothing; a `Mock` answers it with
+  another `Mock`, which then failed the header merge. The test's `Mock`
+  now answers it with `{"X-Nebula-Surface": "cli"}`, and the assertion
+  that no request goes out before the check leaves that local read out.
+  It failed on 485fb5e0 ("1 failed, 38 passed") and passes now (39).
+- **test_cli_apply::test_arrange_from_the_builder_and_in_the_reply**, only
+  in CI part 1. From `ci_shard.assign_files` (largest files first into the
+  part with the fewest tests), part 1 has 144 files and 27 run before
+  test_cli_apply. Of those, four open `/ws`: test_canvas_pins,
+  test_agent_questions_persist, test_canvas_proposal_updates and
+  test_canvas_proposals. The leak is test_canvas_pins'
+  `test_websocket_sends_pins_after_graph_sync`: its client leaves while
+  the handler is still sending, the handler is cancelled rather than
+  getting `WebSocketDisconnect`, and `except WebSocketDisconnect` was the
+  only place a socket was unregistered. The socket stayed in
+  `manager.active_connections`, so `canvas_open()` was true for every
+  later test in the process, and the arrange line said the open canvas
+  would lay the nodes out. The other three each passed together with the
+  arrange test.
+  - The structural fix: the `/ws` handler unregisters in a `finally`,
+    however the socket ends.
+  - An autouse conftest fixture clears the canvas and agent sockets before
+    and after each test (only once a test has imported `main`).
+  - test_cli_apply's `api` fixture sets its own precondition (no canvas
+    open), and a new test covers the arrange line with a canvas open.
+  - Proof, on 485fb5e0: test_canvas_pins then test_cli_apply, "1 failed,
+    65 passed"; with the fix, "67 passed". test_canvas_pins now asserts no
+    socket is left after its `with` block, which fails on 485fb5e0.
+  - Each layer alone: with the `finally` removed and the conftest reset
+    kept, the pair passes; with both removed and test_cli_apply's
+    precondition kept, it passes; with all three removed, it fails.
+
+### Where each part's runs go (GM r24 items 1 and 2; r25 item 1)
+
+- The CLI's runs line tags every part the same way: by where its runs go,
+  as ids, with a count per id once there's more than one, local last:
+  "1 paid run (openai) and 1 free (huggingface)", "3 paid runs (2
+  anthropic, 1 krea) and 2 free (1 fal, 1 local)". It is built in one
+  helper (`formatter._tags`) for the paid and the free part.
+- Idol's cost entry says where it runs as `runsOn` ("huggingface", from
+  `node_route.key_billing_host`); its `provider` stays "speridlabs", which
+  every other reader keeps reading.
+- "run" goes on the first class only and carries through the rest, and a
+  class that stands alone keeps it (GM r25 item 1): "1 paid run (google), 1
+  on the person's Krea plan and 1 free (fal)", "1 run on the person's Krea
+  plan and 1 free (fal)", "1 free run (fal)". The one visible change from
+  round 12: a line whose first class isn't paid now says "run" there ("2
+  runs on the person's Krea plan and 1 free", was "2 on the person's Krea
+  plan and 1 free").
+- A cost without an entry per run (an older backend's) keeps its providers
+  as listed.
+- MCP-SETUP, idol.md, the round 12 note (corrected in place) and the saved
+  CLI text quote what the formatter prints. The saved text,
+  `scratchpad/idol/cli-free-tags-r13.txt`, has live lines from the
+  sandboxed backend ("1 paid run (openai) and 1 free (huggingface), $0.13
+  at list prices", "1 paid run (openai) and 2 free (1 huggingface, 1
+  local)", "1 run on the person's Krea plan and 1 free (huggingface)", "1
+  free run (huggingface)") and the formatter's own lines for the fal
+  examples, since no shipped node is a sourced $0 on fal.
+
+### Krea's words (GM r24 items 3 and 5; r25 item 2)
+
+- The connection choice reads "API key · API balance" everywhere: the
+  node definitions (both copies and the catalog script), the Settings
+  default, readiness, both guides and the model reference.
+- The four Krea handler errors (styles, training, renaming, job history)
+  say "a Krea API key". A test fails on "Krea API token" anywhere in the
+  handlers, services, `main`, `mcp_server` or `person_line`.
+- The HTTP and CLI sign-in line names the row, as MCP does:
+  `node_readiness.KREA_SIGN_IN` is "needs the Krea account signed in
+  (Settings > Providers > Krea)".
+
+### One rule for long lists (GM r24 item 6)
+
+`errorCopy.countsInstead` is the one rule: up to 3 names, then a count.
+`nodeNameList`, `agentNameList`, `quotedNames` and the proposal bar's
+not-ready lines read it. In the bar, up to 3 nodes get a line each; from
+4 it is one line, "4 nodes can’t run here yet.", and every node's line is
+under "See every node that can’t run" (`canvasProposals.notReadyShown`).
+It counts nodes, not the lines a key lock merges. The old "and N more in
+the details" line is gone.
+
+### The 409's path and the settings file (GM r24 item 7; review 12, LOW-2, LOW-3)
+
+- The path shows the home folder as "~" ("~/.nebula/settings.json");
+  anywhere else, a sibling folder that only starts like home included, it
+  stays absolute (`settings.settings_file_shown`). Agents never see it:
+  every settings write runs `require_person` first.
+- One resolved path for reads, writes and the line: `settings_file()`
+  expands and resolves `SETTINGS_PATH`, which is also expanded where it is
+  built. A "~" in NEBULA_SETTINGS_PATH was read as a folder named "~"
+  under the working folder while the 409 named the home folder's file.
+- A file that isn't JSON Nebula can read (cut short, hand-edited) raises
+  `settings.SettingsUnreadable`, a ValueError as json.load's own error is,
+  so every reader that failed closed still does (runs included). `main`
+  catches it as `settings_service.SettingsUnreadable`, read through the
+  module where it is caught: tests/test_settings_path.py reloads the
+  settings module, and a class imported by name before the reload was no
+  longer the one raised (the wide run caught that). The settings routes
+  answer it:
+  - a save, a key's removal and `credentials/update`: 409 "Nothing was
+    saved because Nebula can’t read ~/.nebula/settings.json. Fix the
+    file, then try again." The file is untouched.
+  - GET /api/settings: 409 "Nebula can’t read ~/.nebula/settings.json.
+    Fix the file, then try again." (GM's line without "Nothing was saved
+    because", since nothing was being saved). Settings shows it under
+    "Couldn't load your API keys."; the panel already showed a 409's own
+    line, so only the backend changed. `nebula keys` gets the same line.
+  - Desktop: the panel asks `credentials/update` with `"check": true`
+    before it writes or clears the Keychain. The check runs every refusal
+    the write runs and changes nothing, so a refused key lands in neither
+    the Keychain nor the running backend.
+
+### Each provider's own noun (GM r25 item 3; review 12, copy LOW-1)
+
+The noun comes from one per-provider source, the key link's word
+(`providerCatalog.credentialNoun`, from `LINK_NOUNS`): "keys" a key,
+"tokens" a token. The buttons ("Add", "Replace", "Save"), the notices, the
+toast and the screen-reader names read it. A test fails if any provider's
+notice or name ends in another word than its link's. The screen-reader
+name says the noun once (`credentialName`): never "Krea · API key API
+key" or "Google · Gemini API API key".
+
+| Provider | Link | Notice |
+|---|---|---|
+| OpenAI | Open OpenAI keys | OpenAI key saved. |
+| Anthropic | Open Anthropic keys | Anthropic key saved. |
+| Google · Gemini API | Open Google AI Studio keys | Google · Gemini API key saved. |
+| Google · Vertex AI | Open Google Cloud service accounts | Google · Vertex AI key saved. |
+| OpenRouter | Open OpenRouter keys | OpenRouter key saved. |
+| Replicate | Open Replicate tokens | Replicate token saved. |
+| fal.ai | Open fal.ai keys | fal.ai key saved. |
+| Meshy | Open Meshy keys | Meshy key saved. |
+| Runway | Open Runway keys | Runway key saved. |
+| ElevenLabs | Open ElevenLabs keys | ElevenLabs key saved. |
+| MiniMax | Open MiniMax keys | MiniMax key saved. |
+| xAI (Grok) | Open xAI keys | xAI (Grok) key saved. |
+| Higgsfield | Open Higgsfield keys | Higgsfield key saved. |
+| QuiverAI (Arrow) | Open QuiverAI keys | QuiverAI (Arrow) key saved. |
+| Krea · API key | Open Krea keys | Krea · API key saved. |
+| Krea · usage key | Open Krea keys | Krea · usage key saved. |
+| Ideogram | Open Ideogram keys | Ideogram key saved. |
+| TypeSafe | Open TypeSafe keys | TypeSafe key saved. |
+| World Labs | Open World Labs keys | World Labs key saved. |
+| Black Forest Labs | Open Black Forest Labs keys | Black Forest Labs key saved. |
+| Hugging Face | Open Hugging Face tokens | Hugging Face token saved. |
+| BytePlus · ModelArk | Open BytePlus ModelArk keys | BytePlus · ModelArk key saved. |
+
+Vertex's link opens Google Cloud's service accounts, where the person
+makes the account's key, and every Vertex line already says
+"service-account key", so `LINK_NOUNS` maps that link word to "key" (its
+buttons stay "Add key", "Save key"). The Replicate guide now says "Add
+token" and "Save token". The run-failure line "Add your Replicate API key
+in Settings." (GM, error-copy round 15) is not a key notice and is
+unchanged.
+
+### Announcements (review 12, LOW-4)
+
+A line not said yet is kept (`unsaid`) until it is said. Another read, or
+the person's own save, landing within the two frames adds to it instead of
+cancelling it, and a window in the background, where no frames run, says
+every change it missed once it runs frames again. Tests: three remote
+changes a frame apart, a remote change with the person's own save landing
+before a frame, and a background window with two changes. All three fail
+on 485fb5e0.
+
+### Smaller items (review 12)
+
+- live_cost's count of an unknown kind is pinned: paid, never free (NIT-1).
+- The user guide says the unreadable-keys rule holds in the browser, what
+  desktop does, and what a file Nebula can't read at all does; it writes
+  "Settings > Providers > Hugging Face" (NIT-2, copy NIT-3).
+- No comment says the CLI changes keys; it only reads them (NIT-3).
+- The PR body: guidance scale, the exact Refusals bullet, where the 409
+  lines appear, the gate rule for unreadable keys, and the round's changes.
+
+### The ratchet
+
+`node_route.key_billing_host` reads `key_billing`, and
+`key_billing_account` now reads it through `key_billing_host`. The round
+10 ratchet (`CLASS_PARTS`) lists `key_billing_host` in place of
+`key_billing_account`, so the number of readers is unchanged.
+
+### Base check and mutants
+
+- On 485fb5e0 the new tests fail: backend, 27 of round 13's 36 (and
+  test_canvas_pins' new assertion, and the test_file_access fix);
+  frontend, 37 (round 13's file and the new Settings tests). The ones that
+  pass there pin shapes that were already right and that GM asked to pin
+  ("1 free run (fal)", "2 runs on the person's Krea plan" alone, "1 paid
+  run (google), 1 on the person's Krea plan and 1 free (fal)", "2 paid
+  runs (anthropic) and 1 free", a cost without entries), live_cost's
+  unknown kind (NIT-1 asked for a pin, not a fix), a Settings first-load
+  409 line (the panel already showed a 409's own line; the bug was the
+  backend's 500) and the Hugging Face buttons. Mutants kill them.
+- 32 mutants (19 backend, 13 frontend), each against its covering tests.
+  First pass: 29 killed, 3 survived, and each got a fix:
+  - B1 (the `/ws` `finally` removed) survived once with the machine
+    loaded: the TestClient test depends on whether the handler is
+    cancelled or gets a disconnect. A timing-free test now drives the
+    handler with a fake socket whose read is cancelled, or whose second
+    send hits a closed socket. B1 is killed (5 tests).
+  - B7 (local not last) survived: every case had ids that sort before
+    "local". A case with "replicate" kills it.
+  - B12 (the "~" not expanded) survived because `settings_file()` and the
+    module both expanded it. It is expanded once now, where
+    `SETTINGS_PATH` is built (agent_profiles' deny rules read that too),
+    and the "~" test kills its removal.
+- The leak's three layers, each alone (test_canvas_pins then
+  test_cli_apply, the `finally` removed in all three): conftest reset
+  kept and test_cli_apply's precondition removed, the arrange test
+  passes; conftest reset removed and the precondition kept, it passes;
+  all three removed, it fails.
+
+### Gates
+
+All sandboxed, every npm and npx with the update notifier off. tsc -b and
+lint pass. Focused vitest (158 files: every test importing a frontend
+module this round changed, plus round 12's list): 2,852 passed, 0 failed,
+no errors. Backend: every test file that imports or exercises a module
+this round changed (189 files, found by grepping tests/ for each module,
+route and fixture name): 7,532 passed, 64 skipped. Its first pass had 8
+failures: the ratchet entry and the reloaded error class above, and one
+round 9 socket test that passed alone, in that order with
+test_settings_path, and in the second full pass (settings.py was edited
+mid-run). vite build and the budget pass (460,290 bytes raw).
+check-node-contracts, the model reference and the route tables are
+current. No full suite ran on the Mac.
+
+### Questions for GM
+
+- The GET line for a file Nebula can't read drops "Nothing was saved
+  because": "Nebula can’t read ~/.nebula/settings.json. Fix the file, then
+  try again." OK?
+- Vertex's link word is "service accounts"; its notices and buttons keep
+  "key" ("Google · Vertex AI key saved.", "Add key"), as its own lines say
+  "service-account key". OK, or "service account"?
+- "run" on the first class makes "2 runs on the person's Krea plan and 1
+  free" (was "2 on the person's Krea plan and 1 free"). As r25 item 1
+  reads, but say if the plan part should keep no "run".
+- The paid part counts per provider too ("3 paid runs (2 anthropic, 1
+  krea)"), the same helper as the free part. OK?
+- Replicate's run-failure line still says "Add your Replicate API key in
+  Settings." (error-copy round 15). Should it say "token" too?
+

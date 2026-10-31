@@ -32,7 +32,7 @@ seed for a different object.
 
 Idol runs without a token on Hugging Face’s shared GPUs, which can be busy or out of free time. Add a fine-grained token with no repository access to use your own ZeroGPU allowance. With Hugging Face PRO, time past that allowance uses your prepaid credits.
 
-Add the token in **Settings → Providers → Hugging Face**; create it at
+Add the token in **Settings > Providers > Hugging Face**; create it at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
 Settings says "Hugging Face token saved. Checking it now." Once it's
 saved, the row's **…** menu has **Replace token** and **Remove**, with
@@ -43,10 +43,20 @@ another window, by a script or by the desktop app is said once in an open
 Settings panel ("Hugging Face token saved."); your own save isn't said
 twice.
 
-If Nebula can't read the keys in its settings file, it reads them as no
-keys, so Idol runs without a token, and Settings refuses to save a key
-over them: "Nothing was saved because Nebula can’t read the keys saved in
-<the file's full path>. Fix “apiKeys” in that file, then try again."
+In the browser, if Nebula can't read the keys in its settings file, it
+reads them as no keys, so Idol runs without a token, and Settings refuses
+to save a key over them: "Nothing was saved because Nebula can’t read the
+keys saved in <the file's path, with your home folder as "~">. Fix
+“apiKeys” in that file, then try again." In the desktop app, keys live in
+the macOS Keychain, not in that file, so this doesn't apply there; saving
+any setting clears keys found in the file.
+
+If Nebula can't read the settings file at all (cut short, or not JSON),
+nothing runs until it's fixed. Settings says "Nebula can’t read <the
+path>. Fix the file, then try again.", and any save, in the browser or
+the desktop app, is refused with "Nothing was saved because Nebula can’t
+read <the path>. Fix the file, then try again." On the desktop app the
+key isn't written to the Keychain either.
 Nebula shows Idol at $0 a run, since
 [Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
 Any bill for time past your allowance is between you and Hugging Face;

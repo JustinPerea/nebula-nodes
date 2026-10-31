@@ -16103,7 +16103,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16423,7 +16423,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16560,7 +16560,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16898,7 +16898,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17127,7 +17127,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17305,7 +17305,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25658,7 +25658,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26301,7 +26301,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26422,7 +26422,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26578,7 +26578,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26937,7 +26937,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27190,7 +27190,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27443,7 +27443,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27675,7 +27675,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27880,7 +27880,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28048,7 +28048,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28198,7 +28198,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28315,7 +28315,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28494,7 +28494,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28623,7 +28623,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28814,7 +28814,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28964,7 +28964,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29177,7 +29177,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29273,7 +29273,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29431,7 +29431,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29527,7 +29527,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29675,7 +29675,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29770,7 +29770,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29877,7 +29877,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29932,7 +29932,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30076,7 +30076,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30145,7 +30145,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30355,7 +30355,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30417,7 +30417,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30568,7 +30568,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30707,7 +30707,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30844,7 +30844,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31044,7 +31044,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31191,7 +31191,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31396,7 +31396,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31523,7 +31523,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31708,7 +31708,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31835,7 +31835,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32024,7 +32024,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32092,7 +32092,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32215,7 +32215,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32343,7 +32343,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32455,7 +32455,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32587,7 +32587,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32740,7 +32740,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32867,7 +32867,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32925,7 +32925,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33060,7 +33060,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33118,7 +33118,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33253,7 +33253,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33311,7 +33311,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33443,7 +33443,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33594,7 +33594,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33754,7 +33754,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33899,7 +33899,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34073,7 +34073,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34365,7 +34365,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34638,7 +34638,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34821,7 +34821,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35063,7 +35063,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35288,7 +35288,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35538,7 +35538,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35733,7 +35733,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35864,7 +35864,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36005,7 +36005,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36180,7 +36180,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36319,7 +36319,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36416,7 +36416,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36493,7 +36493,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36649,7 +36649,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36729,7 +36729,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36884,7 +36884,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36964,7 +36964,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -37143,7 +37143,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -37259,7 +37259,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -37480,7 +37480,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -37701,7 +37701,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -37886,7 +37886,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38045,7 +38045,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38170,7 +38170,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38288,7 +38288,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38478,7 +38478,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38679,7 +38679,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38793,7 +38793,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -38940,7 +38940,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39103,7 +39103,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39215,7 +39215,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39396,7 +39396,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39508,7 +39508,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39687,7 +39687,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39781,7 +39781,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -39944,7 +39944,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40085,7 +40085,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40159,7 +40159,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40309,7 +40309,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40423,7 +40423,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40622,7 +40622,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40729,7 +40729,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -40952,7 +40952,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -41116,7 +41116,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -41397,7 +41397,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -41553,7 +41553,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -41818,7 +41818,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -41953,7 +41953,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -42194,7 +42194,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -42354,7 +42354,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -42609,7 +42609,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -42776,7 +42776,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -42971,7 +42971,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43188,7 +43188,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43356,7 +43356,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43501,7 +43501,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43626,7 +43626,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43713,7 +43713,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -43911,7 +43911,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -44026,7 +44026,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -44237,7 +44237,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -44328,7 +44328,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -44477,7 +44477,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -44947,7 +44947,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -45163,7 +45163,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -45379,7 +45379,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -45618,7 +45618,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -45880,7 +45880,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46096,7 +46096,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46196,7 +46196,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46264,7 +46264,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46428,7 +46428,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46600,7 +46600,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46764,7 +46764,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46880,7 +46880,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -46995,7 +46995,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47120,7 +47120,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47236,7 +47236,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47351,7 +47351,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47462,7 +47462,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47543,7 +47543,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47678,7 +47678,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47816,7 +47816,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -47897,7 +47897,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48031,7 +48031,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48114,7 +48114,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48186,7 +48186,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48227,7 +48227,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48318,7 +48318,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48361,7 +48361,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48454,7 +48454,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48497,7 +48497,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48590,7 +48590,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -48633,7 +48633,7 @@
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",

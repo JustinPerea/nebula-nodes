@@ -81,7 +81,7 @@ from services.settings import (
     load_settings,
     load_saved_settings,
     saved_keys_writable,
-    settings_file_path,
+    settings_file_shown,
     save_settings,
     get_api_key,
     validate_provider_keys,
@@ -90,6 +90,10 @@ from services.settings import (
     update_injected_keys,
     hf_token_character_line,
 )
+# The module itself too, for its error class: read where it is caught, so a
+# reloaded settings module (tests/test_settings_path.py) raises the class
+# that is caught.
+import services.settings as settings_service
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
@@ -4075,6 +4079,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
     except WebSocketDisconnect:
+        pass
+    finally:
+        # However the socket ends: a disconnect, a send to a socket already
+        # closed, or the task cancelled (a test client leaving before the
+        # handler reads again, a shutdown). Left registered, it would keep
+        # `canvas_open` true and get every broadcast (PR #203 round 13).
         manager.disconnect(websocket)
 
 
@@ -9788,7 +9798,14 @@ async def zoom_manifest_entry(body: dict[str, Any]) -> dict:
 
 @app.get("/api/settings")
 async def get_settings() -> dict:
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except settings_service.SettingsUnreadable:
+        settings = None
+    if not isinstance(settings, dict):
+        # Cut short, hand-edited or not an object: Settings says the file
+        # can't be read, never a 500 (review 12 of PR #203, LOW-3).
+        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE_ON_READ))
     masked = dict(settings)
     if "apiKeys" in masked:
         # Justin, Q55 a: "Only the app (your person token) gets the endings.
@@ -9841,9 +9858,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # Do not mutate a loaded/shared object until the complete request is valid.
     # The file as saved, not as read: a save writes back every entry it wasn't
     # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
-    current = copy.deepcopy(load_saved_settings())
-    if not isinstance(current, dict):
-        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
+    current = _saved_settings_or_409()
     before = dict(load_settings().get("apiKeys") or {})
     writes_keys = "apiKeys" in body and accepts_keys and any(
         node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
@@ -9940,9 +9955,7 @@ async def remove_settings_api_key(provider: str) -> dict:
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
     # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
-    current = copy.deepcopy(load_saved_settings())
-    if not isinstance(current, dict):
-        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
+    current = _saved_settings_or_409()
     before = dict(load_settings().get("apiKeys") or {})
     if not saved_keys_writable(current):
         # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
@@ -9964,6 +9977,12 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     Called by the desktop Settings panel after it stores a provider key
     through the credential IPC. Person-only: an agent that could call this
     could swap or clear the person's injected keys. Never persists to disk.
+
+    With ``"check": true`` it refuses or accepts exactly as the write would
+    and changes nothing: the panel asks it before the Keychain write, so a
+    key the backend would refuse (a settings file it can't read) lands in
+    neither the Keychain nor the running backend (review 12 of PR #203,
+    LOW-3).
     """
     require_person(current_request_headers())
     provider = body.get("provider")
@@ -9988,6 +10007,11 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     refusal = _key_refusal(provider, key)
     if refusal is not None:
         raise HTTPException(status_code=422, detail=refusal)
+    # The file holds this backend's other settings: one it can't read gets
+    # the 409 before any key changes, as PUT /api/settings does.
+    _saved_settings_or_409()
+    if body.get("check") is True:
+        return {"status": "ok"}
     before = dict(load_settings().get("apiKeys") or {})
     update_injected_keys(provider, node_route.key_text(key))
     await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
@@ -10002,11 +10026,28 @@ async def credentials_update(body: dict[str, Any]) -> dict:
 KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                    "Fix “apiKeys” in that file, then try again.")
 SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
+# GET /api/settings, where nothing was being saved: GM's line without its
+# first clause.
+SETTINGS_UNREADABLE_ON_READ = "Nebula can’t read {path}. Fix the file, then try again."
+
+
+def _saved_settings_or_409() -> dict[str, Any]:
+    """The settings file as saved (load_saved_settings), copied for a write
+    to change; the 409 SETTINGS_UNREADABLE when it isn't JSON Nebula can
+    read or isn't an object (review 12 of PR #203, LOW-3: never a 500)."""
+    try:
+        current = load_saved_settings()
+    except settings_service.SettingsUnreadable:
+        current = None
+    if not isinstance(current, dict):
+        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
+    return copy.deepcopy(current)
 
 
 def _unreadable(line: str) -> str:
-    """``line`` naming the settings file this backend reads, resolved."""
-    return line.format(path=settings_file_path())
+    """``line`` naming the settings file this backend reads, resolved, with
+    the home folder as "~" (settings_file_shown; GM, PR #203 r24 item 7)."""
+    return line.format(path=settings_file_shown())
 
 
 # A key with something in it that is empty once trimmed: no key at all, so

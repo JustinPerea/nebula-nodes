@@ -229,7 +229,8 @@ def instance_access(
     return KEY
 
 
-KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers)"
+# The row by name, as MCP's sign-in hint does (GM, PR #203 r25 item 2).
+KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers > Krea)"
 
 
 def instance_missing(

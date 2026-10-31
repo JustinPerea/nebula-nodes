@@ -237,10 +237,17 @@ $0 and spend tracking never counts it as paid.
   - The CLI's `runs` line (`nebula propose`, `nebula proposal`) counts
     each class on its own (review 10, MEDIUM-1; GM r21 item 1): "up to 1
     paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices",
-    "1 run that may bill the person's own account (Idol)". A plan run is
-    never "free" and never in the figure, and a free run that calls a
-    provider names it as a paid run's tag does ("1 free run (fal)" beside
-    "1 paid run (google)"; GM r22 item 5), never "runs locally".
+    "1 run that may bill the person's own account (Idol)". "run" goes on
+    the first class only and carries through the rest, and a class that
+    stands alone keeps it (GM r25 item 1): "1 run on the person's Krea plan
+    and 1 free (fal)", "1 free run (fal)". A plan run is never "free" and
+    never in the figure. Each part is tagged one way, by
+    where its runs go as ids, a count each when there are several (GM r22
+    item 5, r24 items 1 and 2): "1 paid run (openai) and 1 free
+    (huggingface)", "3 paid runs (2 anthropic, 1 krea) and 2 free (1 fal,
+    1 local)". Idol's entry says where it runs as `runsOn`
+    ("huggingface", `node_route.key_billing_host`); its `provider` stays
+    "speridlabs".
     The journal's `proposal.created` has `planRuns` and `mayCostRuns`
     beside `paidRuns`. propose_change's description lists the classes
     from one table, `model_pricing.CLASS_ENTRIES` (review 10, LOW-2).
@@ -289,21 +296,40 @@ $0 and spend tracking never counts it as paid.
     its manage view is open turns it into the edit view, with focus in the
     field if focus was in the row (GM r21 item 2). The Providers tab's
     badge counts the sections as shown, held rows included (item 3). The
-    panel says each change made elsewhere once, politely: "Replicate key
-    saved." / "Replicate key removed." (item 4). The Krea key's row is
-    "Krea · API key" (item 7).
+    panel says each change made elsewhere once, politely: "Replicate token
+    saved." / "Replicate token removed." (item 4; r25 item 3: each
+    provider's noun is the word its link uses, `credentialNoun`). Lines
+    not said yet are kept until they are: a read or the person's own save
+    landing within the two frames adds to them, and a background window
+    says every change once it is shown again (review 12, LOW-4). The Krea
+    key's row is "Krea · API key" (item 7), and screen readers hear each
+    credential's name with its noun once (`credentialName`: "Krea · API
+    key", "Google · Gemini API key"; review 12, copy LOW-1).
   - A settings.json whose `apiKeys` isn't an object reads as no keys, and
     is never overwritten with a guess (review 10, NIT-6): a PUT that writes
     a key and a key's DELETE get 409 "Nothing was saved because Nebula
     can’t read the keys saved in <path>. Fix “apiKeys” in that file, then
     try again.", <path> the full path of the file this backend reads
-    (NEBULA_SETTINGS_PATH when set, resolved; GM r22 item 3); a PUT that
+    (NEBULA_SETTINGS_PATH when set, resolved; GM r22 item 3), with the
+    home folder as "~" ("~/.nebula/settings.json"; anywhere else it stays
+    absolute; `settings.settings_file_shown`, GM r24 item 7); a PUT that
     writes no key, or sends only masked `***` values, saves and keeps
-    `apiKeys` as it was. A file that isn't an object at all refuses every
-    write: "Nothing was saved because Nebula can’t read <path>. Fix the
-    file, then try again." A value that holds no key (null, [], "", false,
-    0) is replaced by the write instead (GM r23). No agent surface writes
-    settings, so the lines reach only the person's Settings panel.
+    `apiKeys` as it was. A file that isn't an object at all, or isn't JSON
+    Nebula can read (cut short, hand-edited; `settings.SettingsUnreadable`,
+    review 12, LOW-3), refuses every write, the desktop credential bridge's
+    included: "Nothing was saved because Nebula can’t read <path>. Fix the
+    file, then try again." GET /api/settings answers it with 409 "Nebula
+    can’t read <path>. Fix the file, then try again.", which Settings shows
+    under "Couldn't load your API keys.", never a 500; runs fail closed on
+    it, as before. On desktop the panel asks `credentials/update` with
+    `"check": true` before the Keychain write, so a refused key lands in
+    neither. The path is resolved once (`settings.settings_file`; a "~" in
+    NEBULA_SETTINGS_PATH is the home folder) for reads, writes and the 409
+    (review 12, LOW-2). A value that holds no key (null, [], "", false, 0)
+    is replaced by the write instead (GM r23). No agent surface writes
+    settings (`require_person` runs first), so the save lines reach only
+    the person's Settings panel; `nebula keys` reads GET /api/settings and
+    gets the read line.
   - Keys Nebula can't read are no keys for every reader, the spend gate
     included (review 11, HIGH-1, option a): an agent's Idol run then runs
     keyless, and no handler reads a key from the environment instead

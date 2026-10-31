@@ -10,10 +10,6 @@ export interface ProviderKeySpec {
   placeholder: string;
   /** A Google service-account key arrives as a JSON file, not a pasted token. */
   input?: 'secret' | 'service-account';
-  /** What the provider calls the credential in screen-reader labels ("token"
-   *  for Hugging Face); "API key" when unset. The visible "Add key" buttons
-   *  stay as they are (GM, PR #203 r1). */
-  credential?: string;
   /** Words dropped from node names in this row ("ElevenLabs TTS" reads as "TTS"). */
   brand?: string[];
   /** Nodes to name first in the row's summary. A test keeps these real. */
@@ -30,8 +26,36 @@ export interface ProviderKeySpec {
    *  view: "Open <provider> keys", with the provider's own word for its
    *  credential (keys or tokens) and no domain, since the name says where it
    *  goes (GM, PR #203 r19 item 5; Idol's "Open Hugging Face tokens", r14
-   *  item 5). Every provider has one. */
+   *  item 5). Every provider has one. It is the one source of the row's
+   *  credential noun (`credentialNoun`): its buttons, notices and
+   *  screen-reader names say the link's word (GM, PR #203 r25 item 3). */
   keyLink: string;
+}
+
+/** The noun each link word gives. Google Cloud's link opens its service
+ * accounts, where the person makes the account's key, and every Vertex line
+ * says "service-account key", so it is a key. */
+export const LINK_NOUNS: Readonly<Record<string, string>> = { keys: 'key', tokens: 'token', 'service accounts': 'key' };
+const LINK_WORD = / (keys|tokens|service accounts)$/;
+
+/** What the provider calls the credential, as its link says it: "key" for
+ * "Open OpenAI keys", "token" for "Open Hugging Face tokens" and "Open
+ * Replicate tokens" (GM, PR #203 r25 item 3: every provider, from one
+ * source). */
+export function credentialNoun(spec: Pick<ProviderKeySpec, 'keyLink'>): string {
+  const word = LINK_WORD.exec(spec.keyLink)?.[1];
+  return (word && LINK_NOUNS[word]) || 'key';
+}
+
+/** The row's credential by name, its noun said once: "Hugging Face token",
+ * "Replicate token", "OpenAI API key", "Google · Gemini API key", "Krea · API
+ * key", "Krea · usage key" (review 12, copy LOW-1: never "Krea · API key API
+ * key"). What screen readers hear on the field, Show and Remove. */
+export function credentialName(spec: Pick<ProviderKeySpec, 'keyLink' | 'label'>): string {
+  const noun = credentialNoun(spec);
+  if (noun !== 'key') return `${spec.label} ${noun}`;
+  if (/\bkey$/i.test(spec.label)) return spec.label;
+  return /\bAPI$/.test(spec.label) ? `${spec.label} key` : `${spec.label} API key`;
 }
 
 export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
@@ -84,7 +108,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // credits": "PRO, Team, and Enterprise users can continue using ZeroGPU
   // Spaces beyond their included daily quota by consuming pre-paid credits at
   // the rate of $1 per 10 minutes of GPU time."
-  { key: 'HF_TOKEN', label: 'Hugging Face', credential: 'token', placeholder: 'hf_...',
+  { key: 'HF_TOKEN', label: 'Hugging Face', placeholder: 'hf_...',
     url: 'https://huggingface.co/settings/tokens',
     brand: ['Idol'], note: 'Optional. Gives Idol your own Hugging Face allowance.',
     instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
