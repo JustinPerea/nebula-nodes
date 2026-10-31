@@ -17,8 +17,9 @@ node scripts/check-node-contracts.mjs
 ```
 
 A Claude Code cloud session installs the backend and frontend dependencies at
-start, through `.claude/settings.json` and `scripts/cloud-session-setup.sh`, so
-the checks above run there as written (the desktop checks below don't). The
+start, through `.claude/settings.json`, which runs
+`scripts/cloud-session-setup.mjs` and, in a Linux cloud session,
+`scripts/cloud-session-setup.sh`, so the checks above run there as written (the desktop checks below don't). The
 script does nothing outside the cloud. [AGENTS.md](AGENTS.md#where-tests-run)
 says which checks belong where.
 

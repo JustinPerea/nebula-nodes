@@ -9,7 +9,7 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 - The script exits at once unless both hold:
   - `CLAUDE_CODE_REMOTE` is exactly `true`. The Claude Code docs (env-vars, cloud-environments and hooks, read 2026-10-30) say cloud sessions set it and local ones never do.
   - `uname -s` is `Linux`.
-- Every local session in this repo runs the hook, so on the Mac it spawns a bash that exits.
+- Every local session in this repo runs the hook, so on the Mac or Windows node starts the wrapper, which exits without starting bash.
 - At start and resume, in the cloud, it runs two installs side by side, matching ci.yml:
   - **backend:** a venv at `backend/.venv`, the path AGENTS.md and CONTRIBUTING.md already use, then `pip install -r backend/requirements.txt`. If `import cairosvg` fails, it runs `apt-get install libcairo2`, non-interactive with a dpkg lock timeout.
   - **frontend:** `npm ci` in `frontend`.

@@ -1,6 +1,7 @@
 """The cloud-session setup hook (.claude/settings.json runs
-scripts/cloud-session-setup.sh whenever a session starts, resumes, clears,
-compacts or forks).
+scripts/cloud-session-setup.mjs whenever a session starts, resumes, clears,
+compacts or forks, and in a Linux cloud session that starts
+scripts/cloud-session-setup.sh).
 
 Outside a Claude Code cloud session it must do nothing at all: every local
 session in this repo runs the hook. Inside one it installs what CI installs at
@@ -165,7 +166,7 @@ def test_settings_run_the_script_on_every_session_start():
     # Claude Code cancels a SessionStart command after 600 s unless this says
     # otherwise; a cold install of both halves needs the headroom.
     assert 600 < hook["timeout"] <= 1800
-    assert SCRIPT.is_file()
+    assert WRAPPER.is_file() and SCRIPT.is_file()
 
 
 @pytest.mark.skipif(NODE is None, reason="needs node")
@@ -175,7 +176,11 @@ def test_the_hook_wrapper_starts_the_script_only_in_a_linux_cloud_session(tmp_pa
     and the script's stdout straight through, and is a no-op otherwise."""
     bin_dir = tmp_path / "bin"
     calls = tmp_path / "calls.log"
-    _stub(bin_dir / "bash", f'echo "bash $* <$(cat)>" >> "{calls}"\necho "from the script"\n')
+    # Builtins only: PATH holds nothing but this stand-in.
+    _stub(
+        bin_dir / "bash",
+        f'IFS= read -r -d "" input\necho "bash $* <$input>" >> "{calls}"\necho "from the script"\n',
+    )
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_")}
     env["PATH"] = str(bin_dir)
     if remote is not None:
