@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .venv/
 
+# Cloud-session setup (scripts/cloud-session-setup.sh)
+/.cloud-setup.lock
+
 # Build output
 frontend/dist/
 frontend/dist-desktop/
@@ -18,7 +21,7 @@ settings.json
 # Claude Code's project settings (the cloud-session hook) hold no secrets;
 # each person's own permissions stay local.
 !/.claude/settings.json
-.claude/settings.local.json
+**/.claude/settings.local.json
 credentials.json
 *.pem
 *.key

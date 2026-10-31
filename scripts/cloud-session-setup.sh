@@ -1,9 +1,10 @@
 #!/bin/bash
 # Installs what CI installs, so a Claude Code cloud session can run the same
-# suites. .claude/settings.json runs this on every session start and resume.
-# It does nothing outside the cloud: Claude Code sets CLAUDE_CODE_REMOTE=true
-# only in cloud sessions. To run it by hand in a cloud session the hook didn't
-# reach (several repositories, a project thread):
+# suites. .claude/settings.json runs this whenever a session starts, resumes,
+# clears, compacts or forks. It does nothing outside the cloud: Claude Code
+# sets CLAUDE_CODE_REMOTE=true only in cloud sessions, and it refuses any
+# machine that isn't Linux. To run it by hand in a cloud session the hook
+# didn't reach (several repositories, a project thread):
 #   CLAUDE_CODE_REMOTE=true bash scripts/cloud-session-setup.sh
 #
 # Each install is skipped while its inputs and this script are unchanged since
@@ -13,16 +14,33 @@
 if [ "$CLAUDE_CODE_REMOTE" != "true" ]; then
   exit 0
 fi
+# The variable alone isn't enough: a person can set it by hand on a Mac, where
+# npm ci would empty the frontend's node_modules under a running dev server.
+if [ "$(uname -s)" != "Linux" ]; then
+  echo "Cloud setup: this isn't a cloud machine ($(uname -s)), so nothing was installed."
+  exit 0
+fi
 
 root="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$root" || { echo "Cloud setup: couldn't enter $root."; exit 0; }
 
 script=scripts/cloud-session-setup.sh
 venv=backend/.venv
-log_dir=$(mktemp -d /tmp/nebula-cloud-setup.XXXXXX)
+log_dir=$(mktemp -d "${TMPDIR:-/tmp}/nebula-cloud-setup.XXXXXX")
 backend_stamp=$venv/.cloud-setup.sha256
 frontend_stamp=frontend/node_modules/.cloud-setup.sha256
 started=$SECONDS
+
+# One run at a time per checkout, since runs share its venv and node_modules.
+# Installs left running by a run that hit the hook timeout still hold the
+# lock, so a resume waits for them instead of racing them.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>".cloud-setup.lock"
+  if ! flock -w 600 9; then
+    echo "Cloud setup: another setup run is still going after 10 minutes. Run \`CLAUDE_CODE_REMOTE=true bash $script\` once it ends."
+    exit 0
+  fi
+fi
 
 # CI pins Python 3.12. Use it when the image has it, else let uv fetch it,
 # else fall back to the image's python3 and say which version that is.
@@ -59,7 +77,8 @@ setup_backend() {
     --requirement backend/requirements.txt || return 1
   # cairosvg loads libcairo at import time; the image may not ship it.
   if ! "$venv/bin/python" -c "import cairosvg" >/dev/null 2>&1; then
-    apt-get update -qq && apt-get install -y -qq libcairo2 || return 1
+    local apt=(env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=120 -qq)
+    { "${apt[@]}" update && "${apt[@]}" install -y --no-install-recommends libcairo2; } </dev/null || return 1
     "$venv/bin/python" -c "import cairosvg" || return 1
   fi
   sha256sum "$script" backend/requirements.txt > "$backend_stamp" || rm -f "$backend_stamp"
@@ -72,7 +91,7 @@ setup_frontend() {
     return 0
   fi
   rm -f "$frontend_stamp"
-  (cd frontend && npm ci --no-audit --no-fund --loglevel=error) || return 1
+  (cd frontend && npm ci --no-audit --no-fund --loglevel=error) </dev/null || return 1
   sha256sum "$script" frontend/package.json frontend/package-lock.json > "$frontend_stamp" \
     || rm -f "$frontend_stamp"
   echo "frontend: installed (node $(node --version))"
