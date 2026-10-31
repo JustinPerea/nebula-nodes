@@ -12,6 +12,10 @@ import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasS
 import { BoardCardNode } from './BoardCardNode';
 import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
+import type { NodeRect } from '../../lib/nodePlacement';
+import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
+import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
+import { OutsideChip } from './OutsideChip';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import '../../styles/moodboard-board.css';
 
@@ -28,16 +32,36 @@ export interface BoardCanvasProps {
   images: MoodboardImage[];
   /** One step: every card a drag (or a run of arrow keys) moved. */
   onMove: (moves: BoardMove[]) => void;
-  /** Image files dropped on the board (or added with its button), and the
-   *  point in board coordinates they gather around: the pointer, or the
-   *  middle of the view. */
-  onDropFiles: (files: File[], at: { x: number; y: number }) => void;
+  /** Image files dropped on the board (or added with its button), and where
+   *  they go (lib/boardPlacement): the point they gather around, the view
+   *  they should land in, and whether it was aimed (a drop). */
+  onDropFiles: (files: File[], target: BoardTarget) => void;
   /** Files are uploading: the Add images button waits. */
   uploading?: boolean;
-  /** Set by the board to where a paste lands, in board coordinates: the
-   *  last pointer position over the board, else the middle of the view
+  /** Set by the board to where a paste goes: the last pointer position over
+   *  the board, else the middle of the view, and the view at paste time
    *  (Cmd+V, Justin decided 2026-10-31). The Studio's paste reads it. */
-  pastePoint?: MutableRefObject<(() => { x: number; y: number }) | null>;
+  pasteTarget?: MutableRefObject<(() => BoardTarget) | null>;
+  /** Tiles just added outside the view: the board shows its edge chip for them. */
+  outside?: OutsideTiles | null;
+  /** The chip went: pressed, the tiles came into view, Esc. */
+  onOutsideDone?: () => void;
+}
+
+/** Where new tiles go: the point they gather around and the visible board, in
+ *  board coordinates (null before the board has a size). `aim` is a drop. */
+export interface BoardTarget {
+  at: { x: number; y: number };
+  view: NodeRect | null;
+  aim: boolean;
+}
+
+/** Tiles placed outside the view (GM, #210 answer 1): their rects, the first
+ *  one's image for the chip's thumbnail, and how many. */
+export interface OutsideTiles {
+  id: number;
+  rects: NodeRect[];
+  thumb: string | null;
 }
 
 const nodeTypes: NodeTypes = { card: BoardCardNode };
@@ -48,6 +72,8 @@ const FIT_PADDING = 0.12;
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
+/** Screen pixels kept clear inside the board's edges when placing new tiles. */
+const VIEW_INSET = 16;
 // Props React Flow gets the same object for on every render: a new one (an
 // inline `[]` or `{}`) would make it update its store on each pointer move.
 const NO_EDGES: [] = [];
@@ -92,7 +118,8 @@ function BoardDots() {
     color="var(--mb-board-dot)" />;
 }
 
-function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pastePoint: pastePointRef }: BoardCanvasProps) {
+function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pasteTarget: pasteTargetRef,
+  outside = null, onOutsideDone }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -277,10 +304,28 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     return { x: right + 280, y: cards.length ? Math.min(...cards.map((node) => node.position.y)) + 135 : 0 };
   };
 
+  // The toolbar is the board's bottom bar: the app's notices stack above it
+  // (lib/bottomBar.ts, GM #210 item 6), and new tiles land above it.
+  const controlsRef = useRef<HTMLDivElement>(null);
+  useBottomBarClearance([controlsRef]);
+
+  /** The board the person can see, in board coordinates, less a small inset
+   *  and the toolbar, so a tile placed in it is fully visible. */
+  const viewRect = (): NodeRect | null => {
+    const box = wrapperRef.current?.getBoundingClientRect();
+    if (!box || box.width <= 0 || box.height <= 0) return null;
+    const bar = controlsRef.current?.getBoundingClientRect();
+    const bottom = bar && bar.height > 0 ? Math.min(box.bottom, bar.top) : box.bottom;
+    const topLeft = screenToFlowPosition({ x: box.left + VIEW_INSET, y: box.top + VIEW_INSET });
+    const bottomRight = screenToFlowPosition({ x: box.right - VIEW_INSET, y: bottom - VIEW_INSET });
+    if (bottomRight.x <= topLeft.x || bottomRight.y <= topLeft.y) return null;
+    return { x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y };
+  };
+
   const addFiles = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
     if (files.length === 0) return;
-    onDropFiles(files, viewPoint());
+    onDropFiles(files, { at: viewPoint(), view: viewRect(), aim: false });
   };
 
   // The pointer over the board, in screen pixels (null once it leaves): a
@@ -291,14 +336,26 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     pointer.current = { x: event.clientX, y: event.clientY };
   };
   const onPointerLeave = () => { pointer.current = null; };
-  const pasteAt = useRef<() => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
-  pasteAt.current = () => (pointer.current ? screenToFlowPosition(pointer.current) : viewPoint());
+  const pasteAt = useRef<() => BoardTarget>(() => ({ at: { x: 0, y: 0 }, view: null, aim: false }));
+  pasteAt.current = () => ({ at: pointer.current ? screenToFlowPosition(pointer.current) : viewPoint(),
+    view: viewRect(), aim: false });
   useEffect(() => {
-    if (!pastePointRef) return undefined;
+    if (!pasteTargetRef) return undefined;
     const read = () => pasteAt.current();
-    pastePointRef.current = read;
-    return () => { if (pastePointRef.current === read) pastePointRef.current = null; };
-  }, [pastePointRef]);
+    pasteTargetRef.current = read;
+    return () => { if (pasteTargetRef.current === read) pasteTargetRef.current = null; };
+  }, [pasteTargetRef]);
+
+  /** The chip's press: the tiles into view on the board's fit spring (a pan the person asked for). */
+  const showOutside = useCallback((rects: NodeRect[]) => {
+    const { width, height } = flowStore.getState();
+    if (!width || !height || rects.length === 0) return;
+    const x = Math.min(...rects.map((r) => r.x));
+    const y = Math.min(...rects.map((r) => r.y));
+    const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+      height: Math.max(...rects.map((r) => r.y + r.height)) - y };
+    springTo(getViewportForBounds(bounds, width, height, MIN_ZOOM, 1, FIT_PADDING));
+  }, [flowStore, springTo]);
 
   const [dropping, setDropping] = useState(false);
   const carriesFiles = (event: ReactDragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -318,7 +375,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     if (!carriesFiles(event) && files.length === 0) return;
     event.preventDefault();
     if (files.length === 0) return;
-    onDropFiles(files, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    onDropFiles(files, { at: screenToFlowPosition({ x: event.clientX, y: event.clientY }), view: viewRect(), aim: true });
   };
 
   return (
@@ -350,7 +407,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
           ariaLabelConfig={ARIA_LABELS}
         >
           <BoardDots />
-          <Panel position="bottom-left" className="moodboard-board__controls">
+          <Panel ref={controlsRef} position="bottom-left" className="moodboard-board__controls" {...{ [BOTTOM_BAR_ATTR]: '' }}>
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(1 / ZOOM_STEP)}
               aria-label="Zoom out" title="Zoom out">−</button>
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(ZOOM_STEP)}
@@ -366,6 +423,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
           </Panel>
         </ReactFlow>
       </BoardWideContext.Provider>
+      {outside && onOutsideDone && (
+        <OutsideChip key={outside.id} tiles={outside} onShow={showOutside} onDone={onOutsideDone} />
+      )}
       {nodes.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>
