@@ -55,47 +55,68 @@ def drops_owner_access(function: ast.AST) -> list[int]:
     return lines
 
 
-def _marked(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Marked itself, or through a pytest.param(..., marks=...) of its own."""
-    return any("pytest.mark.unprivileged" in ast.unparse(decorator) for decorator in function.decorator_list)
+MARK = "pytest.mark.unprivileged"
+Function = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+def _says_mark(nodes: list[ast.expr]) -> bool:
+    return any(MARK in ast.unparse(node) for node in nodes)
+
+
+def _pytestmark(body: list[ast.stmt]) -> bool:
+    return any(
+        isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets)
+        and _says_mark([node.value])
+        for node in body
+    )
+
+
+def _uses(function: Function) -> set[str]:
+    """Names a function calls (f() or self.f()) or takes as fixtures."""
+    names = {arg.arg for arg in function.args.args + function.args.kwonlyargs}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                names.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) \
+                    and node.func.value.id in {"self", "cls"}:
+                names.add(node.func.attr)
+    return names
 
 
 def unmarked(source: str) -> list[str]:
+    """Tests that reach a chmod dropping the owner's read or write and aren't
+    marked. Scope: chmod modes written as int literals or stat constants, in
+    module functions and in test classes' methods, followed through helpers
+    and fixtures by name. A parametrize with one marked case counts as marked:
+    the scan doesn't check that the chmod runs only in that case."""
     tree = ast.parse(source)
-    if any(
-        isinstance(node, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets)
-        and "unprivileged" in ast.unparse(node.value)
-        for node in tree.body
-    ):
+    if _pytestmark(tree.body):
         return []
-    functions = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    tests = [f for f in functions if f.name.startswith("test")]
+    # (function, marked by its class or module) for every function in scope.
+    scope: list[tuple[Function, bool]] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope.append((node, False))
+        elif isinstance(node, ast.ClassDef):
+            class_marked = _says_mark(node.decorator_list) or _pytestmark(node.body)
+            methods = [item for item in node.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            scope += [(method, class_marked) for method in methods]
+    uses = {id(f): _uses(f) for f, _ in scope}
+    helpers = [f for f, _ in scope if not f.name.startswith("test")]
     # Helpers and fixtures that drop access, followed through the helpers and
     # fixtures that use them, so a test two steps away is still found.
-    dropping = {f.name for f in functions if not f.name.startswith("test") and drops_owner_access(f)}
-    while True:
-        more = {
-            f.name for f in functions
-            if not f.name.startswith("test") and f.name not in dropping and _reaches(f, dropping)
-        }
-        if not more:
-            break
+    dropping = {f.name for f in helpers if drops_owner_access(f)}
+    while more := {f.name for f in helpers if f.name not in dropping and uses[id(f)] & dropping}:
         dropping |= more
     return [
         f"{f.name} (line {f.lineno})"
-        for f in tests
-        if (drops_owner_access(f) or _reaches(f, dropping)) and not _marked(f)
+        for f, outer_marked in scope
+        if f.name.startswith("test")
+        and (drops_owner_access(f) or uses[id(f)] & dropping)
+        and not (outer_marked or _says_mark(f.decorator_list))
     ]
-
-
-def _reaches(function: ast.FunctionDef | ast.AsyncFunctionDef, names: set[str]) -> bool:
-    called = {
-        node.func.id for node in ast.walk(function)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    fixtures = {arg.arg for arg in function.args.args}
-    return bool((called | fixtures) & names)
 
 
 def test_every_test_that_takes_away_file_access_is_marked():
@@ -130,6 +151,13 @@ def test_every_test_that_takes_away_file_access_is_marked():
          "def test_a(p, d):\n    p.chmod(0)\n", []),
         ("import os, pytest\npytestmark = [pytest.mark.unprivileged]\ndef test_a(p):\n    os.chmod(p, 0)\n", []),
         ("import os, stat\ndef test_a(p):\n    os.chmod(p, 0o600)\n    os.chmod(p, stat.S_IRWXU)\n", []),
+        # Test classes: a method, a method through self.helper, a marked class.
+        ("import os\nclass TestA:\n    def test_a(self, p):\n        os.chmod(p, 0)\n", ["test_a (line 3)"]),
+        ("import os\nclass TestA:\n    def _lock(self, p):\n        os.chmod(p, 0)\n"
+         "    def test_a(self, p):\n        self._lock(p)\n", ["test_a (line 5)"]),
+        ("import os, pytest\n@pytest.mark.unprivileged\nclass TestA:\n    def test_a(self, p):\n        os.chmod(p, 0)\n", []),
+        # The word alone in pytestmark isn't the mark.
+        ("import os\npytestmark = ['unprivileged']\ndef test_a(p):\n    os.chmod(p, 0)\n", ["test_a (line 3)"]),
     ],
 )
 def test_the_scan_finds_what_it_should(source, expected):

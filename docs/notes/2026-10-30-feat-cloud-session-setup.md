@@ -134,7 +134,7 @@ Round 5:
 - **Warm path: 0.015 s.** Both halves said "up to date".
 - **The session ran the three jobs at once.**
   - **backend:** 12,318 passed, 8 failed, in 700 s. All 8 make a file or folder unreadable or unwritable with chmod. The session runs as root, which ignores permissions. Rerun as `nobody`, both files passed (54).
-  - **frontend:** `npm test` had 8,530 of 8,531 passing, in 645 s. The one failure was a 3 s `waitFor` timing out while the three jobs shared the CPU, and it passed alone. Lint passed in 62 s, and build in 26 s.
+  - **frontend:** `npm test` had 8,530 of 8,531 passing, in 645 s. The one failure was a 3 s `waitFor` timing out while the three jobs shared the CPU, and it passed alone. Lint passed in 62 s, and build in 26 s (444,245 bytes raw).
   - **contracts:** passed in 1 s.
 - **The PR comment failed:** `gh api …/issues/206/comments` answered 403, "GitHub access to this repository is not enabled for this session." The results were read back with `claude --teleport <id> -p …`, with tools denied.
 
@@ -153,12 +153,13 @@ Round 5:
 
 ### Round 7: what the cloud run found
 
+- **Round 9 (review 6):** the scan also covers test classes: methods, `self.` helpers, and a marked class or class-level `pytestmark`. It matches `pytest.mark.unprivileged` exactly, and works out each function's calls once. Its docstring states its scope, including that a parametrize with one marked case counts as marked. AGENTS.md names the checks, since #207 split CI into more jobs. Mutation check: 5 of 5 killed.
 - **Root-safe permission tests.** `@pytest.mark.unprivileged` (registered in `tests/conftest.py`) skips a test as root. It's on the nine tests that take away a file's read or write permission: the eight that failed, and `test_startup_keeps_every_file_when_the_store_cant_be_read[unreadable]`, which passed as root only because its store was still readable. CI runs them all.
   - `tests/test_unprivileged_marker.py` reads every test file's syntax tree. It finds each chmod whose mode drops the owner's read or write bit, follows helpers, helpers' helpers and fixtures to the tests that reach it, and fails on any test left unmarked.
   - Skipping is the honest result: as root, chmod can't produce the condition these tests check. Simulating the failure instead (patching the write calls) would test a different path than the real one.
   - Mutation check: 10 of 10 killed (each unmarked shape, the hook's root check, its marker check, its skip, the helper chain, fixtures and `mode=`).
 - **AGENTS.md** says:
-  - run the three jobs one after another in a cloud session;
+  - run the checks one after another in a cloud session;
   - root and the marker;
   - a cloud session may have no GitHub write access.
 
