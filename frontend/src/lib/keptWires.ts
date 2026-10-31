@@ -112,7 +112,7 @@ export const KEPT_WIRE_NO_PORT = 'Couldn’t make that connection. That input or
 export const keptWireWrongKind = (into: PortShape | undefined, out: PortShape | undefined) =>
   `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${takesTypes(into?.dataType)}, not ${typeName(out?.dataType)}.`;
 export const keptWireTooMany = (into: PortShape | undefined, limit: number) =>
-  `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${limit === 1 ? 'one connection' : `up to ${limit} connections`}.`;
+  `Couldn’t connect to “${portName(into, 'Input')}”. It takes ${limit === 1 ? 'only one connection' : `up to ${limit} connections`}.`;
 
 export type KeptWireCheck = { ok: true; duplicate: boolean } | { ok: false; line: string };
 
@@ -169,10 +169,15 @@ export function refusedConnectionLine(connection: Connection, nodes: readonly No
  * began at `from` (an output when its handleType is 'source'). Null when the
  * drop wasn't a refusal on a handle (a drop on empty space opens the
  * connection popup instead). */
-export function refusedDropConnection(from: { nodeId: string; handleId: string; handleType: 'source' | 'target' },
-  state: { isValid: boolean | null; toHandle?: { nodeId: string; id?: string | null } | null }): Connection | null {
+type DropStart = { nodeId: string; handleId: string; handleType: 'source' | 'target' };
+type DropEnd = { isValid: boolean | null; toHandle?: { nodeId: string; id?: string | null; type?: 'source' | 'target' } | null };
+
+export function refusedDropConnection(from: DropStart, state: DropEnd): Connection | null {
   const to = state.toHandle;
   if (state.isValid !== false || !to?.nodeId) return null;
+  // A handle of the same kind (an output on an output, an input on an
+  // input) makes no connection to describe (review 17 LOW-1): sameKindDrop.
+  if (to.type === from.handleType) return null;
   const fromSource = from.handleType === 'source';
   return {
     source: fromSource ? from.nodeId : to.nodeId,
@@ -180,6 +185,31 @@ export function refusedDropConnection(from: { nodeId: string; handleId: string; 
     target: fromSource ? to.nodeId : from.nodeId,
     targetHandle: fromSource ? (to.id ?? null) : from.handleId,
   };
+}
+
+/** GM r28 (1), verbatim: a drop on a handle of the same kind as the one
+ * the drag began at. Its own line, never another failure's (review 17
+ * LOW-1: React Flow refuses it in Strict mode with a `toHandle`, which was
+ * read as an input and said "isn’t on the node anymore" or a loop). */
+export const SAME_KIND_DROP_LINES = {
+  source: 'Couldn’t connect two outputs. Drag from an output to an input.',
+  target: 'Couldn’t connect two inputs. Drag from an output to an input.',
+} as const;
+
+/** The line a drop the canvas refused says (GM r26, 3; GM r28, 1), or null
+ * when the drop wasn't a refusal on a handle (a drop on empty space opens
+ * the connection popup; a release on the handle the drag began at, a
+ * click, says nothing). '' for a refusal with nothing to say. */
+export function refusedDropLine(from: DropStart, state: DropEnd, nodes: readonly Node<NodeData>[],
+  edges: readonly Edge[]): string | null {
+  const to = state.toHandle;
+  if (state.isValid !== false || !to?.nodeId) return null;
+  if (to.type === from.handleType) {
+    if (to.nodeId === from.nodeId && (to.id ?? null) === from.handleId) return null;
+    return SAME_KIND_DROP_LINES[from.handleType];
+  }
+  const connection = refusedDropConnection(from, state);
+  return connection ? refusedConnectionLine(connection, nodes, edges) : null;
 }
 
 /** The node a dropped connection's end names: the copy's name, else the

@@ -115,7 +115,8 @@ describe('GM r26, 3: the canvas’s drop end', () => {
   it('Canvas.onConnectEnd says the refused drop’s line before anything else', () => {
     const canvas = readFileSync(resolve(__dirname, '../src/components/Canvas.tsx'), 'utf8');
     const end = canvas.slice(canvas.indexOf('const onConnectEnd'));
-    expect(end).toMatch(/const refused = refusedDropConnection\(info, connectionState\);\s*if \(refused\) \{\s*useGraphStore\.getState\(\)\.sayRefusedConnection\(refused\);\s*return;/);
-    expect(end.indexOf('refusedDropConnection')).toBeLessThan(end.indexOf('showConnectionPopup'));
+    // Round 19: through the store's sayRefusedDrop (GM r28, 1: a handle of the same kind says its own line).
+    expect(end).toMatch(/if \(useGraphStore\.getState\(\)\.sayRefusedDrop\(info, connectionState\)\) return;/);
+    expect(end.indexOf('sayRefusedDrop')).toBeLessThan(end.indexOf('showConnectionPopup'));
   });
 });

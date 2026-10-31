@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { adoptRenumberedSelection, hasUnsavedSceneEdits, keepCanvasLocally, nodeCardTitle, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
+import { adoptRenumberedSelection, hasUnsavedSceneEdits, isTabLocalNode, keepCanvasLocally, nodeCardTitle, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
 import { isCanvasKept, pulseKeptCanvas, setKeptCanvasSaving, subscribeKeptCanvas } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
@@ -1105,7 +1105,7 @@ async function saveKeptEdits(): Promise<void> {
     const byCopyId = new Map(Object.entries(renumbered).map(([was, now]) => [now, was]));
     const dropped = droppedConnectionsLine(saved?.droppedWires ?? [],
       (id) => namesBefore.get(id) || namesBefore.get(byCopyId.get(id) ?? '') || null);
-    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : recoveredCopyFallbackName(kept.sourceName),
+    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : recoveredCopyFallbackName(kept.sourceName, namesInUse()),
       ...(dropped ? { dropped } : {}) };
   } catch (error) {
     setKeptCanvasSaving(false);
@@ -1567,6 +1567,15 @@ function adoptCanvasCamera(before: ProjectSnapshot['viewport']): void {
  * have changed anything: the same open or create. */
 /** True once the project is open; `then` (a create's) waits with the held
  * edits when saving is paused with unsaved edits. */
+/** Whether the person's open of the project already loaded should go to
+ * Nebula: the canvas holds a node by a tab-local id (Duplicate, Paste), and
+ * nothing holds the canvas in this tab (kept). STOPGAP with the lines it
+ * makes true: the bulk-create PR gives such nodes their ids at once. */
+function reopenGivesIds(id: string): boolean {
+  return getProjectContext()?.id === id && !isCanvasKept()
+    && useGraphStore.getState().nodes.some((node) => isTabLocalNode(node.id));
+}
+
 async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
   then?: () => Promise<void>): Promise<boolean> {
   const state = useProjectStore.getState();
@@ -1794,6 +1803,13 @@ function relistProjects(): Promise<void> {
 
 /** The switch toast's way back, as the list has it now: renamed, or gone
  * when that project was deleted. */
+/** Every name the tab knows is in use (the project list and Recently
+ * deleted), for a name the tab makes as Nebula would. */
+function namesInUse(): string[] {
+  const { projects, trash } = useProjectStore.getState();
+  return [...projects.map((project) => project.name), ...trash.map((entry) => entry.name)];
+}
+
 function wayBackIn(notice: ProjectSwitchNotice, projects: ProjectSummary[]): ProjectSwitchNotice {
   if (!notice.previousProjectId) return notice;
   const previous = projects.find((project) => project.id === notice.previousProjectId);
@@ -2127,10 +2143,13 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // Refused for good: the held edits' screen says it (holdRefusedEdits).
     if (error instanceof EditsRefused) { noteAgentOpening(latest(), alreadyHeld); return; }
     const newest = latest();
-    const who = byNebula(newest) ? 'Nebula' : newest.actor?.name ?? 'Another app';
     // Try again loads what is open now (initialize), as the line says.
-    const line = sentences(`${who} opened “${newest.projectName}”, but this window couldn't follow it.`,
-      reasonSentence(error, true));
+    // Nebula's own reopen says what to do instead (GM r27, 3 on PR #199:
+    // "window" in the app); its reason stays in the details.
+    const line = byNebula(newest)
+      ? `Nebula opened “${newest.projectName}”, but this window couldn’t follow it. Open it from Projects.`
+      : sentences(`${newest.actor?.name ?? 'Another app'} opened “${newest.projectName}”, but this window couldn’t follow it.`,
+        reasonSentence(error, true));
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
       error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
   } finally {
@@ -2297,8 +2316,13 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       }
       return;
     }
-    // Returning to an already loaded project is safe even during generation.
-    if (state.initialized && !state.busy && id === state.activeProject?.id) {
+    // Returning to an already loaded project is safe even during generation,
+    // unless its canvas holds a node only this tab has (a duplicate or a
+    // paste, GM r26 4's stopgap lines: "after you reopen the project"). Then
+    // the open goes to Nebula, which gives it its `nN` id as an agent's
+    // reopen does (review 17 drops-locks-ui MEDIUM-2); the flush in activate
+    // saves everything first. Not while kept: the kept lines say what unlocks.
+    if (state.initialized && !state.busy && id === state.activeProject?.id && !reopenGivesIds(id)) {
       // The person's own open of the project already loaded: no request goes
       // out, so the tab says it (GM r13, 1), even after following an agent there.
       personOpenedId = id;

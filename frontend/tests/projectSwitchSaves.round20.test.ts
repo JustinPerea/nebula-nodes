@@ -235,7 +235,7 @@ describe('M1: the canvas is read-only while it follows an agent\'s switch', () =
     const started = vi.spyOn(execution, 'executeNode');
     await useGraphStore.getState().executeNode('n1');
     expect(started).not.toHaveBeenCalled();
-    expect(lines()).toContain("Couldn't run “Hero prompt”. Claude Code is opening “beta”.");
+    expect(lines()).toContain("Couldn’t run “Hero prompt”. Claude Code is opening “beta”.");
     land();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
   });

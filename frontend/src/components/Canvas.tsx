@@ -21,7 +21,6 @@ import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
-import { refusedDropConnection } from '../lib/keptWires';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
 import { ContextMenu } from './ContextMenu';
 import { AgentNoteOutlines, ConnectionPopup } from './DeferredPanels';
@@ -516,11 +515,9 @@ export function Canvas() {
     // GM r26, 3: a drop on a handle the canvas refused (useIsValidConnection:
     // a wrong kind or a loop) says why, on kept and normal tabs alike; a
     // silent drop looks like a missed one.
-    const refused = refusedDropConnection(info, connectionState);
-    if (refused) {
-      useGraphStore.getState().sayRefusedConnection(refused);
-      return;
-    }
+    // A drop the canvas refused on a handle says why (GM r26, 3), a handle
+    // of the same kind included (GM r28, 1), and opens nothing.
+    if (useGraphStore.getState().sayRefusedDrop(info, connectionState)) return;
     if (connectionState.toHandle || connectionState.toNode || connectionState.isValid !== null) return;
 
     const point = getEventClientPoint(event);

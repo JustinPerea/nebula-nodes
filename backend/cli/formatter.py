@@ -377,6 +377,10 @@ def format_selection(selection: dict[str, Any]) -> str:
     """Format the bounded live canvas selection for human and agent callers."""
     nodes = selection.get("nodes", [])
     if not nodes:
+        # Only a duplicate or a paste selected (review 17 drops-locks-ui
+        # MEDIUM-1): the note still says so.
+        if selection.get("tabOnlyNote"):
+            return "No live canvas nodes selected.\n\n" + str(selection["tabOnlyNote"])
         return "No live canvas nodes selected."
 
     lines = [f"SELECTED NODES ({len(nodes)}):"]
@@ -516,6 +520,8 @@ def format_start(start: dict[str, Any]) -> str:
     lines.append(f"CANVAS: {title}, {counted(canvas.get('nodeCount', 0), 'node')}, {watching}")
     selection = canvas.get("selection") or []
     lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
+    if canvas.get("tabOnlyNote"):
+        lines.append(f"  {canvas['tabOnlyNote']}")
     for agent in canvas.get("agents") or []:
         target = agent.get("target") or {}
         at = target.get("nodeId") or (f"({target.get('x')},{target.get('y')})" if target else "?")
@@ -728,6 +734,9 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
 
     selection = snapshot.get("selection") or []
     lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
+    if snapshot.get("tabOnlyNote"):
+        # Nodes only the person's tab has (review 17 drops-locks-ui MEDIUM-1).
+        lines.append(f"  {snapshot['tabOnlyNote']}")
 
     pins = [pin for pin in snapshot.get("pins") or [] if isinstance(pin, dict)]
     if pins:

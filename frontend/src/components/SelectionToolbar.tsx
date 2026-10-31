@@ -9,10 +9,9 @@ import {
   StickyNote,
   Trash2,
 } from 'lucide-react';
-import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
+import { isTabLocalNode, sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
-import { isBackendNodeId } from '../lib/canvasPins';
 import { describeRunScope, runChipLabel, runChipTitle, summarizeRunScope } from '../lib/runScope';
 import { usePricingStore } from '../store/pricingStore';
 import { useInputSizeStore } from '../store/inputSizeStore';
@@ -85,7 +84,7 @@ export function SelectionToolbar() {
   // TAB_LOCAL_LINES). STOPGAP: the bulk-create PR deletes `tabLocal`. Note
   // always shows for one node, locked or not, so the bar never shifts when
   // the node gets its id.
-  const tabLocal = ids.some((id) => !isBackendNodeId(id));
+  const tabLocal = ids.some(isTabLocalNode);
   const showNote = ids.length === 1;
   const runScopeId = useId();
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar

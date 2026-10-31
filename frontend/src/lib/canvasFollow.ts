@@ -113,12 +113,16 @@ export function followingReason(switching: FollowingSwitch | null): string {
 }
 
 /** GM's derived lines (round 21, confirmed): `node` names a one-node run;
- * `count` (2 or more) a run of several nodes ("Couldn't run <N> nodes.");
- * neither: a run of the whole canvas ("Couldn't run the canvas."). */
+ * `count` (2 or more) a run of several nodes ("Couldn’t run <N> nodes.");
+ * neither: a run of the whole canvas ("Couldn’t run the canvas.").
+ * Nebula's own reopen (the boot's) says the lock form instead, GM r27 (3)
+ * on PR #199, verbatim for the canvas: "You can run the canvas when “P”
+ * opens." */
 export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number,
   byNebula = false): string {
   const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
-  return `Couldn't run ${what}. ${followingReason({ agent, projectName: project, byNebula })}`;
+  if (byNebula) return `You can run ${what} when “${project}” opens.`;
+  return `Couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`;
 }
 
 /** Create's line while following (G1), in its normal error style: its own

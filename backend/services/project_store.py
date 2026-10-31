@@ -465,7 +465,8 @@ def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken
       number.
     - Any other source takes the family's first name when it is free
       ("Alpha copy", "Recovered Alpha"; a number in the source is part of
-      its name: "Shot 7 copy", "Recovered Shot 7"). When that is taken, the
+      its name: "Shot 7 copy"; recovered_name gives "Recovered Shot 7
+      copy", GM r27 2). When that is taken, the
       first name is the source in the family, and the rule above applies
       to it: "Alpha copy 2", "Recovered Alpha copy 3" for "Alpha copy 2"
       with "Recovered Alpha copy 2" taken (never "copy 2 2").
@@ -485,16 +486,41 @@ def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken
     return _next_free(family, stem, names, number)
 
 
+# A name ending in a number of its own ("Shot 7", "Take2"): one whose last
+# number Nebula didn't add after "copy" ("Alpha copy 2").
+_ENDS_IN_A_NUMBER = re.compile(r".*[0-9]")
+
+
+def _ends_in_its_own_number(name: str) -> bool:
+    return bool(_ENDS_IN_A_NUMBER.fullmatch(name)) and _family_number(name, "copy") is None
+
+
 def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
     """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r14, r23 a and r25 5 of PR #199): "Recovered <project>", then the next
-    free number (family_name's rule). A name already in a recovery family
-    gets the next free number above its own in that family: "Recovered
-    Alpha" gives "Recovered Alpha 2", "Recovered canvas 2" gives "Recovered
-    canvas 3", and an old "Alpha (recovered)" (the family's first) gives
-    "Recovered Alpha 2"."""
+    r14, r23 a, r25 5 and r27 2 of PR #199): "Recovered <project>", then the
+    next free number (family_name's rule). A name already in a recovery
+    family gets the next free number above its own in that family:
+    "Recovered Alpha" gives "Recovered Alpha 2", "Recovered canvas 2" gives
+    "Recovered canvas 3", and an old "Alpha (recovered)" (the family's
+    first) gives "Recovered Alpha 2".
+
+    A name's own number is part of its name, and Nebula numbers only after
+    "copy" there (GM r27, 2): a project whose name ends in a number of its
+    own ("Shot 7") is recovered as "Recovered Shot 7 copy", then "Recovered
+    Shot 7 copy 2" (the copy family of "Recovered Shot 7"), never
+    "Recovered Shot 7" (read as the 7th "Recovered Shot") or "Recovered Shot
+    7 2". A number after "copy" is Nebula's and is raised: "Recovered Alpha
+    copy 2" gives "Recovered Alpha copy 3"."""
     if _family_stem(source_name, "canvas") is not None:
         return family_name(source_name, "canvas", catalog)
+    legacy = _LEGACY_RECOVERED.fullmatch(source_name)
+    stem = legacy.group("stem") if legacy else _family_stem(source_name, "recovered")
+    if stem is None and _ends_in_its_own_number(source_name):
+        return family_name(f"Recovered {source_name[:100]}", "copy", catalog)
+    if stem is not None and _ends_in_its_own_number(stem):
+        # "Recovered Take2", or an old "Shot 7 (recovered)": the family's
+        # number would follow the name's own.
+        return family_name(source_name if not legacy else f"Recovered {stem}", "copy", catalog)
     return family_name(source_name, "recovered", catalog)
 
 

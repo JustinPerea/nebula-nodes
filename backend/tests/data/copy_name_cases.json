@@ -1,0 +1,251 @@
+[
+ {
+  "source": "X",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy"
+ },
+ {
+  "source": "X",
+  "family": "copy",
+  "taken": [
+   "X copy"
+  ],
+  "expect": "X copy 2"
+ },
+ {
+  "source": "X copy",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy 2"
+ },
+ {
+  "source": "X copy 2",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy 3"
+ },
+ {
+  "source": "X copy 2",
+  "family": "copy",
+  "taken": [
+   "X copy",
+   "X copy 3"
+  ],
+  "expect": "X copy 4"
+ },
+ {
+  "source": "Shot 7",
+  "family": "copy",
+  "taken": [],
+  "expect": "Shot 7 copy"
+ },
+ {
+  "source": "Shot 7",
+  "family": "copy",
+  "taken": [
+   "Shot 7 copy"
+  ],
+  "expect": "Shot 7 copy 2"
+ },
+ {
+  "source": "Shot 7",
+  "family": "copy",
+  "taken": [
+   "Shot 7 copy",
+   "Shot 7 copy 2"
+  ],
+  "expect": "Shot 7 copy 3"
+ },
+ {
+  "source": "Recovered Alpha copy 2",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered Alpha copy 3"
+ },
+ {
+  "source": "Recovered X",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered X copy"
+ },
+ {
+  "source": "Recovered X 2",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered X 2 copy"
+ },
+ {
+  "source": "Recovered Shot 7 copy",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered Shot 7 copy 2"
+ },
+ {
+  "source": "Recovered canvas",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered canvas copy"
+ },
+ {
+  "source": "Recovered canvas 2",
+  "family": "copy",
+  "taken": [],
+  "expect": "Recovered canvas 2 copy"
+ },
+ {
+  "source": "X (recovered)",
+  "family": "copy",
+  "taken": [],
+  "expect": "X (recovered) copy"
+ },
+ {
+  "source": "Delta",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Delta"
+ },
+ {
+  "source": "Delta",
+  "family": "recovered",
+  "taken": [
+   "Recovered Delta"
+  ],
+  "expect": "Recovered Delta 2"
+ },
+ {
+  "source": "Delta",
+  "family": "recovered",
+  "taken": [
+   "Recovered Delta",
+   "Recovered Delta 2"
+  ],
+  "expect": "Recovered Delta 3"
+ },
+ {
+  "source": "X copy",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy"
+ },
+ {
+  "source": "X copy 2",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy 2"
+ },
+ {
+  "source": "X copy 2",
+  "family": "recovered",
+  "taken": [
+   "Recovered X copy 2"
+  ],
+  "expect": "Recovered X copy 3"
+ },
+ {
+  "source": "Recovered X",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X 2"
+ },
+ {
+  "source": "Recovered X 2",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X 3"
+ },
+ {
+  "source": "Recovered Alpha copy 2",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Alpha copy 3"
+ },
+ {
+  "source": "Shot 7",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Shot 7 copy"
+ },
+ {
+  "source": "Shot 7",
+  "family": "recovered",
+  "taken": [
+   "Recovered Shot 7 copy"
+  ],
+  "expect": "Recovered Shot 7 copy 2"
+ },
+ {
+  "source": "Shot 7",
+  "family": "recovered",
+  "taken": [
+   "Recovered Shot 7 copy",
+   "Recovered Shot 7 copy 2"
+  ],
+  "expect": "Recovered Shot 7 copy 3"
+ },
+ {
+  "source": "Recovered Shot 7 copy",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Shot 7 copy 2"
+ },
+ {
+  "source": "Take2",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Take2 copy"
+ },
+ {
+  "source": "Recovered canvas",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered canvas 2"
+ },
+ {
+  "source": "Recovered canvas 2",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered canvas 3"
+ },
+ {
+  "source": "X (recovered)",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X 2"
+ },
+ {
+  "source": "X (recovered 2)",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X 3"
+ },
+ {
+  "source": "Shot 7 (recovered)",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered Shot 7 copy"
+ },
+ {
+  "source": "",
+  "family": "canvas",
+  "taken": [],
+  "expect": "Recovered canvas"
+ },
+ {
+  "source": "",
+  "family": "canvas",
+  "taken": [
+   "Recovered canvas"
+  ],
+  "expect": "Recovered canvas 2"
+ },
+ {
+  "source": "",
+  "family": "canvas",
+  "taken": [
+   "Recovered canvas",
+   "Recovered canvas 2"
+  ],
+  "expect": "Recovered canvas 3"
+ }
+]

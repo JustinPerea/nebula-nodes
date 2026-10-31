@@ -36,7 +36,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NoReturn, Sequence
+from typing import Any, Awaitable, BinaryIO, Callable, Iterable, Iterator, Mapping, NamedTuple, NoReturn, Sequence
 from urllib.parse import quote, urlsplit
 
 from uuid import uuid4
@@ -251,6 +251,7 @@ from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 from services.selection_context import SelectionContextStore, _safe_value as _journal_safe_value, selection_prompt_context
+from services.selection_context import tab_only_fields
 from services.provider_recovery import (
     ProviderRecoveryCapacityError,
     ProviderRecoveryConflictError,
@@ -4667,15 +4668,25 @@ class ConnectionManager:
         self._settle_kept_later(KEPT_GRACE_SECONDS + KEPT_BOOT_SLACK_SECONDS)
         return min(tabs, 64)
 
-    @staticmethod
-    def _state_dir_writable(folder: Path) -> bool:
-        """Whether a file can be made (and removed) in ``folder``."""
+    # The errors that say no run could write a file in the folder: no
+    # permission (EACCES, EPERM) or a read-only file system (EROFS). Review
+    # 17 agents-docs NIT-3: any other (a full disk, a quota, an I/O error,
+    # too many open files) says nothing about who could write there, and a
+    # marker written before it is a real one, so the folder counts as
+    # writable and the marker holds its grace.
+    _CANT_WRITE_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
+
+    @classmethod
+    def _state_dir_writable(cls, folder: Path) -> bool:
+        """Whether a file can be made (and removed) in ``folder``: False only
+        for an error that means no run could have written the marker there
+        (_CANT_WRITE_ERRNOS)."""
         probe = folder / f".kept-probe.{uuid4().hex}.tmp"
         try:
             with probe.open("x", encoding="utf-8"):
                 pass
-        except OSError:
-            return False
+        except OSError as exc:
+            return exc.errno not in cls._CANT_WRITE_ERRNOS
         try:
             probe.unlink()
         except OSError:
@@ -6292,21 +6303,35 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="nodeIds must be an array")
     if len(node_ids) > 200:
         raise HTTPException(status_code=422, detail="nodeIds supports at most 200 entries")
-    before = set(selection_context.current())
+    before = (set(selection_context.current()), selection_context.tab_only())
     snapshot = selection_context.snapshot(
         cli_graph,
         node_registry,
         requested_ids=node_ids,
     )
     after = selection_context.current()
-    if set(after) != before:
+    tab_only = selection_context.tab_only()
+    # The selection agents can see, and how many nodes only the person's tab
+    # has (review 17 agents-docs LOW-1): selecting just a duplicate is a
+    # selection, never "cleared". Two selections of tab-local nodes with the
+    # same count read the same to agents (no id is kept), so no event.
+    if (set(after), tab_only) != before:
         live = [node_id for node_id in after if node_id in cli_graph.nodes]
         _journal(
             "selection.changed",
-            data={"nodeIds": live[:50], "count": len(live)},
-            summary=f"selected {_listed(live)}" if live else "cleared the selection",
+            data={"nodeIds": live[:50], "count": len(live), **tab_only_fields(snapshot)},
+            summary=_selection_summary(live, tab_only),
         )
     return snapshot
+
+
+def _selection_summary(live: list[str], tab_only: int) -> str:
+    """selection.changed's summary, for agents (`nebula watch`, MCP
+    wait_for_canvas_change). Nothing in the app shows it."""
+    only_tab = f"{counted(tab_only, 'node')} only their tab has" if tab_only else ""
+    if live:
+        return f"selected {_listed(live)}" + (f" and {only_tab}" if only_tab else "")
+    return f"selected {only_tab}" if only_tab else "cleared the selection"
 
 
 def _did(verb: str, node_id: str | None = None, label: str | None = None) -> dict[str, Any]:
@@ -7182,9 +7207,12 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/api/canvas/snapshot")
 async def get_canvas_snapshot() -> dict[str, Any]:
-    """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors."""
-    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
-    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
+    A selection holding nodes only the person's tab has adds ``tabOnlyCount``
+    and ``tabOnlyNote`` beside ``selection`` (review 17 agents-docs LOW-2)."""
+    read = selection_context.snapshot(cli_graph, node_registry)
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
+    snapshot.update(tab_only_fields(read))
     # Why a node's last run failed, as its card says it (services/node_errors.py).
     key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
@@ -7306,8 +7334,10 @@ async def agent_start_here(request: Request, via: str = "mcp") -> dict[str, Any]
         raise HTTPException(status_code=422, detail="via must be mcp or cli")
     headers = current_request_headers()
     caller = identify_agent(headers)
-    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
-    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    read = selection_context.snapshot(cli_graph, node_registry)
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
+    # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
+    snapshot.update(tab_only_fields(read))
     catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
@@ -17738,7 +17768,10 @@ async def _renumber_live_canvas_at_boot() -> None:
                 while len(handoffs) > _MAX_SWITCH_HANDOFFS:
                     handoffs.pop(next(iter(handoffs)))
                 catalog["handoffs"] = handoffs
-                project[_HANDOFF_RENUMBERED] = {"revision": before, "map": dict(mapping)}
+                # The baseline is the project's copy, the values just taken
+                # (review 17 MEDIUM-1): the tab's last autosave of each node.
+                project[_HANDOFF_RENUMBERED] = {"revision": before, "map": dict(mapping),
+                                                "base": _renumbered_base(project, mapping)}
                 cli_graph._maybe_persist()
                 project_store.commit(catalog)
                 _boot_replacement.update({"projectId": project_id, "projectSwitch": {
@@ -20346,17 +20379,46 @@ def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
 
 # On a project an open renumbered while a handoff is kept for it (a reopen in
 # place; review 16 HIGH-1 of PR #199): {"revision": the handoff's, "map":
-# {old: new}}. It lasts as long as that handoff and ends with it.
+# {old: new}, "base": {new: {params, label, position}}}. It lasts as long as
+# that handoff and ends with it. ``base`` (round 19, review 17 MEDIUM-1) is
+# each renamed node as the open (or the boot) loaded it: the tab's last
+# autosave of it, which the handoff compares the tab's copy with, so only
+# what the person changed since counts as unsent.
 _HANDOFF_RENUMBERED = "_handoffRenumbered"
+
+
+def _renumbered_base(project: Mapping[str, Any], mapping: Mapping[str, str]) -> dict[str, dict[str, Any]]:
+    """Each renamed node's settings, name and place in the project's stored
+    copy (already under the new ids): the handoff's baseline."""
+    wanted = set(mapping.values())
+    base: dict[str, dict[str, Any]] = {}
+    for node in (project.get("snapshot") or {}).get("nodes") or []:
+        if not isinstance(node, dict) or node.get("id") not in wanted:
+            continue
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        base[node["id"]] = _handoff_node_values(node, data.get("label"))
+    return base
+
+
+def _handoff_node_values(node: Mapping[str, Any], label: Any) -> dict[str, Any]:
+    """A node's settings, name (None for the model's own) and place, as the
+    handoff compares them."""
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    position = node.get("position")
+    return {"params": copy.deepcopy(params), "label": label or None,
+            "position": copy.deepcopy(position) if isinstance(position, dict) else None}
 
 
 def _keep_handoff_renumbering(catalog: dict[str, Any], project_id: str, mapping: Mapping[str, str]) -> None:
     """After an open's _begin_switch: the open's {old: new} goes with the
-    handoff kept for ``project_id`` (a reopen in place), or none is kept."""
+    handoff kept for ``project_id`` (a reopen in place), with each renamed
+    node as the open loaded it (``base``), or none is kept."""
     project = catalog["projects"][project_id]
     revision = _switch_handoffs(catalog).get(project_id)
     if revision is not None and mapping:
-        project[_HANDOFF_RENUMBERED] = {"revision": revision, "map": dict(mapping)}
+        project[_HANDOFF_RENUMBERED] = {"revision": revision, "map": dict(mapping),
+                                        "base": _renumbered_base(project, mapping)}
     else:
         project.pop(_HANDOFF_RENUMBERED, None)
 
@@ -20369,6 +20431,15 @@ def _handoff_renumbering(project: Mapping[str, Any], revision: str) -> dict[str,
         return {}
     return {old: new for old, new in kept["map"].items()
             if isinstance(old, str) and isinstance(new, str) and _BACKEND_NODE_ID.fullmatch(new)}
+
+
+def _handoff_renumbering_base(project: Mapping[str, Any], revision: str) -> dict[str, Any]:
+    """The kept ``base`` ({new: {params, label, position}}) of the handoff at
+    ``revision``, the stored dict itself (a handoff moves it on), else {}."""
+    kept = project.get(_HANDOFF_RENUMBERED)
+    if not isinstance(kept, dict) or kept.get("revision") != revision or not isinstance(kept.get("base"), dict):
+        return {}
+    return kept["base"]
 
 
 def _drop_ended_handoff_renumbering(catalog: dict[str, Any]) -> None:
@@ -20679,10 +20750,15 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         # Its refusal comes where the check ran before (_IngressVerdict).
         verdict = await _ingress_verdict_off_loop(body["snapshot"])
     result = _save_project(project_id, body, ingress=verdict)
+    removed = result.pop("_removed", None)
     if result.pop("_liveChanged", False):
         # An agent reopened the project the tab showed: the handoff's typing
         # went onto the live graph too (review 20 M-1). The tab's own echo.
         await _broadcast_graph_sync(edit=True)
+    if removed:
+        # A renumbered node the person deleted before the handoff (review 17
+        # reopen LOW-2): its pins and proposals, as for any delete.
+        await _announce_removed_nodes(removed)
     if "previousName" in result and result["previousName"] != result["project"]["name"]:
         # Before any await (round 8 of PR #114).
         _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
@@ -20704,14 +20780,18 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             # switches (_begin_switch). The project may be the open one
             # again: an agent reopened the project the tab was showing,
             # which reloads it from what was saved.
-            merged = _save_handoff(project, body["snapshot"], ingress=ingress,
+            landed = _save_handoff(project, body["snapshot"], ingress=ingress,
                                    pending_params=body.get("pendingParams"), pending_labels=body.get("pendingLabels"),
-                                   renumbered=_handoff_renumbering(project, handoff))
+                                   renumbered=_handoff_renumbering(project, handoff),
+                                   base=_handoff_renumbering_base(project, handoff))
             refresh_metadata(project)
             project_store.commit(catalog)
-            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(project, merged)
+            removed: list[dict[str, Any]] = []
+            live = catalog["activeProjectId"] == project_id and _apply_handoff_live(
+                project, landed.merged, deleted=landed.deleted, removed=removed)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
-                    "handoff": True, **({"_liveChanged": True} if live else {})}
+                    "handoff": True, **({"_liveChanged": True} if live else {}),
+                    **({"_removed": removed} if removed else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
@@ -20854,9 +20934,17 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
     return merged
 
 
+class _HandoffLanded(NamedTuple):
+    """What a handoff's save merged ({nodeId: (keys, name merged, moved)})
+    and the renumbered nodes the person deleted before it (their new ids)."""
+    merged: dict[str, tuple[list[str], bool, bool]]
+    deleted: list[str]
+
+
 def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
                   pending_params: Any = None, pending_labels: Any = None,
-                  renumbered: Mapping[str, str] | None = None) -> dict[str, tuple[list[str], bool, bool]]:
+                  renumbered: Mapping[str, str] | None = None,
+                  base: dict[str, Any] | None = None) -> _HandoffLanded:
     """The last save from a tab whose project an agent switched away from.
 
     The switch already merged the live canvas into this project
@@ -20874,29 +20962,51 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     anyone but the person's tab) refuses the whole save with 409, so the tab
     keeps it as a copy.
 
-    Answers the merged nodes ({nodeId: (keys, name merged)}), so a project
-    that is the open one again (an agent reopened it) gets them onto the live
-    graph too (_apply_handoff_live, round 21, review 20 M-1).
+    Answers the merged nodes ({nodeId: (keys, name merged, moved)}) and the
+    deleted ones, so a project that is the open one again (an agent reopened
+    it) gets them onto the live graph too (_apply_handoff_live, round 21,
+    review 20 M-1).
 
     ``renumbered`` ({old: new}; PR #199 round 18, review 16 HIGH-1): the ids
     the open that kept this handoff gave the project's tab-local nodes (a
-    reopen in place). The tab's snapshot was taken before it, so it still
-    holds the old ids: it is moved first (_apply_node_renumbering: ids,
+    reopen in place). The tab's snapshot was taken before it, so it may
+    still hold the old ids: it is moved first (_apply_node_renumbering: ids,
     wires, run history, references, and the keys of the unsent lists), so a
-    duplicated or pasted node lands once, as its new id, not twice. The tab
-    never sent such a node's values (its id wasn't Nebula's), so its
-    settings and name are all unsent: they merge onto the new id, and onto
-    the live graph. A snapshot the tab already moved (it holds the new id)
-    lands the same way.
+    duplicated or pasted node lands once, as its new id, not twice. A
+    snapshot the tab already moved (it holds the new id) lands the same way.
+
+    The tab never sent such a node's values (its id wasn't Nebula's), so
+    from the person's tab its unsent values are what differs from ``base``
+    ({new: {params, label, position}}, the node as the open or the boot
+    loaded it; round 19, review 17 MEDIUM-1): each setting whose value
+    differs, its name if it differs, its place if it differs, plus anything
+    the unsent lists name. Everything else keeps the stored copy, and the
+    live graph keeps what an agent wrote to the new id after the open, as
+    for any other node: the person's change wins on the keys they changed,
+    an agent's change on any other key stands. ``base`` moves on to what
+    landed, so a later handoff counts only newer changes.
+
+    A renumbered node the tab's snapshot holds under neither id was deleted
+    by the person before the save reached Nebula (review 17 reopen LOW-2):
+    the tab never sends a delete for a node only it had, so leaving it out is
+    how it says so. It is dropped from the stored copy (and, by
+    _apply_handoff_live, from the live graph, as the person's delete). Only
+    from the person's tab; a node an agent added after the open is in no map,
+    so it stays.
     """
     _refuse_handoff_pending_not_from_the_tab(pending_params, pending_labels)
+    persons_tab = _from_persons_tab()
+    base = base if base is not None else {}
     stored = project["snapshot"]
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
     renamed: set[str] = set()
+    deleted: set[str] = set()
     if renumbered:
         if isinstance(raw, dict):
             held = {node.get("id") for node in raw.get("nodes") or [] if isinstance(node, dict)}
             renamed = {new for old, new in renumbered.items() if old in held or new in held}
+            if persons_tab:
+                deleted = {new for old, new in renumbered.items() if old not in held and new not in held}
             _apply_node_renumbering(raw, renumbered)
         pending_params = _renumbered_keys(pending_params, renumbered)
         pending_labels = _renumbered_keys(pending_labels, renumbered)
@@ -20911,16 +21021,25 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
     staged_nodes = {node["id"]: node for node in staged["nodes"]}
     moved: set[str] = set()
-    for node_id in sorted(renamed & set(staged_nodes) & backend_nodes if _from_persons_tab() else ()):
-        # The renumbered node: every setting and its name are the tab's
-        # unsent ones (only from the person's tab, as the unsent lists are:
-        # anyone else's save keeps the stored copy).
-        keys = list(((staged_nodes[node_id].get("data") or {}).get("params") or {}))
-        unsent_params[node_id] = list(dict.fromkeys([*unsent_params.get(node_id, []), *keys]))
-        unsent_labels.add(node_id)
-        moved.add(node_id)
+    landed_values: dict[str, dict[str, Any]] = {}
+    for node_id in sorted(renamed & set(staged_nodes) & backend_nodes if persons_tab else ()):
+        # The renumbered node: what the person changed since the open loaded
+        # it (only from the person's tab, as the unsent lists are: anyone
+        # else's save keeps the stored copy).
+        tab_node = staged_nodes[node_id]
+        theirs = _handoff_node_values(tab_node, (tab_node.get("data") or {}).get("label"))
+        was = base.get(node_id) if isinstance(base.get(node_id), dict) else {}
+        was_params = was.get("params") if isinstance(was.get("params"), dict) else {}
+        keys = [key for key, value in theirs["params"].items() if key not in was_params or was_params[key] != value]
+        if keys:
+            unsent_params[node_id] = list(dict.fromkeys([*unsent_params.get(node_id, []), *keys]))
+        if theirs["label"] != was.get("label"):
+            unsent_labels.add(node_id)
+        if theirs["position"] != was.get("position"):
+            moved.add(node_id)
+        landed_values[node_id] = theirs
     merged: dict[str, dict[str, Any]] = {}
-    for node_id in [*unsent_params, *(key for key in unsent_labels if key not in unsent_params)]:
+    for node_id in dict.fromkeys([*unsent_params, *sorted(unsent_labels), *sorted(moved)]):
         tab_node = staged_nodes.get(node_id)
         if tab_node is None:
             raise _handoff_refused(HANDOFF_WHY["removed"])
@@ -20937,7 +21056,8 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
              for node in staged["nodes"]]
     listed = {node["id"] for node in nodes}
-    nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
+    nodes += [node for node in stored["nodes"]
+              if node["id"] in backend_nodes and node["id"] not in listed and node["id"] not in deleted]
     kept = {node["id"] for node in nodes}
     stored_edges = {edge["id"]: edge for edge in stored["edges"]}
     edges = [stored_edges.get(edge["id"], edge) if edge["id"] in backend_edges else edge for edge in staged["edges"]]
@@ -20945,8 +21065,14 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
     edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
     project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
-    return {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels, node_id in moved)
-            for node_id in merged}
+    # The baseline moves on to what landed: a later handoff (the tab's last
+    # save after one in flight) counts only what changed since.
+    base.update(landed_values)
+    for node_id in deleted:
+        base.pop(node_id, None)
+    return _HandoffLanded(
+        {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels, node_id in moved) for node_id in merged},
+        sorted(deleted))
 
 
 def _renumbered_keys(listed: Any, renumbered: Mapping[str, str]) -> Any:
@@ -20964,14 +21090,23 @@ def _renumbered_keys(listed: Any, renumbered: Mapping[str, str]) -> Any:
     return moved
 
 
-def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool, bool]]) -> bool:
+def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[list[str], bool, bool]], *,
+                        deleted: Sequence[str] = (), removed: list[dict[str, Any]] | None = None) -> bool:
     """The handoff's merged keys and names onto the live graph, for a project
     that is the open one again (round 21 of PR #195, review 20 M-1): an
     agent's reopen of the project the tab showed reloaded the live graph from
     what was saved, and every read of the open project lays the live graph
     over the stored copy, so the typing kept only in the stored copy was lost
     at the next read. Same step as the save (no await). Answers whether the
-    live graph changed (the route then broadcasts a graphSync)."""
+    live graph changed (the route then broadcasts a graphSync).
+
+    Only what the person changed is written and journaled as theirs (round
+    19, review 17 MEDIUM-1): ``merged`` holds only those keys, names and
+    places. ``deleted``: renumbered nodes the person deleted before the
+    handoff (review 17 reopen LOW-2), removed from the live graph and
+    journaled as the person's delete (``node.removed``); their removal
+    entries go into ``removed`` for the route to announce. One that can't be
+    deleted (a paid start holds it) stays, and the next read keeps it."""
     stored = {node["id"]: node for node in project["snapshot"]["nodes"]}
     changed = False
     for node_id, (keys, label, placed) in merged.items():
@@ -21004,6 +21139,29 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
             _journal("node.params", node_id=node_id, data=changes,
                      summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})")
         changed = changed or bool(update) or label
+    gone: list[dict[str, Any]] = []
+    for node_id in deleted:
+        live = cli_graph.nodes.get(node_id)
+        if live is None:
+            continue
+        try:
+            _ensure_node_deletable(node_id, live)
+        except HTTPException:
+            continue
+        name = _node_label(node_id)
+        try:
+            cli_graph.remove_node(node_id)
+        except ValueError:
+            continue
+        gone.append({"id": node_id, "name": name, "definitionId": str(live.get("definitionId") or ""),
+                     "position": copy.deepcopy(live.get("position"))})
+    if gone:
+        _note_scene_deletes([{"id": item["id"], "definitionId": item["definitionId"]} for item in gone])
+        entries = _remove_side_effects(gone, lambda item: f"{item['name']} ({item['id']}) was deleted")
+        _journal_removed_nodes(entries, note="", pin_reason=lambda item: f"{item['name']} was deleted")
+        if removed is not None:
+            removed.extend(entries)
+        changed = True
     return changed
 
 

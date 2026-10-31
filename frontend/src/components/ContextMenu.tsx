@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUIStore } from '../store/uiStore';
-import { sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
+import { isTabLocalNode, sceneDeleteDisabledTitle, useGraphStore } from '../store/graphStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
-import { isBackendNodeId } from '../lib/canvasPins';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { useCanvasLock } from '../lib/canvasLock';
 import type { KeptAction } from '../lib/keptCanvas';
@@ -135,7 +134,7 @@ export function ContextMenu() {
       // Agents only see nodes the backend knows (ids like n4): a duplicated
       // or pasted node waits for the project's next open (GM r26, 4; a
       // stopgap the bulk-create PR deletes).
-      tabLocal: isBackendNodeId(nodeId) ? undefined : 'note',
+      tabLocal: isTabLocalNode(nodeId) ? 'note' : undefined,
       action: () => {
         composeNote({ nodeId });
         hideContextMenu();

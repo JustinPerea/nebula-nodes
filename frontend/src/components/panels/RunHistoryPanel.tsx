@@ -265,7 +265,7 @@ export function RunHistoryPanel() {
                         // kept, then the run, following, offline (lib/canvasLock; GM r19 on PR #199).
                         // Offline, its own verb (PR #200 review 3 LOW-1; GM
                         // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
-                        {...lockedAction(lock, { kept: 'run', title: recoveryReplayReady
+                        {...lockedAction(lock, { kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun', title: recoveryReplayReady
                           ? 'Resume this run from its saved checkpoint'
                           : 'Run this again with the same nodes and settings',
                         offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN },
@@ -284,7 +284,7 @@ export function RunHistoryPanel() {
                         <button
                           type="button"
                           className="run-history__replay"
-                          {...lockedAction(lock, { kept: 'run', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
+                          {...lockedAction(lock, { kept: 'rerun', disabled: !latestSourceReady, offline: OFFLINE_RERUN, title: latestSourceReady
                             ? 'Run again with the same settings and the latest artwork from Paper'
                             : 'Refresh or reconnect the Paper source first.' }, { run: isExecuting, runTitle: runFinishesLine(OFFLINE_RERUN) })}
                           onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}

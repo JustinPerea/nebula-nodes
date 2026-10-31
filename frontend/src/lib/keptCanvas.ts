@@ -67,17 +67,25 @@ export function useKeptCanvas(): boolean {
 // say "run nodes". GM r25 (3): Ask and Note say one line on any node while
 // kept, one added while kept (a tab-local id) or a saved one: saving is what
 // unlocks both.
-export type KeptAction = 'run' | 'run-nodes' | 'note' | 'ask' | 'settings'
+// GM r27 (1): each control gets its own verb: a note's Delete says "delete
+// the note", and Run history's Rerun, Retry and Recover (and a node's Rerun
+// with latest source) say theirs, as their offline lines do (OFFLINE_VERBS).
+export type KeptAction = 'run' | 'rerun' | 'retry' | 'recover' | 'run-nodes' | 'note' | 'delete-note' | 'ask' | 'settings'
   | 'add-node' | 'add-character' | 'add-moodboard' | 'test-character' | 'next-step' | 'rewrite' | 'load' | 'import' | 'proposal' | 'unlock' | 'forget'
   | 'home' | 'open' | 'create'
   | 'edit-video' | 'generate' | 'scene' | 'other';
 const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   run: 'You can run this after you save it as a project.',
+  rerun: 'You can rerun it after you save it as a project.',
+  retry: 'You can retry it after you save it as a project.',
+  recover: 'You can recover it after you save it as a project.',
   // GM r23 (c), verbatim: the selection bar's Run and the bottom bar's Run.
   'run-nodes': 'You can run nodes after you save it as a project.',
   // GM r25 (3), verbatim: every note control while kept, on any node (Ask's
   // line is keptLockTitle's, with the agent's name).
   note: 'You can leave a note after you save it as a project.',
+  // GM r27 (1), verbatim: a note's Delete.
+  'delete-note': 'You can delete the note after you save it as a project.',
   settings: 'You can change settings after you save it as a project.',
   // The builder's, in GM's form (GM r18, Q1: the pattern stays).
   'add-node': 'You can add nodes after you save it as a project.',

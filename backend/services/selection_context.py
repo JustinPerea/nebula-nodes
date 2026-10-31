@@ -15,8 +15,9 @@ MAX_NODE_ID_LENGTH = 128
 _BACKEND_NODE_ID = re.compile(r"n[0-9]+")
 # Said where a selection holds nodes only the person's tab has (PR #199
 # round 18, GM r26): a duplicated or pasted node keeps a tab-local id until
-# the project is opened again, so agents get no id to act on.
-TAB_ONLY_NOTE = ("The person also selected {count} only their tab has (a duplicate or a paste): "
+# the project is opened again, so agents get no id to act on. "also" only
+# beside nodes agents can see (round 19, review 17 drops-locks-ui MEDIUM-1).
+TAB_ONLY_NOTE = ("The person {also}selected {count} only their tab has (a duplicate or a paste): "
                  "it has no id agents can use until the project is opened again.")
 _SECRET_KEY_RE = re.compile(
     r"(^|[_-])(api[_-]?key|authorization|bearer|credential|password|secret|token)([_-]|$)",
@@ -104,6 +105,10 @@ class SelectionContextStore:
     def current(self) -> list[str]:
         """The stored IDs as last published, without resolving them against the graph."""
         return list(self._node_ids)
+
+    def tab_only(self) -> int:
+        """How many tab-local ids the last publish held (left out of current())."""
+        return self._tab_only
 
     def clear(self) -> None:
         """Forget the published selection (a project switch, a catalog
@@ -219,15 +224,26 @@ class SelectionContextStore:
             "missingNodeIds": missing_ids,
             "nodes": nodes,
             "connections": connections,
-            **({"tabOnlyCount": tab_only, "tabOnlyNote": tab_only_note(tab_only)} if tab_only else {}),
+            **({"tabOnlyCount": tab_only, "tabOnlyNote": tab_only_note(tab_only, also=bool(valid_ids))}
+               if tab_only else {}),
             "updatedAt": self._updated_at,
             "ephemeral": True,
         }
 
 
-def tab_only_note(count: int) -> str:
-    """TAB_ONLY_NOTE for ``count`` nodes ("1 node", "2 nodes")."""
-    return TAB_ONLY_NOTE.format(count=f"{count} node" if count == 1 else f"{count} nodes")
+def tab_only_note(count: int, *, also: bool = True) -> str:
+    """TAB_ONLY_NOTE for ``count`` nodes ("1 node", "2 nodes"); ``also`` when
+    the selection holds nodes agents can see too."""
+    return TAB_ONLY_NOTE.format(count=f"{count} node" if count == 1 else f"{count} nodes",
+                                also="also " if also else "")
+
+
+def tab_only_fields(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """A selection read's ``tabOnlyCount`` and ``tabOnlyNote``, when it has
+    them, for every other surface that shows the selection to agents
+    (start_here, look_at_canvas, the selection event; review 17 agents-docs
+    LOW-1 and LOW-2)."""
+    return {key: snapshot[key] for key in ("tabOnlyCount", "tabOnlyNote") if snapshot.get(key)}
 
 
 def selection_prompt_context(snapshot: dict[str, Any]) -> str:
@@ -274,7 +290,7 @@ def selection_prompt_context(snapshot: dict[str, Any]) -> str:
             "- Ignored stale/non-canonical IDs: " + ", ".join(str(node_id) for node_id in missing)
         )
     if snapshot.get("tabOnlyCount"):
-        lines.append(f"- {tab_only_note(int(snapshot['tabOnlyCount']))}")
+        lines.append(f"- {tab_only_note(int(snapshot['tabOnlyCount']), also=bool(nodes))}")
     return "\n".join(lines)
 
 

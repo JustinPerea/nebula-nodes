@@ -82,8 +82,8 @@ describe('GM follow-ups 1 and 3: following an agent\'s switch', () => {
     expect(waitToOpenTooltip('beta')).toBe('Wait for “beta” to open.');
   });
   it('a press that gets through', () => {
-    expect(runWhileFollowingLine('Hero prompt', 'Claude Code', 'beta')).toBe("Couldn't run “Hero prompt”. Claude Code is opening “beta”.");
-    expect(runWhileFollowingLine('Hero prompt', null, 'beta')).toBe("Couldn't run “Hero prompt”. An agent is opening “beta”.");
+    expect(runWhileFollowingLine('Hero prompt', 'Claude Code', 'beta')).toBe("Couldn’t run “Hero prompt”. Claude Code is opening “beta”.");
+    expect(runWhileFollowingLine('Hero prompt', null, 'beta')).toBe("Couldn’t run “Hero prompt”. An agent is opening “beta”.");
   });
 });
 

@@ -57,7 +57,7 @@ describe('review 15 kept-wires-ui LOW-2: “replaced” is one predicate for the
     expect(checkKeptWire({ source: 'i1', sourceHandle: 'image', target: 'c', targetHandle: 'refs' }, [capped, ...images], []))
       .toEqual({ ok: true, duplicate: false });
     expect(checkKeptWire({ source: 'i2', sourceHandle: 'image', target: 'c', targetHandle: 'refs' }, [capped, ...images],
-      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Couldn’t connect to “Refs”. It takes one connection.' });
+      [edge('i1', 'image', 'c', 'refs')])).toEqual({ ok: false, line: 'Couldn’t connect to “Refs”. It takes only one connection.' });
   });
 
   it('a one-connection port is replaced: the new one is allowed', () => {

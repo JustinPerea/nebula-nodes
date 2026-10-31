@@ -357,8 +357,9 @@ def get_selected_nodes(ctx: Context | None = None) -> dict[str, Any]:
     and connections touching the selection. Deleted/stale IDs are never
     returned as live nodes. A node only the person's tab has (a duplicate or
     a paste, until the project is opened again) is never listed, not even as
-    stale: `tabOnlyCount` and `tabOnlyNote` say how many. Don't ask about or
-    change it; it gets an id when the project is opened again.
+    stale: `tabOnlyCount` and `tabOnlyNote` say how many (look_at_canvas,
+    start_here and the `selection.changed` event carry them too). Don't ask
+    about or change it; it gets an id when the project is opened again.
     """
     return _canvas_call("GET", "/api/canvas/selection", ctx)
 
@@ -433,7 +434,8 @@ def start_here(ctx: Context | None = None) -> str:
     `sourceWas` / `targetWas`), names, port labels and types, `kind` and
     `detail`; while kept, the canvas shows no selection and no view):
     - `canvas`: the project, `view.stale` (no browser watching), the
-      selection, other agents' cursors, and the nodes (id, name,
+      selection (with `tabOnlyCount` and `tabOnlyNote` when the person
+      selected nodes only their tab has, never listed), other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
       characters). A big canvas shows its first nodes in full (selected
       first, then on screen), the rest in `others` by id and name, with
@@ -473,7 +475,9 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     Returns the browser's viewport and visible area (flow coordinates), every
     node with its name, run state (idle/queued/executing/complete/error),
     position, size, whether it is on screen, redacted params and outputs, the
-    connections, the user's selection, and other agents' cursors. An input node
+    connections, the user's selection (with `tabOnlyCount` and `tabOnlyNote`
+    beside it when the person selected nodes only their tab has: a duplicate
+    or a paste, never listed), and other agents' cursors. An input node
     holding an uploaded file has `fileName`, the name it was uploaded with
     (its `filePath` is a stored, hashed name). `view.stale` is
     true when no browser has reported recently (the canvas may be closed).
@@ -1577,8 +1581,14 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     Nebula's ids at this open: the person's Duplicate and Paste make nodes
     only their tab knows until the next open. Read the canvas again then; an
     old id answers 404 "… read the canvas again for the current ids."
-    Reopening the project the person has open is safe for those nodes: what
-    their tab hadn't saved lands on the new id, never as a second node.
+    Reopening the project the person has open never doubles those nodes:
+    what their tab hadn't saved lands on the new id. Of a renumbered node,
+    the tab's handoff takes only what differs from the node as this open
+    loaded it (each setting whose value differs from that, its name, its
+    place), so your later edit to another setting, the name or the place
+    stands; if the person changed the same setting, theirs wins. The person
+    can reopen it themselves too (canvas.replaced in their name, with
+    `renumbered`).
     """
     from urllib.parse import quote
 

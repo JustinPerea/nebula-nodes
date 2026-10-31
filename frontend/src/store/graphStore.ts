@@ -137,7 +137,7 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
-import { checkKeptWire, refusedConnectionLine, targetHandleAllowsMultiple } from '../lib/keptWires';
+import { checkKeptWire, refusedConnectionLine, refusedDropLine, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
@@ -1112,6 +1112,12 @@ interface GraphState {
   /** A connection the canvas refused as it was dropped (a wrong kind, a
    * loop): says why, on kept and normal tabs alike (GM r26, 3). */
   sayRefusedConnection: (connection: Connection) => void;
+  /** A drop React Flow refused on a handle (Canvas.onConnectEnd): says its
+   * line (GM r26, 3; GM r28, 1: two outputs, two inputs) and changes
+   * nothing. True when the drop was a refusal on a handle, so the canvas
+   * opens no connection popup for it. */
+  sayRefusedDrop: (from: { nodeId: string; handleId: string; handleType: 'source' | 'target' },
+    state: { isValid: boolean | null; toHandle?: { nodeId: string; id?: string | null; type?: 'source' | 'target' } | null }) => boolean;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   /** Give a node a custom name. Blank, or the model's own name, restores the default. */
   renameNode: (nodeId: string, label: string) => void;
@@ -7751,6 +7757,22 @@ function refuseAdd(line: string): null {
  * isn't connected yet"; until round 12 it kept the node to itself), and a
  * tab whose banner says Nebula is offline refuses before sending anything.
  */
+/** The cards addDynamicNode shows while Nebula makes the node (a uuid
+ * until its `nN` id arrives, milliseconds later). Not a tab-local node:
+ * the reopen stopgap lines (canvasLock's TAB_LOCAL_LINES) don't flash on
+ * it (review 17 drops-locks-ui NIT). */
+const arrivingNodeIds = new Set<string>();
+export function isArrivingNode(id: string): boolean {
+  return arrivingNodeIds.has(id);
+}
+
+/** A node only this tab has, by a tab-local id (Duplicate and Paste), until
+ * the project's next open gives it Nebula's id: the reopen stopgap locks
+ * (GM r26, 4; GM r27, 4). STOPGAP: the bulk-create PR deletes it. */
+export function isTabLocalNode(id: string): boolean {
+  return !CLI_ID_RE.test(id) && !arrivingNodeIds.has(id);
+}
+
 async function createNodeOnBackend(
   set: GraphSet,
   get: GraphGet,
@@ -11541,6 +11563,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         providerMeta: {},
       },
     });
+    arrivingNodeIds.add(tempId);
     set((state) => ({ nodes: [...state.nodes, buildNode(tempId) as unknown as Node<NodeData>] }));
 
     // Its step owns this card, and later the backend id it gets (round 14 of
@@ -11552,6 +11575,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // the node off this tab again (it had stayed there, frontend-only, with
     // only a console line) and says why, as addNode does.
     const takeBack = (): null => {
+      arrivingNodeIds.delete(tempId);
       set((state) => ({
         nodes: state.nodes.filter((n) => n.id !== tempId),
         edges: state.edges.filter((e) => e.source !== tempId && e.target !== tempId),
@@ -11609,6 +11633,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // Remap edges too so any connections drawn during the race window
       // keep pointing at the renamed node.
       const drawn = new Set(get().edges.filter((e) => e.source === tempId || e.target === tempId).map((e) => e.id));
+      arrivingNodeIds.delete(tempId);
       if (undoStep) renameOwnedNode(undoStep, tempId, shortId);
       set((state) => ({
         // The create's own graphSync lands before its answer (the backend
@@ -11682,6 +11707,13 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const state = get();
     const line = refusedConnectionLine(connection, state.nodes, state.edges);
     if (line) set((current) => noticeLine(current, line));
+  },
+
+  sayRefusedDrop: (from, end) => {
+    const state = get();
+    const line = refusedDropLine(from, end, state.nodes, state.edges);
+    if (line) set((current) => noticeLine(current, line));
+    return line !== null;
   },
 
   onConnect: (connection, options) => {
@@ -15020,7 +15052,7 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   // Notices.
   'dismissUndoNotice', 'dismissLateNotice', 'dismissMessageNotice', 'notify', 'dismissProviderRecoveryWarning',
   // A refused drop's line (GM r26, 3): it says why, and changes nothing.
-  'sayRefusedConnection',
+  'sayRefusedConnection', 'sayRefusedDrop',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.

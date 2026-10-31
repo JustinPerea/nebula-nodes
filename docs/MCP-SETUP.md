@@ -369,9 +369,22 @@ The server exposes these tools for building and running (see
   pins and any node that names it, such as a video timeline's items). The
   open answers `renumbered` (`{old: new}`, `{}` when nothing changed), and
   the `canvas.replaced` event says it too (`data.renumbered`, "gave 1 node
-  new ids"). Reopening the project the person has open is safe for
-  those nodes: what their tab hadn't saved yet still arrives (the handoff
-  learns the new ids), on the node's new id, and the node is never doubled.
+  new ids"). The person can reopen the project they have open themselves
+  (Projects, Open, while a duplicate or paste has no Nebula id yet): that is
+  the person's own open, so `canvas.replaced` comes in their name with the
+  same `renumbered`, and their tab saves before it, so nothing waits to
+  arrive. When you reopen the project the person has open, the node is
+  never doubled, and what their tab hadn't saved yet still arrives on the
+  node's new id (the handoff learns the new ids). What holds for your own
+  edits to the new id after the open: of a renumbered node, the handoff
+  takes only what differs from the node as the open loaded it (each setting
+  whose value differs from that, its name if it differs, its place if it
+  differs), so the person's change wins on what they changed, and your
+  edit to any other setting, its name or its place stands. If the person
+  changed the same setting, their value wins. A renumbered node the
+  person's tab no longer holds under either id was deleted by them before
+  the save reached Nebula: it is removed, as their delete (`node.removed`
+  in their name), but a node you added after the open stays.
   Until that open, such a node isn't on the canvas you read: a project read
   shows it under its tab id, and the selection never offers it (see
   `tabOnlyCount` below). An upgrade that finds such an id on the canvas at
@@ -639,9 +652,16 @@ IDs and are never presented as live handles. A node only the person's tab has
 all, not even as stale: the selection says only how many there are
 (`tabOnlyCount`, and `tabOnlyNote`: "The person also selected 1 node only their
 tab has (a duplicate or a paste): it has no id agents can use until the project
-is opened again."), and a chat turn's selection context and `nebula selection`
-print that note. Don't ask about or change such a node; tell the person it
-gets an id when the project is opened again.
+is opened again.", without "also" when nothing else is selected). Every read
+that shows the selection carries both: `get_selected_nodes` (`nebula
+selection`), `look_at_canvas` (`nebula look`, beside `selection`),
+`start_here` (`nebula context`, in `canvas`) and a chat turn's selection
+context, which print the note, also when it is the only thing selected.
+The `selection.changed` event carries them too, so selecting only a
+duplicate reads "selected 1 node only their tab has", never "cleared the
+selection"; swapping one such node for another with the same count changes
+nothing you can see, so no event comes. Don't ask about or change such a
+node; tell the person it gets an id when the project is opened again.
 
 The same context is available without MCP through:
 
@@ -740,7 +760,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
 | `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | connected / disconnected | source, target and handles; `proposalId` when an accepted proposal connected it |
-| `selection.changed` | the selected set changed | `nodeIds`, `count` |
+| `selection.changed` | the selected set changed, or how many selected nodes only the person's tab has ("selected 1 node only their tab has") | `nodeIds`, `count`; `tabOnlyCount`, `tabOnlyNote` when there are such nodes |
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
 | `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
@@ -3173,7 +3193,9 @@ Nebula process restores the same folder. The restore:
    "X copy 2"; "Recovered X 2" gives "Recovered X 3"), and a name never
    gets a second number or a second "Recovered": a copy of "Recovered
    Alpha copy 2" is "Recovered Alpha copy 3". A number in any other name
-   is part of the name ("Shot 7 copy", "Recovered Shot 7").
+   is part of the name, and Nebula numbers only after "copy" there: a copy
+   of "Shot 7" is "Shot 7 copy", then "Shot 7 copy 2"; its recovered copy
+   is "Recovered Shot 7 copy", then "Recovered Shot 7 copy 2".
    A name made from one in another family names its source, so families
    sit together: a copy of "Recovered X" is "Recovered X copy", then
    "Recovered X copy 2"; a recovered "X copy" is "Recovered X copy", and

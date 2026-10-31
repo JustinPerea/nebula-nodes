@@ -70,8 +70,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
-  { file: 'lib/canvasFollow.ts', text: '`Couldn\'t run ${what}. ${followingReason({ agent, projectName: project, byNebula })}`',
-    why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”." (“Nebula” for its own reopen after a boot renumbering: #199 round 18)' },
+  { file: 'lib/canvasFollow.ts', text: '`Couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`',
+    why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”."' },
   { file: 'lib/canvasFollow.ts', text: '`${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`',
     why: 'GM\'s following line for Create: the tail is the same fixed "is opening" sentence' },
   { file: 'lib/deleteCopy.ts', text: '`Couldn\'t delete ${nodeNameList(names)}. ${DELETE_NO_ANSWER_REASON}`',

@@ -186,9 +186,11 @@ def _node_entry(node: Mapping[str, Any]) -> dict[str, Any]:
 
 def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | None, caller_id: str | None,
                 via: str) -> dict[str, Any]:
-    """The project, whether a browser is watching, the selection, other
-    agents' cursors, and the nodes: up to FULL_NODES in full (selected first,
-    then on screen), then the rest by id and name, as the budget allows."""
+    """The project, whether a browser is watching, the selection (with
+    ``tabOnlyCount`` and ``tabOnlyNote`` when it holds nodes only the
+    person's tab has), other agents' cursors, and the nodes: up to
+    FULL_NODES in full (selected first, then on screen), then the rest by id
+    and name, as the budget allows."""
     budget = BUDGETS["canvas"] * CHARS_PER_TOKEN
     selection = [str(node_id) for node_id in snapshot.get("selection") or []]
     agents = [
@@ -206,6 +208,9 @@ def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | Non
         "project": dict(project) if project else None,
         "view": {"stale": bool((snapshot.get("view") or {}).get("stale", True))},
         "selection": selection,
+        # Nodes the person selected that only their tab has (a duplicate or
+        # a paste): counted, never listed (review 17 agents-docs LOW-2).
+        **{key: snapshot[key] for key in ("tabOnlyCount", "tabOnlyNote") if snapshot.get(key)},
         "agents": agents,
         "nodeCount": total,
         "nodes": [],

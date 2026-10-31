@@ -353,7 +353,7 @@ describe('review 16 MEDIUM-1: Nebula’s reopen after a boot renumbering', () =>
         previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'system' }, created: false },
       nodes: [{ ...n1 }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
-    expect(useProjectStore.getState().error).toMatch(/^Nebula opened “Glass campaign”, but this window couldn't follow it\./);
+    expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this window couldn’t follow it. Open it from Projects.');
   });
 
   it('a run pressed while following names Nebula', async () => {
@@ -361,7 +361,7 @@ describe('review 16 MEDIUM-1: Nebula’s reopen after a boot renumbering', () =>
     expect(followingReason({ agent: null, projectName: 'Glass campaign' })).toBe('An agent is opening “Glass campaign”.');
     setFollowingSwitch({ projectName: 'Glass campaign', agent: null, byNebula: true });
     await useGraphStore.getState().executeGraph();
-    expect(noticeText()).toBe('Couldn\'t run the canvas. Nebula is opening “Glass campaign”.');
+    expect(noticeText()).toBe('You can run the canvas when “Glass campaign” opens.');
     setFollowingSwitch(null);
   });
 });

@@ -219,7 +219,9 @@ def test_high1_the_handoffs_renumbering_ends_with_the_handoff(app):
     delta, _tab, old_rev = _delta_with_a_duplicate(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
     kept = _on_disk(store, delta)[main_module._HANDOFF_RENUMBERED]
-    assert kept == {"revision": old_rev, "map": {DUP: new}}
+    assert {key: kept[key] for key in ("revision", "map")} == {"revision": old_rev, "map": {DUP: new}}
+    # Round 19 (review 17 MEDIUM-1): the node as the open loaded it, the handoff's baseline.
+    assert kept["base"][new]["params"] == {"value": "dup-old"}
     _create(client, "Alpha")  # the person's own switch ends every handoff
     assert main_module._HANDOFF_RENUMBERED not in _on_disk(store, delta)
 
@@ -506,7 +508,7 @@ def test_gm_r25_5_copy_names(source, taken, want):
     ("Recovered X 2", ("Recovered X 2",), "Recovered X 3"),
     ("Recovered Delta", ("Recovered Delta", "Recovered Delta 2"), "Recovered Delta 3"),
     ("Recovered Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
-    ("Shot 7", (), "Recovered Shot 7"),
+    ("Shot 7", (), "Recovered Shot 7 copy"),  # GM r27 2: Nebula numbers only after "copy"
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
     ("Recovered canvas 2", ("Recovered canvas 2",), "Recovered canvas 3"),
     ("X (recovered)", (), "Recovered X 2"),

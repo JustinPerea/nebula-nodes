@@ -546,7 +546,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           {/* A run: it takes the canvas lock (fix round 1 of PR #200: the ratchet's new control check found it), in
             canvasLock's order (PR #198 review 7, L5; GM r19 on PR #199: kept, then the run, following, offline). */}
           {nodeData.outputFreshness.runId && <button type="button"
-            {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun', kept: 'run',
+            {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun', kept: 'rerun',
               title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },
             { run: isExecuting })}
             onClick={(event) => {
