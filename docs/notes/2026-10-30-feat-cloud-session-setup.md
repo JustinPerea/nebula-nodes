@@ -4,19 +4,23 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 
 ## What it does
 
-- `.claude/settings.json` has one SessionStart hook, with no matcher. It runs `bash "$CLAUDE_PROJECT_DIR"/scripts/cloud-session-setup.sh`.
+- `.claude/settings.json` has one SessionStart hook, with no matcher. It runs `bash` with `${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.sh` as its argument, in exec form. The hooks docs advise exec form for a path placeholder, so no shell (sh, Git Bash or PowerShell) parses the path.
 - The script exits at once unless both hold:
   - `CLAUDE_CODE_REMOTE` is exactly `true`. The Claude Code docs (env-vars, cloud-environments and hooks, read 2026-10-30) say cloud sessions set it and local ones never do.
   - `uname -s` is `Linux`.
 - Every local session in this repo runs the hook, so on the Mac it spawns a bash that exits.
-- In the cloud it runs two installs side by side, matching ci.yml:
+- At start and resume, in the cloud, it runs two installs side by side, matching ci.yml:
   - **backend:** a venv at `backend/.venv`, the path AGENTS.md and CONTRIBUTING.md already use, then `pip install -r backend/requirements.txt`. If `import cairosvg` fails, it runs `apt-get install libcairo2`, non-interactive with a dpkg lock timeout.
   - **frontend:** `npm ci` in `frontend`.
-- After a successful backend install it appends `export PATH="<repo>/backend/.venv/bin:$PATH"` to `CLAUDE_ENV_FILE`. CI's own `python -m pytest` then uses the venv.
+- After a clear, compaction or fork (the hook input's `source`), it installs nothing: it only appends the PATH line again, and says if the dependencies changed since the last install.
+- As soon as the backend install succeeds, before the frontend finishes, it appends `export PATH=<repo>/backend/.venv/bin:"$PATH"` to `CLAUDE_ENV_FILE`. The path is quoted with `printf %q`. CI's own `python -m pytest` then uses the venv.
+- Run by hand, a Bash command gets no `CLAUDE_ENV_FILE`, so it prints that line for Claude to run.
 - Its stdout goes into the session's context: how long setup took, what's ready or what failed (with the last lines of that log), and CI's commands.
 
 ## Decisions
 
+- **Installs only at start and resume.** Review 2: with no matcher, an auto-compaction after the agent changed the lockfile would run `npm ci` mid-session. That empties node_modules under whatever vite or vitest it left running. Now a clear, compaction or fork only restores PATH.
+  - The script finds the checkout from its own path, not from `CLAUDE_PROJECT_DIR`.
 - **No matcher.** `/clear` and a fork start a new session id. `CLAUDE_ENV_FILE` files are kept per session id, so the new session's env file starts empty.
   - Review 1 confirmed this in Claude Code 2.1.314: `regenerateSessionId` on `/clear`, and nothing copies the session-env files across.
   - With `startup|resume`, the PATH export was lost after `/clear`. Running on every source costs two hash checks once the installs are done.
@@ -31,6 +35,10 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
   - `backend/.venv/.cloud-setup.sha256` hashes the script and requirements.txt.
   - `frontend/node_modules/.cloud-setup.sha256` hashes the script, package.json and package-lock.json.
   - The stamp is removed before an install and written only after a successful one, so a failure installs again next time.
+- **It never deletes a venv it didn't make.**
+  - A venv this script makes gets a `.cloud-setup-owned` marker, and only a marked venv that lost pip is made again.
+  - Anyone else's venv without pip gets `python -m ensurepip` in place, or the backend reports FAILED and the venv is left as it is.
+  - This guards a contributor on Linux who runs the manual command over their own uv-made venv.
 - **Python 3.12, as CI pins it.**
   - The script uses `python3.12` if the image has it. Otherwise it uses uv's 3.12, found or installed. Otherwise `python3`. It prints the version it got.
   - A venv, not the system Python, because Ubuntu 24.04's system Python is externally managed (PEP 668): a bare `pip install` there is refused.
@@ -48,7 +56,11 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 ## Tests
 
 `backend/tests/test_cloud_session_setup.py` runs the real script on a PATH of stand-in commands and the few real tools it needs. The stand-ins are `uname`, `python3.12`, `uv`, the venv's `python`, `npm`, `node` and `apt-get`. They only record their calls. The tests check:
-- the settings hook entry;
+- the settings hook entry (exec form, no matcher);
+- the light path for clear, compact and fork: PATH only, no installs, and what it says;
+- the PATH line: written before the frontend finishes, and safe to source with a space, `$(...)` or `"` in the checkout path;
+- the manual run printing the PATH line;
+- someone else's venv never deleted, and the script's own venv made again;
 - the no-op for an unset, empty, `false`, `1`, `TRUE` or `yes` value, and for `true` on a Mac: no calls, no files, no env file;
 - the install once, then the skip;
 - a changed lockfile reinstalling only the frontend;
@@ -76,6 +88,17 @@ Round 2:
 - the matcher;
 - the root-only local-settings rule;
 - the lock file not being ignored.
+
+Round 3:
+- installing on compact;
+- `compact` left out of the light path;
+- the unquoted PATH line;
+- exporting only after the frontend;
+- deleting any venv, or never trying ensurepip;
+- no owned marker;
+- no manual PATH line;
+- no fresh-venv branch;
+- shell form back.
 
 ## Verifying it in the cloud
 

@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/cloud-session-setup.sh",
+            "command": "bash",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/cloud-session-setup.sh"],
             "timeout": 900
           }
         ]
