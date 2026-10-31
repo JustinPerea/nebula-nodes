@@ -57,21 +57,30 @@ export_path() {
   if [ -n "$CLAUDE_ENV_FILE" ]; then
     echo "$line" >> "$CLAUDE_ENV_FILE"
   else
-    echo "Run this before CI's commands (only the hook can set PATH for later commands): $line"
+    echo "Bash commands don't keep PATH from one call to the next, and only the hook can set it for later ones. Start each command that runs CI's backend steps with \`$line &&\`, or call backend/.venv/bin/python directly."
   fi
 }
 
 if [ -n "$light" ]; then
-  if [ -x "$venv/bin/python" ]; then
-    export_path
-    if sha256sum --check --status "$backend_stamp" 2>/dev/null \
-      && sha256sum --check --status "$frontend_stamp" 2>/dev/null; then
-      echo "Nebula cloud setup ($light): backend/.venv is on PATH; dependencies are up to date."
-    else
-      echo "Nebula cloud setup ($light): backend/.venv is on PATH, but the dependencies changed since the last install. When nothing is running, run \`CLAUDE_CODE_REMOTE=true bash $script\`."
-    fi
+  rerun="When nothing is running, run \`CLAUDE_CODE_REMOTE=true bash $script\`."
+  # A stamp exists only after a successful install; without one the venv may
+  # be half installed, so it stays off PATH, as after a failed start.
+  if [ ! -e "$venv" ]; then
+    echo "Nebula cloud setup ($light): there's no backend/.venv yet. $rerun"
+    exit 0
+  fi
+  if [ ! -e "$backend_stamp" ]; then
+    echo "Nebula cloud setup ($light): the last backend install didn't finish, so backend/.venv isn't on PATH. $rerun"
+    exit 0
+  fi
+  export_path
+  if [ ! -e "$frontend_stamp" ]; then
+    echo "Nebula cloud setup ($light): backend/.venv is on PATH, but the last frontend install didn't finish. $rerun"
+  elif sha256sum --check --status "$backend_stamp" 2>/dev/null \
+    && sha256sum --check --status "$frontend_stamp" 2>/dev/null; then
+    echo "Nebula cloud setup ($light): backend/.venv is on PATH; dependencies are up to date."
   else
-    echo "Nebula cloud setup ($light): there's no backend/.venv yet. Run \`CLAUDE_CODE_REMOTE=true bash $script\`."
+    echo "Nebula cloud setup ($light): backend/.venv is on PATH, but the dependencies changed since the last install. $rerun"
   fi
   exit 0
 fi
@@ -106,11 +115,21 @@ pick_python() {
 make_venv() {
   local python
   python=$(pick_python)
+  # The marker goes in first, so a venv cut off halfway is still known as
+  # this script's; `-m venv` fills a folder that already exists.
+  mkdir -p "$venv" && : > "$venv_owned" || return 1
+  if "$python" -m venv "$venv"; then
+    return 0
+  fi
   # Ubuntu's own python3 can lack ensurepip (python3-venv); uv can seed pip.
-  "$python" -m venv "$venv" \
-    || { command -v uv >/dev/null 2>&1 && rm -rf "$venv" && uv venv --quiet --seed --python "$python" "$venv"; } \
-    || return 1
-  : > "$venv_owned"
+  rm -rf "$venv"
+  if command -v uv >/dev/null 2>&1 && uv venv --quiet --seed --python "$python" "$venv"; then
+    : > "$venv_owned"
+    return 0
+  fi
+  # Never leave a half-made venv behind.
+  rm -rf "$venv"
+  return 1
 }
 
 setup_backend() {
@@ -120,20 +139,17 @@ setup_backend() {
   fi
   # Remove the stamp first, so a failed install runs again next time.
   rm -f "$backend_stamp"
-  if [ ! -e "$venv" ]; then
+  if [ ! -e "$venv" ] || [ -e "$venv_owned" ]; then
+    # Like CI's, this script's venv starts clean, so a package dropped from
+    # requirements.txt is gone here too.
+    rm -rf "$venv"
     make_venv || return 1
   elif ! "$venv/bin/python" -m pip --version >/dev/null 2>&1; then
-    # A venv this script made and left without pip is made again. Anyone
-    # else's venv is never deleted: pip is added to it in place.
-    if [ -e "$venv_owned" ]; then
-      rm -rf "$venv"
-      make_venv || return 1
-    else
-      "$venv/bin/python" -m ensurepip --upgrade || {
-        echo "backend/.venv has no pip and this script didn't make it, so it was left as it is."
-        return 1
-      }
-    fi
+    # Anyone else's venv is never deleted: pip is added to it in place.
+    "$venv/bin/python" -m ensurepip --upgrade || {
+      echo "backend/.venv has no pip and this script didn't make it, so it was left as it is."
+      return 1
+    }
   fi
   "$venv/bin/python" -m pip install --quiet --disable-pip-version-check \
     --requirement backend/requirements.txt || return 1

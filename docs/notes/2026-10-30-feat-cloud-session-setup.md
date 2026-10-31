@@ -12,9 +12,9 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 - At start and resume, in the cloud, it runs two installs side by side, matching ci.yml:
   - **backend:** a venv at `backend/.venv`, the path AGENTS.md and CONTRIBUTING.md already use, then `pip install -r backend/requirements.txt`. If `import cairosvg` fails, it runs `apt-get install libcairo2`, non-interactive with a dpkg lock timeout.
   - **frontend:** `npm ci` in `frontend`.
-- After a clear, compaction or fork (the hook input's `source`), it installs nothing: it only appends the PATH line again, and says if the dependencies changed since the last install.
+- After a clear, compaction or fork (the hook input's `source`), it installs nothing. It appends the PATH line again only when the last backend install succeeded (its stamp exists), as after a start. It says when there's no venv yet, when the last backend or frontend install didn't finish, or when the dependencies changed since.
 - As soon as the backend install succeeds, before the frontend finishes, it appends `export PATH=<repo>/backend/.venv/bin:"$PATH"` to `CLAUDE_ENV_FILE`. The path is quoted with `printf %q`. CI's own `python -m pytest` then uses the venv.
-- Run by hand, a Bash command gets no `CLAUDE_ENV_FILE`, so it prints that line for Claude to run.
+- Run by hand, a Bash command gets no `CLAUDE_ENV_FILE`, and Bash commands don't keep `PATH` between calls. So it says to start each backend command with that line and `&&`, or to call `backend/.venv/bin/python` directly.
 - Its stdout goes into the session's context: how long setup took, what's ready or what failed (with the last lines of that log), and CI's commands.
 
 ## Decisions
@@ -35,8 +35,9 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
   - `backend/.venv/.cloud-setup.sha256` hashes the script and requirements.txt.
   - `frontend/node_modules/.cloud-setup.sha256` hashes the script, package.json and package-lock.json.
   - The stamp is removed before an install and written only after a successful one, so a failure installs again next time.
+- **Its own venv starts clean, as CI's does.** When requirements.txt or the script changes, a venv this script made is deleted and made again, so a package dropped from requirements.txt can't linger and let a test pass here that fails in CI. Review 3 caught the in-place install. npm ci already starts clean.
 - **It never deletes a venv it didn't make.**
-  - A venv this script makes gets a `.cloud-setup-owned` marker, and only a marked venv that lost pip is made again.
+  - A venv this script makes gets a `.cloud-setup-owned` marker before anything goes into it, so a venv cut off halfway is still known as its own. A venv it fails to finish is removed.
   - Anyone else's venv without pip gets `python -m ensurepip` in place, or the backend reports FAILED and the venv is left as it is.
   - This guards a contributor on Linux who runs the manual command over their own uv-made venv.
 - **Python 3.12, as CI pins it.**
@@ -61,6 +62,8 @@ Why: full test suites on the maintainer's Mac were pinning its CPU (several agen
 - the PATH line: written before the frontend finishes, and safe to source with a space, `$(...)` or `"` in the checkout path;
 - the manual run printing the PATH line;
 - someone else's venv never deleted, and the script's own venv made again;
+- the script's own venv starting clean when requirements change, and a half-made one (python or uv cut off) removed and made again;
+- mid-session, a failed backend staying off PATH, and a failed frontend named;
 - the no-op for an unset, empty, `false`, `1`, `TRUE` or `yes` value, and for `true` on a Mac: no calls, no files, no env file;
 - the install once, then the skip;
 - a changed lockfile reinstalling only the frontend;
@@ -99,6 +102,14 @@ Round 3:
 - no manual PATH line;
 - no fresh-venv branch;
 - shell form back.
+
+Round 4:
+- the marker written last;
+- a half-made venv kept;
+- an own venv updated in place;
+- a failed backend put on PATH mid-session;
+- a failed frontend not named;
+- no separate no-venv line.
 
 ## Verifying it in the cloud
 

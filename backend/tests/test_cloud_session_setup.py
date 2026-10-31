@@ -80,16 +80,19 @@ class Project:
     def npm(self, body: str) -> None:
         _stub(self.bin / "npm", f'echo "npm $* (in $(basename "$PWD"))" >> "{self.calls}"\n' + body)
 
-    def maker(self, name: str, *, venv_fails: bool = False, cairo_after: Path | None = None) -> None:
-        """A python that makes a venv (whose python records its calls), or fails to."""
+    def maker(self, name: str, *, venv_fails: bool = False, partial: bool = False,
+              cairo_after: Path | None = None) -> None:
+        """A python that makes a venv (whose python records its calls), or
+        fails to; with `partial`, it leaves bin/python behind and then fails,
+        as Ubuntu's python3 does without ensurepip."""
         venv_python = self.tmp / f"venv-python-{name.replace('/', '_')}"
         _venv_python(venv_python, self.calls, cairo_after)
+        make = ('if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then mkdir -p "$3/bin"; '
+                f'cp "{venv_python}" "$3/bin/python"; fi\n')
         _stub(
             self.bin / name if "/" not in name else Path(name),
             f'echo "{name} $*" >> "{self.calls}"\n'
-            + ('exit 1\n' if venv_fails else
-               'if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then mkdir -p "$3/bin"; '
-               f'cp "{venv_python}" "$3/bin/python"; fi\n'),
+            + ('exit 1\n' if venv_fails else make + ('exit 1\n' if partial else '')),
         )
 
     def uv(self, *, finds: str | None) -> None:
@@ -350,7 +353,7 @@ def test_a_run_by_hand_prints_the_path_line(tmp_path):
     project = Project(tmp_path)
     result = project.run(source=None, env_file=False)
     assert "backend: installed" in result.stdout
-    assert f"Run this before CI's commands (only the hook can set PATH for later commands): {project.export_line()}" in result.stdout
+    assert f"Start each command that runs CI's backend steps with `{project.export_line()} &&`" in result.stdout
 
 
 def test_the_venv_is_on_path_before_the_frontend_finishes(tmp_path):
@@ -408,6 +411,61 @@ def test_its_own_venv_without_pip_is_made_again(tmp_path):
     made = project.made()
     assert "python3.12 -m venv backend/.venv" in made
     assert _pip_installs(made), made
+
+
+def test_a_half_made_venv_is_removed_and_made_again(tmp_path):
+    project = Project(tmp_path, venv=False)
+    project.maker("python3.12", partial=True)
+    # uv gets as far as a folder, then fails (a proxy blip while it fetches pip).
+    _stub(project.bin / "uv", f'echo "uv $*" >> "{project.calls}"\n'
+          'if [ "$1" = "venv" ]; then mkdir -p "${@: -1}/bin"; fi\nexit 1\n')
+    first = project.run()
+    assert "backend: FAILED" in first.stdout
+    assert not (project.root / "backend" / ".venv").exists()
+
+    assert any(c.startswith("uv venv") for c in project.made())
+    project.maker("python3.12")
+    second = project.run()
+    assert "python3.12 -m venv backend/.venv" in project.made()
+    assert "backend: installed" in second.stdout
+
+
+def test_its_own_venv_starts_clean_when_requirements_change(tmp_path):
+    """CI installs into a fresh environment, so a package dropped from
+    requirements.txt mustn't linger here."""
+    project = Project(tmp_path, venv=False)
+    project.maker("python3.12")
+    project.run()
+    leftover = project.root / "backend" / ".venv" / "lib" / "dropped_pkg"
+    leftover.mkdir(parents=True)
+    (project.root / "backend" / "requirements.txt").write_text("fastapi==0.115.13\n", encoding="utf-8")
+    project.made()
+    project.run()
+    assert "python3.12 -m venv backend/.venv" in project.made()
+    assert not leftover.exists()
+
+
+def test_mid_session_a_failed_backend_stays_off_path(tmp_path):
+    project = Project(tmp_path)
+    _stub(
+        project.root / "backend" / ".venv" / "bin" / "python",
+        'if [ "$2" = "pip" ] && [ "$3" = "install" ]; then exit 1; fi\n',
+    )
+    project.run()
+    assert not project.env_file.exists()
+    result = project.run(source="compact")
+    assert not project.env_file.exists()
+    assert result.stdout.startswith("Nebula cloud setup (compact): the last backend install didn't finish, so backend/.venv isn't on PATH.")
+
+
+def test_mid_session_a_failed_frontend_is_named(tmp_path):
+    project = Project(tmp_path)
+    project.npm('exit 1\n')
+    project.run()
+    project.env_file.unlink()
+    result = project.run(source="clear")
+    assert project.env_file.read_text(encoding="utf-8").splitlines() == [project.export_line()]
+    assert "but the last frontend install didn't finish" in result.stdout
 
 
 @pytest.mark.skipif(shutil.which("flock") is None, reason="flock is Linux-only (util-linux)")
