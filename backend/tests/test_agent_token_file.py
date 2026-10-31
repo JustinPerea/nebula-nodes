@@ -243,7 +243,9 @@ def test_startup_removes_files_of_apps_no_longer_active(tmp_path):
     assert reloaded.clear_unknown_files() == 1 and victim.exists()
 
 
-@pytest.mark.parametrize("damage", ["unreadable", "corrupt", "wrong shape"])
+@pytest.mark.parametrize(
+    "damage", [pytest.param("unreadable", marks=pytest.mark.unprivileged), "corrupt", "wrong shape"]
+)
 def test_startup_keeps_every_file_when_the_store_cant_be_read(tmp_path, damage):
     # The store keeps only hashes, so a deleted file can't be made again:
     # an unreadable store means "apps unknown", never "no apps".
@@ -271,7 +273,9 @@ def test_startup_keeps_every_file_when_the_store_cant_be_read(tmp_path, damage):
     assert app_token_file.read(readable.token_file(first["id"])) == token
 
 
-@pytest.mark.parametrize("damage", ["unreadable", "corrupt", "wrong shape"])
+@pytest.mark.parametrize(
+    "damage", [pytest.param("unreadable", marks=pytest.mark.unprivileged), "corrupt", "wrong shape"]
+)
 def test_a_new_app_never_writes_over_a_store_that_cant_be_read(tmp_path, damage):
     # The empty list a failed load leaves is "unknown", not "no apps": saving
     # one new app over it would drop every other, and the next startup would
