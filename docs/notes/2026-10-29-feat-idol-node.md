@@ -1519,3 +1519,192 @@ their files (117 passed), and passed in the earlier full run.
   row says "Krea · API key". Follow the row?
 - The CLI's free part names where a provider call runs: "1 free run (on
   fal.ai)", and beside other classes "2 free (1 on fal.ai)".
+
+## Round 12 (2026-10-30): each tab knows its own key change, the 409 names the file, the provider's own nouns (GM r22, r23, review 11)
+
+No request to any host but localhost, control runs included. Backend
+tests, the frontend gates and the live backend ran inside a macOS
+`sandbox-exec` profile that denies every outbound connection but localhost.
+Before anything else ran, a sandboxed Python reaching api.x.ai,
+api.meshy.ai, api.ideogram.ai, huggingface.co and 1.1.1.1:443 got
+"Operation not permitted". The browser can't run inside the sandbox, so
+CDP blocks 8000-8010, 5173, hf.space, huggingface.co and the provider check,
+and sends everything else to a dead proxy; its canaries (8000, 5173,
+api.x.ai, api.meshy.ai, huggingface.co) were blocked. Fake keys only;
+nothing was run or accepted. One slip, early in the round: `npm run lint`
+ran outside the sandbox and npm's update notifier reached
+registry.npmjs.org (a version check, no package installed). From then on
+every frontend command ran sandboxed with the notifier off.
+
+### Each tab knows its own key change (review 11, copy MEDIUM-1)
+
+- The structure: a per-tab id, not a record of this tab's writes. A record
+  matched by value can't tell this tab's write from a write elsewhere of
+  the same value in the same moment, and needs a rule for when to forget
+  an entry. An id names the writer whatever the order and value.
+- The id is the one the canvas already had: `lib/tabId.ts`, which apiFetch
+  sends on every write (`X-Nebula-Tab`) and graphSync echoes as
+  `edit.tab`. `main._writing_tab` reads it from the person's request (the
+  same rule as `_graph_edit_origin`), and `settingsChanged` carries it as
+  `origin` from PUT /api/settings, a key's DELETE and the desktop
+  credential bridge. `store/settingsChangedSocket.ts` drops an event whose
+  origin is this tab's, whether it lands before the write's answer or
+  after.
+- The first build kept a second id in `settingsSignal.ts` and set it on the
+  three calls in `api.ts`. apiFetch then overwrote the header with
+  `tabId.ts`'s id, so live every echo read as a change made elsewhere and
+  the person's own save was said twice. The unit tests passed because they
+  took both ids from the same module. The live check caught it from the
+  socket frames: the PUT's header and the frame's `origin` matched, but the
+  socket compared against the other id. Now there's one id, and
+  `tests/idolRound12.tabEcho.test.ts` sends the save, the removal and the
+  credential write through the real apiFetch and replays the header it sent
+  as the echo.
+- A remote change landing while this tab's write is in flight: Settings
+  defers the read until the writes settle (`readAfterWrites`), and the
+  Providers tab announces only on the first read after the latest signal
+  (`settingsDraftStore.reads`). Tested in both orders for save and removal,
+  with a change elsewhere during the write announced once.
+
+### Settings (review 11, copy LOW-1, NIT-2; GM r22 item 3, r23)
+
+- Re-adding a key removed elsewhere no longer leaves a focus request
+  waiting: `focusRowIfItMoves` asks for focus only when the row moves, and
+  `settleRowFocus` clears any request two frames after the write settles
+  (LOW-1).
+- The badge and "Connected · N" read one source,
+  `rowHelpers.connectedRows`: key rows by `isKeySet`, Krea when its status
+  isn't "disconnected" (so while it signs in too), Nous by a current check
+  (NIT-2).
+- The 409 lines name the settings file by its full path
+  (`settings.settings_file_path()`: NEBULA_SETTINGS_PATH when set,
+  `expanduser().resolve()`). Settings shows that line in the row
+  (`settingsWrites.unreadableSettingsLine`) for a key save, a removal, a
+  field and the run-cost confirm; any other failure keeps its own line.
+  Agents can't write settings (`require_person` runs first), so only the
+  person ever sees these lines; MCP and the CLI need nothing new.
+- An `apiKeys` that holds nothing (null, [], "", false, 0) is replaced by a
+  key write and a key's DELETE (`saved_keys_hold_nothing`,
+  `saved_keys_writable`); content Nebula can't read keeps the 409 (GM r23
+  item 2).
+- Hugging Face says "token": "Hugging Face token saved." / "Hugging Face
+  token removed." / "Hugging Face token saved. Checking it now.", and the
+  row's buttons "Add token", "Replace token", "Save token", "Saved token
+  ending in" (`keyNoun`, `spec.credential`; GM r23 item 3). Every other row
+  keeps "key".
+- The Krea sign-in row: "Uses your Krea plan instead of an API key", no
+  period. The readiness detail: "This recipe uses Krea sign-in. Sign in to
+  Krea in Settings; an API key doesn’t replace it." (GM r23 item 4).
+- Settings.test's first render waits up to 5 s (NIT-6).
+
+### The words (GM r22 items 1, 2, 4, 5; r23 item 1; review 11 LOW-2, copy LOW-3)
+
+- "~$0.13 · 1 may cost" is pinned on the Run chip; the proposal wording
+  stays.
+- Person lines say "Krea API key" on both sides
+  (`person_line.KEY_NAMES`, `directRoute.KEY_NAMES`, the readiness
+  labels), and the guides follow. The grouped lines read "Black Forest
+  Labs, fal.ai or Krea API key".
+- MCP sends the person to "Settings > Providers > Krea", in the refusal and
+  the docstring.
+- The Inspector's and readiness's Krea verb is pinned (F15, F18).
+- The CLI's free tag uses the provider id, as the paid part does: "1 free
+  run (fal)" beside "1 paid run (google)". When some free runs are local:
+  "2 free (1 on fal)".
+
+### Agent surfaces and the gate (review 11, HIGH-1, LOW-1, NIT-1 to NIT-8)
+
+- HIGH-1, option a: unreadable keys read as none for the gate and the
+  run, and Idol runs keyless. Two tests name it: the gate and the handler
+  see no token, and no handler or backend module reads a provider key
+  from the environment. Option b would be one check before
+  `agent_spend.decide`.
+- `agent_words.surface(headers, query_via)`: start_here reads an older
+  CLI's `?via=cli` only when X-Nebula-Surface is missing; the header wins
+  (LOW-1).
+- `nebula load` sends the CLI header, and `graph_file_client._words` builds
+  from `agent_words.WORDS` (`size`, `delete` and `open` added); the `via`
+  parameter is gone (NIT-3).
+- `canvas_proposals.class_counts`: a kind Nebula doesn't name counts as
+  paid, as propose_change's description says, never free. The gate reads no
+  kind, only the cost class, so it already agreed. The canvas's
+  `liveKeyBilling` counts free from kind "free" too (NIT-4).
+- NIT-5, documented, not changed: in desktop mode every save writes `{}`
+  over the file's `apiKeys`. Keys live in the Keychain there and no reader
+  uses the file's, so a key left in the desktop file is removed rather
+  than kept as plain text. idol.md says so beside "never overwritten".
+- start_here's data notes are reworded for the CLI before the Krea and
+  provider notes are added in the surface's own words (NIT-7, S7).
+- A PUT that only echoes masked keys while the keys are unreadable writes
+  no key and keeps them (NIT-8, T5).
+- G5 (cost_class checks the plan before key billing) and G6 (the ratchet
+  entry removed with the gate reverted) are killed by tests that pin the
+  order and the entry. S4 (`_NAMED` without "projects") is killed through
+  `cli_words` (NIT-1, NIT-2).
+
+### The notice region beside the rail (review 11, copy LOW-2)
+
+While the workspace rail shows, `.notice-region` keeps clear of its column
+on the left (`--notice-rail-clearance`: rail left + width + the gap) and by
+the same width on the right (or the docked Agent log's clearance, if
+wider), so a notice that fits stays centred. No layer changes: the rail's
+labels, menus and popovers stay above the bar. Live at 700, 740, 1024 and
+1440 the bar never touches the rail (16 px at 700 and 740), and the rail's
+"Add nodes" label still shows over it at 700. With the Agent log docked
+at 700, the bar is 272 px wide.
+
+### Base check and mutants
+
+- On 14538996 the new tests fail: 32 backend, 22 frontend. The ones that
+  pass there pin behaviour already right and asked to be pinned: the 409
+  for content Nebula can't read, a masked-key echo, desktop mode, no
+  environment fallback, the CLI words for the reviewer's calls, a Krea
+  plan route counted by its key, an unknown kind read as paid by
+  propose_change, "~$0.13 · 1 may cost", the toast's noun template, the
+  bar's layers, the Inspector's Krea verb (F15), another 409's own line,
+  and the tab id carried on writes and a change elsewhere being said.
+  Mutants kill them.
+- 46 mutants (19 backend guards and the reviewer's G5, G6, S4, S7 and T5;
+  26 frontend, F15 and F18 among them), each run against focused tests that
+  all passed unmutated first. 43 killed on the first pass. F3 (a read
+  landing during a write taken anyway) and F10 (Nous counted on a stale
+  check) survived and got tests: a read from before the person's write
+  that lands during it is dropped and read again once the write settles,
+  and `connectedRows` counts Nous only on a current check. Both are killed
+  now, and so is the old drop with no read again.
+- F7 (`focusRowIfItMoves` always asks for focus), F8 (`settleRowFocus`
+  does nothing) and F23 (the save always counts as a move) each survive
+  alone: the three overlap. A handoff asked for when nothing moves is
+  cancelled by ProvidersTab's own-save handler while focus is in the row,
+  and by `settleRowFocus` two frames after the write otherwise. F7 and F8
+  together fail the LOW-1 test. Three more tests that tried to separate
+  them (a tab switch as the save lands, leaving Providers before it lands,
+  stepping out of a held row mid-save) passed with the mutants, so I
+  didn't keep them.
+- The new `_writing_tab` rule (an id only from the person, by
+  `_TAB_ID_RE`) is killed when any header text is taken as an id.
+
+### Gates
+
+All sandboxed. tsc -b and lint (eslint, inline styles, Slava CSS scope)
+pass. Focused vitest: 48 files, 1,071 tests, 0 failed, 0 errors, no
+timeouts. Backend: the round 9 to 12 files, the settings API, the
+credential bridge and every test file touching `settingsChanged`,
+`X-Nebula-Tab` or `_graph_edit_origin`: 838 passed. Earlier in the
+round, the wider related set was 3,321 passed and 10 skipped. vite build
+and the budget pass (459,738 bytes raw).
+check-node-contracts, contract-inventory, the model reference and route
+tables checks are current. No full suite ran on the Mac.
+
+### Questions for GM
+
+- Idol's free tag reads "(speridlabs)", the provider id, as GM r22 item
+  5's shape gives it. "(Hugging Face)" instead?
+- With local free runs beside a provider call: "2 free (1 on fal)". OK?
+- The Krea key row's mode label still says "API token · API balance". Leave
+  it, or "API key · API balance"?
+- Hugging Face's buttons follow the noun too: "Add token", "Replace token",
+  "Save token", "Saved token ending in". OK?
+- Four Krea handler errors still say "Krea API token" (styles, training,
+  renaming, job history). They are worded on their own (error-copy
+  rounds); change them to "Krea API key" in a wording pass?

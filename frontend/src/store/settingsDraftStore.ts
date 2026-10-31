@@ -56,6 +56,11 @@ interface SettingsState {
    * PR #203 r19 item 6). ProvidersTab keeps it; the tab badge counts by it
    * too, so the two agree while a row is held (r21 item 3). */
   heldRows: Record<string, boolean>;
+  /** How many reads of the saved settings (GET /api/settings) have landed in
+   * the panel. A change made elsewhere is said once the read it asked for
+   * lands, never on a write of this tab's that lands first (ProvidersTab;
+   * review 11 of PR #203, copy MEDIUM-1). */
+  reads: number;
   tab: SettingsTab;
   /** Fields and keys with a write in flight, by key name or field name. */
   pending: Record<string, true>;
@@ -74,6 +79,7 @@ export const useSettingsDraftStore = create<SettingsState>(() => ({
   fieldDrafts: {},
   openRow: null,
   heldRows: {},
+  reads: 0,
   tab: 'providers',
   pending: {},
   errors: {},

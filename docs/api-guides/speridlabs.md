@@ -34,10 +34,19 @@ Idol runs without a token on Hugging Face’s shared GPUs, which can be busy or 
 
 Add the token in **Settings → Providers → Hugging Face**; create it at
 [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
-Once it's saved, the row's **…** menu has **Replace key** and **Remove**,
-with **Open Hugging Face tokens ↗** on the line under "Saved key ending in
+Settings says "Hugging Face token saved. Checking it now." Once it's
+saved, the row's **…** menu has **Replace token** and **Remove**, with
+**Open Hugging Face tokens ↗** on the line under "Saved token ending in
 …". A token of only spaces or invisible characters isn't saved, and Nebula
-treats one saved that way as no token.
+treats one saved that way as no token. A token added or removed in
+another window, by a script or by the desktop app is said once in an open
+Settings panel ("Hugging Face token saved."); your own save isn't said
+twice.
+
+If Nebula can't read the keys in its settings file, it reads them as no
+keys, so Idol runs without a token, and Settings refuses to save a key
+over them: "Nothing was saved because Nebula can’t read the keys saved in
+<the file's full path>. Fix “apiKeys” in that file, then try again."
 Nebula shows Idol at $0 a run, since
 [Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
 Any bill for time past your allowance is between you and Hugging Face;

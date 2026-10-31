@@ -158,6 +158,8 @@ export interface ProjectsChangedEvent {
 export interface SettingsChangedEvent {
   type: 'settingsChanged';
   keys?: string[];
+  /** The writing tab's own id, when it sent one (lib/tabId.ts TAB_ID). */
+  origin?: string;
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

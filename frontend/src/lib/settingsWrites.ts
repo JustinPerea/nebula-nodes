@@ -1,5 +1,6 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
+import { RequestFailedError } from './errorCopy';
 import { keyText } from './directRoute';
 import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
@@ -68,6 +69,17 @@ function confirm(update: Partial<SettingsDraft>) {
   window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));
 }
 
+/** The backend's own line for a settings write it refused because it can't
+ * read the settings file (409; main.KEYS_UNREADABLE and
+ * SETTINGS_UNREADABLE, GM r22 item 3): it names the file by its full path
+ * and what to fix, so the panel says it as it is, not a generic "try
+ * again" the person can't act on. Any other failure keeps its own line. */
+export function unreadableSettingsLine(error: unknown): string | null {
+  if (!(error instanceof RequestFailedError) || error.status !== 409) return null;
+  return typeof error.detail === 'string' && error.detail.startsWith('Nothing was saved because Nebula can’t read ')
+    ? error.detail : null;
+}
+
 function notify(message: string, undoKey?: string) {
   noticeId += 1;
   useSettingsDraftStore.setState({ notice: { id: noticeId, message, ...(undoKey ? { undoKey } : {}) } });
@@ -86,9 +98,13 @@ function labelFor(key: string) {
 }
 
 /** "Replicate key", and "Krea · API key" as it is: a row label that already
- * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one. */
-function keyNoun(key: string) {
+ * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one.
+ * A provider whose credential has its own name says it, as its links do:
+ * "Hugging Face token" (GM, PR #203 r23; the spec's `credential`). */
+export function keyNoun(key: string) {
   const label = labelFor(key);
+  const credential = PROVIDER_KEY_SPECS[key]?.credential;
+  if (credential) return `${label} ${credential}`;
   return /\bkey$/i.test(label) ? label : `${label} key`;
 }
 
@@ -152,7 +168,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, "The key couldn't be saved. Your text is still here; try again.", error);
+      fail(key, unreadableSettingsLine(error) ?? "The key couldn't be saved. Your text is still here; try again.", error);
       return false;
     }
     const { saved, keyDrafts, openRow } = useSettingsDraftStore.getState();
@@ -184,7 +200,7 @@ export function removeKey(key: string): Promise<boolean> {
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, "The key couldn't be removed. Try again.", error);
+      fail(key, unreadableSettingsLine(error) ?? "The key couldn't be removed. Try again.", error);
       return false;
     }
     const { saved, openRow } = useSettingsDraftStore.getState();
@@ -215,7 +231,7 @@ export function saveField<F extends SettingsField>(field: F, value: SettingsDraf
       await updateSettings(body);
     } catch (error) {
       setPending(field, false);
-      fail(field, "Couldn't save. Try again.", error);
+      fail(field, unreadableSettingsLine(error) ?? "Couldn't save. Try again.", error);
       return false;
     }
     if (field === 'outputPath' || field === 'exportFolder') {
@@ -245,7 +261,7 @@ export function saveRunCostConfirm(value: number | null): Promise<boolean> {
     } catch (error) {
       if (useUIStore.getState().runCostConfirmUsd === chosen) useUIStore.getState().setRunCostConfirmUsd(previous);
       setPending(id, false);
-      fail(id, "Couldn't save. Try again.", error);
+      fail(id, unreadableSettingsLine(error) ?? "Couldn't save. Try again.", error);
       return false;
     }
     setPending(id, false);

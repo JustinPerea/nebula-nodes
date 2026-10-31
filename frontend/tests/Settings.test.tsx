@@ -71,6 +71,9 @@ import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
 import { PROVIDER_KEYS } from '../src/lib/providerCatalog';
 import { SETTINGS_SAVED_EVENT } from '../src/lib/settingsSignal';
+import { TAB_ID } from '../src/lib/tabId';
+import { wsClient } from '../src/lib/wsClient';
+import '../src/store/settingsChangedSocket';
 import { ConnectionLostError, RequestFailedError } from '../src/lib/errorCopy';
 
 // ---------------------------------------------------------------------------
@@ -149,7 +152,9 @@ function setupDesktopBridge(overrides?: {
 async function renderSettings(settings: Record<string, unknown> = { apiKeys: {} }) {
   getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, ...settings });
   const rendered = render(<Settings />);
-  await screen.findByRole('searchbox', { name: 'Search providers and models' });
+  // The file's first render loads the panel's modules: under load it can
+  // pass findByRole's 1 s default (review 11 of PR #203, NIT-6).
+  await screen.findByRole('searchbox', { name: 'Search providers and models' }, { timeout: 5000 });
   return rendered;
 }
 
@@ -450,7 +455,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     const hf = row('Hugging Face');
     expect(hf).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
     expect(hf).not.toHaveTextContent('Needed to run Idol.');
-    fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face key' }));
+    fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face token' }));
     expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
     expect(screen.queryByLabelText('Hugging Face API key')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show Hugging Face token' })).toBeInTheDocument();
@@ -476,11 +481,11 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (GM, PR #203 r2)', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: {} });
-    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
     const input = await screen.findByLabelText('Hugging Face token');
     fireEvent.change(input, { target: { value: '  hf_fixture0123\r\n' } });
     fireEvent.submit(input.closest('form')!);
-    await screen.findByText('Hugging Face key saved. Checking it now.');
+    await screen.findByText('Hugging Face token saved. Checking it now.');
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { HF_TOKEN: 'hf_fixture0123' } }]]);
     expect(document.querySelector('.settings-row__error')).toBeNull();
   });
@@ -488,21 +493,21 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   it('trims a byte-order mark and zero-width spaces as the agent gate and the run do (review 7 of PR #203, NIT-4)', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: {} });
-    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
     const input = await screen.findByLabelText('Hugging Face token');
     // Only invisible characters: nothing to save.
     fireEvent.change(input, { target: { value: '\u200b\ufeff' } });
-    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save token' })).toBeDisabled();
     fireEvent.change(input, { target: { value: '\ufeffhf_fixture0123\u200b' } });
     fireEvent.submit(input.closest('form')!);
-    await screen.findByText('Hugging Face key saved. Checking it now.');
+    await screen.findByText('Hugging Face token saved. Checking it now.');
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { HF_TOKEN: 'hf_fixture0123' } }]]);
   });
 
   it.each(['hf_abc def', 'hf_abc’def', 'hf_été', 'hf_abc\tdef'])(
     'refuses a Hugging Face token with a character tokens can\'t have, by the field (%j)', async (bad) => {
       await renderSettings({ apiKeys: {} });
-      fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face key' }));
+      fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
       const input = await screen.findByLabelText('Hugging Face token');
       fireEvent.change(input, { target: { value: bad } });
       fireEvent.submit(input.closest('form')!);
@@ -542,16 +547,17 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
 
   it('keeps the actions on the key together and puts its page on its own line, every provider (GM, PR #203 r16 item 5)', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
-    for (const [name, words] of [['Hugging Face', 'Open Hugging Face tokens'], ['OpenAI', 'Open OpenAI keys']] as const) {
+    // Each in its provider's own noun (GM, PR #203 r23): a Hugging Face token.
+    for (const [name, words, noun] of [['Hugging Face', 'Open Hugging Face tokens', 'token'], ['OpenAI', 'Open OpenAI keys', 'key']] as const) {
       fireEvent.click(screen.getByRole('button', { name: `Manage ${name}` }));
       const manage = row(name).querySelector('.settings-row__manage')!;
       // [Replace key] and [Remove] on one row, and nothing else on it.
       const buttons = manage.querySelector('.settings-row__buttons')!;
-      expect([...buttons.children].map((child) => child.textContent)).toEqual(['Replace key', 'Remove']);
+      expect([...buttons.children].map((child) => child.textContent)).toEqual([`Replace ${noun}`, 'Remove']);
       expect(buttons.querySelector('a')).toBeNull();
       // The page link on its own line, right under "Saved key ending in …".
       const lines = [...manage.children];
-      const saved = lines.findIndex((line) => /^Saved key ending in /.test(line.textContent ?? ''));
+      const saved = lines.findIndex((line) => new RegExp(`^Saved ${noun} ending in `).test(line.textContent ?? ''));
       expect(saved).toBeGreaterThan(-1);
       const link = lines[saved + 1];
       expect(link.tagName).toBe('P');
@@ -599,6 +605,33 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     removeKey('OpenAI');
     expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be removed. Try again.");
     expect(rowNames(list(/^Connected/))).toContain('OpenAI');
+  });
+
+  // GM r22 item 3: a 409 for a settings file Nebula can't read names the file
+  // by its full path, in the row, as the backend said it.
+  const UNREADABLE = 'Nothing was saved because Nebula can’t read the keys saved in /Users/fixture/.nebula/settings.json. Fix “apiKeys” in that file, then try again.';
+  const unreadable = () => new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE });
+
+  it('says the 409 line with the full path when a save can’t read the settings file', async () => {
+    updateSettingsMock.mockRejectedValueOnce(unreadable());
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    expect((await screen.findByRole('alert')).textContent).toBe(UNREADABLE);
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic');
+  });
+
+  it('says the 409 line with the full path when a removal can’t read the settings file', async () => {
+    deleteSettingsApiKeyMock.mockRejectedValueOnce(unreadable());
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    removeKey('OpenAI');
+    expect((await screen.findByRole('alert')).textContent).toBe(UNREADABLE);
+  });
+
+  it('keeps its own line for any other 409', async () => {
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409, { detail: 'Something else.' }));
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
   });
 
   it('invalidates a running check when a key changes', async () => {
@@ -809,6 +842,177 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     await renderSettings();
     expect(row('Krea · API key')).toBeInTheDocument();
     expect(() => row('Krea · API token')).toThrow();
+  });
+});
+
+describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
+  // The backend's signal as the socket delivers it (store/settingsChangedSocket.ts).
+  const signal = (keys: string[], origin?: string) => act(async () => {
+    (wsClient as unknown as { dispatch: (event: unknown) => void }).dispatch({ type: 'settingsChanged', keys, ...(origin ? { origin } : {}) });
+  });
+  const frames = () => act(async () => { await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))); });
+  const said = () => document.querySelector('[data-key-changes]')?.textContent ?? '';
+  /** Every non-empty line the live region has held, in order. */
+  const listen = () => {
+    const lines: string[] = [];
+    const region = document.querySelector('[data-key-changes]')!;
+    const observer = new MutationObserver(() => { if (region.textContent) lines.push(region.textContent); });
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    return { lines, stop: () => observer.disconnect() };
+  };
+  const deferred = () => {
+    let resolve!: (value: unknown) => void;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+  };
+  const badge = () => screen.getByRole('tab', { name: /^Providers/ }).querySelector('.settings-tabs__count')?.textContent ?? '0';
+  const heading = () => screen.getByRole('heading', { name: /^Connected · / }).textContent;
+  const saveHf = async () => {
+    fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
+    const input = await screen.findByLabelText('Hugging Face token');
+    fireEvent.change(input, { target: { value: 'hf_fixture0123' } });
+    fireEvent.submit(input.closest('form')!);
+  };
+
+  for (const when of ['before', 'after'] as const) {
+    it(`never announces the person's own save again when its echo lands ${when} the answer (copy MEDIUM-1)`, async () => {
+      providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+      await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+      const heard = listen();
+      const answer = deferred();
+      updateSettingsMock.mockReturnValueOnce(answer.promise);
+      getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123' } });
+      await saveHf();
+      if (when === 'before') await signal(['HF_TOKEN'], TAB_ID);
+      await act(async () => { answer.resolve({ status: 'saved' }); });
+      await screen.findByText('Hugging Face token saved. Checking it now.');
+      if (when === 'after') await signal(['HF_TOKEN'], TAB_ID);
+      await frames();
+      await frames();
+      expect(heard.lines).toEqual([]);
+      expect(said()).toBe('');
+      expect(getSettingsMock).toHaveBeenCalledTimes(1);
+      heard.stop();
+    });
+
+    it(`never announces the person's own removal again when its echo lands ${when} the answer (copy MEDIUM-1)`, async () => {
+      await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123' } });
+      const heard = listen();
+      const answer = deferred();
+      deleteSettingsApiKeyMock.mockReturnValueOnce(answer.promise);
+      getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Manage Hugging Face' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Hugging Face token' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm removing the Hugging Face token' }));
+      if (when === 'before') await signal(['HF_TOKEN'], TAB_ID);
+      await act(async () => { answer.resolve({ status: 'removed' }); });
+      await screen.findByText('Hugging Face token removed.');
+      if (when === 'after') await signal(['HF_TOKEN'], TAB_ID);
+      await frames();
+      await frames();
+      expect(heard.lines).toEqual([]);
+      heard.stop();
+    });
+  }
+
+  it('announces a change made elsewhere during the person’s own write, once (copy MEDIUM-1)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const heard = listen();
+    const answer = deferred();
+    updateSettingsMock.mockReturnValueOnce(answer.promise);
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1,
+      apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123', REPLICATE_API_TOKEN: '***dddd' } });
+    await saveHf();
+    // The CLI saves a Replicate key while this tab's write is in flight; then the echo of its own.
+    await signal(['REPLICATE_API_TOKEN']);
+    await signal(['HF_TOKEN'], TAB_ID);
+    await act(async () => { answer.resolve({ status: 'saved' }); });
+    await screen.findByText('Hugging Face token saved. Checking it now.');
+    await waitFor(() => expect(said()).toBe('Replicate key saved.'));
+    await frames();
+    await frames();
+    expect(heard.lines).toEqual(['Replicate key saved.']);
+    heard.stop();
+  });
+
+  it('drops a read from before the person’s own write that lands during it, and reads again once it settles (copy MEDIUM-1)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const heard = listen();
+    // The CLI saves a Replicate key; the read it asks for is still out when the person saves Hugging Face.
+    const before = deferred();
+    getSettingsMock.mockReturnValueOnce(before.promise);
+    await signal(['REPLICATE_API_TOKEN']);
+    const answer = deferred();
+    updateSettingsMock.mockReturnValueOnce(answer.promise);
+    await saveHf();
+    const reads = getSettingsMock.mock.calls.length;
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1,
+      apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123', REPLICATE_API_TOKEN: '***dddd' } });
+    // It lands mid-write, from before the write: nothing is taken from it or said.
+    await act(async () => { before.resolve({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } }); });
+    await frames();
+    await frames();
+    expect(heard.lines).toEqual([]);
+    await act(async () => { answer.resolve({ status: 'saved' }); });
+    await waitFor(() => expect(getSettingsMock.mock.calls.length).toBe(reads + 1));
+    await waitFor(() => expect(said()).toBe('Replicate key saved.'));
+    await frames();
+    expect(heard.lines).toEqual(['Replicate key saved.']);
+    heard.stop();
+  });
+
+  it('a signal from another tab is that tab’s, never this one’s', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123' } });
+    await signal(['HF_TOKEN'], 'tab-another-window-0000');
+    await waitFor(() => expect(said()).toBe('Hugging Face token saved.'));
+  });
+
+  it('keeps focus on the tab after re-adding a key that was removed elsewhere (copy LOW-1)', async () => {
+    await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg', OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Google · Gemini API' }));
+    await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    await signal(['GOOGLE_API_KEY']);
+    const field = await screen.findByLabelText('Google · Gemini API API key');
+    await waitFor(() => expect(field).toHaveFocus());
+    fireEvent.change(field, { target: { value: 'AIza-fixture-0001' } });
+    await act(async () => { fireEvent.submit(field.closest('form')!); });
+    await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Manage Google · Gemini API' })).toBeInTheDocument());
+    await frames();
+    await frames();
+    // Away and back with the keyboard: every row remounts, and none takes focus.
+    const providers = screen.getByRole('tab', { name: /^Providers/ });
+    act(() => { providers.focus(); });
+    fireEvent.keyDown(providers, { key: 'ArrowRight' });
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Preferences/ })).toHaveFocus());
+    fireEvent.keyDown(screen.getByRole('tab', { name: /^Preferences/ }), { key: 'ArrowLeft' });
+    await screen.findByRole('searchbox', { name: 'Search providers and models' });
+    await frames();
+    expect(screen.getByRole('tab', { name: /^Providers/ })).toHaveFocus();
+  });
+
+  it('counts the badge and "Connected · N" from one source: Krea while it signs in, and Nous (copy NIT-2)', async () => {
+    getKreaConnectionMock.mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Krea · sign-in'));
+    expect(heading()).toBe('Connected · 2');
+    expect(badge()).toBe('2');
+    act(() => {
+      const checkedAt = Date.now();
+      useProviderReadinessStore.setState({ checkedAt, providers: {
+        Nous: { configured: true, status: 'valid', last_checked: new Date(checkedAt).toISOString() } } as never });
+    });
+    await waitFor(() => expect(heading()).toBe(`Connected · ${rowNames(list(/^Connected/)).length}`));
+    expect(badge()).toBe(String(rowNames(list(/^Connected/)).length));
+    expect(rowNames(list(/^Connected/)).length).toBe(3);
+  });
+
+  it('says the Krea sign-in row’s summary in GM’s words, with no period (GM r23)', async () => {
+    await renderSettings();
+    expect(row('Krea · sign-in').querySelector('.settings-row__summary')?.textContent).toBe('Uses your Krea plan instead of an API key');
   });
 });
 

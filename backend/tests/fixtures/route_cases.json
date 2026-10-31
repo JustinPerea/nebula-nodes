@@ -3883,7 +3883,7 @@
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API key in Settings, then run the node again."
     },
     {
       "name": "routes: a missing _provider reads as Auto",
@@ -5176,7 +5176,7 @@
         "fixes": [],
         "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again.",
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API key in Settings, then run the node again.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -6856,7 +6856,7 @@
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API key in Settings, then run the node again."
     },
     {
       "name": "flux-video-edit: bfl chosen runs there with its key",
@@ -7019,7 +7019,7 @@
         "fixes": [],
         "message": "FLUX Video Edit [fast] needs BFL_API_KEY, FAL_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key or Krea API token in Settings, then run the node again."
+      "unavailableLine": "Add your Black Forest Labs, fal.ai or Krea API key in Settings, then run the node again."
     },
     {
       "name": "flux-video-upscale: bfl chosen runs there with its key",
@@ -7316,7 +7316,7 @@
         "fixes": [],
         "message": "FLUX Video Upscale needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token or Krea API token in Settings, then run the node again."
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token or Krea API key in Settings, then run the node again."
     },
     {
       "name": "krea-3: krea chosen runs there with its key",
@@ -7554,7 +7554,7 @@
         "fixes": [],
         "message": "Krea 3 needs KREA_API_TOKEN or FAL_KEY in Settings > Providers."
       },
-      "unavailableLine": "Add your Krea API token or fal.ai API key in Settings, then run the node again."
+      "unavailableLine": "Add your Krea or fal.ai API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-image: Auto on fal can't take 1.5k, so it stops and offers the routes that can",
@@ -7948,7 +7948,7 @@
         "fixes": [],
         "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
       },
-      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API token in Settings, then run the node again."
+      "unavailableLine": "Add your Black Forest Labs API key, fal.ai API key, Replicate API token, OpenRouter API key or Krea API key in Settings, then run the node again."
     },
     {
       "name": "flux-3-video: under Auto a BFL key runs on BFL with the plan connected",

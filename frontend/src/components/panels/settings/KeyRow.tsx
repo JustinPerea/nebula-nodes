@@ -6,10 +6,10 @@ import { useProviderReadinessStore } from '../../../store/providerReadinessStore
 import { keyText } from '../../../lib/directRoute';
 import { keyReadiness } from '../../../lib/providerReadiness';
 import { unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalog';
-import { removeKey, saveKey } from '../../../lib/settingsWrites';
+import { keyNoun, removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
-import { cancelRowFocus, focusRowAfterMove, keyStatus, readServiceAccount, takeRowFocus } from './rowHelpers';
+import { cancelRowFocus, focusRowIfItMoves, keyStatus, readServiceAccount, settleRowFocus, takeRowFocus } from './rowHelpers';
 
 
 
@@ -62,6 +62,9 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   const serviceAccount = spec.input === 'service-account';
   // "Hugging Face token", "OpenAI API key": what screen readers hear.
   const credentialName = `${spec.label} ${spec.credential ?? 'API key'}`;
+  // The provider's own noun on the buttons too, as its links and notices
+  // say it: "Add token", "Save token" for Hugging Face (GM, PR #203 r23).
+  const noun = spec.credential ?? 'key';
 
   useEffect(() => {
     if (!takeRowFocus(spec.key)) return;
@@ -105,11 +108,17 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   const setDraft = (text: string) => useSettingsDraftStore.setState((state) => ({
     keyDrafts: { ...state.keyDrafts, [spec.key]: text }, errors: withoutKey(state.errors, spec.key),
   }));
+  // The section the row is shown in now: where it is held while the person
+  // is in it (ProvidersTab), else where its key puts it.
+  const shownConnected = () => {
+    const held = useSettingsDraftStore.getState().heldRows;
+    return Object.hasOwn(held, spec.key) ? held[spec.key] : configured;
+  };
   const canSave = !pending && (serviceAccount ? readServiceAccount(draft).ok : keyText(draft) !== '');
   const submit = () => {
     if (!canSave) return;
-    if (!configured) focusRowAfterMove(spec.key);
-    void saveKey(spec.key, draft).then((ok) => { if (!ok) cancelRowFocus(spec.key); });
+    focusRowIfItMoves(spec.key, shownConnected(), true);
+    void saveKey(spec.key, draft).then((ok) => { if (!ok) cancelRowFocus(spec.key); settleRowFocus(spec.key); });
   };
 
   // Escape backs out one step: an open row closes before the dock does.
@@ -133,8 +142,8 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   ) : open === 'edit' ? (
     <button ref={trigger} type="button" className="settings__button settings__button--ghost" onClick={cancelEdit}>Cancel</button>
   ) : (
-    <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${spec.label} key`}
-      aria-expanded={open !== null} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add key</button>
+    <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${keyNoun(spec.key)}`}
+      aria-expanded={open !== null} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add {noun}</button>
   );
 
   return (
@@ -147,14 +156,14 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
             <div className="settings-row__buttons">
               {/* GM, PR #203 r16 item 5: the actions on the key, together on
                   one row; the key's page is a reference, on its own line below. */}
-              <button ref={firstAction} type="button" className="settings__button" onClick={() => setOpen('edit')}>Replace key</button>
+              <button ref={firstAction} type="button" className="settings__button" onClick={() => setOpen('edit')}>Replace {noun}</button>
               <RemoveKeyButton label={credentialName} removing={pending} onConfirm={() => {
-                focusRowAfterMove(spec.key);
-                void removeKey(spec.key).then((ok) => { if (!ok) cancelRowFocus(spec.key); });
+                focusRowIfItMoves(spec.key, shownConnected(), false);
+                void removeKey(spec.key).then((ok) => { if (!ok) cancelRowFocus(spec.key); settleRowFocus(spec.key); });
               }} />
             </div>
             <p className="settings-hint">
-              {serviceAccount ? 'Service-account key saved.' : <>Saved key ending in <span className="settings-mono">{saved.replace(/^\*+/, '') || '····'}</span>.</>}
+              {serviceAccount ? 'Service-account key saved.' : <>Saved {noun} ending in <span className="settings-mono">{saved.replace(/^\*+/, '') || '····'}</span>.</>}
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
@@ -206,7 +215,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
             <div className="settings-row__foot">
               <span />
               <button type="submit" className="settings__button settings__button--primary" disabled={!canSave}>
-                {pending ? 'Saving…' : 'Save key'}
+                {pending ? 'Saving…' : `Save ${noun}`}
               </button>
             </div>
           </form>

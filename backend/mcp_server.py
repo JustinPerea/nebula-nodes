@@ -1267,7 +1267,7 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     import graph_file_client
 
     try:
-        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx), via="mcp")
+        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx))
     except graph_file_client.GraphFileError as exc:
         raise RuntimeError(str(exc)) from exc
 
@@ -2670,7 +2670,7 @@ def _krea_call(method: str, path: str, ctx: Context | None, **kwargs: Any) -> di
         if exc.status in (400, 503) and ("connect" in detail or "sign in" in detail):
             raise NebulaAPIError(
                 f"{exc.detail.rstrip('.')}. Only the person can sign in to Krea: ask them to open "
-                "Settings > Connections > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
+                "Settings > Providers > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
         raise
 
 
@@ -2681,7 +2681,7 @@ def krea_discovery_tools(ctx: Context | None = None) -> dict[str, Any]:
     Krea's prompting guide, the account's styles and moodboards, node apps.
     Call one with krea_discover. None of them generates, uploads or spends;
     Krea generation goes through Krea graph nodes. If Krea isn't connected,
-    ask the person to sign in to Krea in Nebula (Settings > Connections > Krea)."""
+    ask the person to sign in to Krea in Nebula (Settings > Providers > Krea)."""
     allowed = _krea_allowed()
     payload = _krea_call("GET", "/api/krea/tools", ctx)
     tools = [tool for tool in payload.get("tools") or [] if isinstance(tool, dict) and tool.get("name") in allowed]

@@ -1,5 +1,6 @@
 import { wsClient } from '../lib/wsClient';
 import { SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from '../lib/settingsSignal';
+import { TAB_ID } from '../lib/tabId';
 
 /**
  * Every key change reaches every one of the person's tabs (review 8 of PR
@@ -24,6 +25,14 @@ export { SETTINGS_SAVED_EVENT };
 
 wsClient.subscribe((event) => {
   if (event.type === 'settingsChanged') {
+    // This tab's own write, echoed back: its `origin` is this tab's id, the
+    // one apiFetch sends on every write (X-Nebula-Tab, lib/tabId.ts; the
+    // backend's main._writing_tab). The write's own confirm already told
+    // every cache here, with the keys it changed ('local'), so the echo says
+    // nothing, whether it lands before the write's answer or after it
+    // (review 11 of PR #203, copy MEDIUM-1). A change from anywhere else,
+    // during this tab's write too, has another origin or none.
+    if (event.origin === TAB_ID) return;
     const keys = Array.isArray(event.keys) ? event.keys.filter((key): key is string => typeof key === 'string') : undefined;
     const detail: SettingsSavedDetail = { source: 'remote', ...(keys ? { keys } : {}) };
     window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));

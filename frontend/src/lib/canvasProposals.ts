@@ -315,10 +315,11 @@ export function liveKeyBilling(
     seen.add(key);
     return [row];
   });
-  const paid = entries.filter((entry) => entry.kind === 'paid').length;
-  const plan = entries.filter((entry) => entry.kind === 'plan').length;
+  // Free runs are those whose kind is "free"; a kind this canvas doesn't
+  // name stays in the backend's paid count, never in the free one (backend
+  // canvas_proposals.class_counts; review 11 of PR #203, NIT-4).
   return { ...view, nodes, cost: { ...view.cost, nodes: entries, mayCostRuns: may.length, mayCost,
-    freeRuns: entries.length - paid - plan - may.length } };
+    freeRuns: entries.filter((entry) => entry.kind === 'free').length } };
 }
 
 /** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */

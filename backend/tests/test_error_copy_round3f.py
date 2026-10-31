@@ -551,7 +551,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     definition = definition_for("krea-image-bytedance-seedream-4")
     block = node_route.DirectBlock(node_route.BLOCKED, param="style_images")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", block) == (
-        "These settings need your Krea API token. Add it in Settings, then run the node again.")
+        "These settings need your Krea API key. Add it in Settings, then run the node again.")
     definition = definition_for("seedream-4-5")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", None) == (
         "These settings need your fal.ai API key. Add it in Settings, then run the node again.")
@@ -559,7 +559,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     several = {"id": "x", "envKeyName": ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "KREA_API_TOKEN"],
                "directKeyName": "BFL_API_KEY"}
     assert _blocked_key_line(several, "BFL_API_KEY", None) == (
-        "These settings need your fal.ai API key, Replicate API token or Krea API token. Add one in Settings, "
+        "These settings need your fal.ai API key, Replicate API token or Krea API key. Add one in Settings, "
         "then run the node again.")
 
 

@@ -80,7 +80,8 @@ from execution import provider_calls
 from services.settings import (
     load_settings,
     load_saved_settings,
-    saved_keys_readable,
+    saved_keys_writable,
+    settings_file_path,
     save_settings,
     get_api_key,
     validate_provider_keys,
@@ -6387,6 +6388,11 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
             options = node_readiness.detail(definition, context["keys"], context["krea"], definitions) or {}
             if options.get("note"):
                 notes.append(f"{row['id']}: {options['note']}")
+    if via == "cli":
+        # Data in MCP words (find_nodes' needsKeyFor, describe_node's note):
+        # a shell-only agent reads the `nebula` commands. The notes below are
+        # worded where they are written (review 11, NIT-7).
+        notes = [_cli_words(note) for note in notes]
     look = agent_words.worded("{describe}", via)
     propose = agent_words.worded("{propose}", via)
     if any(row.get("runsWith") == "krea" for row in ready):
@@ -6398,10 +6404,7 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
     if any(row.get("billing") for row in ready):
         # Each row's own note, as the token is set now (_space_billing).
         for note, ids in _group_by_note(row for row in ready if row.get("billing")).items():
-            notes.append(f"{', '.join(ids)}: {note}")
-    if via == "cli":
-        # find_nodes' hints name MCP tools; a shell-only agent reads the `nebula` commands.
-        notes = [_cli_words(note) for note in notes]
+            notes.append(f"{', '.join(ids)}: {_cli_words(note) if via == 'cli' else note}")
     return notes
 
 
@@ -6437,9 +6440,11 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     its own budget (services/agent_start.py). MCP `start_here` and `nebula
     context` print it; the CLI's ``X-Nebula-Surface: cli``, the one signal
     every CLI request sends (services/agent_words; review 10 of PR #203,
-    NIT-4), words its hints as `nebula` commands."""
+    NIT-4), words its hints as `nebula` commands. A CLI from before the
+    header sends ``?via=cli`` instead, read only when the header is missing
+    (review 11, LOW-1)."""
     headers = current_request_headers()
-    via = agent_words.surface(headers)
+    via = agent_words.surface(headers, request.query_params.get("via"))
     caller = identify_agent(headers)
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
@@ -9838,14 +9843,16 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
     current = copy.deepcopy(load_saved_settings())
     if not isinstance(current, dict):
-        raise HTTPException(409, SETTINGS_UNREADABLE)
+        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
     before = dict(load_settings().get("apiKeys") or {})
     writes_keys = "apiKeys" in body and accepts_keys and any(
         node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
-    if writes_keys and not saved_keys_readable(current):
+    if writes_keys and not saved_keys_writable(current):
         # Keys Nebula can't read stay as saved: a key added to them would be
-        # a guess at what they were (review 10 of PR #203, NIT-6).
-        raise HTTPException(409, KEYS_UNREADABLE)
+        # a guess at what they were (review 10 of PR #203, NIT-6). A value
+        # that holds nothing (null, [], "", false, 0) has no key to keep, so
+        # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
+        raise HTTPException(409, _unreadable(KEYS_UNREADABLE))
     if writes_keys:
         current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
         for k, v in body["apiKeys"].items():
@@ -9874,7 +9881,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
     clear_provider_validation_cache()
-    await _broadcast_settings_changed(_changed_keys(before))
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "saved"}
 
 
@@ -9885,7 +9892,21 @@ def _changed_keys(before: Mapping[str, Any]) -> list[str]:
     return sorted(name for name in {*before, *after} if before.get(name) != after.get(name))
 
 
-async def _broadcast_settings_changed(keys: Iterable[str] = ()) -> None:
+def _writing_tab() -> str | None:
+    """The person's tab that made this settings write, as it says: the
+    canvas's apiFetch sends its id (X-Nebula-Tab, frontend lib/tabId.ts) on
+    every write, as `_graph_edit_origin` reads it for a graphSync. The signal
+    carries it back as `origin`, so that tab knows its own write's echo by
+    name, whenever it arrives, and a change made anywhere else during its
+    write is still a change made elsewhere (review 11 of PR #203, copy
+    MEDIUM-1). Anything that isn't such an id, or doesn't come from the
+    person, is no origin at all."""
+    headers = current_request_headers() or {}
+    tab = next((value for key, value in headers.items() if str(key).lower() == "x-nebula-tab"), None)
+    return tab if _is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab) else None
+
+
+async def _broadcast_settings_changed(keys: Iterable[str] = (), origin: str | None = None) -> None:
     """The person's tabs hear that the settings changed: each reads them
     again (GET /api/settings, masked as ever), so a key added or removed in
     another window, another tab, the desktop app or a script calling the API
@@ -9895,8 +9916,10 @@ async def _broadcast_settings_changed(keys: Iterable[str] = ()) -> None:
     value or an ending), so a tab clears only those connection checks (GM,
     PR #203 r19 item 7). Only the person's tabs (broadcast_browser): agents
     re-read keys on every call, and the signal would tell them a key was
-    replaced (review 9, keys LOW-1)."""
-    await manager.broadcast_browser({"type": "settingsChanged", "keys": sorted(set(keys))})
+    replaced (review 9, keys LOW-1). ``origin`` is the writing tab's own id
+    (_writing_tab), when it sent one."""
+    await manager.broadcast_browser({"type": "settingsChanged", "keys": sorted(set(keys)),
+                                     **({"origin": origin} if origin else {})})
 
 
 # The credential-update allowlist (services/credential_catalog.py; the
@@ -9919,17 +9942,18 @@ async def remove_settings_api_key(provider: str) -> dict:
     # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
     current = copy.deepcopy(load_saved_settings())
     if not isinstance(current, dict):
-        raise HTTPException(409, SETTINGS_UNREADABLE)
+        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
     before = dict(load_settings().get("apiKeys") or {})
-    if not saved_keys_readable(current):
+    if not saved_keys_writable(current):
         # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
-        raise HTTPException(409, KEYS_UNREADABLE)
+        # A value that holds nothing is replaced with no keys (LOW-3).
+        raise HTTPException(409, _unreadable(KEYS_UNREADABLE))
     current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
     current_keys.pop(provider, None)
     current["apiKeys"] = current_keys
     save_settings(current)
     clear_provider_validation_cache()
-    await _broadcast_settings_changed(_changed_keys(before))
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "removed"}
 
 
@@ -9966,17 +9990,23 @@ async def credentials_update(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=422, detail=refusal)
     before = dict(load_settings().get("apiKeys") or {})
     update_injected_keys(provider, node_route.key_text(key))
-    await _broadcast_settings_changed(_changed_keys(before))
+    await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "updated"}
 
 
 # A settings.json whose `apiKeys` isn't an object, or that isn't an object at
 # all: Nebula reads no keys from it (services/settings.load_settings) and a
 # write never replaces what it holds with a guess (review 10 of PR #203,
-# NIT-6). Builder's wording, for GM.
-KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in settings.json. "
+# NIT-6). GM's wording (PR #203 r22 item 3): each names the file by its full
+# path, the one this backend reads (NEBULA_SETTINGS_PATH when it is set).
+KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                    "Fix “apiKeys” in that file, then try again.")
-SETTINGS_UNREADABLE = ("Nothing was saved because Nebula can’t read settings.json. Fix the file, then try again.")
+SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
+
+
+def _unreadable(line: str) -> str:
+    """``line`` naming the settings file this backend reads, resolved."""
+    return line.format(path=settings_file_path())
 
 
 # A key with something in it that is empty once trimmed: no key at all, so

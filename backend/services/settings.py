@@ -138,6 +138,32 @@ def saved_keys_readable(saved: Any) -> bool:
     return isinstance(saved, dict) and isinstance(saved.get("apiKeys", {}), dict)
 
 
+def saved_keys_hold_nothing(saved: Any) -> bool:
+    """Whether the saved `apiKeys` is a value that holds no key at all
+    (null, [], "", false, 0): a write may replace it, as it fills a file
+    that leaves `apiKeys` out (GM, PR #203 r23; review 11, LOW-3). Content
+    Nebula can't read (a list of keys, a string, a number) is never this."""
+    if not isinstance(saved, dict) or "apiKeys" not in saved:
+        return False
+    value = saved["apiKeys"]
+    return not isinstance(value, dict) and not value
+
+
+def saved_keys_writable(saved: Any) -> bool:
+    """Whether a key write may change the saved `apiKeys`: it is an object
+    (saved_keys_readable), or a value that holds nothing, which the write
+    replaces (saved_keys_hold_nothing). Anything else stays as saved and the
+    write gets main.KEYS_UNREADABLE."""
+    return saved_keys_readable(saved) or saved_keys_hold_nothing(saved)
+
+
+def settings_file_path() -> str:
+    """The settings file this backend reads and writes, as a full path:
+    NEBULA_SETTINGS_PATH when it is set, resolved (the 409 lines name it;
+    GM, PR #203 r22 item 3)."""
+    return str(Path(SETTINGS_PATH).expanduser().resolve())
+
+
 def load_saved_settings() -> dict[str, Any]:
     """The settings file as saved, with a default for every key it leaves
     out, and nothing else: no injected keys and no key read through
@@ -172,6 +198,14 @@ def save_settings(settings: dict[str, Any]) -> None:
     # Desktop mode: never persist injected keys to disk. The App Support
     # settings.json must keep apiKeys empty — keys live only in the
     # Keychain (via Electron) and in _INJECTED_KEYS (memory).
+    #
+    # The one exception to "a write keeps keys it can't read as saved"
+    # (main.KEYS_UNREADABLE; review 11 of PR #203, NIT-5): in desktop mode
+    # every save writes {} over the file's `apiKeys`, readable or not. Kept
+    # on purpose: no reader uses the file's keys there (load_settings
+    # replaces them with the injected ones), so nothing Nebula runs with is
+    # lost, and a key found in the desktop file is plain text on disk that
+    # this write removes. Writing them back as saved would keep it there.
     to_write = dict(settings)
     if _INJECTED_KEYS:
         to_write["apiKeys"] = {}

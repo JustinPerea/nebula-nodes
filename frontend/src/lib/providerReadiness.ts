@@ -110,7 +110,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     if (status === 'connected') return { label: 'Krea signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'Uses the signed-in Krea workspace and its compute units. This model is checked against that account when you explicitly run it.' };
     return { label: status === 'connecting' ? 'Finish Krea sign-in' : status === 'error' ? 'Connection unavailable' : 'Krea sign-in required',
-      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API token does not replace it.' };
+      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API key doesn’t replace it.' };
   }
   if (def.apiProvider === 'nous') {
     const target: ProviderSetupTarget = { kind: 'external', provider: 'nous' };
@@ -257,7 +257,7 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
 }
 
 function connectionLabelFor(key: string): string {
-  if (key === 'KREA_API_TOKEN') return 'Krea API token';
+  if (key === 'KREA_API_TOKEN') return 'Krea API key';
   return `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`;
 }
 
@@ -278,7 +278,7 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
   }
   const directName = keyProviderName(direct);
   const fallbackName = keyProviderName(fallback);
-  const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API token' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
+  const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API key' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
   const fallbackCopy = `${fallbackName} with your ${fallbackKey}${kreaToken ? ' (API balance)' : ''}`;
   if (route.kind === 'direct') {
     return `Runs on ${directName}'s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;

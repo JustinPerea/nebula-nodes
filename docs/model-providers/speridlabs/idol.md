@@ -79,8 +79,9 @@ r11's instruction, link and caveat. The caveat holds in both states: "With
 your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO,
 time past your allowance uses your prepaid Hugging Face credits." With a
 token, the row's manage view keeps the actions on the key together on one
-row, [Replace key] and [Remove], and puts "Open Hugging Face tokens ↗" on
-its own line under "Saved key ending in …", since it's a reference, not an
+row, [Replace token] and [Remove], and puts "Open Hugging Face tokens ↗" on
+its own line under "Saved token ending in …" (the row's buttons say the
+provider's own noun, "token", since round 12), since it's a reference, not an
 action (GM r16 item 5; the words are r14 item 5's, as the edit view has
 them). Every provider's manage view is the same component, so the others
 put "Key page ↗" there too. No copy names a
@@ -238,7 +239,8 @@ $0 and spend tracking never counts it as paid.
     paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices",
     "1 run that may bill the person's own account (Idol)". A plan run is
     never "free" and never in the figure, and a free run that calls a
-    provider names it ("1 free run (on fal.ai)"), never "runs locally".
+    provider names it as a paid run's tag does ("1 free run (fal)" beside
+    "1 paid run (google)"; GM r22 item 5), never "runs locally".
     The journal's `proposal.created` has `planRuns` and `mayCostRuns`
     beside `paidRuns`. propose_change's description lists the classes
     from one table, `model_pricing.CLASS_ENTRIES` (review 10, LOW-2).
@@ -293,10 +295,38 @@ $0 and spend tracking never counts it as paid.
   - A settings.json whose `apiKeys` isn't an object reads as no keys, and
     is never overwritten with a guess (review 10, NIT-6): a PUT that writes
     a key and a key's DELETE get 409 "Nothing was saved because Nebula
-    can’t read the keys saved in settings.json. Fix “apiKeys” in that file,
-    then try again."; a PUT that writes no key saves and keeps `apiKeys` as
-    it was. A file that isn't an object at all refuses every write the
-    same way.
+    can’t read the keys saved in <path>. Fix “apiKeys” in that file, then
+    try again.", <path> the full path of the file this backend reads
+    (NEBULA_SETTINGS_PATH when set, resolved; GM r22 item 3); a PUT that
+    writes no key, or sends only masked `***` values, saves and keeps
+    `apiKeys` as it was. A file that isn't an object at all refuses every
+    write: "Nothing was saved because Nebula can’t read <path>. Fix the
+    file, then try again." A value that holds no key (null, [], "", false,
+    0) is replaced by the write instead (GM r23). No agent surface writes
+    settings, so the lines reach only the person's Settings panel.
+  - Keys Nebula can't read are no keys for every reader, the spend gate
+    included (review 11, HIGH-1, option a): an agent's Idol run then runs
+    keyless, and no handler reads a key from the environment instead
+    (tests/test_idol_round12.py). Refusing the run while the keys are
+    unreadable (option b) would be one check before `agent_spend.decide`.
+  - Desktop mode is the one exception to keeping unreadable keys: every
+    save there writes `{}` over the file's `apiKeys` (keys live in the
+    Keychain, and no reader uses the file's), so a key found in the
+    desktop file is removed rather than kept as plain text.
+  - The canvas tab's id, which its apiFetch sends on every write
+    (`X-Nebula-Tab`, the same id a graphSync echoes as `edit.tab`), comes
+    back on the backend's `settingsChanged` as `origin` when the person's
+    tab made the write, so a tab
+    never announces its own save or removal as a change made elsewhere,
+    whether the echo lands before the write's answer or after (review 11,
+    copy MEDIUM-1). A change made elsewhere during a write is read once the
+    write settles and said once.
+  - The Hugging Face notices use the provider's noun: "Hugging Face token
+    saved." / "Hugging Face token removed." / "Hugging Face token saved.
+    Checking it now.", and its buttons "Add token", "Save token" (GM r23).
+    The Krea sign-in row's summary is "Uses your Krea plan instead of an API
+    key"; a Krea copy that needs sign-in says "… an API key doesn’t replace
+    it."; person lines name "Krea API key" (GM r22 item 4).
 
 ## Request contract
 

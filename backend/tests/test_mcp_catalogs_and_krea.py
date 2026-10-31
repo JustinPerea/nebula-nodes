@@ -243,4 +243,4 @@ def test_krea_not_connected_tells_the_agent_who_connects_it(nebula, monkeypatch)
         with pytest.raises(NebulaAPIError) as refused:
             call()
         assert "Connect your Krea account first" in refused.value.detail
-        assert "Settings > Connections > Krea" in refused.value.detail and "the person" in refused.value.detail
+        assert "Settings > Providers > Krea" in refused.value.detail and "the person" in refused.value.detail

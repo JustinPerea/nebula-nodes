@@ -2,6 +2,7 @@ import { useRef, type KeyboardEvent } from 'react';
 import type { SettingsTab } from '../../../store/settingsDraftStore';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
+import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
 import { shownConnected } from './rowHelpers';
 
 const TABS: { id: SettingsTab; label: string }[] = [
@@ -14,10 +15,12 @@ const TABS: { id: SettingsTab; label: string }[] = [
 export function SettingsTabs({ tab, onChange }: { tab: SettingsTab; onChange: (tab: SettingsTab) => void }) {
   const apiKeys = useSettingsDraftStore((s) => s.saved?.apiKeys);
   const held = useSettingsDraftStore((s) => s.heldRows);
-  const kreaSignedIn = useUIStore((s) => s.settingsCache.kreaConnection?.status === 'connected');
+  const kreaStatus = useUIStore((s) => s.settingsCache.kreaConnection?.status);
+  const providers = useProviderReadinessStore((s) => s.providers);
+  const checkedAt = useProviderReadinessStore((s) => s.checkedAt);
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const index = TABS.findIndex((entry) => entry.id === tab);
-  const count = shownConnected(apiKeys ?? {}, kreaSignedIn, held);
+  const count = shownConnected({ apiKeys: apiKeys ?? {}, kreaStatus, health: { providers, checkedAt } }, held);
 
   function onKeyDown(event: KeyboardEvent) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;

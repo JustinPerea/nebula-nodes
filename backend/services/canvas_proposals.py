@@ -650,14 +650,27 @@ def live_cost(proposal: "Proposal", definitions: Mapping[str, Mapping[str, Any]]
         entries[index] = {**entry, **fresh}
         changed = True
     if changed:
-        may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
-        paid = sum(1 for entry in entries if entry.get("kind") == "paid")
-        plan = sum(1 for entry in entries if entry.get("kind") == "plan")
+        paid, plan, may_cost, free = class_counts(entries)
         cost["mayCostRuns"] = len(may_cost)
         cost["mayCost"] = [{"name": name, "account": account} for name, account in dict.fromkeys(
             (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)]
-        cost["freeRuns"] = len(entries) - paid - plan - len(may_cost)
+        cost["freeRuns"] = free
     return cost
+
+
+def class_counts(entries: Iterable[Mapping[str, Any]]) -> tuple[int, int, list[Mapping[str, Any]], int]:
+    """(paid, plan, the mayCost entries, free) of a run's cost entries, each
+    from its own `kind`. A kind this backend doesn't name (CLASS_ENTRIES)
+    counts as paid, as propose_change's description tells an agent to read
+    it ("paid with no listed price"), never as free: free runs are only
+    those whose kind is "free" (review 11 of PR #203, NIT-4). The spend gate
+    never reads a kind: it reads the one cost class (model_pricing.cost_class,
+    agent_spend.may_bill_nodes), which is always one of the four."""
+    rows = list(entries)
+    plan = sum(1 for entry in rows if entry.get("kind") == "plan")
+    may_cost = [entry for entry in rows if entry.get("kind") == "mayCost"]
+    free = sum(1 for entry in rows if entry.get("kind") == "free")
+    return len(rows) - plan - len(may_cost) - free, plan, may_cost, free
 
 
 def _key_billing(definition: Mapping[str, Any], params: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
@@ -685,15 +698,13 @@ def summarize_cost(
     node the run reads that can't run here, cached ancestors included
     ([{ref, nodeId, name, missing}], main._not_ready_nodes), read when the
     proposal was made."""
-    paid = sum(1 for entry in entries if entry.get("kind") == "paid")
     # Runs that may bill the person's own account (a mayBillWithKey route
     # with their key set: Idol with an HF token), counted apart from paid
     # (GM, PR #203 r11 item 2: "2 paid · 1 may cost"), with their names for
-    # the bar's own clause ("Runs 2 paid models and Idol").
-    may_cost = [entry for entry in entries if entry.get("kind") == "mayCost"]
-    # Runs on the person's Krea plan, counted apart from paid too (GM, PR
-    # #203 r19 item 1: "2 paid · 1 on Krea plan").
-    plan = sum(1 for entry in entries if entry.get("kind") == "plan")
+    # the bar's own clause ("Runs 2 paid models and Idol"). Runs on the
+    # person's Krea plan, counted apart from paid too (GM, PR #203 r19 item
+    # 1: "2 paid · 1 on Krea plan"). class_counts reads an unknown kind.
+    paid, plan, may_cost, free = class_counts(entries)
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
     summary_estimate = None
     if estimate and estimate.get("high") is not None:
@@ -715,7 +726,7 @@ def summarize_cost(
         "mayCostRuns": len(may_cost),
         "mayCost": [{"name": name, "account": account} for name, account in dict.fromkeys(
             (str(entry.get("name") or ""), str(entry.get("account") or "")) for entry in may_cost)],
-        "freeRuns": len(entries) - paid - plan - len(may_cost),
+        "freeRuns": free,
         "estimate": summary_estimate,
         "upTo": up_to,
         "providers": providers,

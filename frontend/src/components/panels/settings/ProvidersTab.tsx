@@ -4,7 +4,6 @@ import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
 import { isKeySet } from '../../../lib/directRoute';
 import { matchesModelSearch } from '../../../lib/modelDiscovery';
 import { supportsKreaAccount } from '../../../lib/kreaConnection';
-import { providerCheckIsCurrent } from '../../../lib/providerReadiness';
 import { PROVIDER_KEYS, providerMatches, unlockCount } from '../../../lib/providerCatalog';
 import { useSettingsDraftStore, type SettingsDraft } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
@@ -15,7 +14,7 @@ import { keyChangedLine } from '../../../lib/settingsWrites';
 import { KeyRow } from './KeyRow';
 import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
-import { focusRowAfterMove, KREA_ROW, NOUS_ROW } from './rowHelpers';
+import { connectedRows, focusRowIfItMoves, KREA_ROW, NOUS_ROW } from './rowHelpers';
 import { useKreaConnection } from './useKreaConnection';
 
 const NODES = Object.values(NODE_DEFINITIONS);
@@ -55,22 +54,23 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const plaintextWarning = desktop?.credentials ? (desktop.plaintextKeyWarning ?? []) : [];
 
   const kreaStatus = krea.connection?.status;
-  const nousEntry = health.providers.Nous;
-  const nousConnected = providerCheckIsCurrent(nousEntry, health.checkedAt) && nousEntry.configured;
+  // One source for each row's section, the heading and the tab's badge
+  // (rowHelpers.connectedRows; review 11 of PR #203, copy NIT-2). A key is
+  // set as the agent gate and the run read it (directRoute isKeySet).
+  const rows = connectedRows({ apiKeys: saved.apiKeys, kreaStatus, health });
 
   const entries: Entry[] = [
     ...PROVIDER_KEYS.map((spec, order) => {
-      // Set as the agent gate and the run read it (directRoute isKeySet; review 7 of PR #203, NIT-4).
-      const connected = isKeySet(saved.apiKeys, spec.key);
+      const connected = rows[spec.key];
       return { id: spec.key, connected, reach: unlockCount(spec), order,
         matches: (q: string) => providerMatches(spec, q),
         render: (moved: boolean) => <KeyRow key={spec.key} spec={spec} configured={connected} moved={moved} /> };
     }),
-    { id: KREA_ROW, connected: !!kreaStatus && kreaStatus !== 'disconnected', reach: KREA_ACCOUNT_NODES.length, order: PROVIDER_KEYS.length,
+    { id: KREA_ROW, connected: rows[KREA_ROW], reach: KREA_ACCOUNT_NODES.length, order: PROVIDER_KEYS.length,
       matches: (q: string) => 'krea sign-in workspace'.includes(q.trim().toLowerCase())
         || KREA_ACCOUNT_NODES.some((node) => matchesModelSearch(node, q)),
       render: () => <KreaSignInRow key={KREA_ROW} krea={krea} mode={saved.kreaConnectionMode} /> },
-    { id: NOUS_ROW, connected: nousConnected, reach: NOUS_NODES.length, order: PROVIDER_KEYS.length + 1,
+    { id: NOUS_ROW, connected: rows[NOUS_ROW], reach: NOUS_NODES.length, order: PROVIDER_KEYS.length + 1,
       matches: (q: string) => 'nous portal hermes'.includes(q.trim().toLowerCase())
         || NOUS_NODES.some((node) => matchesModelSearch(node, q)),
       render: () => <NousRow key={NOUS_ROW} summary={NOUS_NODES.map((node) => node.displayName).join(', ')} /> },
@@ -93,13 +93,18 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const openRow = useSettingsDraftStore((s) => s.openRow);
   const placedRef = useRef<Record<string, boolean>>({});
   // GM, PR #203 r21 item 4: a key set or removed elsewhere is said once,
-  // politely ("Replicate key saved."), when the read it asked for lands.
+  // politely ("Replicate key saved."), when the read it asked for lands: the
+  // first read to land after the latest signal (Settings drops every older
+  // one), never a save of this tab's that lands first (review 11, copy
+  // MEDIUM-1). This tab's own write's echo never reaches here
+  // (store/settingsChangedSocket.ts).
   const toAnnounce = useRef(new Set<string>());
-  const announcedFrom = useRef(saved.apiKeys);
+  const announceAfter = useRef<number | null>(null);
+  const reads = useSettingsDraftStore((s) => s.reads);
   const [announcement, setAnnouncement] = useState('');
   useEffect(() => {
-    if (announcedFrom.current === saved.apiKeys) return;
-    announcedFrom.current = saved.apiKeys;
+    if (announceAfter.current === null || reads <= announceAfter.current) return;
+    announceAfter.current = null;
     // The backend names only the keys whose value changed (main._changed_keys).
     const lines = [...toAnnounce.current].map((key) => keyChangedLine(key, isKeySet(saved.apiKeys, key)));
     toAnnounce.current.clear();
@@ -111,7 +116,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       said = requestAnimationFrame(() => setAnnouncement(lines.join(' ')));
     });
     return () => { cancelAnimationFrame(emptied); cancelAnimationFrame(said); };
-  }, [saved.apiKeys]);
+  }, [reads, saved.apiKeys]);
   const activeRows = useCallback((): Set<string> => {
     const active = new Set<string>();
     const open = useSettingsDraftStore.getState().openRow;
@@ -130,12 +135,14 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
         // a row their own save moves always does (review 10 of PR #203,
         // copy MEDIUM-1). The DOM is still the one they acted in here.
         const own = new Set(detail.keys ?? []);
-        const current = useSettingsDraftStore.getState().heldRows;
+        const { heldRows: current, saved: now } = useSettingsDraftStore.getState();
         const focused = typeof document !== 'undefined' ? document.activeElement : null;
         for (const id of own) {
           if (!Object.hasOwn(current, id)) continue;
           const row = root.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
-          if (row && focused && row.contains(focused)) focusRowAfterMove(id);
+          // Only when releasing it moves the row: a held row already shown
+          // where its key now puts it stays mounted (copy LOW-1).
+          if (row && focused && row.contains(focused)) focusRowIfItMoves(id, current[id], isKeySet(now?.apiKeys ?? {}, id));
         }
         if (own.size) {
           setHeld((held) => (Object.keys(held).some((id) => own.has(id))
@@ -145,6 +152,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       }
       if (detail?.source !== 'remote' && detail?.source !== 'reconnect') return;
       for (const key of detail.keys ?? []) toAnnounce.current.add(key);
+      if (toAnnounce.current.size) announceAfter.current = useSettingsDraftStore.getState().reads;
       // Before the read lands: hold each row the person is in where it is shown now.
       const hold: Record<string, boolean> = {};
       for (const id of activeRows()) if (id in placedRef.current) hold[id] = placedRef.current[id];

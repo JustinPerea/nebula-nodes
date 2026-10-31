@@ -381,11 +381,13 @@ def test_spend_for_an_app_gives_its_own_line_and_the_shared_budget():
 
 
 def test_the_surface_header_is_the_one_signal(start):
-    """The hints follow X-Nebula-Surface only: a `via` query names nothing
-    (review 10 of PR #203, NIT-4), and a surface Nebula doesn't know reads
-    MCP words."""
+    """The hints follow X-Nebula-Surface wherever it is sent (review 10 of
+    PR #203, NIT-4): a `via` query beside it names nothing, and a surface
+    Nebula doesn't know reads MCP words. An older CLI's `?via=cli` with no
+    header at all reads as the CLI (review 11, LOW-1; test_idol_round12)."""
     assert "`nebula " not in json.dumps(_get(start)) and "`nebula " in json.dumps(_get(start, via="cli"))
-    for headers, params in (({**CLAUDE, "X-Nebula-Surface": "telnet"}, None), (CLAUDE, {"via": "cli"})):
+    for headers, params in (({**CLAUDE, "X-Nebula-Surface": "telnet"}, None),
+                            ({**CLAUDE, "X-Nebula-Surface": "mcp"}, {"via": "cli"})):
         response = start.client.get("/api/agent/start", params=params, headers=headers)
         assert response.status_code == 200
         assert "`nebula " not in response.text and "describe_node" in response.text

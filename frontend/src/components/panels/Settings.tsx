@@ -66,6 +66,7 @@ export function Settings() {
   const [loadFailure, setLoadFailure] = useState<FailureCopy | null>(null);
   const [retryLoad, setRetryLoad] = useState(0);
   const loadRequest = useRef(0);
+  const readAfterWrites = useRef(false);
 
   // Read settings fresh on every open, unless a write is still landing (its
   // own confirmation is newer than anything a GET started now could return).
@@ -82,7 +83,10 @@ export function Settings() {
     if (!useSettingsDraftStore.getState().saved) queueMicrotask(() => { if (!cancelled) setLoadState('loading'); });
     const initialCache = useUIStore.getState().settingsCache;
     getSettings().then((data) => {
-      if (cancelled || request !== loadRequest.current || settingsWriteInFlight()) return;
+      if (cancelled || request !== loadRequest.current) return;
+      // A write started meanwhile: its confirmation is newer, so this read
+      // is dropped, and the panel reads again once the writes settle.
+      if (settingsWriteInFlight()) { readAfterWrites.current = true; return; }
       const cache = useUIStore.getState().settingsCache;
       // A newer app-wide refresh landed meanwhile; read again rather than overwrite it.
       if (cache.apiKeys !== initialCache.apiKeys || cache.kreaConnectionMode !== initialCache.kreaConnectionMode) {
@@ -91,7 +95,7 @@ export function Settings() {
       }
       applySavedRunCostConfirm(data);
       const loaded = readSettingsDraft(data);
-      useSettingsDraftStore.setState({ saved: loaded });
+      useSettingsDraftStore.setState((state) => ({ saved: loaded, reads: state.reads + 1 }));
       const sameKeys = Object.keys(cache.apiKeys).length === Object.keys(loaded.apiKeys).length
         && Object.entries(loaded.apiKeys).every(([key, value]) => cache.apiKeys[key] === value);
       if (!cache.loaded || !sameKeys || cache.kreaConnectionMode !== loaded.kreaConnectionMode) {
@@ -116,14 +120,25 @@ export function Settings() {
   // LOW-3): it reads the settings again, as an open does. Drafts live apart
   // (keyDrafts) and are never touched; a row the person is in stays where it
   // stands until they leave it (ProvidersTab).
+  // A change made elsewhere while this tab's own write is in flight is read
+  // once the writes settle: a read now would be dropped for the write's
+  // newer confirmation, and the change would never reach the panel (review
+  // 11 of PR #203, copy MEDIUM-1).
   useEffect(() => {
     if (!visible) return;
     const heard = (event: Event) => {
       const detail = settingsSavedDetail(event);
-      if (detail?.source === 'remote' || detail?.source === 'reconnect') setRetryLoad((value) => value + 1);
+      if (detail?.source !== 'remote' && detail?.source !== 'reconnect') return;
+      if (settingsWriteInFlight()) readAfterWrites.current = true;
+      else setRetryLoad((value) => value + 1);
     };
     window.addEventListener(SETTINGS_SAVED_EVENT, heard);
-    return () => window.removeEventListener(SETTINGS_SAVED_EVENT, heard);
+    const settled = useSettingsDraftStore.subscribe((state) => {
+      if (!readAfterWrites.current || settingsWriteInFlight(state)) return;
+      readAfterWrites.current = false;
+      setRetryLoad((value) => value + 1);
+    });
+    return () => { window.removeEventListener(SETTINGS_SAVED_EVENT, heard); settled(); };
   }, [visible]);
 
   // A setup link from a node or the library always lands on Providers.

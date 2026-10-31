@@ -67,16 +67,17 @@ PAID_AND_PLAN = {
       "nodes": [_entry("plan", "on Krea plan"), _entry("plan", "on Krea plan"), _entry("free", "free · runs locally")]},
      "2 on the person's Krea plan and 1 free"),
     # A sourced $0 and Idol without a token call a provider: never "runs locally".
-    ({"paidRuns": 0, "freeRuns": 1, "nodes": [_entry("free", "free · fal.ai")]}, "1 free run (on fal.ai)"),
+    ({"paidRuns": 0, "freeRuns": 1, "nodes": [_entry("free", "free · fal.ai", provider="fal")]}, "1 free run (fal)"),
     ({"paidRuns": 0, "freeRuns": 2, "nodes": [_entry("free", "free · runs locally")] * 2},
      "2 free runs (runs locally)"),
     ({"paidRuns": 1, "mayCostRuns": 1, "planRuns": 1, "freeRuns": 2, "providers": ["openai"],
       "mayCost": [{"name": "Idol", "account": "Hugging Face"}],
       "estimate": {"low": 0.011, "high": 0.011, "open": True},
       "nodes": [_entry("paid", "paid · openai"), _entry("mayCost", "may cost · Hugging Face"),
-                _entry("plan", "on Krea plan"), _entry("free", "free · fal.ai"), _entry("free", "free · runs locally")]},
+                _entry("plan", "on Krea plan"), _entry("free", "free · fal.ai", provider="fal"),
+                _entry("free", "free · runs locally")]},
      "1 paid run (openai), 1 that may bill the person's own account (Idol), 1 on the person's Krea plan "
-     "and 2 free (1 on fal.ai), $0.011+ at list prices"),
+     "and 2 free (1 on fal), $0.011+ at list prices"),
     ({"paidRuns": 2, "freeRuns": 0, "providers": ["anthropic"], "estimate": None},
      "2 paid runs (anthropic), no list price"),
 ], ids=["paid-and-plan", "plan-only", "plan-and-free", "sourced-zero", "local", "every-class", "no-price"])
@@ -294,9 +295,9 @@ def test_unreadable_keys_are_never_overwritten(sockets, raw):  # noqa: F811
     client = TestClient(main.app, headers=PERSON)
     assert client.get("/api/settings").status_code == 200
     refused = client.put("/api/settings", json={"apiKeys": {"FAL_KEY": "fal-1111"}})
-    assert refused.status_code == 409 and refused.json()["detail"] == main.KEYS_UNREADABLE
+    assert refused.status_code == 409 and refused.json()["detail"] == main._unreadable(main.KEYS_UNREADABLE)
     removed = client.delete("/api/settings/api-keys/FAL_KEY")
-    assert removed.status_code == 409 and removed.json()["detail"] == main.KEYS_UNREADABLE
+    assert removed.status_code == 409 and removed.json()["detail"] == main._unreadable(main.KEYS_UNREADABLE)
     assert sockets.read_text() == before
     # A save that writes no key keeps them as saved too.
     assert client.put("/api/settings", json={"favorites": ["nano-banana"]}).status_code == 200
@@ -316,9 +317,10 @@ def test_a_settings_file_that_is_no_object_is_never_overwritten(sockets):  # noq
 
 
 def test_the_unreadable_refusals_say_nothing_was_saved():
-    assert main.KEYS_UNREADABLE == ("Nothing was saved because Nebula can’t read the keys saved in settings.json. "
+    # GM r22 item 3: each names the file by its full path (test_idol_round12).
+    assert main.KEYS_UNREADABLE == ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                                     "Fix “apiKeys” in that file, then try again.")
-    assert main.SETTINGS_UNREADABLE.startswith("Nothing was saved because Nebula can’t read settings.json.")
+    assert main.SETTINGS_UNREADABLE.startswith("Nothing was saved because Nebula can’t read {path}.")
 
 
 # -- the settings signal skips every socket that isn't the person's (review 10, NIT-7) -------
@@ -415,7 +417,7 @@ def test_krea_discovery_still_says_who_signs_in(monkeypatch):
     with pytest.raises(NebulaAPIError) as raised:
         mcp_server._krea_call("GET", "/api/krea/tools", None)
     assert raised.value.detail == ("Sign in to Krea in Settings first. Only the person can sign in to Krea: "
-                                   "ask them to open Settings > Connections > Krea in Nebula.")
+                                   "ask them to open Settings > Providers > Krea in Nebula.")
 
 
 # -- the run dialog's free ids (review 10, NIT-3) --------------------------------------------

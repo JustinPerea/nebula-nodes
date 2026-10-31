@@ -62,6 +62,20 @@
   transition: bottom 420ms var(--agent-log-spring);
 }
 
+/* Review 11 of PR #203, copy LOW-2: the workspace rail sits on the left edge
+   above every notice (z-index 12), so a notice as wide as the region (a
+   narrow window, or the docked Agent log taking the right) reached under it,
+   and a tall proposal bar slid behind its buttons. While the rail is shown,
+   the region keeps clear of its column on the left, and by the same width on
+   the right, so a notice that fits stays centred where it was. Its layers are
+   unchanged: menus, popovers and the rail's own labels stay above the bar.
+   tests/idolRound12.test.ts reads this rule. */
+:root:has(.workspace-rail) .notice-region {
+  --notice-rail-clearance: calc(var(--workspace-rail-left, 8px) + var(--workspace-rail-width, 54px) + var(--notice-gap));
+  left: max(var(--page-gutter, 16px), var(--notice-rail-clearance));
+  right: max(var(--page-gutter, 16px), var(--notice-rail-clearance), var(--agent-log-clearance, 0px));
+}
+
 /* The reserved band (GM, round 2: "Floating panels stop above a reserved
    notice band, whether or not a notice is showing. The band is the region's
    height for one notice plus its gap"). Never drawn, never clicked: floating

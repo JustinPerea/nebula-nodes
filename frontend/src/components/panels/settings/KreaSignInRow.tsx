@@ -130,7 +130,7 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
       <ProviderRow id={KREA_ROW} setup="krea-mcp" tone={shown.tone} name="Krea · sign-in"
         status={started || !status ? shown.label : undefined} statusTone={signedIn ? 'ok' : shown.tone === 'warn' ? 'warn' : undefined}
         summary={signedIn ? 'workspace compute' : started ? undefined
-          : mode === 'mcp' ? 'New Krea nodes are set to use it' : "Your Krea plan's compute, no API token"}
+          : mode === 'mcp' ? 'New Krea nodes are set to use it' : 'Uses your Krea plan instead of an API key'}
         title="Uses the Krea workspace you pick during sign-in and its compute units. Connecting never changes existing nodes or starts generation."
         action={action}>
         {showBody ? (

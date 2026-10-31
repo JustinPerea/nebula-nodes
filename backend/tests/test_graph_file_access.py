@@ -50,6 +50,8 @@ def test_cli_protected_paths_fail_before_backend_access(
 ):
     before = protected_graph.read_bytes()
     client = Mock()
+    # The CLI's identity headers (cli/client.py): `nebula load` sends them.
+    client._identity_headers.return_value = {"X-Nebula-Surface": "cli"}
     client.get_graph.return_value = {"nodes": [], "edges": []}
 
     with pytest.raises(SystemExit) as exc:
@@ -57,7 +59,8 @@ def test_cli_protected_paths_fail_before_backend_access(
 
     assert exc.value.code == 1
     assert capsys.readouterr().err.startswith("error: ")
-    assert client.mock_calls == []
+    # Building its own headers is no request; nothing reached the backend.
+    assert [call for call in client.mock_calls if call[0] != "_identity_headers"] == []
     assert protected_graph.read_bytes() == before
     assert list(protected_graph.parent.iterdir()) == [protected_graph]
 
@@ -100,6 +103,8 @@ def test_cli_ordinary_export_and_import_roundtrip(tmp_path):
     graph.add_node("image-output", {})
     graph.connect("n1", "image", "n2", "image")
     client = Mock()
+    # The CLI's identity headers (cli/client.py): `nebula load` sends them.
+    client._identity_headers.return_value = {"X-Nebula-Surface": "cli"}
     client.get_graph.return_value = graph.get_state()
     path = tmp_path / "export.json"
 
@@ -142,6 +147,8 @@ def test_cli_load_of_a_bundle_restores_it_through_the_backend(tmp_path, capsys):
     path = tmp_path / "Big campaign.nebula.zip"
     path.write_bytes(buffer.getvalue())
     client = Mock()
+    # The CLI's identity headers (cli/client.py): `nebula load` sends them.
+    client._identity_headers.return_value = {"X-Nebula-Surface": "cli"}
     client.api.request.side_effect = NebulaAPIError("Unsupported .nebula file version", status=400)
 
     with pytest.raises(SystemExit) as exc:

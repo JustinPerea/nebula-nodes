@@ -1,7 +1,7 @@
 # Nebula Nodes MCP setup
 
 To connect a Krea account for Nebula's agents and Canvas/Create generation,
-use **Settings → Connections → Krea**. [Krea MCP setup](KREA-MCP.md) explains
+use **Settings > Providers > Krea**. [Krea MCP setup](KREA-MCP.md) explains
 sign-in, saved connection choices and workspace billing.
 
 Nebula includes a local stdio MCP server that lets an agent work on the
@@ -38,7 +38,9 @@ Code's 10,000-token warning and its 50,000-character file cut:
 
 No private note, image note, board note or pin reply history goes in. The
 route is `GET /api/agent/start` (a request with `X-Nebula-Surface: cli`, which
-the CLI sends on every call, gets its hints in `nebula` words);
+the CLI sends on every call, gets its hints in `nebula` words; an older CLI's
+`?via=cli` with no such header reads the same, while a header, whatever it
+says, wins over the query);
 `nebula context` prints the same, and `nebula context --json` prints it as
 it comes. Later turns use `look_at_canvas`, which stays the full snapshot.
 
@@ -137,8 +139,10 @@ The server exposes these tools for building and running (see
   characters are removed."). A save writes back every entry it wasn't
   asked to change as it was. When a key is set, replaced or removed, the
   person's browser tabs get `{"type": "settingsChanged", "keys": [...]}`
-  (the names of the keys whose value changed, never a value) and read
-  their settings again; it goes to the canvas's sockets only, so an MCP or
+  (the names of the keys whose value changed, never a value, plus
+  `origin`, the canvas tab's `X-Nebula-Tab`, when the person's tab made the
+  write, so that tab doesn't say its own change again) and read their
+  settings again; it goes to the canvas's sockets only, so an MCP or
   CLI listener never receives it. An open proposal's "may cost" follows a
   token added from anywhere;
   `get_proposal`, `list_proposals` and `nebula proposals` already read the
@@ -151,7 +155,10 @@ The server exposes these tools for building and running (see
   Krea plan", `reason: {"kind": "plan"}`, counted in the cost's `planRuns`,
   never in `paidRuns` or the estimate), `mayCost`, or `free` (a key-billing
   route with no key, or a sourced $0: "free · fal.ai" with `price` {0, 0},
-  in `freeRuns`). Treat a reason kind you don't know as `noPrice`.
+  in `freeRuns`). Treat a reason kind you don't know as `noPrice`. An
+  entry `kind` Nebula doesn't name is counted in `paidRuns`, never in
+  `freeRuns`: `freeRuns` counts only `kind: "free"`, so the four counts
+  always add up to the run.
   `definition_id` is the id, or
   the node type's exact display name (any case, outer spaces ignored) when
   one node type has it: `describe_node(definition_id="Moodboard")` answers
@@ -1790,10 +1797,12 @@ the `propose_change` arguments:
 line, each cost class counted on its own, as `cost` counts them: "up to 1
 paid run (fal) and 1 on the person's Krea plan, $0.03 at list prices", "1
 run on the person's Krea plan", "1 paid run (openai), 1 that may bill the
-person's own account (Idol) and 1 free (on fal.ai), $0.011 at list prices".
+person's own account (Idol) and 1 free (fal), $0.011 at list prices".
 A run on the Krea plan is never free and never in the figure. A free run
-says where it runs: "(runs locally)", or the provider for a call whose list
-price is $0 ("(on fal.ai)").
+says where it runs: "(runs locally)", or, for a call whose list price is $0,
+its provider tagged as a paid run's is ("1 free run (fal)" beside "1 paid
+run (google)"); when only some free runs call a provider, the tag counts
+them ("2 free (1 on fal)").
 
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its
@@ -2286,7 +2295,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   no field is named: the run is refused for the key or the sign-in first.
   Your `run_nodes` and `nebula run` get "Missing API key: KREA_API_TOKEN"
   (or every key a copy can use: "Missing API key: XAI_API_KEY or
-  KREA_API_TOKEN"), the card "Add your Krea API token in Settings, then
+  KREA_API_TOKEN"), the card "Add your Krea API key in Settings, then
   run the node again."; a run on the plan that isn't signed in gets
   "Sign in to Krea in Settings before running this recipe".
   A run that would send one with nothing in it is refused before anything
@@ -4293,7 +4302,10 @@ module (`backend/graph_file_client.py`): a bundle's files are restored, a
 file under the save limit replaces the open project's canvas, and one over
 it opens as a new project named after the file, the open one left as it
 was; it prints what happened and how to go back (`nebula project open
-<id>`).
+<id>`). It sends the CLI's `X-Nebula-Surface: cli` like every other
+command, so the backend's refusals and the notes name `nebula` commands;
+the notes' calls come from the one table, `services/agent_words.WORDS`
+(`size`, `apply`, `delete`, `open`).
 
 `rename`, `show`, `size`, `trash list`, `keys` and `providers` are the CLI
 twins of `rename_project`, `get_project`, `project_size`, `list_trash`,

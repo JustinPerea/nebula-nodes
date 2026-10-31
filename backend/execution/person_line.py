@@ -227,7 +227,7 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
     "HF_TOKEN": ("Hugging Face", "token"),
     "HIGGSFIELD_API_KEY": ("Higgsfield", "API key"),
     "IDEOGRAM_API_KEY": ("Ideogram", "API key"),
-    "KREA_API_TOKEN": ("Krea", "API token"),
+    "KREA_API_TOKEN": ("Krea", "API key"),
     "KREA_USAGE_KEY": ("Krea", "usage key"),
     "MESHY_API_KEY": ("Meshy", "API key"),
     "MINIMAX_API_KEY": ("MiniMax", "API key"),

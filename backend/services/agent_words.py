@@ -30,11 +30,16 @@ CLI = "cli"
 # Every surface's words for these calls live here: main._start_node_notes,
 # project_client and canvas_proposals' READY_NODES_* and WITHDRAW_* read this
 # table (review 10 of PR #203, NIT-4).
+# graph_file_client's load notes name {size}, {apply}, {delete} and {open}
+# (a whole call with the project's id as {id}) from here too (review 11,
+# NIT-3): the fourth table it kept is gone.
 WORDS: dict[str, dict[str, str]] = {
     MCP: {"propose": "propose_change", "describe": "describe_node", "find": "find_nodes", "apply": "edit_canvas",
-          "projects": "list_projects", "withdraw": 'withdraw_proposal(proposal_id="{id}")'},
+          "projects": "list_projects", "withdraw": 'withdraw_proposal(proposal_id="{id}")',
+          "size": "project_size", "delete": "remove_from_canvas", "open": "`open_project('{id}')`"},
     CLI: {"propose": "`nebula propose`", "describe": "`nebula info <id>`", "find": "`nebula nodes`",
-          "apply": "`nebula apply`", "projects": "`nebula projects`", "withdraw": "nebula proposal withdraw {id}"},
+          "apply": "`nebula apply`", "projects": "`nebula projects`", "withdraw": "nebula proposal withdraw {id}",
+          "size": "`nebula project size`", "delete": "`nebula delete`", "open": "`nebula project open {id}`"},
 }
 
 # The calls named by a bare tool name, which cli_words can find in MCP-worded
@@ -49,9 +54,16 @@ _TOOL = re.compile(r"(?<![`\w])(" + "|".join(map(re.escape, _CLI_FOR_TOOL)) + r"
 _PROPOSE_RUN = re.compile(r"propose_change \(run: ([^)]*)\)")
 
 
-def surface(headers: Mapping[str, Any] | None) -> str:
-    """The surface a request comes from: CLI when it says so, else MCP."""
+def surface(headers: Mapping[str, Any] | None, query_via: Any = None) -> str:
+    """The surface a request comes from: CLI when it says so, else MCP.
+
+    ``query_via`` is GET /api/agent/start's old ``?via=cli``, which a CLI
+    from before X-Nebula-Surface sends with no header (review 11 of PR #203,
+    LOW-1): it reads as the CLI only when the header is missing, so the
+    header stays the one signal wherever it is sent."""
     lower = {str(key).lower(): value for key, value in (headers or {}).items()}
+    if SURFACE_HEADER.lower() not in lower:
+        return CLI if str(query_via or "").strip().lower() == CLI else MCP
     return CLI if str(lower.get(SURFACE_HEADER.lower()) or "").strip().lower() == CLI else MCP
 
 

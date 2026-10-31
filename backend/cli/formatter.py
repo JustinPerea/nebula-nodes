@@ -931,13 +931,15 @@ def _cost_line(cost: dict[str, Any]) -> str:
     may = _count(cost.get("mayCostRuns"))
     plan = _count(cost.get("planRuns"))
     free = _count(cost.get("freeRuns"))
-    # The free runs that call a provider, by the entries' own labels
-    # ("free · fal.ai"; a local one is "free · runs locally").
-    called = [str(entry.get("label"))[len("free · "):] for entry in cost.get("nodes") or []
-              if isinstance(entry, dict) and entry.get("kind") == "free"
-              and str(entry.get("label") or "").startswith("free · ") and entry.get("label") != LOCAL_LABEL]
+    # The free runs that call a provider, tagged as the paid part is: by the
+    # provider each entry runs on ("1 free run (fal)" beside "1 paid run
+    # (google)"; GM, PR #203 r22 item 5). A local one is "free · runs
+    # locally" and has none.
+    called = [str(entry["provider"]) for entry in cost.get("nodes") or []
+              if isinstance(entry, dict) and entry.get("kind") == "free" and entry.get("provider")
+              and entry.get("label") != LOCAL_LABEL]
     remote = min(len(called), free)
-    on = _and(list(dict.fromkeys(called)))
+    tags = ", ".join(sorted(set(called)))
     runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
     alone = sum(1 for count in (paid, may, plan, free) if count) <= 1
     parts: list[str] = []
@@ -950,7 +952,8 @@ def _cost_line(cost: dict[str, Any]) -> str:
     if plan:
         parts.append(f"{plan} {runs(plan) + ' ' if alone else ''}on the person's Krea plan")
     if free or not parts:
-        where = ("" if not remote else f" (on {on})" if remote == free else f" ({remote} on {on})")
+        # Some free runs local: how many call the tagged providers.
+        where = "" if not remote else f" ({tags})" if remote == free else f" ({remote} on {tags})"
         local = " (runs locally)" if alone and not remote else ""
         parts.append(f"{free} free{' ' + runs(free) if alone else ''}{where}{local}")
     line = up_to + _and(parts)

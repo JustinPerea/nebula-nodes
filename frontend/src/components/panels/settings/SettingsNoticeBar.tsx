@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { dismissNotice, undoAddedKey } from '../../../lib/settingsWrites';
-import { focusRowAfterMove } from './rowHelpers';
+import { focusRowAfterMove, settleRowFocus } from './rowHelpers';
 
 /** Plain confirmations go quickly; one you can undo stays long enough to read the row's check first. */
 const NOTICE_MS = 6000;
@@ -32,8 +32,10 @@ export function SettingsNoticeBar() {
           <span>{notice.message}</span>
           {notice.undoKey && (
             <button type="button" className="settings-notice__undo" onClick={() => {
-              focusRowAfterMove(notice.undoKey!);
-              void undoAddedKey(notice.id);
+              const key = notice.undoKey!;
+              focusRowAfterMove(key);
+              // A handoff the undo didn't use never waits for a later mount (copy LOW-1).
+              void undoAddedKey(notice.id).then(() => settleRowFocus(key));
             }}>Undo</button>
           )}
         </div>
