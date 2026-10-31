@@ -1700,7 +1700,8 @@ def _validated_restore_members(
         if member.file_size < 0 or member.compress_size < 0:
             raise _graph_file_refusal(400, "Zip bundle contains invalid size metadata", "bundle_size_metadata")
         if member.file_size > RESTORE_MAX_MEMBER_BYTES:
-            raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large", limitBytes=RESTORE_MAX_MEMBER_BYTES)
+            raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large",
+                                      sizeBytes=member.file_size, limitBytes=RESTORE_MAX_MEMBER_BYTES)
 
         total_uncompressed += member.file_size
         total_compressed += member.compress_size
@@ -2061,7 +2062,8 @@ def _extract_restore_member(
             while chunk := source.read(RESTORE_COPY_CHUNK_BYTES):
                 member_size += len(chunk)
                 if member_size > RESTORE_MAX_MEMBER_BYTES:
-                    raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large", limitBytes=RESTORE_MAX_MEMBER_BYTES)
+                    raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large",
+                                              sizeBytes=max(member_size, member.file_size), limitBytes=RESTORE_MAX_MEMBER_BYTES)
                 if extracted_total + member_size > RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES:
                     raise _graph_file_refusal(413, "Zip bundle expands beyond the restore limit", "bundle_expands_too_far",
                                           limitBytes=RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES)
@@ -2157,7 +2159,7 @@ async def _spool_restore_request(request: Request) -> BinaryIO:
             raise HTTPException(status_code=400, detail="Invalid Content-Length")
         if declared > RESTORE_MAX_COMPRESSED_BYTES:
             raise _graph_file_refusal(413, "Zip bundle exceeds the compressed upload limit", "bundle_upload_too_large",
-                                  limitBytes=RESTORE_MAX_COMPRESSED_BYTES)
+                                  sizeBytes=declared, limitBytes=RESTORE_MAX_COMPRESSED_BYTES)
 
     spool = tempfile.SpooledTemporaryFile(max_size=RESTORE_SPOOL_MEMORY_BYTES, mode="w+b")
     received = 0
@@ -2167,6 +2169,8 @@ async def _spool_restore_request(request: Request) -> BinaryIO:
                 continue
             received += len(chunk)
             if received > RESTORE_MAX_COMPRESSED_BYTES:
+                # No sizeBytes: only what arrived before the refusal is known,
+                # not the file's size (the person's line then names no size).
                 raise _graph_file_refusal(413, "Zip bundle exceeds the compressed upload limit", "bundle_upload_too_large",
                                   limitBytes=RESTORE_MAX_COMPRESSED_BYTES)
             spool.write(chunk)
@@ -7986,6 +7990,10 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
                             detail=exc.detail) from exc
+    # An agent can't propose a canvas the person's Save couldn't save: the
+    # staged canvas is measured as its own edits are (review 7 of PR #205,
+    # limits MEDIUM-1).
+    _refuse_agent_shape_past_save_limit(_graph_canvas_export(candidate))
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
     measured = await _measure_proposal_inputs(candidate, run_ids)
@@ -8270,6 +8278,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         raise _proposal_http_error(exc) from exc
     positions = {**proposal.positions, **dragged}
     staging_error: HTTPException | None = None
+    too_complex: tuple[int, str] | None = None
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
@@ -8279,12 +8288,37 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             # cli_graph is only replaced at commit, so nothing changed.
             staging_error = exc
         else:
-            touched = sorted(set(id_map.values()) | {change.node_id for change in proposal.spec.params})
-            _commit_graph_candidate_with_recoveries(
-                candidate,
-                [candidate.nodes[node_id] for node_id in touched],
-                source="proposal",
-            )
+            # The canvas may have changed since the agent proposed (its
+            # measure passed then): the Accept would leave it past Save's
+            # shape limits. Refused on the click, nothing changed, and the
+            # proposal stays open (GM PR #205 r16 item 2; review 7 limits
+            # MEDIUM-1). Measured on every Accept: with the canvas unchanged
+            # the measure is the one the proposal passed, so only a change
+            # since can refuse it.
+            too_complex = _shape_past_save_limit(_graph_canvas_export(candidate))
+            if too_complex is None:
+                touched = sorted(set(id_map.values()) | {change.node_id for change in proposal.spec.params})
+                _commit_graph_candidate_with_recoveries(
+                    candidate,
+                    [candidate.nodes[node_id] for node_id in touched],
+                    source="proposal",
+                )
+    if too_complex is not None:
+        _status, why = too_complex
+        limit = ({"kind": "depth", "max": RESTORE_MAX_GRAPH_DEPTH} if "nested" in why
+                 else {"kind": "values", "max": RESTORE_MAX_GRAPH_VALUES})
+        detail = (f"The person's Accept of {proposal.agent.name}'s proposal {proposal.id} was refused: "
+                  f"{why} The proposal is still open.")
+        _journal(
+            "proposal.accept_refused",
+            node_id=next(iter(sorted(proposal.references)), None),
+            data={"proposalId": proposal.id, "agentId": proposal.agent.id, "code": "proposal_too_complex",
+                  "limit": limit},
+            summary=detail,
+            actor=dict(_PERSON_ACTOR),
+        )
+        raise _coded(HTTPException(status_code=409, detail=detail), "proposal_too_complex",
+                     agent=proposal.agent.name, limit=limit)
     if staging_error is not None:
         detail = str(staging_error.detail)
         try:
@@ -15767,6 +15801,11 @@ def _stage_graph_nodes(
                 outputs=outputs,
             )
         except (TypeError, ValueError) as exc:
+            # The node's own fields are bad (a Cinema scene's params that
+            # can't be filled, a position that isn't a number): a damaged
+            # file for the person's Load line (graph_invalid, by
+            # _import_stage_refusal); agents read the words. add_node takes
+            # any param key, so an unknown param is never refused here.
             raise HTTPException(
                 status_code=400,
                 detail=f"invalid node '{reference}': {exc}",
@@ -15963,14 +16002,20 @@ def _stage_graph_edges(
                              _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
                                                 candidate.nodes[source].get("label")))
             continue
-        _validate_connect_handles(
-            source,
-            source_handle,
-            target,
-            target_handle,
-            graph=candidate,
-            saved=saved,
-        )
+        try:
+            _validate_connect_handles(
+                source,
+                source_handle,
+                target,
+                target_handle,
+                graph=candidate,
+                saved=saved,
+            )
+        except HTTPException as exc:
+            # A connection to a port this version's node doesn't have (or
+            # takes differently): coded for the person's Load line (GM PR #205
+            # r16 item 3); agents read the words.
+            raise _coded(exc, "graph_unknown_port") from exc
         try:
             edge_ids.append(
                 candidate.connect(source, source_handle, target, target_handle)["id"]
@@ -15985,8 +16030,20 @@ def _stage_graph_edges(
             [GraphEdge.model_validate(edge) for edge in graph_edges],
         )
     except CycleError as exc:
-        raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
+        raise _coded(HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}"), "graph_cycle") from exc
     return edge_ids
+
+
+def _import_stage_refusal(exc: HTTPException) -> HTTPException:
+    """An import's staging refusal, coded for the person's Load line (GM PR
+    #205 r16 item 3): kept as it is when it has a code (``unknown_definition``,
+    ``graph_unknown_port``, ``graph_cycle``, a person
+    gate's), and ``graph_invalid`` for any other 400 there (the file's own
+    shape: a node without its fields, a connection to no node). Agents read the
+    words, which don't change."""
+    if isinstance(exc, (CodedRefusal, PersonGateError)) or exc.status_code != 400:
+        return exc
+    return _coded(exc, "graph_invalid")
 
 
 @app.post("/api/graph/import")
@@ -16023,18 +16080,24 @@ async def import_graph(body: dict[str, Any]) -> dict:
     # A graph file is saved data: its scenes are converted, never refused
     # (PR #198 review 3, H1).
     port_reports: dict[str, dict[str, Any]] = {}
-    id_map = _stage_graph_nodes(
-        candidate,
-        raw_nodes,
-        reference_key="id",
-        include_outputs=True,
-        strict_scenes=False,
-        port_reports=port_reports,
-    )
+    try:
+        id_map = _stage_graph_nodes(
+            candidate,
+            raw_nodes,
+            reference_key="id",
+            include_outputs=True,
+            strict_scenes=False,
+            port_reports=port_reports,
+        )
+    except HTTPException as exc:
+        raise _import_stage_refusal(exc) from exc
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
-    _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
+    try:
+        _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
+    except HTTPException as exc:
+        raise _import_stage_refusal(exc) from exc
     # What the scenes' lenient read left out (PR #198 review 5, L3): said in
     # the warnings, the canvas.replaced event and the Agent log.
     stray_lines, stray_ports = _stray_port_report(port_reports)
@@ -16048,6 +16111,11 @@ async def import_graph(body: dict[str, Any]) -> dict:
     # project pauses on the canvas, as after the person's own Load graph.
     if body.get("newProjectForFile") is True:
         _require_empty_canvas_for_a_new_project_file()
+        # Only the size check is waived here: an agent's file still can't
+        # put the canvas past Save's shape limits (review 7 of PR #205,
+        # limits MEDIUM-1).
+        if not _is_person_request():
+            _refuse_agent_shape_past_save_limit(_graph_canvas_export(candidate))
     else:
         _refuse_agent_growth_past_save_limit(candidate)
     with _paid_graph_mutation("replace the graph"):
@@ -16756,29 +16824,41 @@ def _canvas_save_file_view(export: dict[str, list[dict[str, Any]]]) -> dict[str,
     for node in export["nodes"]:
         data = node.get("data") if isinstance(node.get("data"), dict) else {}
         outputs = data.get("outputs")
+        # serializeGraph always writes ``outputs`` (undefined when there are
+        # none), and Save's walk counts every own key: so does this view
+        # (review 7 of PR #205, limits MEDIUM-3).
         file_data: dict[str, Any] = {"label": data.get("label"), "definitionId": data.get("definitionId"),
-                                     "params": data.get("params", {}), "state": "complete" if outputs else "idle"}
-        if outputs:
-            file_data["outputs"] = outputs
+                                     "params": data.get("params", {}), "outputs": outputs or None,
+                                     "state": "complete" if outputs else "idle"}
         nodes.append({"id": node.get("id"), "type": node.get("type") or "model-node",
                       "position": {"x": 0, "y": 0}, "data": file_data})
+    # Every connection with serializeGraph's keys, ``data`` included when it
+    # has none (Save counts the key either way).
+    edges = [{"id": edge.get("id"), "source": edge.get("source"), "sourceHandle": edge.get("sourceHandle"),
+              "target": edge.get("target"), "targetHandle": edge.get("targetHandle"),
+              "type": edge.get("type") or "typed-edge", "data": edge.get("data")}
+             for edge in export["edges"]]
     return {"version": 3, "paramsVersion": 0, "name": "", "createdAt": "", "nodes": nodes,
-            "edges": export["edges"], "viewport": {"x": 0, "y": 0, "zoom": 1}}
+            "edges": edges, "viewport": {"x": 0, "y": 0, "zoom": 1}}
 
 
 def _graph_shape_measure(value: Any) -> tuple[int, int]:
     """(the deepest depth, the value count) of ``value`` as the canvas's Save
     walk counts them (frontend assertGraphComplexityWithinLimits): the root at
-    depth 0, every value counted once. Stops one past either limit."""
+    depth 0, every value counted once. Never stops early: "no worse" compares
+    the canvas before and after an edit, and a measure capped one past a
+    limit reads the same for any edit to a canvas already past it, or cuts
+    the other measure short (review 7 of PR #205, limits MEDIUM-2). The walk
+    is linear in a canvas the size limit already bounds, and its depth is
+    bounded by the ingress check (_check_graph_ingress_values)."""
     stack: list[tuple[Any, int]] = [(value, 0)]
     deepest = 0
     count = 0
     while stack:
         current, depth = stack.pop()
         count += 1
-        deepest = max(deepest, depth)
-        if count > RESTORE_MAX_GRAPH_VALUES or deepest > RESTORE_MAX_GRAPH_DEPTH:
-            break
+        if depth > deepest:
+            deepest = depth
         if isinstance(current, dict):
             stack.extend((item, depth + 1) for item in current.values())
         elif isinstance(current, list):
@@ -16810,6 +16890,20 @@ def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, A
     person never made. As the size limit (_refuse_agent_growth_past_save_limit):
     an edit that leaves a canvas already past a limit no worse goes through.
     The agent reads these words exactly."""
+    found = _shape_past_save_limit(after_export)
+    if found is None:
+        return
+    status, detail = found
+    refusal = _person_only_refusal(detail)
+    if isinstance(refusal, PersonGateError):
+        raise refusal
+    raise HTTPException(status_code=status, detail=detail)
+
+
+def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tuple[int, str] | None:
+    """(status, the agent's words) when ``after_export`` would leave the
+    canvas past Save's shape limits and worse than it is now; None when it
+    wouldn't (_refuse_agent_shape_past_save_limit)."""
     depth, count = _graph_shape_measure(_canvas_save_file_view(after_export))
     # The project's own save checks its whole snapshot (the canvas and its
     # run history) from the snapshot's root, where the canvas's values sit
@@ -16826,7 +16920,7 @@ def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, A
     too_deep = depth > RESTORE_MAX_GRAPH_DEPTH
     too_many = max(count, snapshot_count) > RESTORE_MAX_GRAPH_VALUES
     if not too_deep and not too_many:
-        return
+        return None
     before_export = _graph_canvas_export(cli_graph)
     before_depth, before_count = _graph_shape_measure(_canvas_save_file_view(before_export))
     if too_many and snapshot_count > count:
@@ -16840,11 +16934,8 @@ def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, A
                                "and the person's canvas can't save it. Nothing changed. Make the edit smaller, "
                                "or remove what the canvas no longer needs (ask the person first).")
     else:
-        return
-    refusal = _person_only_refusal(detail)
-    if isinstance(refusal, PersonGateError):
-        raise refusal
-    raise HTTPException(status_code=status, detail=detail)
+        return None
+    return status, detail
 
 
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:

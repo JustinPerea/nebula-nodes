@@ -30,7 +30,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   Handle: ({ id, type }: { id?: string; type: string }) => <span data-testid={`handle-${type}-${id}`} />,
 }));
 
-import { forgetHeldHistoryForTests, useGraphStore } from '../src/store/graphStore';
+import { forgetHeldHistoryForTests, saveUndoStep, useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -514,6 +514,45 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
       expect(notice()).toBe('Undid Codex’s edit.');
       expect(valueOf('n1')).toBe('v0');
       sameAsNebula();
+    });
+  });
+
+  describe('GM PR #205 r14 item 2: the Undo Save\'s line offers for a change nobody named', () => {
+    const personStep = () => ({ kind: 'snapshot', nodes: store().nodes, edges: store().edges });
+    const unnamedSync = (change: () => void) => {
+      nebula().request += 1;
+      change();
+      emit({ nodes: FakeNebula.syncNodes({ nodes: [...nebula().nodes.values()], edges: nebula().edges }), edges: nebula().edges, empty: false });
+    };
+    it('an edit from an origin Nebula doesn\'t know is the newest step: "the last change"', async () => {
+      start([{ ...textFakeNode('n1'), params: { value: 'v0' } }]);
+      agentDoes({ actor: { kind: 'anonymous' } }, 'ed_r8outside00001', () => { n1().params = { value: 'OUT' }; });
+      await settle();
+      expect((store().undoStack.at(-1) as { source?: string }).source).toBe('outside');
+      expect(saveUndoStep()).toEqual({ kind: 'unknown' });
+      expect(saveUndoStep([])).toEqual({ kind: 'none' });
+    });
+    it('a change with no origin that made no step: no Undo is offered while it is newer than every step, even after the person\'s Undo', async () => {
+      start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
+      useGraphStore.setState({ undoStack: [personStep(), personStep()] as never });
+      expect(saveUndoStep()).toEqual({ kind: 'person' });
+      unnamedSync(() => { n1().params = { value: 'SOMEONE' }; });
+      await settle();
+      expect(valueOf('n1')).toBe('SOMEONE');
+      expect(store().undoStack).toHaveLength(2);
+      expect(saveUndoStep()).toEqual({ kind: 'none' });
+      useGraphStore.setState({ undoStack: store().undoStack.slice(0, 1) as never });
+      expect(saveUndoStep()).toEqual({ kind: 'none' });
+      // The person's next step is newer than that change: their own again.
+      useGraphStore.setState({ undoStack: [...store().undoStack, personStep()] as never });
+      expect(saveUndoStep()).toEqual({ kind: 'person' });
+    });
+    it('control: a sync with no origin that changes nothing leaves the person\'s step offered', async () => {
+      start([{ ...textFakeNode('n1'), params: { value: 'v0' } }]);
+      useGraphStore.setState({ undoStack: [personStep()] as never });
+      unnamedSync(() => {});
+      await settle();
+      expect(saveUndoStep()).toEqual({ kind: 'person' });
     });
   });
 

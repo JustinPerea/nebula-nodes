@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
-import { useGraphStore } from '../store/graphStore';
+import { saveUndoWalk, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 // Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
@@ -11,7 +11,7 @@ import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { adoptCanvasRevision } from '../lib/projectContext';
 import type { CutOffSave } from '../lib/savingCutOff';
-import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { failureMessage, FailureNotice, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
 import { isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
@@ -21,8 +21,6 @@ import { projectNameForFile } from '../lib/projectSize';
 import type { LoadedGraph } from '../lib/graphFile';
 import type { NodeData } from '../types';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
-import { isForeignEdit } from '../lib/canvasUndo';
-import type { SaveUndoStep } from '../lib/graphFileShared';
 
 /** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
 const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
@@ -37,16 +35,6 @@ function projectsIdle(): Promise<void> {
 }
 
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
-/** The step Save's shape line offers (GM PR #205 r13 item 1): an agent's
- * newest step by the name "Undid Claude’s edit." uses; the person's own, or
- * another window's of theirs, as "your"; none with nothing to undo. */
-function newestUndoStep(stack: readonly unknown[]): SaveUndoStep {
-  const top = stack.at(-1);
-  if (!top) return { kind: 'none' };
-  if (isForeignEdit(top) && top.source === 'agent' && top.agentName) return { kind: 'agent', name: top.agentName };
-  return { kind: 'person' };
-}
-
 export function GraphFileActions() {
   const { fitView, getViewport } = useReactFlow();
   const actionInFlight = useRef(false);
@@ -61,10 +49,14 @@ export function GraphFileActions() {
       const ui = useUIStore.getState();
       const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
       const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
-      const { saveToFile } = await graphFileModule.load();
+      const { saveToFile, saveStepToFit } = await graphFileModule.load();
       const projects = useProjectStore.getState();
-      await saveToFile(state.nodes, state.edges, viewport,
-        projects.initialized ? projects.activeProject?.name : undefined, newestUndoStep(state.undoStack));
+      const name = projects.initialized ? projects.activeProject?.name : undefined;
+      // The Undo that brings the canvas back within Save's limits, worked out
+      // only if Save refuses it (GM PR #205 r16 item 1).
+      const walk = saveUndoWalk(state.undoStack);
+      await saveToFile(state.nodes, state.edges, viewport, name,
+        () => saveStepToFit(walk, state.nodes, state.edges, viewport, name));
     } catch (error) {
       console.error('Graph save failed:', error);
       showNotice(failureMessage(error, "Nebula couldn’t save the canvas."));
@@ -179,6 +171,16 @@ export function GraphFileActions() {
     } catch (error) {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
+      // The import's own checks read GM's lines by the answer's code, never
+      // the backend's words (GM PR #205 r16 item 3; review 7 limits LOW-1).
+      if (error instanceof RequestFailedError && error.code) {
+        const { bundleRefusalLine } = await graphFileModule.load();
+        const line = bundleRefusalLine({ code: error.code });
+        if (line) {
+          showNotice(failureMessage(new FailureNotice('', line), LOAD_GRAPH));
+          return;
+        }
+      }
       showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();

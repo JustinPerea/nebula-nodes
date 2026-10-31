@@ -205,7 +205,7 @@ describe('GM bug 3: a failed reference disables Generate shot and Generate 2 ali
     useCinemaUploadStore.setState({ uploads: [{ id: 'u1', attempt: 'x', nodeId: 'n1', shotId: 'a', name: 'reference.png',
       status: 'error', error: 'Upload failed.', canRetry: true }] });
     const root = at(<CinemaShotPanel cinemaNodeId="n1" scene={spec} shot={spec.shots[0]} onChangeShot={vi.fn()} />);
-    const reason = 'Retry or remove failed reference uploads before generating.';
+    const reason = 'You can generate after you try “reference.png” again or remove it.';
     for (const label of ['Generate shot', 'Generate 2']) {
       const control = button(root, label);
       expect(control, label).toBeDisabled();

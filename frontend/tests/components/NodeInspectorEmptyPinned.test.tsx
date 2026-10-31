@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useEffect, useState } from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
 import { useUIStore } from '../../src/store/uiStore';
 import { useGraphStore } from '../../src/store/graphStore';
+import { noteCanvasSelectionDrag } from '../../src/lib/canvasSelectionDrag';
 import { isCanvasShortcutTarget } from '../../src/lib/canvasShortcutScope';
 
 vi.mock('../../src/lib/api', async (importOriginal) => ({
@@ -262,6 +264,105 @@ describe('the pinned Inspector over a selection', () => {
 // Inspector pinned, Delete, Cmd+Z, Cmd+Shift+Z and Cmd+Z again all stay the
 // canvas's: when the shown node leaves, focus goes to the canvas, and the node
 // an Undo brings back shows in the Inspector without taking focus.
+// GM PR #205 r16 item 5: the unpinned Inspector follows the selection. One
+// node: that node. 2 or more: "N nodes selected", whether or not its old node
+// is among them. None: it closes, as on main (where selectNode(null) closes an
+// unpinned Inspector).
+describe('the unpinned Inspector over a selection', () => {
+  const textNode = (id: string, selected = false) => ({
+    id, type: 'model-node', position: { x: 0, y: 0 }, selected,
+    data: { label: `Text ${id}`, definitionId: 'text-input', params: { value: id }, state: 'idle' },
+  });
+  const select = (ids: string[], selected: boolean) => act(() => {
+    useGraphStore.getState().onNodesChange(ids.map((id) => ({ type: 'select' as const, id, selected })));
+  });
+  const click = (id: string) => act(() => {
+    const others = useGraphStore.getState().nodes.filter((node) => node.selected && node.id !== id).map((node) => node.id);
+    useGraphStore.getState().onNodesChange([...others.map((other) => ({ type: 'select' as const, id: other, selected: false })),
+      { type: 'select' as const, id, selected: true }]);
+    useUIStore.getState().selectNode(id);
+  });
+  const shiftClick = (id: string) => act(() => {
+    useGraphStore.getState().onNodesChange([{ type: 'select' as const, id, selected: true }]);
+    useUIStore.getState().selectNode(id);
+  });
+  function Anchors() {
+    const nodes = useGraphStore((state) => state.nodes);
+    return <>{nodes.map((node, index) => (
+      <button key={node.id} type="button" data-node-inspector-anchor={node.id}
+        ref={(el) => { if (el) el.getBoundingClientRect = () => ({ left: 100 + index * 220, top: 100, right: 300 + index * 220, bottom: 160,
+          width: 200, height: 60, x: 100 + index * 220, y: 100, toJSON: () => ({}) }) as DOMRect; }}>{node.id}</button>
+    ))}</>;
+  }
+  const view = () => {
+    advanceLayout();
+    const ui = useUIStore.getState();
+    const popover = document.querySelector('.node-inspector-popover');
+    return { pinned: ui.inspectorPinned, visible: ui.panels.inspector.visible, open: Boolean(popover),
+      title: popover ? (document.querySelector('.inspector__empty-title')?.textContent
+        ?? document.querySelector('.node-inspector-popover')?.getAttribute('data-node-id') ?? ui.selectedNodeId) : null };
+  };
+  function openUnpinnedOn(id: string) {
+    act(() => {
+      useGraphStore.setState({ nodes: [textNode('a'), textNode('b'), textNode('c'), textNode('d')] as never, edges: [] });
+    });
+    render(<><Anchors /><NodeInspectorPopover /></>);
+    click(id);
+    act(() => { useUIStore.getState().setInspectorVisible(true); });
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: id });
+  }
+
+  it('a click on another node: it shows that node', () => {
+    openUnpinnedOn('a');
+    click('b');
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: 'b' });
+  });
+
+  // As React Flow does it: the selection clears, the drag starts (one handler),
+  // the box takes nodes, the drag ends.
+  const drag = async (ids: string[]) => {
+    act(() => {
+      const on = useGraphStore.getState().nodes.filter((node) => node.selected).map((node) => node.id);
+      useGraphStore.getState().onNodesChange(on.map((id) => ({ type: 'select' as const, id, selected: false })));
+      noteCanvasSelectionDrag(true);
+    });
+    await act(async () => {});
+    select(ids, true);
+    act(() => { noteCanvasSelectionDrag(false); });
+    await act(async () => {});
+  };
+
+  it('a drag-select of two other nodes, a Shift-click and Select all each read "N nodes selected"', async () => {
+    openUnpinnedOn('a');
+    await drag(['b', 'c']);
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: '2 nodes selected' });
+    cleanup();
+    openUnpinnedOn('a');
+    shiftClick('b');
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: '2 nodes selected' });
+    cleanup();
+    openUnpinnedOn('a');
+    act(() => { useGraphStore.getState().selectAll(); });
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: '4 nodes selected' });
+  });
+
+  it('back to one: that node; then none (a pane click): it closes', async () => {
+    openUnpinnedOn('a');
+    await drag(['b', 'c']);
+    select(['b'], false);
+    expect(view()).toEqual({ pinned: false, visible: true, open: true, title: 'c' });
+    select(['c'], false);
+    await act(async () => {});
+    expect(view()).toEqual({ pinned: false, visible: false, open: false, title: null });
+  });
+
+  it('a drag-select that ends over nothing: it closes', async () => {
+    openUnpinnedOn('a');
+    await drag([]);
+    expect(view()).toEqual({ pinned: false, visible: false, open: false, title: null });
+  });
+});
+
 describe('the pinned Inspector and the keyboard', () => {
   function Cards() {
     const nodes = useGraphStore((state) => state.nodes);
@@ -322,6 +423,58 @@ describe('the pinned Inspector and the keyboard', () => {
     } finally {
       document.removeEventListener('keydown', onKey);
     }
+  });
+
+  // React Flow copies the nodes into its own store, so a card leaves a commit
+  // after the selection clears (review 7 of PR #205, inspector LOW-1).
+  function LaggingCards() {
+    const nodes = useGraphStore((state) => state.nodes);
+    const [shown, setShown] = useState(nodes);
+    // React Flow drops a removed card a frame after the store change: so do these.
+    useEffect(() => {
+      const frame = requestAnimationFrame(() => setShown(nodes));
+      return () => cancelAnimationFrame(frame);
+    }, [nodes]);
+    return (
+      <div className="canvas-wrapper" tabIndex={0}>
+        {shown.map((node) => <div key={node.id} className="react-flow__node" tabIndex={0} data-id={node.id} data-card={node.id}>{node.id}</div>)}
+      </div>
+    );
+  }
+
+  it('Delete with focus in the card, which leaves a render after the selection clears: focus ends on the canvas, not the page', () => {
+    act(() => {
+      useGraphStore.setState({ nodes: [{ id: 'temp', type: 'model-node', position: { x: 0, y: 0 }, selected: true,
+        data: { label: 'Temp', definitionId: 'text-input', params: { value: 'kept' }, state: 'idle' } }] as never,
+      edges: [], undoStack: [], redoStack: [] });
+      useUIStore.getState().selectNode('temp');
+      useUIStore.getState().setInspectorPinned(true);
+    });
+    render(<><LaggingCards /><NodeInspectorPopover /></>);
+    advanceLayout();
+    act(() => { (document.querySelector('[data-card="temp"]') as HTMLElement).focus(); });
+    expect(where()).toBe('card temp');
+    act(() => { useGraphStore.getState().onNodesChange([{ id: 'temp', type: 'remove' }]); });
+    advanceLayout();
+    advanceLayout();
+    expect([ids(), document.querySelector('[data-card="temp"]'), where()]).toEqual([[], null, 'canvas']);
+  });
+
+  it('control: focus somewhere else (a field outside the canvas) stays there when the shown node leaves', () => {
+    act(() => {
+      useGraphStore.setState({ nodes: [{ id: 'temp', type: 'model-node', position: { x: 0, y: 0 }, selected: true,
+        data: { label: 'Temp', definitionId: 'text-input', params: { value: 'kept' }, state: 'idle' } }] as never,
+      edges: [], undoStack: [], redoStack: [] });
+      useUIStore.getState().selectNode('temp');
+      useUIStore.getState().setInspectorPinned(true);
+    });
+    render(<><LaggingCards /><input aria-label="elsewhere" /><NodeInspectorPopover /></>);
+    advanceLayout();
+    act(() => { screen.getByLabelText('elsewhere').focus(); });
+    act(() => { useGraphStore.getState().onNodesChange([{ id: 'temp', type: 'remove' }]); });
+    advanceLayout();
+    advanceLayout();
+    expect(where()).toBe('input');
   });
 
   it('with focus on the page (nothing focused), an Undo that brings the node back leaves it there: only the next-step picker hands the Inspector focus', () => {

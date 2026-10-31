@@ -626,14 +626,15 @@ describe('graph structural complexity', () => {
   const complexOpen = 'This file is too complex to open.';
   const valueOpen = 'Part of this file holds a value Nebula can’t read.';
 
+  // GM PR #205 r14, r15: a file being loaded is "This file", the CLI import "This canvas"; Save keeps "The canvas".
   it('matches the backend node and edge ceilings before walking individual nodes, in the person\'s words', () => {
-    for (const use of ['save', 'open'] as const) {
+    for (const [use, subject] of [['save', 'The canvas'], ['open', 'This file'], ['import', 'This canvas']] as const) {
       expect(thrown({ nodes: new Array(GRAPH_MAX_NODES + 1).fill(null), edges: [] }, use)).toEqual({
-        reason: `The canvas has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
+        reason: `${subject} has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
         detail: `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`,
       });
       expect(thrown({ nodes: [], edges: new Array(GRAPH_MAX_EDGES + 1).fill(null) }, use)).toEqual({
-        reason: `The canvas has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`,
+        reason: `${subject} has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections.`,
         detail: `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`,
       });
     }
@@ -734,7 +735,7 @@ describe('graph import memory ceiling', () => {
     const text = JSON.stringify({ version: 2, name: 'Many', createdAt: '2026-10-23T00:00:00.000Z',
       nodes: Array.from({ length: 10_001 }, (_, index) => ({ ...node, id: `n${index}` })), edges: [] });
     const selection = await inspectGraphFileWithinLimit(new File([text], 'Many.nebula'));
-    await expect(readGraphSelection(selection)).rejects.toThrow('The canvas has more than 10,000 nodes.');
+    await expect(readGraphSelection(selection)).rejects.toThrow('This file has more than 10,000 nodes.');
   });
 
   function zipSelection(): File {
@@ -1013,6 +1014,9 @@ describe('the canvas limit lines on each surface', () => {
     ['an agent\'s step: that agent\'s last change', { kind: 'agent', name: 'Claude' } as const,
       'It’s too complex to save. Undo Claude’s last change, then try again.',
       'Part of it holds a value Nebula can’t save. Undo Claude’s last change, then try again.'],
+    ['a step from an origin Nebula doesn\'t know: "the last change", never "your" (GM r14 item 2)', { kind: 'unknown' } as const,
+      'It’s too complex to save. Undo the last change, then try again.',
+      'Part of it holds a value Nebula can’t save. Undo the last change, then try again.'],
     ['no step at all: the cause and nothing more', { kind: 'none' } as const,
       'It’s too complex to save.', 'Part of it holds a value Nebula can’t save.'],
   ])('Save, %s', async (_label, step, complexLine, valueLine) => {
@@ -1034,8 +1038,8 @@ describe('the canvas limit lines on each surface', () => {
         .toThrow(expect.objectContaining({ reason: valueLine, detail: 'Graph contains a circular value that cannot be saved.' }));
       // With nothing to undo, the Agent log names the limit hit (none otherwise).
       expect(logged).toEqual(step.kind === 'none' ? [
-        `Couldn’t save the canvas: Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`,
-        'Couldn’t save the canvas: Graph contains a non-finite number.',
+        `Nebula couldn’t save the canvas. It’s too complex to save: part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`,
+        'Nebula couldn’t save the canvas. Part of it holds a value Nebula can’t save: a number in it isn’t finite.',
       ] : []);
     } finally {
       window.removeEventListener('nebula:agent-log-entry', log);

@@ -732,7 +732,10 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
           library: state.panels.library,
           inspector: {
             ...state.panels.inspector,
-            visible: keep ? state.panels.inspector.visible : false,
+            // GM PR #205 r16 item 5: an unpinned Inspector follows the
+            // selection too (one node shows it, several read "N nodes
+            // selected"), and closes only at none, as on main.
+            visible: keep || nodeId !== null ? state.panels.inspector.visible : false,
           },
         },
       };

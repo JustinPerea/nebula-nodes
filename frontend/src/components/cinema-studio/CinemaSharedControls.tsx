@@ -2,7 +2,7 @@ import { useId, useRef } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { cinemaLookLabel, defaultCinemaLook, defaultCinemaPalette } from '../../lib/cinemaArtDirection';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
-import { useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { shortLine } from '../../lib/errorCopy';
 import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
@@ -156,7 +156,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
           {characterUploads.map((upload) => (
             <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
               <span className="cinema-reference-upload__name">{upload.name}</span>
-              <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
+              <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
                 {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
                   (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                 {upload.status === 'uploading' ? 'Uploading…'

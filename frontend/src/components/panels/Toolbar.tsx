@@ -39,7 +39,8 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
-import { assertGraphComplexityWithinLimits, GraphStructureLimitError } from '../../lib/graphFileShared';
+import { assertGraphComplexityWithinLimits, GraphStructureLimitError, serializeGraph } from '../../lib/graphFileShared';
+import { useProjectStore } from '../../store/projectStore';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
@@ -47,7 +48,7 @@ const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
 
 export function Toolbar() {
-  const { fitView, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, zoomTo, getViewport } = useReactFlow();
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const zoom = useStore((s) => s.transform[2]);
@@ -260,9 +261,14 @@ export function Toolbar() {
       // Checked as a file being opened is (review 6 of PR #205, lines-limits
       // MEDIUM-1), so a canvas Save couldn't save never comes in unseen: its
       // nodes hold their params as deep as Save's file does. GM r13 item 2's
-      // lines: it isn't a file.
+      // lines: it isn't a file. Measured as the file Save will write
+      // (serializeGraph, with its root fields and viewport), so the count is
+      // Save's own (review 7 of PR #205, limits MEDIUM-3).
       try {
-        assertGraphComplexityWithinLimits({ nodes: data.nodes, edges: data.edges }, 'import');
+        const projects = useProjectStore.getState();
+        const file = serializeGraph(data.nodes as Node<NodeData>[], data.edges as Edge[], getViewport(),
+          projects.initialized ? projects.activeProject?.name : undefined);
+        assertGraphComplexityWithinLimits({ ...file, version: 3 }, 'import');
       } catch (error) {
         console.error('[nebula] CLI canvas import', error instanceof GraphStructureLimitError ? error.detail : error);
         throw error;
@@ -286,7 +292,7 @@ export function Toolbar() {
     } catch (error) {
       if (mounted.current) showNotice(failureUnder(error, "Nebula couldn’t import the CLI canvas."));
     }
-  }, [fitView]);
+  }, [fitView, getViewport]);
 
   return (
     <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"

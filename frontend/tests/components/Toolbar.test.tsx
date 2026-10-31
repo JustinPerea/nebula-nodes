@@ -46,7 +46,8 @@ const mocks = vi.hoisted(() => ({
 
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../../src/lib/canvasNotice';
 vi.mock('@xyflow/react', () => ({
-  useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
+  useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo,
+    getViewport: () => ({ x: 0, y: 0, zoom: 1 }) }),
   useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
   // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
   useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
@@ -75,7 +76,12 @@ vi.mock('../../src/store/pricingStore', async () => {
   const { create } = await import('zustand');
   return { usePricingStore: create(() => ({ table: null, loading: false, load: async () => {} })) };
 });
-vi.mock('../../src/lib/backend', () => ({ apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
+vi.mock('../../src/lib/backend', async (importOriginal) => ({ ...await importOriginal<typeof import('../../src/lib/backend')>(),
+  apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
+import { GRAPH_MAX_VALUES, measureShape, serializeGraph } from '../../src/lib/graphFileShared';
+// A CLI canvas node as fetchCLIGraph gives it (the import measures it as Save's file).
+const IMPORTED = { id: 'imported', type: 'model-node', position: { x: 0, y: 0 },
+  data: { label: 'Imported', definitionId: 'text-input', params: {}, state: 'idle' } };
 vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));
 vi.mock('../../src/lib/canvasFit', () => ({ CANVAS_ZOOM_DURATION: 200, CANVAS_FIT_DURATION: 300, computeCanvasFitPadding: () => 0.2 }));
 
@@ -406,6 +412,23 @@ describe('Canvas toolbar hierarchy', () => {
       expect(await importWith([cliNode(deep(59))])).toEqual([]);
       expect(mocks.load).toHaveBeenCalledTimes(1);
     });
+    // Review 7 of PR #205 (limits MEDIUM-3): counted as Save's file counts it
+    // (its root fields, viewport and every node's outputs key), not just
+    // {nodes, edges}, which counts fewer.
+    const fileCount = (length: number) => measureShape({ ...serializeGraph([cliNode(Array.from({ length }, () => 0)) as never], [],
+      { x: 0, y: 0, zoom: 1 }, 'Untitled Graph'), version: 3 }).count;
+    const atSaveEdge = GRAPH_MAX_VALUES - fileCount(0);
+    it('values: one past Save\'s count is refused, though {nodes, edges} alone counts fewer; at the count it comes in', async () => {
+      expect(fileCount(atSaveEdge + 1)).toBe(GRAPH_MAX_VALUES + 1);
+      expect(measureShape({ nodes: [cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))], edges: [] }).count).toBeLessThanOrEqual(GRAPH_MAX_VALUES);
+      expect(await importWith([cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))]))
+        .toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+    });
+    it('values: at Save\'s count it comes in', async () => {
+      expect(await importWith([cliNode(Array.from({ length: atSaveEdge }, () => 0))])).toEqual([]);
+      expect(mocks.load).toHaveBeenCalledTimes(1);
+    });
     it('a value Nebula can\'t read: GM\'s value line', async () => {
       expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas. Part of this canvas holds a value Nebula can’t read.']);
       expect(mocks.load).not.toHaveBeenCalled();
@@ -414,7 +437,7 @@ describe('Canvas toolbar hierarchy', () => {
 
   it('fits the imported graph only while the same Canvas target and viewport are current', async () => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
@@ -431,7 +454,7 @@ describe('Canvas toolbar hierarchy', () => {
     { canvasViewportRevision: 1 },
   ])('does not refit after import when navigation or viewport ownership changes: %j', async (state) => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
@@ -442,7 +465,7 @@ describe('Canvas toolbar hierarchy', () => {
 
   it('does not revive an import fit after navigating away and back or unmounting', async () => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     const view = render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
@@ -462,7 +485,7 @@ describe('Canvas toolbar hierarchy', () => {
     const view = render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     view.unmount();
-    await act(async () => finishCLI!({ nodes: [{ id: 'imported' }], edges: [] }));
+    await act(async () => finishCLI!({ nodes: [IMPORTED], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.fit).not.toHaveBeenCalled();
   });

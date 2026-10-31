@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
-import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { getCinemaUploadIssue, otherShotsUploadLine, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { useGraphStore } from '../../store/graphStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../lib/cinemaMotion';
 import { useCinemaMotionStore } from '../../store/cinemaMotionStore';
@@ -49,7 +49,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const uploads = useCinemaUploadStore((state) => state.uploads);
   const shotUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === shot.id);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, shot.id);
-  const allReferenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
+  // Read with `uploads` above, so the line follows the store.
+  const otherShotsIssue = uploads.length > 0 ? otherShotsUploadLine(cinemaNodeId, shot.id, scene.shots) : null;
 
   const shotRefs = shot.refImageUrls ?? [];
   const paletteOverridden = shot.overrides?.palette !== undefined;
@@ -258,7 +259,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
 
         {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status" id={reasonId}>{sharedInputsMessage}</div>}
         {referenceIssue && <div className="cinema-reference-upload__message" role="status" id={reasonId}>{referenceIssue}</div>}
-        {!referenceIssue && allReferenceIssue && <div className="cinema-reference-upload__message" role="status">{allReferenceIssue} Generate all will be available when the other shot’s references are resolved.</div>}
+        {!referenceIssue && otherShotsIssue && <div className="cinema-reference-upload__message" role="status">{otherShotsIssue}</div>}
 
         <div className="cinema-shot-panel__motion">
           <button type="button" className="cinema-shot-panel__action"
@@ -339,9 +340,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               {shotUploads.map((upload) => (
                 <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
                   <span className="cinema-reference-upload__name">{upload.name}</span>
-                  <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
+                  <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
                     {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
-                  (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
+                        (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                     {upload.status === 'uploading' ? 'Uploading…'
                       : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
                         : upload.error ?? "Couldn't upload this image."}

@@ -77,6 +77,7 @@ export { GRAPH_BUNDLE_MAX_ASSET_BYTES, GRAPH_BUNDLE_MAX_IMPORT_BYTES, GRAPH_BUND
 // The .nebula writer lives in the startup entry (graphFileShared) so a held
 // recovered copy can be downloaded even when this chunk can't load (Q116 a).
 export { serializeGraph };
+export { saveStepToFit } from './saveFixStep';
 export type { NebulaFile };
 // Load graph's limits and its shape walk live there too, so the unsaved
 // edits download can tell whether Load graph will open its file
@@ -143,6 +144,16 @@ const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, 
 /** GM PR #205 r12: a bundle whose files Nebula couldn't copy into its output
  * folder (the restore's 500), under "Nebula couldn’t load the canvas.". */
 const BUNDLE_FILES_NOT_COPIED_COPY = 'Its files couldn’t be copied. Try again.';
+/** GM PR #205 r16 item 3: a node type, a port or a param this version of
+ * Nebula doesn't have (mostly version drift: one line). */
+const GRAPH_FILE_UNKNOWN_NODE_COPY = 'This file uses a node this version of Nebula doesn’t have.';
+const MIB = 1024 * 1024;
+/** GM PR #205 r16 item 3: a bundle's file over the member limit, and a bundle
+ * over the upload limit, in the size lines' MB (graphSizeLine). */
+export const bundleMemberSizeLine = (bytes: number, limitBytes: number) =>
+  `One of its files is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
+export const bundleUploadSizeLine = (bytes: number, limitBytes: number) =>
+  `This file is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
 
 export class GraphFileInvalidError extends FailureNotice {
   readonly detail: string;
@@ -607,6 +618,17 @@ export async function addGraphAssetsToBundle(
   return summary;
 }
 
+/** The Agent log's line for a Save its shape check refused with no step to
+ * offer: Nebula's line, then which limit, in Nebula's words, so an agent can
+ * help (never the walk's own English: review 7 of PR #205, limits LOW). */
+function saveLimitLogLine(error: GraphStructureLimitError): string {
+  const which = error.detail.includes('values') ? `it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`
+    : error.detail.includes('nested') ? `part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`
+      : error.detail.includes('non-finite') ? 'a number in it isn’t finite.'
+        : 'a value in it refers back to itself.';
+  return `Nebula couldn’t save the canvas. ${error.reason.replace(/\.$/, '')}: ${which}`;
+}
+
 /**
  * Save the graph as a `.nebula.zip` bundle: graph.json plus every referenced
  * asset under assets/. Self-contained and portable — the file reloads cleanly
@@ -622,8 +644,14 @@ export async function saveToFile(
   edges: Edge[],
   viewport?: Viewport,
   projectName?: string,
-  undoStep?: SaveUndoStep,
+  undoStep?: SaveUndoStep | (() => SaveUndoStep),
 ): Promise<GraphBundleAssetSummary | null> {
+  // Worked out once, and only if a shape check refuses the Save.
+  let resolvedStep: SaveUndoStep | undefined;
+  const stepNow = (): SaveUndoStep | undefined => {
+    if (resolvedStep === undefined && undoStep !== undefined) resolvedStep = typeof undoStep === 'function' ? undoStep() : undoStep;
+    return resolvedStep;
+  };
   let file: NebulaFile;
   let graphJson: string;
   try {
@@ -635,7 +663,7 @@ export async function saveToFile(
     }
     file = serializeGraph(nodes, edges, viewport, projectName);
     file.version = 3;
-    assertGraphComplexityWithinLimits(file, 'save', undoStep);
+    assertGraphComplexityWithinLimits(file, 'save', () => stepNow() ?? { kind: 'person' });
     try {
       graphJson = JSON.stringify(file, null, 2);
     } catch (error) {
@@ -654,9 +682,9 @@ export async function saveToFile(
     console.error('[nebula] graph save', error instanceof GraphStructureLimitError ? error.detail : error);
     // With nothing to undo the line offers no step (GM PR #205 r13 item 1),
     // so the Agent log says which limit it hit, for an agent to help.
-    if (error instanceof GraphStructureLimitError && error.shape && undoStep?.kind === 'none') {
+    if (error instanceof GraphStructureLimitError && error.shape && stepNow()?.kind === 'none') {
       window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
-        message: `Couldn’t save the canvas: ${error.detail}` } }));
+        message: saveLimitLogLine(error) } }));
     }
     showNotice(failureMessage(error, SAVE_GRAPH));
     return null;
@@ -1015,11 +1043,28 @@ export function bundleRefusalLine(body: unknown): string | null {
     case 'bundle_size_metadata':
     case 'bundle_missing_graph':
       return GRAPH_FILE_DAMAGED_COPY;
+    // The import's own checks (GM PR #205 r16 item 3), for a plain file and a
+    // bundle's graph.json alike: backend _import_stage_refusal.
+    case 'unknown_definition':
+    case 'graph_unknown_port':
+      return GRAPH_FILE_UNKNOWN_NODE_COPY;
+    case 'graph_cycle':
+      return GRAPH_FILE_DAMAGED_COPY;
+    case 'bundle_member_too_large': {
+      const size = count('sizeBytes');
+      const limit = count('limitBytes');
+      return size !== null && limit !== null ? bundleMemberSizeLine(size, limit) : null;
+    }
+    case 'bundle_upload_too_large': {
+      const size = count('sizeBytes');
+      const limit = count('limitBytes');
+      return size !== null && limit !== null ? bundleUploadSizeLine(size, limit) : null;
+    }
     case 'graph_newer_version': return GRAPH_FILE_NEWER_COPY;
     case 'bundle_restore_failed': return BUNDLE_FILES_NOT_COPIED_COPY;
     case 'graph_unreadable_value': return shapeLine('open', 'value');
-    case 'graph_too_many_nodes': return tooManyNodesLine(count('maxNodes') ?? GRAPH_MAX_NODES);
-    case 'graph_too_many_edges': return tooManyEdgesLine(count('maxEdges') ?? GRAPH_MAX_EDGES);
+    case 'graph_too_many_nodes': return tooManyNodesLine(count('maxNodes') ?? GRAPH_MAX_NODES, 'open');
+    case 'graph_too_many_edges': return tooManyEdgesLine(count('maxEdges') ?? GRAPH_MAX_EDGES, 'open');
     case 'graph_too_large': {
       const size = count('sizeBytes');
       const limit = count('limitBytes');

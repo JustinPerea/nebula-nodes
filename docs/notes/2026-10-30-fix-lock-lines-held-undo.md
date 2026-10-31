@@ -1583,3 +1583,290 @@ NO_UPDATE_NOTIFIER=1 and npm_config_update_notifier=false.
   8 before the item 6 fix and 8 of 8 after; `restoretype` 4 of 4 with the
   shorter wait; Save's line with Claude's step, the CLI import line and
   the Cinema upload row pass, with shots.
+
+## 55. GM r14 items 1–2: whose change Save's line offers to undo
+
+- Item 1: the value form already took the same three endings as the
+  complex form (round 7, GM r13): the person's step "… Undo your last
+  change, then try again.", an agent's "… Undo Claude’s last change, then
+  try again.", none "Part of it holds a value Nebula can’t save." alone.
+  Its tests were written then; nothing changed.
+- Item 2: a change from an origin Nebula doesn't know. `saveUndoStep`
+  (graphStore) now picks the ending, and GraphFileActions passes it to Save:
+  - an edit with no named agent that is the newest step (an `outside`
+    step: a request with no agent marker and no person token) reads "Undo
+    the last change, then try again." in both forms;
+  - another window of the person's stays "your";
+  - a change nobody named that made no step (a sync with no origin that
+    changed the canvas: noteForeignTouches' `unknown`) can't be reached by
+    Undo. The sync records the steps on the stack then; while the newest
+    step is one of those (an Undo of the person's step included), the line
+    ends at its first sentence. The person's next step is newer, and theirs
+    again. Before, both read "your".
+  - Not covered: a run's own param write-back (rebased into the steps, not
+    a change of anyone's) is left as it was.
+
+## 56. GM r14 items 3–4: the Cinema upload lines
+
+- Item 3: the shot panel's lock reason for failed uploads takes the lock
+  form and names them with `quotedNames` (up to 3 by name, from 4 a count):
+  "You can generate after you try “ref.png” again or remove it.", "… “a.png”
+  and “b.png” again or remove them.", "… 4 uploads again or remove them.".
+  It is `getCinemaUploadIssue`, so Generate all's tooltip in the Cinema
+  toolbar and the canvas's run refusal read it too. The line under it for
+  another shot's uploads keeps its second sentence ("Generate all will be
+  available when the other shot’s references are resolved."), for the
+  wording batch.
+- Item 4: an upload a canvas import stopped (`stopped`, set by
+  `interrupt()`) reads as a status in the row's neutral ink, the rule every
+  row reason that isn't an alert already uses
+  (`.cinema-reference-upload__status`); the warning colour stays on
+  `[role="alert"]`. One helper, `uploadReasonRole`, decides it for both rows
+  (shared references and a shot's). A Try again is a new attempt and clears
+  the mark; a reload drops it (the file is gone then).
+- The other upload-row reasons, all left in the warning colour because
+  the person has a problem to fix:
+  - "Couldn't upload <name>. <reason>" (the upload failed: too large, the
+    wrong type, a refusal, the network);
+  - "Upload was interrupted. Remove it, then attach the image again." (a
+    reload during an upload: the file is gone);
+  - "Remove this upload, then attach the image again." (a failed upload
+    after a reload);
+  - "Uploading…" is a status already.
+  A stopped upload that is reloaded shows "The upload stopped because a
+  canvas import started." with only [Remove] and the warning colour: the
+  file is gone, but the line doesn't say to attach it again. A question
+  below.
+
+## 57. GM r14: "This file" for a load's node and connection limits
+
+- `tooManyNodesLine` and `tooManyEdgesLine` take where the check ran: Load
+  canvas (a plain file's walk, and a bundle's `graph_too_many_nodes` /
+  `graph_too_many_edges` answer) says "This file has more than 10,000
+  nodes." / "… 50,000 connections."; Save keeps "The canvas has more
+  than …" (the CLI import's took "This canvas" in r15: section 57b). Agents' writes keep the backend's own words.
+- The plain file's load path has the same check (the walk with `open`),
+  so it says "This file" too. Each surface is tested.
+
+## 57b. GM r15 (round 8, section 1b)
+
+- Item 1: the CLI import's limits say "This canvas has more than N
+  nodes." / "… N connections." under "Nebula couldn’t import the CLI
+  canvas." (as its other lines say "This canvas"). Load keeps "This
+  file", and Save keeps "The canvas".
+- Item 2: a stopped upload that is reloaded reads "Remove it, then attach
+  the image again." with only [Remove], as an alert in the warning colour,
+  like the other reloaded rows (its file and Try again are gone, so the
+  import reason led nowhere). Section 56's question is answered.
+- Item 3: under the shot's own lock line, another shot's uploads hold
+  Generate all. `otherShotsUploadLine` names those shots by the name-list
+  rule: "You can generate all when the uploads in “Shot 2” finish." (or
+  "in “Shot 2” and “Shot 3”", from 4 "4 shots") while any are on their
+  way, and "You can generate all after you try the uploads in “Shot 2”
+  again or remove them." when they have failed. Pending ones win, and
+  name only their own shots. It replaces "<the issue> Generate all will be
+  available when the other shot’s references are resolved.".
+
+## 58. Agents
+
+Agent-visible: MCP-SETUP's list of the restore's codes now gives the
+"This file has more than N nodes." line, and the agents' Save-line
+paragraph gives the "Undo the last change" form and the no-step case. No
+tool, route or answer changed.
+
+## 59. Review 7, held Undo (round 8, section 2)
+
+- MEDIUM-1 (a trailing restore echo): a restore Nebula answered OK keeps
+  holding the node's presence until a sync shows it as the restore left
+  it (its own echo, or a later sync), capped at the hold limit; the syncs
+  before the echo still count for every other change. Chosen over
+  "ignore the node's absence in copies synced before the echo" because
+  that rule needs the same echo to know which copies are older, and a
+  marker left behind when no echo comes would hide a real later delete.
+  Holding works in every order: echo before the answer (agreed already,
+  released at the answer), echo after (released at the echo), no echo
+  (released at the cap, newest copy decides as before). The hold also
+  waits when no foreign sync came during it, since an older sync can
+  still arrive after the answer over the socket. A replaced canvas ends
+  every echo hold (`forgetEchoWaits` now also drops their writes).
+- MEDIUM-2: a link without the node after one with it is that edit's
+  removal (`removes`), placed at its seq and origin; later null links
+  change nothing.
+- LOW-1: one edit's links across a restore hold and a refused-Delete hold
+  join one step (the cross-hold join in `applyHeldCopies`' note).
+- LOW-2: a refused Delete gives back the connections an agent's delete of
+  the other end took (`giveBackLostConnections`).
+- Item 7: a refused rename is taken out of every step that captured it
+  (slices, an add's accepted node, snapshots), in both answer orders
+  (`forgetRefusedRename`, `refusedRenames`, and the put-back of a failed
+  Delete).
+- X2 (GM r16 item 4): an agent's clear while the person's Delete of n1 is
+  on its way: the clear's step carries n1 as Nebula had it (its newest
+  synced copy, with Codex's edit) and its connections to nodes the clear
+  also took, so the clear's Undo brings n1 back with Codex's value.
+- LOW-3: W1 and W3b pin the 15 s cap, X1 pins the refused name on links,
+  X2 pins the clear's off-canvas rule. The P-B empty-path bind: two empty
+  syncs that aren't clears (Claude deletes the only node a restore holds;
+  Claude deletes n1 and n2 while n1's Delete is refused) both pass with
+  and without it, so no test needs it. The credit to P13 is dropped; the
+  bind stays for symmetry with the non-empty path (an empty sync's held
+  links reach it only from a node off the canvas, which no sync both
+  lacks and links). Both tests stay as coverage of the empty path.
+- NIT-1: `!write.restore` dropped from `writesAnsweredNow` (a restore
+  never gets an answer entry). The other survivors stay as the reviewer
+  classified them: `waitAnyCanvas` (an older canvas's writes answer or
+  fail within the cap), `joinReturnsNothing`, `tieBreakFlip` and
+  `ownOnlyFirst` (no step is made from copies with no foreign link),
+  `clearAllCopies`, `forgetAnyName` (`labelsInFlight` covers a later
+  rename), `appliedAny` (a restore is atomic). `earlierNullLinksToo` is
+  MEDIUM-2's case and is now killed by F2.
+- NIT-3 (the offline blip under load): no change; see section 61.
+- The old round 13 harness emits no echo after a restore, so a node held
+  until its echo stayed held into the next test (ids repeat). Its
+  afterEach now forgets the held history, as the newer harnesses do.
+- Tests: heldUndo.pr205r8 (W1, W3b, W9, W9b, F1, F2, F3, X1, X2, L1a,
+  L1b, both empty-path cases, and the generator with "delete held").
+
+## 60. GM r16 (round 8, section 2c)
+
+- Item 1 (review 7 limits MEDIUM-4): Save walks the Undo stack from the
+  top, a node and a connection at a time (`undosToFitSave`), and names the
+  Undo that brings the canvas within the limits: the top step's owner when
+  it alone does, "Undo the last 2 changes, then try again." (digits) when
+  it takes more, the first sentence when none does.
+- Item 2 (MEDIUM-1): a non-person `newProjectForFile` import is
+  shape-checked (only size is waived); a proposal is measured when made;
+  every Accept is measured again. Measuring on every Accept equals "only
+  when the canvas changed": with it unchanged the result is the one the
+  proposal passed. A refused Accept is 409 `proposal_too_complex` with
+  `agent` and `limit` {kind, max}, journaled as `proposal.accept_refused`
+  (new event kind, with a CLI line), and the proposal stays open. The bar
+  shows "Nebula couldn’t accept this because the canvas would be too
+  complex to save. Reject it, or ask Claude to change it." in its line
+  spot, neutral, Accept live. The agent's name is the proposal's
+  `agent.name`; with none, "ask the agent" (tested both ways).
+- Item 3 (LOW-1): the import's staging checks carry codes:
+  `unknown_definition`, `graph_unknown_port`
+  ("This file uses a node this version of Nebula doesn’t have."),
+  `graph_cycle` and any other staging 400 as `graph_invalid` ("This file
+  is damaged or isn’t a Nebula canvas."). A node's own bad fields (a
+  Cinema scene's params that can't be filled) are `graph_invalid` too: the
+  import takes any param key, so "a param this version doesn't have" is
+  never refused and has no code (a `graph_unknown_params` code built for it
+  survived mutation, which showed that). The member and upload size
+  refusals carry `sizeBytes` ("One of its files is N MB." / "This file is
+  N MB.", then "Nebula opens files up to M MB."). A streamed upload with no
+  Content-Length knows only what arrived before the refusal, so it gives
+  no `sizeBytes` and its line is the heading alone. Agents keep the
+  backend's text.
+- Item 4: X2, section 59.
+- Item 5: the unpinned Inspector follows the selection: one node shows
+  it, two or more read "N nodes selected", and it closes only at zero.
+  Main closes it at zero too (`selectNode(null)` sets it hidden); this
+  keeps that and drops the closes at two or more. A drag's momentary empty
+  selection doesn't close it (`lib/canvasSelectionDrag`); a drag that ends
+  on nothing does. Select all, a drag of two others and a Shift-click
+  read the same. The drag flag is its own module, not graphStore's: with
+  the canvas's drag handlers calling into graphStore, the lock ratchet's
+  G check overflowed the stack on Canvas.tsx (its `refuseCoverage`
+  recurses through graphStore's chain of local helpers, about 110 deep),
+  and took 5 minutes on that one file; now 3 seconds.
+- Builder's wording, not GM's (flag): the Agent log line for a Save the
+  shape check refused, "Nebula couldn’t save the canvas. It’s too complex
+  to save: it holds more than 1,000,000 values." (or "part of it is
+  nested more than 64 levels deep.", "a number in it isn’t finite.", "a
+  value in it refers back to itself.").
+
+## 61. Review 7, limits and Inspector (round 8, section 2)
+
+- MEDIUM-2: "no worse" compares uncapped measures (the walk no longer
+  stops early).
+- LOW (count parity): the backend's file view always writes `outputs`
+  and normalizes edges to serializeGraph's keys; the parity fixture pins
+  24, 44 and 53 on both sides. The CLI import measures the file Save
+  would write.
+- NIT-1 (run write-backs): outputs are `{type, value}` with string values
+  (structured results are `json.dumps`'d), so depth stays at 6 to 7 from
+  the file's root and size is bounded by the project size limit. No
+  check added.
+- NIT-2 (offline under a million-value canvas), found live: an agent's
+  write of a 990,000-item list blocks the backend for about 4 s (the
+  write's own measure and save; a direct health check took up to 3.1 s).
+  The tab's probes don't time out, so slowness alone never marks it
+  offline; what did was one probe failing in 9 ms with `net::ERR_FAILED`
+  (no CORS or block reason in the browser's own record), which flipped
+  the banner on for about 2.9 s until the next probe. The harness runs
+  every request through Puppeteer's request interception (the rule that
+  keeps it off real hosts), and the reviewer's run had it too, so I can't
+  tell whether that layer fails the request or the browser would anyway.
+  Not changed: whether one failed probe should be enough to go offline is
+  a product choice (a retry before the banner would delay a real offline
+  by one probe). Flagged for Justin and GM.
+- Inspector: focus waits for the deleted card to leave, then lands on the
+  canvas; a focus request for a missing node makes the UI store agree with
+  the pinned Inspector; MCP-SETUP's several-nodes sentence is corrected;
+  the two survivors are killed; the comment indent is fixed.
+- The round 7 upload question: no path reaches the reloaded upload rows
+  in the app. Every canvas comes through `loadProjectGraph` (opening a
+  project, and the bootstrap after a page reload), which clears the
+  upload store, and a graph sync is refused before a project is open
+  (`graphNotForThisTab`). The lines and their tests stay.
+
+## Round 8 proof
+
+- tsc, lint, check:inline-styles and check:slava-css-scope clean.
+- Related vitest at 2 workers: 115 files, 1,838 tests, Errors 0.
+- Base b13d4c90: every new test fails there except one control (a failed
+  upload stays an alert).
+- Mutation: 14 of 14 killed (the unknown ending, the outside step, the
+  unreachable mark and its use, the lock line and its it/them, the stopped
+  mark, the role, Try again clearing it, "This file" for the walk and for
+  the bundle's nodes and connections).
+- Live, 8797/5797 (canaries refused first, 0 requests to 8000-8010 or
+  5173, no real host): 13 of 13. Five shots at 1440, no duplicate md5s:
+  the bundle's "This file has more than 10,000 nodes.", the value form
+  with Claude's step, the unknown-origin form, the panel's lock line with
+  two uploads, and the stopped row in the row's neutral ink (the same
+  colour as `--sr-ink-meta`) beside a failed one in the warning colour.
+- Section 1b: related vitest again at 2 workers, 115 files, 1,846 tests,
+  Errors 0; tsc, lint and both CSS checks clean. Its tests use new
+  exports, so they fail on b13d4c90 by construction. Mutation: 5 of 5
+  killed (the import's "This canvas", the reloaded stopped line, pending
+  first, failed read as pending, the panel's line turned off).
+- Live 1b, same isolation: 3 of 3, three more shots (eight in all, no
+  duplicate md5s, each opened): "in “Shot 2” and “Shot 3” finish.", the
+  failed "in “Shot 2” again or remove them.", and the reloaded stopped row
+  ("Remove it, then attach the image again.", only [Remove]) in the
+  warning colour, the same as the reloaded "Upload was interrupted." row
+  beside it.
+- Found live, not changed: after a page reload, opening the project
+  clears the upload store (the project load calls
+  `useCinemaUploadStore.getState().clear()`, as on main), so the saved
+  upload rows never reach the screen in the app. The reloaded rows exist
+  only when the store's reload reader runs before a project opens (tests,
+  and the harness, which reads the saved records back after opening).
+  The reloaded lines are right; whether they can show is a question for
+  review.
+
+## Round 8 section 2 proof
+
+- Gates: `tsc -b --noEmit`, lint, `check:inline-styles` and
+  `check:slava-css-scope` clean. `vite build` plus
+  `check-build-budget.mjs` pass: 446,099 bytes raw entry, 137,132 gzip.
+- Backend, isolated (temp HOME, TMPDIR and Nebula paths): 565 passed over
+  16 files.
+- Frontend, related files at 2 workers: 119 files, 15 failures, all
+  timeouts at load average 30. Rerun alone: GraphFileActions, Toolbar
+  and the r11 in-flight Undo file, 88 of 88; the lock ratchet and the r17
+  property file, 60 of 60.
+- Base check (b13d4c90): every new test fails there except the ones that
+  pin behaviour main already had (W1, W3b, both empty-sync forms, the
+  picker's ask used once) and the echo-forget test, which pins new code.
+- Mutation: 28 of 28 killed. The 29th guard (the `graph_unknown_params`
+  code) survived and was removed instead (section 60).
+- Live, 8797/5797 (canaries refused first, 0 requests to 8000-8010 or
+  5173, no real host): the late echo 3 of 3; "Undo the last 2 changes";
+  the refused Accept (neutral ink, role status, Accept enabled, the
+  proposal open, the event's limit {values, 20000}); focus on the canvas
+  after the focused card's Delete; "2 nodes selected", closing at none.
+  Four shots at 1440 in shots8, no duplicate md5s, each opened.

@@ -390,7 +390,11 @@ def test_the_zips_limits_carry_their_codes_and_limits(api, monkeypatch, limit, e
              "RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES": len(GRAPH) + 10}[limit]
     monkeypatch.setattr(api.main, limit, small)
     response = _post(api, _bundle_raw(GRAPH, extra=extra))
-    assert (response.status_code, response.json()) == (status, {"detail": detail, "code": code, field: small})
+    body = response.json()
+    # A member's own size, as the bundle declares it, for the person's line.
+    if code == "bundle_member_too_large":
+        assert body.pop("sizeBytes") == len(PNG_BYTES) * 20
+    assert (response.status_code, body) == (status, {"detail": detail, "code": code, field: small})
 
 
 def test_graph_json_past_its_limit_once_read_is_bad_size_metadata(api):
@@ -416,13 +420,17 @@ def test_files_that_couldnt_be_copied_are_bundle_restore_failed(api, monkeypatch
 
 def test_an_upload_past_the_limit_is_bundle_upload_too_large(api, monkeypatch):
     monkeypatch.setattr(api.main, "RESTORE_MAX_COMPRESSED_BYTES", 64)
-    response = _post(api, _bundle_raw(GRAPH))
+    raw = _bundle_raw(GRAPH)
+    response = _post(api, raw)
+    # The declared length is the upload's size, for the person's line.
     assert (response.status_code, response.json()) == (413, {
-        "detail": "Zip bundle exceeds the compressed upload limit", "code": "bundle_upload_too_large", "limitBytes": 64})
+        "detail": "Zip bundle exceeds the compressed upload limit", "code": "bundle_upload_too_large",
+        "sizeBytes": len(raw), "limitBytes": 64})
 
 
 def test_a_streamed_upload_past_the_limit_is_bundle_upload_too_large(api, monkeypatch):
-    # No Content-Length: the limit is caught while the body streams in.
+    # No Content-Length: the limit is caught while the body streams in, and
+    # the file's size isn't known (no sizeBytes).
     monkeypatch.setattr(api.main, "RESTORE_MAX_COMPRESSED_BYTES", 64)
     raw = _bundle_raw(GRAPH)
     response = api.client.post("/api/outputs/restore", content=iter([raw[:32], raw[32:]]), headers=ZIP)

@@ -139,6 +139,35 @@ describe('Pinned Inspector navigation clearance', () => {
     expect(screen.getByText('new-video')).toBeVisible();
   });
 
+  // Review 7 of PR #205 (inspector NIT-1, M13): the picker's ask is used once.
+  it('the picker\'s ask is used once: a node change soon after (an Undo bringing one back) leaves focus on the page', () => {
+    useUIStore.getState().setInspectorVisible(false);
+    renderWorkbench();
+    const anchor = document.createElement('button');
+    anchor.dataset.nodeInspectorAnchor = 'new-video';
+    anchor.getBoundingClientRect = () => rect(140, 100, 200, 160);
+    document.body.append(anchor);
+    act(() => {
+      resumeInspectorFocus();
+      useUIStore.getState().selectNode('new-video');
+      useUIStore.getState().setInspectorVisible(true);
+    });
+    advanceLayout();
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveFocus();
+    act(() => { (document.activeElement as HTMLElement).blur(); });
+    act(() => {
+      useUIStore.getState().selectNode('n2');
+      useUIStore.getState().setInspectorVisible(true);
+    });
+    advanceLayout();
+    act(() => {
+      useUIStore.getState().selectNode('new-video');
+      useUIStore.getState().setInspectorVisible(true);
+    });
+    advanceLayout();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('preserves an active navigation control when Inspector opens, changes selection, or reflows', () => {
     useUIStore.getState().setInspectorVisible(false);
     renderWorkbench();

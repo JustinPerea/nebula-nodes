@@ -339,12 +339,32 @@ export function NodeInspectorPopover() {
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
   // The shown node left the canvas (a Delete, an Undo, an agent): its card
   // took focus with it. Focus goes to the canvas, never to the page, so the
-  // next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin MEDIUM-1).
+  // next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin MEDIUM-1;
+  // GM r13 item 5). React Flow removes the card a render after the selection
+  // clears (it copies the nodes into its own store), so while focus is still in
+  // the leaving card, wait for the card to go, then move it (review 7 LOW-1).
   const shownBefore = useRef(selectedNodeId);
   useLayoutEffect(() => {
-    const left = shownBefore.current !== null && selectedNodeId === null;
+    const previous = shownBefore.current;
     shownBefore.current = selectedNodeId;
-    if (left && document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
+    if (previous === null || selectedNodeId !== null) return;
+    const toCanvas = () => {
+      if (document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
+    };
+    const active = document.activeElement;
+    const card = active instanceof Element ? active.closest('.react-flow__node') : null;
+    if (!card || card.getAttribute('data-id') !== previous) { toCanvas(); return; }
+    let frame = 0;
+    let frames = 0;
+    const waitForCard = () => {
+      if (card.isConnected && document.activeElement !== document.body && frames++ < 30) {
+        frame = requestAnimationFrame(waitForCard);
+        return;
+      }
+      toCanvas();
+    };
+    frame = requestAnimationFrame(waitForCard);
+    return () => cancelAnimationFrame(frame);
   }, [selectedNodeId]);
 
   if (!visible || (!selectedNodeId && !pinned) || !frame) return null;

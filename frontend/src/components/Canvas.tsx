@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
+import { noteCanvasSelectionDrag } from '../lib/canvasSelectionDrag';
 import { RUN_LOCK_VERBS, canvasWaitLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
@@ -224,7 +225,12 @@ export function CanvasFocusController() {
     const graph = useGraphStore.getState();
     if (!graph.nodes.some((node) => node.id === request.nodeId)) {
       clearRequest(request.requestId);
-      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null, { keepPin: true });
+      // The UI store names what the canvas still has selected: its one node,
+      // as the Inspector shows it, or none (review 7 of PR #205, inspector NIT-2).
+      if (ui.selectedNodeId === request.nodeId) {
+        const ringed = graph.nodes.filter((node) => node.selected);
+        ui.selectNode(ringed.length === 1 ? ringed[0].id : null, { keepPin: true });
+      }
       return;
     }
     if (!viewportInitialized || !internalNode?.measured.width || !internalNode.measured.height) return;
@@ -631,6 +637,11 @@ export function Canvas() {
     hideContextMenu();
   }, [hideContextMenu]);
 
+  // A drag-select: the unpinned Inspector follows it, and closes only if it
+  // ends with none selected (GM PR #205 r16 item 5).
+  const onSelectionStart = useCallback(() => noteCanvasSelectionDrag(true), []);
+  const onSelectionEnd = useCallback(() => noteCanvasSelectionDrag(false), []);
+
   // Right-click on empty canvas offers "Leave a note for agents here…".
   const onPaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
@@ -815,6 +826,8 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
+        onSelectionStart={onSelectionStart}
+        onSelectionEnd={onSelectionEnd}
         onPaneContextMenu={onPaneContextMenu}
         fitView={fitFirstNodes}
         defaultViewport={initialCanvasState.viewport ?? undefined}

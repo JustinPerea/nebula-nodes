@@ -129,6 +129,24 @@ describe('Canvas requested node focus', () => {
     expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
   });
 
+  // Review 7 of PR #205 (inspector NIT-2): the UI store names what the canvas still has selected.
+  it('a focus request for a missing node while one node is ringed: the UI store names that node, as the pinned Inspector shows it', () => {
+    useGraphStore.setState({ nodes: [node('motion'), { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, 'sibling', true, true]);
+  });
+
+  it('control: two ringed, a focus request for a missing node names none', () => {
+    useGraphStore.setState({ nodes: [{ ...node('motion'), selected: true }, { ...node('sibling'), selected: true }] });
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    expect(useUIStore.getState().selectedNodeId).toBeNull();
+  });
+
   it('a canvas replaced while a focus request waits: the pinned Inspector stays pinned and on screen, empty', () => {
     useUIStore.getState().setInspectorPinned(true);
     useUIStore.getState().requestCanvasNodeFocus('motion');

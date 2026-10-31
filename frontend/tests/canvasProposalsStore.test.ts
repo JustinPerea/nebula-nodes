@@ -247,3 +247,39 @@ describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', ()
       "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.");
   });
 });
+
+// GM PR #205 r16 item 2 (review 7 limits MEDIUM-1): an Accept that would leave
+// the canvas past Save's limits is refused on the click. GM's line names the
+// agent as the bar does; the proposal stays open and Accept stays live.
+describe('Accept that would make the canvas too complex to save', () => {
+  const refuse = async () => {
+    const { ProposalRequestError } = await import('../src/lib/canvasProposals');
+    api.acceptProposal.mockRejectedValueOnce(new ProposalRequestError(409,
+      "The person's Accept of Claude's proposal p_a was refused: This edit would leave the canvas nested more than 64 levels deep from its file's root, and the person's canvas can't save it. Nothing changed. Nest the value less deeply. The proposal is still open.",
+      { heading: "Couldn't accept the proposal.", code: 'proposal_too_complex' } as never));
+  };
+  it("says GM's line, naming the agent; the proposal stays open, and a second click sends again", async () => {
+    const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    await refuse();
+    await useCanvasProposalsStore.getState().accept('p_a');
+    const line = useCanvasProposalsStore.getState().errors.p_a;
+    expect(line).toBe(`Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask ${proposal('p_a').agent.name} to change it.`);
+    expect(isNeutralProposalLine(line)).toBe(true);
+    expect(useCanvasProposalsStore.getState().proposals.p_a).toBeDefined();
+    expect(useCanvasProposalsStore.getState().pending.p_a).toBeUndefined();
+    await refuse();
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(api.acceptProposal).toHaveBeenCalledTimes(2);
+  });
+  it('an agent with no name: "the agent", never "your"', async () => {
+    const { proposalTooComplexLine } = await import('../src/store/canvasProposalsStore');
+    expect(proposalTooComplexLine('Codex')).toBe('Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask Codex to change it.');
+    expect(proposalTooComplexLine('')).toBe('Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask the agent to change it.');
+    expect(proposalTooComplexLine(null)).toBe('Nebula couldn’t accept this because the canvas would be too complex to save. Reject it, or ask the agent to change it.');
+  });
+  it('control: another refusal keeps the alert style', async () => {
+    const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
+    expect(isNeutralProposalLine("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.")).toBe(false);
+  });
+});

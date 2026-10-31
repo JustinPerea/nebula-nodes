@@ -61,9 +61,9 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['a number out of range', 400, { detail: 'Invalid graph.json: a number is out of range: NaN', code: 'graph_unreadable_value' },
       'Part of this file holds a value Nebula can’t read.'],
     ['too many nodes', 413, { detail: 'graph.json contains too many nodes', code: 'graph_too_many_nodes', maxNodes: 10_000 },
-      'The canvas has more than 10,000 nodes.'],
+      'This file has more than 10,000 nodes.'],
     ['too many connections', 413, { detail: 'graph.json contains too many edges', code: 'graph_too_many_edges', maxEdges: 50_000 },
-      'The canvas has more than 50,000 connections.'],
+      'This file has more than 50,000 connections.'],
     ['too large', 413, { detail: 'graph.json is too large', code: 'graph_too_large',
       sizeBytes: 600 * 1024 * 1024, limitBytes: 528 * 1024 * 1024 },
       'This canvas is 600.0 MB. Nebula opens canvases up to 528 MB.'],
@@ -100,6 +100,11 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['bundle_expands_too_far', 413, 'Zip bundle expands beyond the restore limit', { limitBytes: 8 }, COMPLEX],
     ['bundle_unsafe_ratio', 413, 'Zip bundle member has an unsafe compression ratio', { maxRatio: 250 }, COMPLEX],
     ['bundle_restore_failed', 500, 'Could not restore zip bundle assets', {}, 'Its files couldn’t be copied. Try again.'],
+    // GM PR #205 r16 item 3: the sizes in the size lines' MB.
+    ['bundle_member_too_large', 413, 'Zip bundle member is too large',
+      { sizeBytes: 3 * 1024 ** 3, limitBytes: 256 * 1024 * 1024 }, 'One of its files is 3072.0 MB. Nebula opens files up to 256 MB.'],
+    ['bundle_upload_too_large', 413, 'Zip bundle exceeds the compressed upload limit',
+      { sizeBytes: 600 * 1024 * 1024 + 52_429, limitBytes: 528 * 1024 * 1024 }, 'This file is 600.1 MB. Nebula opens files up to 528 MB.'],
   ])('%s (%s): the line under the load heading', async (code, status, detail, fields, line) => {
     const { result, said, errors } = await loadBundleAnswering(answer(status, { detail, code, ...fields }));
     expect(result).toBeNull();
@@ -117,7 +122,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   it('the node line uses the limit the answer carries', async () => {
     const { said } = await loadBundleAnswering(answer(413,
       { detail: 'graph.json contains too many nodes', code: 'graph_too_many_nodes', maxNodes: 2_500 }));
-    expect(said).toHaveBeenCalledWith(`${LOAD} The canvas has more than 2,500 nodes.`);
+    expect(said).toHaveBeenCalledWith(`${LOAD} This file has more than 2,500 nodes.`);
   });
 
   it.each([
@@ -140,10 +145,10 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
 describe('bundleRefusalLine', () => {
   it('falls back to this tab’s limit when the answer’s is missing or not a positive whole number', () => {
     for (const maxNodes of [undefined, 0, -3, 1.5, '10', Number.NaN]) {
-      expect(bundleRefusalLine({ code: 'graph_too_many_nodes', maxNodes })).toBe('The canvas has more than 10,000 nodes.');
+      expect(bundleRefusalLine({ code: 'graph_too_many_nodes', maxNodes })).toBe('This file has more than 10,000 nodes.');
     }
     for (const maxEdges of [undefined, 0, '9']) {
-      expect(bundleRefusalLine({ code: 'graph_too_many_edges', maxEdges })).toBe('The canvas has more than 50,000 connections.');
+      expect(bundleRefusalLine({ code: 'graph_too_many_edges', maxEdges })).toBe('This file has more than 50,000 connections.');
     }
   });
 
@@ -153,5 +158,23 @@ describe('bundleRefusalLine', () => {
       { code: 'graph_too_large', sizeBytes: 0, limitBytes: 64 }]) {
       expect(bundleRefusalLine(body)).toBeNull();
     }
+  });
+});
+
+// GM PR #205 r16 item 3: the import's own checks, for a plain file and a
+// bundle's graph.json alike (backend _import_stage_refusal), by code.
+describe('the import’s own checks (GM #205 r16 item 3)', () => {
+  const NODE = 'This file uses a node this version of Nebula doesn’t have.';
+  it.each([
+    ['unknown_definition', NODE],
+    ['graph_unknown_port', NODE],
+    ['graph_cycle', 'This file is damaged or isn’t a Nebula canvas.'],
+    ['graph_invalid', 'This file is damaged or isn’t a Nebula canvas.'],
+  ])('%s: %s', (code, line) => {
+    expect(bundleRefusalLine({ code, detail: 'unknown node definition no-such-node' })).toBe(line);
+  });
+  it('a member or upload size with no numbers keeps the answer as it was', () => {
+    expect(bundleRefusalLine({ code: 'bundle_member_too_large', limitBytes: 8 })).toBeNull();
+    expect(bundleRefusalLine({ code: 'bundle_upload_too_large', sizeBytes: 9 })).toBeNull();
   });
 });

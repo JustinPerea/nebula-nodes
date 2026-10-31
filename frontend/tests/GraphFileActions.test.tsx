@@ -10,7 +10,11 @@ const mocks = vi.hoisted(() => ({
   fitView: vi.fn(), getViewport: vi.fn(), transform: [10, 20, 0.75],
   onSync: null as ((event: ExecutionEvent) => void) | null,
 }));
-vi.mock('../src/lib/graphFile', () => ({ saveToFile: mocks.saveToFile, loadFromFile: mocks.loadFromFile }));
+vi.mock('../src/lib/graphFile', async () => ({ saveToFile: mocks.saveToFile, loadFromFile: mocks.loadFromFile,
+  saveStepToFit: (await vi.importActual<typeof import('../src/lib/saveFixStep')>('../src/lib/saveFixStep')).saveStepToFit,
+  bundleRefusalLine: (await vi.importActual<typeof import('../src/lib/graphFile')>('../src/lib/graphFile')).bundleRefusalLine }));
+// Save hands saveToFile the step its shape line offers as a function, worked out only on a refusal.
+const stepSaveGot = () => (mocks.saveToFile.mock.lastCall?.[4] as (() => unknown) | undefined)?.();
 vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(), apiFetch: mocks.apiFetch,
 }));
@@ -114,7 +118,8 @@ describe('workspace-independent graph file actions', () => {
     rendered.rerender(<><GraphFileActions /><CommandPalette /></>);
     paletteCommand('Save canvas');
     await waitFor(() => expect(mocks.saveToFile).toHaveBeenCalledOnce());
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, { kind: 'none' });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, expect.any(Function));
+    expect(stepSaveGot()).toEqual({ kind: 'none' });
     expect(useUIStore.getState().viewMode).toBe(viewMode);
   });
 
@@ -124,7 +129,8 @@ describe('workspace-independent graph file actions', () => {
     try {
       render(<GraphFileActions />);
       await act(async () => { requestGraphSave(); });
-      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign', { kind: 'none' });
+      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign', expect.any(Function));
+      expect(stepSaveGot()).toEqual({ kind: 'none' });
     } finally {
       useProjectStore.setState(before, true);
     }
@@ -141,11 +147,14 @@ describe('workspace-independent graph file actions', () => {
       [[{ kind: 'snapshot', nodes: [], edges: [] }], { kind: 'person' }],
       [[agentStep, { kind: 'snapshot', nodes: [], edges: [] }], { kind: 'person' }],
       [[{ ...agentStep, source: 'window', agentName: null }], { kind: 'person' }],
+      [[{ ...agentStep, source: 'outside', agentName: null }], { kind: 'unknown' }],
+      [[{ kind: 'snapshot', nodes: [], edges: [] }, { ...agentStep, source: 'outside', agentName: null }], { kind: 'unknown' }],
     ] as const) {
       useGraphStore.setState({ undoStack: stack as never });
       mocks.saveToFile.mockClear();
       await act(async () => { requestGraphSave(); });
-      expect(mocks.saveToFile).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), undefined, step);
+      expect(mocks.saveToFile).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), undefined, expect.any(Function));
+      expect(stepSaveGot()).toEqual(step);
     }
   });
 
@@ -162,7 +171,8 @@ describe('workspace-independent graph file actions', () => {
     useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, { kind: 'none' });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, expect.any(Function));
+    expect(stepSaveGot()).toEqual({ kind: 'none' });
   });
 
   it.each(['create', 'cinema-editor'] as const)('loads from %s only after atomic backend confirmation', async (viewMode) => {
@@ -219,6 +229,14 @@ describe('workspace-independent graph file actions', () => {
     await act(async () => { requestGraphLoad(); });
     // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the reason.
     expect(notice()).toMatchObject({ text: "Nebula couldn’t load the canvas. Fixture import rejected", tone: 'error', offer: null });
+    // GM PR #205 r16 item 3: the import's own checks read GM's line by code, never the backend's words.
+    for (const [code, line] of [['unknown_definition', 'This file uses a node this version of Nebula doesn’t have.'],
+      ['graph_unknown_port', 'This file uses a node this version of Nebula doesn’t have.'],
+      ['graph_cycle', 'This file is damaged or isn’t a Nebula canvas.']]) {
+      mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'unknown node definition no-such-node', code }), { status: 400 }));
+      await act(async () => { requestGraphLoad(); });
+      expect(notice()?.text).toBe(`Nebula couldn’t load the canvas. ${line}`);
+    }
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
     await act(async () => { requestGraphLoad(); });
