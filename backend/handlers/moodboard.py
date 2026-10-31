@@ -7,7 +7,8 @@ from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
-from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images, steers
+from services.moodboard_analysis import (analysis_is_current, analyze_moodboard, predates_alpha,
+                                         rank_representative_images, steers)
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
 from services.stored_image_refs import is_outside_link
@@ -55,12 +56,15 @@ async def handle_moodboard_node(
     analysis = moodboard.get("analysis")
     if not analysis_is_current(moodboard, analysis):
         stale = isinstance(analysis, dict) and bool(analysis.get("styleBrief"))
+        before_alpha = stale and predates_alpha(moodboard, analysis)
         # It reads every image file, so it runs off the event loop.
         analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         if stale:
+            reason = ("The board's saved analysis was made before Nebula left transparent pixels out of the "
+                      "colors" if before_alpha else "The board changed after its saved analysis")
             analysis["warnings"] = [
                 *analysis.get("warnings", []),
-                "The board changed after its saved analysis, so this run analyzed it again. "
+                f"{reason}, so this run analyzed it again. "
                 "Analyze it in Moodboard Studio to save the new analysis.",
             ]
 

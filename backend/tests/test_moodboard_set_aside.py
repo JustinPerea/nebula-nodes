@@ -94,7 +94,7 @@ def test_set_aside_is_measured_never_steers() -> None:
 
     analysis = analyze_moodboard(board)
 
-    assert analysis["version"] == ANALYSIS_VERSION == 5
+    assert analysis["version"] == ANALYSIS_VERSION == 6
     # Measured: an entry with its number, its colours and setAside.
     entries = {item["id"]: item for item in analysis["images"]}
     assert [item["number"] for item in analysis["images"]] == [1, 2, 3, 4]

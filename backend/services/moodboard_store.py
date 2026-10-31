@@ -423,8 +423,9 @@ def _brief():
 
 def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
-    the startup migration hasn't written them yet), its layout fields and its
-    saved summary counting only the images that steer.
+    the startup migration hasn't written them yet), its layout fields, its
+    saved summary counting only the images that steer, and ``outdated`` on an
+    analysis made before alpha counted when the board has transparent images.
     ``layout_board``: also lay it out in memory (an old board gets the grid;
     services/moodboard_layout.ensure_layout). Nothing is written here."""
     board = _with_cover(_with_layout_fields(_with_image_defaults(board)))
@@ -440,6 +441,13 @@ def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str,
         board = with_steering_count(board)
     except Exception:  # an odd old analysis still opens, as it was saved
         logging.getLogger(__name__).exception("Moodboard %s: summary not recounted", board.get("id"))
+    try:
+        # An analysis from before alpha counted, of a board with transparent
+        # images, says it's out of date (moodboard_analysis.with_alpha_outdated).
+        from services.moodboard_analysis import with_alpha_outdated
+        board = with_alpha_outdated(board)
+    except Exception:  # an odd old analysis still opens, as it was saved
+        logging.getLogger(__name__).exception("Moodboard %s: alpha staleness not checked", board.get("id"))
     if layout_board:
         try:
             board = layout.ensure_layout(board)

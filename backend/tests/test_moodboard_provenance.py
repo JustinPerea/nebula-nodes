@@ -54,7 +54,7 @@ def _accent_board() -> dict:
 def test_each_board_colour_lists_its_source_images_by_board_number() -> None:
     analysis = analyze_moodboard(_accent_board())
 
-    assert analysis["version"] == ANALYSIS_VERSION == 5
+    assert analysis["version"] == ANALYSIS_VERSION == 6
     by_hex = {colour["hex"]: colour for colour in analysis["colors"]}
     navy, cream, sage = (c for c in analysis["colors"] if c["role"] == "dominant")
     assert [s["number"] for s in navy["sources"]] == [2] and navy["sources"][0]["id"] == "navy"

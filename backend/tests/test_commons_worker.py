@@ -67,6 +67,20 @@ async def test_analyzes_one_item_and_records_versions(store):
 
 
 @pytest.mark.asyncio
+async def test_the_analysis_records_the_assets_measurement_version(store):
+    from commons.measure import CODE_VERSION
+
+    new = add(store, seed=2).asset["id"]
+    old = add(store, seed=3).asset["id"]
+    with store.db.tx() as conn:  # measured before alpha counted
+        conn.execute("UPDATE assets SET code_version = 'measure-1' WHERE id = ?", (old,))
+    w = AnalysisWorker(store, reader=fake_reader(), load_avg=lambda: 1.0, budget=5)
+    assert await w.run_once() == "analyzed" and await w.run_once() == "analyzed"
+    assert effective(store, new)["analysis"]["code_version"] == CODE_VERSION == "measure-2"
+    assert effective(store, old)["analysis"]["code_version"] == "measure-1"
+
+
+@pytest.mark.asyncio
 async def test_invalid_output_is_rejected_whole_and_raw_kept(store):
     aid = add(store).asset["id"]
     bad = good_output(1)

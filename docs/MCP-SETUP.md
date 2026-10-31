@@ -4536,6 +4536,17 @@ nebula moodboard delete <board>
   (its part of the board share), largest first. `show` prints them as
   `#4 0.35%, #5 0.26%`. An analysis from before sources existed has none;
   `analyze` again to see them.
+- Colour counts alpha (analysis version 6, Commons `measure-2`): pixels
+  under alpha 16 of 255 aren't counted, the rest count by their alpha, and
+  a share is of what's seen. A fully transparent image has no colours: its
+  `analysis.images` entry has `transparent: true` and `colors: []`, and the
+  summary and `warnings` say `#N is fully transparent, so it adds no
+  colors.` A saved analysis older than version 6 on a board with an image
+  that has transparency is out of date: on every read its analysis carries
+  `outdated` (the line Moodboard Studio and `show` print), the dry run's
+  `saved` has `current: false` and the same `outdated`, and the Moodboard
+  node analyzes the board again. An older analysis of a board with no
+  transparency stays current, since its colours are the same.
 - `analyze --dry-run` (`moodboard_analyze` with `dry_run`) calls
   `POST /api/moodboards/{id}/analyze/dry-run`: the analysis and the brief
   generators would get, plus `changes` against what's saved (palette and

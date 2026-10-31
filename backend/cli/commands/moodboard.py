@@ -241,6 +241,9 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
         print(f"  Not analyzed since its last change. `nebula moodboard analyze {board.get('id')}`")
         return
     print("  Analysis:")
+    if analysis.get("outdated"):
+        # Made before alpha counted, on a board with transparent images.
+        print(f"    {analysis['outdated']} `nebula moodboard analyze {board.get('id')}`")
     if analysis.get("summary"):
         print(f"    {analysis['summary']}")
     _print_colours(analysis, board.get("id"))
@@ -319,6 +322,8 @@ def _print_dry_run(result: dict[str, Any]) -> None:
     saved = result.get("saved") or {}
     if not saved.get("analyzed"):
         print("  The board has no saved analysis, so everything below is new.")
+    elif saved.get("outdated"):
+        print(f"  {saved['outdated']}")
     elif not saved.get("current"):
         print("  The saved analysis is out of date, so the changes include edits to the board.")
     analysis = result.get("analysis") or {}

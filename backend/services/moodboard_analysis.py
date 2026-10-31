@@ -44,6 +44,7 @@ from urllib.parse import urlparse
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
+from cinema.color import ALPHA_MIN, has_transparency
 from commons.colour import delta_e00, hex_to_lab, lab_to_hex
 from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MERGE_DELTA_E, measure_image
 from services.file_access import ProtectedPathError, require_allowed_path
@@ -67,7 +68,15 @@ from services.stored_image_refs import is_outside_link
 # left out as the switch is. Nothing else moved and the hash is the same, so
 # no bump: a saved analysis that counted weight 0 reads with the new count
 # (``with_steering_count``, applied by the store on every read).
-ANALYSIS_VERSION = 5
+# 6: alpha counts (cinema.color.visible_pixels): a transparent pixel isn't a
+# colour, a partly transparent one counts by its alpha, and a fully
+# transparent image has no colours (``transparent: true`` on its entry, a line
+# in the summary). An image with no transparency measures exactly as in 5, so
+# a version 5 (or older) analysis stays current unless one of the board's
+# images has transparency (``predates_alpha``); then it reads as out of date,
+# with ``outdated`` saying why (``with_alpha_outdated``, on every read).
+ANALYSIS_VERSION = 6
+ALPHA_VERSION = 6
 PALETTE_SIZE = 8
 ACCENT_LIMIT = 4
 REPRESENTATIVE_LIMIT = 10
@@ -154,6 +163,12 @@ ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes th
 # An image saved before board writes were checked that links to another site.
 OUTSIDE_IMAGE_WARNING = ("#{number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
                          "gets it. Replace it with an upload in Moodboard Studio.")
+# An image with no visible pixel: every one is fully transparent.
+TRANSPARENT_IMAGE_LINE = "#{number} is fully transparent, so it adds no colors."
+# A saved analysis from before alpha counted, on a board with an image that
+# has transparency (``with_alpha_outdated``).
+ALPHA_OUTDATED = ("Made before Nebula left transparent pixels out of the colors, and this board has images "
+                  "with transparency. Analyze again to update it.")
 # The summary of a board with images none of which steers.
 NONE_STEER_SUMMARY = "No reference image steers this board: every one is set aside."
 # The same when the images that would steer are all links from outside Nebula
@@ -216,6 +231,8 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
     steering: list[dict[str, Any]] = []
     analyzed_urls: set[str] = set()
     warnings: list[str] = []
+    # The numbers of the images that steer but are fully transparent.
+    transparent: list[int] = []
     any_steers = False
 
     for number, img in numbered:
@@ -276,13 +293,20 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
             "saturation": measured["saturation"],
         })
         analyzed_urls.add(url)
-        if shapes:
+        if not colours:
+            # Every pixel is transparent: no colour, and no light or
+            # saturation to read. It says so rather than inventing one.
+            item["transparent"] = True
+            if shapes:
+                transparent.append(number)
+        elif shapes:
             weighted_colours.append(_Steering(weight, colours, number, item["id"]))
             steering.append(item)
         per_image.append(item)
 
     if per_image and not any_steers:
         warnings.append(ALL_SET_ASIDE_WARNING)
+    warnings.extend(TRANSPARENT_IMAGE_LINE.format(number=number) for number in transparent)
 
     dominant, accent = _roll_up(weighted_colours, thresholds.merge_delta_e)
     palette = [colour["hex"] for colour in dominant]
@@ -303,7 +327,7 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
         "modeIntent": _MODE_LABELS.get(mode, _MODE_LABELS["look"]),
         "strength": strength,
         "summary": _summary(mode, len(images), palette, accents, notes, has_images=bool(numbered),
-                            outside_only=outside_only),
+                            outside_only=outside_only, transparent=transparent),
         "tasteProfile": _taste_profile(mode, keywords, palette),
         "styleBrief": style_brief,
         "negativePrompt": ", ".join(avoids),
@@ -359,7 +383,8 @@ def dry_run(moodboard: dict[str, Any], thresholds: Thresholds | None = None) -> 
         "name": moodboard.get("name"),
         "thresholds": thresholds.as_json(),
         "defaults": Thresholds().as_json(),
-        "saved": {"analyzed": saved is not None, "current": analysis_is_current(moodboard, saved)},
+        "saved": {"analyzed": saved is not None, "current": analysis_is_current(moodboard, saved),
+                  **({"outdated": ALPHA_OUTDATED} if predates_alpha(moodboard, saved) else {})},
         "analysis": analysis,
         "brief": after,
         "changes": {
@@ -436,7 +461,63 @@ def analysis_is_current(moodboard: dict[str, Any], analysis: Any) -> bool:
         version = int(analysis.get("version") or 1)
     except (TypeError, ValueError):
         return False
-    return analysis.get("sourceHash") == source_hash(moodboard, version)
+    if analysis.get("sourceHash") != source_hash(moodboard, version):
+        return False
+    return not predates_alpha(moodboard, analysis)
+
+
+def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
+    """Whether a saved analysis was made before alpha counted (version 6) on a
+    board with an image that has transparency, so its colours are wrong: a
+    transparent background was measured as a colour (near black). An older
+    analysis of a board with no transparency is right as it stands."""
+    if not isinstance(analysis, dict):
+        return False
+    try:
+        version = int(analysis.get("version") or 1)
+    except (TypeError, ValueError):
+        return False
+    if version >= ALPHA_VERSION:
+        return False
+    for img in moodboard.get("images") or []:
+        if not isinstance(img, dict):
+            continue
+        path = resolve_moodboard_image_path(str(img.get("url") or ""))
+        if path is not None and _path_has_transparency(path):
+            return True
+    return False
+
+
+def _path_has_transparency(path: Path) -> bool:
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    return _file_has_transparency(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=1024)
+def _file_has_transparency(path: str, mtime_ns: int, size: int) -> bool:
+    """Whether an image file has a pixel less than opaque. The key's mtime
+    and size check a changed file again. An unreadable file is left to the
+    analysis, which says so."""
+    try:
+        with Image.open(path) as pil:
+            return has_transparency(pil)
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
+        return False
+
+
+def with_alpha_outdated(moodboard: dict[str, Any]) -> dict[str, Any]:
+    """The board with ``outdated`` on its saved analysis when that analysis
+    predates alpha (``predates_alpha``), in memory, so Moodboard Studio, the
+    CLI and MCP all say it's out of date; the board as it is otherwise."""
+    analysis = moodboard.get("analysis")
+    if not isinstance(analysis, dict) or analysis.get("outdated") == ALPHA_OUTDATED:
+        return moodboard
+    if not predates_alpha(moodboard, analysis):
+        return moodboard
+    return {**moodboard, "analysis": {**analysis, "outdated": ALPHA_OUTDATED}}
 
 
 _COUNTED = re.compile(r"^\d+ reference image\(s\) analyzed as ")
@@ -613,20 +694,22 @@ def _measure_file(path: str, mtime_ns: int, size: int, accent_min_chroma: float,
                   merge_delta_e: float) -> dict[str, Any]:
     """Measure one image file. The key's mtime and size re-measure a changed
     file; the thresholds keep a dry run's measurement apart from the default."""
+    # Alpha is kept: a transparent pixel isn't a colour (Commons' measure
+    # and _image_stats count it out). An opaque image reads as RGB, as before.
     with Image.open(path) as pil:
-        rgb = pil.convert("RGB")
-    measured = measure_image(rgb, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
+        image = pil.convert("RGBA") if has_transparency(pil) else pil.convert("RGB")
+    measured = measure_image(image, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
                              merge_delta_e=merge_delta_e)
-    lightness, saturation = _image_stats(rgb)
+    lightness, saturation = _image_stats(image)
     return {
-        "width": rgb.width,
-        "height": rgb.height,
+        "width": image.width,
+        "height": image.height,
         "colors": [
             {"hex": entry["hex"], "share": entry["share"], "accent": entry["is_accent"]}
             for entry in measured["palette"]
         ],
-        "lightness": round(lightness, 3),
-        "saturation": round(saturation, 3),
+        "lightness": None if lightness is None else round(lightness, 3),
+        "saturation": None if saturation is None else round(saturation, 3),
     }
 
 
@@ -755,13 +838,28 @@ def _clamp_float(raw: Any, default: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
-def _image_stats(img: Image.Image) -> tuple[float, float]:
-    arr = np.asarray(img.resize((64, 64), Image.Resampling.BILINEAR), dtype=np.float64)
-    maxc = arr.max(axis=2)
-    minc = arr.min(axis=2)
-    lightness = float(((maxc + minc) / 2.0).mean())
+def _image_stats(img: Image.Image) -> tuple[float | None, float | None]:
+    """Mean lightness and saturation (0-255). An RGBA image counts each pixel
+    by its alpha and leaves out those under ALPHA_MIN (Pillow's RGBA resize
+    premultiplies, so colours stay straight); a fully transparent one has
+    neither (None, None). An RGB image reads as before."""
+    if img.mode != "RGBA":
+        arr = np.asarray(img.resize((64, 64), Image.Resampling.BILINEAR), dtype=np.float64)
+        maxc = arr.max(axis=2)
+        minc = arr.min(axis=2)
+        lightness = float(((maxc + minc) / 2.0).mean())
+        saturation = np.where(maxc == 0, 0.0, (maxc - minc) / np.maximum(maxc, 1.0) * 255.0)
+        return lightness, float(saturation.mean())
+    rgba = np.asarray(img.resize((64, 64), Image.Resampling.BILINEAR), dtype=np.float64).reshape(-1, 4)
+    seen = rgba[:, 3] >= ALPHA_MIN
+    if not seen.any():
+        return None, None
+    arr, weights = rgba[seen, :3], rgba[seen, 3] / 255.0
+    maxc = arr.max(axis=1)
+    minc = arr.min(axis=1)
+    lightness = float(np.average((maxc + minc) / 2.0, weights=weights))
     saturation = np.where(maxc == 0, 0.0, (maxc - minc) / np.maximum(maxc, 1.0) * 255.0)
-    return lightness, float(saturation.mean())
+    return lightness, float(np.average(saturation, weights=weights))
 
 
 def _weighted_mean(images: list[dict[str, Any]], value: Any) -> float:
@@ -799,11 +897,12 @@ def _keywords_from_analysis(
 
 
 def _summary(mode: str, count: int, palette: list[str], accents: list[str], notes: str, *,
-             has_images: bool = False, outside_only: bool = False) -> str:
+             has_images: bool = False, outside_only: bool = False, transparent: list[int] | None = None) -> str:
     """``count``: the images that steer (outside links left out). ``has_images``:
     the board has any, so none steering means every one is set aside, not an
     empty board; ``outside_only``: the ones that would steer are all links
-    from outside Nebula."""
+    from outside Nebula; ``transparent``: the numbers of those that steer but
+    are fully transparent, each said in a line of its own."""
     if count == 0:
         if outside_only:
             return OUTSIDE_ONLY_SUMMARY
@@ -812,8 +911,10 @@ def _summary(mode: str, count: int, palette: list[str], accents: list[str], note
         return "Empty moodboard; add images before using this as a strong creative reference."
     palette_text = ", ".join(palette[:5]) if palette else "no local palette extracted"
     accent_text = f" Accents: {', '.join(accents)}." if accents else ""
+    clear_text = "".join(f" {TRANSPARENT_IMAGE_LINE.format(number=number)}" for number in transparent or [])
     note_text = f" Notes emphasize: {notes[:180]}" if notes else ""
-    return f"{count} reference image(s) analyzed as {mode}. Palette: {palette_text}.{accent_text}{note_text}"
+    return (f"{count} reference image(s) analyzed as {mode}. Palette: {palette_text}.{accent_text}{clear_text}"
+            f"{note_text}")
 
 
 def _taste_profile(mode: str, keywords: list[str], palette: list[str]) -> str:

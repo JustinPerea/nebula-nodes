@@ -182,6 +182,58 @@ def _to_rgb_array(img: Image.Image) -> np.ndarray:
     return np.asarray(img, dtype=np.uint8)
 
 
+# ---------------------------------------------------------------------------
+# Alpha-aware pixels: the one way Nebula reads colour from an image
+# ---------------------------------------------------------------------------
+
+# A pixel below this alpha (of 255) isn't counted: about 6% coverage, the
+# faint fringe of an antialiased edge or a haze whose colour, once stored in
+# 8 bits, says little about what's seen. Above it a pixel counts by its alpha
+# (alpha / 255), the part of it that covers what's behind.
+ALPHA_MIN = 16
+# The longest edge pixels are read at, by NEAREST resize: no blending, so
+# each pixel keeps its own colour and alpha.
+PIXELS_MAX_DIM = 256
+
+
+def has_transparency(img: Image.Image) -> bool:
+    """Whether any pixel of ``img`` is less than fully opaque: an alpha
+    channel that isn't all 255, or a palette or tRNS transparency."""
+    if not img.has_transparency_data:
+        return False
+    return img.convert("RGBA").getchannel("A").getextrema()[0] < 255
+
+
+def visible_pixels(img: Image.Image, max_dim: int | None = PIXELS_MAX_DIM) -> tuple[np.ndarray, np.ndarray | None]:
+    """The pixels of ``img`` whose colour is seen, for measuring colour.
+
+    Returns ``(rgb, weights)``: an (N, 3) uint8 array of straight (not
+    premultiplied, never flattened onto black or white) colours, and each
+    pixel's weight, its alpha / 255. Pixels under ``ALPHA_MIN`` are left out,
+    so a fully transparent image gives no pixels at all.
+
+    An image with no transparency gives every pixel and ``weights`` None:
+    exactly the pixels Nebula read before alpha counted (``convert("RGB")``,
+    NEAREST resize to ``max_dim``), so an opaque image measures byte for
+    byte as it did.
+    """
+    def _small(image: Image.Image) -> Image.Image:
+        w, h = image.size
+        if max_dim and max(w, h) > max_dim:
+            scale = max_dim / float(max(w, h))
+            image = image.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.NEAREST)
+        return image
+
+    if not has_transparency(img):
+        rgb = np.asarray(_small(img.convert("RGB")), dtype=np.uint8)
+        return rgb.reshape(-1, 3), None
+    # PNG and Pillow's RGBA hold straight alpha; a premultiplied mode
+    # (RGBa, La) is un-premultiplied by the conversion.
+    rgba = np.asarray(_small(img.convert("RGBA")), dtype=np.uint8).reshape(-1, 4)
+    keep = rgba[:, 3] >= ALPHA_MIN
+    return rgba[keep, :3].copy(), rgba[keep, 3].astype(np.float64) / 255.0
+
+
 def _array_to_image(arr: np.ndarray) -> Image.Image:
     """(H, W, 3) float/int array → clipped uint8 RGB Pillow image."""
     clipped = np.clip(np.rint(arr), 0, 255).astype(np.uint8)
@@ -193,13 +245,20 @@ def _array_to_image(arr: np.ndarray) -> Image.Image:
 # ---------------------------------------------------------------------------
 
 
-def _kmeans_lab(points: np.ndarray, k: int, seed: int = _KMEANS_SEED) -> np.ndarray:
+def _kmeans_lab(points: np.ndarray, k: int, seed: int = _KMEANS_SEED,
+                weights: np.ndarray | None = None) -> np.ndarray:
     """Deterministic Lloyd's k-means over (N, 3) Lab points.
 
     Uses k-means++ seeding driven by a seeded RNG so cluster centres are
     reproducible. Returns the (k, 3) cluster centres sorted by lightness (L)
     so the palette order is stable.
+
+    ``weights`` (N,), from :func:`visible_pixels`: each point counts by its
+    weight, in the seeding and in every centre. None is the unweighted
+    k-means, unchanged.
     """
+    if weights is not None:
+        return _kmeans_lab_weighted(points, k, seed, np.asarray(weights, dtype=np.float64))
     rng = np.random.default_rng(seed)
     n = points.shape[0]
     k = max(1, min(k, n))
@@ -240,6 +299,40 @@ def _kmeans_lab(points: np.ndarray, k: int, seed: int = _KMEANS_SEED) -> np.ndar
     return centroids[order]
 
 
+def _kmeans_lab_weighted(points: np.ndarray, k: int, seed: int, weights: np.ndarray) -> np.ndarray:
+    """:func:`_kmeans_lab` with each point counting by its weight."""
+    rng = np.random.default_rng(seed)
+    n = points.shape[0]
+    k = max(1, min(k, n))
+    first = int(rng.choice(n, p=weights / weights.sum()))
+    centers = [points[first]]
+    closest_sq = np.sum((points - centers[0]) ** 2, axis=1)
+    for _ in range(1, k):
+        mass = closest_sq * weights
+        total = float(mass.sum())
+        if total <= 0.0:
+            centers.append(points[int(rng.integers(0, n))])
+            continue
+        idx = int(rng.choice(n, p=mass / total))
+        centers.append(points[idx])
+        closest_sq = np.minimum(closest_sq, np.sum((points - points[idx]) ** 2, axis=1))
+
+    centroids = np.asarray(centers, dtype=np.float64)
+    for _ in range(_KMEANS_ITERS):
+        labels = np.argmin(np.sum((points[:, None, :] - centroids[None, :, :]) ** 2, axis=2), axis=1)
+        mass = np.bincount(labels, weights=weights, minlength=k)
+        new_centroids = centroids.copy()
+        for j in range(k):
+            if mass[j] > 0:
+                members = labels == j
+                new_centroids[j] = (points[members] * weights[members, None]).sum(axis=0) / mass[j]
+        if np.allclose(new_centroids, centroids):
+            centroids = new_centroids
+            break
+        centroids = new_centroids
+    return centroids[np.argsort(centroids[:, 0])]
+
+
 def extract_palette(img: Image.Image, k: int = 6) -> list[str]:
     """Extract a ``k``-color palette from ``img`` via k-means in CIELAB.
 
@@ -247,23 +340,17 @@ def extract_palette(img: Image.Image, k: int = 6) -> list[str]:
     of ``#rrggbb`` strings ordered from darkest to lightest. Large images are
     downsampled to keep clustering fast without changing the result materially
     (the resize is deterministic too).
+
+    Alpha counts (:func:`visible_pixels`): transparent pixels are left out
+    and partly transparent ones count by their alpha, so a transparent
+    background never reads as black. A fully transparent image has no
+    palette: the list is empty.
     """
-    rgb = _to_rgb_array(img)
-
-    # Deterministic downsample for speed on big inputs.
-    h, w = rgb.shape[:2]
-    max_dim = 256
-    if max(h, w) > max_dim:
-        scale = max_dim / float(max(h, w))
-        small = img.convert("RGB").resize(
-            (max(1, int(w * scale)), max(1, int(h * scale))),
-            Image.Resampling.NEAREST,
-        )
-        rgb = np.asarray(small, dtype=np.uint8)
-
-    pixels = rgb.reshape(-1, 3).astype(np.float64)
-    lab = rgb_to_lab(pixels)
-    centers_lab = _kmeans_lab(lab, k)
+    pixels, weights = visible_pixels(img)
+    if pixels.shape[0] == 0:
+        return []
+    lab = rgb_to_lab(pixels.astype(np.float64))
+    centers_lab = _kmeans_lab(lab, k, weights=weights)
     centers_rgb = lab_to_rgb(centers_lab)
     centers_rgb = np.clip(np.rint(centers_rgb), 0, 255).astype(int)
 

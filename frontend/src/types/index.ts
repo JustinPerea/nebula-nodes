@@ -597,6 +597,10 @@ export interface MoodboardAnalysis {
    *  they never steer. */
   images: Array<MoodboardAnalysisImage & Record<string, unknown>>;
   warnings: string[];
+  /** Set on read, never saved by the analyzer: why this saved analysis is
+   *  out of date (one made before alpha counted, on a board with transparent
+   *  images). */
+  outdated?: string;
 }
 
 /** One image a board colour comes from (analysis version 4 on). */

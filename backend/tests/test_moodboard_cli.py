@@ -1361,3 +1361,39 @@ def test_show_says_a_board_at_strength_zero_sends_nothing(capsys, monkeypatch):
     shown = capsys.readouterr().out
     assert "Brief sent to generators" not in shown
     assert "not sent: board strength is 0" in shown and "Quiet coastal mornings." in shown
+
+
+# -- alpha: transparent pixels aren't a colour (tests/test_colour_alpha.py) ---------------
+
+def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_path, capsys):
+    import re
+
+    from services.moodboard_analysis import ALPHA_OUTDATED, analyze_moodboard
+    from services.moodboard_store import MoodboardStore
+    from tests.test_colour_alpha import clear, mark_74
+
+    folder = tmp_path / "sprites"
+    folder.mkdir()
+    mark_74().save(folder / "1-mark.png")
+    clear().save(folder / "2-clear.png")
+    _cli(app, ["moodboard", "new", "Sprites", str(folder)], capsys)
+    board = boards.get_board(app.api, "sprites")
+
+    out = _cli(app, ["moodboard", "analyze", board["id"]], capsys)
+    assert re.search(r"#111413\s+90%\s+#1 90%", out) and re.search(r"#e8593c\s+10%\s+#1 10%", out)
+    assert "#2 is fully transparent, so it adds no colors." in out
+    assert "#040" not in out and "#000000" not in out
+
+    analyzed = mcp_server.moodboard_analyze(board["id"])["analysis"]
+    assert analyzed["palette"] == ["#111413", "#e8593c"]
+    assert [c["share"] for c in analyzed["colors"]] == [0.9, 0.1]
+    assert analyzed["images"][1]["transparent"] is True and "outdated" not in analyzed
+
+    # An analysis saved before alpha counted reads as out of date everywhere.
+    store = MoodboardStore()
+    store.update(board["id"], analysis={**analyze_moodboard(store.get(board["id"])), "version": 5})
+    assert mcp_server.moodboard_get(board["id"])["analysis"]["outdated"] == ALPHA_OUTDATED
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert f"{ALPHA_OUTDATED} `nebula moodboard analyze {board['id']}`" in out
+    out = _cli(app, ["moodboard", "analyze", board["id"], "--dry-run"], capsys)
+    assert ALPHA_OUTDATED in out and "changes include edits to the board" not in out

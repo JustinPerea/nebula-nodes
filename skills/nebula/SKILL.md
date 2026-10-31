@@ -518,6 +518,12 @@ nebula moodboard delete <board>
   `show`, and the colour's share of that image); `--json` has the full
   `sources` (number, id, share, contribution). An older analysis has none
   until you `analyze` again.
+- Colours are what's seen: transparent pixels don't count and partly
+  transparent ones count by their alpha, so a sprite or logo on a clear
+  background gives its own colours, not black. A fully transparent image
+  adds none, and the summary says so (`#2 is fully transparent, so it adds
+  no colors.`). An analysis saved before this, on a board with transparent
+  images, carries `outdated` saying so; `analyze` again to update it.
 - `analyze --dry-run` shows what analyzing would give and what would change
   (palette and accents added, removed or reordered; the brief generators get;
   the negatives), and saves nothing, so you can run it without asking. With

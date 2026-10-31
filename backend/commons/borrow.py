@@ -217,10 +217,13 @@ def run_fidelity(store, borrowing_id: str) -> dict:
         return _set_fidelity(store, borrowing_id, {"status": "unverifiable", "reason": "output is not an image"})
     if attribute == "palette":
         try:
-            palette = measure_image(media.load_image(data, sniffed.mime))["palette"]
+            palette = measure_image(media.load_image(data, sniffed.mime, keep_alpha=True))["palette"]
         except media.MediaError as exc:
             return _set_fidelity(store, borrowing_id,
                                  {"status": "unverifiable", "reason": f"output unreadable: {exc}"})
+        if not palette:
+            return _set_fidelity(store, borrowing_id,
+                                 {"status": "unverifiable", "reason": "output is fully transparent, so it has no palette"})
         target = hex_to_lab(b["value"]["hex"])
         best = min(float(delta_e00(hex_to_lab(p["hex"]), target)) for p in palette)
         return _set_fidelity(store, borrowing_id, {"status": "pass" if best <= PALETTE_TOLERANCE else "fail",

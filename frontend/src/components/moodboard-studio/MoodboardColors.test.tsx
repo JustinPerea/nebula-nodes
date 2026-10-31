@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 
-import { BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
+import { AnalysisOutdated, BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
 import { formatShare, sourcesLabel } from './colorSources';
 import type { MoodboardAnalysis, MoodboardColor } from '../../types';
 
@@ -62,6 +62,22 @@ describe('MoodboardColors', () => {
     expect(screen.getByRole('listitem').textContent).toBe('#1e285a40%');
     expect(screen.getByText('Analyze again to see which images each color comes from.')).toBeTruthy();
     expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
+  });
+
+  it('says when an analysis was made before transparent pixels were left out', () => {
+    const line = 'Made before Nebula left transparent pixels out of the colors, and this board has images with '
+      + 'transparency. Analyze again to update it.';
+    const old = analysis({ version: 3, outdated: line, colors: [{ ...NAVY, sources: undefined }] });
+    const { container } = render(<><AnalysisOutdated analysis={old} /><SourcesOutdated analysis={old} /></>);
+    expect(container.textContent).toBe(line);
+    expect(container.querySelectorAll('.moodboard-analysis__outdated')).toHaveLength(1);
+  });
+
+  it('keeps the older analyzer note for version 1 and says nothing for a current analysis', () => {
+    const { container, rerender } = render(<AnalysisOutdated analysis={analysis({ version: 1 })} />);
+    expect(container.textContent).toContain('Made by the older analyzer');
+    rerender(<AnalysisOutdated analysis={analysis({ version: 6 })} />);
+    expect(container.textContent).toBe('');
   });
 
   it('falls back to plain swatches for an analysis with no colour list', () => {

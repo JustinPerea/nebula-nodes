@@ -96,8 +96,12 @@ _PIL_FORMATS = {"image/jpeg": "JPEG", "image/png": "PNG", "image/gif": "GIF", "i
                 "image/heic": "PNG"}  # HEIC arrives here already converted to PNG by sips
 
 
-def load_image(data: bytes, mime: str) -> Image.Image:
+def load_image(data: bytes, mime: str, *, keep_alpha: bool = False) -> Image.Image:
     """Decode an untrusted image.
+
+    - RGB by default. ``keep_alpha``: an image with transparency comes back
+      RGBA, for measuring its colour (commons.measure counts alpha); one
+      without comes back RGB either way.
 
     - Pillow may only use the format the magic-byte sniffer chose, so the
       validator and the decoder can't disagree about what the bytes are.
@@ -118,6 +122,8 @@ def load_image(data: bytes, mime: str) -> Image.Image:
             raise MediaError(f"image has too many pixels: {img.width}x{img.height} exceeds {limit}", "too_large")
         img.seek(0)
         img.load()
+        if keep_alpha and img.has_transparency_data:
+            return img.convert("RGBA")
         return img.convert("RGB")
     except Image.DecompressionBombError as exc:
         raise MediaError(f"image has too many pixels: {exc}", "too_large") from exc

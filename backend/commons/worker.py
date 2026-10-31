@@ -95,7 +95,10 @@ class AnalysisWorker:
             return "idle"
         self.state = "analyzing"
         vocab = load_vocabulary()
-        common = dict(prompt_version=PROMPT_VERSION, model_id=MODEL_ID, vocab_version=vocab.version)
+        # The measurement the reader is given is the asset's, so the analysis
+        # records that version (measure-1 for an asset measured before alpha counted).
+        common = dict(prompt_version=PROMPT_VERSION, model_id=MODEL_ID, vocab_version=vocab.version,
+                      code_version=asset.get("code_version") or "measure-1")
         try:
             data = store.blob_path(asset["blob_key"]).read_bytes()
             png = media.encode_png(media.load_image(data, asset["mime"]), max_edge=1568)
@@ -136,6 +139,6 @@ class AnalysisWorker:
             records.write_analysis_ok, store, asset["id"], fields=fields, raw_output=result.raw or "",
             fewshot_ids=shot_ids, prompt_version=PROMPT_VERSION, model_id=result.model or MODEL_ID,
             vocab_version=vocab.version, candidates=candidates, proposed_regions=regions,
-            duration_ms=result.duration_ms)
+            duration_ms=result.duration_ms, code_version=common["code_version"])
         self.state = "running"
         return "analyzed"

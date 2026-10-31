@@ -124,8 +124,17 @@ async def handle_cinema_color(
                 raise with_person_line(
                     ValueError(f"Source image not found: {source_ref}"),
                     "The node's palette source image can't be found. Choose it again, or clear it.")
+            # The source's own pixels, alpha and all: a transparent
+            # background isn't a colour to match (cinema.color.visible_pixels).
             with Image.open(require_allowed_path(source_path)) as src_img:
-                swatches = extract_palette(src_img.convert("RGB"))
+                swatches = extract_palette(src_img)
+            if not swatches:
+                raise with_person_line(
+                    ValueError(f"Source image {source_ref} is fully transparent, so it has no palette to match. "
+                               "Choose a source image with visible pixels, or add hex swatches to the palette."),
+                    f"The image in “{field_label('cinema-color', 'source_image')}” is fully transparent, so it has "
+                    f"no colors to match. Choose another image, or add hex swatches to "
+                    f"“{field_label('cinema-color', 'palette')}”.")
 
     # An empty palette would pass the image through unchanged, which reads as
     # "the node did nothing". Surface it as actionable feedback instead of a
