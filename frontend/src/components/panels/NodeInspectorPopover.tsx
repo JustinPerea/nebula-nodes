@@ -7,6 +7,8 @@ import { Inspector } from './Inspector';
 import { InspectorFootContext } from './inspectorFootContext';
 import { ScrollFade } from '../ScrollFade';
 import { floatingBottomLimit, floatingTopLimit } from '../../lib/bottomBar';
+import { canvasFocusTarget } from '../../lib/noticeFocus';
+import { inspectorFocusResumeWaiting, takeInspectorFocusResume } from '../../lib/inspectorFocusResume';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
@@ -321,15 +323,29 @@ export function NodeInspectorPopover() {
   }, []);
 
   // A confirmed next-step picker unmounts its focused choice. Resume keyboard
-  // work in the Inspector only when focus was lost; preserve an active control.
+  // work in the Inspector only then (it asks: resumeInspectorFocus), and only
+  // when focus was lost; preserve an active control. Never for a node an
+  // Undo or a Redo brought back, or any other way the shown node changed
+  // (review 6 of PR #205, inspector-pin MEDIUM-1; GM r13 item 5: focus stays
+  // on the canvas, and the Inspector updates without taking it).
   const hasFrame = Boolean(frame);
   useLayoutEffect(() => {
     if (!visible || !selectedNodeId || !hasFrame || frame?.suspended
-      || document.activeElement !== document.body) return;
+      || document.activeElement !== document.body || !inspectorFocusResumeWaiting()) return;
+    takeInspectorFocusResume();
     popoverRef.current?.querySelector<HTMLElement>(
       '.node-inspector-popover__body input:not(:disabled), .node-inspector-popover__body textarea:not(:disabled), .node-inspector-popover__body select:not(:disabled)',
     )?.focus();
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
+  // The shown node left the canvas (a Delete, an Undo, an agent): its card
+  // took focus with it. Focus goes to the canvas, never to the page, so the
+  // next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin MEDIUM-1).
+  const shownBefore = useRef(selectedNodeId);
+  useLayoutEffect(() => {
+    const left = shownBefore.current !== null && selectedNodeId === null;
+    shownBefore.current = selectedNodeId;
+    if (left && document.activeElement === document.body) canvasFocusTarget()?.focus({ preventScroll: true });
+  }, [selectedNodeId]);
 
   if (!visible || (!selectedNodeId && !pinned) || !frame) return null;
 

@@ -114,7 +114,7 @@ describe('workspace-independent graph file actions', () => {
     rendered.rerender(<><GraphFileActions /><CommandPalette /></>);
     paletteCommand('Save canvas');
     await waitFor(() => expect(mocks.saveToFile).toHaveBeenCalledOnce());
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, { kind: 'none' });
     expect(useUIStore.getState().viewMode).toBe(viewMode);
   });
 
@@ -124,7 +124,7 @@ describe('workspace-independent graph file actions', () => {
     try {
       render(<GraphFileActions />);
       await act(async () => { requestGraphSave(); });
-      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign');
+      expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], expect.anything(), 'Glass campaign', { kind: 'none' });
     } finally {
       useProjectStore.setState(before, true);
     }
@@ -132,6 +132,23 @@ describe('workspace-independent graph file actions', () => {
 
   // Review 4 of PR #205, NIT-1: the save's own catch (a module or bundling
   // throw that never reached graphFile's own notice) says the canvas heading.
+  it('hands Save the newest Undo step, so its shape line offers an Undo that works (GM PR #205 r13 item 1)', async () => {
+    render(<GraphFileActions />);
+    const agentStep = { kind: 'foreign', source: 'agent', agentName: 'Claude', before: { nodes: {}, edges: {} },
+      after: { nodes: {}, edges: {} }, at: 0 };
+    for (const [stack, step] of [
+      [[agentStep], { kind: 'agent', name: 'Claude' }],
+      [[{ kind: 'snapshot', nodes: [], edges: [] }], { kind: 'person' }],
+      [[agentStep, { kind: 'snapshot', nodes: [], edges: [] }], { kind: 'person' }],
+      [[{ ...agentStep, source: 'window', agentName: null }], { kind: 'person' }],
+    ] as const) {
+      useGraphStore.setState({ undoStack: stack as never });
+      mocks.saveToFile.mockClear();
+      await act(async () => { requestGraphSave(); });
+      expect(mocks.saveToFile).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), undefined, step);
+    }
+  });
+
   it('a save that throws before its own notice says "Nebula couldn’t save the canvas." then the reason', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mocks.saveToFile.mockRejectedValueOnce(new Error('bundle broke'));
@@ -145,7 +162,7 @@ describe('workspace-independent graph file actions', () => {
     useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined);
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 }, undefined, { kind: 'none' });
   });
 
   it.each(['create', 'cinema-editor'] as const)('loads from %s only after atomic backend confirmation', async (viewMode) => {
@@ -233,6 +250,12 @@ describe('workspace-independent graph file actions', () => {
       await act(async () => { requestGraphLoad(); });
       expect(useGraphStore.getState().nodes[0].id).toBe('n8');
       expect(noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', false);
+      // A picker that gives no file name: the line names "the canvas".
+      noteLoadedGraph.mockClear();
+      mocks.loadFromFile.mockResolvedValueOnce(pickedGraph());
+      mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ nodes: [node('n9')], edges: [] }), { status: 200 }));
+      await act(async () => { requestGraphLoad(); });
+      expect(noteLoadedGraph).toHaveBeenCalledWith('the canvas', false);
       // A refused import opens nothing, so there is nothing to note.
       noteLoadedGraph.mockClear();
       mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));

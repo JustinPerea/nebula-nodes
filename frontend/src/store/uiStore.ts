@@ -704,7 +704,24 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   zoomTimelineOut: () => set((s) => ({ timelineZoom: Math.max(1, s.timelineZoom / 2) })),
   resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
-  selectNode: (nodeId, options) =>
+  selectNode: (nodeId, options) => {
+    // GM PR #205 r12: the Inspector and the rings agree. A node named for the
+    // Inspector (the command palette, a focus request) while the canvas has
+    // others selected is selected alone, as a click on it would. Checked once
+    // the event is done: a card's own click names it before the canvas has
+    // added it to the selection (a Shift-click keeps the others).
+    if (nodeId !== null) {
+      queueMicrotask(() => {
+        if (get().selectedNodeId !== nodeId) return;
+        const { nodes } = useGraphStore.getState();
+        if (!nodes.some((node) => node.selected && node.id !== nodeId) || !nodes.some((node) => node.id === nodeId)
+          || nodes.some((node) => node.id === nodeId && node.selected)) return;
+        useGraphStore.setState({ nodes: nodes.map((node) => {
+          const want = node.id === nodeId;
+          return Boolean(node.selected) === want ? node : { ...node, selected: want };
+        }) });
+      });
+    }
     set((state) => {
       const keep = state.inspectorPinned && (nodeId !== null || options?.keepPin === true);
       return {
@@ -719,7 +736,8 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
           },
         },
       };
-    }),
+    });
+  },
 
   requestCanvasNodeFocus: (nodeId) => {
     const targetId = nodeId.trim();
@@ -767,7 +785,10 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
       inspectorPinned: pinned,
       panels: {
         ...state.panels,
-        inspector: { ...state.panels.inspector, visible: pinned ? true : state.panels.inspector.visible },
+        // Unpinning the empty Inspector closes it, as the screen does: the
+        // store and the screen agree (review 6 inspector-pin NIT-1).
+        inspector: { ...state.panels.inspector,
+          visible: pinned ? true : state.selectedNodeId === null ? false : state.panels.inspector.visible },
       },
     })),
 

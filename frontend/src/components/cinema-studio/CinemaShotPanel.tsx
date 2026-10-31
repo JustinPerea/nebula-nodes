@@ -340,17 +340,18 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
                   <span className="cinema-reference-upload__name">{upload.name}</span>
                   <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
-                    {/* GM's WRAP rule: with Retry shown, the reason drops its own "try again". */}
+                    {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
+                  (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                     {upload.status === 'uploading' ? 'Uploading…'
                       : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
                         : upload.error ?? "Couldn't upload this image."}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {upload.status === 'error' && upload.canRetry && (
-                      <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
-                        {...lock.act({ offline: true })}>Retry</button>
+                      <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Try again uploading “${upload.name}”`}
+                        {...lock.act({ offline: true })}>Try again</button>
                     )}
-                    <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
+                    <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove “${upload.name}”`}>Remove</button>
                   </div>
                 </div>
               ))}

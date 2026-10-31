@@ -50,17 +50,34 @@ export const GRAPH_MAX_VALUES = 1_000_000;
  * check ran; `detail`, the engine's exact reason, for the log. */
 export class GraphStructureLimitError extends FailureNotice {
   readonly detail: string;
+  /** The shape walk's cause, when it was one: too complex, or a value. */
+  readonly shape?: 'complex' | 'value';
 
-  constructor(reason: string, detail = reason) {
+  constructor(reason: string, detail = reason, shape?: 'complex' | 'value') {
     super('', reason);
     this.name = 'GraphStructureLimitError';
     this.detail = detail;
+    if (shape) this.shape = shape;
   }
 }
 
-/** Where a shape check ran: a Save, or a file being opened (Load canvas, and
- * whether Load canvas would open a downloaded edits file). */
-export type GraphCheckUse = 'save' | 'open';
+/** Where a shape check ran: a Save, a file being opened (Load canvas, and
+ * whether Load canvas would open a downloaded edits file), or the CLI's
+ * canvas coming in (Import CLI canvas). */
+export type GraphCheckUse = 'save' | 'open' | 'import';
+
+/** The step a Save's shape line offers, by the newest Undo step (GM PR #205
+ * r13 item 1): the person's, an agent's (named as "Undid Claude’s edit."
+ * names it), or none at all, when there is nothing to undo. */
+export type SaveUndoStep = { kind: 'person' } | { kind: 'agent'; name: string } | { kind: 'none' };
+
+/** A Save's shape line (GM PR #205 r10 item 4, r13 item 1): the cause, then
+ * the Undo that can fix it, never one that can't. */
+export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { kind: 'person' }): string {
+  const cause = kind === 'complex' ? 'It’s too complex to save.' : 'Part of it holds a value Nebula can’t save.';
+  if (step.kind === 'none') return cause;
+  return `${cause} Undo ${step.kind === 'agent' ? `${step.name}’s` : 'your'} last change, then try again.`;
+}
 
 /** GM PR #205 r9 item 2: the node and connection limits, in the person's
  * words ("edges" is ours). */
@@ -74,14 +91,23 @@ export const tooManyEdgesLine = (limit: number) => `The canvas has more than ${l
  * lines have no step. */
 const SHAPE_LINES: Record<GraphCheckUse, Record<'complex' | 'value', string>> = {
   save: {
-    complex: 'It’s too complex to save. Undo your last change, then try again.',
-    value: 'Part of it holds a value Nebula can’t save. Undo your last change, then try again.',
+    complex: saveShapeLine('complex'),
+    value: saveShapeLine('value'),
   },
   open: {
     complex: 'This file is too complex to open.',
     value: 'Part of this file holds a value Nebula can’t read.',
   },
+  // GM PR #205 r13 item 2: the CLI's canvas isn't a file the person picked.
+  import: {
+    complex: 'This canvas is too complex to open.',
+    value: 'Part of this canvas holds a value Nebula can’t read.',
+  },
 };
+
+/** One of those lines, for a check that ran somewhere else (the backend's
+ * restore of a bundle's graph.json, GM PR #205 r11 item 2). */
+export const shapeLine = (use: GraphCheckUse, kind: 'complex' | 'value'): string => SHAPE_LINES[use][kind];
 
 /** True when JSON.stringify failed because the text is longer than the engine
  * lets a string be (#190). Chromium (V8, the desktop app's engine too) caps a
@@ -139,8 +165,9 @@ function* jsonChildValues(value: object): Generator<unknown> {
 /** Match the backend restore preflight without recursive JavaScript calls.
  * The enter/exit frames preserve JSON-tree depth semantics and reject cycles
  * in live state before JSON.stringify can throw after expensive asset work. */
-export function assertGraphComplexityWithinLimits(value: unknown, use: GraphCheckUse): void {
-  const refuse = (kind: 'complex' | 'value', detail: string) => new GraphStructureLimitError(SHAPE_LINES[use][kind], detail);
+export function assertGraphComplexityWithinLimits(value: unknown, use: GraphCheckUse, step?: SaveUndoStep): void {
+  const refuse = (kind: 'complex' | 'value', detail: string) => new GraphStructureLimitError(
+    use === 'save' ? saveShapeLine(kind, step) : SHAPE_LINES[use][kind], detail, kind);
   if (isRecord(value)) {
     if (Array.isArray(value.nodes) && value.nodes.length > GRAPH_MAX_NODES) {
       throw new GraphStructureLimitError(tooManyNodesLine(GRAPH_MAX_NODES), `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
@@ -450,11 +477,16 @@ export function projectFileName(projectName: string): string {
   return editsFileName(projectName).replace(/ - unsaved edits\.nebula$/, '.nebula');
 }
 
+/** GM PR #205 r9 item 2: the file pickers' labels (the extensions stay), on
+ * every picker: Load canvas, Save canvas, Download a copy and Download your edits. */
+export const GRAPH_PICKER_LABEL = 'Nebula canvas';
+export const GRAPH_BUNDLE_PICKER_LABEL = 'Nebula canvas bundle';
+
 async function writeGraphText(text: string, suggestedName: string): Promise<SavedEditsFile | null> {
   // Parsed only when the size allows a reopen at all.
   const reopens = new Blob([text]).size <= GRAPH_BUNDLE_MAX_IMPORT_BYTES && editsFileReopens(text, JSON.parse(text));
   const blob = new Blob([text], { type: 'application/json' });
   const name = await saveBlobWithPicker(blob, suggestedName,
-    { description: 'Nebula Node Graph', accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
+    { description: GRAPH_PICKER_LABEL, accept: { 'application/json': ['.nebula'] } }, { reportWriteFailure: true });
   return name === null ? null : { name, reopens };
 }

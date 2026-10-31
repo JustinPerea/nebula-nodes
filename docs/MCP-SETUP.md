@@ -200,7 +200,40 @@ The server exposes these tools for building and running (see
   until it is under the limit, and `project_size` shows what's large. The
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
-  files up to 528 MB.
+  files up to 528 MB. A bundle the restore refuses is refused with the
+  backend's own words (`detail`, which `load_graph_file` and `nebula load`
+  say after the file's path, e.g. "graph.json contains too many nodes").
+  The HTTP answer also carries a `code` beside `detail`, which the person's
+  tab uses to pick its line under "Nebula couldn’t load the canvas.":
+  - "This file is too complex to open.": `graph_too_complex` (too many
+    values, or nested too deeply), `bundle_too_many_members` (with
+    `maxMembers`), `bundle_expands_too_far` (with `limitBytes`) and
+    `bundle_unsafe_ratio` (with `maxRatio`);
+  - "Part of this file holds a value Nebula can’t read.":
+    `graph_unreadable_value` (a NaN, an Infinity or a number past a
+    float's range);
+  - "The canvas has more than N nodes." / "… connections.":
+    `graph_too_many_nodes` (with `maxNodes`) and `graph_too_many_edges`
+    (with `maxEdges`);
+  - "This canvas is N MB. Nebula opens canvases up to M MB.":
+    `graph_too_large` (with `sizeBytes`, graph.json's unpacked size as the
+    bundle declares it, and `limitBytes`);
+  - "This file is damaged or isn’t a Nebula canvas.": `graph_invalid`
+    (graph.json isn't a Nebula graph: its shape, or a parser error) and the
+    zip's own checks, `bundle_not_zip`, `bundle_encrypted`,
+    `bundle_unsupported_compression`, `bundle_unsafe_path`,
+    `bundle_path_too_long` (with `maxPathBytes` or `maxComponentBytes`),
+    `bundle_link`, `bundle_special_file`, `bundle_size_metadata` and
+    `bundle_missing_graph`;
+  - "This file is from a newer Nebula. Update Nebula, then open it
+    again.": `graph_newer_version` (with `version`);
+  - "Its files couldn’t be copied. Try again.": `bundle_restore_failed`
+    (500).
+  `bundle_member_too_large` and `bundle_upload_too_large` (each with
+  `limitBytes`) carry a code but no line of their own yet: the person reads
+  the backend's words, as for a refusal with no `code` (the request's own,
+  an empty body; graph.json's import checks keep the code
+  `/api/graph/import` gives them, such as `unknown_definition`).
 - `remove_from_canvas`: deletes nodes or single connections, all or nothing.
   On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
   back with their connections (as the person's own delete is, from the
@@ -223,8 +256,9 @@ The server exposes these tools for building and running (see
   paste does: one selection, so the Inspector's node and its "…" pill move
   to the node brought back (none when several come back: a pinned Inspector
   stays pinned, saying "No node selected", as it does whenever the node it
-  shows leaves the canvas, by an Undo, a delete, yours included, or another
-  canvas opening). Either way it
+  shows leaves the canvas, by an Undo, a delete, yours included, or Load
+  canvas; opening another project resets the panels, which unpins and
+  closes it). Either way it
   brings them back as Nebula last had them: your edit to a node (or a
   connection you made or took off) that Nebula took while the person's
   delete was on its way comes back with it, a connection only while the node
@@ -433,6 +467,23 @@ The server exposes these tools for building and running (see
   the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
   the 16 MiB limit"). CLI: `nebula project size [<id>|current]` (`--json`
   prints this result).
+  The same edits are refused when they would leave the canvas past the
+  shape limits the person's Save checks, measured as Save measures them
+  (from the canvas file's root, where a param's value sits 5 levels down,
+  and over the whole canvas, so several writes add up): 400 "This edit would
+  leave the canvas nested more than 64 levels deep from its file's root, and
+  the person's canvas can't save it. Nothing changed. Nest the value less
+  deeply." or 413 "This edit would leave the canvas holding more than
+  1,000,000 values, and the person's canvas can't save it. Nothing changed.
+  Make the edit smaller, or remove what the canvas no longer needs (ask the
+  person first)." The value count includes the project's run history when it
+  could reach the limit. An edit that leaves a canvas already past a limit
+  no worse goes through; a request with no agent marker gets
+  `code: "person_required"` with the same `detail`. The person's own edits
+  are never refused; their Save says "It’s too complex to save." and, when
+  the newest Undo step is yours, "Undo <agent>’s last change, then try
+  again." (the canvas's import of the CLI graph says "This canvas is too
+  complex to open." under "Nebula couldn’t import the CLI canvas.").
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -3368,6 +3419,15 @@ what that edit changed: deleted nodes come back with their params, outputs,
 name and connections, and new nodes go away with their connections. Redo (Cmd-Shift-Z)
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
+
+While a restore holds a node (the person's Undo of a delete, on its way),
+an edit made to it waits and lands when the restore's answer does, in
+Nebula's order with every other held edit, across nodes: each edit stays
+one step (an edit's later part joins the step its first part made, which
+clears the person's Redo, as any agent edit after an Undo does). A rename
+of the person's that Nebula refuses leaves nothing behind: no later Undo
+or Redo writes it back. A restore Nebula applied but answered late is kept,
+not put back.
 
 An open canvas draws exactly the backend's connections between backend nodes: a
 connection an agent took away (an unwire, `disconnect`, an undo, a node re-typed

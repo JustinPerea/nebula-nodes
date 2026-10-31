@@ -380,6 +380,38 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
+  describe('a CLI canvas past Save\'s limits (review 6 of PR #205, GM r13 item 2)', () => {
+    const deep = (levels: number): unknown => (levels === 0 ? 'leaf' : { next: deep(levels - 1) });
+    const cliNode = (value: unknown) => ({ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'Brief', definitionId: 'text-input', params: { value }, state: 'idle' } });
+    const importWith = async (nodes: unknown[]) => {
+      const said: string[] = [];
+      const listener = (event: Event) => said.push((event as CustomEvent<CanvasNoticeDetail>).detail.text);
+      window.addEventListener(CANVAS_NOTICE_EVENT, listener);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mocks.cli.mockResolvedValue({ nodes, edges: [] });
+      render(<Toolbar />);
+      fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
+      await act(async () => undefined);
+      window.removeEventListener(CANVAS_NOTICE_EVENT, listener);
+      return said;
+    };
+    it('a value nested past Save\'s depth: GM\'s line under the import heading, and nothing comes in', async () => {
+      // A param's value sits 5 deep: 59 more is Save's edge, 60 past it.
+      expect(await importWith([cliNode(deep(60))])).toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledWith('[nebula] CLI canvas import', 'Graph is nested more than 64 levels deep.');
+    });
+    it('at Save\'s edge it comes in', async () => {
+      expect(await importWith([cliNode(deep(59))])).toEqual([]);
+      expect(mocks.load).toHaveBeenCalledTimes(1);
+    });
+    it('a value Nebula can\'t read: GM\'s value line', async () => {
+      expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas. Part of this canvas holds a value Nebula can’t read.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+    });
+  });
+
   it('fits the imported graph only while the same Canvas target and viewport are current', async () => {
     vi.useFakeTimers();
     mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });

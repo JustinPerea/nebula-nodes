@@ -1599,15 +1599,15 @@ def _zip_member_kind(member: zipfile.ZipInfo) -> str:
     mode = member.external_attr >> 16
     file_type = stat.S_IFMT(mode)
     if file_type == stat.S_IFLNK:
-        raise HTTPException(status_code=400, detail="Zip bundle contains a symlink")
+        raise _graph_file_refusal(400, "Zip bundle contains a symlink", "bundle_link")
     if file_type not in (0, stat.S_IFREG, stat.S_IFDIR):
-        raise HTTPException(status_code=400, detail="Zip bundle contains a special file")
+        raise _graph_file_refusal(400, "Zip bundle contains a special file", "bundle_special_file")
 
     archive_kind = "directory" if member.is_dir() else "file"
     if file_type == stat.S_IFDIR and archive_kind != "directory":
-        raise HTTPException(status_code=400, detail="Zip bundle has an ambiguous directory entry")
+        raise _graph_file_refusal(400, "Zip bundle has an ambiguous directory entry", "bundle_unsafe_path")
     if file_type == stat.S_IFREG and archive_kind != "file":
-        raise HTTPException(status_code=400, detail="Zip bundle has an ambiguous file entry")
+        raise _graph_file_refusal(400, "Zip bundle has an ambiguous file entry", "bundle_unsafe_path")
     return archive_kind
 
 
@@ -1619,9 +1619,9 @@ def _safe_zip_parts(member_name: str) -> tuple[str, ...]:
     Unicode-normalizing filesystem.
     """
     if not member_name or "\x00" in member_name or "\\" in member_name:
-        raise HTTPException(status_code=400, detail="Zip bundle contains an invalid path")
+        raise _graph_file_refusal(400, "Zip bundle contains an invalid path", "bundle_unsafe_path")
     if len(member_name.encode("utf-8")) > RESTORE_MAX_PATH_BYTES:
-        raise HTTPException(status_code=400, detail="Zip bundle path is too long")
+        raise _graph_file_refusal(400, "Zip bundle path is too long", "bundle_path_too_long", maxPathBytes=RESTORE_MAX_PATH_BYTES)
 
     stripped = member_name[:-1] if member_name.endswith("/") else member_name
     raw_parts = stripped.split("/")
@@ -1635,11 +1635,11 @@ def _safe_zip_parts(member_name: str) -> tuple[str, ...]:
         or any(part in {"", ".", ".."} for part in raw_parts)
         or (parts and re.fullmatch(r"[A-Za-z]:", parts[0]))
     ):
-        raise HTTPException(status_code=400, detail="Zip bundle contains an unsafe path")
+        raise _graph_file_refusal(400, "Zip bundle contains an unsafe path", "bundle_unsafe_path")
 
     for raw_part in parts:
         if len(raw_part.encode("utf-8")) > 255:
-            raise HTTPException(status_code=400, detail="Zip bundle path component is too long")
+            raise _graph_file_refusal(400, "Zip bundle path component is too long", "bundle_path_too_long", maxComponentBytes=255)
     return tuple(parts)
 
 
@@ -1650,13 +1650,13 @@ def _decoded_portable_component(raw_part: str) -> tuple[str, str]:
     try:
         return graph_file_links.decoded_portable_component(raw_part)
     except graph_file_links.PortablePathError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _graph_file_refusal(400, str(exc), "bundle_unsafe_path") from exc
 
 
 def _canonical_zip_parts(parts: tuple[str, ...]) -> tuple[str, ...]:
     canonical = tuple(_decoded_portable_component(part)[1] for part in parts)
     if len("/".join(canonical).encode("utf-8")) > RESTORE_MAX_PATH_BYTES:
-        raise HTTPException(status_code=400, detail="Zip bundle path is too long")
+        raise _graph_file_refusal(400, "Zip bundle path is too long", "bundle_path_too_long", maxPathBytes=RESTORE_MAX_PATH_BYTES)
     return canonical
 
 
@@ -1683,7 +1683,7 @@ def _validated_restore_members(
     """Preflight the complete central directory before creating output files."""
     members = archive.infolist()
     if len(members) > RESTORE_MAX_MEMBERS:
-        raise HTTPException(status_code=413, detail="Zip bundle contains too many members")
+        raise _graph_file_refusal(413, "Zip bundle contains too many members", "bundle_too_many_members", maxMembers=RESTORE_MAX_MEMBERS)
 
     total_uncompressed = 0
     total_compressed = 0
@@ -1694,23 +1694,25 @@ def _validated_restore_members(
 
     for member in members:
         if member.flag_bits & 0x1:
-            raise HTTPException(status_code=400, detail="Encrypted zip bundles are not supported")
+            raise _graph_file_refusal(400, "Encrypted zip bundles are not supported", "bundle_encrypted")
         if member.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
-            raise HTTPException(status_code=400, detail="Zip bundle uses an unsupported compression method")
+            raise _graph_file_refusal(400, "Zip bundle uses an unsupported compression method", "bundle_unsupported_compression")
         if member.file_size < 0 or member.compress_size < 0:
-            raise HTTPException(status_code=400, detail="Zip bundle contains invalid size metadata")
+            raise _graph_file_refusal(400, "Zip bundle contains invalid size metadata", "bundle_size_metadata")
         if member.file_size > RESTORE_MAX_MEMBER_BYTES:
-            raise HTTPException(status_code=413, detail="Zip bundle member is too large")
+            raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large", limitBytes=RESTORE_MAX_MEMBER_BYTES)
 
         total_uncompressed += member.file_size
         total_compressed += member.compress_size
         if total_uncompressed > RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES:
-            raise HTTPException(status_code=413, detail="Zip bundle expands beyond the restore limit")
+            raise _graph_file_refusal(413, "Zip bundle expands beyond the restore limit", "bundle_expands_too_far",
+                                          limitBytes=RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES)
         if member.file_size and (
             member.compress_size == 0
             or member.file_size / member.compress_size > RESTORE_MAX_COMPRESSION_RATIO
         ):
-            raise HTTPException(status_code=413, detail="Zip bundle member has an unsafe compression ratio")
+            raise _graph_file_refusal(413, "Zip bundle member has an unsafe compression ratio", "bundle_unsafe_ratio",
+                                      maxRatio=RESTORE_MAX_COMPRESSION_RATIO)
 
         kind = _zip_member_kind(member)
         parts = _safe_zip_parts(member.filename)
@@ -1719,9 +1721,9 @@ def _validated_restore_members(
         parent_keys = {key[:index] for index in range(1, len(key))}
 
         if key in file_keys or key in directory_keys:
-            raise HTTPException(status_code=400, detail="Zip bundle contains duplicate or colliding paths")
+            raise _graph_file_refusal(400, "Zip bundle contains duplicate or colliding paths", "bundle_unsafe_path")
         if parent_keys & file_keys:
-            raise HTTPException(status_code=400, detail="Zip bundle contains a file/directory collision")
+            raise _graph_file_refusal(400, "Zip bundle contains a file/directory collision", "bundle_unsafe_path")
 
         if kind == "directory":
             directory_keys.add(key)
@@ -1730,13 +1732,14 @@ def _validated_restore_members(
         # A file at a path that is already an implicit parent directory, or a
         # file whose path is a parent of an earlier file, is ambiguous on disk.
         if any(existing[: len(key)] == key for existing in file_keys | directory_keys):
-            raise HTTPException(status_code=400, detail="Zip bundle contains a file/directory collision")
+            raise _graph_file_refusal(400, "Zip bundle contains a file/directory collision", "bundle_unsafe_path")
         file_keys.add(key)
         directory_keys.update(parent_keys)
 
         if parts == ("graph.json",):
             if member.file_size > RESTORE_MAX_GRAPH_BYTES:
-                raise HTTPException(status_code=413, detail="graph.json is too large")
+                raise _graph_file_refusal(413, "graph.json is too large", "graph_too_large",
+                                          sizeBytes=member.file_size, limitBytes=RESTORE_MAX_GRAPH_BYTES)
             graph_member = member
         if parts[0] == "assets" and len(parts) > 1:
             inner_parts = parts[1:]
@@ -1752,9 +1755,10 @@ def _validated_restore_members(
         total_compressed == 0
         or total_uncompressed / total_compressed > RESTORE_MAX_COMPRESSION_RATIO
     ):
-        raise HTTPException(status_code=413, detail="Zip bundle has an unsafe compression ratio")
+        raise _graph_file_refusal(413, "Zip bundle has an unsafe compression ratio", "bundle_unsafe_ratio",
+                                  maxRatio=RESTORE_MAX_COMPRESSION_RATIO)
     if graph_member is None:
-        raise HTTPException(status_code=400, detail="Zip bundle is missing graph.json")
+        raise _graph_file_refusal(400, "Zip bundle is missing graph.json", "bundle_missing_graph")
     return graph_member, restore_members
 
 
@@ -1769,13 +1773,47 @@ def _read_restore_member_bytes(
         while chunk := source.read(min(RESTORE_COPY_CHUNK_BYTES, byte_limit + 1)):
             payload.extend(chunk)
             if len(payload) > byte_limit:
-                raise HTTPException(status_code=413, detail=f"{member.filename} is too large")
+                raise _graph_file_refusal(413, f"{member.filename} is too large", "bundle_size_metadata")
     if len(payload) != member.file_size:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{member.filename} size did not match its metadata",
-        )
+        raise _graph_file_refusal(400, f"{member.filename} size did not match its metadata", "bundle_size_metadata")
     return bytes(payload)
+
+
+def _graph_file_refusal(status_code: int, detail: str, code: str, **fields: Any) -> CodedRefusal:
+    """A bundle's graph.json refused for its shape (PR #205 r11 item 2): the
+    answer keeps ``detail``, the engine's words that agents, the CLI and the
+    log read, and adds ``code`` (with the limit where there is one) so the
+    person's tab picks its line by the cause, never by the words:
+
+    - ``graph_too_complex``: too many values, or nested too deeply;
+    - ``graph_unreadable_value``: a non-finite or out-of-range number;
+    - ``graph_too_many_nodes``: ``maxNodes``;
+    - ``graph_too_many_edges``: ``maxEdges``;
+    - ``graph_too_large``: ``sizeBytes`` (graph.json's unpacked size, as
+      the bundle declares it) and ``limitBytes``;
+    - ``graph_invalid``: graph.json isn't a Nebula graph (its shape, or the
+      parser's other errors);
+    - ``graph_newer_version``: a version number past the newest Nebula reads
+      (``version``).
+
+    The zip's own checks, by the same rule (``code``, and the limit where
+    there is one):
+    ``bundle_not_zip``, ``bundle_encrypted``, ``bundle_unsupported_compression``,
+    ``bundle_unsafe_path``, ``bundle_path_too_long`` (``maxPathBytes`` or
+    ``maxComponentBytes``), ``bundle_link``, ``bundle_special_file``,
+    ``bundle_size_metadata`` (a size that doesn't match what the bundle
+    declares, graph.json's included: past its limit once read although
+    declared within it), ``bundle_missing_graph``,
+    ``bundle_too_many_members`` (``maxMembers``), ``bundle_member_too_large``
+    (``limitBytes``), ``bundle_expands_too_far`` (``limitBytes``),
+    ``bundle_unsafe_ratio`` (``maxRatio``), ``bundle_upload_too_large``
+    (``limitBytes``) and ``bundle_restore_failed`` (500)."""
+    return CodedRefusal(status_code, detail, {"code": code, **fields})
+
+
+def _graph_invalid(detail: str) -> CodedRefusal:
+    """graph.json isn't a Nebula graph: the plain file's "damaged" case."""
+    return _graph_file_refusal(400, detail, "graph_invalid")
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -1795,11 +1833,11 @@ def _validate_restore_json_complexity(value: Any) -> None:
         current, depth = stack.pop()
         value_count += 1
         if value_count > RESTORE_MAX_GRAPH_VALUES:
-            raise HTTPException(status_code=413, detail="graph.json contains too many values")
+            raise _graph_file_refusal(413, "graph.json contains too many values", "graph_too_complex")
         if depth > RESTORE_MAX_GRAPH_DEPTH:
-            raise HTTPException(status_code=400, detail="graph.json is nested too deeply")
+            raise _graph_file_refusal(400, "graph.json is nested too deeply", "graph_too_complex")
         if isinstance(current, float) and not math.isfinite(current):
-            raise HTTPException(status_code=400, detail="graph.json contains a non-finite number")
+            raise _graph_file_refusal(400, "graph.json contains a non-finite number", "graph_unreadable_value")
         if isinstance(current, dict):
             stack.extend((item, depth + 1) for item in current.values())
         elif isinstance(current, list):
@@ -1824,45 +1862,50 @@ def _restore_runtime_params(
 def _validate_restore_graph(graph: Any) -> dict[str, Any]:
     """Validate the complete browser-facing NebulaFile without mutating state."""
     if not isinstance(graph, dict):
-        raise HTTPException(status_code=400, detail="graph.json must contain an object")
+        raise _graph_invalid("graph.json must contain an object")
     _validate_restore_json_complexity(graph)
 
     version = graph.get("version")
     if type(version) is not int or version not in {1, 2, 3}:
-        raise HTTPException(status_code=400, detail="Unsupported .nebula file version")
+        # As a plain file reads it: a number past 3 is from a newer Nebula,
+        # anything else isn't a Nebula graph.
+        if isinstance(version, (int, float)) and not isinstance(version, bool) and version > 3:
+            raise _graph_file_refusal(400, "Unsupported .nebula file version", "graph_newer_version", version=version)
+        raise _graph_invalid("Unsupported .nebula file version")
     if not isinstance(graph.get("name"), str) or not graph["name"].strip():
-        raise HTTPException(status_code=400, detail="graph.json name must be a non-empty string")
+        raise _graph_invalid("graph.json name must be a non-empty string")
     if not isinstance(graph.get("createdAt"), str) or not graph["createdAt"].strip():
-        raise HTTPException(status_code=400, detail="graph.json createdAt must be a non-empty string")
+        raise _graph_invalid("graph.json createdAt must be a non-empty string")
 
     nodes = graph.get("nodes")
     edges = graph.get("edges")
     if not isinstance(nodes, list) or not isinstance(edges, list):
-        raise HTTPException(status_code=400, detail="graph.json requires nodes and edges arrays")
+        raise _graph_invalid("graph.json requires nodes and edges arrays")
     if len(nodes) > RESTORE_MAX_GRAPH_NODES:
-        raise HTTPException(status_code=413, detail="graph.json contains too many nodes")
+        raise _graph_file_refusal(413, "graph.json contains too many nodes", "graph_too_many_nodes",
+                                  maxNodes=RESTORE_MAX_GRAPH_NODES)
     if len(edges) > RESTORE_MAX_GRAPH_EDGES:
-        raise HTTPException(status_code=413, detail="graph.json contains too many edges")
+        raise _graph_file_refusal(413, "graph.json contains too many edges", "graph_too_many_edges",
+                                  maxEdges=RESTORE_MAX_GRAPH_EDGES)
 
     ingress_nodes: list[dict[str, Any]] = []
     seen_node_ids: set[str] = set()
     for index, node in enumerate(nodes):
         if not isinstance(node, dict):
-            raise HTTPException(status_code=400, detail=f"nodes[{index}] must be an object")
+            raise _graph_invalid(f"nodes[{index}] must be an object")
         node_id = node.get("id")
         if not isinstance(node_id, str) or not node_id or len(node_id) > 256:
-            raise HTTPException(
-                status_code=400, detail=f"nodes[{index}].id must be a bounded non-empty string"
+            raise _graph_invalid(f"nodes[{index}].id must be a bounded non-empty string"
             )
         if node_id in seen_node_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate node id {node_id}")
+            raise _graph_invalid(f"duplicate node id {node_id}")
         seen_node_ids.add(node_id)
         if not isinstance(node.get("type"), str) or not node["type"]:
-            raise HTTPException(status_code=400, detail=f"nodes[{index}].type must be a string")
+            raise _graph_invalid(f"nodes[{index}].type must be a string")
 
         position = node.get("position")
         if not isinstance(position, dict):
-            raise HTTPException(status_code=400, detail=f"nodes[{index}].position must be an object")
+            raise _graph_invalid(f"nodes[{index}].position must be an object")
         x = position.get("x")
         y = position.get("y")
         if (
@@ -1873,25 +1916,21 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
             or isinstance(y, bool)
             or not math.isfinite(float(y))
         ):
-            raise HTTPException(
-                status_code=400, detail=f"nodes[{index}].position requires finite numeric x and y"
+            raise _graph_invalid(f"nodes[{index}].position requires finite numeric x and y"
             )
 
         data = node.get("data")
         if not isinstance(data, dict):
-            raise HTTPException(status_code=400, detail=f"nodes[{index}].data must be an object")
+            raise _graph_invalid(f"nodes[{index}].data must be an object")
         if not isinstance(data.get("label"), str):
-            raise HTTPException(status_code=400, detail=f"nodes[{index}].data.label must be a string")
+            raise _graph_invalid(f"nodes[{index}].data.label must be a string")
         definition_id = data.get("definitionId")
         if not isinstance(definition_id, str) or not definition_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"nodes[{index}].data.definitionId must be a non-empty string",
+            raise _graph_invalid(f"nodes[{index}].data.definitionId must be a non-empty string",
             )
         params = data.get("params")
         if not isinstance(params, dict):
-            raise HTTPException(
-                status_code=400, detail=f"nodes[{index}].data.params must be an object"
+            raise _graph_invalid(f"nodes[{index}].data.params must be an object"
             )
         normalized_params = _restore_runtime_params(definition_id, params)
 
@@ -1899,26 +1938,22 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
         if outputs is None:
             outputs = {}
         if not isinstance(outputs, dict):
-            raise HTTPException(
-                status_code=400, detail=f"nodes[{index}].data.outputs must be an object"
+            raise _graph_invalid(f"nodes[{index}].data.outputs must be an object"
             )
         for port_id, output in outputs.items():
             if not isinstance(port_id, str) or not port_id:
-                raise HTTPException(
-                    status_code=400, detail=f"nodes[{index}] has an invalid output port id"
+                raise _graph_invalid(f"nodes[{index}] has an invalid output port id"
                 )
             if (
                 not isinstance(output, dict)
                 or not isinstance(output.get("type"), str)
                 or not output["type"]
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"nodes[{index}].data.outputs.{port_id} must be a typed port object",
+                raise _graph_invalid(f"nodes[{index}].data.outputs.{port_id} must be a typed port object",
                 )
         state = data.get("state")
         if state is not None and state not in {"idle", "queued", "executing", "complete", "error", "skipped"}:
-            raise HTTPException(status_code=400, detail=f"nodes[{index}].data.state is invalid")
+            raise _graph_invalid(f"nodes[{index}].data.state is invalid")
 
         ingress_nodes.append(
             {
@@ -1934,19 +1969,18 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
     seen_edge_ids: set[str] = set()
     for index, edge in enumerate(edges):
         if not isinstance(edge, dict):
-            raise HTTPException(status_code=400, detail=f"edges[{index}] must be an object")
+            raise _graph_invalid(f"edges[{index}] must be an object")
         edge_id = edge.get("id")
         if not isinstance(edge_id, str) or not edge_id or len(edge_id) > 256:
-            raise HTTPException(
-                status_code=400, detail=f"edges[{index}].id must be a bounded non-empty string"
+            raise _graph_invalid(f"edges[{index}].id must be a bounded non-empty string"
             )
         if edge_id in seen_edge_ids:
-            raise HTTPException(status_code=400, detail=f"duplicate edge id {edge_id}")
+            raise _graph_invalid(f"duplicate edge id {edge_id}")
         seen_edge_ids.add(edge_id)
         if not isinstance(edge.get("type"), str) or not edge["type"]:
-            raise HTTPException(status_code=400, detail=f"edges[{index}].type must be a string")
+            raise _graph_invalid(f"edges[{index}].type must be a string")
         if edge.get("data") is not None and not isinstance(edge.get("data"), dict):
-            raise HTTPException(status_code=400, detail=f"edges[{index}].data must be an object")
+            raise _graph_invalid(f"edges[{index}].data must be an object")
         ingress_edges.append(
             {
                 "source": edge.get("source"),
@@ -1959,7 +1993,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
     viewport = graph.get("viewport")
     if viewport is not None:
         if not isinstance(viewport, dict):
-            raise HTTPException(status_code=400, detail="graph.json viewport must be an object")
+            raise _graph_invalid("graph.json viewport must be an object")
         values = [viewport.get(key) for key in ("x", "y", "zoom")]
         if any(
             not isinstance(value, (int, float))
@@ -1967,9 +2001,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
             or not math.isfinite(float(value))
             for value in values
         ) or float(values[2]) <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail="graph.json viewport requires finite x/y and positive zoom",
+            raise _graph_invalid("graph.json viewport requires finite x/y and positive zoom",
             )
 
     # Exercise the same registry, param, handle, duplicate-edge, and cycle
@@ -2003,8 +2035,14 @@ def _read_and_validate_restore_graph(
         # NaN, Infinity and numbers past float's range are refused here:
         # float(10**400) in the checks below would raise OverflowError.
         graph = loads_checked(text, object_pairs_hook=_reject_duplicate_json_keys)
-    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid graph.json: {exc}") from exc
+    except JsonNumberOutOfRange as exc:
+        raise _graph_file_refusal(400, f"Invalid graph.json: {exc}", "graph_unreadable_value") from exc
+    except RecursionError as exc:
+        # Deeper than the parser goes: past the depth limit the walk below
+        # would refuse.
+        raise _graph_file_refusal(400, f"Invalid graph.json: {exc}", "graph_too_complex") from exc
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise _graph_invalid(f"Invalid graph.json: {exc}") from exc
     return _validate_restore_graph(graph)
 
 
@@ -2023,12 +2061,13 @@ def _extract_restore_member(
             while chunk := source.read(RESTORE_COPY_CHUNK_BYTES):
                 member_size += len(chunk)
                 if member_size > RESTORE_MAX_MEMBER_BYTES:
-                    raise HTTPException(status_code=413, detail="Zip bundle member is too large")
+                    raise _graph_file_refusal(413, "Zip bundle member is too large", "bundle_member_too_large", limitBytes=RESTORE_MAX_MEMBER_BYTES)
                 if extracted_total + member_size > RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES:
-                    raise HTTPException(status_code=413, detail="Zip bundle expands beyond the restore limit")
+                    raise _graph_file_refusal(413, "Zip bundle expands beyond the restore limit", "bundle_expands_too_far",
+                                          limitBytes=RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES)
                 output.write(chunk)
         if member_size != member.file_size:
-            raise HTTPException(status_code=400, detail="Zip bundle member size did not match its metadata")
+            raise _graph_file_refusal(400, "Zip bundle member size did not match its metadata", "bundle_size_metadata")
         partial.replace(destination)
         return member_size
     except BaseException:
@@ -2076,7 +2115,7 @@ def _restore_zip_bundle(zip_file: BinaryIO) -> dict[str, Any]:
                 try:
                     destination.relative_to(restore_root)
                 except ValueError as exc:
-                    raise HTTPException(status_code=400, detail="Zip bundle contains an unsafe path") from exc
+                    raise _graph_file_refusal(400, "Zip bundle contains an unsafe path", "bundle_unsafe_path") from exc
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 extracted_total += _extract_restore_member(
                     archive,
@@ -2091,9 +2130,9 @@ def _restore_zip_bundle(zip_file: BinaryIO) -> dict[str, Any]:
     except HTTPException:
         raise
     except (zipfile.BadZipFile, zipfile.LargeZipFile, EOFError, RuntimeError, NotImplementedError) as exc:
-        raise HTTPException(status_code=400, detail=f"Not a valid zip bundle: {exc}") from exc
+        raise _graph_file_refusal(400, f"Not a valid zip bundle: {exc}", "bundle_not_zip") from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail="Could not restore zip bundle assets") from exc
+        raise _graph_file_refusal(500, "Could not restore zip bundle assets", "bundle_restore_failed") from exc
     finally:
         # A successful return leaves the restore tree in place. During an
         # exception, Python executes this block before propagating it.
@@ -2117,7 +2156,8 @@ async def _spool_restore_request(request: Request) -> BinaryIO:
         if declared < 0:
             raise HTTPException(status_code=400, detail="Invalid Content-Length")
         if declared > RESTORE_MAX_COMPRESSED_BYTES:
-            raise HTTPException(status_code=413, detail="Zip bundle exceeds the compressed upload limit")
+            raise _graph_file_refusal(413, "Zip bundle exceeds the compressed upload limit", "bundle_upload_too_large",
+                                  limitBytes=RESTORE_MAX_COMPRESSED_BYTES)
 
     spool = tempfile.SpooledTemporaryFile(max_size=RESTORE_SPOOL_MEMORY_BYTES, mode="w+b")
     received = 0
@@ -2127,7 +2167,8 @@ async def _spool_restore_request(request: Request) -> BinaryIO:
                 continue
             received += len(chunk)
             if received > RESTORE_MAX_COMPRESSED_BYTES:
-                raise HTTPException(status_code=413, detail="Zip bundle exceeds the compressed upload limit")
+                raise _graph_file_refusal(413, "Zip bundle exceeds the compressed upload limit", "bundle_upload_too_large",
+                                  limitBytes=RESTORE_MAX_COMPRESSED_BYTES)
             spool.write(chunk)
         if received == 0:
             raise HTTPException(status_code=400, detail="Empty request body")
@@ -16704,6 +16745,108 @@ def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
     raise ProjectSizeRefusal(size, detail, scope="graph")
 
 
+def _canvas_save_file_view(export: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """The canvas's Save file (frontend serializeGraph: version, name, every
+    node's id, type, position and data's label, definitionId, params, outputs
+    and state, every connection, the viewport) for ``export``, so a value sits
+    where Save's own check finds it: a param's value at depth 5 from the
+    file's root. Placeholders stand in for what the tab adds (its name, its
+    viewport), so the count is never below Save's."""
+    nodes = []
+    for node in export["nodes"]:
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        outputs = data.get("outputs")
+        file_data: dict[str, Any] = {"label": data.get("label"), "definitionId": data.get("definitionId"),
+                                     "params": data.get("params", {}), "state": "complete" if outputs else "idle"}
+        if outputs:
+            file_data["outputs"] = outputs
+        nodes.append({"id": node.get("id"), "type": node.get("type") or "model-node",
+                      "position": {"x": 0, "y": 0}, "data": file_data})
+    return {"version": 3, "paramsVersion": 0, "name": "", "createdAt": "", "nodes": nodes,
+            "edges": export["edges"], "viewport": {"x": 0, "y": 0, "zoom": 1}}
+
+
+def _graph_shape_measure(value: Any) -> tuple[int, int]:
+    """(the deepest depth, the value count) of ``value`` as the canvas's Save
+    walk counts them (frontend assertGraphComplexityWithinLimits): the root at
+    depth 0, every value counted once. Stops one past either limit."""
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    deepest = 0
+    count = 0
+    while stack:
+        current, depth = stack.pop()
+        count += 1
+        deepest = max(deepest, depth)
+        if count > RESTORE_MAX_GRAPH_VALUES or deepest > RESTORE_MAX_GRAPH_DEPTH:
+            break
+        if isinstance(current, dict):
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+    return deepest, count
+
+
+def _project_snapshot_count(export: dict[str, list[dict[str, Any]]]) -> int:
+    """The open project's snapshot with ``export`` on its canvas, counted as
+    its save counts it (_check_graph_ingress_values); 0 with none open."""
+    try:
+        active = project_store.workspace().get("activeProjectId")
+        project = _open_project_record(active) if active else None
+    except ProjectStoreError:
+        return 0
+    if project is None:
+        return 0
+    return _graph_shape_measure(_overlaid_snapshot(project, export))[1]
+
+
+def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> None:
+    """Refuse an edit from anyone but the person that would leave the canvas
+    past Save's own shape limits, measured as Save measures them: depth from
+    the file's root, values over the whole canvas (review 6 of PR #205,
+    lines-limits MEDIUM-1). Each write's own body is within the ingress
+    limits (_check_graph_ingress_values), but a value nested 62 levels below a
+    param is 67 deep in the file, and several writes add up; the person's
+    Save, Download and the project's own save would then refuse a canvas the
+    person never made. As the size limit (_refuse_agent_growth_past_save_limit):
+    an edit that leaves a canvas already past a limit no worse goes through.
+    The agent reads these words exactly."""
+    depth, count = _graph_shape_measure(_canvas_save_file_view(after_export))
+    # The project's own save checks its whole snapshot (the canvas and its
+    # run history) from the snapshot's root, where the canvas's values sit
+    # as deep as in the file: only its count can be larger. Read it only
+    # when it could be: a value is at least a byte of the catalog's JSON (the
+    # same bound as the size check below).
+    snapshot_count = 0
+    try:
+        catalog_bytes = project_store.path.stat().st_size if project_store.path.exists() else 0
+    except OSError:
+        catalog_bytes = 0
+    if (catalog_bytes * 3 + 1) // 2 + project_size.json_bytes(after_export) > RESTORE_MAX_GRAPH_VALUES:
+        snapshot_count = _project_snapshot_count(after_export)
+    too_deep = depth > RESTORE_MAX_GRAPH_DEPTH
+    too_many = max(count, snapshot_count) > RESTORE_MAX_GRAPH_VALUES
+    if not too_deep and not too_many:
+        return
+    before_export = _graph_canvas_export(cli_graph)
+    before_depth, before_count = _graph_shape_measure(_canvas_save_file_view(before_export))
+    if too_many and snapshot_count > count:
+        count, before_count = snapshot_count, _project_snapshot_count(before_export)
+    if too_deep and (before_depth <= RESTORE_MAX_GRAPH_DEPTH or depth > before_depth):
+        status, detail = 400, (f"This edit would leave the canvas nested more than {RESTORE_MAX_GRAPH_DEPTH} levels deep "
+                               "from its file's root, and the person's canvas can't save it. Nothing changed. "
+                               "Nest the value less deeply.")
+    elif too_many and (before_count <= RESTORE_MAX_GRAPH_VALUES or count > before_count):
+        status, detail = 413, (f"This edit would leave the canvas holding more than {RESTORE_MAX_GRAPH_VALUES:,} values, "
+                               "and the person's canvas can't save it. Nothing changed. Make the edit smaller, "
+                               "or remove what the canvas no longer needs (ask the person first).")
+    else:
+        return
+    refusal = _person_only_refusal(detail)
+    if isinstance(refusal, PersonGateError):
+        raise refusal
+    raise HTTPException(status_code=status, detail=detail)
+
+
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     """Refuse an edit from anyone but the person (an agent, the CLI) that
     would leave the open project over the save limit and larger than it is
@@ -16717,6 +16860,7 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     if _is_person_request():
         return
     after_export = _graph_canvas_export(candidate)
+    _refuse_agent_shape_past_save_limit(after_export)
     try:
         catalog_bytes = project_store.path.stat().st_size if project_store.path.exists() else 0
     except OSError:
@@ -16963,8 +17107,13 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # The tab's whole snapshot: checked in a worker thread, refused (if it
-    # is) below where the check ran before (_IngressVerdict).
-    verdict = await _ingress_verdict_off_loop(body)
+    # is) below where the check ran before (_IngressVerdict). From the
+    # snapshot's root, as the project's save and the canvas's Save measure it
+    # (review 6 of PR #205, lines-limits MEDIUM-1): from the body's, a canvas
+    # every other save accepts was one level too deep here.
+    snapshot_in = body.get("snapshot")
+    _check_graph_ingress_values({key: value for key, value in body.items() if key != "snapshot"})
+    verdict = await _ingress_verdict_off_loop(snapshot_in)
     with project_store.transaction() as catalog:
         source_id = body.get("sourceProjectId")
         try:
@@ -16978,16 +17127,15 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         }
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
-        verdict.require(body)
+        verdict.require(snapshot_in)
         fingerprint = hashlib.sha256(json.dumps({"sourceProjectId": source["id"], "snapshot": body.get("snapshot"), "name": body.get("name")}, sort_keys=True, allow_nan=False, ensure_ascii=False).encode("utf-8")).hexdigest()
         if existing := catalog["projects"].get(recovery_id):
             if existing.get("_recoveryFingerprint") != fingerprint:
                 raise HTTPException(status_code=409, detail="Recovery ID already belongs to a different snapshot")
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
-        # The body's check covered its snapshot; staging doesn't walk it twice.
-        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical,
-                                                      ingress=verdict.part("snapshot"))
+        # The check covered its snapshot; staging doesn't walk it twice.
+        snapshot, candidate = _stage_project_snapshot(snapshot_in, historical=historical, ingress=verdict)
         # A recovered copy keeps only the placeholders the live graph has (never a tab's own).
         _live_pending_flags(snapshot["nodes"], cli_graph.nodes if catalog["activeProjectId"] == source["id"] else {})
         _refuse_agent_billing_in_project(

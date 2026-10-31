@@ -152,6 +152,7 @@ describe('Toolbar execution lifecycle', () => {
       [],
       { x: 0, y: 0, zoom: 1 },
       undefined,
+      { kind: 'none' },
     ));
   });
 });

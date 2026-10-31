@@ -39,6 +39,7 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
+import { assertGraphComplexityWithinLimits, GraphStructureLimitError } from '../../lib/graphFileShared';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
@@ -255,6 +256,16 @@ export function Toolbar() {
       if (data.empty) {
         showNotice('The CLI canvas is empty. Build one with the nebula CLI first.', 'info');
         return;
+      }
+      // Checked as a file being opened is (review 6 of PR #205, lines-limits
+      // MEDIUM-1), so a canvas Save couldn't save never comes in unseen: its
+      // nodes hold their params as deep as Save's file does. GM r13 item 2's
+      // lines: it isn't a file.
+      try {
+        assertGraphComplexityWithinLimits({ nodes: data.nodes, edges: data.edges }, 'import');
+      } catch (error) {
+        console.error('[nebula] CLI canvas import', error instanceof GraphStructureLimitError ? error.detail : error);
+        throw error;
       }
       useGraphStore.getState().loadGraph(
         data.nodes as Node<NodeData>[],

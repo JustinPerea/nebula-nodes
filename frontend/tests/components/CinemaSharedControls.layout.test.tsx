@@ -126,9 +126,9 @@ describe('Cinema collapsed shared scene settings', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(2);
     expect(screen.queryByText('shot.png')).toBeNull();
     expect(screen.queryByText('other.png')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Retry interrupted.png' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry failed.png' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove upload pending.png' }));
+    expect(screen.queryByRole('button', { name: 'Try again uploading “interrupted.png”' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “failed.png”' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “pending.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('failed');
     expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     expect(disclosure()).not.toHaveAttribute('open');
@@ -148,6 +148,19 @@ describe('Cinema collapsed shared scene settings', () => {
       // No Retry button here (an upload from before a reload): the line keeps its "try again".
       "Couldn't upload kept.png. Nebula didn't respond. Try again.",
     ]);
+  });
+
+  it('GM PR #205 r13 item 3: an upload a canvas import stopped: its line, then [Try again] and [Remove], each named with the file', () => {
+    metadata.uploads = [{ id: 'stopped', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
+      error: 'The upload stopped because a canvas import started.' }];
+    render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/^The upload stopped because a canvas import started\.$/);
+    const tryAgain = screen.getByRole('button', { name: 'Try again uploading “ref.png”' });
+    expect(tryAgain).toHaveTextContent(/^Try again$/);
+    expect(screen.getByRole('button', { name: 'Remove “ref.png”' })).toHaveTextContent(/^Remove$/);
+    expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
+    fireEvent.click(tryAgain);
+    expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('stopped');
   });
 
   it('retains multi-reference attachment and connected reference ownership inside the disclosure', () => {

@@ -420,7 +420,7 @@ describe('portable graph asset bounds', () => {
 
     expect(summary).toMatchObject({ included: 0, skipped: 1 });
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining(
-      'Nebula saved the canvas without 1 of its files. It may be missing when the graph is opened somewhere else.',
+      'Nebula saved the canvas without 1 of its files. It may be missing when you open the canvas somewhere else.',
     ));
   });
 
@@ -1003,6 +1003,50 @@ describe('the canvas limit lines on each surface', () => {
     await expect(saveToFile([textNode({ value: deep() })], [])).resolves.toBeNull();
     expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t save the canvas. It’s too complex to save. Undo your last change, then try again.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
+  });
+
+  // GM PR #205 r13 item 1: the step the line offers follows the newest Undo step.
+  it.each([
+    ['the person\'s step: unchanged', { kind: 'person' } as const,
+      'It’s too complex to save. Undo your last change, then try again.',
+      'Part of it holds a value Nebula can’t save. Undo your last change, then try again.'],
+    ['an agent\'s step: that agent\'s last change', { kind: 'agent', name: 'Claude' } as const,
+      'It’s too complex to save. Undo Claude’s last change, then try again.',
+      'Part of it holds a value Nebula can’t save. Undo Claude’s last change, then try again.'],
+    ['no step at all: the cause and nothing more', { kind: 'none' } as const,
+      'It’s too complex to save.', 'Part of it holds a value Nebula can’t save.'],
+  ])('Save, %s', async (_label, step, complexLine, valueLine) => {
+    const alertSpy = noticeSpy();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged: string[] = [];
+    const log = (event: Event) => logged.push((event as CustomEvent<{ message: string }>).detail.message);
+    window.addEventListener('nebula:agent-log-entry', log);
+    try {
+      await saveToFile([textNode({ value: deep() })], [], undefined, undefined, step);
+      expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. ${complexLine}`);
+      await saveToFile([textNode({ value: Infinity })], [], undefined, undefined, step);
+      expect(alertSpy).toHaveBeenLastCalledWith(`Nebula couldn’t save the canvas. ${valueLine}`);
+      // A circular value takes the same step (the walk's own check: a
+      // canvas can't carry one into the file writer).
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      expect(() => assertGraphComplexityWithinLimits({ nodes: [{ data: { params: { value: circular } } }], edges: [] }, 'save', step))
+        .toThrow(expect.objectContaining({ reason: valueLine, detail: 'Graph contains a circular value that cannot be saved.' }));
+      // With nothing to undo, the Agent log names the limit hit (none otherwise).
+      expect(logged).toEqual(step.kind === 'none' ? [
+        `Couldn’t save the canvas: Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`,
+        'Couldn’t save the canvas: Graph contains a non-finite number.',
+      ] : []);
+    } finally {
+      window.removeEventListener('nebula:agent-log-entry', log);
+    }
+  });
+
+  it('Save: a param value at Save\'s edge (59 below the param, 64 from the file\'s root) saves; one more doesn\'t', () => {
+    const nested = (levels: number): unknown => (levels === 0 ? 'leaf' : { next: nested(levels - 1) });
+    expect(() => assertGraphComplexityWithinLimits(serializeGraph([textNode({ value: nested(59) })] as never, []), 'save')).not.toThrow();
+    expect(() => assertGraphComplexityWithinLimits(serializeGraph([textNode({ value: nested(60) })] as never, []), 'save'))
+      .toThrow(GraphStructureLimitError);
   });
 
   it('Save: more nodes or connections than Nebula keeps', async () => {

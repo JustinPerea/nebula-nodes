@@ -20,6 +20,7 @@ import { useCanvasLock } from '../lib/canvasLock';
 import { addNodeLine } from '../lib/runLock';
 import '../styles/canvas-next-steps.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { resumeInspectorFocus } from '../lib/inspectorFocusResume';
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
@@ -248,6 +249,8 @@ export function ConnectionPopup() {
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
+        // The Inspector takes focus for this new node's settings (only here).
+        resumeInspectorFocus();
         ui.requestCanvasNodeFocus(newId); ui.setLeftDock(null); ui.setInspectorVisible(true);
       }
     } catch (error) {

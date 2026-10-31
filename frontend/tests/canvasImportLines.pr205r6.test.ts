@@ -21,7 +21,7 @@ describe('a canvas import interrupts', () => {
     store.getState().setUploads(() => [{ id: 'u1', attempt: 'a', nodeId: 'n1', name: 'ref.png', status: 'uploading', canRetry: true }]);
     store.getState().interrupt();
     expect(store.getState().uploads[0]).toMatchObject({
-      status: 'error', error: 'The upload stopped because a canvas import started. Try it again or remove it.',
+      status: 'error', error: 'The upload stopped because a canvas import started.',
     });
   });
 });

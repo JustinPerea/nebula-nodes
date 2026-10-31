@@ -131,9 +131,9 @@ describe('Cinema reference feedback and explicit generation', () => {
     expect(screen.queryByText('hidden.png')).toBeNull();
     fireEvent.click(screen.getByText('Scene settings'));
     expect(screen.getByRole('button', { name: 'Attach character references' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'Retry interrupted.png' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry failed.webp' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove upload logo.png' }));
+    expect(screen.queryByRole('button', { name: 'Try again uploading “interrupted.png”' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “failed.webp”' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “logo.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('failed');
     expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     expect(executeNode).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe('Cinema reference feedback and explicit generation', () => {
     const view = render(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);
     expect(screen.getByText('logo.png')).toBeVisible();
     expect(screen.queryByText('sibling.png')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry logo.png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “logo.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     metadata.uploads = [];
     view.rerender(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);

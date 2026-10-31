@@ -120,6 +120,24 @@ describe('Canvas requested node focus', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
   });
 
+  // Review 6 of PR #205 (inspector-pin LOW-2): the keep-pin sites.
+  it('a focus request for a node that isn\'t on the canvas: the pinned Inspector stays pinned and on screen, empty', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('no-such-node');
+    render(<CanvasFocusController />);
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
+  });
+
+  it('a canvas replaced while a focus request waits: the pinned Inspector stays pinned and on screen, empty', () => {
+    useUIStore.getState().setInspectorPinned(true);
+    useUIStore.getState().requestCanvasNodeFocus('motion');
+    expect(useUIStore.getState().selectedNodeId).toBe('motion');
+    act(() => { useGraphStore.getState().loadGraph([node('imported')], []); });
+    const ui = useUIStore.getState();
+    expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
+  });
+
   it('only fits while Canvas is active', () => {
     flow.initialized = true;
     flow.internalNodes.set('motion', { measured: { width: 280, height: 460 } });

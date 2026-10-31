@@ -21,6 +21,8 @@ import { projectNameForFile } from '../lib/projectSize';
 import type { LoadedGraph } from '../lib/graphFile';
 import type { NodeData } from '../types';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
+import { isForeignEdit } from '../lib/canvasUndo';
+import type { SaveUndoStep } from '../lib/graphFileShared';
 
 /** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
 const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
@@ -35,6 +37,16 @@ function projectsIdle(): Promise<void> {
 }
 
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
+/** The step Save's shape line offers (GM PR #205 r13 item 1): an agent's
+ * newest step by the name "Undid Claude’s edit." uses; the person's own, or
+ * another window's of theirs, as "your"; none with nothing to undo. */
+function newestUndoStep(stack: readonly unknown[]): SaveUndoStep {
+  const top = stack.at(-1);
+  if (!top) return { kind: 'none' };
+  if (isForeignEdit(top) && top.source === 'agent' && top.agentName) return { kind: 'agent', name: top.agentName };
+  return { kind: 'person' };
+}
+
 export function GraphFileActions() {
   const { fitView, getViewport } = useReactFlow();
   const actionInFlight = useRef(false);
@@ -52,7 +64,7 @@ export function GraphFileActions() {
       const { saveToFile } = await graphFileModule.load();
       const projects = useProjectStore.getState();
       await saveToFile(state.nodes, state.edges, viewport,
-        projects.initialized ? projects.activeProject?.name : undefined);
+        projects.initialized ? projects.activeProject?.name : undefined, newestUndoStep(state.undoStack));
     } catch (error) {
       console.error('Graph save failed:', error);
       showNotice(failureMessage(error, "Nebula couldn’t save the canvas."));

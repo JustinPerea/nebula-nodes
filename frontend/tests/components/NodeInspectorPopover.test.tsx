@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorPopover';
 import { WorkspaceRail } from '../../src/components/WorkspaceRail';
 import { useUIStore, type LeftDock } from '../../src/store/uiStore';
+import { resumeInspectorFocus } from '../../src/lib/inspectorFocusResume';
 
 vi.mock('../../src/components/panels/Inspector', () => ({
   Inspector: () => {
@@ -126,6 +127,8 @@ describe('Pinned Inspector navigation clearance', () => {
     document.body.append(anchor);
     act(() => {
       pickerChoice.remove();
+      // As the confirmed picker does (ConnectionPopup).
+      resumeInspectorFocus();
       useUIStore.getState().selectNode('new-video');
       useUIStore.getState().setInspectorVisible(true);
     });

@@ -66,8 +66,8 @@ describe('GM\'s size and "saved without" lines', () => {
   });
 
   it('says how many files a saved graph left out, singular and plural', () => {
-    expect(skippedFilesLine(1)).toBe('Nebula saved the canvas without 1 of its files. It may be missing when the graph is opened somewhere else.');
-    expect(skippedFilesLine(3)).toBe('Nebula saved the canvas without 3 of its files. They may be missing when the graph is opened somewhere else.');
+    expect(skippedFilesLine(1)).toBe('Nebula saved the canvas without 1 of its files. It may be missing when you open the canvas somewhere else.');
+    expect(skippedFilesLine(3)).toBe('Nebula saved the canvas without 3 of its files. They may be missing when you open the canvas somewhere else.');
   });
 });
 

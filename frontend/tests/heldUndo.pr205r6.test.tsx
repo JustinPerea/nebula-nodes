@@ -494,7 +494,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       emptyAndPinned();
     });
 
-    it('a reopen (another project\'s canvas): empty, pin kept', () => {
+    it('the store\'s project canvas load keeps the pin (opening another project resets the panels and unpins, in projectStore)', () => {
       start([textFakeNode('n1')]);
       pin('n1');
       expect(store().loadProjectGraph([], [], [])).toBe(true);

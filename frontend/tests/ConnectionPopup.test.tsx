@@ -6,6 +6,7 @@ import { ConnectionPopup } from '../src/components/ConnectionPopup';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { takeInspectorFocusResume } from '../src/lib/inspectorFocusResume';
 
 const flow = vi.hoisted(() => ({ screenToFlowPosition: vi.fn() }));
 const reads = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -329,6 +330,8 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(ui.canvasFocusRequest).toMatchObject({ nodeId: 'n9' });
     expect(ui.leftDock).toBeNull();
     expect(ui.panels.inspector.visible).toBe(true);
+    // The one case the Inspector takes focus on its own (review 6 of PR #205).
+    expect(takeInspectorFocusResume()).toBe(true);
   });
 
   it('does not dismiss or focus over a newer picker when an old preparation finishes', async () => {
