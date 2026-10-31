@@ -24,6 +24,9 @@ import { GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../src/lib/graphFileActions'
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { appRules, cascaded } from './helpers/cssCascade';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import postcss from 'postcss';
 
 /**
  * GM on PR #205, round 3 and round 4 (and review 2's lines-palette-keys):
@@ -260,5 +263,46 @@ describe('GM r6 item 4: the highlighted row\'s edge', () => {
     expect(contrast(whiteAt(alpha), 0)).toBeGreaterThanOrEqual(3);
     expect(contrast(whiteAt(alpha), whiteAt(0.10))).toBeGreaterThanOrEqual(3);
     if (running) expect(won.get('|color')?.value).toMatch(/disabled-label/);
+  });
+});
+
+describe('GM PR #205 r8 item 4: forced colours', () => {
+  /** The palette's forced-colors blocks, read on their own (the cascade helper reads the normal mode). */
+  const forcedRules = () => {
+    const rules: Array<{ selectors: string[]; decls: Record<string, string> }> = [];
+    // The outline with the palette's styles; the locked grey with the shared grey (disabled-buttons.css).
+    const css = ['command-palette.css', 'disabled-buttons.css']
+      .map((file) => readFileSync(join(__dirname, '..', 'src', 'styles', file), 'utf8')).join('\n');
+    postcss.parse(css).walkAtRules('media', (media) => {
+      if (!/forced-colors\s*:\s*active/.test(media.params)) return;
+      media.walkRules((rule) => {
+        const decls: Record<string, string> = {};
+        rule.walkDecls((decl) => { decls[decl.prop] = `${decl.value}${decl.important ? ' !important' : ''}`; });
+        rules.push({ selectors: rule.selectors, decls });
+      });
+    });
+    return rules;
+  };
+
+  it('the highlighted row has a 1 px outline in Highlight, inside the row; the locked label is GrayText', () => {
+    const rules = forcedRules();
+    const selectedRule = rules.find((rule) => rule.selectors.includes('body.app-slava-restraint .command-palette__item--selected'));
+    expect(selectedRule?.decls).toEqual({ outline: '1px solid Highlight', 'outline-offset': '-1px' });
+    expect(rules.find((rule) => rule.selectors.includes('.command-palette__item--selected'))).toBe(selectedRule);
+    const locked = rules.find((rule) => rule.selectors.some((sel) => sel.includes("[aria-disabled='true']")));
+    expect(locked?.decls).toEqual({ color: 'GrayText !important' });
+    // It outranks the shared grey (disabled-buttons.css), which is !important too.
+    expect(locked?.selectors[0].startsWith('body ')).toBe(true);
+  });
+
+  it('a locked, highlighted row matches both rules', () => {
+    document.body.className = 'app-slava-restraint';
+    useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isExecuting: true });
+    render(<CommandPalette />);
+    openPalette();
+    const field = screen.getByRole('combobox', { name: 'Search commands and nodes' });
+    act(() => { fireEvent.keyDown(field, { key: 'ArrowDown' }); });
+    const row = screen.getByRole('option', { name: 'Save canvas' });
+    for (const rule of forcedRules()) expect(rule.selectors.some((sel) => row.matches(sel) || row.querySelector(sel) !== null)).toBe(true);
   });
 });

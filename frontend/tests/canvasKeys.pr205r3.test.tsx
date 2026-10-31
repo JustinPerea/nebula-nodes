@@ -104,6 +104,16 @@ describe('PR #205 round 3: the canvas during a run', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
+  // Review 4 of PR #205, NIT-2 (GM r6 item 6; MCP-SETUP says so): Create's
+  // launch doesn't hold Cmd+Enter, as it doesn't the toolbar's Run.
+  it('Cmd+Enter during Create\'s launch runs the canvas and says nothing', () => {
+    useGraphStore.setState({ createLaunchingIds: ['x'] } as never);
+    render(<Canvas />);
+    press({ key: 'Enter', metaKey: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(useGraphStore.getState().undoNotice).toBeNull();
+  });
+
   it('a wire dropped on empty canvas during a run opens the node picker, with no line', () => {
     useGraphStore.setState({ isExecuting: true } as never);
     document.elementsFromPoint = () => [];

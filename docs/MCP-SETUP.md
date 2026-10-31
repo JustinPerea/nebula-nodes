@@ -4048,9 +4048,11 @@ How a delete or an undo reads depends on whose run it is:
   command palette's rows say them, Cmd+Enter "You can run the canvas when
   the run finishes.", Cmd+S "You can save the canvas when the run finishes."
   and Cmd+O "You can load a canvas when the run finishes." (Cmd+S and Cmd+O
-  say an import's or Create's launch wait the same way, "… when the import
-  finishes."; Cmd+Enter says an import's and runs during Create's launch, as
-  the toolbar's Run and the palette's do). The palette's Run canvas, Save
+  say an import's wait, "You can save the canvas when the import
+  finishes.", and Create's launch, "You can save the canvas when Nebula
+  finishes preparing the run.", the same way; Cmd+Enter says an import's
+  and runs during Create's launch, as the toolbar's Run and the palette's
+  do). The palette's Run canvas, Save
   canvas and Load canvas stay listed, greyed, each with its line as its own
   text. Adding a node is not locked by a run: from the library, the palette,
   or a connection dropped on empty canvas (its node picker opens as with no

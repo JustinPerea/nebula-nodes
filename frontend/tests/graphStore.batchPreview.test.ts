@@ -177,7 +177,7 @@ describe('Batch preview ownership through real graph store paths', () => {
     expect(copy.data.batchVariants).toBeUndefined(); expect(copy.data.batchRunId).toBeUndefined();
     expect(live().batchOutputs).toHaveLength(2); expect(boundary.execute).not.toHaveBeenCalled();
     // PR #205 r4: Paste and Duplicate move the UI's one selection to the copy.
-    if (action !== 'duplicateNode') expect(boundary.selectNode).toHaveBeenCalledWith(copy.id);
+    if (action !== 'duplicateNode') expect(boundary.selectNode).toHaveBeenCalledWith(copy.id, { keepPin: true });
   });
 
   it('empty and legacy events replace only their owner collections without retaining stale labels', async () => {

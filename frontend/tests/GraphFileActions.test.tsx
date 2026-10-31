@@ -130,6 +130,16 @@ describe('workspace-independent graph file actions', () => {
     }
   });
 
+  // Review 4 of PR #205, NIT-1: the save's own catch (a module or bundling
+  // throw that never reached graphFile's own notice) says the canvas heading.
+  it('a save that throws before its own notice says "Nebula couldn’t save the canvas." then the reason', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.saveToFile.mockRejectedValueOnce(new Error('bundle broke'));
+    render(<GraphFileActions />);
+    await act(async () => { requestGraphSave(); });
+    await waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe('Nebula couldn’t save the canvas. Try again, or reload if it keeps happening.'));
+  });
+
   it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
     useUIStore.setState({ viewMode: 'commons', commonsEnabled: false });
     useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });

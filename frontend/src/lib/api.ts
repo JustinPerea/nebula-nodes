@@ -642,7 +642,9 @@ export async function fetchCLIGraph(): Promise<{
   /** Agent edits waiting for a canvas to lay out their new nodes (services/canvas_arrange.py). */
   arrange?: unknown;
 }> {
-  const response = await apiRequest("Couldn't load the canvas.", '/api/graph/export');
+  // GM PR #205 r8 item 3: the startup, Retry and follow read says the same
+  // heading as Load canvas; the reason after it tells the two apart.
+  const response = await apiRequest('Nebula couldn’t load the canvas.', '/api/graph/export');
   return rewriteBackendAssetUrls(await response.json());
 }
 

@@ -439,7 +439,7 @@ describe('Canvas toolbar hierarchy', () => {
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError("Couldn't load the canvas.", 503), "Nebula didn't respond. Try again."],
+    [new RequestFailedError('Nebula couldn’t load the canvas.', 503), "Nebula didn't respond. Try again."],
     [new Error('boom'), "Try again, or reload if it keeps happening."],
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);

@@ -144,6 +144,15 @@
   color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
   opacity: 1 !important;
 }
+/* In forced colours (GM PR #205 r8 item 4) the shared grey is the system
+   GrayText, so a locked row still reads as locked inside its Highlight
+   outline (command-palette.css). */
+@media (forced-colors: active) {
+  body .command-palette__item:is(:disabled, [aria-disabled='true']),
+  body .command-palette__item:is(:disabled, [aria-disabled='true']) .command-palette__item-sub {
+    color: GrayText !important;
+  }
+}
 
 /* The swatch's × keeps its dark bubble (the chip's own enabled fill) when
    locked; only the × goes to the shared grey, with no hover change (fix

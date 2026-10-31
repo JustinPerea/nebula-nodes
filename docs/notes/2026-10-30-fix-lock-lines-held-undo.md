@@ -993,3 +993,162 @@ A sync with no origin (a reconnect's) that renames a node held by a Delete that
 Nebula then refuses: should the name it brings count as changed by
 someone unknown, as it does outside a Delete? Today it doesn't, so a later
 dropped rename's line names the agent who renamed it before.
+
+# Round 5 (GM r7 and r8, review 4)
+
+## 33. Review 4 MEDIUM-1: a restore's hold with two agent edits
+
+When an Undo's restore holds a node, the syncs put its connections on the
+canvas at once (only its content waits), so an agent's connection gets its
+step when its sync lands. Round 4's `placeEarlierLinks` then rebuilt the
+connections from each earlier edit at the end of the hold, which left the
+canvas at the older edit's connections and added a second step.
+
+- Earlier links take connections by the newest copy's rule: their own only
+  when the hold kept them off (`wires`, a refused Delete); on a restore's
+  hold the canvas's stay. The newest copy's own rule on that path is now
+  `carriedEdges` too, so all of a hold's links follow one rule.
+- One step per edit, in Nebula's order: a link remembers the step its own
+  sync made (`bindHeldLinks`), and its held node change joins that step at
+  the end of the hold (`setLinkStep`). An edit whose sync made no step (a
+  value) gets a new one, under the steps later edits' syncs made.
+- Tests: the reviewer's R1 and R1b (canvas equal to Nebula after the hold
+  and after each Undo and Redo, one step per edit, each Undo naming its own
+  edit), R6 and R12, and an earlier link's connection the newest takes off.
+- Live `restorehold`: 5 of 5.
+
+## 34. GM r7 item 1: "someone" for a sync with no origin
+
+A sync with no origin (a reconnect's) that changes a held node is now a
+link of its own with no origin. As outside a hold, it makes no step and
+marks what it changed as made by someone unknown (`noteForeignTouches`),
+and it is never folded into an agent's step: the last step of a hold is
+the last link's, whoever's it is (no `foreign` carried from an earlier
+agent any more). A run's own write-back (no origin, `runParams`) stays
+nobody's change, as outside a hold. Each link keeps the person's rename in
+flight at its sync, so a stale label is never anyone's change.
+
+Tested on four paths that agree: no hold, a refused Delete, a restore's
+hold and a Delete that goes through. In each, the name is "someone"'s
+(`lastForeignToucher` unknown; the dropped rename's line is the unknown
+one) and Codex's step holds only Codex's change. Also: an earlier agent
+rename is never credited with a reconnect's rename, and a run's write-back
+leaves the value's toucher as it was.
+
+The dropped rename's unknown line is GM's round 17 wording, "This node was
+renamed “X” while Nebula was offline, so your rename to “Y” wasn't saved.";
+it has no word "someone". Not changed; asked below.
+
+Undo still puts back a step's whole node (lib/canvasUndo `applySlice`), as
+it does for every step: undoing Codex's step after a reconnect's rename
+takes the name back too, held or not. Making Undo revert only the step's
+own fields would change every kind of step; asked below.
+
+## 35. GM r7 item 2 and GM r8 item 3: the canvas reads
+
+- "Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula
+  canvas."
+- The startup, Retry and follow read (`fetchCLIGraph`) is headed "Nebula
+  couldn’t load the canvas." too; its reason tells it apart.
+- Still "graph" in lines this PR shows next to a canvas heading (listed,
+  not changed): `graphSizeLine` ("This graph is 3.2 MB. Nebula opens graphs
+  up to 50 MB.", after the save or load heading), "Graph contains more than
+  N nodes." / "… edges." (save), `skippedFilesLine` ("Graph saved without 1
+  of its files. It may be missing when the graph is opened somewhere
+  else."), and the file pickers' "Nebula Node Graph" and "Nebula Node Graph
+  Bundle". Several of these use a straight '.
+
+## 36. GM r8 items 1–2: several nodes back
+
+- `selectNode(id, { keepPin: true })` for what Paste, Duplicate, Undo and
+  Redo select: several nodes back leave a pinned Inspector pinned and open,
+  showing its empty state. The person's own clearing still unpins.
+- A real multi-selection keeps main's look: each node draws its ring and
+  "…" pill from its canvas selection, and the UI's single selection is
+  null, so the node clicked before draws none. Pinned by rendering each
+  card after an Undo that brings two back.
+
+## 37. GM r8 item 4: forced colours
+
+`@media (forced-colors: active)`: the highlighted row has `outline: 1px
+solid Highlight` (offset −1px, inside the row), and a locked row's label
+and line are `GrayText`. The cascade test helper now leaves forced-colors
+blocks out of the normal cascade; a test reads that block on its own.
+Live, with forced colours emulated: the outline is the system Highlight on
+a locked and an unlocked row, and the locked label is GrayText.
+
+## 38. Review 4's other items
+
+- LOW-1 tests: the chain's intermediate connections (a later agent changes
+  them), R9 (order across nodes), R8 (an agent step's Undo keeps the
+  selection).
+- NIT-1 (M7): with the newest link in `placeEarlierLinks`, its step is made
+  there and the last step finds nothing left, unless something came after
+  the last link (now always the person's own echo). Near-equivalent;
+  survives.
+- M9 (the newest step ending at its link's node, not the carried copy):
+  they differ only by what the person's own echo after the last link
+  carries, and `mergeSyncedNode` already keeps the person's own values in
+  both. A test pins the case (Nebula takes Codex's rename, then the
+  person's typing, then the Delete: Redo keeps the typing); survives as
+  equivalent there.
+- The NIT-1 gate (`if (last)`: with no links, a hold's own echoes make no
+  call to `foreignEditStep`): with no links every sync was the person's
+  own, so marking its changes as someone's would be wrong, but the canvas
+  already equals those echoes, so no key differs and nothing is marked.
+  Equivalent in every case found; survives.
+- NIT-2 (M26, `return` → `continue`): equivalent; the node can't come back
+  inside the loop.
+- Lines NIT-1: a test for GraphFileActions' own save heading. NIT-2: a test
+  that Cmd+Enter runs during Create's launch. NIT-3: MCP-SETUP quotes both
+  lines in full.
+- The live harness waits, before every key press, until the canvas is
+  online and unlocked (review 4: the client marks the isolated backend
+  offline for a moment under load).
+
+## 39. Agents
+
+Agent-visible: an agent is no longer credited, in a dropped-rename or kept
+line, with a change a sync with no origin made while a node was held; and
+an agent's edit to a node a restore holds stays one step with Nebula's
+connections. No tool, CLI command or doc wording for agents changed except
+MCP-SETUP's Cmd+S/Cmd+O quote (NIT-3).
+
+## Round 5 proof
+
+Full suites run in CI. On this Mac: tsc, lint, and the changed and related
+files at 2 workers. Every npm and npx call after the coordinator's
+update-notifier rule ran with NO_UPDATE_NOTIFIER=1 and
+npm_config_update_notifier=false; the ones before it in this round didn't.
+
+- **tsc -b and lint:** clean.
+- **Related vitest (262 files):** 4,086 of 4,087 passed, Errors 0, no
+  timeouts. The one failure was the disabled-look ratchet: the forced
+  colours GrayText rule was outside disabled-buttons.css. It moved there;
+  the ratchet and lockLines pass (70/70), and the 18 files that read the
+  CSS pass (317/317). The files changed after that run: 83/83.
+- **Related backend (34 files: the MCP-SETUP readers and
+  test_agent_knowledge, isolated):** 1,089 passed, 9 skipped, 0 failed.
+- **New tests on 96fdb9d8:** they fail where they test new behaviour (R1,
+  R1b, GM r7's held paths, the pinned Inspector, the forced-colours rule,
+  the reason and the startup heading, batchPreview's keepPin). Those that
+  pass there are guards over code only a mutant breaks (R6, R12, the
+  earlier link, the chain, R8, R9, the run write-backs, the save heading,
+  Cmd+Enter) and controls.
+- **Mutation (each guard's own files, --retry=2, clean baseline):** 27
+  mutants, 24 killed. M7, M9 and the NIT-1 gate survive (section 38).
+- **Live** (8797/5797, isolated; the example.com canary aborted by
+  interception and the 8001 canary refused before anything else ran, 0
+  requests to 8000–8010/5173): 16/16. restorehold 5/5, ring 3/3 (the
+  harness waited out 1–3 offline blips per run; no press was refused),
+  reason, someone, forcedcolors (rerun after the CSS move: 6/6).
+  - 5 shots in scratchpad/lock-lines/shots5/; md5 `uniq -d` is empty.
+
+## Round 5 questions for GM
+
+1. The dropped rename's unknown line reads "This node was renamed “X” while
+   Nebula was offline, …" (round 17). Keep it, or "Someone renamed this
+   node “X” …"?
+2. Undo puts back a step's whole node. Should undoing an agent's step keep
+   a later change someone else made to the same node (a reconnect's
+   rename), for every kind of step?

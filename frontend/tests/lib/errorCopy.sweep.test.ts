@@ -67,7 +67,8 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't start the ChatGPT sign-in.", () => api.startCodexChatGPTLogin()],
   ["Couldn't check the ChatGPT sign-in.", () => api.fetchCodexChatGPTLoginState()],
   ["Couldn't load the Quiver models.", () => api.fetchQuiverModels()],
-  ["Couldn't load the canvas.", () => api.fetchCLIGraph()],
+  // GM PR #205 r8 item 3: the same heading as Load canvas.
+  ['Nebula couldn’t load the canvas.', () => api.fetchCLIGraph()],
   ["Couldn't load the Replicate schema.", () => api.fetchReplicateSchema('o', 'm')],
   ["Couldn't load the characters.", () => api.fetchCharacters('global')],
   ["Couldn't create the character.", () => api.createCharacter({} as never)],

@@ -816,7 +816,7 @@ describe('graph import memory ceiling', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // Error copy round 3e (GM): the person reads a written line; the check's
     // own text ("nodes[0] must be an object") goes to the console only.
-    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t load the canvas. This file is damaged or isn't a Nebula graph.");
+    expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('nodes[0] must be an object'));
   });
 

@@ -354,7 +354,9 @@ interface UIState {
   zoomTimelineOut: () => void;
   resetTimelineZoom: () => void;
 
-  selectNode: (nodeId: string | null) => void;
+  /** `keepPin`: what Paste, Undo or Redo selects (GM PR #205 r8 item 1):
+   * bringing nodes back never unpins the Inspector the person pinned. */
+  selectNode: (nodeId: string | null, options?: { keepPin?: boolean }) => void;
   requestCanvasNodeFocus: (nodeId: string) => void;
   clearCanvasNodeFocus: (requestId: string) => void;
   setInspectorVisible: (visible: boolean) => void;
@@ -702,19 +704,22 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   zoomTimelineOut: () => set((s) => ({ timelineZoom: Math.max(1, s.timelineZoom / 2) })),
   resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
-  selectNode: (nodeId) =>
-    set((state) => ({
-      selectedNodeId: nodeId,
-      inspectorPinned: nodeId === null ? false : state.inspectorPinned,
-      panels: {
-        ...state.panels,
-        library: state.panels.library,
-        inspector: {
-          ...state.panels.inspector,
-          visible: nodeId !== null && state.inspectorPinned ? state.panels.inspector.visible : false,
+  selectNode: (nodeId, options) =>
+    set((state) => {
+      const keep = state.inspectorPinned && (nodeId !== null || options?.keepPin === true);
+      return {
+        selectedNodeId: nodeId,
+        inspectorPinned: keep,
+        panels: {
+          ...state.panels,
+          library: state.panels.library,
+          inspector: {
+            ...state.panels.inspector,
+            visible: keep ? state.panels.inspector.visible : false,
+          },
         },
-      },
-    })),
+      };
+    }),
 
   requestCanvasNodeFocus: (nodeId) => {
     const targetId = nodeId.trim();

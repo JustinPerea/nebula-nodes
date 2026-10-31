@@ -129,7 +129,7 @@ export class GraphBundleImportTooLargeError extends FailureNotice {
   }
 }
 
-const GRAPH_FILE_DAMAGED_COPY = "This file is damaged or isn't a Nebula graph.";
+const GRAPH_FILE_DAMAGED_COPY = 'This file is damaged or isn’t a Nebula canvas.';
 const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, then open it again.';
 
 export class GraphFileInvalidError extends FailureNotice {
