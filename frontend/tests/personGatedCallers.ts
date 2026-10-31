@@ -394,6 +394,9 @@ interface Frontend {
   composed: Set<ts.Node>;
   /** Path const references the trace reads at the local they're held in, or lists (round 11). */
   heldConsts: Set<ts.Node>;
+  /** Round 13 (review 10 LOW-3): a path const's or helper's reference handed to a function that
+   * returns the transport's Response, with that function's call (its `!res.ok` is what's read). */
+  wrappedRefs: Map<ts.Node, ts.CallExpression>;
   byFile: Map<string, ts.SourceFile>;
 }
 interface Literal { text: string; method: string; unit: Unit; node: ts.Node; wrapped?: boolean }
@@ -536,10 +539,12 @@ function build(files: Parsed[]): Frontend {
     if (held === 'followed') return;
     // Round 11 (review 9 LOW-3): a path handed to a same-file function that sends it
     // (`const post = (u) => apiFetch(u, …); post('/api/x')`) is that function's request.
+    // Round 13 (review 10 LOW-3): an imported one, or an object's member, too (calledFunction).
     const wrapper = paramWrapper(node);
     const reason = path === null ? 'no /api/ path at its start' : !unit ? 'not in a function' : unplaced ? 'its first segment isn\'t written'
       : held === 'unread' ? 'held in a name or object the trace doesn\'t read' : unreadUse(node, false) ? 'used where the trace can\'t read it'
-        : wrapper === 'unread' ? 'handed to a function that sends it and reads the answer itself' : null;
+        : wrapper === 'unread' ? 'handed to a function that sends it and reads the answer itself'
+          : wrapper === 'unknown' ? 'handed to a function the trace can\'t read' : null;
     if (reason) untraced.push({ file, line: lineOf(node), text: shown(text), reason });
     else literals.push({ text: path!, method: methodOf(node), unit: unit!, node, wrapped: wrapper === 'responds' });
   };
@@ -572,6 +577,7 @@ function build(files: Parsed[]): Frontend {
   // is the path sent, not the helper's own.
   const helpers = pathHelpers(literals);
   const composed = new Set<ts.Node>();
+  const wrappedRefs = new Map<ts.Node, ts.CallExpression>();
   for (const [id, texts] of helpers) {
     const [file, name] = id.split('#');
     for (const reference of references.get(name) ?? []) {
@@ -587,6 +593,16 @@ function build(files: Parsed[]): Frontend {
           composed.add(reference.node);
           for (const text of made) take(reference.file, whole, text);
         }
+        continue;
+      }
+      // Round 13 (review 10 LOW-3): its call handed to a function that sends it (paramWrapper).
+      const wrapper = call === reference.node ? null : paramWrapper(call);
+      if (wrapper === 'responds') wrappedRefs.set(reference.node, climbPath(call).parent as ts.CallExpression);
+      if (wrapper === 'unread' || wrapper === 'unknown') {
+        composed.add(reference.node);
+        untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(texts[0]),
+          reason: wrapper === 'unread' ? 'a path helper\'s call handed to a function that sends it and reads the answer itself'
+            : 'a path helper\'s call handed to a function the trace can\'t read' });
         continue;
       }
       if (!helperPassed(reference.node) && (call === reference.node || !unreadUse(reference.node, true))) continue;
@@ -608,7 +624,18 @@ function build(files: Parsed[]): Frontend {
       const whole = climbPath(named);
       if (whole !== named && literalTexts(whole).some((t) => t.includes('/api/'))) { heldConsts.add(reference.node); continue; }
       const held = heldPath(named);
-      if (held === null) continue;
+      if (held === null) {
+        // Round 13 (review 10 LOW-3): handed to a function that sends it (`post(PRESETS)`).
+        const wrapper = paramWrapper(named);
+        if (wrapper === 'responds') wrappedRefs.set(reference.node, climbPath(named).parent as ts.CallExpression);
+        if (wrapper === 'unread' || wrapper === 'unknown') {
+          heldConsts.add(reference.node);
+          untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(text),
+            reason: wrapper === 'unread' ? 'a path const handed to a function that sends it and reads the answer itself'
+              : 'a path const handed to a function the trace can\'t read' });
+        }
+        continue;
+      }
       heldConsts.add(reference.node);
       if (held === 'unread') untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(text), reason: 'a path const held in a name or object the trace doesn\'t read' });
     }
@@ -629,7 +656,7 @@ function build(files: Parsed[]): Frontend {
       }
     }
   }
-  return { files, references, imports, literals, untraced, defaults, helpers, composed, heldConsts, byFile };
+  return { files, references, imports, literals, untraced, defaults, helpers, composed, heldConsts, wrappedRefs, byFile };
 }
 
 /** The `const` whose whole value `node` is (top-level or function-local), or null. */
@@ -701,13 +728,19 @@ function composedTexts(node: ts.Node, call: ts.Node, texts: string[]): string[] 
  * 'responds' when the function returns that transport's Response (its caller's `!res.ok` is
  * what's read); null when it throws on every failure answer (a throwing call, as before) or for
  * any other call; 'unread' when it reads the answer some other way (listed).
+ * Round 13 (review 10 LOW-3): the function is also found through an import (by name, an alias, a
+ * re-export, a namespace) and as a member of a top-level object (`http.post(…)`, same file or
+ * imported). 'unknown': the callee is one of the trace's own files' functions or objects, but
+ * the trace can't read which function it is (listed, never decided by the catch around it).
  */
-function paramWrapper(at: ts.Node): 'responds' | 'unread' | null {
+function paramWrapper(at: ts.Node): 'responds' | 'unread' | 'unknown' | null {
   const top = climbPath(at);
   const call = top.parent;
-  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(top as ts.Expression) || !ts.isIdentifier(call.expression)) return null;
-  if (ANSWERS_WITH_RESPONSE.has(call.expression.text)) return null;
-  const fn = runnerNamed(call.expression) as ts.FunctionLikeDeclaration | null;
+  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(top as ts.Expression)) return null;
+  if (TRANSPORT_NAMES.has(calleeName(call))) return null;
+  const found = calledFunction(call);
+  if (found === 'unknown') return 'unknown';
+  const fn = found;
   const param = fn?.parameters[call.arguments.indexOf(top as ts.Expression)]?.name;
   if (!fn?.body || !param || !ts.isIdentifier(param)) return null;
   const sends: ts.CallExpression[] = [];
@@ -729,6 +762,116 @@ function paramWrapper(at: ts.Node): 'responds' | 'unread' | null {
   if (sends.every(returned)) return 'responds';
   // One that throws on every failure answer is a throwing call: the catch around it decides.
   return sends.every((send) => returned(send) || throwsOnFailure(send)) ? null : 'unread';
+}
+
+/** The transports and path wrappers by name: a path handed to one is its request (transportAround,
+ * methodOf), never a wrapper's. */
+const TRANSPORT_NAMES = new Set([...GET_BY_DEFAULT, 'OfflineRefusal', 'describeSaves', 'String', 'backendUrl', 'backendUrlSync',
+  'joinBackendPath', 'encodeURI']);
+
+/** A function `name` declares at the top of `source`: `function name`, `const name = (…) => …`. */
+function topFunction(source: ts.SourceFile, name: string): ts.FunctionLikeDeclaration | null {
+  for (const statement of source.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name && statement.body) return statement;
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name && declaration.initializer
+        && isFunctionLike(declaration.initializer)) return declaration.initializer as ts.ArrowFunction;
+    }
+  }
+  return null;
+}
+/** A top-level `const name = { … }` of `source`. */
+function topObject(source: ts.SourceFile, name: string): ts.ObjectLiteralExpression | null {
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      let init = declaration.initializer;
+      while (init && (ts.isParenthesizedExpression(init) || reshapes(init))) init = (init as ts.ParenthesizedExpression).expression;
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name && init && ts.isObjectLiteralExpression(init)) return init;
+    }
+  }
+  return null;
+}
+/** Whether `source` declares `name` at its top (any value: a function, an object, a call's result). */
+function declaresTop(source: ts.SourceFile, name: string): boolean {
+  return source.statements.some((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name
+    || ts.isClassDeclaration(statement) && statement.name?.text === name
+    || ts.isVariableStatement(statement) && statement.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === name));
+}
+/** The member `member` of an object literal: a function it holds, 'unknown' (there, but not a
+ * function the trace reads), or null (not there). */
+function objectMember(object: ts.ObjectLiteralExpression, member: string): ts.FunctionLikeDeclaration | 'unknown' | null {
+  for (const property of object.properties) {
+    if (ts.isSpreadAssignment(property)) return 'unknown'; // `{ ...base }`: any member may be from it
+    const key = property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) ? property.name.text : null;
+    if (key !== member) continue;
+    if (ts.isMethodDeclaration(property)) return property;
+    if (ts.isPropertyAssignment(property) && isFunctionLike(property.initializer)) return property.initializer as ts.ArrowFunction;
+    return 'unknown';
+  }
+  return null;
+}
+/** What `module` exports as `name` (through `export { … } from`, `export *` and a local
+ * `export { a as name }`): a function, an object literal, 'unknown' (exported, but neither), or
+ * null (not found). */
+function exportedValue(module: string, name: string, depth = 0): ts.FunctionLikeDeclaration | ts.ObjectLiteralExpression | 'unknown' | null {
+  const source = currentFiles?.get(module);
+  if (!source || depth > 5) return null;
+  const own = topFunction(source, name) ?? topObject(source, name);
+  if (own) return own;
+  const known = new Set(currentFiles!.keys());
+  for (const statement of source.statements) {
+    if (!ts.isExportDeclaration(statement) || !statement.exportClause && !statement.moduleSpecifier) continue;
+    const from = statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+      ? resolveModule(module, statement.moduleSpecifier.text, known) : null;
+    if (!statement.exportClause) {
+      const found = from ? exportedValue(from, name, depth + 1) : null;
+      if (found) return found;
+      continue;
+    }
+    if (!ts.isNamedExports(statement.exportClause)) continue;
+    const element = statement.exportClause.elements.find((el) => el.name.text === name);
+    if (!element) continue;
+    const original = (element.propertyName ?? element.name).text;
+    if (from) return exportedValue(from, original, depth + 1) ?? 'unknown';
+    if (!statement.moduleSpecifier) return (topFunction(source, original) ?? topObject(source, original)) ?? 'unknown';
+  }
+  return declaresTop(source, name) ? 'unknown' : null;
+}
+/**
+ * Round 13 (review 10 LOW-3): the function a call's callee names, where the trace can read it:
+ * a same-file function (runnerNamed), one imported by name (an alias, a re-export), a namespace
+ * import's member, or a member of a top-level object literal, in this file or imported
+ * (`http.post(…)`). 'unknown': the callee is one of the trace's files' own (an import of them, a
+ * top-level name here) but the trace can't read which function it is. Null: not the trace's own
+ * (a global, a package, a parameter), read as before.
+ */
+function calledFunction(call: ts.CallExpression): ts.FunctionLikeDeclaration | 'unknown' | null {
+  const source = call.getSourceFile();
+  const callee = call.expression;
+  const asFunction = (found: ts.FunctionLikeDeclaration | ts.ObjectLiteralExpression | 'unknown' | null) =>
+    found === null ? 'unknown' : found === 'unknown' || ts.isObjectLiteralExpression(found) ? 'unknown' : found;
+  if (ts.isIdentifier(callee)) {
+    const own = runnerNamed(callee) as ts.FunctionLikeDeclaration | null;
+    if (own) return own;
+    const bound = importOf(source, callee.text);
+    if (bound) return bound.name === null ? 'unknown' : asFunction(exportedValue(bound.module, bound.name));
+    return null;
+  }
+  if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) return null;
+  const object = callee.expression.text;
+  const member = callee.name.text;
+  const bound = importOf(source, object);
+  if (bound) {
+    if (bound.name === null) return asFunction(exportedValue(bound.module, member));
+    const value = exportedValue(bound.module, bound.name);
+    if (value === null || value === 'unknown' || !ts.isObjectLiteralExpression(value)) return 'unknown';
+    return objectMember(value, member) ?? 'unknown';
+  }
+  const local = topObject(source, object);
+  if (local) return objectMember(local, member) ?? 'unknown';
+  return null;
 }
 
 /** Functions that return an /api/ path (`const presetsPath = () => '/api/presets'`), by
@@ -1263,7 +1406,7 @@ function escapes(unit: Unit, node: ts.Node, throwing: boolean): boolean {
  * helper, a path const, a selector and a function whose catch throws the refusal on are followed
  * to their callers; a lib helper reached by nothing is itself returned (fail closed). */
 export function callersOf(route: { method: string; path: string }, extraStarts: string[] = [], stopAt: Set<string> = new Set()): Map<string, Unit> {
-  const { files, references, imports, literals, defaults, helpers, composed, heldConsts } = frontend();
+  const { files, references, imports, literals, defaults, helpers, composed, heldConsts, wrappedRefs } = frontend();
   const known = new Set(files.map((entry) => entry.file));
   const queue: Unit[] = [];
   const found = new Map<string, Unit>();
@@ -1372,7 +1515,10 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
         keep(`${caller.file}#${caller.name}`, caller, 'drops', reference.node);
         continue;
       }
-      reach({ ...caller, via: id }, reference.node, unit.responds);
+      // Round 13 (review 10 LOW-3): handed to a function that returns the transport's Response:
+      // what that call's answer is read as decides it.
+      const wrapperCall = wrappedRefs.get(reference.node);
+      reach({ ...caller, via: id }, wrapperCall ?? reference.node, unit.responds || !!wrapperCall);
     }
     // A module's default export, imported under another name.
     if (defaults.get(unit.file) === unit.name) {

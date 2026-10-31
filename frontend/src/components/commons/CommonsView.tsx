@@ -290,34 +290,56 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
 
 /**
  * PR #204 round 10 (GM r17 item 6, option b): the Commons is the person's to read, so a demoted
- * tab shows exactly what a tab that never connected shows. Once a demote has lasted the held
+ * tab shows exactly what a tab that never connected shows. Once a hold has lasted the held
  * rule's 150 ms (useDemotedView), every Commons call answers as it does with no person token
- * (lib/commonsHold: the not-connected line, nothing sent) and the view mounts
- * afresh, so each pane shows its not-connected state. The promote mounts it again, which reads
- * everything again. A quick reconnect never switches.
+ * (lib/commonsHold: the not-connected line, nothing sent), and each pane shows its not-connected
+ * state. The promote reads everything again. A quick reconnect never switches.
+ *
+ * Round 13 (review 10 MEDIUM-2, GM r19 item 2): a demote no longer remounts the view. The
+ * controls (the header, Add, the filters, the search) stay the same elements, so focus and an
+ * IME composition stay where they are. Only the data starts again: the body empties its loaded
+ * data and reads again under the new `view` (the grid shows the emptied rows), and the panes
+ * that load their own (a reference's detail, Settings, Agent review, Blind labeling) are keyed
+ * on it.
  */
 export function CommonsView() {
   const { demoted, epoch } = useDemotedView();
-  // Set while rendering, before the panes below mount and load: an effect here would run after
-  // theirs. It only mirrors `demoted`, so a second render sets the same value.
+  // Set while rendering, before the panes below load: an effect here would run after theirs. It
+  // only mirrors `demoted`, so a second render sets the same value.
   holdCommonsCalls(demoted);
   // Round 11: the flag is the view's; it goes with the view (commonsApi reads the session itself).
   useEffect(() => () => holdCommonsCalls(false), []);
-  // Round 11 (review 9 MEDIUM-3, GM r19 item 2): the drafts live above the key, and focus that
-  // a remount takes away moves to the same control, the not-connected line, or the heading.
+  const view = demoted ? 'demoted' : `live-${epoch}`;
+  // Round 11 (review 9 MEDIUM-3, GM r19 item 2): focus that the switch takes away (Add's menu, a
+  // keyed pane's control) moves to the same control, the not-connected line, or the heading.
   const root = useRef<HTMLDivElement>(null);
-  const handover = useFocusHandover(`${demoted}-${epoch}`, () => root.current,
+  const handover = useFocusHandover(view, () => root.current,
     () => root.current?.querySelector<HTMLElement>('[data-workspace-heading]') ?? null);
   return (
     <CommonsDraftsProvider>
       <div ref={root} className="commons-view-root" onFocus={handover.onFocus}>
-        <CommonsViewBody key={demoted ? 'demoted' : `live-${epoch}`} />
+        <CommonsViewBody view={view} />
       </div>
     </CommonsDraftsProvider>
   );
 }
 
-function CommonsViewBody() {
+/**
+ * Round 13 (review 10 NIT-2): a tab that isn't connected as you refuses every load at once, and
+ * the pane's one line names one of them by that state, never whichever refusal lands last: the
+ * status first (it is read on every section), then the references, then the collections.
+ */
+const NOT_CONNECTED_LOADS = ['check the Commons status', 'load the references', 'load the collections'];
+function notConnectedLoadRank(line: string | null): number {
+  const what = line ? /^Nebula couldn’t (.+?) because /.exec(line)?.[1] : undefined;
+  return what ? NOT_CONNECTED_LOADS.indexOf(what) : -1;
+}
+
+function CommonsViewBody({ view }: {
+  /** The data's generation: a new one (the switch to demoted, the promote) empties the loaded
+   * data and reads again; the controls and drafts stay. */
+  view: string;
+}) {
   const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
@@ -407,6 +429,33 @@ function CommonsViewBody() {
   // status…" read as if the Commons broke when the backend was only away).
   const [loadError, setLoadError] = useState<string | null>(null);
   const [collectionsKey, setCollectionsKey] = useState(0);
+
+  // Round 13 (review 10 MEDIUM-2): a new `view` starts the data again, as the remount did, while
+  // the controls and drafts stay (derived while rendering: no frame shows the old data).
+  const [dataView, setDataView] = useState(view);
+  if (dataView !== view) {
+    setDataView(view);
+    setRows([]);
+    setLoading(true);
+    setCollections([]);
+    setTarget('');
+    setStatus(null);
+    setStatusFailed(false);
+    setError(null);
+    setNotice(null);
+    setUploadFailures([]);
+    setPage(null);
+    setLoadError(null);
+    setOpened(tab === 'labeling' || tab === 'review' ? [tab] : []);
+  }
+  // A leave the person was asked about goes with the panes' work (the remount closed it too).
+  const leaveClose = leave.close;
+  const askedIn = useRef(view);
+  useEffect(() => {
+    if (askedIn.current === view) return;
+    askedIn.current = view;
+    leaveClose(false);
+  }, [view, leaveClose]);
   const shownLoadError = useOfflineHiddenNotice(loadError, () => {
     setLoadError(null);
     setCollectionsKey((key) => key + 1);
@@ -417,11 +466,14 @@ function CommonsViewBody() {
   // promote (useCommonsLine). A load (the collections, the worker status, a search) also runs
   // again then, all three, so the references load and the status line reads as it normally does.
   // An action isn't done again: the person does it again.
+  // Round 13: on a promote that ends a demoted view, this retry and the new `view` land in the
+  // same render, so each load still reads once (tests/presenceRound13.commonsFocus).
   const reloadAll = useCallback(() => {
     setCollectionsKey((key) => key + 1);
     refresh();
   }, [refresh]);
-  const loadLine = useCommonsLine(setLoadError, null, 'commons.view-load', reloadAll);
+  // Round 13 (review 10 NIT-2): one load line by state (notConnectedLoadRank).
+  const loadLine = useCommonsLine(setLoadError, null, 'commons.view-load', reloadAll, notConnectedLoadRank);
   const actionLine = useCommonsLine(setError, null);
   const loadFailed = loadLine.show;
   // Refused offline before it was sent: the banner says why (round 16, L4).
@@ -445,7 +497,7 @@ function CommonsViewBody() {
       (e: unknown) => { if (!cancelled) loadFailed(e, "Couldn’t load the collections.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, [collectionsKey, loadFailed]);
+  }, [collectionsKey, loadFailed, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -462,7 +514,7 @@ function CommonsViewBody() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [refreshKey, loadFailed]);
+  }, [refreshKey, loadFailed, view]);
 
   useEffect(() => {
     if (tab === 'settings' || tab === 'labeling' || tab === 'review') return undefined;
@@ -489,7 +541,7 @@ function CommonsViewBody() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [filters, tab, refreshKey, loadFailed]);
+  }, [filters, tab, refreshKey, loadFailed, view]);
 
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {
@@ -732,17 +784,17 @@ function CommonsViewBody() {
           otherwise, so each panel stays the view's grid item; commons.css). */}
       {opened.includes('review') && (
         <div className="commons-panel-slot" hidden={tab !== 'review'}>
-          <CommonsReview active={tab === 'review'} onWork={leave.report.review} />
+          <CommonsReview key={view} active={tab === 'review'} onWork={leave.report.review} />
         </div>
       )}
       {opened.includes('labeling') && (
         <div className="commons-panel-slot" hidden={tab !== 'labeling'}>
-          <CommonsEvaluation active={tab === 'labeling'} onWork={leave.report.labeling} />
+          <CommonsEvaluation key={view} active={tab === 'labeling'} onWork={leave.report.labeling} />
         </div>
       )}
       {tab === 'review' || tab === 'labeling' ? null : tab === 'settings' ? (
         <main className="commons-main commons-main--settings">
-          <CommonsSettings status={status} onOpenAsset={openAsset} onChanged={refresh} />
+          <CommonsSettings key={view} status={status} onOpenAsset={openAsset} onChanged={refresh} />
         </main>
       ) : (
         <>
@@ -762,7 +814,7 @@ function CommonsViewBody() {
           </main>
           {selectedId && (
             <CommonsDetail
-              key={selectedId}
+              key={`${view}:${selectedId}`}
               assetId={selectedId}
               onClose={() => setSelectedId(null)}
               onChanged={refresh}
@@ -774,7 +826,9 @@ function CommonsViewBody() {
           )}
         </>
       )}
-      {promptElement}
+      {/* New collection is Add's (locked with it): its prompt goes while Add is locked, as the
+          Add menu does, and comes back with it. */}
+      {!addLock.locked && promptElement}
       {leave.asking && (
         <CommonsLeavePopover asking={leave.asking} unsaved={leave.unsaved.labeling || leave.unsaved.review} running={leave.running}
           onChoose={(choice) => void leave.choose(choice)} onStay={leave.close} />

@@ -76,6 +76,11 @@ const GREY = 'var(--disabled-label, rgba(255, 255, 255, 0.55))';
 const refused = () => new RequestFailedError("Couldn't mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.' });
 
+/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
+ * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
+ * answer holds the tab, as lib/backend does on a real 403. */
+const refusedInFlight = async () => { reportPersonRequired(); throw refused(); };
+
 function update(id: string, author: typeof CODEX, about: 'proposal' | 'question', extra: Record<string, unknown>) {
   return {
     id, author: { kind: 'agent', ...author }, source: 'nebula', about, at: new Date(T + 60_000).toISOString(),
@@ -243,9 +248,8 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
 
 describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote, the line\'s words', () => {
   it('a refused read leaves the header unread and says GM\'s line, curly apostrophes', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValue(refused());
+    notesApi.markAgentNotesRead.mockImplementation(refusedInFlight);
     render(<AppAgentNotes />);
-    held();
     sync();
     const list = openList();
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
@@ -257,9 +261,8 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
   });
 
   it('the promote retries the read once, silently, and the header reaches "all read" for real', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
+    notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
-    held();
     sync();
     const list = openList();
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
@@ -273,9 +276,8 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
   });
 
   it('a retry that fails leaves the header unread and shows no new line', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValue(refused());
+    notesApi.markAgentNotesRead.mockImplementation(refusedInFlight);
     render(<AppAgentNotes />);
-    held();
     sync();
     const list = openList();
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));

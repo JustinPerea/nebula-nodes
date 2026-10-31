@@ -82,6 +82,11 @@ const UPDATES = [COVER, QUESTION, CANVAS];
 const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn't mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
+/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
+ * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
+ * answer holds the tab, as lib/backend does on a real 403. */
+const refusedInFlight = async () => { session.reportPersonRequired(); throw refused(); };
+
 function emit(event: unknown) {
   act(() => {
     for (const handler of [...ws.handlers]) handler(event);
@@ -128,38 +133,44 @@ afterEach(() => {
   session.resetPersonSessionForTests();
 });
 
-describe('GM r6 check a: the mark-read line, held fresh or demoted', () => {
-  it('fresh held: opening the list with unread Updates gives the line and one retry on the promote', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
+// Round 13 (review 10 MEDIUM-1): a held tab, fresh or demoted, sends no mark-read and shows no
+// line (the updates stay unread until it connects); one read per list goes on the promote.
+describe('GM r6 check a: the mark-read, held fresh or demoted (round 13: nothing sent, no line)', () => {
+  it('fresh held: opening the list with unread Updates sends nothing and says nothing; the promote reads once', async () => {
     render(<AppAgentNotes />);
     act(() => { session.reportPersonRequired(); });
     sync();
     const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
-    expect(pendingPromoteRetries()).toBe(1);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(notesApi.markAgentNotesRead).not.toHaveBeenCalled();
+    expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY);
+    expect(useAgentNotesStore.getState().error).toBeNull();
+    expect(pendingPromoteRetries()).toBe(0); // nothing was refused: the read waits (lib/personWork)
+    act(() => { session.notePersonPromoted(); });
+    await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
   });
 
-  it('demoted after reading three: two more arrive, opening the list gives the same line and the same retry', async () => {
+  it('demoted after reading three: two more arrive, opening the list sends nothing, says nothing; the promote reads the newest once', async () => {
     render(<AppAgentNotes />);
     sync();
     let list = openList();
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: /^Updates/ })); // close
     act(() => { session.reportPersonRequired(); }); // demoted
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
     const read = new Date(T + 90_000).toISOString();
     const five = [update('u_new2', CODEX, 'note'), update('u_new1', CLAUDE, 'note'), ...UPDATES.map((n) => ({ ...n, readAt: read }))];
     notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: five, unread: 2 }); // the server's list, read again
     emit({ type: 'agentNotes', surface: 'canvas', op: 'sync', projectId: 'p1', at: 2, unread: 2, notes: five });
     list = openList();
-    await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
+    expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY);
     expect(header(list)).toBe('5 · 2 unread');
-    expect(pendingPromoteRetries()).toBe(1);
     notesApi.markAgentNotesRead.mockResolvedValueOnce({ ids: ['u_new2', 'u_new1'], unread: 0, projectId: 'p1' });
     act(() => { session.notePersonPromoted(); });
-    await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY));
+    await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(2));
+    expect(notesApi.markAgentNotesRead).toHaveBeenLastCalledWith({ kind: 'canvas' }, 'u_new2');
+    await waitFor(() => expect(header(list)).toBe('5 · all read'));
   });
 });
 
@@ -238,10 +249,9 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
 
 describe('review 4 NIT-3: the header\'s changes are read out politely', () => {
   it('the count is a polite, atomic status, and the promote changes it once', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
+    notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: UPDATES, unread: 3 }); // read again on the refusal
     render(<AppAgentNotes />);
-    act(() => { session.reportPersonRequired(); });
     sync();
     const list = openList();
     const count = list.querySelector('.agent-notes-panel__count')!;

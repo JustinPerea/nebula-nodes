@@ -1,5 +1,5 @@
 import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
-import { personDemotedSettled } from './personSession';
+import { personHeldSettled } from './personSession';
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
@@ -55,9 +55,12 @@ const lostConnection = (heading: string, cause: unknown) =>
   new CommonsRequestError(CONNECTION_LOST_COPY, NO_ANSWER_STATUS, { cause, heading });
 
 async function send(heading: string, path: string, init: RequestInit, sentAt?: number): Promise<Response> {
-  // A demote holds the Commons (lib/commonsHold), read from the session itself too, so a call
-  // any pane sends before the view renders is held from the demote's 150 ms on (round 11).
-  if (commonsCallsHeld() || personDemotedSettled()) throw sessionLost(heading, sentAt);
+  // A held tab holds the Commons (lib/commonsHold), read from the session itself too, so a call
+  // any pane sends before the view renders is held from the hold's 150 ms on (round 11). Round 13
+  // (review 10 held-calls MEDIUM-2): any hold, promoted on this page or not: a tab reloaded after
+  // a backend restart keeps its old token (sessionStorage) and was never promoted here, and its
+  // calls would go out with that token, only to be refused. The token stays as it is.
+  if (commonsCallsHeld() || personHeldSettled()) throw sessionLost(heading, sentAt);
   let token: string;
   try {
     token = await resolveCommonsToken();

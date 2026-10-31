@@ -1428,9 +1428,12 @@ it). No MCP tool, CLI command, route or server response changed.
   tabs, the Updates panel, the Agents list, the chat, Creator Studio, the Commons, Projects, then
   20 s idle): Settings' connected agent apps (`GET /api/agent/spend/apps`) and personal agents
   (`GET /api/personal-agents`), and the chat's agent list (`GET /api/personal-agents`, on open),
-  each read only to be refused and show the not-connected line. Nothing else was refused: the
-  Commons sends nothing on a never-connected tab, and the Updates panel, Creator Studio and
-  Projects read only open routes.
+  each read only to be refused and show the not-connected line. Nothing else was refused when
+  there were no unread updates: the Commons sends nothing on a never-connected tab, and
+  Creator Studio and Projects read only open routes. (Corrected in round 13, review 10: with
+  unread updates, opening Updates, and each update that arrived while it was open, sent the
+  person-only mark-read and was refused; and the Commons on a tab reloaded with a stale token
+  sent its reads with that token.)
 - The fix. Person-only work the app starts on its own runs only on a tab connected as the
   person (`lib/personWork`: `whenPerson` runs it now, or keeps it by key and runs it once on the
   promote; `afterPersonRefusal` waits for the next promote after a refusal, never retrying on
@@ -1545,7 +1548,8 @@ it). No MCP tool, CLI command, route or server response changed.
     return. Exact counts: 67 gated main and Krea routes, 41 of them person-only (40 before) and
     26 not; 33 Commons routes (`human_dep`); 74 person-only in all.
   - The tracer (`tests/personGatedCallers.ts`) reads a helper call inside a longer path, an
-    imported or re-exported const, a namespace member, a parameter wrapper and an imported
+    imported or re-exported const, a namespace member, a parameter wrapper (same file in round 11; round 13 adds imported ones, object members, and a
+    const or helper call handed to one) and an imported
     `/api` prefix; a `let` holding a const, an unreadable `/api` join, a held composed call and a
     wrapper that reads the answer itself are listed as untraced, each with its reason. A
     self-referential const no longer overflows the stack. The four agent-notes routes now trace
@@ -1591,7 +1595,8 @@ and where its lines sit changed.
   mutants); and 39 of the 52 trace, route and bare-line tests (the rest are controls and pins).
 - Mutations: every new guard was mutated and each mutant caught (the run-cost wait, the lists'
   held reads, placement, the lock look, the handover hold, drafts, focus, the 150 ms clock,
-  Commons' Add, New collection, drop and flag reset, the Undo lock, the Update card's line, the
+  Commons' Add, New collection, drop and flag reset (corrected in round 13: the flag reset had no
+  test until round 13's `presenceRound13.heldCommons`), the Undo lock, the Update card's line, the
   card counts, the held run's Run and release, Try again and its rule, the Commons line's box);
   the swept lane's 12 and the trace lane's 38 of 39 (the one left is redundant).
 - Gates: `tsc -b --noEmit` and eslint on the 66 changed files are clean. Focused vitest on two
@@ -1682,3 +1687,75 @@ and where its lines sit changed.
   unset): 41 of 41 in the last full run. Shots: `agent-presence/fu3l/` in the scratch folder
   (01 the held Commons with both lines, 02 Add's line alone, 03 after a demote, settled), no two
   alike.
+
+## Round 13 (GM r21; review 10 on 622c55d0; base 8651112c)
+
+### Add's line lines up with the because line's words (GM r21 1)
+- A Commons line's rail and padding are tokens (`--commons-line-rail`, `--commons-line-pad-x`
+  in `styles/commons.css`), and `--commons-line-text-x` is their sum. `.commons-notice` draws
+  with the first two, and Add's lock line in the row is inset by the sum, so it starts where
+  the because line's words start, not at the rail, and at the same x when it stands alone. No
+  second offset. It keeps the lock-line style (11 px, 0.55).
+- Live, measured with a Range over each line's text: 28 px for both at 1280 and 1440, with the
+  because line and alone (the rail at 16). The header stays 49 px (GM r21 2).
+- `tests/presenceRound13.commonsAlign` pins the tokens, the sum and that nothing else moves
+  the lock line sideways; it fails on 8651112c and catches five mutants (a literal inset, a
+  literal padding, a literal rail, a wrong sum, an extra margin).
+
+### Held calls (review 10 held-calls)
+- Updates' mark-read (MEDIUM-1). `POST /api/canvas/agent-notes/read` is person-only, and
+  `sendRead` sent it whenever the list opened or an update arrived while it was open. While the
+  tab is unconfirmed it sends nothing and says nothing: one read per list key waits (the
+  newest `upTo` and the union of ids) under `whenPerson('agentNotes.read:<key>')` and goes once
+  on the promote, for what is still unread. A read refused in flight joins the same wait. The
+  updates stay unread until the tab connects (GM's default while GM rules).
+- A stale token (MEDIUM-2). `commonsApi.send` and `useDemotedView` held on
+  `personDemotedSettled`, which only covers a demote seen on this page; a tab reloaded after a
+  backend restart kept its token and sent the Commons' reads with it. Both now hold on
+  `personHeldSettled()`. No other code used the per-page check. The stored token is untouched
+  (dropping it is Justin's call).
+- After a refused load, Settings' agent apps and personal agents read once on the promote, not
+  twice (`usePersonView`'s `readsOnPromote`). Releases (`releaseOrHold`, `dismissDeferred`)
+  wait on `personUnconfirmed()`, as accept and reject do.
+- The tracer resolves imported wrappers, object members and a const or helper handed to one;
+  a callee in Nebula's own files it can't read is listed with that reason. Its output on the
+  real source is unchanged.
+- `presenceRound11.heldLoad` now loads the app as a never-connected, a demoted and a
+  stale-token tab and opens Settings' tabs, the chat, Updates (an unread update, the corner, an
+  arrival, the Agents panel), the Commons, Creator Studio and Projects; it fails on any request
+  the gate refuses or any request sent with the person's token. Two mocks had hidden the
+  Updates corner and Creator Studio; they render now.
+
+### Lock look and Commons focus (review 10 lock-look-ui)
+- A locked filled button keeps GM's grey fill again (MEDIUM-1). The lock rule tied the filled
+  list at (0,3,0) and came later. Its element part is now `:where(...)` (0,2,0), and the block
+  sits above the filled list so the list also wins a keyboard press. Ghosts keep the ghost
+  tokens. `presenceRound13.lookCascade` resolves every filled and ghost class through the
+  cascade; that needed a fix to `tests/helpers/cssCascade`, whose specificity stopped counting
+  at the first `:is()`. The live check now requires the grey fill on filled classes.
+- A demote no longer remounts the Commons (MEDIUM-2): the body takes a `view` and empties its
+  loaded data on a new one; only the panes that load their own data are keyed. Focus and an IME
+  composition stay put. The handover also finds a field by its label's words.
+- The key-added Undo points at the Providers line when it is on screen and shows its own line
+  only when it isn't (LOW-3).
+- Held and demoted Commons show one because line chosen by state, the status line first
+  (NIT-2; the builder's choice, for GM).
+- Review 10's surviving mutants L4, L7, L10, L13 and L20 have tests; L9 is equivalent and
+  L18's code went in round 12. Round 12's moot LOW-1 and LOW-2 still hold on this head.
+- GM r20 4 is settled by review 10's measure: locked ghost labels 0.55 with a 0.06 edge,
+  against 0.92 and 0.12 live.
+
+### Round 13 tests and checks
+- The load line's rank first went into `show` as an if/else, which hid `setLine(line)` from
+  `presenceRound6.ratchet` (it reads the statements beside each `retryOnPromote`). A ranked
+  setter in CommonsView instead broke `presenceRound9.commons` (no screen sets a line itself).
+  The rank now lives in `useCommonsLine` as a `showLine` helper; both ratchets pass, and
+  dropping the rank fails both state tests.
+- Gates: tsc and eslint clean; vite build and the build budget pass (457,017 bytes raw);
+  isolated backend tests 114 of 114 (no backend file changed). Focused vitest over 233 files
+  (every touched test, the tests of every changed module, and the ratchets that read `src/` and
+  `styles/`): 3,013 of 3,014, Errors 0; the one failure was the ratchet above, and the 51
+  Commons and ratchet files then passed 575 of 575. The lanes' timeouts at a load average of
+  25-50 each passed alone (two with a raised limit).
+- Live on 8795/5795: 44 of 44. The check now requires the grey fill (0.42, dark 0.62 label) on
+  the filled classes and 0.55 with no fill on ghosts, and measures the alignment.

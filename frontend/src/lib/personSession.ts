@@ -381,7 +381,9 @@ export const personPromotions = (): number => personPromotionsNow;
 let personWasPromotedNow = false;
 export const personWasPromoted = (): boolean => personWasPromotedNow;
 /** A demote that has lasted the held rule's 150 ms, from the demote itself: the server promoted
- * this tab once and holds it now (hooks/useTabHeld useDemotedView, lib/commonsApi send). */
+ * this tab once and holds it now. Round 13 (review 10 held-calls MEDIUM-2): what holds the Commons
+ * (hooks/useTabHeld useDemotedView, lib/commonsApi send) is personHeldSettled, any hold, since a
+ * reloaded tab is held without a promote on this page. */
 export const personDemotedSettled = (): boolean => personHeldSettled() && personWasPromotedNow;
 /** Review 4 LOW-1 (round 6): the promote count each answer's request was sent under, recorded
  * at send time, so "sent before the promote" is read against the promotes so far whenever it is

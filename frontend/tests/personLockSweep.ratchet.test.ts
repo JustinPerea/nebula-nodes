@@ -81,8 +81,9 @@ const CALLERS: Record<string, Entry> = {
   'components/panels/Settings.tsx#Settings': { not: 'the run-cost carry-over after the read on open (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
   // Round 11 (review 9 LOW-2): lib/agentNotes' composed paths trace now (they were UNTRACED).
   'store/agentNotesStore.ts#dismiss': { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
-  'store/agentNotesStore.ts#markRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card); opening stays live, and a refusal says markReadRefusedCopy' },
-  'store/agentNotesStore.ts#markReadIds': { not: 'marks an Update read when the person reads it; reading stays live, and a refusal says markReadRefusedCopy' },
+  // Round 13 (review 10 MEDIUM-1): markRead and markReadIds send through sendRead, which sends
+  // nothing on a tab that isn't connected as the person (one read per list waits for the promote).
+  'store/agentNotesStore.ts#sendRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card): opening and reading stay live; on a tab not connected as the person nothing is sent and one read per list waits for the promote (lib/personWork whenPerson); a refusal of one sent says markReadRefusedCopy' },
 };
 
 /** Round 11: controls lockReach reaches that send nothing person-only, by `file attribute={handler}`
@@ -194,14 +195,20 @@ describe('person-only controls lock (PR #204 round 10)', () => {
   it('the Commons: every person-only route goes through commonsApi, which holds them all on a demote', () => {
     const api = source('lib/commonsApi.ts');
     // The one sender, and its first statement answers as with no token while a demote holds
-    // (round 11: the session's own settled demote too). Comments may sit above it.
-    expect(api).toMatch(/async function send\([^)]*\): Promise<Response> \{\n(?:\s*\/\/.*\n)*\s+if \(commonsCallsHeld\(\)(?: \|\| personDemotedSettled\(\))?\) throw sessionLost\(heading, sentAt\);/);
+    // (round 11: the session's own settled demote too; round 13: any settled hold, promoted on
+    // this page or not). Comments may sit above it.
+    expect(api).toMatch(/async function send\([^)]*\): Promise<Response> \{\n(?:\s*\/\/.*\n)*\s+if \(commonsCallsHeld\(\) \|\| personHeldSettled\(\)\) throw sessionLost\(heading, sentAt\);/);
     const view = source('components/commons/CommonsView.tsx');
     // The view holds the calls while it renders demoted (round 11: the parts that matter, not
-    // their adjacency), and keys the body on the demote and the promote's epoch.
+    // their adjacency), and its data starts again on the demote and the promote's epoch. Round 13
+    // (review 10 MEDIUM-2): the body takes the view and empties its data (the controls stay), and
+    // the panes that load their own are keyed on it.
     const viewFn = view.slice(view.indexOf('= useDemotedView();') - 40);
     expect(viewFn).toMatch(/^[^]*?const \{ demoted, epoch \} = useDemotedView\(\);\n(?:\s*\/\/.*\n)*\s*holdCommonsCalls\(demoted\);/);
-    expect(viewFn).toMatch(/<CommonsViewBody key=\{demoted \? 'demoted' : `live-\$\{epoch\}`\} \/>/);
+    expect(viewFn).toMatch(/const view = demoted \? 'demoted' : `live-\$\{epoch\}`;/);
+    expect(viewFn).toMatch(/<CommonsViewBody view=\{view\}/);
+    for (const pane of ['CommonsReview', 'CommonsEvaluation', 'CommonsSettings']) expect(viewFn).toContain(`<${pane} key={view}`);
+    expect(viewFn).toContain('key={`${view}:${selectedId}`}');
     const commons = routes.filter((r) => r.path.startsWith(COMMONS));
     const missing = commons.filter((r) => {
       const tail = r.path.slice(COMMONS.length).replace(/\{[^}]+\}/g, '${').split('${')[0];

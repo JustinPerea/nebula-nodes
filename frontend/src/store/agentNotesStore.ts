@@ -14,6 +14,8 @@ import {
 } from '../lib/agentNotes';
 import { failureMessage, markReadRefusedCopy } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
+import { personUnconfirmed } from '../lib/personSession';
+import { whenPerson } from '../lib/personWork';
 
 /**
  * Updates for every surface, keyed `canvas:<projectId>` and `board:<boardId>`.
@@ -112,24 +114,85 @@ function initialState() {
   };
 }
 
+/** What a read covers: every update up to `upTo` and older, every update (`all`), or just `ids`. */
+interface ReadWanted {
+  upTo?: string;
+  ids?: string[];
+}
+
+/**
+ * PR #204 round 13 (review 10 held-calls MEDIUM-1): the mark-read (POST …/agent-notes/read) is
+ * the person's alone. On a tab that isn't connected as the person (held, demoted, or before the
+ * socket's first answer) nothing is sent: one read per list waits, the newest `upTo` and every
+ * id asked for, and goes once on the promote (lib/personWork whenPerson). No line: the updates
+ * simply stay unread until the tab connects. A read refused after it went out (a demote while it
+ * was in flight) joins the same wait.
+ */
+interface HeldRead {
+  surface: AgentNotesSurface;
+  all: boolean;
+  upTo: string | null;
+  ids: Set<string>;
+}
+const heldReads = new Map<string, HeldRead>();
+
+/** Of two updates in a list (newest first), the newer; one that has left the list loses. */
+function newerOf(key: string, a: string | null, b: string): string {
+  if (a === null || a === b) return b;
+  const notes = (useAgentNotesStore.getState().lists[key] ?? EMPTY).notes;
+  const at = notes.findIndex((n) => n.id === a);
+  const bt = notes.findIndex((n) => n.id === b);
+  if (bt < 0) return at < 0 ? b : a;
+  return at >= 0 && at < bt ? a : b;
+}
+
+/** Add a read to its list's wait (one per list key). */
+function holdRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted): void {
+  const held = heldReads.get(key) ?? { surface, all: false, upTo: null, ids: new Set<string>() };
+  if (wanted.ids) wanted.ids.forEach((id) => held.ids.add(id));
+  else if (wanted.upTo) held.upTo = newerOf(key, held.upTo, wanted.upTo);
+  else held.all = true;
+  heldReads.set(key, held);
+}
+
+/** Send a list's waiting read, once: what is still unread of it, as one `upTo` (or all) read and
+ * one read of the ids it doesn't cover. `retry` as sendRead's. */
+function sendHeldRead(key: string, retry: boolean): void {
+  const held = heldReads.get(key);
+  heldReads.delete(key);
+  if (!held) return;
+  const state = useAgentNotesStore.getState();
+  // Another project opened meanwhile: this list isn't the one on screen (its own open reads it).
+  if (keyFor(state, held.surface) !== key) return;
+  const notes = (state.lists[key] ?? EMPTY).notes;
+  const at = held.all ? notes.length : held.upTo === null ? -1 : notes.findIndex((n) => n.id === held.upTo);
+  if (held.all ? notes.some((n) => !n.readAt) : at >= 0 && notes.slice(at).some((n) => !n.readAt)) {
+    void sendRead(held.surface, key, held.all ? {} : { upTo: held.upTo! }, retry);
+  }
+  const ids = [...held.ids].filter((id) => {
+    const index = notes.findIndex((n) => n.id === id);
+    return index >= 0 && (at < 0 || index < at) && !notes[index].readAt;
+  });
+  if (ids.length > 0) void sendRead(held.surface, key, { ids }, retry);
+}
+
 /**
  * Send a read; the Updates read only when the server says so (GM, #204 r3 item 1: the
  * header says "all read" for real or not at all), from its `ids` and count. On failure
  * nothing was read, so nothing changes but the line. A refusal only because this tab
- * isn't the person's: GM's line, gone on the promote, which retries the read once,
+ * isn't the person's: GM's line, gone on the promote, which sends the list's read once,
  * silently (`retry` false then: a second refusal adds no line).
  */
-async function sendRead(
-  surface: AgentNotesSurface,
-  key: string,
-  send: () => Promise<{ ids?: string[]; unread: number }>,
-  /** What it reads (`upTo:<id>`, `ids:<id,…>`): one retry per read on the promote. */
-  what: string,
-  retry = true,
-): Promise<void> {
+async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted, retry = true): Promise<void> {
   const { getState, setState } = useAgentNotesStore;
+  if (personUnconfirmed()) {
+    // Not connected as the person: nothing goes, and no line (round 13).
+    holdRead(surface, key, wanted);
+    whenPerson(`agentNotes.read:${key}`, () => sendHeldRead(key, true));
+    return;
+  }
   try {
-    const result = await send();
+    const result = await (wanted.ids ? markAgentNotesRead(surface, undefined, wanted.ids) : markAgentNotesRead(surface, wanted.upTo));
     if (keyFor(getState(), surface) !== key) return;
     const read = new Set(Array.isArray(result.ids) ? result.ids : []);
     const at = new Date().toISOString();
@@ -145,12 +208,18 @@ async function sendRead(
     setState({ error: line });
     // Refused only because this tab isn't connected as the person: gone on the promote (GM, #204 r3).
     clearLineOnPromote(error, () => getState().error, line, () => setState({ error: null })); // clears-on-promote: notes.read
-    retryOnPromote(error, `agentNotes.read:${key}:${what}`, () => { // clears-on-promote: notes.read-retry
-      if (keyFor(getState(), surface) === key) void sendRead(surface, key, send, what, false);
+    if (isPersonRefusal(error)) holdRead(surface, key, wanted);
+    retryOnPromote(error, `agentNotes.read:${key}`, () => { // clears-on-promote: notes.read-retry
+      sendHeldRead(key, false);
     });
     // (A board's list is read again by the corner when this error shows.)
     if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
+}
+
+/** Tests: forget the reads waiting for the promote. */
+export function forgetHeldReadsForTests(): void {
+  heldReads.clear();
 }
 
 export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
@@ -250,7 +319,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     const key = keyFor(get(), surface);
     // The cards go (the list is open); the Updates read when the server says (sendRead).
     set((state) => ({ arrivals: state.arrivals.filter((a) => a.key !== key) }));
-    await sendRead(surface, key, () => markAgentNotesRead(surface, upTo), `upTo:${upTo ?? ''}`);
+    await sendRead(surface, key, upTo ? { upTo } : {});
   },
 
   markReadIds: async (surface, ids) => {
@@ -258,7 +327,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     const key = keyFor(get(), surface);
     const wanted = new Set(ids);
     set((state) => ({ arrivals: state.arrivals.filter((a) => !wanted.has(a.id)) }));
-    await sendRead(surface, key, () => markAgentNotesRead(surface, undefined, ids), `ids:${ids.join(',')}`);
+    await sendRead(surface, key, { ids });
   },
 
   dismiss: async (surface, id) => {
@@ -315,7 +384,10 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-  reset: () => set(initialState()),
+  reset: () => {
+    heldReads.clear();
+    set(initialState());
+  },
 }));
 
 /** The open project's list (the main canvas's surface). */

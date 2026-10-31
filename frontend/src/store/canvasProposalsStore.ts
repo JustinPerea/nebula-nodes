@@ -18,7 +18,7 @@ import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
 import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
-import { onPersonPromoted, personGateHeld, personUnconfirmed } from '../lib/personSession';
+import { onPersonPromoted, personUnconfirmed } from '../lib/personSession';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 
@@ -345,7 +345,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // person, Dismiss hides the notice here only; the release (person-only,
     // DELETE /api/canvas/approvals/{id}, which only frees the nodes it locked)
     // goes once the server promotes the tab.
-    if (personGateHeld()) holdRelease(deferred.approvalId);
+    // Round 13 (review 10 NIT-3): not confirmed as the person (held, or before the socket's
+    // first answer), the same check as accept and reject.
+    if (personUnconfirmed()) holdRelease(deferred.approvalId);
     else void releaseApproval(deferred.approvalId);
   },
 }));
@@ -409,7 +411,7 @@ function holdRelease(approvalId: string): void {
  * after its run, or in place of one when its nodes were deleted, waits for the promote on a tab
  * that isn't connected as the person, as Dismiss's does: sent now, the gate refuses it. */
 async function releaseOrHold(approvalId: string): Promise<void> {
-  if (personGateHeld()) holdRelease(approvalId);
+  if (personUnconfirmed()) holdRelease(approvalId);
   else await releaseApproval(approvalId);
 }
 

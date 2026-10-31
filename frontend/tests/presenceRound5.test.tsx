@@ -91,6 +91,11 @@ const UPDATES = [COVER, QUESTION, CANVAS];
 const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn't mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
+/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
+ * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
+ * answer holds the tab, as lib/backend does on a real 403. */
+const refusedInFlight = async () => { session.reportPersonRequired(); throw refused(); };
+
 function emit(event: unknown) {
   act(() => {
     for (const handler of [...ws.handlers]) handler(event);
@@ -173,10 +178,10 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
     let answer: (error: unknown) => void = () => {};
     notesApi.markAgentNotesRead.mockImplementationOnce(() => new Promise((_resolve, reject) => { answer = reject; }));
     render(<AppAgentNotes />);
-    act(() => { session.reportPersonRequired(); });
     sync();
     const list = openList();
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
+    act(() => { session.reportPersonRequired(); }); // demoted while it was in flight (round 13)
     act(() => { session.notePersonPromoted(); }); // the sweep runs: nothing waits yet
     notesApi.markAgentNotesRead.mockResolvedValueOnce({ ids: ['u_cover', 'u_q', 'u_canvas'], unread: 0, projectId: 'p1' });
     await act(async () => { answer(refused({ sentBeforePromote: true })); });
@@ -189,9 +194,8 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
   });
 
   it('a refusal of a request sent after the promote is this tab\'s state now: its line waits for the next promote', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
+    notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
-    act(() => { session.reportPersonRequired(); });
     sync();
     const list = openList();
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
@@ -201,9 +205,8 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
   });
 
   it('the retry checks it is still the project it read (keyFor): a read refused on p1 isn\'t sent once p2 is open', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValueOnce(refused());
+    notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
-    act(() => { session.reportPersonRequired(); });
     sync();
     const list = openList();
     await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));

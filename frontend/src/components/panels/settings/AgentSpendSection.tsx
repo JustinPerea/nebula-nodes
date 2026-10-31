@@ -42,6 +42,10 @@ const spentUsd = formatSpentUsd;
 function useOutsideSpend() {
   const [view, setView] = useState<OutsideSpend | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows (the
+  // list is the person's to read). PR #204 round 11: and it doesn't ask, only to be refused: the
+  // list is read on a tab connected as the person, again after a held view ends.
+  const { held, ready, epoch, readsOnPromote } = usePersonView();
   const reload = useCallback(function readAgain() {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
@@ -52,13 +56,10 @@ function useOutsideSpend() {
         // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.
         clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.spend-load
-        retryOnPromote(exc, 'settings.spend-load', () => { readAgain(); }); // clears-on-promote: settings.spend-load-retry
+        // Round 13 (review 10 NIT-1): unless the held view settled, whose promote reads it anyway.
+        retryOnPromote(exc, 'settings.spend-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.spend-load-retry
       });
-  }, []);
-  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows (the
-  // list is the person's to read). PR #204 round 11: and it doesn't ask, only to be refused: the
-  // list is read on a tab connected as the person, again after a held view ends.
-  const { held, ready, epoch } = usePersonView();
+  }, [readsOnPromote]);
   useReadAsPerson(reload, ready, epoch);
   if (held) return { view: null, error: notConnectedBecause('load the connected apps'), reload, held };
   return { view, error, reload, held };

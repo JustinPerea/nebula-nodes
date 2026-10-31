@@ -28,12 +28,22 @@ interface Options {
  * The status poll and the review's refresh fail every few seconds while the tab waits; a line
  * already waiting for the promote isn't registered again.
  *
+ * `rank` (round 13, review 10 NIT-2): for a pane whose loads all fail at once on a tab that
+ * isn't connected as you, which line it shows by that state, not by which refusal lands last: a
+ * new line doesn't replace one of a lower rank (0 first; -1 for a line outside the order).
+ *
  * tests/clearsOnPromote.ratchet.test.ts ties both markers here to the Commons; a Commons screen
  * that sets a failure line some other way fails tests/presenceRound9.commons.test.tsx (structural).
  */
 export function useCommonsLine<T extends string | null>(
   setLine: Dispatch<SetStateAction<T>>, empty: NoInfer<T>, reloadKey?: string, reload?: () => void,
+  rank?: (line: T) => number,
 ) {
+  // Puts a new line up; with `rank`, not over one that ranks before it (an update passes through).
+  const showLine = useCallback((line: T) => {
+    if (!rank) setLine(line);
+    else setLine((current) => (rank(current) >= 0 && rank(line) > rank(current) ? current : line));
+  }, [setLine, rank]);
   /** The lines already waiting for the promote (the sweep empties it). */
   const pending = useRef(new Set<T>());
   const register = useCallback((error: unknown, line: T) => {
@@ -50,10 +60,10 @@ export function useCommonsLine<T extends string | null>(
     // ("Couldn’t load the references." gives "Nebula couldn’t load the references because …").
     const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
     const line = (isPersonRefusal(error) && what ? notConnectedBecause(what) : failureMessage(error, heading)) as T;
-    setLine(line);
+    showLine(line);
     register(error, line);
     if (options.reload && reloadKey && reload) retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.reload-retry
-  }, [setLine, register, reloadKey, reload]);
+  }, [showLine, register, reloadKey, reload]);
   return useMemo(() => ({ show, keep }), [show, keep]);
 }
 

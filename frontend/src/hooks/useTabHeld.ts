@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { HELD_PENDING_ATTR, useHeldLook } from './useHeldLook';
-import { personDemotedSettled, personGateAnswered, personHeldSettled, personUnconfirmed, subscribePersonGate } from '../lib/personSession';
+import { personGateAnswered, personHeldSettled, personUnconfirmed, subscribePersonGate } from '../lib/personSession';
 
 /**
  * Whether this tab isn't confirmed as the person (GM, #204 r5 item 2: "held is a state, not a
@@ -25,17 +25,19 @@ export function useLockPending(locked: boolean): boolean {
 
 
 /**
- * PR #204 round 10 (GM r17 item 6, option b): a view the person alone can read (the Commons,
- * Settings' agent apps and personal agents) shows, on a demoted tab, exactly what a tab that
- * never connected shows. The switch keeps the held rule: only a demote that lasts
- * HELD_LOOK_DELAY_MS switches, so a quick reconnect (a backend restart) never flashes the view
- * away and back. `epoch` counts the promotes that ended a switch, so the view reads again.
+ * PR #204 round 10 (GM r17 item 6, option b): a view the person alone can read (the Commons)
+ * shows, on a demoted tab, exactly what a tab that never connected shows. The switch keeps the
+ * held rule: only a hold that lasts PERSON_HELD_SETTLE_MS switches, so a quick reconnect (a
+ * backend restart) never flashes the view away and back. `epoch` counts the promotes that ended a
+ * switch, so the view reads again.
  */
 export function useDemotedView(): { demoted: boolean; epoch: number } {
-  // Round 11 (review 9 gates-trace MEDIUM-1): the 150 ms run from the demote itself
-  // (personSession personDemotedSettled), so a view that mounts on a tab demoted long ago is
-  // demoted from its first frame and sends nothing.
-  const demoted = useSyncExternalStore(subscribePersonGate, personDemotedSettled, personDemotedSettled);
+  // Round 11 (review 9 gates-trace MEDIUM-1): the 150 ms run from the hold itself
+  // (personSession personHeldSettled), so a view that mounts on a tab held long ago is held from
+  // its first frame and sends nothing. Round 13 (review 10 held-calls MEDIUM-2): any hold, not
+  // only a demote this page saw: a tab reloaded with a token the backend no longer takes was
+  // never promoted here, and is held all the same.
+  const demoted = useSyncExternalStore(subscribePersonGate, personHeldSettled, personHeldSettled);
   // Derived while rendering (React's "adjusting state when a prop changes"): no effect, no extra pass.
   const [seen, setSeen] = useState({ demoted: false, epoch: 0 });
   if (seen.demoted !== demoted) setSeen({ demoted, epoch: demoted ? seen.epoch : seen.epoch + 1 });
@@ -50,15 +52,23 @@ export function useDemotedView(): { demoted: boolean; epoch: number } {
  * show what a tab that isn't connected shows (the not-connected line, no rows), after the held
  * rule's 150 ms. `epoch` grows each time a held view ends, so a view that showed held reads
  * again; a quick reconnect inside 150 ms never does. Read once per epoch (useReadAsPerson).
+ * `readsOnPromote`: whether the view shows held now, so the promote's new epoch reads it again.
+ * Round 13 (review 10 held-calls NIT-1): a read's own retry on the promote (retryOnPromote, for
+ * a refusal of a read sent just as the tab lost the person) runs only when it doesn't, so a
+ * promote reads once either way.
  */
-export function usePersonView(): { held: boolean; ready: boolean; epoch: number } {
+export function usePersonView(): { held: boolean; ready: boolean; epoch: number; readsOnPromote: { readonly current: boolean } } {
   const ready = !useSyncExternalStore(subscribePersonGate, personUnconfirmed, personUnconfirmed);
   // The 150 ms from the hold itself (personSession personHeldSettled), not from this mount.
   const held = useSyncExternalStore(subscribePersonGate, personHeldSettled, personHeldSettled);
   const [seen, setSeen] = useState({ held: false, epoch: 0 });
   if (seen.held !== held) setSeen({ held, epoch: held ? seen.epoch : seen.epoch + 1 });
   const epoch = seen.held !== held && !held ? seen.epoch + 1 : seen.epoch;
-  return { held, ready, epoch };
+  // Read by a retry in the promote's own sweep, before this view renders the promote: what the
+  // view last committed.
+  const readsOnPromote = useRef(false);
+  useEffect(() => { readsOnPromote.current = held; }, [held]);
+  return { held, ready, epoch, readsOnPromote };
 }
 
 /** Runs `read` once each time the tab is ready and `epoch` is new (usePersonView). */

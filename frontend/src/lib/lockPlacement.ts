@@ -18,7 +18,8 @@ export const LOCK_PLACE_ATTR = 'data-lock-place';
 /** PR #204 round 11 (GM r19 1): the elements styles/disabled-buttons.css gives a person lock's one
  * disabled look. A locked control outside them would look live (lockPlacementProblems fails it). */
 export const LOCK_LOOK_SELECTORS = [
-  ":is(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending])",
+  // Round 13 (review 10 MEDIUM-1): :where(), so a listed filled style keeps its grey fill.
+  ":where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending])",
   ":is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending])",
   "input[type='checkbox'][data-person-lock]:not([data-held-pending])",
 ] as const;

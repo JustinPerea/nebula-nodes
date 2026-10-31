@@ -139,7 +139,7 @@ export function PersonalAgentsSection() {
   const addLock = usePersonLock('add an agent');
   // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows.
   // PR #204 round 11: the list is read only on a tab connected as the person (usePersonView).
-  const { held: demoted, ready, epoch } = usePersonView();
+  const { held: demoted, ready, epoch, readsOnPromote } = usePersonView();
 
   const load = useCallback(function readAgain() {
     fetchPersonalAgents()
@@ -151,9 +151,10 @@ export function PersonalAgentsSection() {
         // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.
         clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents-load
-        retryOnPromote(exc, 'settings.agents-load', () => { readAgain(); }); // clears-on-promote: settings.agents-load-retry
+        // Round 13 (review 10 NIT-1): unless the held view settled, whose promote reads it anyway.
+        retryOnPromote(exc, 'settings.agents-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.agents-load-retry
       });
-  }, []);
+  }, [readsOnPromote]);
 
   useReadAsPerson(load, ready, epoch);
   // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away the focused row moves focus

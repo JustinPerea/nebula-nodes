@@ -14,7 +14,9 @@ import { LOCK_LOOK_SELECTORS, lockPlacementProblems } from '../src/lib/lockPlace
 const css = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
 const rule = (selector: string) => {
   // Round 12 (CI, tests/focusRingCss): hover and press hold the look; focus keeps the shared ring.
-  const at = css.indexOf(`${selector},\n${selector}:is(:hover, :active)`);
+  // Round 13: :hover and :active as their own selectors (tests/helpers/cssCascade reads them as
+  // states; tests/presenceRound13.lookCascade resolves the look through the cascade).
+  const at = css.indexOf(`${selector},\n${selector}:hover,\n${selector}:active {`);
   return at < 0 ? null : css.slice(at, css.indexOf('}', at));
 };
 
@@ -37,6 +39,8 @@ describe('a locked control looks locked (PR #204 round 11)', () => {
   it('a select or input keeps its value, in --disabled-label; a switch takes the 0.06 edge and a grey knob', () => {
     const field = rule(LOCK_LOOK_SELECTORS[1])!;
     expect(field).toContain('color: var(--disabled-label');
+    // Round 13 (review 10 LOW-4, mutant L4): its edge goes to the shared 0.06 too.
+    expect(field).toContain('border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important');
     expect(field).not.toMatch(/color:\s*transparent|visibility|opacity:\s*0[;\s]/);
     expect(rule(LOCK_LOOK_SELECTORS[2])).toContain('var(--sr-disabled-edge, rgba(255, 255, 255, 0.06))');
     expect(css).toContain("input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {\n  background: var(--disabled-label");
