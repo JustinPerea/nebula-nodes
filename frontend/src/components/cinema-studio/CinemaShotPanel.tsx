@@ -270,8 +270,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             title={readOnly && motionHandoff?.status !== 'ready'
               ? lockedAction(lock, {}, { verb: OFFLINE_VERBS.sendToMotion }).title
               // GM PR #205 r4 item 5: an import holds it with its line.
-              : isImportingGraph && motionHandoff?.status !== 'ready' && motionHandoff?.status !== 'pending'
-                ? lockLine(RUN_LOCK_VERBS.sendToMotion, 'import') : undefined}
+              // GM PR #205 r5 item 3: "View video node" says its own verb.
+              : isImportingGraph && motionHandoff?.status !== 'pending'
+                ? lockLine(motionHandoff?.status === 'ready' ? RUN_LOCK_VERBS.viewVideoNode : RUN_LOCK_VERBS.sendToMotion, 'import')
+                : undefined}
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'

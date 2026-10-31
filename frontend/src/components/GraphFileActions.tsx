@@ -23,7 +23,7 @@ import type { NodeData } from '../types';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 
 /** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
-const LOAD_GRAPH = "Couldn't load the graph.";
+const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
 
 /** Until Projects finishes what it is doing (a rename, a save's answer), so
  * a create for Load graph isn't turned away for being busy. */
@@ -55,7 +55,7 @@ export function GraphFileActions() {
         projects.initialized ? projects.activeProject?.name : undefined);
     } catch (error) {
       console.error('Graph save failed:', error);
-      showNotice(failureMessage(error, "Couldn't save the graph."));
+      showNotice(failureMessage(error, "Nebula couldn’t save the canvas."));
     } finally {
       actionInFlight.current = false;
     }

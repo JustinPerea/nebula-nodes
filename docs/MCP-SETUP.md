@@ -209,35 +209,38 @@ The server exposes these tools for building and running (see
   on the canvas or its bars, never in a panel that owns its keys such as the
   Inspector or chat, nor behind a modal dialog). A delete (the person's,
   yours or another agent's) takes the nodes and their connections off the
-  canvas the moment it is made; edits to them still waiting to be sent
-  (the person's typing, yours) are dropped once Nebula confirms it, and a
-  sync that still shows them meanwhile leaves them off. If Nebula refuses
-  it, the nodes come back where they were, with their connections, not
-  selected, with the usual line saying why, and the waiting edits go out.
-  A Cmd+Z pressed while a delete is still on its way waits for the
-  delete's answer, saying nothing meanwhile, then brings the nodes back
-  with their connections, on the canvas and in Nebula's graph, with the
-  usual "Restored the node." (Redo deletes them again), as a Cmd+Z after
-  the delete has landed does. Nodes an Undo brings back come back
-  selected, replacing the selection, as a paste does. Either way it brings
-  them back as Nebula last had them: your edit to a node (or a connection
-  you made or took off) that Nebula took while the person's delete was on
-  its way comes back with it, a connection only while the node at its
-  other end is there; the person's own typing and rename not yet sent stay
-  theirs. Your edit is its own undo step under the delete, as Nebula had
-  them (your edit, then the delete): the person's next Cmd+Z after the
-  restore undoes only your edit, with the usual "Undid <agent>’s edit.",
-  and none of their older steps reverts it. If Nebula refuses the delete,
-  the nodes come back with the delete's own line and the waiting Cmd+Z
-  says nothing more. If the restore is refused or fails, or the delete
-  gets no answer within 15 s, the canvas says "Nebula couldn’t bring back
-  “X”. Try Undo again." (the names as the cards read then; several nodes
-  by the usual list, four or more counted). After the 15 s give-up, a late
-  answer to the delete never brings the nodes back by itself: the next
-  Cmd+Z does. The line goes as soon as it stops being true: a newer step
-  above the delete (Cmd+Z would undo that step), a late answer with the
-  delete no longer on top, or another canvas. A Cmd+Z the person presses
-  before another step has reached Nebula
+  canvas the moment it is made; edits to them still waiting to be sent (the
+  person's typing, yours) are dropped once Nebula confirms it, and a sync
+  that still shows them meanwhile leaves them off. If Nebula refuses it, the
+  nodes come back where they were, with their connections, not selected,
+  with the usual line saying why, and the waiting edits go out. A Cmd+Z
+  pressed while a delete is still on its way waits for the delete's answer,
+  saying nothing meanwhile, then brings the nodes back with their
+  connections, on the canvas and in Nebula's graph, with the usual "Restored
+  the node." (Redo deletes them again), as a Cmd+Z after the delete has
+  landed does. Nodes any Undo or Redo brings back (the person's step or an
+  agent's, yours included) come back selected, replacing the selection, as a
+  paste does: one selection, so the Inspector's node and its "…" pill move
+  to the node brought back (none when several come back). Either way it
+  brings them back as Nebula last had them: your edit to a node (or a
+  connection you made or took off) that Nebula took while the person's
+  delete was on its way comes back with it, a connection only while the node
+  at its other end is there; the person's own typing, and a rename of theirs
+  not yet answered, stay theirs (your rename after theirs landed is yours).
+  Each edit is its own undo step under the delete, as Nebula had them, never
+  merged across agents or edits: the person's next Cmd+Z after the restore
+  undoes only the newest edit, with "Undid <agent>’s edit.", the next one
+  the edit before it, and none of their older steps reverts them. A delete
+  Nebula refuses keeps the node with each edit its own step the same way. If
+  Nebula refuses the delete, the nodes come back with the delete's own line
+  and the waiting Cmd+Z says nothing more. If the restore is refused or
+  fails, or the delete gets no answer within 15 s, the canvas says "Nebula
+  couldn’t bring back “X”. Try Undo again." (the names as the cards read
+  then; several nodes by the usual list, four or more counted). After the
+  15 s give-up, a late answer to the delete never brings the nodes back by
+  itself: the next Cmd+Z does. The line goes as soon as it stops being true:
+  a newer step above the delete (Cmd+Z would undo that step) or another
+  canvas. A Cmd+Z the person presses before another step has reached Nebula
   waits for Nebula's answer, then undoes it (a clear, an upload once its
   node is on the canvas, an accepted proposal, a model picked on an
   OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
@@ -245,58 +248,57 @@ The server exposes these tools for building and running (see
   line). That Cmd+Z is bound to the step it was pressed for, and a second
   Cmd+Z to the step below it. While its own step is still on its way it
   waits, even if something else lands meanwhile; a later step of the
-  person's still on its way is no newer edit (the Cmd+Z applies beneath
-  it). Your edits to a node that a waiting Cmd+Z holds are kept and show on
-  the canvas once it lands, with their Agent log line and their own undo
-  step (a run's outputs too); if Nebula doesn't answer an undo within 15 s
-  it fails with "Couldn't undo that." and the reason, and the edits it held
-  go out in order. An undo Nebula refuses leaves the canvas as Nebula's
-  graph is. An edit or Cmd+Z still waiting when another project opens or a
-  graph import replaces the canvas is never sent: it would land on the
-  wrong project. A delete's change lands when Nebula's own sync takes its
-  nodes off, which can come before its answer: no undo after that brings
-  those nodes back to the canvas or to Nebula's graph unless it undoes
-  that delete. A delete of several nodes
-  is one step however its nodes' syncs arrive (one per node, with your edit
-  or the person's typing between them): one Cmd+Z brings them all back. A
-  sync that already took a node off makes its delete done, whatever its
-  answer says, and undoing a delete puts back only what it removed (a node
-  you added meanwhile stays). A clear the person issues after a Cmd+Z that
-  is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
-  cleared; an undo takes off only the nodes its own step added (a node you,
-  another agent or the person added while that step was on its way stays),
-  and always the ones it did add, even after a delete of one and its undo
-  brought it back (adding a node from the library, a drop, the command
-  palette, a Character or Moodboard drop and Creator's inserts are each
-  their own step too); while an undo or redo is still on its way to
+  person's still on its way is no newer edit (the Cmd+Z applies beneath it).
+  Your edits to a node that a waiting Cmd+Z holds are kept and show on the
+  canvas once it lands, with their Agent log line and their own undo step (a
+  run's outputs too); if Nebula doesn't answer an undo within 15 s it fails
+  with "Couldn't undo that." and the reason, and the edits it held go out in
+  order. An undo Nebula refuses leaves the canvas as Nebula's graph is. An
+  edit or Cmd+Z still waiting when another project opens or a graph import
+  replaces the canvas is never sent: it would land on the wrong project. A
+  delete's change lands when Nebula's own sync takes its nodes off, which
+  can come before its answer: no undo after that brings those nodes back to
+  the canvas or to Nebula's graph unless it undoes that delete. A delete of
+  several nodes is one step however its nodes' syncs arrive (one per node,
+  with your edit or the person's typing between them): one Cmd+Z brings them
+  all back. A sync that already took a node off makes its delete done,
+  whatever its answer says, and undoing a delete puts back only what it
+  removed (a node you added meanwhile stays). A clear the person issues
+  after a Cmd+Z that is still waiting supersedes it: the Cmd+Z is dropped
+  and the canvas ends cleared; an undo takes off only the nodes its own step
+  added (a node you, another agent or the person added while that step was
+  on its way stays), and always the ones it did add, even after a delete of
+  one and its undo brought it back (adding a node from the library, a drop,
+  the command palette, a Character or Moodboard drop and Creator's inserts
+  are each their own step too); while an undo or redo is still on its way to
   Nebula, the person's next edits (typing, a delete, an added node) reach
-  Nebula after it, in the order the person made them, so the graph you
-  read never shows a later edit undone by an earlier Cmd+Z;
-  a Cmd+Z never does nothing without a word: a step that ended up changing
-  nothing is passed over (the press undoes the step below it), and a press
-  whose step was taken back meanwhile (a refused clear) counts in the
-  skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
-  and a step taken while a clear was on its way never brings a cleared
-  node back. If a newer edit has settled on top of its step by then
-  (yours, another agent's, or the person's own later edit), it never undoes
-  that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
-  change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
-  presses were dropped); if some presses went through and some were
-  dropped, the restore's line ends with what was skipped, undos and redos
-  counted apart: "1 undo was skipped while a change was saving.", "2 undos
-  and 1 redo were skipped while a change was saving." (Redo stays). The same line shows if Nebula hasn't answered
-  within 15 s, or another project opens (the person's own switch, or your
-  load into the open project, whose own notice stays beside it). A clear
-  takes off only the nodes that were on the canvas when the person cleared,
-  never one you added after it (even under a reused id such as n1), and an
-  accept the person undid while it was on its way runs nothing (its
-  approval goes back). Its
-  result has `undo` too, which puts the nodes back with their params,
-  outputs, names and connections, the person's pins on them, and the proposals
-  the delete closed when they still fit. `removals` lists, per node it
-  deleted, the pins it detached and the proposals it closed (each record
-  also names its `projectId` and the node's `definitionId`, and `replaces`
-  when it supersedes an earlier delete of the same node).
+  Nebula after it, in the order the person made them, so the graph you read
+  never shows a later edit undone by an earlier Cmd+Z; a Cmd+Z never does
+  nothing without a word: a step that ended up changing nothing is passed
+  over (the press undoes the step below it), and a press whose step was
+  taken back meanwhile (a refused clear) counts in the skipped line below; a
+  Cmd+Z pressed after the clear undoes the clear once it lands, and a step
+  taken while a clear was on its way never brings a cleared node back. If a
+  newer edit has settled on top of its step by then (yours, another agent's,
+  or the person's own later edit), it never undoes that edit instead: it is
+  dropped, and the canvas says "Nothing was undone. Your last change was
+  still saving." ("Nothing was redone. …" when only Cmd+Shift+Z presses were
+  dropped); if some presses went through and some were dropped, the
+  restore's line ends with what was skipped, undos and redos counted apart:
+  "1 undo was skipped while a change was saving.", "2 undos and 1 redo were
+  skipped while a change was saving." (Redo stays). The same line shows if
+  Nebula hasn't answered within 15 s, or another project opens (the person's
+  own switch, or your load into the open project, whose own notice stays
+  beside it). A clear takes off only the nodes that were on the canvas when
+  the person cleared, never one you added after it (even under a reused id
+  such as n1), and an accept the person undid while it was on its way runs
+  nothing (its approval goes back). Its result has `undo` too, which puts
+  the nodes back with their params, outputs, names and connections, the
+  person's pins on them, and the proposals the delete closed when they still
+  fit. `removals` lists, per node it deleted, the pins it detached and the
+  proposals it closed (each record also names its `projectId` and the node's
+  `definitionId`, and `replaces` when it supersedes an earlier delete of the
+  same node).
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
   since stays as it is and is listed in `skipped`; so does a node someone
@@ -4045,14 +4047,15 @@ How a delete or an undo reads depends on whose run it is:
   finishes.", Cmd+V "You can paste when the run finishes.", and, as the
   command palette's rows say them, Cmd+Enter "You can run the canvas when
   the run finishes.", Cmd+S "You can save the canvas when the run finishes."
-  and Cmd+O "You can load a canvas when the run finishes." (an import or
-  Create's launch says its own wait the same way: "… when the import
-  finishes."). The palette's Run canvas, Save canvas and Load canvas stay
-  listed, greyed, each with its line as its own text. Adding a node is not
-  locked by a run: from the library, the palette, or a connection dropped on
-  empty canvas (its node picker opens as with no run, and the node comes
-  connected), and connecting two nodes isn't either; your own adds and
-  connections aren't refused during a run.
+  and Cmd+O "You can load a canvas when the run finishes." (Cmd+S and Cmd+O
+  say an import's or Create's launch wait the same way, "… when the import
+  finishes."; Cmd+Enter says an import's and runs during Create's launch, as
+  the toolbar's Run and the palette's do). The palette's Run canvas, Save
+  canvas and Load canvas stay listed, greyed, each with its line as its own
+  text. Adding a node is not locked by a run: from the library, the palette,
+  or a connection dropped on empty canvas (its node picker opens as with no
+  run, and the node comes connected), and connecting two nodes isn't either;
+  your own adds and connections aren't refused during a run.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is

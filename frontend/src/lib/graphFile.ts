@@ -35,9 +35,9 @@ import {
 } from './graphFileShared';
 
 /** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
-const SAVE_GRAPH = "Couldn't save the graph.";
-const LOAD_GRAPH = "Couldn't load the graph.";
-/** GM - Design, 2026-10-24: "Couldn't save the graph. It's too big to save in
+const SAVE_GRAPH = "Nebula couldn’t save the canvas.";
+const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
+/** GM - Design, 2026-10-24: "Nebula couldn’t save the canvas. It's too big to save in
  * a browser." (under SAVE_GRAPH). */
 const TOO_BIG_FOR_THE_BROWSER = "It's too big to save in a browser.";
 
@@ -961,7 +961,7 @@ export const graphFileLinksForTests = {
 
 /* Round 16 (GM: "lead with what the person pressed"): the bundle restore
  * runs only as part of Load graph, so its refusal uses Load graph's own
- * heading ("Couldn't load the graph."), not "Couldn't restore the asset.",
+ * heading ("Nebula couldn’t load the canvas."), not "Couldn't restore the asset.",
  * which belongs to a Restore control on an asset. */
 
 /** What Load graph hands the canvas. */

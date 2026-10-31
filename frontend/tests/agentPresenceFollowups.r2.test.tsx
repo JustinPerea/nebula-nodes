@@ -245,7 +245,7 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
   it('following: GM\'s tooltip', () => {
     render(<RunHistoryPanel />);
     follow();
-    for (const name of ['Retry failed Full graph run', 'Rerun Full graph']) {
+    for (const name of ['Retry failed Full canvas run', 'Rerun Full canvas']) {
       const control = screen.getByRole('button', { name });
       expect(control, name).toBeDisabled();
       expect(control, name).toHaveAttribute('title', WAIT);
@@ -256,13 +256,13 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
   it('offline: the reconnect tooltip with its verb; the panel itself stays open and live (review 2 check 2)', () => {
     render(<RunHistoryPanel />);
     offline();
-    for (const [name, line] of [['Retry failed Full graph run', 'You can retry it when Nebula reconnects.'],
-      ['Rerun Full graph', 'You can rerun it when Nebula reconnects.']]) {
+    for (const [name, line] of [['Retry failed Full canvas run', 'You can retry it when Nebula reconnects.'],
+      ['Rerun Full canvas', 'You can rerun it when Nebula reconnects.']]) {
       const control = screen.getByRole('button', { name });
       expect(control, name).toBeDisabled();
       expect(control, name).toHaveAttribute('title', line);
     }
-    expect(screen.getAllByText(/Full graph/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Full canvas/).length).toBeGreaterThan(0);
   });
 });
 

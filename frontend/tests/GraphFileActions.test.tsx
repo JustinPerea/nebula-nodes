@@ -176,12 +176,12 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
-    // error-copy round 2 (GM): "Couldn't load the graph." then the reason.
-    expect(notice()).toMatchObject({ text: "Couldn't load the graph. Fixture import rejected", tone: 'error', offer: null });
+    // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the reason.
+    expect(notice()).toMatchObject({ text: "Nebula couldn’t load the canvas. Fixture import rejected", tone: 'error', offer: null });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
     await act(async () => { requestGraphLoad(); });
-    expect(notice()?.text).toBe("Couldn't load the graph. Nebula didn't respond. Try again.");
+    expect(notice()?.text).toBe("Nebula couldn’t load the canvas. Nebula didn't respond. Try again.");
     expect(alert).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
@@ -277,7 +277,7 @@ describe('workspace-independent graph file actions', () => {
       expect(createProject).toHaveBeenCalledOnce();
       expect(flags()).toEqual([true]);
       expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['existing']);
-      expect(notices).toEqual(["Couldn't load the graph. Try again, or reload if it keeps happening."]);
+      expect(notices).toEqual(["Nebula couldn’t load the canvas. Try again, or reload if it keeps happening."]);
     });
 
     it("waiting behind #178's screen, or turned away with its own line: no second line, nothing loaded", async () => {

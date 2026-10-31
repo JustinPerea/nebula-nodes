@@ -63,7 +63,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByText(/target target-node/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry failed Single node run' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full graph' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun Full canvas' }));
 
     expect(retryFailedRun).toHaveBeenCalledWith('failed-run');
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
@@ -77,8 +77,8 @@ describe('RunHistoryPanel replay actions', () => {
 
     render(<RunHistoryPanel />);
 
-    expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toBeDisabled();
   });
 
   // GM r37 (PR #198 round 25): a lock reason says what unlocks it, by the
@@ -92,8 +92,8 @@ describe('RunHistoryPanel replay actions', () => {
       capturedAt: 'now', width: 1, height: 1, identity: { objectName: 'Frame' }, exportSettings: { scale: 1 } } }] } as unknown as RunRecord;
     useGraphStore.setState({ runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete'), recovered, paper], isExecuting: true });
     render(<RunHistoryPanel />);
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', 'You can rerun it when the run finishes.');
-    expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toHaveAttribute('title', 'You can retry it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', 'You can rerun it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toHaveAttribute('title', 'You can retry it when the run finishes.');
     expect(screen.getByRole('button', { name: 'Recover Single node run' })).toHaveAttribute('title', 'You can recover it when the run finishes.');
     const latest = screen.getByRole('button', { name: 'Rerun Single node with latest source' });
     expect(latest).toBeDisabled();

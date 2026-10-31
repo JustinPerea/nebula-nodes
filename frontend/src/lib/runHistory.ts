@@ -978,7 +978,7 @@ export function clearPersistedRunHistory(
 }
 
 const TRIGGER_LABELS: Record<RunTrigger, string> = {
-  graph: 'Full graph',
+  graph: 'Full canvas',
   node: 'Single node',
   cluster: 'Selection',
   shot: 'Cinema shot',

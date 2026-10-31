@@ -842,3 +842,154 @@ and the picker's silent press during an import.
   deletefail, agentstep ("Restored the node.", selected alone, then
   "Undid Codex’s edit." with the typed value back here and in Nebula).
   - 6 shots in scratchpad/lock-lines/shots3/; md5 `uniq -d` is empty.
+
+# Round 4 (GM r5 and r6, review 3)
+
+## 25. GM r5: the canvas failure lines and the import waits
+
+- The three failure headings: "Nebula couldn’t load the canvas.",
+  "Nebula couldn’t save the canvas." (lib/graphFile, GraphFileActions) and
+  "Nebula couldn’t import the CLI canvas." (Toolbar). The reason follows
+  each, as before.
+- The connection-drop picker, pressed during an import, adds nothing and
+  says the store's line in a status row: "You can add “GPT Image 1” when
+  the import finishes." (`addNodeLine` in lib/runLock, which the store's
+  refusal now uses too). The line goes when the import ends.
+- "View video node" during an import is disabled with "You can view the
+  video node when the import finishes." (`RUN_LOCK_VERBS.viewVideoNode`);
+  Send to motion keeps its own line.
+
+## 26. GM r6 item 5: three more names
+
+"…Save your canvas first to keep a copy." (the Clear confirm), "The CLI
+canvas is empty. Build one with the nebula CLI first." and the run
+history's "Full canvas".
+
+## 27. Review 3 MEDIUM-1: an agent's rename after the person's
+
+`noteHeldCopies` took `renaming` from the copy before it, so a rename that
+had landed kept winning over a later agent rename, and the Undo brought
+back the person's name. It now records `renaming` only while the label is
+in flight (`labelsInFlight.get(id)`). The other fields that carry forward
+do so on purpose: `foreign` and `moved` (Nebula's later syncs, the
+person's own echoes included, still hold the agent's edit and move, so the
+newest copy is still theirs to name) and `links` (below), which keeps each
+earlier edit with its own copy. Tested in both sync orders (the reviewer's A3 and
+A3b), with a control where the person's rename is still on its way.
+Live: `renamelate`.
+
+## 28. GM r6 item 1 and review 3 LOW-1: one step per agent edit
+
+Each sync that carries someone else's edit to a held node is a link in the
+copy's `links` (origin, the synced node, its connections, the order
+Nebula sent it). Two syncs of the same edit id fold into one link; any
+other edit, by the same agent or another, is its own link, as
+`foreignEditStep` makes one step per sync outside a Delete (it never
+merges). `carrySyncedCopy` turns the links into a chain, each step's
+before being the previous one's after, the newest ending where the
+restore puts the node; `placeForeignUnder` makes the steps under the
+Delete's step in Nebula's order, so Undo takes the newest first ("Undid
+Claude’s edit." then "Undid Codex’s edit."). Each step carries its own
+edit id, so each Undo names its own edit to Nebula (LOW-1). A Delete
+Nebula refuses leaves the node, and the same links become steps on the
+canvas (`placeEarlierLinks`). Live: `twoagents`.
+
+## 29. GM r6 items 2–3: one selection
+
+`selectionFollows` sets the UI's selected node (the Inspector, its ring and
+the "…" pill) to what a Paste, Duplicate, Undo or Redo brings: the one
+node, or none when it brings several. Any Undo or Redo that brings nodes
+back selects them, agent steps included. Live: `ring` (one ring after
+Paste and after an Undo).
+
+## 30. GM r6 item 4: the highlighted row's edge
+
+Every highlighted palette row, locked or not, has
+`box-shadow: inset 0 0 0 1px var(--sr-ink-meta)` (white at 0.40): 3.66:1
+on the panel, 3.05:1 on the highlight surface. The locked row keeps its
+grey label inside it. Live: `edge`.
+
+## 31. GM r6 item 6 and review 3's other items
+
+- MCP-SETUP: Cmd+Enter during Create's launch runs, as the toolbar's Run
+  and the palette's do; Cmd+S and Cmd+O say the wait.
+- LOW-2: tests for U6, U7 and U17 (all killed). U16 and U18 stay guards:
+  - U16 (save and restore `landingsForNextStep`/`sceneLinesBeforeSync`
+    around `placeForeignUnder`): a sync sets them and consumes them in the
+    same synchronous call (`foreignEditStep` clears them first), and
+    `placeForeignUnder` runs only from the Delete's answer, so today they
+    are always null there. The guard keeps a future path that leaves them
+    set from feeding a sync's landings to an agent step.
+  - U18 (`if (!chain)`): a step re-pushed in the Delete's place holds the
+    same delete-time copy, so building the chain again gives the same
+    chain. The guard keeps the chain from the Delete's own step.
+- NIT-1 (the round 3 note on dropping the `copy.foreign` check was
+  inaccurate): with no origin, `foreignEditStep` makes no step, but it
+  still notes the node's changed keys as touched by an unknown source
+  (`noteForeignTouches`, kind "unknown") and clears the sync's landings and
+  scene lines. So the mutant is not a no-op, and no test catches it
+  (rerun: survived). The one difference a person could see: a sync with
+  no origin (a reconnect's) that changed the label of a node held by a
+  Delete Nebula then refused. Outside a Delete that sync marks the label
+  as changed by someone unknown; here the canvas takes it without a mark,
+  so NodeLabel's dropped-rename line would still name the agent who
+  renamed it before. The mutant's way matches the rest of the app, but it
+  would also mark the person's own echoes. Not changed; left as a
+  question below.
+- names-palette-keys NIT-1: "Wait for it to finish." (cinemaScene.ts) is
+  in the wording batch list with GM's ruling, "You can <verb> when it
+  finishes."
+
+## 32. Agents
+
+Agent-visible behaviour changed; the tools didn't. When the person deletes
+a node an agent is editing, each of the agent's edits stays its own step
+(never merged with another agent's), an agent's rename after the person's
+is kept, and any Undo or Redo selects what it brings back. MCP-SETUP's
+remove_from_canvas bullet says so; the CLI and the MCP tools need no change
+(the restore is the person's, through the same endpoints).
+
+## Round 4 proof
+
+Full suites run in CI after the push; on this Mac only tsc, lint and the
+changed and related files ran (2 workers).
+
+- **tsc -b and lint:** clean.
+- **Related vitest (239 files):** 3,527 of 3,530 passed, Errors 0.
+  - graphStore.batchPreview (2): its uiStore mock lacked `selectNode`,
+    which Paste and Duplicate now call. The mock has it and the test
+    asserts the call with the copy's id; 11/11.
+  - agentPresenceFollowups.ratchet timed out at 120 s under load; alone,
+    51/51.
+  - The files changed after that run started (heldUndo.pr205r4,
+    lockLines.pr205r3, ConnectionPopup, CinemaMotionHandoff): 80/80. The
+    other ten files that mock uiStore don't reach `selectionFollows`:
+    91/91.
+- **Related backend (58 files, isolated):** 2,329 passed, 9 skipped, 0
+  failed.
+- **New tests on f553ac94:** heldUndo.pr205r4 fails 12 of 16; the 4 that
+  pass are the A3c control and the U6p, U7p and U17 guards. Also failing
+  there: lockLines' two edge tests, batchPreview's two selection asserts,
+  ConnectionPopup's import line, CinemaMotionHandoff's "View video node",
+  and the heading and name tests in graphFile, GraphFileActions, Toolbar
+  and runHistory.
+- **Mutation (each guard's own files, --retry=2, clean baseline):** 30
+  mutants, 27 killed. U16 and U18 stay guards (section 31). The NIT-1
+  mutant survives (section 31).
+- **Live** (8797/5797, isolated; a canary to example.com aborted by
+  interception, the canary to 8001 refused, 0 requests reached
+  8000–8010/5173): 12/12 on the final code: edge, failures, picker,
+  videonode, renamelate, twoagents, ring.
+  - The first full run was 11/12: the ring's Undo half found no Delete to
+    undo. That run didn't log whether the Delete key had removed Temp 4,
+    so the cause isn't known. With that logged, ring alone was 6/6 and the
+    next full run 12/12, and both logged that the Delete had removed the
+    node.
+  - 12 shots in scratchpad/lock-lines/shots4/; md5 `uniq -d` is empty.
+
+## Round 4 question for GM
+
+A sync with no origin (a reconnect's) that renames a node held by a Delete that
+Nebula then refuses: should the name it brings count as changed by
+someone unknown, as it does outside a Delete? Today it doesn't, so a later
+dropped rename's line names the agent who renamed it before.

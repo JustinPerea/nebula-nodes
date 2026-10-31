@@ -307,7 +307,7 @@ describe('Canvas toolbar hierarchy', () => {
     const { panel, trigger } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     expect(trigger).toHaveFocus();
-    expect(window.confirm).toHaveBeenCalledWith('Clear the canvas? 1 node will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.');
+    expect(window.confirm).toHaveBeenCalledWith('Clear the canvas? 1 node will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.');
     expect(mocks.fetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' });
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
@@ -435,7 +435,7 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
-  // Error copy round 3e (GM): "Couldn't import the CLI graph." then the
+  // Error copy round 3e (GM): "Nebula couldn’t import the CLI canvas." then the
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
@@ -445,7 +445,14 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
-    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Nebula couldn’t import the CLI canvas. ${reason}`));
+  });
+
+  it('an empty CLI canvas says so in the canvas words (GM PR #205 r6 item 5)', async () => {
+    mocks.cli.mockResolvedValue({ empty: true, nodes: [], edges: [] });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith('The CLI canvas is empty. Build one with the nebula CLI first.'));
   });
 
   it('runs layout only after explicit selection and preserves Reset panels behavior', () => {

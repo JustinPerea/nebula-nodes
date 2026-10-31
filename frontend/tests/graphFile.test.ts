@@ -508,7 +508,7 @@ describe('portable graph asset bounds', () => {
     await expect(saveToFile([node], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. This graph is 528.0 MB. Nebula opens graphs up to 528 MB.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas. This graph is 528.0 MB. Nebula opens graphs up to 528 MB.");
   });
 
   // GM - Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
@@ -531,7 +531,7 @@ describe('portable graph asset bounds', () => {
     await expect(saveToFile([], [])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(generateSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. It's too big to save in a browser.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas. It's too big to save in a browser.");
   });
 
   it('another failure building graph.json (a stack overflow) keeps the generic line', async () => {
@@ -544,7 +544,7 @@ describe('portable graph asset bounds', () => {
     }) as typeof JSON.stringify);
 
     await expect(saveToFile([], [])).resolves.toBeNull();
-    expect(alertSpy).toHaveBeenCalledWith("Couldn't save the graph. Try again, or reload if it keeps happening.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas. Try again, or reload if it keeps happening.");
   });
 
   it('refuses too many live nodes before mapping or compression', async () => {
@@ -577,7 +577,7 @@ describe('portable graph asset bounds', () => {
 
     await expect(saveToFile([], [])).resolves.toBeNull();
     expect(createUrl).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't save the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t save the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
   });
 
   it('stores generated members without creating a restore-rejected compression ratio', async () => {
@@ -645,7 +645,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
     delete (window as Window & { showOpenFilePicker?: unknown }).showOpenFilePicker;
   });
 
@@ -659,7 +659,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadViaInput()).resolves.toBeNull();
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Couldn't load the graph\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas\. This graph is [\d.]+ MB\. Nebula opens graphs up to \d+ MB\.$/));
   });
 
   // Q118 (Justin, 2026-10-23): "Let Load graph open bigger .nebula files (up
@@ -778,10 +778,10 @@ describe('graph import memory ceiling', () => {
     // heading, then the reason, never "(HTTP 503)"; on 1fc3d846 this said
     // "Failed to load graph: Asset restore failed (HTTP 503)", and on fc906cb6
     // "Couldn't restore the asset.".
-    [new Response('', { status: 503 }), "Couldn't load the graph. Nebula didn't respond. Try again."],
-    [new Response('', { status: 400 }), "Couldn't load the graph. Try again, or reload if it keeps happening."],
+    [new Response('', { status: 503 }), "Nebula couldn’t load the canvas. Nebula didn't respond. Try again."],
+    [new Response('', { status: 400 }), "Nebula couldn’t load the canvas. Try again, or reload if it keeps happening."],
     [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
-      "Couldn't load the graph. That bundle has too many files."],
+      "Nebula couldn’t load the canvas. That bundle has too many files."],
   ])('a refused restore names the action and the reason (%#)', async (answer, line) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -816,7 +816,7 @@ describe('graph import memory ceiling', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // Error copy round 3e (GM): the person reads a written line; the check's
     // own text ("nodes[0] must be an object") goes to the console only.
-    expect(alertSpy).toHaveBeenCalledWith("Couldn't load the graph. This file is damaged or isn't a Nebula graph.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t load the canvas. This file is damaged or isn't a Nebula graph.");
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('nodes[0] must be an object'));
   });
 
@@ -930,7 +930,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith("Couldn't load the graph. This file is from a newer Nebula. Update Nebula, then open it again.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t load the canvas. This file is from a newer Nebula. Update Nebula, then open it again.");
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('Unsupported .nebula file version'));
   });
 });

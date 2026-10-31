@@ -44,6 +44,7 @@ export const RUN_LOCK_VERBS = {
   runCanvas: 'run the canvas',
   /** Cinema's "Send to motion" during an import (GM PR #205 r4 item 5). */
   sendToMotion: 'send it to motion',
+  viewVideoNode: 'view the video node',
 } as const;
 export type RunLockVerb = typeof RUN_LOCK_VERBS[keyof typeof RUN_LOCK_VERBS];
 
@@ -75,6 +76,13 @@ export type LockWait = keyof typeof LOCK_WAITS;
 export function lockLine(verb: string, wait: LockWait | { finishes: string }): string {
   const when = typeof wait === 'string' ? LOCK_WAITS[wait] : `when ${wait.finishes} finishes`;
   return `You can ${verb} ${when}.`;
+}
+
+/** The connected add's line, said by the store's refusal and shown in the
+ * connection-drop picker alike (GM PR #205 r5 item 2): "You can add “X”
+ * when the import finishes." */
+export function addNodeLine(displayName: string, wait: LockWait): string {
+  return lockLine(`add “${displayName}”`, wait);
 }
 
 /** GM r37: "You can rerun it when the run finishes." Any verb: Run history's

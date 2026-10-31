@@ -95,7 +95,7 @@ describe('GM (#200 r4 item 2): offline, Rerun says it can rerun when Nebula reco
     useGraphStore.setState({ runHistory: [record], isExecuting: false });
     act(() => noteBackendConnection('offline'));
     render(<RunHistoryPanel />);
-    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(rerun).toBeDisabled();
     expect(rerun.getAttribute('title')).toBe('You can rerun it when Nebula reconnects.');
   });

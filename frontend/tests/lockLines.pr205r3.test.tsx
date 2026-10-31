@@ -229,3 +229,36 @@ describe('GM r4 item 4: Cmd+S and Cmd+O while a wait holds the files', () => {
     expect(store().undoNotice).toBeNull();
   });
 });
+
+// GM PR #205 r6 item 4 (round 4): the highlight's 1 px inset edge, at 3:1 or
+// better against the panel, on every highlighted row, locked or not.
+describe('GM r6 item 4: the highlighted row\'s edge', () => {
+  const token = (name: string): string => {
+    const decl = appRules().filter((rule) => rule.file === 'styles/slava-restraint.css')
+      .flatMap((rule) => rule.decls).find((each) => each.prop === name);
+    return decl?.value ?? '';
+  };
+  /** WCAG contrast of white at `alpha` over `under` (both on black). */
+  const luminance = (v: number) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const whiteAt = (alpha: number) => luminance(255 * alpha);
+  const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+  it.each([['locked (a run holds it)', true], ['unlocked', false]] as const)('%s: the highlighted row has the inset edge in the meta ink, 3:1 or better against the panel and the highlight', (_label, running) => {
+    document.body.className = 'app-slava-restraint';
+    useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isExecuting: running });
+    render(<CommandPalette />);
+    openPalette();
+    const field = screen.getByRole('combobox', { name: 'Search commands and nodes' });
+    act(() => { fireEvent.keyDown(field, { key: 'ArrowDown' }); });
+    const row = screen.getByRole('option', { name: 'Save canvas' });
+    expect(row.className).toContain('command-palette__item--selected');
+    expect(row.getAttribute('aria-disabled')).toBe(running ? 'true' : null);
+    const won = cascaded(row);
+    expect(won.get('|box-shadow')?.value).toBe('inset 0 0 0 1px var(--sr-ink-meta, rgba(255, 255, 255, 0.40))');
+    const alpha = Number(/rgba\(255, 255, 255, ([\d.]+)\)/.exec(token('--sr-ink-meta'))?.[1]);
+    expect(token('--sr-canvas')).toBe('#000000');
+    expect(contrast(whiteAt(alpha), 0)).toBeGreaterThanOrEqual(3);
+    expect(contrast(whiteAt(alpha), whiteAt(0.10))).toBeGreaterThanOrEqual(3);
+    if (running) expect(won.get('|color')?.value).toMatch(/disabled-label/);
+  });
+});

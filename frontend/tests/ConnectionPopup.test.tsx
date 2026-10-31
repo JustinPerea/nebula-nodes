@@ -451,10 +451,16 @@ describe('ConnectionPopup during a run (PR #205 round 3)', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  it('a press during an import adds nothing', async () => {
+  it('a press during an import adds nothing, and the picker says the store\'s line (GM PR #205 r5 item 2); the line goes with the import', async () => {
     useGraphStore.setState({ isImportingGraph: true });
     openPopup();
-    await act(async () => { fireEvent.click(searchFor('veo-3')); });
+    const item = searchFor('veo-3');
+    const name = item.querySelector('.connection-popup__item-name')?.textContent;
+    await act(async () => { fireEvent.click(item); });
     expect(addConnected).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent(`You can add “${name}” when the import finishes.`);
+    expect(screen.queryByRole('alert')).toBeNull();
+    act(() => { useGraphStore.setState({ isImportingGraph: false }); });
+    expect(screen.queryByText(/when the import finishes/)).toBeNull();
   });
 });

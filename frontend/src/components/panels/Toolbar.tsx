@@ -191,7 +191,7 @@ export function Toolbar() {
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
-        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.`
+        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.`
         : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
     if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;
@@ -253,7 +253,7 @@ export function Toolbar() {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
-        showNotice('The CLI graph is empty. Build one with the nebula CLI first.', 'info');
+        showNotice('The CLI canvas is empty. Build one with the nebula CLI first.', 'info');
         return;
       }
       useGraphStore.getState().loadGraph(
@@ -273,7 +273,7 @@ export function Toolbar() {
         void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
     } catch (error) {
-      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."));
+      if (mounted.current) showNotice(failureUnder(error, "Nebula couldn’t import the CLI canvas."));
     }
   }, [fitView]);
 
