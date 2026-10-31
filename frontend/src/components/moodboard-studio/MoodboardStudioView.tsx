@@ -58,6 +58,7 @@ import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
 
 interface MoodboardDraft {
   name: string;
@@ -1100,7 +1101,7 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard...'}
+      {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Moodboard…'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
@@ -1457,9 +1458,9 @@ function MoodboardRail({
       <button type="button" className="moodboard-rail__new" disabled={noProject}
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list">
-        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status">{notice}</div>}
-        {busy && <div className="moodboard-rail__empty">Loading...</div>}
-        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error">{failed}</div>}
+        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
+        {busy && <div className="moodboard-rail__empty">Loading…</div>}
+        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} /></div>}
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}

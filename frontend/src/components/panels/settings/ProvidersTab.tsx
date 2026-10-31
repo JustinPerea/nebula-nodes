@@ -14,6 +14,7 @@ import { KreaSignInRow } from './KreaSignInRow';
 import { NousRow } from './NousRow';
 import { KREA_ROW, NOUS_ROW } from './rowHelpers';
 import { useKreaConnection } from './useKreaConnection';
+import { LineText } from '../../LineText';
 
 const NODES = Object.values(NODE_DEFINITIONS);
 const KREA_ACCOUNT_NODES = NODES.filter((node) => supportsKreaAccount(node));
@@ -138,7 +139,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
               onClick={() => void health.checkConnections()}>{health.loading ? 'Checking…' : 'Check connections'}</button>
           </div>
           <div className="settings-list">{connected.map((entry) => entry.render())}</div>
-          {health.error && <p className="settings-row__error" role="alert">{health.error}</p>}
+          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} /></p>}
           {desktop?.credentials && <p className="settings-hint settings-list__note">Keys are stored in the macOS Keychain.</p>}
         </section>
       )}

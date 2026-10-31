@@ -9,6 +9,7 @@ import { removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
 import { cancelRowFocus, focusRowAfterMove, hostOf, keyStatus, readServiceAccount, takeRowFocus } from './rowHelpers';
+import { LineText } from '../../LineText';
 
 
 
@@ -139,7 +140,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
-            {error && <p className="settings-row__error" role="alert">{error}</p>}
+            {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
           </div>
         )}
         {open === 'edit' && (
@@ -166,7 +167,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               </div>
             )}
             {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
-            {error && <p className="settings-row__error" role="alert">{error}</p>}
+            {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
             <div className="settings-row__foot">
               <span className="settings-hint">
                 {configured ? 'Key page: ' : 'No key yet? '}

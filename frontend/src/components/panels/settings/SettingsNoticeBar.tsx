@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { dismissNotice, undoAddedKey } from '../../../lib/settingsWrites';
 import { focusRowAfterMove } from './rowHelpers';
+import { LineText } from '../../LineText';
 
 /** Plain confirmations go quickly; one you can undo stays long enough to read the row's check first. */
 const NOTICE_MS = 6000;
@@ -29,7 +30,7 @@ export function SettingsNoticeBar() {
         <div key={notice.id} className="settings-notice"
           onPointerEnter={() => setHeldId(notice.id)} onPointerLeave={() => setHeldId(null)}
           onFocus={() => setHeldId(notice.id)} onBlur={() => setHeldId(null)}>
-          <span>{notice.message}</span>
+          <span><LineText text={notice.message} /></span>
           {notice.undoKey && (
             <button type="button" className="settings-notice__undo" onClick={() => {
               focusRowAfterMove(notice.undoKey!);

@@ -256,9 +256,10 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
   switch (reason) {
     // GM, round 4 (2026-10-23), verbatim: a banner stays up, so it fits one
     // line at the region's 560 px (the dev-renderer one is developer-only and
-    // may wrap). Line 3 on the refusal still says what to do.
+    // may wrap). Line 3 on the refusal still says what to do. GM r14 (#204 round 9) dropped
+    // the debug-port line's "Debug mode:" lead.
     case 'debug-port':
-      return 'Debug mode: a debugging port is open, so Settings, proposals and chats are off.';
+      return 'A debugging port is open, so Settings, proposals and chats are off.';
     case 'dev-renderer':
       return "Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':

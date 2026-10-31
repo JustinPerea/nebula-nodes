@@ -7,8 +7,10 @@ import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave'
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
 import '../../styles/commons-review.css';
-import { failureMessage } from '../../lib/errorCopy';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
@@ -30,6 +32,9 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   const headingId = useId();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, '', 'commons.review-load', loadAgain);
   const [index, setIndex] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
@@ -56,14 +61,14 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         }
       }, (e: unknown) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
-          setError(failureMessage(e, "Couldn't load the review."));
+          line.show(e, "Couldn’t load the review.", { reload: true });
         }
       }).finally(() => { if (!cancelled) setLoading(false); });
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => { cancelled = true; alive.current = false; window.clearInterval(timer); };
-  }, []);
+  }, [loadEpoch, line]);
   useEffect(() => {
     onWork?.({ unsaved: dirty, saving, running: generating,
       save: () => draft.current?.save() ?? Promise.resolve({ ok: true }),
@@ -103,7 +108,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         if (alive.current && !editingDraft.current) setBatch(value);
         if (value.items.find((i) => i.position === item.position)?.status === 'failed') break;
       }
-    } catch (e) { if (alive.current) setError(failureMessage(e, "Couldn't propose labels.")); }
+    } catch (e) { if (alive.current) line.show(e, "Couldn’t propose labels."); }
     finally {
       pendingWrites.current--;
       if (alive.current) setGenerating(false);
@@ -123,7 +128,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         const first = value.items.findIndex((i) => !i.reviewed_at);
         if (next >= 0 || first >= 0) setIndex(next >= 0 ? next : first);
         return { ok: true };
-      } catch (e) { const failure = saveFailure(e); setError(failure.message); return failure; }
+      } catch (e) { const failure = saveFailure(e); line.keep(e, failure.message); return failure; }
       finally { pendingWrites.current--; setSaving((current) => (current === attempt ? null : current)); }
     })();
     setSaving(attempt);
@@ -150,7 +155,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
       {batch?.state === 'open' && !running && batch.attempts < batch.call_budget && batch.items.some((i) => i.status === 'pending') &&
         <button className="commons-button" disabled={dirty || !!saving || readOnly} {...offlineMark(readOnly)} onClick={() => void generate()}>Generate remaining grades</button>}
     </div></header>
-    {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
+    <CommonsErrorLine line={error} />
     {!batch && <p>Prepare the reference set in Blind labeling first.</p>}
     {batch && item && <div className="evaluation-workspace">
       <nav aria-label="References to review">{batch.items.map((ref, n) => <button key={ref.position} disabled={dirty || !!saving || generating}
@@ -185,15 +190,17 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
 function ReferenceImage({ item }: { item: ReviewItem }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, '', `commons.review-image-${item.position}`, loadAgain);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
     commonsEvaluationApi.image(item.position, controller.signal).then((blob) => {
       if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); }
-    }, (e: unknown) => { if (!controller.signal.aborted) setError(failureMessage(e, "Couldn't load this reference.")); });
+    }, (e: unknown) => { if (!controller.signal.aborted) line.show(e, "Couldn’t load this reference.", { reload: true }); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [item.position]);
+  }, [item.position, loadEpoch, line]);
   return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-    {error ? <p role="alert">{error}</p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : <p>Loading image…</p>}
+    {error ? <p role="alert"><LineText text={error} /></p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
 }
@@ -214,7 +221,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
   useEffect(() => { draftRef.current = labels ? { save: () => onAccept(labels), discard } : null; });
   useEffect(() => () => { draftRef.current = null; }, [draftRef]);
   if (!item.proposal || !labels) return <div className="evaluation-form"><h3 className="evaluation-step">{item.status === 'failed' ? 'Grade unavailable' : item.status === 'running' ? 'The agent is looking…' : 'Waiting for a grade'}</h3>
-    <p>{item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'}</p></div>;
+    <p><LineText text={item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'} /></p></div>;
   const change = (patch: Partial<EvaluationLabels>) => { setLabels({ ...labels, ...patch }); onDirty(true); };
   const fields = item.proposal.fields;
   const reason = (key: string) => (fields[key] as { why?: string } | undefined)?.why;

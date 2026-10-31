@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   createConnectedApp,
   revokeConnectedApp,
@@ -9,9 +9,11 @@ import {
   type ConnectedApp,
   type OutsideSpend,
 } from '../../../lib/api';
-import { failureMessage } from '../../../lib/errorCopy';
+import { connectAgentLockCopy, failureMessage } from '../../../lib/errorCopy';
+import { useLockPending, useTabHeld } from '../../../hooks/useTabHeld';
 import { formatSpentUsd } from '../../../lib/pricing';
 import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -165,6 +167,14 @@ export function ConnectedApps({ view, loadError, onChanged }: {
   const [armed, setArmed] = useState<string | null>(null);
   const [recoloring, setRecoloring] = useState<string | null>(null);
   const labelOf = (id: string | null | undefined) => clients.find((client) => client.id === id)?.label;
+  // GM r14 (5): the server refuses a new agent token from a tab that isn't connected as the person
+  // (create_agent_app: require_person). So Connect locks in place, the way the held cards' buttons
+  // do (aria-disabled, focusable, the first-moment rule), with the lock line under it and no
+  // tooltip, and unlocks on the promote. The agent/person gate itself is unchanged.
+  const tabHeld = useTabHeld();
+  const lockPending = useLockPending(tabHeld);
+  const lockShown = tabHeld && !lockPending;
+  const lockId = useId();
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -217,7 +227,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           chats&rdquo;. Revoke a token you no longer use.
         </p>
       </div>
-      {loadError && <p className="settings-row__error" role="alert">{loadError}</p>}
+      {loadError && <p className="settings-row__error" role="alert"><LineText text={loadError} /></p>}
       {!available && view?.connect?.reason && (
         <p className="settings-hint" role="note">{view.connect.reason} You can still make a plain token below.</p>
       )}
@@ -269,7 +279,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           </div>
         ))}
         <form className="settings-pref settings-model-limit settings-apps__new"
-          onSubmit={(event) => { event.preventDefault(); if (name.trim()) void create(); }}>
+          onSubmit={(event) => { event.preventDefault(); if (name.trim() && !tabHeld) void create(); }}>
           <span className="settings-pref__text">
             <span className="settings-pref__title">Add an agent</span>
             <span className="settings-pref__description">
@@ -288,10 +298,13 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               onChange={(event) => { setName(event.target.value); setNameTouched(true); }} />
             <ColorPicker value={color} disabled={busy} onChange={setColor} />
             <AppLimitSelect label="New agent daily limit" value={limit} disabled={busy} onChange={setLimit} />
-            <button type="submit" className="settings__button settings__button--primary" disabled={busy || !name.trim()}>
+            <button type="submit" className="settings__button settings__button--primary" disabled={busy || !name.trim()}
+              aria-disabled={tabHeld || undefined} data-held-pending={tabHeld && lockPending ? '' : undefined}
+              aria-describedby={lockShown ? lockId : undefined}>
               {available ? 'Connect' : 'Create token'}
             </button>
           </span>
+          {lockShown && <p id={lockId} className="settings-apps__held-line"><LineText text={connectAgentLockCopy()} /></p>}
         </form>
       </div>
       {made?.setup && (
@@ -327,7 +340,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           )}
         </div>
       )}
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
     </div>
   );
 }

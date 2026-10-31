@@ -5,6 +5,7 @@ import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AgentQuestionsAnswers } from './AgentQuestionsAnswers';
 import { ScrollFade } from '../ScrollFade';
 import { AuthorDot, BusyButton, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
+import { LineText } from '../LineText';
 
 /** One list in the opened Updates: its updates (newest first) and how to draw and run them. */
 export interface AgentNotesListSection {
@@ -177,7 +178,7 @@ export function AgentNotesList({
           ))}
         </ScrollFade>
       )}
-      {error && <div className="agent-notes-panel__error" role="alert">{error}</div>}
+      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} /></div>}
       <div className="agent-notes-panel__foot">
         <span className="agent-notes-panel__foot-note">{notNow ? 'Not now hides a suggestion for good' : ''}</span>
         {onSeeAll && (

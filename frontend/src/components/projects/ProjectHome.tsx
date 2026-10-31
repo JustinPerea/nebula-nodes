@@ -15,6 +15,8 @@ import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
   id: string;
@@ -158,7 +160,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
       </div>
       {choices?.lostPin && <p className="project-home__cover-note">
         {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
-      {failed ? <p className="project-home__cover-note">{failed}</p>
+      {failed ? <p className="project-home__cover-note"><LineText text={failed} /></p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
             : (
@@ -352,11 +354,13 @@ function UndoToast({ project, busy, onUndo, onDismiss, leave }: {
   project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void; leave?: LeaveProps;
 }) {
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('project-home');
   useEffect(() => {
-    if (paused) return;
+    if (paused || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, onDismiss, project.id]);
+  }, [paused, waiting, onDismiss, project.id]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-home">
@@ -381,7 +385,7 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 }) {
   return (
     <div className="project-home__notice project-home__notice--copy" role="status" data-copy-notice="">
-      <span className="project-home__notice-text">{notice.line}</span>
+      <span className="project-home__notice-text"><LineText text={notice.line} /></span>
       <span className="project-home__notice-actions">
         {notice.restore && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onRestore}>Restore</button>}
         {notice.open && <button type="button" className="project-home__notice-restore" disabled={busy} onClick={onOpen}>Open</button>}
@@ -518,9 +522,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
           {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
-            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? shortLine(error!) : error}</span>
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-              : <span>{retry === 'redo' ? shortLine(error!) : error}</span>}
+              : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
               {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div></div>}

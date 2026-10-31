@@ -1,4 +1,5 @@
 import { shortReason, type FailureCopy } from '../../lib/errorCopy';
+import { LineText } from '../LineText';
 
 /**
  * A failure on a two-line surface (GM - Design, error-copy round 2):
@@ -10,13 +11,14 @@ import { shortReason, type FailureCopy } from '../../lib/errorCopy';
  * screen reader and in textContent: "<heading> <reason>".
  */
 export function FailureLines({ failure, retry = false }: { failure: FailureCopy | string; retry?: boolean }) {
-  if (typeof failure === 'string') return <>{failure}</>;
+  // Round 9: through <LineText>, so a not-connected line registers (lib/notConnectedLine).
+  if (typeof failure === 'string') return <LineText text={failure} />;
   const reason = retry ? shortReason(failure.reason) : failure.reason;
   return (
     <span className="failure-lines">
-      {failure.heading && <span className="failure-lines__heading">{failure.heading}</span>}
+      {failure.heading && <LineText className="failure-lines__heading" text={failure.heading} />}
       {failure.heading && ' '}
-      <span className="failure-lines__reason">{reason}</span>
+      <LineText className="failure-lines__reason" text={reason} />
     </span>
   );
 }

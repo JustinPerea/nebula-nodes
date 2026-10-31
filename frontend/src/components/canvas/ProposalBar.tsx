@@ -17,6 +17,7 @@ import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { useLockPending, useTabHeld } from '../agent-notes/heldLock';
+import { LineText } from '../LineText';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -299,7 +300,7 @@ export function ProposalBar() {
             </div>
           )}
           {errorLeave.shown && (
-            <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
+            <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
           )}
         </div>
         <div className="proposal-bar__actions">

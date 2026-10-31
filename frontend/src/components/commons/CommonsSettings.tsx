@@ -2,9 +2,11 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
-import { failureMessage } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 interface Props {
   status: CommonsStatus | null;
@@ -57,7 +59,7 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
             <li key={d.path} className="commons-list__item">
               <span className={`commons-badge commons-badge--${d.state}`}>{d.state}</span>
               <span className="commons-list__text">{d.path.split('/').pop()}</span>
-              {d.error && <span className="commons-meta">{d.error}</span>}
+              {d.error && <span className="commons-meta"><LineText text={d.error} /></span>}
             </li>
           ))}
         </ul>
@@ -75,6 +77,9 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const linkingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
 
   const load = useCallback(async () => {
     const [f, s, c] = await Promise.all([commonsApi.folders(), commonsApi.settings(), commonsApi.candidates()]);
@@ -92,10 +97,10 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setSettings(s);
         setCandidates(c);
       },
-      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the Commons settings.")); },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the Commons settings.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, []);
+  }, [loadEpoch, line]);
 
   const run = useCallback(async (work: () => Promise<unknown>, done?: string) => {
     let committed = false;
@@ -109,20 +114,20 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       return true;
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the settings."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the settings.");
       // The write may have committed even if its read-back failed. Preserve
       // the error without inviting the user to submit that write again.
       if (committed) onChanged();
       return committed;
     }
-  }, [load, onChanged]);
+  }, [load, onChanged, line]);
 
   const exportZip = async () => {
     try {
       const blob = await commonsApi.exportZip();
       await saveBlob(blob, `commons-export-${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      setError(failureMessage(e, "Couldn't export the Commons."));
+      line.show(e, "Couldn’t export the Commons.");
     }
   };
 
@@ -135,7 +140,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
-      {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+      <CommonsErrorLine line={error} />
       {message && <p className="commons-notice" role="status">{message}</p>}
 
       <section className="commons-detail__section" aria-label="Linked folders">

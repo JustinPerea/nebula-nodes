@@ -171,7 +171,7 @@ describe('Create lifecycle across view visits', () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain("Couldn't start the generation. Its nodes weren't added to the canvas."));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation. Its nodes weren’t added to the canvas.'));
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.execute).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
@@ -187,18 +187,27 @@ describe('Create lifecycle across view visits', () => {
     await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.'));
   });
 
-  it('GM r10 (3): a start refused after the cluster was added doesn\'t say its nodes weren\'t added', async () => {
+  it('GM r13 (1): a start refused after the cluster was added says the nodes are there, and never try again', async () => {
     mocks.execute.mockImplementationOnce(() => { throw Object.assign(new Error('refused'), { code: 'person_required' }); });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula couldn’t start the generation. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.'));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.'));
+    // Never "try again": a second Generate would add the nodes again.
+    expect(mocks.store!.getState().messageNotice?.text).not.toMatch(/try again/i);
+    expect(view.queryByRole('button', { name: /try again|retry/i })).toBeNull();
+    // The promote re-runs nothing: the nodes are on the canvas, and the person runs them there.
+    const { notePersonPromoted } = await import('../../src/lib/personSession');
+    act(() => notePersonPromoted());
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(mocks.author).toHaveBeenCalledTimes(1);
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
   });
 
   it('a new Generate takes back only its own line (another screen\'s notice stays)', async () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain("Couldn't start the generation."));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation.'));
     act(() => mocks.store!.setState({ messageNotice: { id: 7, text: 'Another line.', tone: 'info' } }));
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));

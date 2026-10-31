@@ -91,11 +91,14 @@ describe('notices are capped at 560 px', () => {
     expect(wide).toEqual([]);
   });
 
-  it("the band doesn't grow: still one notice (--notice-h, 46 px) plus its gap", () => {
+  // GM r13 (2), PR #204 round 9, supersedes round 3's "Don't grow the band": "The band reserves
+  // the tallest single notice (three lines)." A one-line item is still --notice-h.
+  it('the band is the tallest single notice (three lines) plus its gap', () => {
     const css = readFileSync(join(SRC, 'styles/noticeRegion.css'), 'utf8');
     const region = rules(css).find(([selector]) => selector === '.notice-region')?.[1] ?? '';
     expect(declarations(region)).toContainEqual(['--notice-h', '46px']);
+    expect(declarations(region).some(([name]) => name === '--notice-tallest-h')).toBe(true);
     const band = rules(css).find(([selector]) => selector === '.notice-region__band')?.[1] ?? '';
-    expect(declarations(band)).toContainEqual(['height', 'calc(var(--notice-h) + var(--notice-gap))']);
+    expect(declarations(band)).toContainEqual(['height', 'calc(var(--notice-tallest-h) + var(--notice-gap))']);
   });
 });

@@ -214,7 +214,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
 
   it("GM's one-line debug and dev-renderer banners (round 4)", () => {
     expect(personRequiredMessage('debug-port')).toBe(
-      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
+      'A debugging port is open, so Settings, proposals and chats are off.');
     expect(personRequiredMessage('dev-renderer')).toBe(
       "Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.");
   });
@@ -222,7 +222,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
   it("the shell's own reasons keep their lines in the app, and the browser banner stays", async () => {
     inTheApp({ token: vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' }) });
     expect(await personCredential()).toBeNull();
-    expect(personRequiredMessage()).toMatch(/^Debug mode: a debugging port is open/);
+    expect(personRequiredMessage()).toMatch(/^A debugging port is open/);
     expect(personRequiredMessage('desktop-unavailable')).toBe(
       "Nebula couldn’t confirm this window is yours. Quit Nebula and open it again.");
     delete (window as unknown as Record<string, unknown>).nebulaDesktop;

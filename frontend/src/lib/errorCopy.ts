@@ -25,7 +25,7 @@
 
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
-import { inDesktopShell, isBeforePromote, personUnavailableReason, sentUnderPromote } from './personSession';
+import { inDesktopShell, isBeforePromote, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -71,6 +71,13 @@ export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + DEFERS_TO_NOTICE;
 
+/** GM r14 (5), PR #204 round 9: Settings' Connect (and Create token) while this tab isn't connected
+ * as the person. The server refuses it (POST /api/agent/spend/apps: require_person), so it locks
+ * in place with this line under it; "window" in the desktop app, as its other lines say. */
+export function connectAgentLockCopy(desktop: boolean = inDesktopShell()): string {
+  return `You can connect an agent when this ${desktop ? 'window' : 'tab'} is connected as you.`;
+}
+
 /** Line 3 for where this page runs: `desktop` is personSession's
  * inDesktopShell() (the preload bridge), the flag the rest of the error copy
  * reads (commonsSessionCopy); `reason` is the shell's own, when it gave one. */
@@ -108,15 +115,26 @@ export function notConnectedBecause(what: string, desktop: boolean = inDesktopSh
 }
 
 /**
- * GM r10 (3), PR #204 round 8, verbatim for a tab: Generate refused only because this tab isn't
- * the person's. Generate is one-shot (it never retries on the promote), so it keeps the r2
- * general words (GM r6). "Its nodes weren’t added" only when the cluster itself was refused; a
- * refused start after the cluster was added leaves that sentence out, since the nodes are there.
+ * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
+ * retries on the promote).
+ * - The cluster itself refused: GM r10 (3), verbatim for a tab, the r2 general words after
+ *   "Its nodes weren’t added to the canvas."
+ * - The cluster added and only the start refused: GM r13 (1), verbatim for a tab, the because
+ *   form. The nodes are on the canvas, so it never says try again (a second Generate would add
+ *   them again): the person runs them from the canvas. The desktop app's forms follow
+ *   notConnectedBecause's (a window's fix; the dev setups defer to the notice).
  */
+/** GM r12 (2), PR #204 round 9: every Generate line opens with this (curly apostrophe). */
+export const GENERATE_HEADING = 'Nebula couldn’t start the generation.';
+export const CLUSTER_NOT_ADDED = 'Its nodes weren’t added to the canvas.';
+
 export function generateRefusedCopy(clusterAdded: boolean, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
-  return `Nebula couldn’t start the generation. ${clusterAdded ? '' : 'Its nodes weren’t added to the canvas. '}`
-    + personRequiredCopy(desktop, reason);
+  if (!clusterAdded) return `${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`;
+  const lead = 'Nebula added the nodes to the canvas but couldn’t start the generation because';
+  if (!desktop) return `${lead} this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.`;
+  if (reason === 'debug-port' || reason === 'dev-renderer') return `${lead} this window isn’t connected as you. ${DEFERS_TO_NOTICE}`;
+  return `${lead} this window isn’t connected as you. Quit Nebula and open it again, then run them from the canvas.`;
 }
 
 export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
@@ -124,8 +142,9 @@ export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
   return notConnectedBecause('mark the updates as read', desktop, reason);
 }
 
-/** The "because" form's reason, whatever it was doing (GM r6): a line of that shape. */
-const NOT_CONNECTED_BECAUSE = /^Nebula couldn’t .+ because this (?:tab|window) isn’t connected as you\. /;
+/** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
+ * couldn’t … because"): a line of that shape. */
+const NOT_CONNECTED_BECAUSE = /^Nebula (?:couldn’t|added .+ but couldn’t) .+ because this (?:tab|window) isn’t connected as you\. /;
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
@@ -149,17 +168,27 @@ export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
 export const BACKEND_NOT_RUNNING_COPY = "Nebula's backend isn't running. Start it, then reload.";
-/** The Commons lost the person's sign-in in a plain browser tab (GM, round
- * 2): "That's a dev setup and the reader is Justin, so naming the terminal
- * is right." The desktop app refetches its token silently; if a 401 still
- * comes back there, it says ACCESS_LOST_COPY, since a reload fetches the
- * shell's token again. */
-export const COMMONS_SESSION_EXPIRED_COPY = 'Your session expired. Open a fresh Commons link from the backend terminal.';
+/**
+ * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
+ * per launch and never expires on its own (backend services/person_session.py; commons/actors.py
+ * checks the Bearer against it). A request goes without it only because this tab (or window)
+ * isn't connected as the person: it never had the link, or the backend restarted with a new
+ * one. So it is the because form, a fix line, under the call's own words: "Couldn't load the
+ * references." gives "Nebula couldn’t load the references because this tab isn’t connected as
+ * you. Open the link Nebula printed when it started." A heading that isn't "Couldn't …"
+ * (or none) gives the general words. Refused as a person refusal (code person_required), so
+ * it is neutral, clears on the promote, and offers no Try again.
+ */
+export function commonsNotConnectedCopy(heading: string, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  const what = /^Couldn['’]t (.+)\.$/.exec(heading.trim())?.[1];
+  return what ? notConnectedBecause(what, desktop, reason) : personRequiredCopy(desktop, reason);
+}
 
-/** The line for a Commons call with no person session: `desktop` is
- * personSession's inDesktopShell(). */
-export function commonsSessionCopy(desktop: boolean): string {
-  return desktop ? ACCESS_LOST_COPY : COMMONS_SESSION_EXPIRED_COPY;
+/** The Commons' refusal with no person session to send: its line, the person gate's code, and
+ * the promotes so far (so the line is a person refusal and clears on the next one). */
+export function commonsNotConnected(heading: string): { message: string; code: string; sentAt: number } {
+  return { message: commonsNotConnectedCopy(heading), code: PERSON_REQUIRED_CODE, sentAt: personPromotions() };
 }
 
 /** The status a failure with no answer carries wherever a status is read. */
@@ -520,7 +549,8 @@ export function copyForStatus(status: number, detail: unknown): string {
  * copyForStatus says, or the caller's own `reason`. A person-only refusal
  * is a 4xx: a 5xx or no answer keeps GM's line for those. */
 export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
-  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return personRequiredCopy();
+  // A person refusal says the person line; one written here already (the Commons' because form) keeps its words.
+  if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return reason !== undefined && saysPersonRequired(reason) ? reason : personRequiredCopy();
   return reason ?? copyForStatus(status, detail);
 }
 

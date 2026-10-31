@@ -9,6 +9,7 @@ import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
 import { useLockPending, useTabHeld } from '../agent-notes/heldLock';
 import { askedOrder, HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
+import { LineText } from '../LineText';
 
 /** How often the strip rechecks expiry while one is showing. */
 const TICK_MS = 15_000;
@@ -209,7 +210,7 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
       {view.note && <p className="asset-proposal__note">{view.note}</p>}
       {view.kind === 'project' && <CoverChange view={view} />}
       {view.kind === 'commons' && <CommonsChange view={view} names={names} />}
-      {error && <p className="asset-proposal__error" role="alert">{error}</p>}
+      {error && <p className="asset-proposal__error" role="alert"><LineText text={error} /></p>}
       <div className="asset-proposal__foot">
         <span className="asset-proposal__expires">{closing ? '' : minutesLeft(view, Math.max(now, shownAt))}</span>
         <button type="button" className="asset-proposal__button" disabled={busy || gateGrey}

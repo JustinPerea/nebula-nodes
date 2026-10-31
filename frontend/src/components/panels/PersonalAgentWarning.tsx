@@ -3,6 +3,7 @@ import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
 
 /** The one-time notice before Nebula starts any of the person's own agents.
  * The backend refuses to start one until this is acknowledged. */
@@ -67,7 +68,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
             conversations and channels.
           </li>
         </ul>
-        {error && <p className="personal-warning__error" role="alert">{error}</p>}
+        {error && <p className="personal-warning__error" role="alert"><LineText text={error} /></p>}
         <div className="personal-warning__actions">
           <button type="button" ref={cancelButton} onClick={onCancel} disabled={busy}>Not now</button>
           <button type="button" className="personal-warning__accept" onClick={() => void accept()} disabled={busy}>

@@ -82,7 +82,7 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   // (typeerror, 2026-10-24): GM's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again, or reload if it keeps happening.',
-    message: "Couldn't save your labels. Try again, or reload if it keeps happening.", retry: true });
+    message: "Couldn’t save your labels. Try again, or reload if it keeps happening.", retry: true });
   // GM: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));

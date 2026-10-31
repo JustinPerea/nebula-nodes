@@ -11,6 +11,7 @@ import { ConnectedApps } from './ConnectedApps';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { formatSpentUsd } from '../../../lib/pricing';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -207,7 +208,7 @@ export function AgentSpendSection() {
           </select>
         </div>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
   );

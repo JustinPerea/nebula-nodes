@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { callersOf, gatedRoutes } from './personGatedCallers';
+import { callersOf, gatedRoutes, socketRefusalGaps } from './personGatedCallers';
 
 /**
  * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only reason
@@ -101,6 +101,8 @@ const SITES: Record<string, string> = {
   'chat.transcript': 'components/panels/ChatPanel.tsx',
   'chat.clear-canvas': 'components/panels/ChatPanel.tsx',
   'chat.session': 'components/panels/ChatPanel.tsx',
+  'commons.line': 'components/commons/useCommonsLine.ts',
+  'commons.reload-retry': 'components/commons/useCommonsLine.ts',
   'settings.agent-warning': 'components/panels/PersonalAgentWarning.tsx',
   'settings.apps': 'components/panels/settings/ConnectedApps.tsx',
   'settings.spend-load': 'components/panels/settings/AgentSpendSection.tsx',
@@ -209,6 +211,11 @@ const OTHER_SITES: Record<string, string> = {
   banner: 'the person-gate banner itself (PersonRequiredBanner)',
   'chat.transcript': 'the chat socket\'s own person_required refusal (/ws/chat), by its code',
   'chat.session': 'a chat turn with no person token for the Commons (commonsChatAuthority)',
+  // PR #204 round 9: the Commons' own refusal (lib/commonsApi sessionLost: no person token, or a
+  // 401 with a forgotten one), outside the gate's routes. Every Commons screen's line goes through
+  // useCommonsLine (tests/presenceRound9.commons pins that structurally).
+  'commons.line': 'every Commons screen\'s failure line, through useCommonsLine',
+  'commons.reload-retry': 'a Commons load refused for this tab runs again on the promote (useCommonsLine)',
   'chat.clear-canvas': 'Clear canvas from the chat: DELETE /api/graph has no gate form today; a person_required answer still clears',
 };
 
@@ -269,6 +276,8 @@ const NO_FRONTEND: Record<string, string> = {
  * (`{ code: "person_required", ref }`), not as answers to a request, so no catch or `!res.ok`
  * branch is there to trace. Its sender reads the code where the frame arrives, and these tests
  * pin what it does with it (the refused answer goes back, the line clears by its own ref).
+ * Round 9: the sender is read structurally (socketRefusalGaps): it opens a WebSocket to the
+ * route, and its message handler's branch on the code makes a marked registration call.
  */
 const SOCKETS: Record<string, { file: string; tests: string[] }> = {
   'WS /ws/chat': { file: 'components/panels/ChatPanel.tsx', tests: ['presenceRound7.chat.test.tsx'] },
@@ -312,6 +321,7 @@ const RETRIES: Record<string, string> = {
   'settings.spend-load-retry': 'components/panels/settings/AgentSpendSection.tsx',
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'cinema.scene-save-retry': 'store/graphStore.ts',
+  'commons.reload-retry': 'components/commons/useCommonsLine.ts',
 };
 
 const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'/.test(source)
@@ -390,9 +400,8 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
       const byPath = callersOf(route).size;
       if (key in SOCKETS) {
         const { file, tests } = SOCKETS[key];
-        const sender = readFileSync(join(SRC, file), 'utf8');
-        if (!sender.includes(`'${route.path}'`)) wrong.push(`${key}: ${file} doesn't open it`);
-        if (!/\.code === PERSON_REQUIRED_CODE/.test(sender)) wrong.push(`${key}: ${file} doesn't read the refusal's code`);
+        // Round 9 (review 7 NIT-2): read from the syntax tree, not the text.
+        for (const gap of socketRefusalGaps(file, route.path)) wrong.push(`${key}: ${file} ${gap}`);
         for (const test of tests) {
           if (!readFileSync(join(__dirname, test), 'utf8').includes('person_required')) wrong.push(`${key}: ${test} doesn't pin the refusal`);
         }

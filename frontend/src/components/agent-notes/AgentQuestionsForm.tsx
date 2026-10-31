@@ -4,6 +4,7 @@ import { canSend, useAgentQuestionsStore } from '../../store/agentQuestionsStore
 import { AuthorDot } from './AgentNoteParts';
 import { useLockPending, useTabHeld } from './heldLock';
 import { HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { LineText } from '../LineText';
 
 /**
  * The answer form (Q125 item 1): a popover from the Updates corner, at the
@@ -152,7 +153,7 @@ export function AgentQuestionsForm({
         {view.note && <p className="agent-questions-form__note">{view.note}</p>}
         {view.questions.map(question)}
       </div>
-      {error && <div className="agent-notes-panel__error" role="alert">{error}</div>}
+      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} /></div>}
       <div className="agent-questions-form__foot">
         <button type="button" className={`agent-notes-btn${lockClass}`} disabled={busy} {...lockProps}
           onClick={() => void dismiss()}>

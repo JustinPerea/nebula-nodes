@@ -27,10 +27,12 @@ import { useProjectStore } from '../../store/projectStore';
 import { useCommonsLeave } from './commonsLeave';
 import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
-import { failureMessage } from '../../lib/errorCopy';
+import { useCommonsLine } from './useCommonsLine';
 import { clockTime } from '../../lib/clockTime';
 import { isOfflineRefusal, refuseEditWhileOffline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -331,7 +333,7 @@ export function CommonsView() {
   const [status, setStatus] = useState<CommonsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  /** The files the last upload couldn't add, each "Couldn't upload {filename}."
+  /** The files the last upload couldn't add, each "Couldn’t upload {filename}."
    * over its reason (GM, error-copy round 2). Their own list: the refresh
    * after an upload must not clear them, as it clears a search's error. */
   const [uploadFailures, setUploadFailures] = useState<FailureCopy[]>([]);
@@ -352,7 +354,7 @@ export function CommonsView() {
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   // A load's failure (the collections, the worker status, a search) is kept
   // apart from an action's, so it can hide while Nebula is offline and be
-  // checked again on reconnect (GM, PR #198 r2: "Couldn't check the Commons
+  // checked again on reconnect (GM, PR #198 r2: "Couldn’t check the Commons
   // status…" read as if the Commons broke when the backend was only away).
   const [loadError, setLoadError] = useState<string | null>(null);
   const [collectionsKey, setCollectionsKey] = useState(0);
@@ -362,8 +364,19 @@ export function CommonsView() {
     refresh();
   });
 
+  // PR #204 round 9: a line refused only because this tab isn't connected as you clears on the
+  // promote (useCommonsLine). A load (the collections, the worker status, a search) also runs
+  // again then, all three, so the references load and the status line reads as it normally does.
+  // An action isn't done again: the person does it again.
+  const reloadAll = useCallback(() => {
+    setCollectionsKey((key) => key + 1);
+    refresh();
+  }, [refresh]);
+  const loadLine = useCommonsLine(setLoadError, null, 'commons.view-load', reloadAll);
+  const actionLine = useCommonsLine(setError, null);
+  const loadFailed = loadLine.show;
   // Refused offline before it was sent: the banner says why (round 16, L4).
-  const fail = (e: unknown) => { if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't update the library.")); };
+  const fail = (e: unknown) => { if (!isOfflineRefusal(e)) actionLine.show(e, "Couldn’t update the library."); };
 
   const loadCollections = useCallback(async () => {
     const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
@@ -380,21 +393,21 @@ export function CommonsView() {
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
       },
-      (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn’t load the collections.")); },
+      (e: unknown) => { if (!cancelled) loadFailed(e, "Couldn’t load the collections.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, [collectionsKey]);
+  }, [collectionsKey, loadFailed]);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) setLoadError(failureMessage(e, "Couldn’t load the library status.")); });
+    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) loadFailed(e, "Couldn’t load the library status.", { reload: true }); });
     poll();
     const timer = window.setInterval(poll, STATUS_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [refreshKey]);
+  }, [refreshKey, loadFailed]);
 
   useEffect(() => {
     if (tab === 'settings' || tab === 'labeling' || tab === 'review') return undefined;
@@ -412,7 +425,7 @@ export function CommonsView() {
         },
         (e: unknown) => {
           if (cancelled) return;
-          setLoadError(failureMessage(e, "Couldn’t search the library."));
+          loadFailed(e, "Couldn’t search the library.", { reload: true });
           setLoading(false);
         },
       );
@@ -421,7 +434,7 @@ export function CommonsView() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [filters, tab, refreshKey]);
+  }, [filters, tab, refreshKey, loadFailed]);
 
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {
@@ -622,7 +635,7 @@ export function CommonsView() {
 
       {(shownError || notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0) && (
         <div className="commons-messages">
-          {shownError && <p className="commons-notice commons-notice--error" role="alert">{shownError}</p>}
+          <CommonsErrorLine line={shownError} />
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert">
               <span className="commons-notice__list">
@@ -630,7 +643,7 @@ export function CommonsView() {
               </span>
             </p>
           )}
-          {!shownError && notice && <p className="commons-notice" role="status">{notice}</p>}
+          {!shownError && notice && <p className="commons-notice" role="status"><LineText text={notice} /></p>}
           <CommonsProposalsLine onOpen={reviewProposal} />
         </div>
       )}

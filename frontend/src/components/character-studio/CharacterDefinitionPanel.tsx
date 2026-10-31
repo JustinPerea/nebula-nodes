@@ -4,6 +4,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
 import type { CharacterDraft } from './CharacterStudioView';
+import { LineText } from '../LineText';
 
 interface CharacterDefinitionPanelProps {
   draft: CharacterDraft;
@@ -175,7 +176,7 @@ export function CharacterDefinitionPanel({
           />
         </div>
         {uploadError && (
-          <span className="character-def__error">{uploadError}</span>
+          <span className="character-def__error"><LineText text={uploadError} /></span>
         )}
       </section>
 

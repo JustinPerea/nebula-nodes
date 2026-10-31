@@ -16,6 +16,7 @@ import { dialogStart, openModalDialog } from '../../lib/modalFocus';
 import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import { fitNoteHeading, HEADING_END, HEADING_START, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
+import { LineText } from '../LineText';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
  *
@@ -333,7 +334,7 @@ export function PinComposer() {
       {errorLeave.shown && (
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" {...errorLeave.props}>
-            <span>{errorLeave.shown}</span>
+            <span><LineText text={errorLeave.shown} /></span>
             <button type="button" onClick={clearError} aria-label="Dismiss">×</button>
           </div>
         </InNoticeRegion>

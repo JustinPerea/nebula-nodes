@@ -147,7 +147,7 @@
 .personal-warning__title { margin: 0; font-size: 16px; }
 .personal-warning__lead { margin: 0; }
 .personal-warning__list { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--sr-ink-muted, #ccc); }
-.personal-warning__error { margin: 0; color: #e08a8a; }
+.personal-warning__error { margin: 0; color: var(--line-warning, #e08a8a); }
 .personal-warning__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .personal-warning__actions button {

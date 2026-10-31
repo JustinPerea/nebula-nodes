@@ -372,7 +372,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     ? definition.params.find((param) => param.key === inlineTextParamKey)
     : null;
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
-  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
+  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text…';
   const isNodeSelected = selected || selectedInUi;
   const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
   // The Jev result below hides its echo of the field's text.

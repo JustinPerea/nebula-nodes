@@ -91,7 +91,7 @@ import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
   PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, refusalError, requestError,
-  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause,
+  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy,
 } from '../lib/errorCopy';
 import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { sentUnderPromote } from '../lib/personSession';
@@ -378,8 +378,10 @@ function markNodesErrored(
   nodeIds: Set<string>,
   message: string,
   failure?: unknown,
+  /** `message` is the whole line (GM r13's Generate line): the refusal's own words stay out. */
+  ownLine = false,
 ): Node<NodeData>[] {
-  const hidden = failure === undefined ? null : failureDetails(failure);
+  const hidden = failure === undefined || ownLine ? null : failureDetails(failure);
   // PR #204 round 4: a start the gate refused only for this tab (a spend approval, a billing
   // switch: main._person_only_refusal) leaves these nodes' line until the promote, while it is
   // still theirs. Every refused start comes through here with its failure.
@@ -1503,12 +1505,11 @@ function configuredModel(node: Node<NodeData> | undefined): string {
 }
 
 /** Create's heading and its cluster line (GM, round 3f and round 15 of PR
- * #114): "Couldn't start the generation. Its nodes weren't added to the
- * canvas." then the backend's reason where it gave a person line (a World
+ * #114; GM r12 (2) of #204: "Nebula couldn’t start the generation."): "Nebula
+ * couldn’t start the generation. Its nodes weren’t added to the canvas." then the backend's reason where it gave a person line (a World
  * Labs state, a run, an access refusal), the connection line when Nebula
  * didn't answer, and "Try again." for a bare HTTP failure. */
-export const GENERATE_HEADING = "Couldn't start the generation.";
-export const CLUSTER_NOT_ADDED = "Its nodes weren't added to the canvas.";
+export { CLUSTER_NOT_ADDED, GENERATE_HEADING } from '../lib/errorCopy';
 export function clusterFailureReason(error: unknown): string {
   // GM, round 16: the unified line wherever #114 owns it.
   if (error instanceof ConnectionLostError) return NEBULA_NOT_ANSWERING_COPY;
@@ -13069,13 +13070,17 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       }
       const onItsCanvas = runOnItsCanvas(runId);
       closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
+      // GM r13 (1), PR #204 round 9: Generate's nodes were added and only their start was refused
+      // for this tab. Its result cards say so in GM's words: the nodes are there, run them from
+      // the canvas, never "try again" (a second Generate would add them again).
+      const generateRefused = Boolean(createOrigin) && isPersonRefusal(error);
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
-        failureMessage(error, "Couldn't start the run."), error) }));
+        generateRefused ? generateRefusedCopy(true) : failureMessage(error, "Couldn't start the run."), error, generateRefused) }));
     }
   },
 
   authorGenerationCluster: async (request) => {
-    if (get().isImportingGraph) throw new FailureNotice("Couldn't start the generation.", 'Wait for the graph import to finish.');
+    if (get().isImportingGraph) throw new FailureNotice(GENERATE_HEADING, 'Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 

@@ -58,6 +58,7 @@ import {
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
 
 type ChatAgent = ChatAgentId;
 /** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
@@ -403,7 +404,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><span>{part.text}</span><ErrorDetails raw={part.details} className="chat__system-details" /></> : part.text}
+              {part.details ? <><LineText text={part.text} /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} />}
             </div>
           );
         }
@@ -2127,7 +2128,7 @@ export function ChatPanel() {
                         aria-hidden="true"
                         focusable="false"
                       />
-                      {codexLoginState?.running ? 'Opening ChatGPT...' : 'Connect ChatGPT Account'}
+                      {codexLoginState?.running ? 'Opening ChatGPT…' : 'Connect ChatGPT Account'}
                     </button>
                     <button
                       type="button"
@@ -2140,7 +2141,7 @@ export function ChatPanel() {
                   </div>
                   {(codexLoginState || codexLoginError) && (
                     <div className="chat-panel__connect-progress">
-                      {codexLoginError || codexLoginState?.message}
+                      <LineText text={codexLoginError || codexLoginState?.message} />
                       {codexLoginState?.authUrl && (
                         <a
                           className="chat-panel__connect-link"
@@ -2173,7 +2174,7 @@ export function ChatPanel() {
             </div>
           </details>
         )}
-        {notice && <div className="chat-panel__notice" data-chat-notice="true">{notice}</div>}
+        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} /></div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -2198,7 +2199,7 @@ export function ChatPanel() {
                   </>
                 )}
                 {chip.status === 'error' && (
-                  <div className="chat-panel__chip-error">{chip.error}</div>
+                  <div className="chat-panel__chip-error"><LineText text={chip.error} /></div>
                 )}
                 <button
                   type="button"

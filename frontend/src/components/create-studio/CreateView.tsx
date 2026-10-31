@@ -28,15 +28,15 @@ import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
-import { FailureNotice, failureMessage, generateRefusedCopy, notConnectedBecause } from '../../lib/errorCopy';
+import { CLUSTER_NOT_ADDED, FailureNotice, GENERATE_HEADING, failureMessage, generateRefusedCopy, notConnectedBecause } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
 import { isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
-// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."
-const GENERATE_HEADING = "Couldn't start the generation.";
+// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."; GM r12 (2), #204 round 9:
+// every Generate line opens "Nebula couldn’t start the generation." (lib/errorCopy's GENERATE_HEADING).
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -320,7 +320,7 @@ export function CreateView() {
       const lifecycle = useGraphStore.getState();
       if (!lifecycle.createLaunchingIds.includes(genId) || lifecycle.createCancelledLaunchIds.includes(genId)) return;
       if (modelNodeIds.length === 0 || allNodeIds.length === 0) {
-        throw new FailureNotice(GENERATE_HEADING, "Its nodes weren't added to the canvas. Try again.");
+        throw new FailureNotice(GENERATE_HEADING, `${CLUSTER_NOT_ADDED} Try again.`);
       }
       clusterAdded = true;
       // The shared execution store consumes the reservation atomically when it

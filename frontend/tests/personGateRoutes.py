@@ -1,4 +1,4 @@
-"""Every backend route behind the person gate, read with ast (PR #204 rounds 6, 7 and 8).
+"""Every backend route behind the person gate, read with ast (PR #204 rounds 6 to 9).
 
 Run by tests/personGatedCallers.ts (gatedRoutes, unreadableRouteForms). Prints JSON:
 
@@ -17,10 +17,10 @@ lambda, decorator or Depends() dependency in those files:
 
 - a call of require_person, _person_only_refusal, stop_refusal or person_only, or one passed as a
   value (a callback, Depends(person_only));
-- outside services/person_gate.py: PersonGateError built or raised (an `except PersonGateError` or
-  an isinstance() isn't a gate, round 8), PERSON_REQUIRED written, or the refusal code
-  "person_required" written as a value (`{"code": "person_required"}`, `code="person_required"`,
-  or a string constant holding it: the chat socket's refusals, round 8);
+- outside services/person_gate.py: PersonGateError (or a class whose bases lead to it, round 9)
+  built or raised (an `except PersonGateError` or an isinstance() isn't a gate, round 8),
+  PERSON_REQUIRED written, or the refusal code "person_required" anywhere outside a comparison or
+  a docstring, written or through a string constant (the chat socket's refusals, rounds 8 and 9);
 - Depends(...) on a gate in the route's dependencies=, a parameter default, its router's
   APIRouter(dependencies=[...]), an include_router(..., dependencies=[...]) that mounts it, or the
   app's FastAPI(dependencies=[...]);
@@ -40,8 +40,10 @@ an app or a router it can read; a path or prefix it can't evaluate to a string; 
 read (method "*"); dependencies= it can't read; an endpoint it can't find; include_router of
 something it can't read as a router, or onto something that isn't an app or router; an app or
 router mounted with mount() (and each route on it: its path is under the mount's); a handler that
-reads a gate out of a container by subscript (CHECKS["p"](...), round 8); an unknown decorator on an app or router; a middleware that reaches
-a gate (it would gate routes the list can't name); a file that doesn't parse.
+reads a gate out of a container by subscript (CHECKS["p"](...), round 8) or uses such a container
+any other way (a for loop over it, CHECKS.get("p"), handing it on: round 9); an unknown decorator
+on an app or router; a middleware that reaches a gate (it would gate routes the list can't
+name); a file that doesn't parse.
 """
 from __future__ import annotations
 
@@ -385,7 +387,19 @@ def names_gate_error(module: Module, node: ast.AST | None, cls: str | None, loca
     if isinstance(node, ast.Name) and node.id == GATE_ERROR or isinstance(node, ast.Attribute) and node.attr == GATE_ERROR:
         return True
     q = expr_q(module, node, cls, local) if isinstance(node, (ast.Name, ast.Attribute)) else None
-    return bool(q) and q.split(".")[-1] == GATE_ERROR
+    return is_gate_error(q)
+
+
+def is_gate_error(q: str | None, depth: int = 0) -> bool:
+    """PersonGateError, or a class in the files whose bases lead to it (round 9)."""
+    if not q or depth > 20:
+        return False
+    if q.split(".")[-1] == GATE_ERROR:
+        return True
+    entity = ENT.get(q)
+    if entity is None or entity.kind != "class" or not isinstance(entity.node, ast.ClassDef):
+        return False
+    return any(is_gate_error(expr_q(entity.module, base, None, {}), depth + 1) for base in entity.node.bases)
 
 
 def is_refusal_code(module: Module, node: ast.AST | None, local: dict[str, str]) -> bool:
@@ -394,14 +408,35 @@ def is_refusal_code(module: Module, node: ast.AST | None, local: dict[str, str])
     return eval_str(module, node, local) == REFUSAL_CODE
 
 
+def read_only(root: ast.AST) -> set[int]:
+    """The nodes that only read a value: a comparison's operands (and what is inside them), and
+    docstrings (any statement that is only a string)."""
+    out: set[int] = set()
+    for inner in walk(root):
+        if isinstance(inner, ast.Compare):
+            for operand in [inner.left, *inner.comparators]:
+                out.update(id(n) for n in walk(operand))
+        if isinstance(inner, ast.Expr) and isinstance(inner.value, ast.Constant) and isinstance(inner.value.value, str):
+            out.add(id(inner.value))
+    return out
+
+
 def inline_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
     """A gate written in the def itself: PersonGateError built or raised, PERSON_REQUIRED, or the
-    "person_required" refusal code as a value. Not in services/person_gate.py, which defines them."""
+    "person_required" refusal code as a value. Not in services/person_gate.py, which defines them.
+    Round 9: the code counts anywhere outside a comparison or a docstring (a subscript set, a local,
+    a positional argument), written or through a string constant."""
     if module.rel == GATE_FILE:
         return False
     local = local_scope(module, node, cls)
     for root in roots_of(node):
+        reads = read_only(root)
         for inner in walk(root):
+            if id(inner) not in reads and isinstance(inner, ast.Constant) and inner.value == REFUSAL_CODE:
+                return True
+            if id(inner) not in reads and (isinstance(inner, (ast.Name, ast.Attribute)) and isinstance(inner.ctx, ast.Load)
+                                           or isinstance(inner, (ast.JoinedStr, ast.BinOp))) and is_refusal_code(module, inner, local):
+                return True
             if isinstance(inner, ast.Name) and inner.id in INLINE:
                 return True
             if isinstance(inner, ast.Attribute) and inner.attr in INLINE:
@@ -444,9 +479,7 @@ def subscript_gate(module: Module, node: ast.AST, cls: str | None = None) -> boo
     """The def reads a gate out of a container by subscript (CHECKS["p"](...)): it can't tell
     which entry runs, so the route is listed as unreadable."""
     local = local_scope(module, node, cls)
-    literals = {inner.targets[0].id: inner.value for inner in walk(node)
-                if isinstance(inner, ast.Assign) and len(inner.targets) == 1 and isinstance(inner.targets[0], ast.Name)
-                and isinstance(inner.value, CONTAINERS)}
+    literals = container_names(node)
     for root in roots_of(node):
         for inner in walk(root):
             if isinstance(inner, ast.Subscript) and holds_gate(module, inner.value, cls, local, literals):
@@ -454,16 +487,50 @@ def subscript_gate(module: Module, node: ast.AST, cls: str | None = None) -> boo
     return False
 
 
+def container_names(node: ast.AST) -> dict[str, ast.AST]:
+    return {inner.targets[0].id: inner.value for inner in walk(node)
+            if isinstance(inner, ast.Assign) and len(inner.targets) == 1 and isinstance(inner.targets[0], ast.Name)
+            and isinstance(inner.value, CONTAINERS)}
+
+
+def held_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
+    """Round 9: the def uses a container that holds a gate some other way (a for loop over it,
+    CHECKS.get("p"), handing it on): fail safe, the route is listed as unreadable."""
+    local = local_scope(module, node, cls)
+    literals = container_names(node)
+    for root in roots_of(node):
+        for inner in walk(root):
+            if isinstance(inner, ast.Subscript):
+                continue
+            if isinstance(inner, (ast.Name, ast.Attribute)) and isinstance(inner.ctx, ast.Load) \
+                    and holds_gate(module, inner, cls, local, literals):
+                return True
+            if isinstance(inner, CONTAINERS) and not isinstance(getattr(inner, "ctx", ast.Load()), ast.Store) \
+                    and holds_gate(module, inner, cls, local, literals) and not depends_on_gate(module, inner, local):
+                return True
+    return False
+
+
 GATED: set[str] = set()
 SUBSCRIPTED: set[str] = set()  # defs that reach a gate read by subscript
+HELD: set[str] = set()  # defs that reach a gate container used some other way (round 9)
 
 
 def reaches(module: Module, node: ast.AST, cls: str | None) -> bool:
     return inline_gate(module, node, cls) or any(is_gate(t) or t in GATED for t in edges_of(module, node, cls))
 
 
-def reaches_subscript(module: Module, node: ast.AST, cls: str | None) -> bool:
-    return subscript_gate(module, node, cls) or any(t in SUBSCRIPTED for t in edges_of(module, node, cls))
+def reaches_subscript(module: Module, node: ast.AST, cls: str | None) -> str | None:
+    """The unreadable form for a def that reaches a gate read out of a container, or None."""
+    if subscript_gate(module, node, cls) or any(t in SUBSCRIPTED for t in edges_of(module, node, cls)):
+        return "reads a gate by subscript"
+    if held_gate(module, node, cls) or any(t in HELD for t in edges_of(module, node, cls)):
+        return "reads a gate out of a container"
+    return None
+
+
+def held_form(q: str | None) -> str | None:
+    return "reads a gate by subscript" if q in SUBSCRIPTED else "reads a gate out of a container" if q in HELD else None
 
 
 def spread(found: set[str], calls: dict[str, set[str]]) -> None:
@@ -487,7 +554,10 @@ def compute_gated() -> None:
     for q, entity in defs.items():
         if subscript_gate(entity.module, entity.node, entity.cls):
             SUBSCRIPTED.add(q)
+        if held_gate(entity.module, entity.node, entity.cls):
+            HELD.add(q)
     spread(SUBSCRIPTED, calls)
+    spread(HELD, calls)
 
 
 def depends_on_gate(module: Module, node: ast.AST | None, local: dict[str, str] | None = None) -> bool:
@@ -629,7 +699,7 @@ class Reader:
 
     def route(self, module: Module, site: ast.AST, owner_node: ast.AST, owner_local: dict[str, str], methods: list[str] | None,
               path_node: ast.AST | None, deps: ast.AST | None, handler: str, handler_gated: bool, form: str,
-              subscripted: bool = False) -> None:
+              subscripted: str | None = None) -> None:
         owner_q, owner = self.owner(module, owner_node, owner_local)
         path = eval_str(module, path_node, owner_local)
         deps_gated = depends_on_gate(module, deps, owner_local)
@@ -669,7 +739,7 @@ class Reader:
                 for method in methods:
                     self.routes.append({"method": method, "path": before + own_prefix + path, "handler": handler})
             elif subscripted:
-                self.unread(module, site, f"{form} whose handler reads a gate by subscript", handler, ",".join(methods),
+                self.unread(module, site, f"{form} whose handler {subscripted}", handler, ",".join(methods),
                             before + own_prefix + path, False)
 
     def methods_of(self, module: Module, node: ast.AST | None, default: str) -> list[str] | None:
@@ -689,7 +759,7 @@ class Reader:
             cls = classes.get(id(fn))
             handler = f"{module.label}.{fn.name}"
             handler_gated: bool | None = None
-            subscripted = False
+            subscripted: str | None = None
             for decorator in fn.decorator_list:
                 call = decorator if isinstance(decorator, ast.Call) else None
                 func = call.func if call else decorator
@@ -756,16 +826,16 @@ class Reader:
                 if target and any(f"{target}.{name}" in GATED for name in ("dispatch", "__call__", "__init__")):
                     self.unread(module, call, "a middleware that reaches a gate", target.split(".")[-1], None, None, True)
 
-    def endpoint(self, module: Module, node: ast.AST | None) -> tuple[str | None, bool, bool]:
-        """(handler, gated, reads a gate by subscript)"""
+    def endpoint(self, module: Module, node: ast.AST | None) -> tuple[str | None, bool, str | None]:
+        """(handler, gated, how it reads a gate out of a container)"""
         if isinstance(node, ast.Lambda):
             return f"{module.label}.<lambda>", reaches(module, node, None), reaches_subscript(module, node, None)
         q = expr_q(module, node, None, {})
         entity = ENT.get(q or "")
         if entity is None or entity.kind != "def" or entity.module is None:
-            return None, False, False
+            return None, False, None
         name = getattr(entity.node, "name", (q or "").split(".")[-1])
-        return f"{entity.module.label}.{name}", q in GATED or is_gate(q), q in SUBSCRIPTED
+        return f"{entity.module.label}.{name}", q in GATED or is_gate(q), held_form(q)
 
 
 def main(argv: list[str]) -> None:

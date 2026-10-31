@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationBatch } from '../../lib/commonsEvaluationTypes';
-import { failureMessage } from '../../lib/errorCopy';
 import { isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine } from './useCommonsLine';
 
 /**
  * Ends the held-out batch without sealing it. Irreversible, so it always asks
@@ -18,6 +19,8 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
   const [confirming, setConfirming] = useState(false);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState('');
+  // PR #204 round 9: a not-connected line clears on the promote (closing isn't done again).
+  const line = useCommonsLine(setError, '');
   const cancel = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   // Round 16 (L4): closing the batch is a write, so offline it's disabled.
@@ -29,7 +32,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
     let closed: EvaluationBatch;
     try { closed = await commonsEvaluationApi.close(revision); }
     catch (e) {
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't close the review."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t close the review.");
       setClosing(false); return;
     }
     setClosing(false); setConfirming(false);
@@ -46,7 +49,7 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
       {assisted && <li>You can keep agreeing with or correcting grades after closing{total ? ` (${reviewed ?? 0} / ${total} reviewed)` : ''}. No new grades will be requested.</li>}
       <li>Library analysis of imported references can start. This cannot be undone.</li>
     </ul>
-    {error && <p role="alert" className="commons-notice commons-notice--error">{error}</p>}
+    <CommonsErrorLine line={error} />
     <div className="review-actions">
       <button type="button" className="commons-button commons-button--primary" disabled={closing || disabled || readOnly} {...offlineMark(readOnly)} onClick={() => void close()}>
         {closing ? 'Closing…' : assisted ? 'Close as assisted review' : 'Close without sealing'}</button>

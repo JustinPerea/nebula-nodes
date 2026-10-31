@@ -266,3 +266,134 @@ export const ROUND8_PROBES: Record<string, Record<string, string>> = {
 
 export const RESPONSE_PROBES: Record<string, Record<string, string>> = Object.fromEntries(
   Object.entries(RESPONSE_BODIES).map(([name, body]) => [name, { 'components/C.tsx': comp(body) }]));
+
+// Review 7 (round 9). `go` sends POST /api/presets with apiFetch, and its `!res.ok` branch shows
+// the line without registering it, inside a try whose catch registers (Q6's shape).
+const viaApiFetch = (path: string, before = `const presetsPath = () => '/api/presets';`, branch = 'setLine(await res.text())') => `${before}
+export function Panel({ setLine, show, keep }: any) {
+  const go = async () => {
+    try {
+      const res = await apiFetch(${path}, { method: 'POST' });
+      if (!res.ok) ${branch};
+    } catch (e) { show(String(e)); } // clears-on-promote: zz.lost
+  };
+  return go;
+}`;
+// The same, with the path held in a local first.
+const viaLocal = (held: string, before = `const presetsPath = () => '/api/presets';`) => viaApiFetch('url', before)
+  .replace('    try {\n', `    try {\n      ${held}\n`);
+
+/** Review 7 LOW-2 and LOW-3. */
+export const ROUND9_PROBES: Record<string, Record<string, string>> = {
+  // LOW-2: a helper's path through a wrapper is still the transport's.
+  H1_method_helper: { 'components/C.tsx': viaApiFetch('paths.presets()', `const paths = { presets: () => '/api/presets' };`) },
+  H2_awaited_helper: { 'components/C.tsx': viaApiFetch('await presetsPath()') },
+  H3_helper_as_string: { 'components/C.tsx': viaApiFetch('presetsPath() as string') },
+  H4_helper_non_null: { 'components/C.tsx': viaApiFetch('presetsPath()!') },
+  H5_helper_in_a_template: { 'components/C.tsx': viaApiFetch('`${presetsPath()}`') },
+  H11_helper_in_String: { 'components/C.tsx': viaApiFetch('String(presetsPath())') },
+  H12_helper_in_backendUrl: { 'components/C.tsx': viaApiFetch('backendUrl(presetsPath())') },
+  H13_helper_satisfies: { 'components/C.tsx': viaApiFetch('presetsPath() satisfies string') },
+  H14_helper_type_assertion: { 'components/C.ts': viaApiFetch('<string>presetsPath()') },
+  // LOW-2: the same for a literal path.
+  L1_literal_as: { 'components/C.tsx': viaApiFetch(`'/api/presets' as string`, '') },
+  L2_literal_in_String: { 'components/C.tsx': viaApiFetch(`String('/api/presets')`, '') },
+  L3_literal_in_joinBackendPath: { 'components/C.tsx': viaApiFetch(`joinBackendPath(b, '/api/presets')`, '') },
+  L4_literal_non_null: { 'components/C.tsx': viaApiFetch(`('/api/presets')!`, '') },
+  // A const set from the helper is followed as its own function (as in round 8).
+  H7_helper_in_a_const: { 'components/C.tsx': viaLocal('const url = presetsPath();') },
+  // A thrown refusal still goes to the catch: apiRequest isn't a transport.
+  K2_wrapped_helper_sent_by_apiRequest: { 'components/C.tsx': viaApiFetch('presetsPath()!').replace(
+    "const res = await apiFetch(presetsPath()!, { method: 'POST' });\n      if (!res.ok) setLine(await res.text());", "await apiRequest('No.', presetsPath()!, { method: 'POST' });") },
+  // A lib helper that returns the transport's Response for a wrapped path hands it to its caller.
+  H15_lib_helper_returns_a_wrapped_transport: {
+    'lib/a.ts': "export function save() { return apiFetch(String('/api/presets'), { method: 'POST' }); }",
+    'components/C.tsx': viaApiFetch('x').replace("const res = await apiFetch(x, { method: 'POST' });", 'const res = await save();').replace("const presetsPath = () => '/api/presets';", "import { save } from '../lib/a';"),
+  },
+  // Another file's function of the same name, not imported, isn't the helper.
+  K3_same_name_in_another_file: {
+    'lib/a.ts': "export const presetsPath = () => '/api/presets';",
+    'components/B.tsx': "const presetsPath = () => 'x';\nexport function b() { const u = presetsPath() as string; return u; }",
+  },
+  // A keeper on the branch still keeps, through the wrapper.
+  K1_method_helper_branch_registers: { 'components/C.tsx': viaApiFetch('paths.presets()', `const paths = { presets: () => '/api/presets' };`,
+    'keep(await res.text()) // clears-on-promote: zz.kept') },
+  // Fail closed: the wrapped path is held somewhere the trace can't read; listed as untraced.
+  U1_helper_as_string_in_a_local: { 'components/C.tsx': viaLocal('const url = presetsPath() as string;') },
+  U2_helper_in_a_template_in_a_local: { 'components/C.tsx': viaLocal('const url = `${presetsPath()}`;') },
+  U3_literal_as_string_in_a_local: { 'components/C.tsx': viaLocal(`const url = '/api/presets' as string;`, '') },
+  U4_awaited_backendUrl_in_a_local: { 'components/C.tsx': viaLocal('const url = await backendUrl(presetsPath());') },
+  U5_helper_assigned_to_a_let: { 'components/C.tsx': viaLocal('let url; url = presetsPath();') },
+  U6_helper_in_an_array: { 'components/C.tsx': viaApiFetch('[presetsPath()][0]') },
+  U8_helper_that_wraps_its_path: { 'components/C.tsx': viaLocal('const url = presetsPath() as string;', `const presetsPath = () => String('/api/presets');`) },
+  U7_method_helper_in_a_local: { 'components/C.tsx': viaLocal('const url = paths.presets()!;', `const paths = { presets: () => '/api/presets' };`) },
+  // LOW-3: the destructure follow in callersOf (D1), a marker above the branch's statement (O3),
+  // a marker's words in the middle of a comment (O2), and a marker on its own line in the catch (O4).
+  D1_destructured_outside_the_caller: {
+    'store/a.ts': STORE_A,
+    'components/C.tsx': `import { useA } from '../store/a';
+import { failureMessage } from '../lib/errorCopy';
+export function Panel({ setLine }: any) {
+  const { save } = useA.getState();
+  const go = async () => { try { await save(); } catch (error) { setLine(failureMessage(error, 'No.')); } };
+  return go;
+}`,
+  },
+  O2_marker_words_mid_comment: {
+    'store/a.ts': STORE_A,
+    'components/C.tsx': panelQ(`import { useA } from '../store/a';`, CATCH_Q('useA.getState().save()', `setLine(failureMessage(error, 'No.')) // TODO add // clears-on-promote: zz.mid later`)),
+  },
+  O3_marker_above_the_branch_statement: {
+    'components/C.tsx': `export function Panel({ setLine }: any) {
+  const go = async () => {
+    const res = await apiFetch('/api/presets', { method: 'POST' });
+    if (!res.ok)
+      // clears-on-promote: zz.above
+      setLine(await res.text());
+  };
+  return go;
+}`,
+  },
+  O4_marker_on_its_own_line_in_the_catch: {
+    'store/a.ts': STORE_A,
+    'components/C.tsx': panelQ(`import { useA } from '../store/a';`, `try { await useA.getState().save(); } catch (error) {
+      // clears-on-promote: zz.own
+      setLine(failureMessage(error, 'No.'));
+    }`),
+  },
+};
+
+/** Review 7 NIT-2: a socket's person-only refusal, read from the syntax tree. */
+const chat = (open: string, handler: string) => `import { PERSON_REQUIRED_CODE } from '../lib/errorCopy';
+export function Chat({ setLines }: any) {
+  const connect = () => {
+${open}
+  };
+  return connect;
+}`.replace('HANDLER', handler);
+const THEN_OPEN = `    backendWebSocketUrl('/ws/chat').then((url) => {
+      const socket = new WebSocket(url);
+      socket.onmessage = HANDLER;
+    });`;
+const REGISTERS = `(ev) => {
+      const event = JSON.parse(ev.data);
+      if (event.type === 'error') {
+        const personRequired = event.code === PERSON_REQUIRED_CODE;
+        if (personRequired) {
+          clearRefusedOnPromote(event, () => setLines([])); // clears-on-promote: chat.zz
+        }
+      }
+    }`;
+export const SOCKET_PROBES: Record<string, { source: string; gaps: string[] }> = {
+  S1_then_url_and_a_const_check: { source: chat(THEN_OPEN, REGISTERS), gaps: [] },
+  S2_written_url_and_addEventListener: { source: chat(`    const socket = new WebSocket('ws://x/ws/chat');\n    socket.addEventListener('message', HANDLER);`,
+    REGISTERS.replace('const personRequired = event.code === PERSON_REQUIRED_CODE;\n        if (personRequired)', 'if (PERSON_REQUIRED_CODE === event.code)')), gaps: [] },
+  S3_url_made_for_another_socket: { source: chat(THEN_OPEN.replace('/ws/chat', '/ws/other'), REGISTERS), gaps: ['opens no WebSocket to /ws/chat'] },
+  S4_socket_opened_elsewhere: { source: chat(THEN_OPEN.replace('new WebSocket(url)', "new WebSocket('ws://x/ws/other')"), REGISTERS), gaps: ['opens no WebSocket to /ws/chat'] },
+  S5_handler_on_another_socket: { source: chat(THEN_OPEN.replace('socket.onmessage', 'other.onmessage'), REGISTERS), gaps: ['its socket to /ws/chat has no message handler'] },
+  S6_no_code_comparison: { source: chat(THEN_OPEN, REGISTERS.replace('event.code === PERSON_REQUIRED_CODE', "event.type === 'error'")), gaps: ['its message handler has no branch on the refusal\'s code'] },
+  S7_another_code: { source: chat(THEN_OPEN, REGISTERS.replace('event.code === PERSON_REQUIRED_CODE', "event.code === 'other'")), gaps: ['its message handler has no branch on the refusal\'s code'] },
+  S8_branch_without_a_marker: { source: chat(THEN_OPEN, REGISTERS.replace(' // clears-on-promote: chat.zz', '')), gaps: ['its branch on the refusal\'s code registers no line'] },
+  S9_registration_outside_the_branch: { source: chat(THEN_OPEN, REGISTERS.replace("if (personRequired) {\n          clearRefusedOnPromote(event, () => setLines([])); // clears-on-promote: chat.zz\n        }",
+    "if (personRequired) setLines([]);\n        clearRefusedOnPromote(event, () => setLines([])); // clears-on-promote: chat.zz")), gaps: ['its branch on the refusal\'s code registers no line'] },
+};

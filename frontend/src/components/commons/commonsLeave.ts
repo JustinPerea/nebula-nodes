@@ -17,7 +17,7 @@ import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
 /** `retry`: saving again could work (GM: only then is Save and leave offered
  * again). `reason` is the popover's line under its own heading, in its short
  * form (GM's WRAP rule: Save and leave is the retry); `message` is the
- * one-line form for the panel's banner ("Couldn't save your labels. ..."). */
+ * one-line form for the panel's banner ("Couldn’t save your labels. ..."). */
 export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean };
 type SaveFailure = Extract<SaveResult, { ok: false }>;
 
@@ -32,7 +32,7 @@ type SaveFailure = Extract<SaveResult, { ok: false }>;
  */
 export function saveFailure(error: unknown): SaveFailure {
   const retry = error instanceof CommonsRequestError ? canTryAgain(error.status) : true;
-  const copy = failureCopy(error, { heading: "Couldn't save your labels." });
+  const copy = failureCopy(error, { heading: "Couldn’t save your labels." });
   // The popover offers Save and leave whenever saving again could work, so
   // its reason is the short form; a refusal's reason has no short form.
   return { ok: false, reason: failureCopy(error, { short: retry }).reason, message: oneLine(copy), retry };

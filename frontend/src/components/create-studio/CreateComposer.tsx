@@ -9,6 +9,7 @@ import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { failureMessage } from '../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -164,7 +165,7 @@ export function CreateComposer({
           </button>
         )}
         {enhanceError && (
-          <span className="create-composer__enhance-error" role="alert">{enhanceError}</span>
+          <span className="create-composer__enhance-error" role="alert"><LineText text={enhanceError} /></span>
         )}
         {modelDef && <ParamPills def={modelDef} params={params} onChange={onParamsChange} />}
         <div className="create-composer__qty" role="group" aria-label="Number of variations">

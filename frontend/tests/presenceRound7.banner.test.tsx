@@ -2,7 +2,7 @@
  * PR #204 round 7, GM r8 (1): one notice, not two. While a specific line on screen already says
  * this tab isn't connected as the person (a "because" line, a card's own line), the general
  * notice steps out, and comes back when that line goes. Beside the locked question form, whose
- * lock says it only in a tooltip, it stays. One derived state (notConnectedLineShown) drives it.
+ * lock says it only in a tooltip, it stays. One derived state (the registered lines, round 9) drives it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
@@ -10,7 +10,8 @@ import { useEffect, useState } from 'react';
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
 const { PersonRequiredBanner } = await import('../src/components/PersonRequiredBanner');
-const { notConnectedLineShown } = await import('../src/lib/notConnectedLine');
+const { currentFixLine, registerLine, resetLinesForTests } = await import('../src/lib/notConnectedLine');
+const { LineText } = await import('../src/components/LineText');
 const session = await import('../src/lib/personSession');
 const { notConnectedBecause, personRequiredCopy } = await import('../src/lib/errorCopy');
 const { HELD_QUESTIONS_LINE } = await import('../src/store/heldAssetProposals');
@@ -23,12 +24,12 @@ function Screen({ title }: { title?: string }) {
   useEffect(() => { handle.showLine = setLine; }, []);
   return <>
     <PersonRequiredBanner />
-    {line && <p className="settings-row__error">{line}</p>}
+    {line && <p className="settings-row__error"><LineText text={line} /></p>}
     {title && <button type="button" aria-disabled="true" title={title}>Send answers</button>}
   </>;
 }
 
-beforeEach(() => session.resetPersonSessionForTests());
+beforeEach(() => { session.resetPersonSessionForTests(); resetLinesForTests(); });
 afterEach(() => { cleanup(); session.notePersonPromoted(); });
 
 describe('GM r8 (1): one notice, not two', () => {
@@ -68,16 +69,23 @@ describe('GM r8 (1): one notice, not two', () => {
     expect(banner()).not.toBeNull();
   });
 
-  it('the derived state reads the page: its own words, a hidden part and a tooltip don\'t count', () => {
+  it('the derived state reads registrations: the page\'s words, a hidden line and a tooltip don\'t count', () => {
     const root = document.createElement('div');
     root.innerHTML = `<div class="person-required"><span>${personRequiredCopy()}</span></div>
       <p hidden>${notConnectedBecause('save the style', false)}</p><button title="${personRequiredCopy()}">x</button>`;
     document.body.appendChild(root);
-    expect(notConnectedLineShown(root)).toBe(false);
+    const hidden = root.querySelector('p')!;
+    const stopHidden = registerLine(hidden, hidden.textContent!);
+    expect(currentFixLine()).toBeNull();
     const shown = document.createElement('p');
     shown.textContent = notConnectedBecause('save the style', false);
     root.appendChild(shown);
-    expect(notConnectedLineShown(root)).toBe(true);
+    // On the page but not registered: it doesn't count (review 7 NIT-2).
+    expect(currentFixLine()).toBeNull();
+    const stop = registerLine(shown, shown.textContent);
+    expect(currentFixLine()?.text).toBe(shown.textContent);
+    stop(); stopHidden();
+    expect(currentFixLine()).toBeNull();
     root.remove();
   });
 });

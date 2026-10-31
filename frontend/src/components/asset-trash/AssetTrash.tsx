@@ -14,6 +14,8 @@ import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
 import type { LeaveProps } from '../../lib/noticeLeave';
+import { LineText } from '../LineText';
+import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 /**
  * Recently deleted, inside Moodboard Studio and Character Studio, and under
@@ -167,7 +169,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
             onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
         )}
       </div>
-      {error && <p className="asset-trash__error" role="alert">{error}</p>}
+      {error && <p className="asset-trash__error" role="alert"><LineText text={error} /></p>}
       {open && (
         <>
           <p className="asset-trash__note">Deleted {noun.many} stay here until you delete them for good.</p>
@@ -215,18 +217,20 @@ export interface UndoDeleteToastProps {
 /** "Moved “X” to Recently deleted · Undo", for a few seconds after a delete. */
 export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDismiss, leave }: UndoDeleteToastProps) {
   const [paused, setPaused] = useState(false);
+  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  const waiting = useSlotWaiting('asset-trash');
   useEffect(() => {
-    if (paused || busy || error) return;
+    if (paused || busy || error || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [paused, busy, error, onDismiss]);
+  }, [paused, busy, error, waiting, onDismiss]);
   // In the app's notice region, like every toast (GM - Design, 2026-10-23).
   return (
     <InNoticeRegion slot="asset-trash">
       <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? error : oneLine({ ...error, reason: shortReason(error.reason) })) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? <LineText text={error} /> : <LineText text={oneLine({ ...error, reason: shortReason(error.reason) })} />) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
         <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
         <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>

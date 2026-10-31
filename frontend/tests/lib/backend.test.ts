@@ -246,7 +246,7 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     const session = await import('../../src/lib/personSession');
     expect(session.personUnavailableReason()).toBe('debug-port');
     expect(session.personRequiredMessage()).toBe(
-      'Debug mode: a debugging port is open, so Settings, proposals and chats are off.');
+      'A debugging port is open, so Settings, proposals and chats are off.');
   });
 
   afterEach(() => {

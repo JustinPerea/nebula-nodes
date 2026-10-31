@@ -6,34 +6,49 @@ import { DEFERS_TO_NOTICE, saysPersonRequired } from './errorCopy';
  * names the fix, so the general notice steps out. A lock line, or a line that ends 'The notice
  * below says why.', doesn't name the fix, so the general notice stays."
  *
- * So a line on the page is one of three kinds:
+ * So a line is one of three kinds:
  * - `fix`: a "because" line or the general words ("…Open the link Nebula printed when it
  *   started…"). The general notice steps out beside it.
  * - `defers`: the desktop app's dev setups ("…The notice below says why."). The notice stays.
  * - `lock`: "You can … when this tab is connected as you." The notice stays.
  *
- * Read from the page's text, so every surface that shows one counts without registering (about
- * fifty files render these lines; a site that forgot to register would hide the notice's fix
- * nowhere, but one that forgot to unregister would hide it everywhere). A line counts only while
- * it is rendered: not under `hidden`, `aria-hidden`, `inert`, `display: none`, `visibility:
- * hidden` or opacity 0 (the Commons keeps Settings and Chat mounted in a `display: none`, inert
- * group). A tooltip (`title`) isn't text, so it never counts.
+ * Round 9 (review 7 MEDIUM-1): lines register, the page's text is no longer read. Each surface
+ * renders its line through <LineText> (components/LineText.tsx), which registers the element and
+ * the kind its words give, and unregisters when it goes. So an agent's own text that quotes the
+ * words never counts (review 7 NIT-2), and a line is found however its text is split (NIT-3).
+ * A ratchet (tests/lineRegistration.ratchet.test.ts) fails any surface that shows a line
+ * without it.
+ *
+ * A registered line counts only while it is on screen:
+ * - an IntersectionObserver (root: the window, any part of it in view) reports it intersecting.
+ *   That covers the window's edges, every clipping scroll box (a line scrolled out of Settings'
+ *   view doesn't count), `display: none` and a closed popover;
+ * - and nothing IntersectionObserver can't see hides it: `hidden`, `aria-hidden`, `inert`,
+ *   `visibility: hidden` or opacity 0 (checkVisibility in the browser, computed styles in jsdom).
+ *   A change to those attributes, or an animation's end, checks the registered lines again.
  */
 export type NotConnectedKind = 'fix' | 'defers' | 'lock';
 
 const LOCK = /\bYou can .+ when this (?:tab|window) is connected as you\./;
-/** Every kind says this; a page without it has none (a quick check before the walk). */
-const PHRASE = 'connected as you';
 
 export function notConnectedKind(text: string): NotConnectedKind | null {
-  if (!text.includes(PHRASE)) return null;
+  if (!text.includes('connected as you')) return null;
   if (saysPersonRequired(text)) return text.includes(DEFERS_TO_NOTICE) ? 'defers' : 'fix';
   return LOCK.test(text) ? 'lock' : null;
 }
 
+/** A because line (or the general words, or a dev setup's line): it says why the action didn't
+ * happen and destroys nothing, so it is never drawn in the warning colour (GM r14 (4)). */
+export function isBecauseLine(text: string): boolean {
+  const kind = notConnectedKind(text);
+  return kind === 'fix' || kind === 'defers';
+}
+
 const HIDDEN = '[hidden], [aria-hidden="true"], [inert]';
 
-/** Whether an element is on screen: the browser's own check, or its computed styles in jsdom. */
+/** Whether nothing IntersectionObserver can't see hides the element: hidden, aria-hidden or
+ * inert on it or above it, visibility or opacity (the browser's own check, or computed styles in
+ * jsdom, where display is read too since jsdom has no layout). */
 export function lineRendered(element: Element): boolean {
   if (element.closest(HIDDEN)) return false;
   const check = (element as Element & { checkVisibility?: (options: object) => boolean }).checkVisibility;
@@ -48,99 +63,123 @@ export function lineRendered(element: Element): boolean {
   return true;
 }
 
-/** A `fix` line on the page and whether it already announces itself (it sits in a live region). */
+/** A `fix` line on screen and whether it already announces itself (it sits in a live region). */
 export interface FixLine { readonly text: string; readonly live: boolean }
-interface Found { element: Element; text: string }
 
-const NOTICE_ITSELF = '.person-required, .person-required__announce';
+interface Registered { readonly text: string; readonly kind: NotConnectedKind }
+
 const LIVE = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
 
-function fixLinesIn(root: Node): Found[] {
-  if (!(root.textContent ?? '').includes(PHRASE)) return [];
-  const found: Found[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-    const element = text.parentElement;
-    // The notice itself, and its live region's copy of a line, never count.
-    if (!element || element.closest(NOTICE_ITSELF)) continue;
-    const words = text.textContent ?? '';
-    if (notConnectedKind(words) === 'fix') found.push({ element, text: words });
-  }
-  return found;
-}
-
-function firstRendered(found: Found[]): FixLine | null {
-  const line = found.find(({ element }) => element.isConnected && lineRendered(element));
-  return line ? { text: line.text, live: line.element.closest(LIVE) !== null } : null;
-}
-
-/** The first `fix` line rendered under `root`, read now. */
-export function shownFixLine(root: Node = document.body): FixLine | null {
-  return firstRendered(fixLinesIn(root));
-}
-
-export function notConnectedLineShown(root: Node = document.body): boolean {
-  return shownFixLine(root) !== null;
-}
-
-// While anything subscribes, the answer is kept current and cached: a change to the page's text
-// finds the lines again; a change to what hides them (an attribute, an animation's end) only
-// checks the lines already found (review 6 NIT-2: no walk of every text node per style change).
+const lines = new Map<Element, Registered>();
+/** What the IntersectionObserver last said of each line; a line it hasn't reported yet doesn't count. */
+const inView = new Map<Element, boolean>();
 const listeners = new Set<() => void>();
-let found: Found[] = [];
+let observer: IntersectionObserver | null = null;
+let stopWatching = () => {};
 let cached: FixLine | null = null;
-let rescan = false;
 let frame = 0;
-let stop = () => {};
 
 const same = (a: FixLine | null, b: FixLine | null) => a === b || (!!a && !!b && a.text === b.text && a.live === b.live);
+const ioAvailable = () => typeof IntersectionObserver === 'function';
+
+function computeFixLine(): FixLine | null {
+  const shown = [...lines].filter(([element, line]) => line.kind === 'fix' && element.isConnected
+    && (ioAvailable() ? inView.get(element) === true : true) && lineRendered(element));
+  // The first in the page's order, so the answer never depends on which mounted first.
+  shown.sort(([a], [b]) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  const first = shown[0];
+  return first ? { text: first[1].text, live: first[0].closest(LIVE) !== null } : null;
+}
 
 function settle() {
   frame = 0;
-  if (rescan) { found = fixLinesIn(document.body); rescan = false; }
-  const next = firstRendered(found);
+  const next = computeFixLine();
   if (same(next, cached)) return;
   cached = next;
   listeners.forEach((listener) => listener());
 }
 
-function schedule(texts: boolean) {
-  if (texts) rescan = true;
-  if (!frame) frame = requestAnimationFrame(settle);
+function schedule() {
+  if (frame) return;
+  frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(settle) : (setTimeout(settle, 0) as unknown as number);
 }
 
-function start() {
-  found = fixLinesIn(document.body);
-  cached = firstRendered(found);
-  const observer = new MutationObserver((records) => {
-    schedule(records.some((record) => record.type !== 'attributes'));
-  });
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true,
+function startWatching() {
+  // What IntersectionObserver can't see: these attributes anywhere above a line, and a fade's end.
+  const attributes = new MutationObserver(() => schedule());
+  attributes.observe(document.body, { subtree: true, attributes: true,
     attributeFilter: ['hidden', 'aria-hidden', 'inert', 'class', 'style'] });
-  // A line that fades in is at opacity 0 when it mounts; check again once it has.
-  const settled = () => schedule(false);
+  const settled = () => schedule();
   document.addEventListener('animationend', settled, true);
   document.addEventListener('transitionend', settled, true);
-  stop = () => {
-    observer.disconnect();
+  stopWatching = () => {
+    attributes.disconnect();
     document.removeEventListener('animationend', settled, true);
     document.removeEventListener('transitionend', settled, true);
-    if (frame) cancelAnimationFrame(frame);
-    frame = 0;
   };
 }
 
-/** Calls `onChange` (at most once a frame) when the rendered `fix` line changes. */
+function ensureObserver(): IntersectionObserver | null {
+  if (!ioAvailable()) return null;
+  observer ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (lines.has(entry.target)) inView.set(entry.target, entry.isIntersecting && entry.intersectionRatio > 0);
+    }
+    schedule();
+  }, { root: null, threshold: [0, 0.01] });
+  return observer;
+}
+
+/**
+ * Registers a line's element under the kind its words give (none: nothing registers). Returns
+ * the unregister. Registering the same element again replaces its entry (StrictMode's double
+ * mount leaves one).
+ */
+export function registerLine(element: Element, text: string): () => void {
+  const kind = notConnectedKind(text);
+  if (kind === null) return () => {};
+  const first = lines.size === 0;
+  lines.set(element, { text, kind });
+  if (first) startWatching();
+  const io = ensureObserver();
+  if (io) { inView.delete(element); io.observe(element); }
+  schedule();
+  return () => {
+    if (lines.get(element)?.text !== text) return;
+    lines.delete(element);
+    inView.delete(element);
+    observer?.unobserve(element);
+    if (lines.size === 0) stopWatching();
+    schedule();
+  };
+}
+
+/** Calls `onChange` (at most once a frame) when the `fix` line on screen changes. */
 export function subscribeToLines(onChange: () => void): () => void {
   listeners.add(onChange);
-  if (listeners.size === 1) start();
-  return () => {
-    listeners.delete(onChange);
-    if (listeners.size === 0) { stop(); found = []; cached = null; }
-  };
+  if (listeners.size === 1) cached = computeFixLine();
+  return () => { listeners.delete(onChange); };
 }
 
-/** The rendered `fix` line: the cached answer while subscribed, else read now. */
+/** The `fix` line on screen: the kept answer while anything subscribes, else read now. */
 export function currentFixLine(): FixLine | null {
-  return listeners.size > 0 ? cached : shownFixLine();
+  return listeners.size > 0 ? cached : computeFixLine();
+}
+
+/** What is registered, for tests and the ratchet's runtime check. */
+export function registeredLines(): ReadonlyMap<Element, Registered> {
+  return lines;
+}
+
+export function resetLinesForTests(): void {
+  for (const element of lines.keys()) observer?.unobserve(element);
+  lines.clear();
+  inView.clear();
+  stopWatching();
+  stopWatching = () => {};
+  observer?.disconnect();
+  observer = null;
+  cached = null;
+  if (frame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+  frame = 0;
 }

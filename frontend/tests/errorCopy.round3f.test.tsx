@@ -232,7 +232,7 @@ describe('the shared lines GM rewrote', () => {
     useGraphStore.setState({ isImportingGraph: true });
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'flux-2-pro' } as never)
       .catch((caught: unknown) => caught);
-    expect(errorCopy.failureCopy(error)).toEqual({ heading: "Couldn't start the generation.",
+    expect(errorCopy.failureCopy(error)).toEqual({ heading: 'Nebula couldn’t start the generation.',
       reason: 'Wait for the graph import to finish.' });
   });
 });

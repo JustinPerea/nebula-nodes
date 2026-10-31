@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState, type CSSProperties } from 'react';
 import { BOTTOM_BAR_ATTR, floatingBottomLimit } from '../lib/bottomBar';
+import { useCappedPopover } from '../lib/noticeWaiting';
 
 /** The window's edge a modal keeps clear of, as the floating panels do. */
 const GUTTER = 16;
@@ -17,9 +18,12 @@ export function noticeClearance(viewportHeight = window.innerHeight): number {
 /**
  * `--notice-clearance` for a modal's overlay (the model picker, the Lightbox, the comparison):
  * its stylesheet pads its bottom by at least that and caps its box's height to match. Measured
- * again when a bar (the composer) or the window changes size.
+ * again when a bar (the composer) or the window changes size. While it is mounted the band
+ * shows only the newest notice (GM r13 2, lib/noticeWaiting), so one notice never lands on the
+ * box.
  */
 export function useNoticeClearance(): CSSProperties {
+  useCappedPopover();
   const [clearance, setClearance] = useState(() => noticeClearance());
   useLayoutEffect(() => {
     const measure = () => setClearance(noticeClearance());

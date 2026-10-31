@@ -41,8 +41,8 @@ body.app-slava-restraint .batch-node__guidance { margin: 10px 0; font-size: 10px
 body.app-slava-restraint .batch-node__warning {
   margin: 8px 0;
   padding: 7px;
-  border-left: 2px solid #fbbf24;
-  color: #fbbf24;
+  border-left: 2px solid var(--line-warning-edge, #fbbf24);
+  color: var(--line-warning, #fbbf24);
   font-size: 11px;
   line-height: 1.4;
 }

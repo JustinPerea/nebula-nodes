@@ -1,6 +1,6 @@
 import { personTokenForSocket } from './backend';
-import { commonsSessionCopy, FailureNotice } from './errorCopy';
-import { inDesktopShell } from './personSession';
+import { commonsNotConnectedCopy, FailureNotice, PERSON_REQUIRED_CODE } from './errorCopy';
+import { personPromotions } from './personSession';
 
 export interface ChatAuthority {
   personToken?: string;
@@ -14,8 +14,11 @@ export interface ChatAuthority {
 export async function chatAuthority(socketUrl: string, commonsEnabled: boolean, brand: string): Promise<ChatAuthority> {
   const personToken = await personTokenForSocket(socketUrl);
   if (!commonsEnabled) return personToken ? { personToken } : {};
-  // No person session (GM, error-copy round 2): the chat panel shows this
-  // line under its own send; the same words as the Commons' own 401.
-  if (!personToken) throw new FailureNotice('', commonsSessionCopy(inDesktopShell()));
+  // No person session: this tab isn't connected as the person (GM r12 (2), #204 round 9). The
+  // chat panel shows the because line under its own send, and it clears on the promote.
+  if (!personToken) {
+    throw new FailureNotice('', commonsNotConnectedCopy("Couldn’t send the message."),
+      { code: PERSON_REQUIRED_CODE, sentAt: personPromotions() });
+  }
   return { brand: brand.trim() || null, personToken };
 }

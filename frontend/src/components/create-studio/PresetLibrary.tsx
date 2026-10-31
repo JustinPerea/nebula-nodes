@@ -7,6 +7,7 @@ import { wsClient } from '../../lib/wsClient';
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import { presetLibraryPlacement } from '../../lib/presetLibraryPlacement';
+import { useCappedPopover } from '../../lib/noticeWaiting';
 
 export interface PresetLibraryProps {
   onApply: (preset: Preset) => void;
@@ -42,6 +43,8 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   }, [reloadKey, projectId, changed]);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  // Capped at the band (lib/presetLibraryPlacement): one notice while it is open (GM r13 2).
+  useCappedPopover();
   const [placement, setPlacement] = useState<{ bottom: number; maxHeight: number } | null>(null);
   useLayoutEffect(() => {
     const place = () => setPlacement((was) => {

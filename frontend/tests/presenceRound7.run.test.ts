@@ -133,3 +133,37 @@ describe('review 5 LOW-3: a refused shot goes back to the output it last settled
     expect(shotOutput()).toEqual(failedBefore);
   });
 });
+
+describe('PR #204 round 9, GM r13 (1): Generate\'s nodes added, their start refused for this tab', () => {
+  const GM_R13 = 'Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.';
+  const origin = { genId: 'g1', prompt: 'a lighthouse', ts: 1, sessionId: 's', modelNodeIds: ['n2'], allNodeIds: ['n1', 'n2'] };
+  beforeEach(() => {
+    resetPersonSessionForTests();
+    useGraphStore.getState().resetExecution();
+    window.localStorage.removeItem(RUN_HISTORY_STORAGE_KEY);
+    vi.spyOn(api, 'getExecutionStatus').mockResolvedValue({ runId: '', status: 'failed' });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => { notePersonPromoted(); vi.restoreAllMocks(); });
+
+  it('the result cards say GM\'s line, whole, with no "try again"; the promote puts them back', async () => {
+    fresh([text('n1'), text('n2')]);
+    useGraphStore.setState({ createLaunchingIds: ['g1'], createCancelledLaunchIds: [] } as never);
+    vi.spyOn(api, 'executeGraph').mockRejectedValueOnce(gateStart("Couldn't start the run."));
+    await useGraphStore.getState().executeClusterConcurrent(['n1', 'n2'], origin as never);
+    const cards = useGraphStore.getState().nodes.map((n) => n.data);
+    expect(cards.map((d) => d.state)).toEqual(['error', 'error']);
+    expect(cards.map((d) => d.error)).toEqual([GM_R13, GM_R13]);
+    expect(cards.map((d) => d.errorPerson)).toEqual([undefined, undefined]);
+    notePersonPromoted();
+    expect(useGraphStore.getState().nodes.map((n) => n.data.state)).toEqual(['idle', 'idle']);
+  });
+
+  it('a start from the canvas (no Generate) keeps the run-start line', async () => {
+    fresh([text('n1'), text('n2')]);
+    vi.spyOn(api, 'executeGraph').mockRejectedValueOnce(gateStart("Couldn't start the run."));
+    await useGraphStore.getState().executeClusterConcurrent(['n1', 'n2']);
+    expect(useGraphStore.getState().nodes[0].data.error).not.toBe(GM_R13);
+    expect(useGraphStore.getState().nodes[0].data.state).toBe('error');
+  });
+});

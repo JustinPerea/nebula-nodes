@@ -56,7 +56,9 @@ describe('commonsApi', () => {
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
     // Round 2 (GM): in the desktop app a reload fetches the shell's token
     // again, so a 401 after the silent refetch says GM's 401 line.
-    await expect(commonsApi.status()).rejects.toThrow("You don't have access to this anymore. Reload to sign in again.");
+    // Round 9 (GM r12 2): the person session never expires on its own; a 401 means this window
+    // isn't connected as the person, so it is the because form, with the packaged app's fix.
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this window isn’t connected as you. Quit Nebula and open it again.');
     expect(uiToken).toHaveBeenCalledTimes(2);
     expect(apiFetch).toHaveBeenCalledTimes(2);
     expect(apiFetch.mock.calls[0][1].headers.Authorization).not.toBe(apiFetch.mock.calls[1][1].headers.Authorization);
@@ -65,10 +67,10 @@ describe('commonsApi', () => {
   it('stops sending a forgotten browser session after two rejected requests', async () => {
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
     // Round 2 (GM): a plain browser tab, where only a fresh terminal link helps.
-    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
     expect(sessionStorage.getItem('nebula.person')).toBeNull();
-    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(apiFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -92,13 +94,13 @@ describe('commonsApi', () => {
   it('makes no request from a desktop window that may not have the token', async () => {
     const token = vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' });
     vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token } });
-    await expect(commonsApi.status()).rejects.toThrow("You don't have access to this anymore. Reload to sign in again.");
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this window isn’t connected as you. The notice below says why.');
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it('does not make a request without human authority', async () => {
     sessionStorage.clear();
-    await expect(commonsApi.status()).rejects.toThrow("Your session expired. Open a fresh Commons link from the backend terminal.");
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(apiFetch).not.toHaveBeenCalled();
   });
 

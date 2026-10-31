@@ -12,6 +12,7 @@ import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents
 import '../../../styles/personal-agents.css';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -184,7 +185,7 @@ export function PersonalAgentsSection() {
         canvas tools and counts their runs in the budget for agents outside Nebula&rsquo;s chats. The agent keeps its
         own shell, network and files; Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
       </p>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       <div className="settings-list">
         {(list?.agents ?? []).map((agent) => (
           <div className="settings-pref settings-model-limit" key={agent.id} data-testid="personal-agent-row"

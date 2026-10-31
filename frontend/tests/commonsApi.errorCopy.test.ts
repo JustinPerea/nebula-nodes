@@ -40,8 +40,8 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect((error.cause as Error).cause).toBe(original);
     // Round 2: the popover's short line (Save and leave is the retry), the banner's one line.
     expect(saveFailure(error)).toEqual({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.",
-      message: `Couldn't save your labels. ${LOST}`, retry: true });
-    expect(error.heading).toBe("Couldn't save your labels.");
+      message: `Couldn’t save your labels. ${LOST}`, retry: true });
+    expect(error.heading).toBe("Couldn’t save your labels.");
   });
 
   it.each([408, 429, 500, 502, 503, 504])('HTTP %i: the no-response line, the status, retry', async (status) => {
@@ -55,7 +55,7 @@ describe('Commons request failures carry copy and keep their status', () => {
 
   it('the export says "ZIP" in capitals, as everywhere else (GM, round 3)', async () => {
     answer = () => new Response('', { status: 503 });
-    expect((await failure(() => commonsApi.exportZip())).heading).toBe("Couldn't export the ZIP.");
+    expect((await failure(() => commonsApi.exportZip())).heading).toBe("Couldn’t export the ZIP.");
   });
 
   it('a 503 with no JSON body no longer says "Commons request failed (503)"', async () => {
@@ -68,7 +68,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
     expect(error.reason).toBe('Labels changed in another window. Reload before saving.');
     expect(saveFailure(error)).toEqual({ ok: false, reason: 'Labels changed in another window. Reload before saving.',
-      message: "Couldn't save your labels. Labels changed in another window. Reload before saving.", retry: false });
+      message: "Couldn’t save your labels. Labels changed in another window. Reload before saving.", retry: false });
   });
 
   it.each([
@@ -94,7 +94,7 @@ describe('Commons request failures carry copy and keep their status', () => {
   it('a failure that isn\'t a request\'s says GM\'s general line, never its own message', () => {
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
       ok: false, reason: "Try again, or reload if it keeps happening.",
-      message: "Couldn't save your labels. Try again, or reload if it keeps happening.", retry: true,
+      message: "Couldn’t save your labels. Try again, or reload if it keeps happening.", retry: true,
     });
   });
 
@@ -116,7 +116,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     const error = await failure(() => commonsApi.status());
     expect(error.reason).toBe(LOST);
     expect(error.status).toBe(0);
-    expect(error.heading).toBe("Couldn't check the Commons status.");
+    expect(error.heading).toBe("Couldn’t check the Commons status.");
   });
 
   it('a used body (a bug, not a dropped connection) is not read as a lost connection', async () => {

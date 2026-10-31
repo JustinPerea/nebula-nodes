@@ -9,6 +9,7 @@ import type { KreaController } from './useKreaConnection';
 import '../../../styles/krea-connection.css';
 import { failureMessage } from '../../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
+import { LineText } from '../../LineText';
 
 const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTone }> = {
   disconnected: { label: 'Not signed in', tone: 'idle' },
@@ -47,7 +48,7 @@ function KreaPlans() {
       <>
         <button type="button" className="settings__button settings__button--ghost" disabled={busy}
           onClick={() => void run(async () => setPlans(await getKreaPlans()))}>{busy ? 'Loading plans…' : 'Show plans'}</button>
-        {error && <p className="settings-row__error" role="alert">{error}</p>}
+        {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       </>
     );
   }
@@ -71,7 +72,7 @@ function KreaPlans() {
         {trialUrl && <a className="settings__button" href={trialUrl} target="_blank" rel="noopener noreferrer">Open trial checkout ↗</a>}
       </div>
       {trialUrl && <p className="settings-hint">Krea asks for a card on its checkout page. The trial converts to Pro unless you cancel.</p>}
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
     </div>
   );
 }
@@ -93,7 +94,7 @@ function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>
       </div>
-      {error && <p className="settings-row__error" role="alert">{error}</p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
       <p className="settings-hint">Nodes you already placed keep their connection.</p>
     </div>
   );
@@ -159,7 +160,7 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
                 if (!result.ok) krea.setError("Couldn't open Krea sign-in in your browser.");
               }).catch(() => krea.setError("Couldn't open Krea sign-in in your browser."));
             }}>Open Krea sign-in ↗</a>}
-            {problem && <p className="settings-row__error" role="alert">{problem}</p>}
+            {problem && <p className="settings-row__error" role="alert"><LineText text={problem} /></p>}
             {(started || mode === 'mcp') && <KreaDefault mode={mode} />}
             {signedIn && <KreaPlans />}
             {started && <p className="settings-hint">To change workspaces, disconnect and sign in again.</p>}

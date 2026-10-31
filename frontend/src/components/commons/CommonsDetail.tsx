@@ -13,9 +13,11 @@ import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
-import { failureMessage } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 interface Props {
   assetId: string;
@@ -170,24 +172,27 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const dragStart = useRef<[number, number] | null>(null);
   const [ask, promptElement] = useCommonsPrompt();
   const readOnly = useBackendOffline();
+  // PR #204 round 9: a not-connected line clears on the promote, and the reference loads again.
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, null, 'commons.detail-load', loadAgain);
 
   const load = useCallback(async () => {
     try {
       setDetail(await commonsApi.asset(assetId));
       setError(null);
     } catch (e) {
-      setError(failureMessage(e, "Couldn't load the reference."));
+      line.show(e, "Couldn’t load the reference.", { reload: true });
     }
-  }, [assetId]);
+  }, [assetId, line]);
 
   useEffect(() => {
     let cancelled = false;
     commonsApi.asset(assetId).then(
-      (d) => { if (!cancelled) setDetail(d); },
-      (e: unknown) => { if (!cancelled) setError(failureMessage(e, "Couldn't load the reference.")); },
+      (d) => { if (!cancelled) { setDetail(d); setError(null); } },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the reference.", { reload: true }); },
     );
     return () => { cancelled = true; };
-  }, [assetId]);
+  }, [assetId, loadEpoch, line]);
 
   // An agent's proposal for this reference was accepted (here or in another
   // tab): the reading changed under the open detail, so read it again.
@@ -214,10 +219,10 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       return true;
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't save the change."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the change.");
       return false;
     }
-  }, [load, onChanged]);
+  }, [load, onChanged, line]);
 
   const correct = async (field_path: string, op: 'set' | 'add' | 'remove', value: unknown, withReason = false) => {
     let reason: string | undefined;
@@ -235,7 +240,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <div className="commons-detail__bar">
           <button type="button" className="commons-button" onClick={onClose}>Close</button>
         </div>
-        <p className="commons-empty">{error ?? 'Loading…'}</p>
+        <p className="commons-empty"><LineText text={error ?? 'Loading…'} /></p>
       </aside>
     );
   }
@@ -291,7 +296,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       await commonsApi.purge(assetId);
       onDeleted();
     } catch (e) {
-      if (!isOfflineRefusal(e)) setError(failureMessage(e, "Couldn't delete the reference."));
+      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t delete the reference.");
     }
   };
 
@@ -310,7 +315,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <button type="button" className="commons-button" onClick={onClose} aria-label="Close detail">Close</button>
       </div>
 
-      {error && <p className="commons-notice commons-notice--error" role="alert">{error}</p>}
+      <CommonsErrorLine line={error} />
 
       {/* Round 16 (L4): offline the reference is read-only like the canvas.
           Everything below Close is a write, so one fieldset disables it all;

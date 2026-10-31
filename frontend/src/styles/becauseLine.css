@@ -1,0 +1,43 @@
+/*
+ * GM r14 (4), PR #204 round 9: a "because" line ("Nebula couldn’t … because this tab isn’t
+ * connected as you. …") destroys nothing, so it never takes the warning colour, on any surface.
+ * One shared style, not a per-screen fix: <LineText> (components/LineText.tsx) marks the element
+ * a because line registers on with `data-line-because`, and this sheet turns every warning token
+ * inside it into the neutral ink, edge and surface. A surface's own error rule keeps reading its
+ * token (`color: var(--sr-danger)`) and gets the neutral one. Words in their own span
+ * (`data-line-because="own"`, FailureLines' heading and reason) take it on the element that holds
+ * them, since their colour comes from there. A surface whose warning is its own literal reads it
+ * through `var(--line-warning, <its colour>)` (or -soft, -edge): unset anywhere else, so the
+ * literal shows, and set here, so a because line gets the neutral one.
+ *
+ * tests/becauseLine.ratchet.test.tsx fails a warning token missing here, and a rule for a line's
+ * element that sets a warning colour some other way.
+ */
+[data-line-because],
+:has(> [data-line-because='own']),
+:has(> .failure-lines > [data-line-because='own']) {
+  --line-warning: var(--sr-ink-light);
+  --line-warning-soft: var(--sr-surface-control);
+  --line-warning-edge: var(--sr-edge-strong);
+  --sr-accent: var(--sr-ink-light);
+  --sr-accent-hover: var(--sr-ink-light);
+  --sr-error: var(--sr-ink-light);
+  --sr-danger: var(--sr-ink-light);
+  --sr-danger-ink: var(--sr-ink-light);
+  --sr-danger-ink-hover: var(--sr-ink-light);
+  --sr-warning: var(--sr-ink-light);
+  --sr-accent-soft: var(--sr-surface-control);
+  --sr-accent-hover-soft: var(--sr-surface-control);
+  --sr-error-soft: var(--sr-surface-control);
+  --sr-danger-soft: var(--sr-surface-control);
+  --sr-danger-tint: var(--sr-surface-control);
+  --sr-warning-soft: var(--sr-surface-control);
+  --sr-accent-border: var(--sr-edge-strong);
+  --sr-accent-border-soft: var(--sr-edge-strong);
+  --sr-accent-border-muted: var(--sr-edge-strong);
+  --sr-accent-border-medium: var(--sr-edge-strong);
+  --sr-accent-border-strong: var(--sr-edge-strong);
+  --sr-error-border: var(--sr-edge-strong);
+  --sr-danger-border: var(--sr-edge-strong);
+  --sr-danger-edge: var(--sr-edge-strong);
+}

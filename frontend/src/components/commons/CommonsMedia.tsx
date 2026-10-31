@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
-import { failureMessage } from '../../lib/errorCopy';
+import { LineText } from '../LineText';
+import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 type Props = {
   path: string;
@@ -16,7 +17,12 @@ type Props = {
 
 /** Media elements cannot send the Commons bearer header themselves. */
 export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props) {
-  const [media, setMedia] = useState<{ path: string; url?: string; error?: string }>();
+  const [media, setMedia] = useState<{ path: string; url?: string }>();
+  // PR #204 round 9: a not-connected line clears on the promote, and the file loads again.
+  const [error, setError] = useState<string | null>(null);
+  const [errorPath, setErrorPath] = useState<string | null>(null);
+  const [loadEpoch, loadAgain] = useReloadEpoch();
+  const line = useCommonsLine(setError, null, `commons.media-${path}`, loadAgain);
   useEffect(() => {
     const controller = new AbortController();
     let url: string | undefined;
@@ -24,16 +30,19 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(blob);
       setMedia({ path, url });
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setMedia({ path, error: failureMessage(error, "Couldn't load this reference.") });
+      setError(null);
+    }).catch((failure: unknown) => {
+      if (controller.signal.aborted) return;
+      setErrorPath(path);
+      line.show(failure, "Couldn’t load this reference.", { reload: true });
     });
     return () => {
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [path]);
+  }, [path, loadEpoch, line]);
   const current = media?.path === path ? media : undefined;
-  if (current?.error) return <span role="alert">{current.error}</span>;
+  if (error && errorPath === path) return <span role="alert"><LineText text={error} /></span>;
   return video ? <video {...props} src={current?.url} /> :
     <img {...props} src={current?.url} alt={alt} loading={loading} />;
 }

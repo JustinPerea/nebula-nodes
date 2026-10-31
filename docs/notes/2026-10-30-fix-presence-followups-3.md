@@ -824,7 +824,10 @@ The first full backend run on the merged tree failed 9 tests.
     403. (Corrected in round 8, review 6 gates LOW-1: the backend here is configured as in real
     use, with the person token set. Save style, a cluster and a run start from a caller that
     isn't the person are refused only when they change who bills, carry a run approval or
-    break a spending limit; otherwise they go through, as for any agent. The because line
+    break a spending limit, or (a cluster) would change a run the person approved that hasn't
+    started (409 `approved_run`) or leave the open project over its save limit (a
+    `person_required` 403); otherwise they go through, as for any agent (round 9, review 7
+    gates LOW-1). The because line
     shows only for a Style that changes who bills. The shots show those refusals, staged); the demotes and promotes in the
     person's tab are the frontend's own `reportPersonRequired`/`notePersonPromoted`; the
     permission ask is delivered on the tab's own chat socket (no ACP agent here), and the
@@ -959,10 +962,12 @@ The first full backend run on the merged tree failed 9 tests.
 - **MCP, CLI and docs.** No agent-visible behaviour changed this round: the tool-kind tag is the
   tab's, the notice rule and the placement are the tab's, and `/ws/chat` joins the gated list
   of the tests, not the server. MCP-SETUP already says Save style, cluster and run starts are
-  refused for a caller that isn't the person only for a billing change, a run approval or a
-  spending limit ("Who bills is the person's call", the billing-change list, and "Everything
-  else, including running nodes, is open to agents and held to the spending limits"); it is
-  unchanged. Still with Justin, not built: the proposal read boundary, and whether runs started
+  refused for a caller that isn't the person only for a billing change, a run approval, a
+  spending limit or (its coded refusals, :2728-2731) an edit that would leave the open project
+  over the save limit ("Who bills is the person's call", the billing-change list, and
+  "Everything else, including running nodes, is open to agents and held to the spending
+  limits"); it is unchanged. (Round 9, review 7 gates LOW-1: this paraphrase first left the
+  save limit and the approved-run check out.) Still with Justin, not built: the proposal read boundary, and whether runs started
   by anything that isn't the person should have a default daily dollar total.
 - **Live on 8795/5795** (isolated backend, every root in scratch, no keys, the Commons on with a
   call budget of 0; 8000-8010 and 5173 blocked, canary refused): 26 of 27 in the full run, and
@@ -1016,3 +1021,252 @@ The first full backend run on the merged tree failed 9 tests.
   limit at about 80%; the second ran to the end, 12,352 passed and 2 failed, both event-loop
   timing tests (an ACP open and an autosave), which passed on their own. No backend code
   changed this round.
+
+## Round 9 (review 7 on 0a29f1d0; GM r12, r13)
+
+### The one notice reads registrations (review 7 MEDIUM-1, NIT-2, NIT-3)
+- `lib/notConnectedLine.ts` no longer reads the page's text. A line registers its element and
+  the kind its words give (fix, defers, lock; GM r11) through `components/LineText.tsx`, and
+  unregisters when it unmounts (StrictMode's double mount leaves one; the same element
+  re-registering replaces its entry). `FailureLines` and the new `commons/CommonsErrorLine`
+  render through it.
+- `LineText` with no class renders the words as bare text in the surface's own element, plus
+  an empty anchor (`display: none` inline, so no stylesheet can show it or make it a flex item)
+  whose parent is what registers. So every surface keeps its role, class and test selectors
+  (`getByText` still finds the surface's element). With a class it renders its own span.
+- A registered line counts only while one IntersectionObserver (root: the window, thresholds
+  0 and 0.01, any part in view) says it intersects, and nothing IO can't see hides it
+  (`hidden`, `aria-hidden`, `inert`, visibility, opacity: `checkVisibility`, or computed
+  styles in jsdom). A change of those attributes, class or style anywhere, or an animation's or
+  transition's end, re-checks. A line scrolled out of Settings' scroll box doesn't count, and
+  scrolling re-checks (IO fires). Without IO (jsdom) a line counts as in view.
+- An agent's note or chat text quoting the words never counts: it doesn't register. A line is
+  found however it is split, since it registers by its words, not its text nodes.
+- **The ratchet** (`tests/lineRegistration.ratchet.test.ts`) replaces the scan's "every surface
+  counts". (1) From the trace: every `// clears-on-promote:` site is in HOLDERS with where its
+  line shows and the expression it hands a registering component there; the Commons surfaces
+  too. A new site fails until it says where its line shows. (2) Structurally: no JSX text
+  child anywhere reads a value named for an error, refusal, failure, notice or problem, or calls
+  a sentence helper, without a registering component; `dangerouslySetInnerHTML` fails too. One
+  exemption (Moodboard's `notices`, a block of FailureLines). 47 component files moved to
+  `LineText` (most by a codemod over the ratchet's own findings), including lines that can't be
+  not-connected today: cheaper than a reviewed exemption each, and a later gate covers them.
+- Out of scope but done with it: three-dot strings in those files' visible text became "…"
+  (Rendering, Loading Moodboard, Loading, Enter text, Opening ChatGPT, Loading models, Search
+  models, Extracting, Fetching, the connection search placeholder).
+
+### GM r12
+- (1) Every Generate line opens "Nebula couldn’t start the generation." (`GENERATE_HEADING`,
+  now in `lib/errorCopy` with `CLUSTER_NOT_ADDED`; graphStore re-exports them, so the
+  CreateView tests' graphStore mocks don't need them).
+- (2) The Commons. Traced: the person session is one per launch and never expires on its own
+  (`services/person_session.py`; `commons/actors.py` checks the Bearer against it). "Your
+  session expired" was shown when this tab had no person token, or a 401 after the backend
+  restarted with a new one: both mean the tab isn't connected as the person. So it is the
+  because form, under the call's own heading (`commonsNotConnectedCopy`: "Couldn’t load the
+  references." gives "Nebula couldn’t load the references because this tab isn’t connected as
+  you. Open the link Nebula printed when it started."), the desktop window's forms as
+  `notConnectedBecause`. No session line to propose to GM. No "backend terminal". It is a
+  person refusal (`person_required`, stamped with the promotes so far: `commonsNotConnected`).
+  `CommonsErrorLine` draws a not-connected line neutral (`commons-notice`, a status) and any
+  other failure red (an alert). The Commons screens have no Try again button, and the line
+  carries no "try again". Every Commons "Couldn't" became "Couldn’t" (commonsApi's 42
+  headings, the screens, the leave popover's save line).
+  - A Commons line clears on the promote, and the Commons loads again: see "The Commons on the
+    promote" below.
+- (3) "Connecting…" was already U+2026 in source (CommonsView's StatusLine). Checked live:
+  see below.
+- (4) The desktop dev notice. `personRequiredMessage` gives the dev text for 'debug-port' and
+  'dev-renderer' whenever the shell's answer set the reason: round 8's shot 07 was staged in a
+  browser with only the line forced to desktop, so the notice was the tab's. Pinned in
+  `presenceRound9.desktop.test.tsx` with the shell's own `decidePersonToken` and
+  `registerPersonTokenHandler` (desktop/person-token.mjs) answering the bridge. An unstaged
+  packaged shot isn't possible inside this round's rules: `npm run package -- --validation`
+  rebuilds the renderer with `npm run build:desktop` when sources changed (they did), and a
+  vite build is off-limits on this Mac. So the shot is the real app in the browser with the
+  bridge answering as the shell does for a debug-port launch, named "-component".
+
+### GM r13
+- (1) Generate after its nodes were added: GM's line exactly. The desktop forms follow
+  `notConnectedBecause` (the dev setups defer to the notice; the packaged app: "Quit Nebula and
+  open it again, then run them from the canvas.", confirmed by GM r14 (2)). Where it shows:
+  live, a start refusal never reached CreateView, because `executeClusterConcurrent` catches
+  it and marks the nodes errored. So the store now marks a Generate cluster's nodes with this
+  line when the start is a person refusal (`markNodesErrored(..., ownLine)`, no "details"
+  toggle under it), and the result cards show it; CreateView's notice path stays for a start
+  that throws. Neither takes an action, and nothing retries Generate on the promote (the
+  RETRIES list has only Style's); a test promotes after the refusal and sees no second cluster
+  or start.
+- (2) The band. `--notice-tallest-h` (three lines) sets the band's height. `lib/noticeWaiting`
+  counts the open capped popovers (`useCappedPopover`): every modal that reads the clearance
+  (the hook holds it), Styles, the context menu, the connection menu and the provider menu.
+  While one is open, NoticeRegion marks every slot item but the newest (by the order its slot
+  gained the element) `data-notice-waiting`, drawn as nothing; it comes back when the newest
+  goes or the popover closes. Timed notices hold their timers while waiting (`useNoticeHold`
+  takes the slot; the four toasts read `useSlotWaiting`), and start a full hold when shown, so
+  none is lost. The proposal bar is an item like any other.
+  - The Inspector popover and the size panel stop at the band too but are docked panels a person
+    keeps open, so they don't hold the band to one notice (listed with why in
+    `presenceRound9.band.test.tsx`). GM r14 (1) confirmed: not popovers, the rule doesn't apply.
+
+### Review 7, the rest
+- notice-rule-ui LOW-3: the toolbar ratchet is structural now: no line component (LineText,
+  FailureLines, CommonsErrorLine) in a row at all, no literal sentence, no
+  `dangerouslySetInnerHTML`, no alert role through a spread, a local helper read through its
+  returns, and a row class read from a constant, a helper's literals and a template. The
+  reviewer's T7, T10, T13-T15, T17 and T18 each have a probe.
+- LOW-4 (N7): an `inert`-only toggle test; the `inert` mutant fails it.
+- gates-trace LOW-1, NIT-3: docs (the "only when" list now names the cluster's approved-run and
+  save-limit refusals; closed entries also drop a Commons proposal's reason). LOW-2, LOW-3,
+  NIT-1, NIT-2: the trace lane (below).
+- **MCP and docs.** Agent-visible: nothing. The Commons refusal's code and status are what
+  the API already answered; only the tab's words changed. MCP-SETUP unchanged.
+
+### The trace lane (gates-trace LOW-2, LOW-3, NIT-1, NIT-2)
+- LOW-2: the caller trace follows a helper call. It climbs through templates, `await`, `as`,
+  `satisfies`, `!` and `<T>x`, and through any call that isn't a transport (`String`,
+  `backendUrl`, `joinBackendPath`, ...) until it reaches one; a lib helper returning
+  `apiFetch(String(...))` hands its Response to its caller. Fail closed: a wrapped path, or a
+  path helper's call, held somewhere the trace can't read (a local through `as`, a template or
+  `await`, `let x; x = ...`, an array) is listed as untraced and its caller drops. The real
+  app's untraced list is unchanged.
+- LOW-3: the new probes are `ROUND9_PROBES` in `traceProbes.ts`, each outcome pinned in
+  `presenceRound9.trace.test.ts`. O4 is the keeper whose marker sits on its own line in the
+  catch.
+- NIT-1: route discovery (`personGateRoutes.py`) counts `"person_required"` anywhere outside a
+  comparison or docstring (a constant, an f-string, a `+`), follows an error's subclasses, and
+  lists a gate read out of a container (looped, `.get`, handed on, built inline) as unreadable.
+  The real backend's output is byte-identical: 67 routes, none unreadable. 21 forms are pinned
+  in `presenceRound9.routes.test.ts`, with negative controls.
+- NIT-2: the socket check is structural (`socketRefusalGaps`): a `new WebSocket` on the path,
+  that socket's message handler, a branch on `code === PERSON_REQUIRED_CODE`, and a marked
+  registration inside the branch. `clearsOnPromote.ratchet`'s SOCKETS uses it.
+- Left as is: a bare literal path in a local (`const u = '/api/x'; apiFetch(u)`) still lets the
+  catch decide, as before; failing it closed would add entries to the untraced list
+  `presenceRound6.ratchet` pins. `PATH_WRAPPERS` is a named list. The path may sit in any
+  transport argument (errs towards drops).
+
+### Round 9 verification
+- **A rule broken, by accident.** One gate run meant for the focused files ran the whole frontend
+  suite on this Mac: zsh doesn't split an unquoted `$CH`, so the file list came out empty and
+  vitest ran everything (714 files, 9,034 of 9,035 passed; the one failure was the round 6
+  retry-wording ratchet, fixed below). Later runs pass an explicit array.
+- Gates after the Commons promote and GM r14: `tsc` (app and node configs, `--noEmit`, no shared
+  build info) and lint clean; the touched area again (14 files, 141 of 141, Errors 0). npm and npx
+  ran with the update notifier off from the coordinator's rule on.
+- Gates (no full suites on this Mac this round; CI runs them): `tsc -b` and lint clean. The
+  focused vitest set (31 files: every new and changed test file plus the trace, route and socket
+  ratchets): 439 of 440, Errors 0; the one failure was the ratchet's "round 5" test timing out
+  at 30 s under load about 19, and it passed alone (9 of 9). Earlier this round the related set
+  (254 files) ran 3,067 passed, its 5 failures fixed or timeouts that passed alone.
+- New tests on 0a29f1d0 fail: the round 9 notice, band, desktop and ratchet files, the GM r13
+  store and CreateView tests, and the copy pins; the trace lane's 48 of 72 (the 24 that pass
+  pin behaviour that already existed, to kill mutants).
+- Mutants: 34 of 34 frontend mutants killed (the 34th: the hook's refused line not in the because
+  form, killed by `presenceRound6.ratchet`; the hook's mutants were run again on its final form).
+  The 13 added with the Commons promote and GM r14:
+  the Commons marker, its retry, a screen bypassing the hook, the poll registering each time, the
+  refusal stamped at failure, LineText marking nothing, a token left out of the sheet, a literal
+  warning colour back on a line rule, CommonsErrorLine's per-screen neutral class, Connect not
+  locked, Connect submitting while held, "tab" in the app, the debug notice's old lead. The
+  first 20 (registration and IO, `inert` observed and hiding,
+  the anchor's parent, a holder rendered bare, a site dropped from the ratchet, newest-only,
+  the held timers, a popover not holding, the band's height, the Commons line's colour and
+  registration, the Generate line's words, the card line for Generate's start only, the card
+  keeping the run-start line, `ownLine`, and two toolbar-ratchet mutants). The trace lane's:
+  N1-N17, S_a-S_h and the scanner's N1-N14 killed, the reviewer's T4, T5, T10, T16 killed;
+  the scanner's N15 survives (dropping the `ctx` Load restriction; errs safe).
+- Live on 8795/5795 (isolated HOME, settings, state and outputs; 8000-8010 and 5173 blocked,
+  the canary to 8001 refused, nothing reached them; keys unset; nothing accepted, rejected,
+  answered, executed or run against a provider). All pass across three runs:
+  - Settings: scrolled out, the notice shows; scrolled in, it steps out; back, it returns.
+  - Commons: the because line, neutral, a status; the notice steps out; "Connecting…" is one
+    U+2026 and not cut off.
+  - Generate: the curly heading on the refused cluster; nodes added and start refused, the cards
+    say GM r13's line exactly, the nodes are on the canvas (0 to 2), no button on the line or
+    cards, and the general notice steps out.
+  - An agent's note quoting the general words leaves the notice showing.
+  - Band at 1280×800 and 1440×900: with the model picker open only the newest notice shows,
+    below the picker; a three-line notice (64 px) fits the band (74 px); closing the picker
+    shows all, none lost.
+  - Desktop (component): the debug-port line and the dev notice.
+  - GM r14 and the Commons promote (two more runs): Connect from a caller that isn't the person
+    answers 403 `person_required` and makes no token; Settings' two because lines are the light
+    ink (`rgba(255, 255, 255, 0.55)`), marked, while a settings error line for another reason
+    stays `rgb(255, 90, 31)`; Connect is aria-disabled, not disabled, no title, with GM's line,
+    and a click sends nothing; a held page's Commons shows the because line and no references,
+    then the person link opened in that tab (`#view=commons&nebula-person=…`) promotes it: the
+    line goes, the reference loads, the status reads "Stopped · 1 queued" and the link leaves the
+    address bar; desktop (component): the reworded notice, Connect's line says "window". One
+    reference was added to the scratch library with the person token (no keys, call budget 0).
+  - Settings 01 and 02 were taken again after the colour change.
+- Shots in the session scratchpad's `agent-presence/fu3i/` (16, no duplicate md5s, each opened):
+  12 is Settings with the neutral because lines and Connect locked, 13 the Commons after the
+  promote, 10 the reworded debug notice.
+
+### The Commons on the promote (round 9, after GM r12 (2))
+- Every Commons screen's failure line goes through `components/commons/useCommonsLine`: the
+  view (its loads and its actions), a reference's detail, the settings, blind labeling (its load,
+  its scan, its label writes, each reference's image), agent review (its load and refresh, its
+  proposals, its accepts, each reference's image), closing a review, and a tile's media. A line
+  refused only because this tab isn't connected as the person registers with
+  `lib/clearsOnPromote` (one marker, `commons.line`) and clears on the promote; a load also runs
+  again then (`commons.reload-retry`, one retry per screen and load: the view runs the
+  collections, the status and the search again), so the references load and the status line
+  reads as it normally does. An action isn't done again. Any other line stays.
+- The hook words a refusal for this tab itself, in the because form under the request's own
+  words (`notConnectedBecause`, the same words lib/commonsApi's refusal carries), so
+  `presenceRound6.ratchet`'s rule (what retries on the promote says why in the because form) reads
+  it at the retry; a label write's own line (`saveFailure`) goes through `keep`, without a retry.
+- The status poll (every 5 s) and the review's refresh keep failing while the tab waits; a line
+  already waiting isn't registered again (a set per screen), so nothing piles up.
+- `lib/commonsApi` stamps the refusal with the promotes counted when the call started, not when it
+  failed: a call sent before the promote and refused after it (a 401 for the forgotten token,
+  refused again on its resend) is the old state's answer, so its line clears and its load runs
+  at once (`clearsOnPromote`'s existing "sent before this promote" path).
+- Ratchets: both markers are in `clearsOnPromote.ratchet` (SITES, OTHER_SITES, RETRIES) and
+  `commons.line` in `lineRegistration.ratchet` (HOLDERS: the Commons places, now with the
+  labeling image and the media). `presenceRound9.commons.test.tsx` fails a Commons screen that
+  sets a failure line itself (a line setter handed anything but a literal, `failureMessage`
+  anywhere but a scan outcome that carries its `cause`, a line put in another state object).
+- Tests: a held page (no token) and a normal page (a 401: the backend forgot the token) each show
+  the because line, then on the promote the line goes, the reference tile loads and the status
+  isn't "Connecting…"; a line for another reason stays; the poll keeps three registrations
+  (collections, status, search) over 16 s; the send-time stamp.
+
+### GM r14
+- (1) The docked panels stay exempt from newest-only. No change.
+- (2) The packaged-app Generate card line was already GM's exact words ("…because this window
+  isn’t connected as you. Quit Nebula and open it again, then run them from the canvas.").
+- (3) The debug-port notice is "A debugging port is open, so Settings, proposals and chats are
+  off." (`personSession.personRequiredMessage`). Pinned in `presenceRound9.desktop`,
+  `personRequiredLines` and `lib/backend.test`. Checked every place it shows: the notice only;
+  no backend, desktop shell, MCP or docs copy says it (only old dated notes quote the old words).
+  Not agent-visible.
+- (4) Because lines are neutral on every surface, through one shared style. `LineText` marks the
+  element a because line registers on (`data-line-because`; "own" on a span of its own), and
+  `styles/becauseLine.css` (imported by `LineText`) turns every warning token inside it into the
+  neutral ink (`--sr-ink-light`), edge and surface. A surface keeps its own error rule; its
+  token resolves neutral there. Surfaces whose warning was a literal colour now read it through
+  `var(--line-warning, <the same literal>)` (and `-soft`, `-edge`), unset anywhere else, so their
+  look is unchanged for other failures. `CommonsErrorLine` no longer picks a neutral class; every
+  Commons line has the error class and takes the shared style. `becauseLine.ratchet.test.tsx`:
+  the mark (and only for because lines, and gone when the words change), the sheet ships with
+  `LineText` and covers every warning token the app defines (four button-only and five node-card
+  layout tokens listed with why), nothing else styles the mark, and every CSS rule for an element
+  a line renders in (found from the JSX) colours it only through covered tokens or neutral values
+  (a warning-hued literal, an uncovered warning token, or a warning literal as another token's
+  fallback fails). Its first run found 17 rules (Settings' was a token; the literal ones are in
+  batch-node, canvasProposals, character-studio, moodboard-studio, nodes, panels,
+  personal-agents and slava-restraint), all now through the hook.
+- (5) GM's question. Connect does not work from a tab that isn't connected as the person: the
+  route (`POST /api/agent/spend/apps`, `create_agent_app`) calls `require_person`, and live the
+  server answers a caller with no person token 403 `person_required` and makes nothing. So
+  Connect (and "Create token", the same button when no client setup is available) locks in place
+  like the held cards' buttons (aria-disabled, focusable, the first-moment rule), with "You can
+  connect an agent when this tab is connected as you." on its own row under the controls
+  ("window" in the app, `connectAgentLockCopy`), no tooltip, and unlocks on the promote. The
+  gate is unchanged. Revoke, a limit and a colour change hit the same gate; refused, they show the
+  refusal's line, which clears on the promote (`settings.apps`). They aren't locked (not asked).
+- Not built: GM's batch item (the save-board heading's missing "Nebula"), left for the wording
+  batch.

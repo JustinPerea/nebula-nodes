@@ -244,6 +244,8 @@ interface Frontend {
   untraced: { file: string; line: number; text: string }[];
   /** A module's default export: the name of the function it is. */
   defaults: Map<string, string>;
+  /** Functions that return an /api/ path, by `file#name` (round 9). */
+  helpers: Map<string, string>;
 }
 let cache: Frontend | null = null;
 
@@ -376,7 +378,7 @@ function build(files: Parsed[]): Frontend {
         // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
         // sends nothing (round 7: no longer a caller to follow).
         if (describesOnly(node)) return;
-        if (path === null || !unit || unplaced) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
+        if (path === null || !unit || unplaced || unreadUse(node, false)) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
         else literals.push({ text: path, method: methodOf(node), unit, node });
       }
       if (texts.some((text) => text.includes('/api/'))) return; // the parts of a `+` are read with it
@@ -384,7 +386,39 @@ function build(files: Parsed[]): Frontend {
     };
     visit(source);
   }
-  return { files, references, imports, literals, untraced, defaults };
+  // Round 9 (review 7 LOW-2): each call of a path helper whose use can't be read is untraced too.
+  const helpers = pathHelpers(literals);
+  for (const [id, text] of helpers) {
+    const [file, name] = id.split('#');
+    for (const reference of references.get(name) ?? []) {
+      if (reference.file !== file && !imports.get(reference.file)?.has(file)) continue;
+      if (helperCall(reference.node) === reference.node || !unreadUse(reference.node, true)) continue;
+      const line = reference.node.getSourceFile().getLineAndCharacterOfPosition(reference.node.getStart()).line + 1;
+      untraced.push({ file: reference.file, line, text: text.replace(/\uE000/g, '${…}') });
+    }
+  }
+  return { files, references, imports, literals, untraced, defaults, helpers };
+}
+
+/** Functions that return an /api/ path (`const presetsPath = () => '/api/presets'`), by
+ * `file#name`, with the path. */
+function pathHelpers(literals: Frontend['literals']): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const { text, unit, node } of literals) {
+    let top = climbPath(node);
+    while (top.parent && ts.isCallExpression(top.parent) && top.parent.arguments.includes(top as ts.Expression)
+      && PATH_WRAPPERS.has(calleeName(top.parent))) top = climbPath(top.parent);
+    const body = unitBody(unit);
+    const returned = top.parent && (top.parent === body && isFunctionLike(body) && (body as ts.ArrowFunction).body === top
+      || ts.isReturnStatement(top.parent) && enclosingFunction(top.parent) === body);
+    if (returned) out.set(`${unit.file}#${unit.name}`, text);
+  }
+  return out;
+}
+function enclosingFunction(node: ts.Node): ts.Node | undefined {
+  let n = node.parent;
+  while (n && !isFunctionLike(n) && !ts.isFunctionDeclaration(n) && !ts.isMethodDeclaration(n)) n = n.parent;
+  return n;
 }
 
 /** Constructors and functions whose /api/ argument only names a request (nothing is sent):
@@ -400,12 +434,57 @@ function describesOnly(node: ts.Node): boolean {
 const COMPARES = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
   ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
 /** Climbs from a path literal through what still names the same request: parentheses, a concat,
- * a template, and either branch of a conditional (`want ? '/a' : '/b'`). */
+ * a template, and either branch of a conditional (`want ? '/a' : '/b'`). Round 9 (review 7
+ * LOW-2): also the whole template, and await, `as`, `satisfies`, `!` and `<T>x`. */
 function climbPath(at: ts.Node): ts.Node {
   let n: ts.Node = at;
   while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent) || ts.isTemplateSpan(n.parent)
+    || ts.isTemplateExpression(n.parent) || reshapes(n.parent)
     || ts.isConditionalExpression(n.parent) && n.parent.condition !== n)) n = n.parent;
   return n;
+}
+/** Wrappers that change a value's type or wait for it, not what it is. */
+const reshapes = (node: ts.Node): boolean => ts.isAwaitExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)
+  || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node);
+
+/** Calls that only turn a path into a URL or a string; they send nothing. */
+const PATH_WRAPPERS = new Set(['String', 'backendUrl', 'backendUrlSync', 'joinBackendPath', 'encodeURI']);
+const calleeName = (call: ts.CallExpression): string => ts.isIdentifier(call.expression) ? call.expression.text
+  : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '';
+
+/** The expression a helper's reference makes its path with: `helper()`, `paths.helper()`. */
+function helperCall(at: ts.Node): ts.Node {
+  let n = at;
+  if (n.parent && ts.isPropertyAccessExpression(n.parent) && n.parent.name === n) n = n.parent;
+  return n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n ? n.parent : at;
+}
+
+/**
+ * Round 9 (review 7 LOW-2, fail closed): a path, or a path helper's call, whose use the trace
+ * can't read once it went through await, `as`, `!`, a template or a URL wrapper (or, for a
+ * helper, at all): not a transport's path, not a call's argument, not returned, not a const that
+ * is followed as its own function. It is listed as untraced; no catch decides it.
+ */
+function unreadUse(at: ts.Node, helper: boolean): boolean {
+  if (transportAround(at)) return false;
+  let n = helper ? helperCall(at) : at;
+  let wrapped = helper;
+  for (;;) {
+    const top = climbPath(n);
+    for (let m = n; m !== top; m = m.parent) if (reshapes(m.parent) || ts.isTemplateSpan(m.parent)) wrapped = true;
+    const parent = top.parent;
+    if (parent && ts.isCallExpression(parent) && parent.arguments.includes(top as ts.Expression) && PATH_WRAPPERS.has(calleeName(parent))) {
+      wrapped = true;
+      n = parent;
+      continue;
+    }
+    if (!wrapped || !parent) return wrapped;
+    if (ts.isCallExpression(parent) && parent.arguments.includes(top as ts.Expression)) return false;
+    if (ts.isReturnStatement(parent) || isFunctionLike(parent) && (parent as ts.ArrowFunction).body === top) return false;
+    // Left as a statement it sends nothing, unless it is assigned to a name.
+    if (ts.isExpressionStatement(parent)) return ts.isBinaryExpression(top) && top.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+    return !(ts.isVariableDeclaration(parent) && parent.initializer === top && (ts.isCallExpression(top) || isFunctionLike(top)));
+  }
 }
 
 /** /api/ text the trace can't follow to a function: each must be declared (round 6, fail closed). */
@@ -494,18 +573,22 @@ function answersWithResponse(at: ts.Node): boolean {
  * review 6 gates LOW-4) a call that makes it (`apiFetch(presetsPath(), …)`), whose Response is the
  * transport's, not the helper's. */
 function transportAround(at: ts.Node): ts.CallExpression | null {
-  let n = climbPath(at);
-  if (n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n) n = climbPath(n.parent);
-  const call = n.parent;
-  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return null;
-  const callee = ts.isIdentifier(call.expression) ? call.expression.text
-    : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '';
-  return ANSWERS_WITH_RESPONSE.has(callee) ? call : null;
+  // Round 9 (review 7 LOW-2): a method helper (`paths.presets()`), and a call around the path
+  // that isn't a transport (`String(x)`, `backendUrl(x)`): the transport's path is what counts.
+  let n = climbPath(helperCall(climbPath(at)));
+  for (;;) {
+    const call = n.parent;
+    if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return null;
+    if (ANSWERS_WITH_RESPONSE.has(calleeName(call))) return call;
+    n = climbPath(call);
+  }
 }
 
 /** The call around a path literal (or the node itself when it is a call). */
 function callAround(at: ts.Node): ts.CallExpression | null {
   if (ts.isCallExpression(at)) return at;
+  const transport = transportAround(at);
+  if (transport) return transport;
   const n = climbPath(at);
   if (n.parent && ts.isCallExpression(n.parent) && n.parent.arguments.includes(n as ts.Expression)) return n.parent;
   if (n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n) return n.parent;
@@ -795,7 +878,7 @@ function escapes(unit: Unit, node: ts.Node, throwing: boolean): boolean {
  * helper, a path const, a selector and a function whose catch throws the refusal on are followed
  * to their callers; a lib helper reached by nothing is itself returned (fail closed). */
 export function callersOf(route: { method: string; path: string }, extraStarts: string[] = [], stopAt: Set<string> = new Set()): Map<string, Unit> {
-  const { files, references, imports, literals, defaults } = frontend();
+  const { files, references, imports, literals, defaults, helpers } = frontend();
   const known = new Set(files.map((entry) => entry.file));
   const queue: Unit[] = [];
   const found = new Map<string, Unit>();
@@ -894,6 +977,11 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const caller = unitOf(reference.file, reference.node);
       if (!caller || (caller.file === unit.file && caller.name === unit.name)) continue;
       followed += 1;
+      // Round 9: a path helper's call whose use can't be read (listed as untraced) drops here.
+      if (helpers.has(id) && helperCall(reference.node) !== reference.node && unreadUse(reference.node, true)) {
+        keep(`${caller.file}#${caller.name}`, caller, 'drops');
+        continue;
+      }
       reach({ ...caller, via: id }, reference.node, unit.responds);
     }
     // A module's default export, imported under another name.
@@ -1048,4 +1136,110 @@ export function keepsLine(unit: Unit): boolean {
 /** Whether a function registers a line with the mechanism in its own body (a marked call). */
 export function registersInBody(unit: Unit): boolean {
   return marked(unit.node);
+}
+
+/**
+ * Round 9 (review 7 NIT-2): what a socket's person-only refusal lacks in `file`, read from the
+ * syntax tree. None when the file opens a WebSocket whose URL ends in `path` (written there, or
+ * made by a call written with it: `backendWebSocketUrl('/ws/chat').then((url) => …)`), and in
+ * that socket's message handler a branch on `<event>.code === PERSON_REQUIRED_CODE` (or a const
+ * set to that comparison) makes a marked registration call (or calls a same-file keeper).
+ */
+export function socketRefusalGaps(file: string, path: string): string[] {
+  const parsed = frontend().files.find((entry) => entry.file === file);
+  if (!parsed) return [`${file} isn't there`];
+  const sockets: { name: string; scope: ts.Node }[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'WebSocket'
+      && node.arguments?.[0] && socketUrlEndsIn(node.arguments[0], path)) {
+      const holder = node.parent;
+      const name = ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name) ? holder.name.text
+        : ts.isBinaryExpression(holder) && holder.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(holder.left) ? holder.left.text : null;
+      if (name) sockets.push({ name, scope: enclosingFunction(node) ?? parsed.source });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed.source);
+  if (sockets.length === 0) return [`opens no WebSocket to ${path}`];
+  const handlers: ts.Node[] = [];
+  for (const { name, scope } of sockets) {
+    const find = (node: ts.Node) => {
+      // `socket.onmessage = (ev) => …`, `socket.addEventListener('message', (ev) => …)`
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left)
+        && node.left.name.text === 'onmessage' && ts.isIdentifier(node.left.expression) && node.left.expression.text === name
+        && isFunctionLike(node.right)) handlers.push(node.right);
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'addEventListener'
+        && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === name
+        && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0]) && node.arguments[0].text === 'message'
+        && node.arguments[1] && isFunctionLike(node.arguments[1])) handlers.push(node.arguments[1]);
+      ts.forEachChild(node, find);
+    };
+    find(scope);
+  }
+  if (handlers.length === 0) return [`its socket to ${path} has no message handler`];
+  const branches: ts.Statement[] = [];
+  for (const handler of handlers) {
+    const codeChecks = new Set<string>();
+    const walkHandler = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && comparesRefusalCode(node.initializer)) codeChecks.add(node.name.text);
+      if (ts.isIfStatement(node)) {
+        let test: ts.Expression = node.expression;
+        while (ts.isParenthesizedExpression(test)) test = test.expression;
+        if (comparesRefusalCode(test) || ts.isIdentifier(test) && codeChecks.has(test.text)) branches.push(node.thenStatement);
+      }
+      ts.forEachChild(node, walkHandler);
+    };
+    walkHandler(handler);
+  }
+  if (branches.length === 0) return ['its message handler has no branch on the refusal\'s code'];
+  const registers = (branch: ts.Node): boolean => {
+    let found = false;
+    const look = (node: ts.Node) => {
+      if (found) return;
+      if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && marked(node)) found = true;
+      ts.forEachChild(node, look);
+    };
+    look(branch);
+    return found || callsKeeper(file, branch, '');
+  };
+  return branches.some(registers) ? [] : ['its branch on the refusal\'s code registers no line'];
+}
+
+/** `x.code === PERSON_REQUIRED_CODE`, either way round, `===` or `==`. */
+function comparesRefusalCode(node: ts.Node): boolean {
+  if (!ts.isBinaryExpression(node) || ![ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken].includes(node.operatorToken.kind)) return false;
+  const isCode = (side: ts.Expression) => ts.isPropertyAccessExpression(side) && side.name.text === 'code';
+  const isConst = (side: ts.Expression) => ts.isIdentifier(side) && side.text === 'PERSON_REQUIRED_CODE';
+  return isCode(node.left) && isConst(node.right) || isConst(node.left) && isCode(node.right);
+}
+
+/** A socket URL that ends in `path`: written as such, or the parameter of a `.then` on a call
+ * written with it, or a const set to one of those. */
+function socketUrlEndsIn(node: ts.Expression, path: string): boolean {
+  let e: ts.Expression = node;
+  while (ts.isParenthesizedExpression(e) || ts.isAwaitExpression(e) || ts.isAsExpression(e) || ts.isNonNullExpression(e)) e = e.expression;
+  if (literalTexts(e).some((text) => text.endsWith(path))) return true;
+  if (ts.isCallExpression(e)) return e.arguments.some((arg) => literalTexts(arg).some((text) => text.endsWith(path)));
+  if (!ts.isIdentifier(e)) return false;
+  for (let scope: ts.Node | undefined = e.parent; scope; scope = scope.parent) {
+    if (isFunctionLike(scope)) {
+      const fn = scope as ts.ArrowFunction;
+      const param = fn.parameters.find((p) => ts.isIdentifier(p.name) && p.name.text === (e as ts.Identifier).text);
+      if (param) {
+        const call = fn.parent;
+        return fn.parameters.indexOf(param) === 0 && ts.isCallExpression(call) && call.arguments[0] === fn
+          && ts.isPropertyAccessExpression(call.expression) && call.expression.name.text === 'then'
+          && socketUrlEndsIn(call.expression.expression, path);
+      }
+    }
+    if (ts.isBlock(scope) || ts.isSourceFile(scope)) {
+      for (const statement of scope.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        for (const decl of statement.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name) && decl.name.text === e.text && decl.initializer) return socketUrlEndsIn(decl.initializer, path);
+        }
+      }
+    }
+  }
+  return false;
 }

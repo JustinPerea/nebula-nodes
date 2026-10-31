@@ -469,7 +469,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 
 .proposal-bar__error {
   margin: 2px 0 0;
-  color: #ff8a80;
+  color: var(--line-warning, #ff8a80);
   /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
   overflow: clip;
   interpolate-size: allow-keywords;

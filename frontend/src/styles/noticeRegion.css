@@ -19,6 +19,11 @@
      item's height and the band read it, so floating panels stop exactly one
      notice and its gap above the bar (lib/bottomBar.ts). */
   --notice-h: 46px;
+  /* GM r13 (2), PR #204 round 9: "The band reserves the tallest single notice
+     (three lines)." A notice wraps to at most three lines at its 560 px cap;
+     the band holds that one, so the one notice a capped popover lets show
+     (lib/noticeWaiting) never lands on the popover's content. */
+  --notice-tallest-h: 66px;
   /* Every row's widest (GM - Design, round 3: "keep notices to one line in
      the copy. Cap their width at 560 px, and let a rare second line overlap a
      panel's edge while it shows. Don't grow the band."). Each item's own
@@ -58,14 +63,15 @@
 
 /* The reserved band (GM, round 2: "Floating panels stop above a reserved
    notice band, whether or not a notice is showing. The band is the region's
-   height for one notice plus its gap"). Never drawn, never clicked: floating
+   height for one notice plus its gap"; GM r13 2 of PR #204: the tallest single
+   notice, three lines). Never drawn, never clicked: floating
    panels measure it (lib/bottomBar.ts floatingBottomLimit). */
 .notice-region__band {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(var(--notice-h) + var(--notice-gap));
+  height: calc(var(--notice-tallest-h) + var(--notice-gap));
   visibility: hidden;
   pointer-events: none;
 }
@@ -200,4 +206,11 @@
   .notice-region {
     transition: none;
   }
+}
+
+/* GM r13 (2), PR #204 round 9: while a capped popover is open, only the newest
+   item shows; the others wait (NoticeRegion marks them) and come back when it
+   goes or the popover closes. */
+.notice-region__slot > [data-notice-waiting] {
+  display: none !important;
 }

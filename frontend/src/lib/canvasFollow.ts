@@ -119,7 +119,7 @@ export function runWhileFollowingLine(node: string | null, agent: string | null,
 
 /** Create's line while following (G1), in its normal error style: its own
  * heading (graphStore's GENERATE_HEADING) over followingReason. */
-export const CREATE_WHILE_FOLLOWING_HEADING = "Couldn't start the generation.";
+export const CREATE_WHILE_FOLLOWING_HEADING = 'Nebula couldn’t start the generation.';
 export function createWhileFollowingLine(switching: FollowingSwitch | null): string {
   return `${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`;
 }

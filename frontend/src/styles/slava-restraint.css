@@ -4607,7 +4607,7 @@ body.app-slava-restraint .final-export__start {
 }
 
 body.app-slava-restraint .final-export__error {
-  color: #ff7a68;
+  color: var(--line-warning, #ff7a68);
   overflow-wrap: anywhere;
 }
 

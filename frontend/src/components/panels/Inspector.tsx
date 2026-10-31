@@ -37,6 +37,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
+import { LineText } from '../LineText';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -461,10 +462,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
           type="text"
           placeholder={
             modelsLoading
-              ? 'Loading models...'
+              ? 'Loading models…'
               : modelLoadError
                 ? "Couldn't load the models."
-                : 'Search models...'
+                : 'Search models…'
           }
           value={modelSearch}
           onChange={(e) => setModelSearch(e.target.value)}
@@ -489,7 +490,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         </select>
         {modelLoadError && universalProvider === 'nous' && (
           <div className="inspector__model-error">
-            {modelLoadError}
+            <LineText text={modelLoadError} />
           </div>
         )}
         {selectedModel !== '' && (
@@ -745,7 +746,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 aria-hidden="true"
                 focusable="false"
               />
-              <span>{extracting ? 'Extracting...' : 'Extract from reference'}</span>
+              <span>{extracting ? 'Extracting…' : 'Extract from reference'}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -946,7 +947,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-hidden="true"
               focusable="false"
             />
-            <span>{schemaLoading ? 'Fetching...' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
+            <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
           </button>
         )}
       </div>

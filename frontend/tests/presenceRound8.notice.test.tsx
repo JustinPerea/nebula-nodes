@@ -12,7 +12,8 @@ import { useEffect, useState } from 'react';
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
 const { PersonRequiredBanner } = await import('../src/components/PersonRequiredBanner');
-const { notConnectedKind, notConnectedLineShown, lineRendered } = await import('../src/lib/notConnectedLine');
+const { notConnectedKind, currentFixLine, registerLine, resetLinesForTests, lineRendered } = await import('../src/lib/notConnectedLine');
+const { LineText } = await import('../src/components/LineText');
 const session = await import('../src/lib/personSession');
 const copy = await import('../src/lib/errorCopy');
 const { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } = await import('../src/store/heldAssetProposals');
@@ -31,14 +32,14 @@ function Screen({ live = false }: { live?: boolean }) {
   return <>
     <PersonRequiredBanner />
     <div className={`workspace-overlays${commons ? ' workspace-overlays--hidden' : ''}`} inert={commons}>
-      {line && (live ? <p role="status">{line}</p> : <p className="settings-row__error">{line}</p>)}
+      {line && (live ? <p role="status"><LineText text={line} /></p> : <p className="settings-row__error"><LineText text={line} /></p>)}
     </div>
   </>;
 }
 
 const because = copy.notConnectedBecause('load your agents', false);
 
-beforeEach(() => session.resetPersonSessionForTests());
+beforeEach(() => { session.resetPersonSessionForTests(); resetLinesForTests(); });
 afterEach(() => { cleanup(); session.notePersonPromoted(); vi.restoreAllMocks(); });
 
 describe('GM r11: the three kinds of line', () => {
@@ -157,10 +158,14 @@ describe('review 6 MEDIUM-1: only a rendered line counts', () => {
       `<div inert><p>${because}</p></div>`, `<div hidden><p>${because}</p></div>`,
       `<div aria-hidden="true"><p>${because}</p></div>`]) {
       root.innerHTML = html;
-      expect(notConnectedLineShown(root), html).toBe(false);
+      const stop = registerLine(root.querySelector('p')!, because);
+      expect(currentFixLine(), html).toBeNull();
+      stop();
     }
     root.innerHTML = `<div><p>${because}</p></div>`;
-    expect(notConnectedLineShown(root)).toBe(true);
+    const stop = registerLine(root.querySelector('p')!, because);
+    expect(currentFixLine()?.text).toBe(because);
+    stop();
     root.remove();
     style.remove();
   });
