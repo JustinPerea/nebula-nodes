@@ -14,10 +14,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The two test suites run in parts, one job each, so no job comes near its
+  # timeout as the suites grow. Each part count appears twice per job (the
+  # matrix and the "/3"); backend/tests/test_ci_shard.py checks they agree.
   backend:
-    name: Backend tests (Python 3.12)
+    name: Backend tests (Python 3.12, part ${{ matrix.shard }} of 3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -34,12 +41,18 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
+        env:
+          NEBULA_TEST_SHARD: ${{ matrix.shard }}/3
         run: python -m pytest
 
-  frontend:
-    name: Frontend tests, lint, and build
+  frontend-tests:
+    name: Frontend tests (part ${{ matrix.shard }} of 3)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -57,7 +70,26 @@ jobs:
 
       - name: Run frontend tests
         working-directory: frontend
-        run: npm test
+        run: npm test -- --shard=${{ matrix.shard }}/3
+
+  frontend:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
 
       - name: Run frontend lint
         working-directory: frontend
