@@ -25,6 +25,12 @@ export function DeferredRunNotice() {
   // PR #204 round 10 (GM r15): Dismiss releases the run's approval (DELETE
   // /api/canvas/approvals: require_person), so it locks through the one lock.
   const dismissLock = usePersonLock('dismiss this');
+  // PR #204 round 11: with every one of its nodes deleted since Accept, Run has nothing to start
+  // and only releases the approval, as Dismiss does (lib/canvasApprovals: require_person), so then
+  // it locks with Dismiss and points at the same line. With nodes left it runs, which isn't
+  // person-only, and stays live.
+  const nothingLeft = useGraphStore((s) => !!deferredRun
+    && !deferredRun.nodeIds.some((nodeId) => s.nodes.some((node) => node.id === nodeId)));
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(deferredRun);
   if (!leave.shown) return null;
@@ -40,7 +46,8 @@ export function DeferredRunNotice() {
           className="proposal-bar__button proposal-bar__button--primary"
           // Review 7, L5: canvasLock's order (run, then following, then offline).
           {...lock.act({}, { run: isExecuting || runStarting })}
-          onClick={() => void runDeferred()}
+          {...(nothingLeft ? dismissLock.control() : {})}
+          onClick={nothingLeft ? dismissLock.guard(runDeferred) : () => void runDeferred()}
         >
           <Play size={13} aria-hidden="true" />
           Run
@@ -50,7 +57,7 @@ export function DeferredRunNotice() {
           <X size={13} aria-hidden="true" />
         </button>
       </div>
-      <PersonLockLine lock={dismissLock} className="proposal-bar__held-line" />
+      <PersonLockLine lock={dismissLock} place="control" className="proposal-bar__held-line" />
     </div>
   );
 }

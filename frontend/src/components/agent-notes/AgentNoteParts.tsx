@@ -140,16 +140,21 @@ export function NoteButtons({
   adapter,
   onAction,
   onShow,
+  sharedLock = null,
 }: {
   note: AgentNote;
   adapter: AgentNotesAdapter;
   /** `anchor`: the clicked button, where the Commons asks before leaving. */
   onAction: (action: AgentNoteAction, anchor: HTMLElement) => void;
   onShow: (anchor: HTMLElement) => void;
+  /** PR #204 round 11 (GM r19 item 3): the arrival card's one lock for its ask and its ×; the
+   * card renders that line, so these buttons render none of their own. */
+  sharedLock?: PersonLock | null;
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
   // GM, #204 r3 item 2: an ask this tab doesn't hold yet keeps its Review or Answer, locked.
-  const lock = useNoteLock(note);
+  const ownLock = useNoteLock(note);
+  const lock = sharedLock ?? ownLock;
   const held = lock.locked;
   if (controls.buttons.length === 0 && !controls.state) return null;
   const holds = controls.buttons.some((button) => button.kind === 'action' && HELD_OPS.has(button.action.op.kind));
@@ -171,7 +176,7 @@ export function NoteButtons({
           {button.label}
         </BusyButton>
       ))}
-      {holds && <PersonLockLine lock={lock} className="agent-notes-acts__held-line" />}
+      {holds && !sharedLock && <PersonLockLine lock={lock} place="control" className="agent-notes-acts__held-line" />}
     </div>
   );
 }

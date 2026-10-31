@@ -189,7 +189,7 @@ export function CreateComposer({
           {activeCount > 0 ? `Generating… (${activeCount})` : 'Generate'}
         </button>
       </div>
-      <PersonLockLine lock={enhanceLock} className="create-composer__held-line" />
+      <PersonLockLine lock={enhanceLock} place="control" className="create-composer__held-line" />
     </div>
   );
 }

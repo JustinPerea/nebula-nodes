@@ -1,5 +1,6 @@
 import { isBecauseLine } from '../../lib/notConnectedLine';
 import { LineText } from '../LineText';
+import { FOCUS_LINE_ATTR } from '../../hooks/useFocusHandover';
 
 /**
  * A Commons screen's failure line (GM r12 (2), PR #204 round 9). A refusal because this tab
@@ -15,7 +16,12 @@ export function CommonsErrorLine({ line, className = '' }: { line: string | null
   const person = isBecauseLine(line);
   return (
     <p className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
-      role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}>
+      role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}
+      // Round 11 (GM r18 c): the rail and fill make it a box, the shared one (styles/becauseLine.css):
+      // neutral and in the sans face with a because line, the warning look for any other failure.
+      data-line-box=""
+      // Round 11 (GM r19 2): a not-connected line can take focus when a demote removes the control.
+      {...(person ? { tabIndex: -1, [FOCUS_LINE_ATTR]: '' } : {})}>
       <LineText text={line} />
     </p>
   );

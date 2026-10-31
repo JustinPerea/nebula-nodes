@@ -254,16 +254,14 @@ const PROMOTE_LISTENERS: Record<string, string> = {
   'lib/clearsOnPromote.ts': 'the sweep',
   'lib/personSession.ts': 'defines it',
   'store/canvasProposalsStore.ts': 'releases approvals dismissed while the gate held (a request, not a line)',
+  // PR #204 round 11: person-only work the app starts on its own waits for the promote (no line).
+  'lib/personWork.ts': 'runs the person-only work a held tab held back (a request, not a line)',
 };
 
-/** Round 5: what a route the trace can't find by its path is (none may be left unexplained). */
-const COMPOSED: Record<string, string[]> = {
-  // lib/agentNotes builds the path from base(surface): both surfaces go through these two.
-  'POST /api/canvas/agent-notes/read': ['lib/agentNotes.ts#markAgentNotesRead'],
-  'POST /api/moodboards/{moodboard_id}/agent-notes/read': ['lib/agentNotes.ts#markAgentNotesRead'],
-  'POST /api/canvas/agent-notes/{note_id}/dismiss': ['lib/agentNotes.ts#dismissAgentNote'],
-  'POST /api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss': ['lib/agentNotes.ts#dismissAgentNote'],
-};
+/** Round 5: what a route the trace can't find by its path is (none may be left unexplained).
+ * Round 11 (review 9 LOW-2): none now. lib/agentNotes' `${base(surface)}/…/dismiss` and `/read`
+ * are read with the helper's paths in its place, so the four agent-notes routes trace by path. */
+const COMPOSED: Record<string, string[]> = {};
 const NO_FRONTEND: Record<string, string> = {
   'POST /api/graph/apply': 'an agent\'s edit (edit_canvas, `nebula apply`); no tab sends it',
   'POST /api/graph/apply/undo': 'an agent\'s undo of its own apply; no tab sends it',
@@ -296,7 +294,7 @@ const CALLERS: Record<string, Caller> = {
   // onAccept, whose catch registers the line.
   'components/panels/ChatPanel.tsx#ChatPanel': ['settings.agent-warning'],
   // No line.
-  'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: a failure logs and tries again on the next read of settings'),
+  'lib/runCostConfirm.ts#applySavedRunCostConfirm': NO_LINE('a quiet migration of the run cost threshold: sent only from a tab connected as the person (lib/personWork); a refusal waits for the next promote, another failure logs and goes again on the next read'),
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
   'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
@@ -392,7 +390,8 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     expect(own).toEqual([]);
   });
 
-  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 60_000 }, () => {
+  // Round 11 (review 9 LOW-1): back to 30 s; the route scan no longer re-reads every fill.
+  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 30_000 }, () => {
     const routes = gatedRoutes();
     expect(routes.length).toBeGreaterThan(50);
     const keys = routes.map((route) => `${route.method} ${route.path}`);

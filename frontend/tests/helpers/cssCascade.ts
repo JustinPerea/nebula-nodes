@@ -124,7 +124,10 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       let loose = base;
       try {
         selectorParser((root) => {
-          root.walkAttributes((attribute) => { attribute.remove(); });
+          // PR #204 round 11: `data-line-because` marks a line's words (components/LineText), not
+          // a state a control takes, so a rule for it reaches only an element that carries it:
+          // the because sheet's sans face (styles/becauseLine.css) isn't a pin edge's own font.
+          root.walkAttributes((attribute) => { if (attribute.attribute !== 'data-line-because') attribute.remove(); });
           root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
           // A compound left empty ("> [data-x]") matches anything: "*".
           root.each((sel) => {

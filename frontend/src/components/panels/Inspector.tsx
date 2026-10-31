@@ -499,7 +499,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </option>
           ))}
         </select>
-        <PersonLockLine lock={modelLock} />
+        <PersonLockLine lock={modelLock} place="control" />
         {modelLoadError && universalProvider === 'nous' && (
           <div className="inspector__model-error">
             <LineText text={modelLoadError} />
@@ -549,7 +549,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </button>
           </div>
         )}
-        {selectedModel !== '' && <PersonLockLine lock={favoriteLock} />}
+        {selectedModel !== '' && <PersonLockLine lock={favoriteLock} place="control" />}
         {favoriteError && <div className="inspector__model-error" role="alert"><LineText text={favoriteError} /></div>}
       </div>
     );
@@ -975,7 +975,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
           </button>
         )}
-        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={modelLock} />}
+        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={modelLock} place="control" />}
       </div>
     );
   }

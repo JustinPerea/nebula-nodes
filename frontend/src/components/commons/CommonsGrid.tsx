@@ -10,6 +10,9 @@ interface Props {
   emptyHint: string;
   onOpen: (row: SearchRow) => void;
   onDropFiles: (files: File[]) => void;
+  /** PR #204 round 11: adding is locked (a tab that isn't connected as you). A drop is taken
+   * (so the browser doesn't open the file) and does nothing: no highlight, nothing sent. */
+  dropLocked?: boolean;
   /** References an agent proposes to change (open asset proposals of kind commons). */
   proposed?: ReadonlySet<string>;
 }
@@ -20,7 +23,7 @@ function columnCount(grid: HTMLElement | null): number {
   return Math.max(1, template.split(' ').filter(Boolean).length);
 }
 
-export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDropFiles, proposed }: Props) {
+export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDropFiles, dropLocked = false, proposed }: Props) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -48,6 +51,7 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);
+    if (dropLocked) return;
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length) onDropFiles(files);
   };
@@ -58,6 +62,7 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
       onDragOver={(event) => {
         if (Array.from(event.dataTransfer.types).includes('Files')) {
           event.preventDefault();
+          if (dropLocked) { event.dataTransfer.dropEffect = 'none'; return; }
           setDragging(true);
         }
       }}
@@ -67,7 +72,7 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
       onDrop={onDrop}
     >
       {rows.length === 0 ? (
-        <p className="commons-empty">{loading ? 'Searching…' : emptyHint}</p>
+        emptyHint || loading ? <p className="commons-empty">{loading ? 'Searching…' : emptyHint}</p> : null
       ) : (
         <div ref={gridRef} className="commons-grid" role="listbox" aria-label="Commons results" onKeyDown={onKeyDown}>
           {rows.map((row, index) => (

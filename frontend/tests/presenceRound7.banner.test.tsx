@@ -2,7 +2,7 @@
  * PR #204 round 7, GM r8 (1): one notice, not two. While a specific line on screen already says
  * this tab isn't connected as the person (a "because" line, a card's own line), the general
  * notice steps out, and comes back when that line goes. Beside the locked question form, whose
- * lock says it only in a tooltip, it stays. One derived state (the registered lines, round 9) drives it.
+ * line only locks its controls (PR #204 round 11: a lock line, never a tooltip), it stays. One derived state (the registered lines, round 9) drives it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
@@ -19,13 +19,14 @@ const { heldQuestionsLine } = await import('../src/store/heldAssetProposals');
 const banner = () => document.querySelector('.person-required');
 const handle: { showLine: (line: string | null) => void } = { showLine: () => {} };
 const showLine = (line: string | null) => handle.showLine(line);
-function Screen({ title }: { title?: string }) {
+function Screen({ lockLine }: { lockLine?: string }) {
   const [line, setLine] = useState<string | null>(null);
   useEffect(() => { handle.showLine = setLine; }, []);
   return <>
     <PersonRequiredBanner />
     {line && <p className="settings-row__error"><LineText text={line} /></p>}
-    {title && <button type="button" aria-disabled="true" title={title}>Send answers</button>}
+    {lockLine && <><button type="button" aria-disabled="true" aria-describedby="held-questions-line">Send answers</button>
+      <p id="held-questions-line" className="person-lock-line"><LineText text={lockLine} /></p></>}
   </>;
 }
 
@@ -52,10 +53,10 @@ describe('GM r8 (1): one notice, not two', () => {
     await waitFor(() => expect(banner()).toBeNull());
   });
 
-  it('beside the locked question form (its lock says it in a tooltip only), the notice stays', async () => {
+  it('beside the locked question form (its line locks, it doesn\'t say what fixes it), the notice stays', async () => {
     expect(heldQuestionsLine()).toBe('You can answer this when this tab is connected as you.');
-    render(<Screen title={heldQuestionsLine()} />);
-    expect(document.querySelector(`[title="${heldQuestionsLine()}"]`)).not.toBeNull();
+    render(<Screen lockLine={heldQuestionsLine()} />);
+    expect(document.querySelector('.person-lock-line')!.textContent).toBe(heldQuestionsLine());
     act(() => session.reportPersonRequired());
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
     expect(banner()).not.toBeNull();

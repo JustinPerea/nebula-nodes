@@ -96,7 +96,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
             {open ? `No answer in ${left}s denies it` : 'Sending…'}
           </span>
         </div>
-        <PersonLockLine lock={lock} className="permission-card__held-line" />
+        <PersonLockLine lock={lock} place="control" className="permission-card__held-line" />
       </>) : settled ? (
         <div className="permission-card__outcome" role="status">{OUTCOME_TEXT[part.status as keyof typeof OUTCOME_TEXT]}</div>
       ) : null}

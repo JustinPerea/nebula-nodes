@@ -70,6 +70,7 @@ const CODEX = { id: 'codex', name: 'Codex', color: '#5B9DFF', verified: true };
 const T = Date.now() - 120_000;
 const REVIEW_LOCK = 'You can review this when this tab is connected as you.';
 const ANSWER_LOCK = 'You can answer this when this tab is connected as you.';
+const CARD_ANSWER_LOCK = 'You can answer or dismiss this when this tab is connected as you.';
 const GREY = 'var(--disabled-label, rgba(255, 255, 255, 0.55))';
 
 const refused = () => new RequestFailedError("Couldn't mark the updates as read.", 403,
@@ -203,7 +204,8 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
       expect(found).not.toBeNull();
       return found!;
     });
-    expect(look(card)).toEqual([['card', 'Answer', 'true', ANSWER_LOCK]]);
+    // PR #204 round 11 (GM r19 3): the arrival card's one line covers Answer and dismiss.
+    expect(look(card)).toEqual([['card', 'Answer', 'true', CARD_ANSWER_LOCK]]);
     fireEvent.click(asks(card)[0]);
     await act(async () => { await Promise.resolve(); });
     expect(useAgentQuestionsStore.getState().formId).toBeNull();

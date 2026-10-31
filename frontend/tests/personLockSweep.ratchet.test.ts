@@ -8,11 +8,20 @@
  * the verb it locks with; a new caller with no entry fails, and so does an entry nothing sends.
  * A read the person alone may make (the agent apps and personal agents lists, and the Commons)
  * switches to the never-connected view on a demote instead (GM r17 item 6): those name the hook.
+ *
+ * Round 11 (review 9 lock-sweep LOW-3): controls, not files. From each locked entry's sends
+ * (callersOf's points) the trace walks to every JSX handler that reaches them
+ * (personGatedCallers lockReach: through callers, props handed to components, a hook's returned
+ * members), and each must hold a lock: `<lock>.guard(…)` around the call, an early
+ * `if (<lock>.locked) return` (or `!<lock>.locked`) on the way, work held for the promote, or the
+ * element's `{...<lock>.control()}`. A second control that reaches a locked sender unlocked fails,
+ * whatever file it is in.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { callersOf, personOnlyRoutes, SRC } from './personGatedCallers';
+import { type ControlSite, callersOf, lockReach, personOnlyRoutes, SRC } from './personGatedCallers';
 import { notConnectedKind } from '../src/lib/notConnectedLine';
 import { personLockLine } from '../src/lib/errorCopy';
 
@@ -39,20 +48,20 @@ const CALLERS: Record<string, Entry> = {
   'store/canvasPinsStore.ts#remove': { lock: 'delete notes', in: ['components/canvas/PinLayer.tsx'] },
   'store/agentQuestionsStore.ts#send': { lock: 'answer this', in: ['components/agent-notes/AgentQuestionsForm.tsx'] },
   'store/agentQuestionsStore.ts#dismiss': { lock: 'answer this', in: ['components/agent-notes/AgentQuestionsForm.tsx'] },
-  'lib/settingsWrites.ts#saveKey': { lock: 'change keys', in: [`${SETTINGS}ProvidersTab.tsx`] },
-  'lib/settingsWrites.ts#removeKey': { lock: 'change keys', in: [`${SETTINGS}ProvidersTab.tsx`] },
+  'lib/settingsWrites.ts#saveKey': { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
+  'lib/settingsWrites.ts#removeKey': { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
   'lib/settingsWrites.ts#saveField': {
-    lock: '', in: [`${SETTINGS}AgentSpendSection.tsx`, `${SETTINGS}StorageTab.tsx`, `${SETTINGS}KreaSignInRow.tsx`],
+    lock: '', in: [`${SETTINGS}AgentSpendSection.tsx`, `${SETTINGS}StorageTab.tsx`, `${SETTINGS}ProvidersTab.tsx`],
   },
-  'lib/settingsWrites.ts#saveRunCostConfirm': { lock: 'change preferences', in: [`${SETTINGS}PreferencesTab.tsx`] },
+  'lib/settingsWrites.ts#saveRunCostConfirm': { lock: 'change this', in: [`${SETTINGS}PreferencesTab.tsx`] },
   'components/create-studio/CreateComposer.tsx#handleEnhance': { lock: 'enhance prompts', in: ['components/create-studio/CreateComposer.tsx'] },
   'store/graphStore.ts#configureOpenRouterModel': { lock: 'change the model', in: ['components/panels/Inspector.tsx'] },
   'store/graphStore.ts#fetchReplicateSchemaAndConfigure': { lock: 'change the model', in: ['components/panels/Inspector.tsx'] },
   'store/graphStore.ts#pushNodeParams': { not: 'sends PUT /api/graph/node/{id} (gated only by the canvas checks); the tracer reads the shared path' },
   'components/panels/Inspector.tsx#renderUniversalModelControl': { lock: 'save favorites', in: ['components/panels/Inspector.tsx'] },
-  [`${SETTINGS}useKreaConnection.ts#disconnect`]: { lock: 'change the Krea sign-in', in: [`${SETTINGS}KreaSignInRow.tsx`] },
-  [`${SETTINGS}useKreaConnection.ts#signIn`]: { lock: 'change the Krea sign-in', in: [`${SETTINGS}KreaSignInRow.tsx`] },
-  [`${SETTINGS}useKreaConnection.ts#check`]: { lock: 'change the Krea sign-in', in: [`${SETTINGS}KreaSignInRow.tsx`] },
+  [`${SETTINGS}useKreaConnection.ts#disconnect`]: { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
+  [`${SETTINGS}useKreaConnection.ts#signIn`]: { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
+  [`${SETTINGS}useKreaConnection.ts#check`]: { lock: 'change provider settings', in: [`${SETTINGS}ProvidersTab.tsx`] },
   [`${SETTINGS}KreaSignInRow.tsx#KreaPlans`]: { lock: 'start a trial', in: [`${SETTINGS}KreaSignInRow.tsx`] },
   [`${SETTINGS}PersonalAgentsSection.tsx#load`]: { demoted: `${SETTINGS}PersonalAgentsSection.tsx` },
   [`${SETTINGS}PersonalAgentsSection.tsx#addCustom`]: { lock: 'add an agent', in: [`${SETTINGS}PersonalAgentsSection.tsx`] },
@@ -63,43 +72,55 @@ const CALLERS: Record<string, Entry> = {
   'store/projectStore.ts#purge': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
   'store/projectStore.ts#emptyTrashOf': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
   'components/asset-trash/AssetTrash.tsx#RecentlyDeletedAssets': { lock: 'delete items for good', in: ['components/asset-trash/AssetTrash.tsx'] },
-  'App.tsx#App': { not: 'reads settings (GET /api/settings, open to every tab); the tracer reads the shared path' },
-  'App.tsx#handleSettingsSaved': { not: 'reads settings again after a save (GET); the tracer reads the shared path' },
-  'components/panels/Settings.tsx#Settings': { not: 'reads settings on open (GET); the tracer reads the shared path' },
+  // Round 11 (review 9 MEDIUM-2, LOW-7): these reach PUT /api/settings only through
+  // lib/runCostConfirm's run-cost carry-over after a settings read, which now runs only on a tab
+  // connected as the person (lib/personWork whenPerson) and waits for the promote otherwise. No
+  // control sends it.
+  'App.tsx#App': { not: 'the run-cost carry-over after the settings read on load (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
+  'App.tsx#handleSettingsSaved': { not: 'the run-cost carry-over after the read that follows a save (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
+  'components/panels/Settings.tsx#Settings': { not: 'the run-cost carry-over after the read on open (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
+  // Round 11 (review 9 LOW-2): lib/agentNotes' composed paths trace now (they were UNTRACED).
+  'store/agentNotesStore.ts#dismiss': { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
+  'store/agentNotesStore.ts#markRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card); opening stays live, and a refusal says markReadRefusedCopy' },
+  'store/agentNotesStore.ts#markReadIds': { not: 'marks an Update read when the person reads it; reading stays live, and a refusal says markReadRefusedCopy' },
 };
+
+/** Round 11: controls lockReach reaches that send nothing person-only, by `file attribute={handler}`
+ * (no line number), with why. One that no longer reaches a locked sender fails. */
+const NOT_SENDING: Record<string, string> = {
+  'components/PromptDialog.tsx onKeyDown': 'its only call of onDone is Escape\'s onDone(null), which PinComposer reads as cancel',
+  'components/PromptDialog.tsx onClick={() => onDone(null)}': 'Cancel: PinComposer reads onDone(null) as cancel; only Send note sends the note',
+};
+const siteKey = (site: ControlSite) => `${site.file} ${site.attribute}${site.attribute === 'onKeyDown' && site.file === 'components/PromptDialog.tsx' ? '' : `=${site.handler}`}`;
 
 /** saveField's hosts each lock with their own verb. */
 const SAVE_FIELD_VERBS: Record<string, string> = {
   [`${SETTINGS}AgentSpendSection.tsx`]: 'change limits',
   [`${SETTINGS}StorageTab.tsx`]: 'change storage settings',
-  [`${SETTINGS}KreaSignInRow.tsx`]: 'change the Krea sign-in',
+  // Round 11 (GM r18 a): the Krea sign-in row locks with the providers' one lock (its `lock` prop).
+  [`${SETTINGS}ProvidersTab.tsx`]: 'change provider settings',
 };
 
-/** Person-only routes the tracer can't follow to a caller (a path built from a helper), with the
- * file that sends them and what holds the control. Fails once the tracer reads them. */
-const UNTRACED: Record<string, { sender: string; tail: string; entry: Entry }> = {
-  'POST /api/canvas/agent-notes/{note_id}/dismiss': {
-    sender: 'lib/agentNotes.ts', tail: '/dismiss`', entry: { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
-  },
-  'POST /api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss': {
-    sender: 'lib/agentNotes.ts', tail: '/dismiss`', entry: { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
-  },
-  'POST /api/canvas/agent-notes/read': {
-    sender: 'lib/agentNotes.ts', tail: '/read`', entry: { not: 'read on open, no control; a refusal says markReadRefusedCopy' },
-  },
-  'POST /api/moodboards/{moodboard_id}/agent-notes/read': {
-    sender: 'lib/agentNotes.ts', tail: '/read`', entry: { not: 'read on open, no control; a refusal says markReadRefusedCopy' },
-  },
-};
 
 const source = (file: string) => readFileSync(join(SRC, file), 'utf8');
+/** The text of every string and template part a file writes (comments left out). */
+function writtenTexts(text: string): string[] {
+  const out: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) out.push(node.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile('x.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX));
+  return out;
+}
 const rel = (key: string) => key.replace(/^.*\/src\//, '');
 const key = (route: { method: string; path: string }) => `${route.method} ${route.path}`;
 
 function checkEntry(entry: Entry, where: string, problems: string[]) {
   if ('not' in entry) return;
   if ('demoted' in entry) {
-    if (!/useDemotedView\(\)/.test(source(entry.demoted))) problems.push(`${where}: ${entry.demoted} doesn't switch on a demote (useDemotedView)`);
+    // Round 11: usePersonView also reads only on a tab connected as the person (useReadAsPerson).
+    if (!/use(?:DemotedView|PersonView)\(\)/.test(source(entry.demoted))) problems.push(`${where}: ${entry.demoted} doesn't switch on a demote (useDemotedView or usePersonView)`);
     return;
   }
   for (const host of entry.in) {
@@ -114,6 +135,20 @@ function checkEntry(entry: Entry, where: string, problems: string[]) {
   }
 }
 
+/** Round 11: every control that reaches a locked entry's sends holds a lock (lockReach), and
+ * every send is reached from a control or held behind a lock on the way. */
+function checkControls(caller: string, points: { file: string; node: ts.Node }[], problems: string[], used: Set<string>) {
+  const reach = lockReach(points);
+  for (const site of reach.sites) {
+    if (site.locked) continue;
+    const key = siteKey(site);
+    if (key in NOT_SENDING) { used.add(key); continue; }
+    problems.push(`${caller}: ${site.file}:${site.line} <${site.tag} ${site.attribute}> reaches it with no lock (via ${[...site.via].reverse().join(' > ') || 'itself'})`);
+  }
+  for (const end of reach.open) problems.push(`${caller}: sent from ${end.at} with no control or lock on the way (via ${[...end.via].reverse().join(' > ') || 'itself'})`);
+  if (reach.sites.length === 0 && reach.held.length === 0 && reach.open.length === 0) problems.push(`${caller}: no control reaches it`);
+}
+
 const COMMONS = '/api/commons';
 const routes = personOnlyRoutes();
 
@@ -125,39 +160,48 @@ describe('person-only controls lock (PR #204 round 10)', () => {
     for (const live of ['POST /api/execute', 'PUT /api/projects/{project_id}/cover', 'PUT /api/moodboards/{moodboard_id}']) {
       expect(routes.map(key)).not.toContain(live);
     }
+    // Round 11 (review 9 NIT-2): the asset trash's Empty validates its filters first (an `if` that
+    // only raises), then require_person: person-only.
+    for (const personOnly of ['POST /api/trash/empty', 'DELETE /api/trash/{kind}/{item_id}', 'POST /api/projects/trash/empty']) {
+      expect(routes.map(key)).toContain(personOnly);
+    }
   });
 
   it('every caller of a person-only route is mapped to its lock, and every entry is still a caller', { timeout: 30_000 }, () => {
     const problems: string[] = [];
     const seen = new Set<string>();
+    const points = new Map<string, { file: string; node: ts.Node }[]>();
     for (const route of routes) {
       if (route.path.startsWith(COMMONS)) continue;
-      const callers = [...callersOf(route).keys()].map(rel);
-      const untraced = UNTRACED[key(route)];
-      if (callers.length === 0) {
-        if (!untraced) { problems.push(`${key(route)}: no caller found and not in UNTRACED`); continue; }
-        if (!source(untraced.sender).includes(untraced.tail)) problems.push(`${key(route)}: ${untraced.sender} no longer sends ${untraced.tail}`);
-        checkEntry(untraced.entry, key(route), problems);
-        continue;
-      }
-      if (untraced) problems.push(`${key(route)}: the tracer reads it now; move it from UNTRACED to CALLERS`);
-      for (const caller of callers) {
+      const callers = [...callersOf(route)].map(([id, unit]) => [rel(id), unit] as const);
+      if (callers.length === 0) { problems.push(`${key(route)}: no caller found`); continue; }
+      for (const [caller, unit] of callers) {
         seen.add(caller);
         const entry = CALLERS[caller];
         if (!entry) { problems.push(`${key(route)}: ${caller} sends it and has no lock entry`); continue; }
         checkEntry(entry, `${key(route)} via ${caller}`, problems);
+        if ('lock' in entry) points.set(caller, [...(points.get(caller) ?? []), ...(unit.points ?? [unit.node]).map((node) => ({ file: unit.file, node }))]);
       }
     }
     for (const caller of Object.keys(CALLERS)) if (!seen.has(caller)) problems.push(`${caller}: in CALLERS but sends no person-only route`);
-    expect(problems).toEqual([]);
+    // Round 11 (LOW-3): the controls themselves.
+    const used = new Set<string>();
+    for (const [caller, at] of points) checkControls(caller, at, problems, used);
+    for (const site of Object.keys(NOT_SENDING)) if (!used.has(site)) problems.push(`${site}: in NOT_SENDING but no longer reaches a locked sender unlocked`);
+    expect([...new Set(problems)]).toEqual([]);
   });
 
   it('the Commons: every person-only route goes through commonsApi, which holds them all on a demote', () => {
     const api = source('lib/commonsApi.ts');
-    // The one sender, and its first statement answers as with no token while a demote holds.
-    expect(api).toMatch(/async function send\([^)]*\): Promise<Response> \{\n\s+if \(commonsCallsHeld\(\)\) throw sessionLost\(heading, sentAt\);/);
+    // The one sender, and its first statement answers as with no token while a demote holds
+    // (round 11: the session's own settled demote too). Comments may sit above it.
+    expect(api).toMatch(/async function send\([^)]*\): Promise<Response> \{\n(?:\s*\/\/.*\n)*\s+if \(commonsCallsHeld\(\)(?: \|\| personDemotedSettled\(\))?\) throw sessionLost\(heading, sentAt\);/);
     const view = source('components/commons/CommonsView.tsx');
-    expect(view).toMatch(/const \{ demoted, epoch \} = useDemotedView\(\);\n(?:\s*\/\/.*\n)*\s*holdCommonsCalls\(demoted\);\n\s*return <CommonsViewBody key=\{demoted \? 'demoted' : `live-\$\{epoch\}`\} \/>;/);
+    // The view holds the calls while it renders demoted (round 11: the parts that matter, not
+    // their adjacency), and keys the body on the demote and the promote's epoch.
+    const viewFn = view.slice(view.indexOf('= useDemotedView();') - 40);
+    expect(viewFn).toMatch(/^[^]*?const \{ demoted, epoch \} = useDemotedView\(\);\n(?:\s*\/\/.*\n)*\s*holdCommonsCalls\(demoted\);/);
+    expect(viewFn).toMatch(/<CommonsViewBody key=\{demoted \? 'demoted' : `live-\$\{epoch\}`\} \/>/);
     const commons = routes.filter((r) => r.path.startsWith(COMMONS));
     const missing = commons.filter((r) => {
       const tail = r.path.slice(COMMONS.length).replace(/\{[^}]+\}/g, '${').split('${')[0];
@@ -172,8 +216,8 @@ describe('person-only controls lock (PR #204 round 10)', () => {
         const full = join(dir, name);
         if (statSync(full).isDirectory()) { walk(full); continue; }
         if (!/\.tsx?$/.test(name) || /\.test\./.test(name) || full.endsWith('lib/commonsApi.ts')) continue;
-        const text = readFileSync(full, 'utf8');
-        if (/\/api\/commons(?!\/blobs\/)/.test(text)) others.push(rel(full));
+        // Round 11: the strings and templates it writes, not its comments.
+        if (writtenTexts(readFileSync(full, 'utf8')).some((text) => /\/api\/commons(?!\/blobs\/)/.test(text))) others.push(rel(full));
       }
     };
     walk(SRC);

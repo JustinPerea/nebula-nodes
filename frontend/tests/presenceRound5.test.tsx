@@ -70,6 +70,7 @@ const CURSOR = { id: 'cursor', name: 'Cursor', color: '#E8825A', verified: true 
 const T = Date.now() - 120_000;
 const REVIEW_LOCK = 'You can review this when this tab is connected as you.';
 const ANSWER_LOCK = 'You can answer this when this tab is connected as you.';
+const CARD_ANSWER_LOCK = 'You can answer or dismiss this when this tab is connected as you.';
 
 function update(id: string, author: typeof CODEX, about: 'proposal' | 'question' | 'note', extra: Record<string, unknown> = {}) {
   return {
@@ -352,7 +353,8 @@ describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => 
       return found!;
     });
     expect(asks(card).map((button) => [button.getAttribute('aria-disabled'), reasonOf(button)]))
-      .toEqual([['true', ANSWER_LOCK]]);
+      // PR #204 round 11 (GM r19 3): the arrival card's one line covers Answer and dismiss.
+      .toEqual([['true', CARD_ANSWER_LOCK]]);
     fireEvent.click(asks(card)[0]);
     await act(async () => { await Promise.resolve(); });
     expect(useAgentQuestionsStore.getState().formId).toBeNull();

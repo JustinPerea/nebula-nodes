@@ -164,7 +164,7 @@ export function AgentQuestionsForm({
         >
           Send
         </button>
-        <PersonLockLine lock={lock} className="agent-questions-form__held-line" />
+        <PersonLockLine lock={lock} place="control" className="agent-questions-form__held-line" />
       </div>
     </div>
   );

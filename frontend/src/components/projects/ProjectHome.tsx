@@ -63,6 +63,10 @@ export interface ProjectHomeProps {
    * line), 'reload' only reloads the saved projects (the whole line stays),
    * 'none' hides Try again (the whole line). */
   retry?: 'redo' | 'reload' | 'none' | 'reloadNebula';
+  /** PR #204 round 11: Try again redoes a "Delete forever" or "Empty" (DELETE
+   * /api/projects/trash/{id}, POST /api/projects/trash/empty: require_person), so on a tab that
+   * isn't connected as the person it locks as those buttons do. */
+  retryPersonOnly?: boolean;
   /** GM r12 item 5: where an update's recovered copy went, when the reload
    * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
    * [Restore] while it is in Recently deleted. */
@@ -72,6 +76,10 @@ export interface ProjectHomeProps {
   /** GM #198 r22 Q2: [Open] on the notice saying where a stale tab's edits
    * were saved (a recovered project); opens it. */
   onOpenCopy?: () => void;
+  /** PR #204 round 11 (GM r18): whether this tab loaded the work. A card's node and connection
+   * counts come with it: while it couldn't (a tab that isn't connected as you), they show
+   * nothing rather than a 0 nobody counted. */
+  workLoaded?: boolean;
   trash?: TrashedProject[];
   lastDeleted?: { id: string; name: string } | null;
   onRestore?: (id: string) => void;
@@ -198,7 +206,7 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean }) {
+function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean }) {
   // GM r18: the icons disabled offline carry the offline mark (the
   // not-allowed cursor, and a press pulses the banner).
   const off = offlineMark(offline);
@@ -222,7 +230,9 @@ function ProjectCard({ project, busy, offline = false, onOpen, onRename, onDelet
         <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
-        <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+        {counts
+          ? <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
+          : <span data-testid="project-card-no-counts" />}
         <span className="project-home__card-actions">
           {loadCoverChoices && onPinCover && (
             <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
@@ -337,7 +347,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
         {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
           busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" lock={purgeLock} />}
       </div>
-      {open && <PersonLockLine lock={purgeLock} />}
+      {open && <PersonLockLine lock={purgeLock} place="control" />}
       {open && (
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
@@ -466,7 +476,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
   settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
+  const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
   // delete, restore and covers are disabled as while busy; search and
@@ -536,8 +547,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
-            {retry !== 'none' && <button type="button" disabled={loading || busy} onClick={onRetry}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}</div></div>}
+            {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
+              {retry === 'reloadNebula' ? 'Reload Nebula' : 'Try again'}</button>}
+            <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
@@ -546,7 +558,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

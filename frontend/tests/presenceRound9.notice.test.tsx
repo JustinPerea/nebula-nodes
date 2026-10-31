@@ -161,7 +161,7 @@ describe('review 7 NIT-2 and NIT-3: what registers, not what the page says', () 
   it('an agent\'s note quoting the general words exactly leaves the notice showing', async () => {
     render(<>
       <PersonRequiredBanner />
-      <article className="agent-note"><p data-agent-text="">{`The tab said: “${copy.PERSON_REQUIRED_COPY}” — ${because}`}</p></article>
+      <article className="agent-note"><p className="agent-note-card__text" data-agent-text="">{`The tab said: “${copy.PERSON_REQUIRED_COPY}” — ${because}`}</p></article>
     </>);
     act(() => session.reportPersonRequired());
     act(() => FakeObserver.report(document.body, true));

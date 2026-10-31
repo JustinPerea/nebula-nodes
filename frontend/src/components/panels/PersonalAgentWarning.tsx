@@ -82,7 +82,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
             I understand, start it
           </button>
         </div>
-        <PersonLockLine lock={lock} />
+        <PersonLockLine lock={lock} place="control" />
       </div>
     </div>
     </ModalPortal>

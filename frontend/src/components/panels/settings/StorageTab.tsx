@@ -110,7 +110,7 @@ export function StorageTab({ saved }: { saved: SettingsDraft }) {
 
   return (
     <div className="settings-storage">
-      <PersonLockLine lock={lock} />
+      <PersonLockLine lock={lock} place="tab" />
       <FolderField field="outputPath" label="Generated files" saved={saved.outputPath}
         placeholder={desktop ? 'Default folder' : 'Default: ./output'}
         hint={`Every run saves here.${desktop ? '' : ' Use an absolute path.'} A new folder takes effect after Nebula restarts.`} lock={lock} />

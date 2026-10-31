@@ -16,7 +16,9 @@ function usd(value: number) {
  * run-cost threshold is saved to settings.json, because it limits agents too. */
 export function PreferencesTab() {
   // PR #204 round 10 (GM r15): the run-cost threshold is PUT /api/settings, the person's alone.
-  const costLock = usePersonLock('change preferences');
+  // Round 11 (GM r18 b): Job notifications live in this browser only (lib/jobNotifications,
+  // localStorage), so only this row locks, its line inside the box right under it.
+  const costLock = usePersonLock('change this');
   // Selected one by one: the UI store changes constantly while the canvas is in use.
   const ui = {
     runCostConfirmUsd: useUIStore((s) => s.runCostConfirmUsd),
@@ -57,7 +59,7 @@ export function PreferencesTab() {
               <option value="off">Never</option>
             </select>
           </div>
-          <PersonLockLine lock={costLock} />
+          <PersonLockLine lock={costLock} place="control" />
           {costError && <p className="settings-row__error" role="alert"><LineText text={costError} /></p>}
           <SwitchRow title="Job notifications" description="When a run finishes in a background tab, or after a long run"
             checked={ui.notificationPrefs.enabled} onChange={(enabled) => ui.setNotificationPrefs({ enabled })} />

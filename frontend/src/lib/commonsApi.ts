@@ -1,4 +1,5 @@
 import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
+import { personDemotedSettled } from './personSession';
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
@@ -54,7 +55,9 @@ const lostConnection = (heading: string, cause: unknown) =>
   new CommonsRequestError(CONNECTION_LOST_COPY, NO_ANSWER_STATUS, { cause, heading });
 
 async function send(heading: string, path: string, init: RequestInit, sentAt?: number): Promise<Response> {
-  if (commonsCallsHeld()) throw sessionLost(heading, sentAt); // a demote holds the Commons (lib/commonsHold)
+  // A demote holds the Commons (lib/commonsHold), read from the session itself too, so a call
+  // any pane sends before the view renders is held from the demote's 150 ms on (round 11).
+  if (commonsCallsHeld() || personDemotedSettled()) throw sessionLost(heading, sentAt);
   let token: string;
   try {
     token = await resolveCommonsToken();

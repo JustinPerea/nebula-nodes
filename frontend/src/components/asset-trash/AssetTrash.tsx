@@ -177,7 +177,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
             onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
         )}
       </div>
-      {open && <PersonLockLine lock={purgeLock} />}
+      {open && <PersonLockLine lock={purgeLock} place="control" />}
       {error && <p className="asset-trash__error" role="alert"><LineText text={error} /></p>}
       {open && (
         <>

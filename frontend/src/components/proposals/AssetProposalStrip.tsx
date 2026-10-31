@@ -219,7 +219,7 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
           {...gate.control()}
           onClick={() => { if (!gateHeld) void accept(view.id); }}>{pending === 'accept' ? 'Accepting…' : words.accept}</button>
       </div>
-      <PersonLockLine lock={gate} className="asset-proposal__held-line" />
+      <PersonLockLine lock={gate} place="control" className="asset-proposal__held-line" />
     </div>
   );
 }

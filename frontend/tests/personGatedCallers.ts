@@ -94,6 +94,9 @@ export interface Unit {
   outcome?: Outcome;
   /** It hands a Response back to its callers (round 7): their `!res.ok` handling is what's read. */
   responds?: boolean;
+  /** Round 11: where in the unit the route is reached (callersOf's result): the calls or paths
+   * lockReach follows to the controls. */
+  points?: ts.Node[];
 }
 
 const isFunctionLike = (node: ts.Node | undefined): boolean => !!node && (ts.isArrowFunction(node) || ts.isFunctionExpression(node));
@@ -126,20 +129,80 @@ function pathRoot(node: ts.Node): ts.Node {
   return n;
 }
 
-/** A top-level `const NAME = '…'` of the node's file, by name: what a placeholder holds. */
+/** A top-level `const NAME = '…'` of the node's file, by name: what a placeholder holds. Round 11
+ * (review 9 LOW-3): also one imported by name (`import { PRESETS_PATH } from '../lib/paths'`, an
+ * alias, a re-export) or read off a namespace import (`paths.PRESETS_PATH`). */
 function constantText(node: ts.Node): string | null {
+  if (ts.isPropertyAccessExpression(node)) return namespaceConstText(node);
   if (!ts.isIdentifier(node)) return null;
-  const source = node.getSourceFile();
+  return topConstText(node.getSourceFile(), node.text) ?? importedConstText(node);
+}
+function topConstText(source: ts.SourceFile, name: string): string | null {
   for (const statement of source.statements) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === node.text && declaration.initializer
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name && declaration.initializer
         && (ts.isStringLiteral(declaration.initializer) || ts.isNoSubstitutionTemplateLiteral(declaration.initializer))) {
         return declaration.initializer.text;
       }
     }
   }
   return null;
+}
+
+/** The files the trace reads (src, or a test's sources), by path under src. */
+let currentFiles: Map<string, ts.SourceFile> | null = null;
+const fileOf = (source: ts.SourceFile): string => relative(SRC, source.fileName);
+
+/** The text of `name` exported as a top-level string const by `module`, through `export { … }
+ * from` and `export * from` (a few hops). */
+function exportedConstText(module: string, name: string, depth = 0): string | null {
+  const source = currentFiles?.get(module);
+  if (!source || depth > 5) return null;
+  const own = topConstText(source, name);
+  if (own !== null) return own;
+  const known = new Set(currentFiles!.keys());
+  for (const statement of source.statements) {
+    if (!ts.isExportDeclaration(statement) || !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const from = resolveModule(module, statement.moduleSpecifier.text, known);
+    if (!from) continue;
+    if (!statement.exportClause) {
+      const found = exportedConstText(from, name, depth + 1);
+      if (found !== null) return found;
+    } else if (ts.isNamedExports(statement.exportClause)) {
+      const element = statement.exportClause.elements.find((el) => el.name.text === name);
+      if (element) return exportedConstText(from, (element.propertyName ?? element.name).text, depth + 1);
+    }
+  }
+  return null;
+}
+/** The module an import in `source` binds `local` from, and the name it has there (a namespace
+ * import: name null). */
+function importOf(source: ts.SourceFile, local: string): { module: string; name: string | null } | null {
+  if (!currentFiles) return null;
+  const known = new Set(currentFiles.keys());
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause?.namedBindings) continue;
+    const bindings = statement.importClause.namedBindings;
+    const module = resolveModule(fileOf(source), statement.moduleSpecifier.text, known);
+    if (!module) continue;
+    if (ts.isNamespaceImport(bindings)) {
+      if (bindings.name.text === local) return { module, name: null };
+      continue;
+    }
+    const element = bindings.elements.find((el) => el.name.text === local);
+    if (element) return { module, name: (element.propertyName ?? element.name).text };
+  }
+  return null;
+}
+function importedConstText(node: ts.Identifier): string | null {
+  const bound = importOf(node.getSourceFile(), node.text);
+  return bound?.name ? exportedConstText(bound.module, bound.name) : null;
+}
+function namespaceConstText(node: ts.PropertyAccessExpression): string | null {
+  if (!ts.isIdentifier(node.expression)) return null;
+  const bound = importOf(node.getSourceFile(), node.expression.text);
+  return bound && bound.name === null ? exportedConstText(bound.module, node.name.text) : null;
 }
 
 /**
@@ -180,19 +243,23 @@ function readableTexts(node: ts.Node, depth = 0): string[] | null {
     const whenFalse = readableTexts(e.whenFalse, depth);
     return whenTrue && whenFalse ? [...whenTrue, ...whenFalse] : null;
   }
-  if (ts.isIdentifier(e)) {
+  if (ts.isIdentifier(e) || ts.isPropertyAccessExpression(e)) {
     const top = constantText(e);
     if (top !== null) return [top];
-    return depth < 4 ? localConstTexts(e, depth + 1) : null;
+    return depth < 4 && ts.isIdentifier(e) ? localConstTexts(e, depth + 1) : null;
   }
   const texts = literalTexts(e);
   return texts.length > 0 ? texts : null;
 }
-/** The texts of the function-local `const` a name refers to (null: not one, or not read). */
+/** The texts of the function-local `const` a name refers to (null: not one, or not read). Round 11
+ * (review 9 NIT-1): a const read while it is being read (`const u = \`${u}/api/…\``, TDZ code) is
+ * null there, so no cycle runs away. */
+const reading = new Set<ts.VariableDeclaration>();
 function localConstTexts(node: ts.Node, depth = 0): string[] | null {
   const declaration = localConst(node);
-  if (!declaration || !isConstList(declaration) || !declaration.initializer) return null;
-  return readableTexts(declaration.initializer, depth);
+  if (!declaration || !isConstList(declaration) || !declaration.initializer || reading.has(declaration)) return null;
+  reading.add(declaration);
+  try { return readableTexts(declaration.initializer, depth); } finally { reading.delete(declaration); }
 }
 /** A placeholder's or a `+` part's text: a top-level const, or a function-local one of one text. */
 function nameText(node: ts.Node): string | null {
@@ -210,17 +277,22 @@ function literalTexts(node: ts.Node): string[] {
   if (ts.isTemplateExpression(node)) {
     let out = [node.head.text];
     for (const span of node.templateSpans) {
-      let e: ts.Expression = span.expression;
-      while (ts.isParenthesizedExpression(e)) e = e.expression;
-      const choices = ts.isConditionalExpression(e) && [e.whenTrue, e.whenFalse].every((b) => ts.isStringLiteral(b) || ts.isNoSubstitutionTemplateLiteral(b))
-        ? [e.whenTrue, e.whenFalse].map((b) => (b as ts.StringLiteral).text)
-        : [nameText(span.expression) ?? '\uE000'];
+      const choices = spanChoices(span.expression);
       out = out.flatMap((head) => choices.map((choice) => head + choice + span.literal.text));
     }
     return out;
   }
   const text = literalText(node);
   return text === null ? [] : [text];
+}
+
+/** What a template's placeholder reads as: either of two strings, a const's text, or anything. */
+function spanChoices(expression: ts.Expression): string[] {
+  let e: ts.Expression = expression;
+  while (ts.isParenthesizedExpression(e)) e = e.expression;
+  return ts.isConditionalExpression(e) && [e.whenTrue, e.whenFalse].every((b) => ts.isStringLiteral(b) || ts.isNoSubstitutionTemplateLiteral(b))
+    ? [e.whenTrue, e.whenFalse].map((b) => (b as ts.StringLiteral).text)
+    : [nameText(expression) ?? '\uE000'];
 }
 
 function literalText(node: ts.Node): string | null {
@@ -309,15 +381,23 @@ interface Frontend {
   files: Parsed[];
   references: Map<string, { file: string; node: ts.Identifier }[]>;
   imports: Map<string, Map<string, Taken>>;
-  /** Every /api/ literal in a function, read once. */
-  literals: { text: string; method: string; unit: Unit; node: ts.Node }[];
-  /** /api/ text the trace can't follow (round 6, fail closed). */
-  untraced: { file: string; line: number; text: string }[];
+  /** Every /api/ literal in a function, read once. `wrapped`: handed to a same-file function
+   * that returns the transport's Response (round 11). */
+  literals: Literal[];
+  /** /api/ text the trace can't follow (round 6, fail closed), with why (round 11). */
+  untraced: Untraced[];
   /** A module's default export: the name of the function it is. */
   defaults: Map<string, string>;
-  /** Functions that return an /api/ path, by `file#name` (round 9). */
-  helpers: Map<string, string>;
+  /** Functions that return an /api/ path, by `file#name`, with each path they return (round 9). */
+  helpers: Map<string, string[]>;
+  /** Helper references whose call is read as part of a longer path (round 11). */
+  composed: Set<ts.Node>;
+  /** Path const references the trace reads at the local they're held in, or lists (round 11). */
+  heldConsts: Set<ts.Node>;
+  byFile: Map<string, ts.SourceFile>;
 }
+interface Literal { text: string; method: string; unit: Unit; node: ts.Node; wrapped?: boolean }
+export interface Untraced { file: string; line: number; text: string; reason?: string }
 let cache: Frontend | null = null;
 
 /** A relative module specifier, as a file under src. */
@@ -333,19 +413,21 @@ function resolveModule(from: string, specifier: string, known: Set<string>): str
 /** Tests: run `fn` against the given sources ({path under src: text}) in place of src. */
 export function withSources<T>(sources: Record<string, string>, fn: () => T): T {
   const saved = cache;
+  const savedFiles = currentFiles;
   const savedKeepers = new Map(keepersCache);
   cache = build(Object.entries(sources).map(([file, text]) => ({ file,
     source: ts.createSourceFile(join(SRC, file), text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS) })));
   keepersCache.clear();
   try { return fn(); } finally {
     cache = saved;
+    currentFiles = savedFiles;
     keepersCache.clear();
     for (const [key, value] of savedKeepers) keepersCache.set(key, value);
   }
 }
 
 function frontend(): Frontend {
-  if (cache) return cache;
+  if (cache) { currentFiles = cache.byFile; return cache; }
   cache = build(walk(SRC, /\.(ts|tsx)$/).map((path) => ({
     file: relative(SRC, path),
     source: ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true,
@@ -355,6 +437,8 @@ function frontend(): Frontend {
 }
 
 function build(files: Parsed[]): Frontend {
+  const byFile = new Map(files.map((entry) => [entry.file, entry.source]));
+  currentFiles = byFile;
   const references = new Map<string, { file: string; node: ts.Identifier }[]>();
   for (const { file, source } of files) {
     const visit = (node: ts.Node) => {
@@ -433,50 +517,224 @@ function build(files: Parsed[]): Frontend {
     };
     visit(source);
   }
-  const literals: { text: string; method: string; unit: Unit; node: ts.Node }[] = [];
-  const untraced: { file: string; line: number; text: string }[] = [];
+  const literals: Literal[] = [];
+  const untraced: Untraced[] = [];
+  const lineOf = (node: ts.Node) => node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1;
+  const shown = (text: string) => text.replace(/\uE000/g, '${…}');
+  /** One path text found at `node` (a literal, or a helper's call composed into one). */
+  const take = (file: string, node: ts.Node, text: string) => {
+    const path = apiPath(text);
+    const unit = unitOf(file, node);
+    // Round 7 (gates-security LOW-1): a path whose first segment is a placeholder
+    // (`/api/${kind}/…`) could be any route, and a string that is only the /api/ prefix is
+    // joined to one somewhere the trace can't read: both are listed, never skipped.
+    const unplaced = path !== null && (/^\/api\/\uE000/.test(path) || /^\/api\/?$/.test(path));
+    // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
+    // sends nothing (round 7: no longer a caller to follow).
+    if (describesOnly(node)) return;
+    const held = heldPath(node);
+    if (held === 'followed') return;
+    // Round 11 (review 9 LOW-3): a path handed to a same-file function that sends it
+    // (`const post = (u) => apiFetch(u, …); post('/api/x')`) is that function's request.
+    const wrapper = paramWrapper(node);
+    const reason = path === null ? 'no /api/ path at its start' : !unit ? 'not in a function' : unplaced ? 'its first segment isn\'t written'
+      : held === 'unread' ? 'held in a name or object the trace doesn\'t read' : unreadUse(node, false) ? 'used where the trace can\'t read it'
+        : wrapper === 'unread' ? 'handed to a function that sends it and reads the answer itself' : null;
+    if (reason) untraced.push({ file, line: lineOf(node), text: shown(text), reason });
+    else literals.push({ text: path!, method: methodOf(node), unit: unit!, node, wrapped: wrapper === 'responds' });
+  };
   for (const { file, source } of files) {
     const visit = (node: ts.Node) => {
       const texts = literalTexts(node);
-      if (texts.some((text) => text.includes('/api/'))) for (const text of texts) {
-        const path = apiPath(text);
-        const unit = unitOf(file, node);
-        const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-        // Round 7 (gates-security LOW-1): a path whose first segment is a placeholder
-        // (`/api/${kind}/…`) could be any route, and a string that is only the /api/ prefix is
-        // joined to one somewhere the trace can't read: both are listed, never skipped.
-        const unplaced = path !== null && (/^\/api\/\uE000/.test(path) || /^\/api\/?$/.test(path));
-        // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
-        // sends nothing (round 7: no longer a caller to follow).
-        if (describesOnly(node)) return;
-        const held = heldPath(node);
-        if (held === 'followed') return;
-        if (path === null || !unit || unplaced || held === 'unread' || unreadUse(node, false)) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
-        else literals.push({ text: path, method: methodOf(node), unit, node });
+      if (texts.some((text) => text.includes('/api/'))) {
+        for (const text of texts) take(file, node, text);
+        return; // the parts of a `+` are read with it
       }
-      if (texts.some((text) => text.includes('/api/'))) return; // the parts of a `+` are read with it
+      // Round 11 (review 9 LOW-3): '/api' joined to something the trace can't read
+      // (`'/api' + path`, `${API}${path}`) could be any route: listed. A top-level const that
+      // holds it is checked at each use instead.
+      if (texts.some((text) => /^\uE000*\/api(?:\uE000|$)/.test(text)) && !describesOnly(node)) {
+        // A const that holds it is checked at its uses (a top-level one below, file by file).
+        const held = constHolding(node);
+        if (!held || !prefixUsesRead(held)) {
+          untraced.push({ file, line: lineOf(node), text: shown(texts[0]), reason: 'the /api prefix joined where the trace can\'t read the path' });
+        }
+        return;
+      }
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
+  const reachable = (reference: { file: string }, file: string) => reference.file === file || !!imports.get(reference.file)?.has(file);
   // Round 9 (review 7 LOW-2): each call of a path helper whose use can't be read is untraced too.
+  // Round 11 (review 9 LOW-2): a helper's call inside a longer path (`${base(s)}/${id}/dismiss`,
+  // `base(s) + '/read'`) is read with the rest of it, the helper's every path in its place: that
+  // is the path sent, not the helper's own.
   const helpers = pathHelpers(literals);
-  for (const [id, text] of helpers) {
+  const composed = new Set<ts.Node>();
+  for (const [id, texts] of helpers) {
     const [file, name] = id.split('#');
     for (const reference of references.get(name) ?? []) {
-      if (reference.file !== file && !imports.get(reference.file)?.has(file)) continue;
-      if (!helperPassed(reference.node) && (helperCall(reference.node) === reference.node || !unreadUse(reference.node, true))) continue;
-      const line = reference.node.getSourceFile().getLineAndCharacterOfPosition(reference.node.getStart()).line + 1;
-      untraced.push({ file: reference.file, line, text: text.replace(/\uE000/g, '${…}') });
+      if (!reachable(reference, file)) continue;
+      const call = helperCall(reference.node);
+      const whole = call === reference.node ? call : composeRoot(call);
+      if (whole !== call) {
+        const made = composedTexts(whole, call, texts);
+        // Held in a name, it is listed, and the helper's own trace still drops at the caller.
+        if (heldPath(whole) !== null) {
+          untraced.push({ file: reference.file, line: lineOf(whole), text: shown(made[0] ?? ''), reason: 'a path helper\'s call in a longer path held in a name' });
+        } else {
+          composed.add(reference.node);
+          for (const text of made) take(reference.file, whole, text);
+        }
+        continue;
+      }
+      if (!helperPassed(reference.node) && (call === reference.node || !unreadUse(reference.node, true))) continue;
+      untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(texts[0]),
+        reason: helperPassed(reference.node) ? 'a path helper handed on uncalled' : 'a path helper\'s call used where the trace can\'t read it' });
     }
   }
-  return { files, references, imports, literals, untraced, defaults, helpers };
+  // Round 11 (review 9 LOW-3): a path const used by name. Held in a function-local const that is
+  // read at its uses (literalTexts): those uses are the request. Held where the trace can't read
+  // it (a `let`, an object): listed. Written into a longer path read as one: that path is.
+  const heldConsts = new Set<ts.Node>();
+  const constants = new Map<string, string>();
+  for (const literal of literals) if (literal.unit.constant) constants.set(`${literal.unit.file}#${literal.unit.name}`, literal.text);
+  for (const [id, text] of constants) {
+    const [file, name] = id.split('#');
+    for (const reference of references.get(name) ?? []) {
+      if (!reachable(reference, file)) continue;
+      const named = helperName(reference.node);
+      const whole = climbPath(named);
+      if (whole !== named && literalTexts(whole).some((t) => t.includes('/api/'))) { heldConsts.add(reference.node); continue; }
+      const held = heldPath(named);
+      if (held === null) continue;
+      heldConsts.add(reference.node);
+      if (held === 'unread') untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(text), reason: 'a path const held in a name or object the trace doesn\'t read' });
+    }
+  }
+  // Round 11 (review 9 LOW-3): a top-level const that is only '/api' is joined to a path at each
+  // use; a use the trace doesn't read as one /api/ path is listed.
+  for (const { file, source } of files) {
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer || !isTopConstValue(declaration.initializer)) continue;
+        if (!literalTexts(declaration.initializer).some((text) => /^\/api$/.test(text))) continue;
+        for (const reference of references.get(declaration.name.text) ?? []) {
+          if (!reachable(reference, file)) continue;
+          if (prefixUseRead(reference.node)) continue;
+          untraced.push({ file: reference.file, line: lineOf(reference.node), text: '/api', reason: 'the /api prefix joined where the trace can\'t read the path' });
+        }
+      }
+    }
+  }
+  return { files, references, imports, literals, untraced, defaults, helpers, composed, heldConsts, byFile };
+}
+
+/** The `const` whose whole value `node` is (top-level or function-local), or null. */
+function constHolding(node: ts.Node): ts.VariableDeclaration | null {
+  const declaration = climbPath(node).parent;
+  return declaration && ts.isVariableDeclaration(declaration) && declaration.initializer === climbPath(node)
+    && ts.isIdentifier(declaration.name) && isConstList(declaration) ? declaration : null;
+}
+/** Round 11: whether a use of a '/api' prefix (a name for it) is read as one /api/ path: written
+ * into a template or `+` that is one, or held in a local const each of whose uses is. */
+function prefixUseRead(use: ts.Node, depth = 0): boolean {
+  const whole = climbPath(helperName(use));
+  if (literalTexts(whole).some((text) => text.includes('/api/'))) return true;
+  const held = constHolding(whole);
+  return !!held && !isTopConstValue(whole) && depth < 4 && prefixUsesRead(held, depth + 1);
+}
+/** Whether every use of a function-local const holding a '/api' prefix is read (at least one). */
+function prefixUsesRead(declaration: ts.VariableDeclaration, depth = 0): boolean {
+  if (isTopConstValue(declaration.initializer!)) return true; // checked at each use, file by file
+  const name = declaration.name as ts.Identifier;
+  const uses: ts.Identifier[] = [];
+  const visit = (n: ts.Node) => {
+    if (ts.isIdentifier(n) && n !== name && n.text === name.text && localConst(n) === declaration) uses.push(n);
+    ts.forEachChild(n, visit);
+  };
+  visit(declaration.parent.parent.parent);
+  return uses.length > 0 && uses.every((use) => prefixUseRead(use, depth));
+}
+
+/** The initializer of a top-level `const`. */
+function isTopConstValue(node: ts.Node): boolean {
+  const declaration = node.parent;
+  return !!declaration && ts.isVariableDeclaration(declaration) && declaration.initializer === node
+    && ts.isVariableStatement(declaration.parent.parent) && ts.isSourceFile(declaration.parent.parent.parent);
+}
+
+/** The template or `+` of strings a helper's call is written in (or the call itself). */
+function composeRoot(call: ts.Node): ts.Node {
+  let n = call;
+  while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isTemplateSpan(n.parent) && n.parent.expression === n
+    || ts.isTemplateExpression(n.parent) || ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.PlusToken)) n = n.parent;
+  return n;
+}
+const holds = (outer: ts.Node, inner: ts.Node) => inner.pos >= outer.pos && inner.end <= outer.end;
+/** The texts of `node` with the helper's `call` read as each of the helper's paths. */
+function composedTexts(node: ts.Node, call: ts.Node, texts: string[]): string[] {
+  if (node === call) return texts;
+  if (ts.isParenthesizedExpression(node)) return composedTexts(node.expression, call, texts);
+  const part = (e: ts.Expression) => holds(e, call) ? composedTexts(e, call, texts) : spanChoices(e);
+  if (ts.isTemplateExpression(node)) {
+    let out = [node.head.text];
+    for (const span of node.templateSpans) {
+      const choices = part(span.expression);
+      out = out.flatMap((head) => choices.map((choice) => head + choice + span.literal.text));
+    }
+    return out;
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = holds(node.left, call) ? composedTexts(node.left, call, texts) : [literalText(node.left) ?? nameText(node.left) ?? '\uE000'];
+    const right = holds(node.right, call) ? composedTexts(node.right, call, texts) : [literalText(node.right) ?? nameText(node.right) ?? '\uE000'];
+    return left.flatMap((l) => right.map((r) => l + r));
+  }
+  return ['\uE000'];
+}
+
+/**
+ * Round 11 (review 9 LOW-3): a path handed to a same-file function (`const post = (u) =>
+ * apiFetch(u, …)`, a function declaration) whose parameter at that place is a transport's path:
+ * 'responds' when the function returns that transport's Response (its caller's `!res.ok` is
+ * what's read); null when it throws on every failure answer (a throwing call, as before) or for
+ * any other call; 'unread' when it reads the answer some other way (listed).
+ */
+function paramWrapper(at: ts.Node): 'responds' | 'unread' | null {
+  const top = climbPath(at);
+  const call = top.parent;
+  if (!call || !ts.isCallExpression(call) || !call.arguments.includes(top as ts.Expression) || !ts.isIdentifier(call.expression)) return null;
+  if (ANSWERS_WITH_RESPONSE.has(call.expression.text)) return null;
+  const fn = runnerNamed(call.expression) as ts.FunctionLikeDeclaration | null;
+  const param = fn?.parameters[call.arguments.indexOf(top as ts.Expression)]?.name;
+  if (!fn?.body || !param || !ts.isIdentifier(param)) return null;
+  const sends: ts.CallExpression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ANSWERS_WITH_RESPONSE.has(calleeName(node)) && node.arguments[0]) {
+      let arg: ts.Expression = node.arguments[0];
+      while (ts.isParenthesizedExpression(arg) || reshapes(arg)) arg = (arg as ts.ParenthesizedExpression).expression;
+      if (ts.isIdentifier(arg) && arg.text === param.text) sends.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(fn.body);
+  if (sends.length === 0) return null;
+  const returned = (send: ts.Node): boolean => {
+    let n = send;
+    while (n.parent && (ts.isAwaitExpression(n.parent) || ts.isParenthesizedExpression(n.parent) || reshapes(n.parent))) n = n.parent;
+    return n.parent === fn && fn.body === n || ts.isReturnStatement(n.parent) && enclosingFunction(n.parent) === fn;
+  };
+  if (sends.every(returned)) return 'responds';
+  // One that throws on every failure answer is a throwing call: the catch around it decides.
+  return sends.every((send) => returned(send) || throwsOnFailure(send)) ? null : 'unread';
 }
 
 /** Functions that return an /api/ path (`const presetsPath = () => '/api/presets'`), by
- * `file#name`, with the path. */
-function pathHelpers(literals: Frontend['literals']): Map<string, string> {
-  const out = new Map<string, string>();
+ * `file#name`, with each path (round 11: a helper that picks between two keeps both). */
+function pathHelpers(literals: Frontend['literals']): Map<string, string[]> {
+  const out = new Map<string, string[]>();
   for (const { text, unit, node } of literals) {
     let top = climbPath(node);
     while (top.parent && ts.isCallExpression(top.parent) && top.parent.arguments.includes(top as ts.Expression)
@@ -484,7 +742,7 @@ function pathHelpers(literals: Frontend['literals']): Map<string, string> {
     const body = unitBody(unit);
     const returned = top.parent && (top.parent === body && isFunctionLike(body) && (body as ts.ArrowFunction).body === top
       || ts.isReturnStatement(top.parent) && enclosingFunction(top.parent) === body);
-    if (returned) out.set(`${unit.file}#${unit.name}`, text);
+    if (returned) out.set(`${unit.file}#${unit.name}`, [...(out.get(`${unit.file}#${unit.name}`) ?? []), text]);
   }
   return out;
 }
@@ -611,7 +869,7 @@ function heldPath(node: ts.Node): 'followed' | 'unread' | null {
 }
 
 /** /api/ text the trace can't follow to a function: each must be declared (round 6, fail closed). */
-export function untracedApiText(): { file: string; line: number; text: string }[] {
+export function untracedApiText(): Untraced[] {
   return frontend().untraced;
 }
 
@@ -698,7 +956,11 @@ function answersWithResponse(at: ts.Node): boolean {
 function transportAround(at: ts.Node): ts.CallExpression | null {
   // Round 9 (review 7 LOW-2): a method helper (`paths.presets()`), and a call around the path
   // that isn't a transport (`String(x)`, `backendUrl(x)`): the transport's path is what counts.
-  let n = climbPath(helperCall(climbPath(at)));
+  // Round 11 (review 9 LOW-3): a const read off a namespace (`apiFetch(paths.PRESETS_PATH)`) is
+  // the property access.
+  const start = climbPath(at);
+  const called = helperCall(start);
+  let n = climbPath(called === start ? helperName(start) : called);
   for (;;) {
     const call = n.parent;
     if (!call || !ts.isCallExpression(call) || !call.arguments.includes(n as ts.Expression)) return null;
@@ -1001,13 +1263,13 @@ function escapes(unit: Unit, node: ts.Node, throwing: boolean): boolean {
  * helper, a path const, a selector and a function whose catch throws the refusal on are followed
  * to their callers; a lib helper reached by nothing is itself returned (fail closed). */
 export function callersOf(route: { method: string; path: string }, extraStarts: string[] = [], stopAt: Set<string> = new Set()): Map<string, Unit> {
-  const { files, references, imports, literals, defaults, helpers } = frontend();
+  const { files, references, imports, literals, defaults, helpers, composed, heldConsts } = frontend();
   const known = new Set(files.map((entry) => entry.file));
   const queue: Unit[] = [];
   const found = new Map<string, Unit>();
-  const keep = (id: string, unit: Unit, outcome: Outcome) => {
-    const before = found.get(id)?.outcome;
-    found.set(id, { ...unit, outcome: before === 'drops' ? 'drops' : outcome });
+  const keep = (id: string, unit: Unit, outcome: Outcome, at: ts.Node = unit.node) => {
+    const before = found.get(id);
+    found.set(id, { ...unit, outcome: before?.outcome === 'drops' ? 'drops' : outcome, points: [...(before?.points ?? []), at] });
   };
   const reach = (unit: Unit, at: ts.Node, responds = false) => {
     const id = `${unit.file}#${unit.name}`;
@@ -1015,20 +1277,20 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
     const call = callAround(at);
     const handsBack = !!call && (responds || answersWithResponse(at)) && returnsCall(unit, call) && !throwsOnFailure(call);
     // A lib helper the ratchet declares as where its route's answer stops (stopAt).
-    if (stopAt.has(id)) keep(id, unit, 'drops');
+    if (stopAt.has(id)) keep(id, unit, 'drops', at);
     else if (unit.file.startsWith('lib/')) {
       // A lib helper whose branch or catch registers the line (settingsWrites' `fail`) keeps it;
       // any other hands the refusal, or the Response, to its callers.
-      if (!handsBack && outcomeAt(unit, at, responds) === 'keeps') keep(id, unit, 'keeps'); else queue.push({ ...unit, responds: handsBack });
+      if (!handsBack && outcomeAt(unit, at, responds) === 'keeps') keep(id, unit, 'keeps', at); else queue.push({ ...unit, responds: handsBack });
     } else {
       const outcome = outcomeAt(unit, at, responds);
-      if (outcome === 'passes') { passed.add(id); queue.push({ ...unit, responds: handsBack }); } else keep(id, unit, outcome);
+      if (outcome === 'passes') { passed.add(id); queue.push({ ...unit, responds: handsBack }); } else keep(id, unit, outcome, at);
     }
   };
   const passed = new Set<string>();
   for (const literal of literals) {
     if ((literal.method === '*' || literal.method === route.method) && sendsTo(literal.text, route.path)) {
-      if (literal.unit.constant) queue.push(literal.unit); else reach(literal.unit, literal.node);
+      if (literal.unit.constant) queue.push(literal.unit); else reach(literal.unit, literal.node, literal.wrapped);
     }
   }
   for (const start of extraStarts) {
@@ -1064,6 +1326,10 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const parent = reference.node.parent;
       // `typeof helper` in a type names it; it sends nothing.
       if (ts.isTypeQueryNode(parent)) { followed += 1; continue; }
+      // Round 11: a helper's call read as part of a longer path, or a path const read at the
+      // local that holds it (or listed): that path, or the local's uses, are the request.
+      if ((helpers.has(id) && composed.has(reference.node) || unit.constant && heldConsts.has(reference.node))
+        && (reference.file === unit.file || imports.get(reference.file)?.has(unit.file))) { followed += 1; continue; }
       // Another file reaches an exported helper only through an import of its module: by name
       // (`import { helper }`), through a namespace (`api.helper`), an imported object or instance
       // (`styles.save()`), a store's action (`getState().action()`), or a dynamic import.
@@ -1103,7 +1369,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       // Round 9: a path helper's call whose use can't be read (listed as untraced) drops here;
       // round 10, so does a helper handed to a call uncalled (`send(presetsPath)`).
       if (helpers.has(id) && (helperPassed(reference.node) || helperCall(reference.node) !== reference.node && unreadUse(reference.node, true))) {
-        keep(`${caller.file}#${caller.name}`, caller, 'drops');
+        keep(`${caller.file}#${caller.name}`, caller, 'drops', reference.node);
         continue;
       }
       reach({ ...caller, via: id }, reference.node, unit.responds);
@@ -1366,4 +1632,443 @@ function socketUrlEndsIn(node: ts.Expression, path: string): boolean {
     }
   }
   return false;
+}
+
+// ---------- round 11: from a sending unit to the controls that reach it ----------
+
+/** A JSX attribute whose handler reaches a person-only request, and how it is locked (null: it
+ * isn't). */
+export interface ControlSite { file: string; line: number; tag: string; attribute: string; locked: string | null;
+  /** The attribute's value as written (whitespace folded), to name the site without its line. */
+  handler: string;
+  /** The functions between the control and the send, nearest the control first. */
+  via: string[] }
+export interface LockReach {
+  sites: ControlSite[];
+  /** Where the walk ends with no control: a function nothing calls (an export src doesn't use),
+   * a component's render or effect, a hook's body: `file#name`, or `file:line` (`<Tag>` when it is
+   * rendered), with the chain to the send. */
+  open: { at: string; via: string[] }[];
+  /** Where the walk stopped at a lock before any control (an early return, a guard, work held
+   * for the promote). */
+  held: { at: string; locked: string; via: string[] }[];
+}
+
+interface Step { file: string; name: string; wide: boolean; node: ts.Node; locked: string | null; via: string[];
+  /** Only references read off this name (`props.onConfirm`: 'props'). */
+  propsOf?: string; scope?: ts.Node;
+  /** Only `.name` reads (a hook's returned member) in files that import `file`. */
+  member?: boolean }
+
+/** A name that holds a lock: a const set by a `use…Lock(…)` hook (usePersonLock, useNoteLock), or a
+ * prop or parameter named `lock`, `…Lock` or `gate` (a lock handed down: KreaSignInRow's `lock`). */
+function isLock(expression: ts.Expression, depth = 0): boolean {
+  let e = expression;
+  while (ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e)) e = e.expression;
+  if (ts.isPropertyAccessExpression(e)) return /(?:^l|L)ock$|^gate$/.test(e.name.text);
+  if (!ts.isIdentifier(e)) return false;
+  const name = e.text;
+  for (let scope: ts.Node | undefined = e.parent; scope; scope = scope.parent) {
+    if (ts.isBlock(scope) || ts.isSourceFile(scope)) {
+      for (const statement of scope.statements) {
+        if (!ts.isVariableStatement(statement)) continue;
+        for (const declaration of statement.declarationList.declarations) {
+          if (!ts.isIdentifier(declaration.name) || declaration.name.text !== name || !declaration.initializer) continue;
+          let init = declaration.initializer;
+          while (ts.isParenthesizedExpression(init)) init = init.expression;
+          // `const dismissLock = ask ? sharedLock : ownLock`, `const lock = rowLock`
+          if (depth < 4 && ts.isConditionalExpression(init)) return isLock(init.whenTrue, depth + 1) && isLock(init.whenFalse, depth + 1);
+          if (depth < 4 && (ts.isIdentifier(init) || ts.isPropertyAccessExpression(init))) return isLock(init, depth + 1);
+          return ts.isCallExpression(init) && /^use\w*Lock$/.test(calleeName(init));
+        }
+      }
+    }
+    if (isFunctionLike(scope) || ts.isFunctionDeclaration(scope)) {
+      for (const param of (scope as ts.FunctionLikeDeclaration).parameters) {
+        const names = ts.isIdentifier(param.name) ? [param.name.text]
+          : ts.isObjectBindingPattern(param.name) ? param.name.elements.flatMap((el) => ts.isIdentifier(el.name) ? [el.name.text] : []) : [];
+        if (names.includes(name)) return /(?:^l|L)ock$|^gate$/.test(name);
+      }
+    }
+  }
+  return false;
+}
+/** The lock read as `<lock>.locked` in `node`, not under a `!` (or under one, `negated`). */
+function lockedRead(node: ts.Node, negated: boolean): string | null {
+  let found: string | null = null;
+  const visit = (n: ts.Node) => {
+    if (found) return;
+    // `<lock>.locked`, or a const set to it (`const tabHeld = connectLock.locked`).
+    const value = ts.isIdentifier(n) && !(ts.isPropertyAccessExpression(n.parent) && n.parent.name === n) ? constValue(n, n.text) : null;
+    // Also a lock's control props honoured by hand: `confirm?.['aria-disabled']` (PromptDialog).
+    const read = ts.isPropertyAccessExpression(n) && n.name.text === 'locked' && isLock(n.expression) ? n.expression
+      : value && ts.isPropertyAccessExpression(value) && value.name.text === 'locked' && isLock(value.expression) ? value.expression
+        : ts.isElementAccessExpression(n) && ts.isStringLiteral(n.argumentExpression) && n.argumentExpression.text === 'aria-disabled' ? n.expression : null;
+    if (read) {
+      let up: ts.Node = n;
+      while (ts.isParenthesizedExpression(up.parent)) up = up.parent;
+      const isNegated = ts.isPrefixUnaryExpression(up.parent) && up.parent.operator === ts.SyntaxKind.ExclamationToken;
+      if (isNegated === negated) found = read.getText();
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return found;
+}
+const exits = (statement: ts.Statement): boolean => ts.isReturnStatement(statement) || ts.isThrowStatement(statement)
+  || ts.isBlock(statement) && statement.statements.length > 0 && exits(statement.statements[statement.statements.length - 1]);
+
+/** How the code from `at` up to `boundary` holds a lock: `<lock>.guard(…)` around it, an
+ * `if (<lock>.locked) return` before it, or an `if (!<lock>.locked)` or `<lock>.locked ? … :`
+ * around it. Null: nothing does. */
+const PROMOTE_RUNNERS = new Set(['retryOnPromote', 'whenPerson', 'afterPersonRefusal', 'onPersonPromoted']);
+function lockAround(at: ts.Node, boundary: ts.Node | undefined): string | null {
+  // Up to the unit's own function, and one step past it: `const save = lock.guard((x) => …)`.
+  for (let n: ts.Node = at; n.parent; n = n.parent) {
+    const parent = n.parent;
+    if (ts.isCallExpression(parent) && parent.arguments.includes(n as ts.Expression) && ts.isPropertyAccessExpression(parent.expression)
+      && parent.expression.name.text === 'guard' && isLock(parent.expression.expression)) return `${parent.expression.expression.getText()}.guard`;
+    // Work held for the promote runs only on a tab connected as the person.
+    if (ts.isCallExpression(parent) && parent.arguments.includes(n as ts.Expression) && PROMOTE_RUNNERS.has(calleeName(parent))) return `${calleeName(parent)}()`;
+    if (n === boundary) break;
+    if (ts.isBlock(parent) || ts.isSourceFile(parent)) {
+      const before = (parent.statements as ts.NodeArray<ts.Statement>).slice(0, parent.statements.indexOf(n as ts.Statement));
+      for (const statement of before) {
+        const lock = ts.isIfStatement(statement) && exits(statement.thenStatement) ? lockedRead(statement.expression, false) : null;
+        if (lock) return `${lock}.locked return`;
+      }
+    }
+    if (ts.isIfStatement(parent) && parent.thenStatement === n) { const lock = lockedRead(parent.expression, true); if (lock) return `!${lock}.locked`; }
+    if (ts.isIfStatement(parent) && parent.elseStatement === n) { const lock = lockedRead(parent.expression, false); if (lock) return `${lock}.locked else`; }
+    if (ts.isConditionalExpression(parent) && parent.whenFalse === n) { const lock = lockedRead(parent.condition, false); if (lock) return `${lock}.locked ?`; }
+    if (ts.isConditionalExpression(parent) && parent.whenTrue === n) { const lock = lockedRead(parent.condition, true); if (lock) return `!${lock}.locked ?`; }
+  }
+  return null;
+}
+/** A name bound by a function's parameters (a prop) around `at`. */
+function isLockParam(id: ts.Identifier): boolean {
+  for (let scope: ts.Node | undefined = id.parent; scope; scope = scope.parent) {
+    if (!isFunctionLike(scope) && !ts.isFunctionDeclaration(scope)) continue;
+    for (const param of (scope as ts.FunctionLikeDeclaration).parameters) {
+      if (ts.isIdentifier(param.name) && param.name.text === id.text) return true;
+      if (ts.isObjectBindingPattern(param.name) && param.name.elements.some((el) => ts.isIdentifier(el.name) && el.name.text === id.text)) return true;
+    }
+  }
+  return false;
+}
+/** A const's value, where `name` is declared in a block around `at` (null: none). */
+function constValue(at: ts.Node, name: string): ts.Expression | null {
+  for (let scope: ts.Node | undefined = at.parent; scope; scope = scope.parent) {
+    if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) continue;
+    for (const statement of scope.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      const declaration = statement.declarationList.declarations.find((d) => ts.isIdentifier(d.name) && d.name.text === name);
+      if (declaration) return declaration.initializer ?? null;
+    }
+  }
+  return null;
+}
+/** `<lock>.control(…)`, or a const set to one (`const lockProps = lock.control()`), or what a
+ * component was handed for it: a prop named `lock` that is the control's props (`{...lock}`) or
+ * its `control` (`{...lock(describedBy)}`). */
+function controlCall(expression: ts.Expression): string | null {
+  let e: ts.Expression | null = expression;
+  const handed = (id: ts.Expression) => ts.isIdentifier(id) && /(?:^l|L)ock(?:Props)?$/.test(id.text) && constValue(id, id.text) === null && isLockParam(id);
+  if (handed(e)) return `{...${e.getText()}}`;
+  if (ts.isCallExpression(e) && handed(e.expression)) return `{...${e.expression.getText()}()}`;
+  if (ts.isIdentifier(e)) e = constValue(e, e.text);
+  if (e && ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'control'
+    && isLock(e.expression.expression)) return `${e.expression.expression.getText()}.control()`;
+  return null;
+}
+/** Round 11: a lock taken only while a condition holds (`{...(cond ? lock.control() : {})}`
+ * with `onClick={cond ? lock.guard(f) : () => f()}`): the spread's branch is `<lock>.control()`,
+ * and a handler on the same element is a conditional on the same condition whose branch on the
+ * same side is `<lock>.guard(…)` of the same lock. What the other side sends is the code's own
+ * claim (DeferredRunNotice: the approval is released only when nothing is left). */
+function pairedControl(element: ts.JsxOpeningLikeElement, spread: ts.Expression): string | null {
+  let e = spread;
+  while (ts.isParenthesizedExpression(e)) e = e.expression;
+  if (!ts.isConditionalExpression(e)) return null;
+  const condition = e.condition.getText();
+  for (const [side, branch] of [['whenTrue', e.whenTrue], ['whenFalse', e.whenFalse]] as const) {
+    const control = controlCall(branch);
+    if (!control || !control.endsWith('.control()')) continue;
+    const lock = control.slice(0, -'.control()'.length);
+    for (const property of element.attributes.properties) {
+      if (!ts.isJsxAttribute(property) || !property.initializer || !ts.isJsxExpression(property.initializer)) continue;
+      let handler = property.initializer.expression;
+      while (handler && ts.isParenthesizedExpression(handler)) handler = handler.expression;
+      if (!handler || !ts.isConditionalExpression(handler) || handler.condition.getText() !== condition) continue;
+      const guarded = handler[side];
+      if (ts.isCallExpression(guarded) && ts.isPropertyAccessExpression(guarded.expression) && guarded.expression.name.text === 'guard'
+        && guarded.expression.expression.getText() === lock && isLock(guarded.expression.expression)) return `${lock}.control() when ${condition}`;
+    }
+  }
+  return null;
+}
+/** How a JSX element holds a lock itself: it spreads `<lock>.control(…)`, or its `disabled`
+ * reads `<lock>.locked`. */
+function elementLock(element: ts.JsxOpeningLikeElement): string | null {
+  for (const property of element.attributes.properties) {
+    if (ts.isJsxSpreadAttribute(property)) {
+      const control = controlCall(property.expression) ?? pairedControl(element, property.expression);
+      if (control) return control;
+    } else if (property.name.getText() === 'data-person-lock') {
+      return 'data-person-lock';
+    } else if (ts.isIdentifier(property.name) && property.name.text === 'disabled' && property.initializer
+      && ts.isJsxExpression(property.initializer) && property.initializer.expression) {
+      const lock = lockedRead(property.initializer.expression, false);
+      if (lock) return `disabled={${lock}.locked}`;
+    }
+  }
+  return null;
+}
+
+/** The function a component's tag names (same file, or imported by name or as the default):
+ * its declaration, or the function a const holds (through memo(), forwardRef()). */
+function componentNamed(tag: ts.Identifier): { file: string; fn: ts.SignatureDeclaration } | null {
+  const source = tag.getSourceFile();
+  const own = (file: string, src: ts.SourceFile, name: string): { file: string; fn: ts.SignatureDeclaration } | null => {
+    for (const statement of src.statements) {
+      if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) return { file, fn: statement };
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.name.text !== name || !declaration.initializer) continue;
+        let init: ts.Expression = declaration.initializer;
+        while (ts.isCallExpression(init) && init.arguments[0]) init = init.arguments[0];
+        return isFunctionLike(init) ? { file, fn: init as ts.ArrowFunction } : null;
+      }
+    }
+    return null;
+  };
+  const file = fileOf(source);
+  const local = own(file, source, tag.text);
+  if (local) return local;
+  const bound = importOf(source, tag.text);
+  if (bound?.name) {
+    const target = currentFiles?.get(bound.module);
+    return target ? own(bound.module, target, bound.name) : null;
+  }
+  // A default import.
+  if (!currentFiles) return null;
+  const known = new Set(currentFiles.keys());
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.importClause?.name?.text !== tag.text) continue;
+    const module = resolveModule(file, statement.moduleSpecifier.text, known);
+    const name = module ? frontend().defaults.get(module) : undefined;
+    const target = module ? currentFiles.get(module) : undefined;
+    return module && name && target ? own(module, target, name) : null;
+  }
+  return null;
+}
+
+/** Whether `id` names something imported from `store` (or from a module that leads to it). */
+function importedFrom(id: ts.Identifier, store: string, imports: Map<string, Map<string, Taken>>): boolean {
+  const source = id.getSourceFile();
+  // The store's own hook, in its own file.
+  if (fileOf(source) === store) return source.statements.some((st) => ts.isVariableStatement(st)
+    && st.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === id.text));
+  const bound = importOf(source, id.text);
+  if (!bound) return false;
+  return bound.module === store || !!imports.get(bound.module)?.has(store) || reachesStoreThroughAlias(imports.get(bound.module), store, imports);
+}
+/** Whether a reference reads a store's action off that store: `useX.getState().action`,
+ * `useX((s) => s.action)`, `const { action } = useX()` (or `useX.getState()`), `getState()['action']`,
+ * or off a const that holds the state (`const state = useX.getState(); state.action()`). */
+function storeRead(reference: ts.Identifier, store: string, imports: Map<string, Map<string, Taken>>): boolean {
+  const parent = reference.parent;
+  let host: ts.Expression | undefined;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === reference) host = parent.expression;
+  else if (ts.isElementAccessExpression(parent) && parent.argumentExpression === reference) host = parent.expression;
+  else if (ts.isBindingElement(parent) && (parent.propertyName ?? parent.name) === reference && ts.isVariableDeclaration(parent.parent.parent)) host = parent.parent.parent.initializer;
+  else if (ts.isImportSpecifier(parent)) return false;
+  else return false;
+  const fromHost = (expression: ts.Expression | undefined, depth: number): boolean => {
+    let e = expression;
+    while (e && (ts.isParenthesizedExpression(e) || ts.isAwaitExpression(e) || ts.isNonNullExpression(e) || ts.isAsExpression(e))) e = e.expression;
+    if (!e || depth > 3) return false;
+    if (ts.isCallExpression(e)) {
+      const callee = e.expression;
+      // In the store's own file: zustand's `get().action()`.
+      if (ts.isIdentifier(callee) && callee.text === 'get' && fileOf(reference.getSourceFile()) === store) return true;
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'getState' && ts.isIdentifier(callee.expression)) return importedFrom(callee.expression, store, imports);
+      return ts.isIdentifier(callee) && importedFrom(callee, store, imports);
+    }
+    if (!ts.isIdentifier(e)) return false;
+    const name = e.text;
+    for (let n: ts.Node | undefined = e.parent; n; n = n.parent) {
+      if (isFunctionLike(n)) {
+        const fn = n as ts.ArrowFunction;
+        if (fn.parameters.some((p) => ts.isIdentifier(p.name) && p.name.text === name)) {
+          const call = fn.parent;
+          return ts.isCallExpression(call) && call.arguments[0] === fn && ts.isIdentifier(call.expression) && importedFrom(call.expression, store, imports);
+        }
+      }
+      if (ts.isBlock(n) || ts.isSourceFile(n)) {
+        for (const statement of n.statements) {
+          if (!ts.isVariableStatement(statement)) continue;
+          const declaration = statement.declarationList.declarations.find((d) => ts.isIdentifier(d.name) && d.name.text === name);
+          if (declaration) return fromHost(declaration.initializer, depth + 1);
+        }
+      }
+    }
+    return false;
+  };
+  return fromHost(host, 0);
+}
+
+/**
+ * Round 11 (review 9 lock-sweep LOW-3): from the points where units send a person-only route
+ * (callersOf's `points`) to every JSX attribute whose handler reaches them, through each
+ * function's callers (by name, imports, store actions and selectors, as callersOf follows them),
+ * a prop handed to a component (into that component's use of it), and a member a hook returns
+ * (`krea.signIn`). Each site says how it is locked: `<lock>.guard(…)` around the call, an early
+ * `if (<lock>.locked) return` on the way, the element's `{...<lock>.control()}`, or nothing.
+ */
+export function lockReach(points: { file: string; node: ts.Node }[]): LockReach {
+  const { references, imports } = frontend();
+  const sites: ControlSite[] = [];
+  const open = new Map<string, string[]>();
+  const held: { at: string; locked: string; via: string[] }[] = [];
+  const queue: Step[] = [];
+  const seen = new Set<string>();
+
+  const visitPoint = (file: string, at: ts.Node, locked: string | null, via: string[]) => {
+    const unit = unitOf(file, at);
+    const boundary = unit ? unitBody(unit) : undefined;
+    const here = locked ?? lockAround(at, boundary);
+    // A handler in a JSX attribute inside this unit.
+    let attribute: ts.JsxAttribute | null = null;
+    for (let n: ts.Node | undefined = at; n && n !== boundary; n = n.parent) if (ts.isJsxAttribute(n)) { attribute = n; break; }
+    if (attribute) {
+      const element = attribute.parent.parent;
+      const tag = element.tagName;
+      const line = element.getSourceFile().getLineAndCharacterOfPosition(element.getStart()).line + 1;
+      const name = attribute.name.getText();
+      const lock = here ?? elementLock(element);
+      const custom = ts.isIdentifier(tag) && /^[A-Z]/.test(tag.text);
+      if (!lock && custom) {
+        // A prop handed to a component: its use of the prop is the control.
+        const component = componentNamed(tag as ts.Identifier);
+        const param = component?.fn.parameters[0]?.name;
+        if (component && param && ts.isObjectBindingPattern(param)) {
+          const element = param.elements.find((el) => (el.propertyName ?? el.name).getText() === name && ts.isIdentifier(el.name));
+          if (element) { queue.push({ file: component.file, name: (element.name as ts.Identifier).text, wide: false, node: element, locked: null, via: [`${file}:${line} <${tag.getText()} ${name}>`, ...via] }); return; }
+        } else if (component && param && ts.isIdentifier(param)) {
+          queue.push({ file: component.file, name, wide: false, node: param, locked: null, propsOf: param.text, scope: component.fn, via: [`${file}:${line} <${tag.getText()} ${name}>`, ...via] });
+          return;
+        }
+      }
+      const handler = (attribute.initializer?.getText() ?? '').replace(/\s+/g, ' ').slice(0, 120);
+      sites.push({ file, line, tag: tag.getText(), attribute: name, locked: lock, via, handler });
+      return;
+    }
+    // Held behind a lock on the way: whatever control reaches it from here is locked.
+    if (here) { held.push({ at: `${file}:${at.getSourceFile().getLineAndCharacterOfPosition(at.getStart()).line + 1}`, locked: here, via }); return; }
+    // Rendered (`<Panel />`): it runs on render, not from a control.
+    if ((ts.isJsxOpeningElement(at.parent) || ts.isJsxSelfClosingElement(at.parent)) && at.parent.tagName === at) {
+      open.set(`${file}:${at.getSourceFile().getLineAndCharacterOfPosition(at.getStart()).line + 1} <${at.getText()}>`, via);
+      return;
+    }
+    // A member of an object a function returns (a hook's `{ signIn, check }`).
+    const property = at.parent && (ts.isShorthandPropertyAssignment(at.parent) || ts.isPropertyAssignment(at.parent) && at.parent.initializer === at) ? at.parent : null;
+    if (property && ts.isObjectLiteralExpression(property.parent)) {
+      const object = climbPath(property.parent);
+      const fn = enclosingFunction(object);
+      const returned = !!fn && (ts.isReturnStatement(object.parent) && enclosingFunction(object.parent) === fn || object.parent === fn && (fn as ts.ArrowFunction).body === object);
+      if (returned) { queue.push({ file, name: property.name.getText(), wide: true, node: property, locked: here, member: true, via }); return; }
+    }
+    if (!unit) {
+      // A store's action put back under its own name (`setState({ x: wrap(methods.x) })`): the
+      // same action, whose callers are already followed by that name.
+      let n: ts.Node = at;
+      while (n.parent && !ts.isPropertyAssignment(n.parent) && !ts.isStatement(n.parent)) n = n.parent;
+      if (n.parent && ts.isPropertyAssignment(n.parent) && n.parent.name.getText() === at.getText()) return;
+      open.set(`${file}:${at.getSourceFile().getLineAndCharacterOfPosition(at.getStart()).line + 1}`, via);
+      return;
+    }
+    // Sent while a component renders or a hook runs (an effect, a load on open): no control.
+    if (/^(?:[A-Z]|use[A-Z])/.test(unit.name)) { open.set(`${file}#${unit.name}`, via); return; }
+    // A function a hook (or any non-store function) returns in an object (`disconnect: () => …`):
+    // its callers read it off the result.
+    if ((ts.isPropertyAssignment(unit.node) || ts.isMethodDeclaration(unit.node)) && !isStoreAction(unit) && ts.isObjectLiteralExpression(unit.node.parent)) {
+      const object = climbPath(unit.node.parent);
+      const fn = enclosingFunction(object);
+      if (fn && (ts.isReturnStatement(object.parent) && enclosingFunction(object.parent) === fn || object.parent === fn && (fn as ts.ArrowFunction).body === object)) {
+        queue.push({ file, name: unit.name, wide: true, node: unit.node, locked: here, member: true, via: [`${file}#${unit.name}`, ...via] });
+        return;
+      }
+    }
+    queue.push({ file, name: unit.name, wide: unit.wide, node: unit.node, locked: here, via: [`${file}#${unit.name}`, ...via] });
+  };
+
+  for (const point of points) visitPoint(point.file, point.node, null, []);
+  while (queue.length > 0) {
+    const step = queue.shift()!;
+    const id = `${step.file}#${step.name}`;
+    const key = `${id}${step.member ? '.member' : ''}@${step.node.pos}|${step.locked ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const unitLike: Unit = { file: step.file, name: step.name, wide: step.wide, node: step.node };
+    const scope = step.scope ?? (step.wide ? null : declaringScope(step.node));
+    let followed = 0;
+    for (const reference of references.get(step.name) ?? []) {
+      const parent = reference.node.parent;
+      if (ts.isTypeQueryNode(parent) || reference.node === step.node || ts.isJsxAttribute(parent) && parent.name === reference.node) continue;
+      if (step.member) {
+        // `x.member` or `const { member } = …` in a file that imports the hook's file (or in it).
+        if (reference.file !== step.file && !imports.get(reference.file)?.has(step.file)) continue;
+        if (ts.isPropertyAccessExpression(parent) && parent.name === reference.node) { followed += 1; visitPoint(reference.file, reference.node, step.locked, step.via); continue; }
+        if (ts.isBindingElement(parent) && (parent.propertyName ?? parent.name) === reference.node && ts.isIdentifier(parent.name)) {
+          followed += 1;
+          queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent, locked: step.locked, via: step.via });
+        }
+        continue;
+      }
+      if (!step.wide && reference.file !== step.file) continue;
+      if (scope && !within(reference.node, scope)) continue;
+      // `words.reject` isn't the local `reject`.
+      if (!step.wide && !step.propsOf && ts.isPropertyAccessExpression(parent) && parent.name === reference.node) continue;
+      if (step.propsOf) {
+        if (!(ts.isPropertyAccessExpression(parent) && parent.name === reference.node && ts.isIdentifier(parent.expression) && parent.expression.text === step.propsOf)) continue;
+        followed += 1;
+        visitPoint(reference.file, parent, step.locked, step.via);
+        continue;
+      }
+      if (ts.isExportSpecifier(parent) && parent.propertyName === reference.node) {
+        queue.push({ file: reference.file, name: parent.name.text, wide: true, node: parent, locked: step.locked, via: step.via });
+        followed += 1;
+        continue;
+      }
+      // A store's action is read off that store (callersOf takes any `.action` its importers
+      // read, which is safe for a caller list but names unrelated controls here).
+      if (isStoreAction(unitLike) ? !storeRead(reference.node, step.file, imports)
+        : reference.file !== step.file && !reachesThroughImport(imports.get(reference.file)?.get(step.file), reference.node)) continue;
+      if (ts.isBindingElement(parent) && (parent.propertyName ?? parent.name) === reference.node && ts.isIdentifier(parent.name)) {
+        queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent, locked: step.locked, via: step.via });
+        followed += 1;
+        continue;
+      }
+      if (ts.isImportSpecifier(parent) && parent.propertyName === reference.node) {
+        queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent, locked: step.locked, via: step.via });
+        followed += 1;
+        continue;
+      }
+      if (ts.isImportSpecifier(parent) || ts.isImportClause(parent)) continue;
+      const caller = unitOf(reference.file, reference.node);
+      if (caller && caller.file === step.file && caller.name === step.name && caller.node === step.node) continue;
+      followed += 1;
+      visitPoint(reference.file, reference.node, step.locked, step.via);
+    }
+    if (followed === 0) open.set(id, step.via.slice(1));
+  }
+  // One site once: unlocked if any way to it is.
+  const merged = new Map<string, ControlSite>();
+  for (const site of sites) {
+    const key = `${site.file}:${site.line} <${site.tag}> ${site.attribute}`;
+    const before = merged.get(key);
+    if (!before || before.locked && !site.locked) merged.set(key, site);
+  }
+  return { sites: [...merged.values()], open: [...open].map(([at, via]) => ({ at, via })).sort((a, b) => a.at.localeCompare(b.at)), held };
 }

@@ -155,7 +155,7 @@ async function runNodes(nodeIds: string[], approvalId: string | null): Promise<v
       await graph.executeCluster(withAncestors(nodeIds, graph.edges), options);
     }
   } finally {
-    if (approvalId) await releaseApproval(approvalId);
+    if (approvalId) await releaseOrHold(approvalId);
   }
 }
 
@@ -263,12 +263,12 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const onCanvas = new Set(useGraphStore.getState().nodes.map((node) => node.id));
       const undone = result.runNodeIds.some((nodeId) => !onCanvas.has(nodeId));
       if (result.runNodeIds.length > 0 && undone) {
-        if (result.approvalId) await releaseApproval(result.approvalId);
+        if (result.approvalId) await releaseOrHold(result.approvalId);
       } else if (result.runNodeIds.length > 0 && runsNothing(entry.view)) {
         // Its whole run waits on agents' placeholders, so the button said
         // "Accept" (GM - Design, round 5): no run, no Run history entry, no
         // held run, and the approval goes back (review 5, L1).
-        if (result.approvalId) await releaseApproval(result.approvalId);
+        if (result.approvalId) await releaseOrHold(result.approvalId);
       } else if (result.runNodeIds.length > 0) {
         // A run waiting for its inputs counts as running (review 15, M-B).
         if (useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) {
@@ -334,7 +334,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // A node deleted since Accept makes this a different run; the backend
     // refuses it as changed, and the person can run what is left by hand.
     if (nodeIds.length > 0) await runNodes(nodeIds, deferred.approvalId);
-    else if (deferred.approvalId) await releaseApproval(deferred.approvalId);
+    else if (deferred.approvalId) await releaseOrHold(deferred.approvalId);
   },
 
   dismissDeferred: () => {
@@ -361,7 +361,7 @@ wsClient.subscribe((event) => {
     // Every held run goes, and every approval it held goes back (review 16, L-2).
     const { deferredRun, deferredQueue } = useCanvasProposalsStore.getState();
     useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] });
-    for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseApproval(held.approvalId);
+    for (const held of [deferredRun, ...deferredQueue]) if (held?.approvalId) void releaseOrHold(held.approvalId);
   }
 });
 
@@ -403,6 +403,14 @@ const releasesHeld = new Set<string>(readHeldReleases());
 function holdRelease(approvalId: string): void {
   releasesHeld.add(approvalId);
   writeHeldReleases(releasesHeld);
+}
+
+/** PR #204 round 11: a held run's release (DELETE /api/canvas/approvals/{id}: require_person)
+ * after its run, or in place of one when its nodes were deleted, waits for the promote on a tab
+ * that isn't connected as the person, as Dismiss's does: sent now, the gate refuses it. */
+async function releaseOrHold(approvalId: string): Promise<void> {
+  if (personGateHeld()) holdRelease(approvalId);
+  else await releaseApproval(approvalId);
 }
 
 onPersonPromoted(() => {

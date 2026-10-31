@@ -91,6 +91,12 @@ export interface CopyNotice {
  * 'none' (no Try again; the whole line). */
 export type ProjectRetryOffer = 'redo' | 'reload' | 'none' | 'reloadNebula';
 
+/** PR #204 round 11: Try again redoes a person-only action ("Delete forever", "Empty":
+ * require_person), so it locks on a tab that isn't connected as the person. */
+export function projectRetryPersonOnly(state: { errorRetry: ProjectRetry | null }): boolean {
+  return state.errorRetry?.action === 'purge' || state.errorRetry?.action === 'emptyTrash';
+}
+
 export function projectRetryOffer(state: { error: string | null; errorRetry: ProjectRetry | null }): ProjectRetryOffer {
   if (!state.error || !state.errorRetry) return 'none';
   if (state.errorRetry.action === 'reloadForUpdate') return 'reloadNebula';

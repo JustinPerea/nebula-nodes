@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   antigravityAction,
   createPersonalAgent,
@@ -12,10 +12,11 @@ import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents
 import '../../../styles/personal-agents.css';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
-import { LineText } from '../../LineText';
+import { LineBox } from '../../LineBox';
+import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
-import { useDemotedView } from '../../../hooks/useTabHeld';
+import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -136,8 +137,9 @@ export function PersonalAgentsSection() {
   // line under the heading; Add has its own line (GM's words).
   const rowLock = usePersonLock('change your agents');
   const addLock = usePersonLock('add an agent');
-  // GM r17 item 6 (b): a demoted tab shows what a tab that never connected shows.
-  const { demoted, epoch } = useDemotedView();
+  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows.
+  // PR #204 round 11: the list is read only on a tab connected as the person (usePersonView).
+  const { held: demoted, ready, epoch } = usePersonView();
 
   const load = useCallback(function readAgain() {
     fetchPersonalAgents()
@@ -153,7 +155,12 @@ export function PersonalAgentsSection() {
       });
   }, []);
 
-  useEffect(() => { load(); }, [load, epoch]);
+  useReadAsPerson(load, ready, epoch);
+  // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away the focused row moves focus
+  // to the section's line, not to the page.
+  const sectionRef = useRef<HTMLElement>(null);
+  const handover = useFocusHandover(demoted, () => sectionRef.current,
+    () => document.getElementById('settings-personal-agents-heading'));
 
   // Follow a download or sign-in while it runs.
   const following = !demoted && (list?.agents ?? []).some(personalAgentBusy);
@@ -192,15 +199,16 @@ export function PersonalAgentsSection() {
   const agents = demoted ? [] : (list?.agents ?? []);
   const shownError = demoted ? notConnectedBecause('load your agents') : error;
   return (
-    <section aria-labelledby="settings-personal-agents-heading" data-testid="settings-personal-agents">
-      <div className="settings-label"><h3 id="settings-personal-agents-heading">Personal agents</h3></div>
+    <section aria-labelledby="settings-personal-agents-heading" data-testid="settings-personal-agents" ref={sectionRef} onFocus={handover.onFocus}>
+      <div className="settings-label"><h3 id="settings-personal-agents-heading" tabIndex={-1}>Personal agents</h3></div>
+      {agents.length > 0 && <PersonLockLine lock={rowLock} place="heading" />}
       <p className="settings-hint">
         Chat with your own agent (your login, settings, memory and MCP servers) in the chat panel. Nebula adds its
         canvas tools and counts their runs in the budget for agents outside Nebula&rsquo;s chats. The agent keeps its
         own shell, network and files; Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
       </p>
-      {agents.length > 0 && <PersonLockLine lock={rowLock} />}
-      {shownError && <p className="settings-row__error" role="alert"><LineText text={shownError} /></p>}
+      {/* Round 11 (GM r18 c): the section's own line, in the shared box (components/LineBox). */}
+      <LineBox text={shownError} />
       <div className="settings-list">
         {agents.map((agent) => (
           <div className="settings-pref settings-model-limit" key={agent.id} data-testid="personal-agent-row"
@@ -261,7 +269,7 @@ export function PersonalAgentsSection() {
             <button type="submit" className="settings__button settings__button--primary"
               disabled={busy || !draft.id.trim() || !draft.command.trim()} {...addLock.control()}>Add</button>
           </span>
-          <PersonLockLine lock={addLock} />
+          <PersonLockLine lock={addLock} place="control" />
         </form>
       </div>
     </section>

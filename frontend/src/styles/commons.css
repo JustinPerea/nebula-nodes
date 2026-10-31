@@ -13,6 +13,9 @@ body.app-slava-restraint .commons-scope {
   font-size: 12px;
 }
 
+/* Round 11: the Commons' focus and drafts wrapper (CommonsView) takes no box of its own. */
+.commons-view-root { display: contents; }
+
 body.app-slava-restraint .commons-view {
   --commons-detail-w: 0px;
   position: fixed;
@@ -252,6 +255,23 @@ body.app-slava-restraint .commons-status--budget_exhausted {
 
 body.app-slava-restraint .commons-add {
   position: relative;
+}
+
+/* PR #204 round 11 (GM r18): Add's lock line, directly under Add (the one placement rule), in
+   the flow, ending at Add's right edge. The header scrolls its overflow (workspace-header.css),
+   so a line hung below the row was cut in half and ran under Updates; while it shows, the row
+   grows by its two lines. */
+body.app-slava-restraint .commons-add:has(> .commons-add__held-line) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+body.app-slava-restraint .commons-add__held-line {
+  flex-basis: auto;
+  max-width: 15rem;
+  margin: 0;
+  text-align: right;
 }
 
 body.app-slava-restraint .commons-add__menu {

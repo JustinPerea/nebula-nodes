@@ -1412,3 +1412,202 @@ it). No MCP tool, CLI command, route or server response changed.
   - The Commons on a demoted tab shows the never-connected line and no references; the promote
     reads it again. The demote and promote are the frontend's own calls (staged).
   - Nothing was accepted, rejected, answered, executed, or run against a provider.
+
+## Round 11 (review 9 on f93f2968; GM r18, r19)
+
+### A held tab sent person-only calls on its own (section 1)
+- Root cause. `GET /api/settings` is open to every tab. When settings.json has no
+  `runCostConfirmUsd` (a fresh or older file), `lib/runCostConfirm.applySavedRunCostConfirm`
+  carries this browser's stored threshold over with `PUT /api/settings`, from every read that
+  lacks it: the app's load, each Settings open, `nebula:settings-saved` and the run dialog's
+  refresh. It had no person check, and `PUT /api/settings` is `require_person`, so a held tab got
+  403 `person_required`. Its `.catch` reset `migration = null` on any error, so every later read
+  sent it again (3 to 5 times a session live). The result wasn't lost, but the promote didn't
+  redo it either: it waited for the next settings read made as the person.
+- The same shape, found by loading a held tab live and opening every surface (Settings' three
+  tabs, the Updates panel, the Agents list, the chat, Creator Studio, the Commons, Projects, then
+  20 s idle): Settings' connected agent apps (`GET /api/agent/spend/apps`) and personal agents
+  (`GET /api/personal-agents`), and the chat's agent list (`GET /api/personal-agents`, on open),
+  each read only to be refused and show the not-connected line. Nothing else was refused: the
+  Commons sends nothing on a never-connected tab, and the Updates panel, Creator Studio and
+  Projects read only open routes.
+- The fix. Person-only work the app starts on its own runs only on a tab connected as the
+  person (`lib/personWork`: `whenPerson` runs it now, or keeps it by key and runs it once on the
+  promote; `afterPersonRefusal` waits for the next promote after a refusal, never retrying on
+  the next read; only a refusal of a request sent before a promote that already happened goes
+  again at once). The carry-over: while the tab isn't confirmed, it is marked waiting; on the
+  promote it reads the settings again first (another tab may have carried it over: then it only
+  applies the value) and sends the PUT once. A refusal while sending waits for the next promote;
+  another failure (offline) still goes again on the next read. Two tabs: the re-read means the
+  second finds the value and writes nothing. The wait is silent (GM r19 item 5).
+- The three lists read only on a tab connected as the person (`hooks/useTabHeld usePersonView`
+  and `useReadAsPerson`: read once per held view that ended), and show the not-connected line
+  locally on a held tab, with no request (GM r19 item 4). The chat's list waits for the same.
+- Ratchet: `tests/presenceRound11.heldLoad.test.tsx` renders the app as a held tab, with every
+  request recorded at `apiFetch` and the person-only routes from the route scan refused, opens
+  each Settings tab, the chat and Projects, and fails on any request the gate would refuse. On
+  f93f2968 it fails with two `PUT /api/settings`, `GET /api/agent/spend/apps` and two
+  `GET /api/personal-agents`. A second test pins the promote: one more read, then exactly one
+  PUT. `tests/runCostConfirm.round11.test.ts` covers the person tab, the held tab, an unanswered
+  load, two tabs, a refusal while sending (no retry on reads, once on the promote), a stale
+  refusal and an offline failure.
+- No change for agents: no route, gate or answer changed; only when this tab sends.
+
+### GM r18
+- One placement rule, in the shared code: `PersonLockLine` takes a required `place`
+  ('heading': right under its group's heading; 'tab': first in the tab; 'control': right under
+  the control it locks, or closing the row of controls it locks), and `lib/lockPlacement
+  lockPlacementProblems` reads it back from the page: the place, that a control points at the
+  line, and that every locked control past its first moment points at a line on screen. The
+  held-load test and the live check run it on every screen they open.
+- a. Providers: one lock, "You can change provider settings when this tab is connected as you.",
+  under the first heading ("Connect a provider · 23", or "Connected · N" when a provider is
+  connected). It replaces the keys line and the Krea sign-in line; every key row and the Krea
+  row point at it (KreaSignInRow takes the lock from ProvidersTab).
+- b. Preferences: Job notifications lives in this browser only (`lib/jobNotifications`,
+  localStorage), so it stays live; the run cost's line is "You can change this when this tab is
+  connected as you.", inside the box right under it, the select described by it.
+- c. Personal agents' and the connected apps' load lines go in the shared box
+  (`components/LineBox`: `data-line-box`, neutral with a because line, the warning look for any
+  other failure). Why the ratchet missed it: `becauseLine.ratchet` checks that a box drawing a
+  warning carries the mark; a line with no box at all passed. The held-load test now fails any
+  because line on its screens outside a `data-line-box`. The shared because style sets the sans
+  face on the line and its box (`styles/becauseLine.css`); raw details and code keep mono.
+  The shared cascade helper (`tests/helpers/cssCascade`) no longer drops `data-line-because`
+  in its loose match: it marks a line's words, not a state a control takes, so that sans rule
+  isn't read as the pin edge's own font.
+- d. "Connecting…" shows only while a read of the status is on its way: not on a held tab
+  (it makes no attempt) and not once the read was refused.
+- Projects: a card shows no counts while this tab couldn't load the work
+  (`ProjectHome workLoaded`, from the store's `initialized`). New project, rename and the card's
+  trash are open routes (POST /api/projects, PATCH and DELETE /api/projects/{id}), so they stay
+  live; only Delete forever and Empty are the person's, and they lock already. Live on a held
+  tab whose work loaded: rename sent `PUT /api/projects/{id}`, New project sent `POST
+  /api/projects` and opened it, the card's trash sent `DELETE /api/projects/{id}` with its Undo
+  toast; nothing was refused. In two of the live runs the work didn't load at all, and not
+  because of the hold: the store said "Couldn't load your projects. Nebula's backend isn't
+  running. Start it, then reload." while the isolated backend was up (the app's first load
+  raced it at a load average near 20). There the screen had no cards, so rename and trash had
+  nothing to act on, and New project sent nothing: the store's create waits for the load
+  (`initialized`), by design since round 3b, with Try again beside the error. Once the check
+  had gone home through `goHome` the error was gone (`error: null`, `initialized: false`), and
+  the screen showed "Your first project starts here" with a New project that does nothing.
+  That is any tab whose first load failed, held or not; it isn't changed in this round and is
+  reported to main.
+- The Commons: adding (intake/files, intake/url, intake/moodboards: `human_dep`) locks Add with
+  "You can add references when this tab is connected as you." under it; "New collection…" in
+  "Add to" is disabled while locked and does nothing (the select stays live; no new line,
+  GM-confirmed). A drop onto the grid is taken (the browser doesn't open the file), with no
+  highlight and nothing sent, and the empty-state line is gone while locked. Add's line hangs under Add,
+  ending at its right edge (it ran off screen and under Updates starting from its left). The
+  toolbar ratchet (`presenceRound7.toolbar`) now lets a plain `PersonLockLine` (its lock, place
+  and class, nothing else) sit in a row: it is the control's own description, made from its
+  verb, never a refusal; anything more on it still fails. The Commons' own error line
+  (`CommonsErrorLine`) is the shared box (`data-line-box`): its rail and fill drew one, and the
+  live check found its because line outside a box.
+
+### Review 9 and GM r19
+- Locked controls look locked (MEDIUM-1, GM r19 1): one rule set in `styles/disabled-buttons.css`
+  keyed on `[data-person-lock]:not([data-held-pending])`, held through hover, press and focus:
+  buttons take the shared grey label and edge with no fill (a listed filled style keeps its grey
+  fill), a select or input keeps its value in `--disabled-label`, a switch takes the 0.06 edge
+  and a grey knob (on still reads by the knob's side and a faint fill). Locked controls stay
+  `aria-disabled` and focusable. `lockPlacementProblems` fails a locked element no rule covers;
+  `tests/presenceRound11.lockLook.test.ts` reads the rules; the live check computes them.
+- The handover flash (MEDIUM-2 → LOW): while a newly registered fix line waits for its first
+  observer entry, the answer on screen holds (`notConnectedLine settle`), so A → B across
+  elements, and a ternary swapping two LineTexts on one element, neither flash the notice nor
+  announce. The entry always comes; a line out of view then brings the notice back.
+- Drafts and focus (MEDIUM-3, GM r19 2): the Commons keeps the search, filters, URL draft, open
+  Add menu, section, open reference, membership notes and keyword drafts across the demote's and
+  the promote's remount (`commons/commonsDrafts`, above the keyed body). When a remount or a
+  demote takes away the focused control, `hooks/useFocusHandover` moves focus to the same control
+  if it is back (by its label), else the section's lock or not-connected line (`tabIndex -1`,
+  `data-focus-line`), else its heading; never while focus is on a control that's still there.
+  Used by the Commons, Personal agents and Agent spending.
+- The demote's 150 ms (gates-trace MEDIUM-1): `personSession` stamps when the hold began and
+  tells subscribers when 150 ms have passed (`personHeldSettled`, `personDemotedSettled`), so a
+  view that mounts on a tab demoted long ago is demoted from its first frame. `commonsApi.send`
+  reads it directly, so a call sent before the view renders is held too, and the view's own flag
+  clears when it unmounts (a test found it outliving the view). `usePersonView` uses the same
+  clock. The other `useHeldLook` users time a moment of their own (a retry, a clash answer).
+- The key-added Undo (LOW-1) locks with the providers' words, its line under it.
+- The Update arrival card with an open ask has one line, "You can review or dismiss this…" (or
+  "answer", following the card's own button), both its buttons described by it; with no ask, ×'s
+  own line sits right under ×. Two older tests expected "answer this" on the card and follow it.
+- Trace and scan (gates-trace LOW-1 to LOW-3, NITs; lock-sweep LOW-2, LOW-3, LOW-6):
+  - The route scan (`tests/personGateRoutes.py`) caches its fill lookups and keys a function's
+    own containers by that function (another handler's local `checks` no longer pools by bare
+    name; `self.x`, aliases and `global` names resolve). Its output is byte-identical; it takes
+    3.8 s, not 7.6 to 9.9 s (the Python scan was the slow part). The round 5 timeout is back to
+    30 s and COMPOSED is empty.
+  - `POST /api/trash/empty` is person-only: the scan now reads past an `if` whose branches can't
+    return. Exact counts: 67 gated main and Krea routes, 41 of them person-only (40 before) and
+    26 not; 33 Commons routes (`human_dep`); 74 person-only in all.
+  - The tracer (`tests/personGatedCallers.ts`) reads a helper call inside a longer path, an
+    imported or re-exported const, a namespace member, a parameter wrapper and an imported
+    `/api` prefix; a `let` holding a const, an unreadable `/api` join, a held composed call and a
+    wrapper that reads the answer itself are listed as untraced, each with its reason. A
+    self-referential const no longer overflows the stack. The four agent-notes routes now trace
+    to `agentNotesStore`, so UNTRACED is gone.
+  - Controls, not host files (lock-sweep LOW-3): `lockReach()` walks from each sending unit to
+    every JSX control that reaches it and reads how it is locked; `personLockSweep.ratchet`
+    fails any control on the way that isn't. It found two: the held run's Run, which with every
+    node deleted only releases the approval (`DELETE /api/canvas/approvals/{id}`), and Projects'
+    Try again after a failed Delete forever or Empty. Run now locks with Dismiss in that case
+    (pointing at its line; with nodes left it runs, which isn't person-only, and stays live), and
+    every release the store sends goes through `releaseOrHold`, which keeps it for the promote
+    on a held tab as Dismiss already did. Try again locks with "You can delete projects for good
+    when this tab is connected as you." when it would redo either (`projectRetryPersonOnly`).
+    `tests/presenceRound11.heldRetry.test.tsx` covers both. The App and Settings CALLERS reasons
+    are rewritten.
+  - Bare lines (lock-sweep LOW-6): P1 needs the words to be the LineText's own; P2 exempts only
+    the two Update text classes; P3 fails a `title` or `aria-label` with "connected as you",
+    set at render or after. Two older fixtures used the forms these now fail (round 7's locked
+    form with its line in a tooltip, round 9's agent note without its class) and follow src.
+  - New: `presenceRound11.routes`, `.trace`, `.bareLines`; 39 of their 52 tests fail on
+    f93f2968 (the rest are negative controls and pins); 38 of 39 mutants killed (the survivor is
+    a redundant cross-file walk `callersOf` already covers).
+- Behaviour tests for each swept control (LOW-4): `presenceRound11.sweptSettings` (11) and
+  `.sweptSurfaces` (9). Each control, held past its first moment, is aria-disabled and
+  focusable, has no tooltip, points at one line with its verb, and sends nothing on click,
+  change or submit; after the promote the same action sends. Covered: Add key, Save key (a draft
+  typed before the demote doesn't save), Krea sign-in and default, the providers' one line,
+  the storage folder (a held draft doesn't save on Enter or blur), the telemetry switch, the run
+  cost, the connected apps' limit and colour, the personal agent warning's accept, Enhance, both
+  trashes' Empty and Delete forever (a confirm armed before the demote sends nothing), the
+  Inspector's model picker and star (a refused save puts the star back). The 12 named surviving
+  mutants (M5, M13 to M22, M25) are killed.
+
+### Agent-visible
+Nothing. Every route, gate and answer is unchanged; only when this tab sends, how its locks look,
+and where its lines sit changed.
+
+### Round 11 verification
+- Base: f93f2968. Nothing committed, pushed or stashed; full suites left to CI.
+- On f93f2968 the new tests fail: the held-load ratchet (five refused requests); 27 of 46 in the
+  run-cost, demote, focus, handover, lock-look (it can't load), held-retry and swept files (the
+  swept surfaces file passes 9 of 9 there: it pins locks that already existed, to kill
+  mutants); and 39 of the 52 trace, route and bare-line tests (the rest are controls and pins).
+- Mutations: every new guard was mutated and each mutant caught (the run-cost wait, the lists'
+  held reads, placement, the lock look, the handover hold, drafts, focus, the 150 ms clock,
+  Commons' Add, New collection, drop and flag reset, the Undo lock, the Update card's line, the
+  card counts, the held run's Run and release, Try again and its rule, the Commons line's box);
+  the swept lane's 12 and the trace lane's 38 of 39 (the one left is redundant).
+- Gates: `tsc -b --noEmit` and eslint on the 66 changed files are clean. Focused vitest on two
+  workers over 136 affected files: 1,756 of 1,760 with Errors 0; three were timeouts at a load
+  average near 20 and passed alone, and one was real (the toolbar ratchet and Add's line, fixed
+  as above). The 21 files changed after that ran again: 233 passed, 3 timed out and one file's
+  setup hook timed out (load average near 36); each of the four files passed alone. The copy
+  ratchets (`tests/lib/errorCopy.namedLine`, `.sweep`, `errorCopy`, `.typeError`) and the lib
+  tests that name a touched file (27 files) pass 645 of 645; no new hand-built heading and
+  reason line was added.
+- Live on 8795/5795 (8000-8010, 5173 and every other host blocked, canaries to 8000, 8001,
+  5173 and a `.invalid` host refused, keys unset): 30 of 30 in the last full run, after fixes
+  the runs found (Add's line cut off under the header, the Commons line outside a box, the
+  preferences line's inset, and harness steps). A held tab's load sent no person-only request;
+  the promote sent exactly one `PUT /api/settings` (an 8 s wait missed it once at a load
+  average near 40; with up to 30 s it passed in every run). Nothing was accepted, rejected,
+  answered, executed or run against a provider. Shots: `agent-presence/fu3k/` in the scratch
+  folder, 11, no two alike; the Projects shot shows counts because the held tab's work loaded
+  (the no-counts state is in the unit tests).

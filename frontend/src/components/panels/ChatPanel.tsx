@@ -61,6 +61,7 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { usePersonView } from '../../hooks/useTabHeld';
 
 type ChatAgent = ChatAgentId;
 /** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
@@ -570,8 +571,11 @@ export function ChatPanel() {
     catch { /* Browsing without persistent storage still works. */ }
   }, [selection]);
 
+  // PR #204 round 11: the list of personal agents is the person's to read. A tab that isn't
+  // connected as the person doesn't ask (it would only be refused); it reads on the promote.
+  const { ready: personReady } = usePersonView();
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !personReady) return;
     let cancelled = false;
     const load = () => {
       fetchPersonalAgents()
@@ -581,7 +585,7 @@ export function ChatPanel() {
     load();
     window.addEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load);
     return () => { cancelled = true; window.removeEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load); };
-  }, [visible]);
+  }, [visible, personReady]);
 
   useEffect(() => {
     if (!visible || !providerAgent) return;
@@ -2145,7 +2149,7 @@ export function ChatPanel() {
                       Device Code
                     </button>
                   </div>
-                  <PersonLockLine lock={codexLock} />
+                  <PersonLockLine lock={codexLock} place="control" />
                   {(codexLoginState || codexLoginError) && (
                     <div className="chat-panel__connect-progress">
                       <LineText text={codexLoginError || codexLoginState?.message} />

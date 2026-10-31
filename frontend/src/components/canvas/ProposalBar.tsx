@@ -338,7 +338,7 @@ export function ProposalBar() {
             {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
           </button>
         </div>
-        <PersonLockLine lock={gate} className="proposal-bar__held-line" />
+        <PersonLockLine lock={gate} place="control" className="proposal-bar__held-line" />
       </div>
     </InNoticeRegion>
   );

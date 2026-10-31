@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { useCommonsDraft } from './commonsDraftsContext';
 import { commonsApi } from '../../lib/commonsApi';
 import { wsClient } from '../../lib/wsClient';
 import { ProposalsFor } from '../proposals/ProposalsFor';
@@ -70,7 +71,7 @@ function Membership({ assetId, membership, run }: {
   membership: MembershipDetail;
   run: (work: () => Promise<unknown>) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useCommonsDraft(`note:${assetId}:${membership.id}`, '');
   const [posting, setPosting] = useState(false);
   const postingRef = useRef(false);
   return (
@@ -167,7 +168,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const [detail, setDetail] = useState<AssetDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftBox, setDraftBox] = useState<Box | null>(null);
-  const [keywordDraft, setKeywordDraft] = useState('');
+  const [keywordDraft, setKeywordDraft] = useCommonsDraft(`keyword:${assetId}`, '');
   const [frameIndex, setFrameIndex] = useState(0);
   const dragStart = useRef<[number, number] | null>(null);
   const [ask, promptElement] = useCommonsPrompt();

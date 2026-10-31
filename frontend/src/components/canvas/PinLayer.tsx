@@ -171,7 +171,7 @@ function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number })
             <Trash2 size={12} aria-hidden="true" />
             <span>Delete</span>
           </button>
-          <PersonLockLine lock={deleteLock} className="canvas-pin__held-line" />
+          <PersonLockLine lock={deleteLock} place="control" className="canvas-pin__held-line" />
         </div>
       )}
     </div>

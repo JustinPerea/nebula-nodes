@@ -15,6 +15,7 @@ import { usePersonLock } from '../../../hooks/usePersonLock';
 import { formatSpentUsd } from '../../../lib/pricing';
 import { clearSetterOnPromote } from '../../../lib/clearsOnPromote';
 import { LineText } from '../../LineText';
+import { LineBox } from '../../LineBox';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
@@ -225,14 +226,14 @@ export function ConnectedApps({ view, loadError, onChanged }: {
     <div className="settings-apps" aria-labelledby="settings-apps-heading" role="group">
       <div className="settings-apps__head">
         <h4 id="settings-apps-heading" className="settings-apps__title">Connect your agent</h4>
+        {apps.length > 0 && <PersonLockLine lock={rowLock} place="heading" />}
         <p className="settings-hint" id="settings-apps-help">
           Let an agent you already use work on this canvas through Nebula&rsquo;s MCP server. It keeps its own memory
           and tools, shows up as a named cursor, and gets its own daily limit inside &ldquo;Agents outside Nebula
           chats&rdquo;. Revoke a token you no longer use.
         </p>
       </div>
-      {apps.length > 0 && <PersonLockLine lock={rowLock} />}
-      {loadError && <p className="settings-row__error" role="alert"><LineText text={loadError} /></p>}
+      <LineBox text={loadError} />
       {!available && view?.connect?.reason && (
         <p className="settings-hint" role="note">{view.connect.reason} You can still make a plain token below.</p>
       )}
@@ -309,7 +310,7 @@ export function ConnectedApps({ view, loadError, onChanged }: {
               {available ? 'Connect' : 'Create token'}
             </button>
           </span>
-          <PersonLockLine lock={connectLock} className="settings-apps__held-line" />
+          <PersonLockLine lock={connectLock} place="control" className="settings-apps__held-line" />
         </form>
       </div>
       {made?.setup && (

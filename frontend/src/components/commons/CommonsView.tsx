@@ -35,6 +35,12 @@ import { isOfflineRefusal, refuseEditWhileOffline } from '../../lib/backendConne
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { CommonsDraftsProvider } from './commonsDrafts';
+import { useCommonsDraft } from './commonsDraftsContext';
+import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { useFocusHandover } from '../../hooks/useFocusHandover';
+import { PersonLockLine } from '../PersonLock';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
 type PageResult = Extract<UrlAddResult, { kind: 'page' }>;
@@ -186,9 +192,14 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 
 /** Round 16 (L4): offline the Commons is read-only like the canvas. Start
  * is disabled with the offline mark; Stop stays, since it only ends work. */
-export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus | null; onStart: () => void; onStop: () => void }) {
+export function StatusLine({ status, connecting = true, onStart, onStop }: {
+  status: CommonsStatus | null; connecting?: boolean; onStart: () => void; onStop: () => void;
+}) {
   const readOnly = useBackendOffline();
   if (!status) {
+    // PR #204 round 11 (GM r18 d): "Connecting…" only while a read of the status is on its way
+    // (the first one, or right after the promote), never once it was refused: the banner says why.
+    if (!connecting) return null;
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
   if (status.evaluation_waiting) {
@@ -291,7 +302,20 @@ export function CommonsView() {
   // Set while rendering, before the panes below mount and load: an effect here would run after
   // theirs. It only mirrors `demoted`, so a second render sets the same value.
   holdCommonsCalls(demoted);
-  return <CommonsViewBody key={demoted ? 'demoted' : `live-${epoch}`} />;
+  // Round 11: the flag is the view's; it goes with the view (commonsApi reads the session itself).
+  useEffect(() => () => holdCommonsCalls(false), []);
+  // Round 11 (review 9 MEDIUM-3, GM r19 item 2): the drafts live above the key, and focus that
+  // a remount takes away moves to the same control, the not-connected line, or the heading.
+  const root = useRef<HTMLDivElement>(null);
+  const handover = useFocusHandover(`${demoted}-${epoch}`, () => root.current,
+    () => root.current?.querySelector<HTMLElement>('[data-workspace-heading]') ?? null);
+  return (
+    <CommonsDraftsProvider>
+      <div ref={root} className="commons-view-root" onFocus={handover.onFocus}>
+        <CommonsViewBody key={demoted ? 'demoted' : `live-${epoch}`} />
+      </div>
+    </CommonsDraftsProvider>
+  );
 }
 
 function CommonsViewBody() {
@@ -307,7 +331,7 @@ function CommonsViewBody() {
       window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (rest ? `#${rest}` : ''));
     }
   };
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useCommonsDraft<Tab>('tab', 'all');
   const folded = useToolbarFolds();
   const foldFocus = useFoldFocusHandoff(folded, tab);
   // Blind labeling and Agent review stay mounted once opened, hidden while
@@ -342,21 +366,25 @@ function CommonsViewBody() {
     window.addEventListener('hashchange', stay);
     return () => window.removeEventListener('hashchange', stay);
   }, [leave.hold, request, busyFor]);
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [filters, setFilters] = useCommonsDraft<FilterState>('filters', EMPTY_FILTERS);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useCommonsDraft<string | null>('selected', null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [target, setTarget] = useState('');
   const [status, setStatus] = useState<CommonsStatus | null>(null);
+  // Whether the last read of the status failed (refused on a held tab, say): no "Connecting…".
+  // A held tab makes no attempt at all (its Commons reads answer here, unsent).
+  const [statusFailed, setStatusFailed] = useState(false);
+  const gateHeld = useSyncExternalStore(subscribePersonGate, personGateHeld, personGateHeld);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** The files the last upload couldn't add, each "Couldn’t upload {filename}."
    * over its reason (GM, error-copy round 2). Their own list: the refresh
    * after an upload must not clear them, as it clears a search's error. */
   const [uploadFailures, setUploadFailures] = useState<FailureCopy[]>([]);
-  const [addOpen, setAddOpen] = useState(false);
-  const [urlDraft, setUrlDraft] = useState('');
+  const [addOpen, setAddOpen] = useCommonsDraft('addOpen', false);
+  const [urlDraft, setUrlDraft] = useCommonsDraft('url', '');
   const [page, setPage] = useState<PageResult | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [ask, promptElement] = useCommonsPrompt();
@@ -370,6 +398,10 @@ function CommonsViewBody() {
     [proposedIds, heldCommons]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+  // PR #204 round 11 (GM r18): adding (files, a URL, moodboards: intake/*, human_dep) is the
+  // person's alone, so Add locks on a tab that isn't connected as you, its line under it, and a
+  // drop onto the grid does nothing (nothing sent, the browser doesn't open the file).
+  const addLock = usePersonLock('add references');
   // A load's failure (the collections, the worker status, a search) is kept
   // apart from an action's, so it can hide while Nebula is offline and be
   // checked again on reconnect (GM, PR #198 r2: "Couldn’t check the Commons
@@ -418,7 +450,13 @@ function CommonsViewBody() {
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => { if (!cancelled) setStatus(s); }, (e: unknown) => { if (!cancelled) loadFailed(e, "Couldn’t load the library status.", { reload: true }); });
+    const poll = () => commonsApi.status().then((s) => {
+      if (!cancelled) { setStatus(s); setStatusFailed(false); }
+    }, (e: unknown) => {
+      if (!cancelled) { setStatusFailed(true); loadFailed(e, "Couldn’t load the library status.", { reload: true }); }
+    });
+    // A new round of reads (mount, a refresh, the promote's reload) is an attempt again.
+    setStatusFailed(false);
     poll();
     const timer = window.setInterval(poll, STATUS_POLL_MS);
     return () => {
@@ -459,6 +497,9 @@ function CommonsViewBody() {
       setTarget(value);
       return;
     }
+    // Round 11: a new collection (POST /api/commons/collections, human_dep) is the person's:
+    // locked with Add, the option disabled and the choice doing nothing.
+    if (addLock.locked) return;
     // A new collection is a write: offline the choice only pulses the banner.
     if (refuseEditWhileOffline()) return;
     const name = await ask('New collection name');
@@ -479,6 +520,7 @@ function CommonsViewBody() {
   };
 
   const upload = async (files: File[]) => {
+    if (addLock.locked) return;
     // A drop onto the grid offline is an edit: it only pulses the banner.
     if (refuseEditWhileOffline()) return;
     const collectionId = requireTarget();
@@ -560,9 +602,12 @@ function CommonsViewBody() {
   // An action's failure first; a load's only while Nebula is online.
   const shownError = error ?? shownLoadError;
 
-  const emptyHint = tab === 'inbox'
-    ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
-    : 'No matches. Drop images or videos here, or use Add.';
+  // GM r18: on a tab that isn't connected as you nothing was searched and a drop won't add, so
+  // the area stays empty while the banner explains.
+  const emptyHint = addLock.locked ? ''
+    : tab === 'inbox'
+      ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
+      : 'No matches. Drop images or videos here, or use Add.';
 
   return (
     <div className={`commons-view commons-scope${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
@@ -598,18 +643,20 @@ function CommonsViewBody() {
           <select value={target} onChange={(event) => void chooseTarget(event.target.value)}>
             {collections.length === 0 && <option value="">No collections</option>}
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            <option value={NEW_COLLECTION}>New collection…</option>
+            {/* Round 11: locked with Add (its line covers it); picking a target stays live. */}
+            <option value={NEW_COLLECTION} disabled={addLock.locked}>New collection…</option>
           </select>
         </label>
         <div className="commons-add">
           <button
-            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly}
-            disabled={readOnly} {...offlineMark(readOnly)}
-            onClick={() => setAddOpen((open) => !open)}
+            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly && !addLock.locked}
+            disabled={readOnly} {...offlineMark(readOnly)} {...addLock.control()}
+            onClick={addLock.guard(() => setAddOpen((open) => !open))}
           >
             Add
           </button>
-          {addOpen && !readOnly && (
+          <PersonLockLine lock={addLock} place="control" className="commons-add__held-line" />
+          {addOpen && !readOnly && !addLock.locked && (
             <div className="commons-add__menu" role="menu">
               <button
                 type="button" role="menuitem" className="commons-button"
@@ -646,6 +693,7 @@ function CommonsViewBody() {
         {/* The status takes the row's free room itself (commons.css): no spacer. */}
         <StatusLine
           status={status}
+          connecting={!statusFailed && !gateHeld}
           onStart={() => workerAction(commonsApi.workerStart)}
           onStop={() => workerAction(commonsApi.workerStop)}
         />
@@ -711,6 +759,7 @@ function CommonsViewBody() {
               emptyHint={emptyHint}
               onOpen={(row) => setSelectedId(row.id)}
               onDropFiles={(files) => void upload(files)}
+              dropLocked={addLock.locked}
               proposed={proposed}
             />
             {rows.length === 20 && <p className="commons-meta">Showing the top 20. Narrow the search to see others.</p>}

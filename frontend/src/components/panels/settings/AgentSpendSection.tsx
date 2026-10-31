@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
 import { getOutsideSpend, type OutsideSpend } from '../../../lib/api';
@@ -14,7 +15,7 @@ import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../
 import { LineText } from '../../LineText';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
-import { useDemotedView } from '../../../hooks/useTabHeld';
+import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -54,12 +55,13 @@ function useOutsideSpend() {
         retryOnPromote(exc, 'settings.spend-load', () => { readAgain(); }); // clears-on-promote: settings.spend-load-retry
       });
   }, []);
-  // GM r17 item 6 (b): a demoted tab shows what a tab that never connected shows (the list is
-  // the person's to read), and reads it again after the promote.
-  const { demoted, epoch } = useDemotedView();
-  useEffect(() => { reload(); }, [reload, epoch]);
-  if (demoted) return { view: null, error: notConnectedBecause('load the connected apps'), reload };
-  return { view, error, reload };
+  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows (the
+  // list is the person's to read). PR #204 round 11: and it doesn't ask, only to be refused: the
+  // list is read on a tab connected as the person, again after a held view ends.
+  const { held, ready, epoch } = usePersonView();
+  useReadAsPerson(reload, ready, epoch);
+  if (held) return { view: null, error: notConnectedBecause('load the connected apps'), reload, held };
+  return { view, error, reload, held };
 }
 
 function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, onChange, describedBy, lock }: {
@@ -95,6 +97,11 @@ export function AgentSpendSection() {
   const error = useSettingsDraftStore((s) => s.errors.agentSpend);
   const perRun = useUIStore((s) => s.runCostConfirmUsd);
   const outside = useOutsideSpend();
+  // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
+  // focus to the section's line, not to the page.
+  const sectionRef = useRef<HTMLElement>(null);
+  const handover = useFocusHandover(outside.held, () => sectionRef.current,
+    () => document.getElementById('settings-agent-spend-heading'));
   // PR #204 round 10 (GM r15, r17 item 1): every limit is PUT /api/settings, the person's alone,
   // so they lock as a group, with one line under the heading.
   const lock = usePersonLock('change limits');
@@ -123,9 +130,9 @@ export function AgentSpendSection() {
     (NODE_DEFINITIONS[a]?.displayName ?? a).localeCompare(NODE_DEFINITIONS[b]?.displayName ?? b));
 
   return (
-    <section aria-labelledby="settings-agent-spend-heading">
-      <div className="settings-label"><h3 id="settings-agent-spend-heading">Agent spending</h3></div>
-      <PersonLockLine lock={lock} />
+    <section aria-labelledby="settings-agent-spend-heading" ref={sectionRef} onFocus={handover.onFocus}>
+      <div className="settings-label"><h3 id="settings-agent-spend-heading" tabIndex={-1}>Agent spending</h3></div>
+      <PersonLockLine lock={lock} place="heading" />
       <p className="settings-hint" id="settings-agent-spend-help">
         Agents must ask before going over these, and before any node without a published price.
         Your own runs aren&rsquo;t limited.{' '}

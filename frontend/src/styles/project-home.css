@@ -240,3 +240,6 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
   body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }
+/* PR #204 round 11: Try again's person lock line (a "Delete forever" or "Empty" to redo) closes the row. */
+body.app-slava-restraint .project-home__error:has(.person-lock-line) { flex-wrap: wrap; }
+body.app-slava-restraint .project-home__error > .person-lock-line { flex-basis: 100%; margin: 0; }

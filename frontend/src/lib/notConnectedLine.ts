@@ -133,9 +133,20 @@ function computeFixLine(): FixLine | null {
   return first ? { text: lineOf(first)!.text, live: first.closest(LIVE) !== null } : null;
 }
 
+/** A fix line registered on screen that the observer hasn't answered for yet. */
+function awaitingFirstEntry(): boolean {
+  return ioAvailable() && [...owners.keys()].some((element) => lineOf(element)?.kind === 'fix'
+    && element.isConnected && !inView.has(element));
+}
+
 function settle() {
   frame = 0;
   const next = computeFixLine();
+  // PR #204 round 11 (review 9 lock-sweep MEDIUM-2): a line handing over to another element (one
+  // unregisters and the next registers in the same commit) keeps the answer on screen until the
+  // new element's first observer entry, so the general notice doesn't flash back for a moment
+  // and isn't announced again. The entry always comes, and then this settles for real.
+  if (next === null && cached !== null && awaitingFirstEntry()) return;
   if (same(next, cached)) return;
   cached = next;
   listeners.forEach((listener) => listener());

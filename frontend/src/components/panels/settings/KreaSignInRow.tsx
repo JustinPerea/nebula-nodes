@@ -75,7 +75,7 @@ function KreaPlans() {
           {...trialLock.control()} onClick={trialLock.guard(() => run(async () => setTrialUrl(await startKreaTrial())))}>Start a free Pro trial</button>}
         {trialUrl && <a className="settings__button" href={trialUrl} target="_blank" rel="noopener noreferrer">Open trial checkout ↗</a>}
       </div>
-      {plans.trialAvailable && !trialUrl && <PersonLockLine lock={trialLock} />}
+      {plans.trialAvailable && !trialUrl && <PersonLockLine lock={trialLock} place="control" />}
       {trialUrl && <p className="settings-hint">Krea asks for a card on its checkout page. The trial converts to Pro unless you cancel.</p>}
       {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
     </div>
@@ -105,7 +105,7 @@ function KreaDefault({ mode, lock }: { mode: KreaConnectionMode; lock: PersonLoc
   );
 }
 
-export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: KreaConnectionMode }) {
+export function KreaSignInRow({ krea, mode, lock }: { krea: KreaController; mode: KreaConnectionMode; lock: PersonLock }) {
   const open = useSettingsDraftStore((s) => s.openRow?.id === KREA_ROW);
   const { connection, busy, error, launchError } = krea;
   const status = connection?.status;
@@ -113,8 +113,8 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
   const started = !!status && status !== 'disconnected';
   const trigger = useRef<HTMLButtonElement>(null);
   // PR #204 round 10 (GM r15, r17 item 1): sign-in, check, disconnect and the default for new
-  // nodes are the person's alone; they lock as one group with one line under the row.
-  const lock = usePersonLock('change the Krea sign-in');
+  // nodes are the person's alone. Round 11 (GM r18 a): they lock with the providers' one lock
+  // (ProvidersTab), whose line sits under the group's heading.
   const setOpen = (on: boolean) => useSettingsDraftStore.setState({ openRow: on ? { id: KREA_ROW, mode: 'manage' } : null });
   const authUrl = connection?.authorizationUrl && isKreaAuthorizationUrl(connection.authorizationUrl)
     ? connection.authorizationUrl : null;
@@ -176,7 +176,6 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
           </div>
         ) : null}
       </ProviderRow>
-      <PersonLockLine lock={lock} />
     </div>
   );
 }

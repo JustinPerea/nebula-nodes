@@ -76,6 +76,10 @@ function className(element: ts.JsxOpeningLikeElement): string {
 
 /** The components that render a line (tests/lineRegistration.ratchet.test.ts): none belongs in a row. */
 const LINE_TAGS = new Set(['LineText', 'FailureLines', 'CommonsErrorLine']);
+/** PR #204 round 11 (GM r18): a lock's own line ("You can <verb> when this tab is connected as
+ * you.", made from its verb alone: components/PersonLock) describes the control it sits under, so a
+ * locked control in a row (the Commons' Add) keeps it there. It holds no refusal or failure. */
+const LOCK_LINE_TAGS = new Set(['PersonLockLine']);
 /** A sentence in literal text (T17): a capital, a space, and a full stop, ! or ?. A label ("Saved",
  * "Save failed") or a state or menu item that trails off ("Preparing generation…", "Clear canvas…") isn't one. */
 const SENTENCE = /^[A-Z“"].*\s.*[.!?]["”]?$/s;
@@ -372,6 +376,15 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
         return;
       }
       if ((ts.isJsxOpeningElement(part) || ts.isJsxSelfClosingElement(part)) && ts.isIdentifier(part.tagName)
+        && LOCK_LINE_TAGS.has(part.tagName.text)) {
+        // Only its lock: a child or any other attribute could carry a line.
+        const attrs = part.attributes.properties;
+        const plain = attrs.every((a) => ts.isJsxAttribute(a) && ['lock', 'place', 'className'].includes(a.name.getText()))
+          && (ts.isJsxSelfClosingElement(part) || (ts.isJsxElement(part.parent) && part.parent.children.every((c) => ts.isJsxText(c) && !c.text.trim())));
+        if (!plain) bad.push(`${where(part)} <${part.tagName.text}> (a lock line with more than its lock)`);
+        return;
+      }
+      if ((ts.isJsxOpeningElement(part) || ts.isJsxSelfClosingElement(part)) && ts.isIdentifier(part.tagName)
         && /^[A-Z]/.test(part.tagName.text) && !ROW_TAGS.has(part.tagName.text)) {
         child(part.tagName);
       }
@@ -567,6 +580,10 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
   });
 
   it('structural: a line component in a row fails, whatever it is handed', () => {
+    // Round 11: a lock's own line passes; with anything more it fails.
+    expect(probe('export const F = () => <WorkspaceHeader title="x"><button {...lock.control()}>Add</button><PersonLockLine lock={lock} place="control" className="a" /></WorkspaceHeader>;')).toEqual([]);
+    expect(probe('export const F = () => <WorkspaceHeader title="x"><PersonLockLine lock={lock} place="control" {...extra} /></WorkspaceHeader>;'))
+      .toEqual(['components/create-studio/Probe.tsx:1 <PersonLockLine> (a lock line with more than its lock)']);
     expect(probe(`export function F({ x }: { x: string }) { return <WorkspaceHeader title="x"><LineText text={x} /></WorkspaceHeader>; }
       export const G = () => <F x="Saved" />;`)).toEqual(['components/create-studio/Probe.tsx:1 <LineText> (a line)']);
     expect(probe(`export function F({ x }: { x: string }) { return <div className="canvas-toolbar"><FailureLines failure={x} /></div>; }

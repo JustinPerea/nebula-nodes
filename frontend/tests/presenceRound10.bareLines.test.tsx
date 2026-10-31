@@ -51,7 +51,7 @@ describe('review 8 LOW-1: each bypass form is caught at run time', () => {
       <p><LineText text={line} /></p>
       <span className="label"><LineText text={line} className="own" /></span>
       <div className="person-required">{personRequiredCopy()}</div>
-      <p data-agent-text="">{`The tab said: “${line}”`}</p>
+      <p className="agent-note-card__text" data-agent-text="">{`The tab said: “${line}”`}</p>
     </>)).toEqual([]);
   });
 });

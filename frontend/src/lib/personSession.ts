@@ -319,12 +319,34 @@ let personGateHeldNow = false;
  */
 let personGateAnsweredNow = import.meta.env.MODE === 'test';
 const personGateListeners = new Set<() => void>();
+/**
+ * PR #204 round 11 (review 9 gates-trace MEDIUM-1): when the current hold began, so the held
+ * rule's 150 ms (a quick reconnect never switches a view) runs from the hold itself, not from
+ * whenever a view mounts. A tab held long ago that opens the Commons or Settings is past it from
+ * its first frame. One timer here tells the subscribers when the 150 ms are up.
+ */
+export const PERSON_HELD_SETTLE_MS = 150;
+let personHeldSince: number | null = null;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
 function setPersonGateHeld(held: boolean): void {
   if (held === personGateHeldNow && personGateAnsweredNow) return;
+  if (held && !personGateHeldNow) personHeldSince = Date.now();
+  if (!held) personHeldSince = null;
   personGateHeldNow = held;
   personGateAnsweredNow = true;
+  if (settleTimer !== null) clearTimeout(settleTimer);
+  settleTimer = null;
+  if (held && typeof window !== 'undefined') {
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      personGateListeners.forEach((listener) => listener());
+    }, Math.max(0, PERSON_HELD_SETTLE_MS - (Date.now() - (personHeldSince ?? Date.now()))));
+  }
   personGateListeners.forEach((listener) => listener());
 }
+/** Held for at least the held rule's 150 ms, counted from the hold (not a view's mount). */
+export const personHeldSettled = (): boolean =>
+  personGateHeldNow && personHeldSince !== null && Date.now() - personHeldSince >= PERSON_HELD_SETTLE_MS;
 export const personGateHeld = (): boolean => personGateHeldNow;
 /** The socket has answered since load (promoted or refused). */
 export const personGateAnswered = (): boolean => personGateAnsweredNow;
@@ -358,6 +380,9 @@ export const personPromotions = (): number => personPromotionsNow;
  * resets (its stamps compare against it), this does, with the session in tests. */
 let personWasPromotedNow = false;
 export const personWasPromoted = (): boolean => personWasPromotedNow;
+/** A demote that has lasted the held rule's 150 ms, from the demote itself: the server promoted
+ * this tab once and holds it now (hooks/useTabHeld useDemotedView, lib/commonsApi send). */
+export const personDemotedSettled = (): boolean => personHeldSettled() && personWasPromotedNow;
 /** Review 4 LOW-1 (round 6): the promote count each answer's request was sent under, recorded
  * at send time, so "sent before the promote" is read against the promotes so far whenever it is
  * asked (at parse, at a line's registration), never frozen when the answer was parsed. */

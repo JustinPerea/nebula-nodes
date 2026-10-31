@@ -794,6 +794,9 @@ body.app-slava-restraint .settings-notice-slot {
   pointer-events: none;
 }
 
+/* Round 11: a locked Undo's line wraps under it. */
+body.app-slava-restraint .settings-notice:has(.person-lock-line) { flex-wrap: wrap; }
+
 body.app-slava-restraint .settings-notice {
   display: flex;
   align-items: center;
@@ -867,3 +870,12 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
   opacity: var(--sr-disabled-opacity);
   cursor: not-allowed;
 }
+
+/* PR #204 round 11 (GM r18 b): a lock line inside a list box belongs to the row above it: no
+   divider between them, and the row's own inset (the run cost's "You can change this…"). */
+body.app-slava-restraint .settings-list > .person-lock-line {
+  margin: 0;
+  padding: 0 12px 9px;
+  border-top: 0;
+}
+body.app-slava-restraint .settings-list > .settings-pref:has(+ .person-lock-line) { padding-bottom: 4px; }

@@ -45,8 +45,9 @@ router mounted with mount() (and each route on it: its path is under the mount's
 reads a gate out of a container by subscript (CHECKS["p"](...), round 8) or uses such a container
 any other way (a for loop over it, CHECKS.get("p"), handing it on: round 9), also one held as a
 class attribute (K.CHECKS) or filled after it is made at module level (CHECKS.append(gate) and the
-like, CHECKS[k] = gate, CHECKS += [gate]: round 10); an unknown decorator
-on an app or router; a middleware that reaches a gate (it would gate routes the list can't
+like, CHECKS[k] = gate, CHECKS += [gate]: round 10; a container local to a function counts only
+in that function, one around it or one inside it, never pooled by its bare name across the
+backend: round 11); an unknown decorator on an app or router; a middleware that reaches a gate (it would gate routes the list can't
 name); a file that doesn't parse.
 
 personOnly (PR #204 round 10, the person-only control sweep): the routes that refuse anyone but
@@ -55,10 +56,12 @@ route is person-only when require_person, person_only or the Commons' human_dep 
 reached unconditionally: a Depends() on one in its dependencies=, a parameter default or its
 router's or app's dependencies=, or a call of one (or of a function that is person-only itself)
 in a statement the handler always runs before any return, raise or branch: its top level, a
-`with` body, an assignment or `await`, and a `try` body whose every `except` raises again. A gate
-behind a condition (a spend limit, an approval, a cover the person pinned) is only gated, not
-person-only: those controls stay live. Not read as person-only (a gap is a missing lock, so the
-ratchet's own probes pin each form): a gate inside an if, a loop or a conditional expression, and
+`with` body, an assignment or `await`, a `try` body whose every `except` raises again, and past an
+`if` whose branches can't return (a validation guard that only raises or falls through: round 11,
+POST /api/trash/empty). A gate behind a condition (a spend limit, an approval, a cover the
+person pinned) is only gated, not person-only: those controls stay live. Not read as person-only
+(a gap is a missing lock, so the ratchet's own probes pin each form): a gate inside an if, after
+an if that may return, a loop or a conditional expression, and
 an include_router(..., dependencies=[...]) gate (none in the backend: fails closed in
 `unreadable` if one is added).
 """
@@ -242,26 +245,94 @@ FILL_METHODS = {"append", "extend", "insert", "add", "update", "setdefault", "ap
 FILLS: dict[str, list[tuple[Module, ast.AST]]] = {}  # a container's qualified name -> what is put in it
 
 
-def fills_in(node: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
-    """(container, value) for each value put in a container after it is made: .append(x) and the
-    like, CHECKS[k] = x, CHECKS += [x] (round 10, review 8 NIT-1)."""
-    out: list[tuple[ast.AST, ast.AST]] = []
-    for inner in walk(node):
-        if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and inner.func.attr in FILL_METHODS:
-            out.extend((inner.func.value, value) for value in [*inner.args, *[k.value for k in inner.keywords]])
-        elif isinstance(inner, ast.Assign):
-            out.extend((target.value, inner.value) for target in inner.targets if isinstance(target, ast.Subscript))
-        elif isinstance(inner, ast.AugAssign):
-            out.append((inner.target, inner.value))
-    return out
+def fill_pairs(inner: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
+    """(container, value) for each value one node puts in a container after it is made: .append(x)
+    and the like, CHECKS[k] = x, CHECKS += [x] (round 10, review 8 NIT-1)."""
+    if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and inner.func.attr in FILL_METHODS:
+        return [(inner.func.value, value) for value in [*inner.args, *[k.value for k in inner.keywords]]]
+    if isinstance(inner, ast.Assign):
+        return [(target.value, inner.value) for target in inner.targets if isinstance(target, ast.Subscript)]
+    if isinstance(inner, ast.AugAssign):
+        return [(inner.target, inner.value)]
+    return []
+
+
+FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+# Round 11 (review 9 LOW-1): a container local to a function (`out`, `lines`) is keyed by that
+# function, never pooled under its bare name with every other function's `out`.
+LOCAL_FILLS: dict[str, list[tuple[int, Module, ast.AST]]] = {}  # bare name -> (function, module, value)
+ENCLOSING: dict[int, list[int]] = {}  # a function -> the functions around it, innermost first
+FILL_MEMO: dict[tuple, bool] = {}
+
+
+def qualified(q: str) -> bool:
+    """A name of something defined at module level in the files (or a member of one)."""
+    parts = q.split(".")
+    return any(".".join(parts[:i]) in ENT for i in range(len(parts), 0, -1))
 
 
 def read_fills(module: Module) -> None:
-    for container, value in fills_in(module.tree):
-        if isinstance(container, (ast.Name, ast.Attribute)):
-            q = expr_q(module, container, None, {})
-            if q:
+    """Each fill once, read in the scope it is written in: module level as before; inside a
+    function with that function's imports, aliases and class, so `self.checks.append(gate)` is
+    K.checks and a local alias of a module container is that container."""
+    classes = {id(item): f"{module.name}.{node.name}" for node in walk(module.tree) if isinstance(node, ast.ClassDef)
+               for item in node.body}
+
+    def visit(node: ast.AST, fn: ast.AST | None, cls: str | None, around: list[int]) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, FUNCTIONS):
+                ENCLOSING[id(child)] = around
+                visit(child, child, classes.get(id(child), cls if fn is not None else None), [id(child), *around])
+                continue
+            fill(child, fn, cls)
+            visit(child, fn, cls, around)
+
+    def fill(inner: ast.AST, fn: ast.AST | None, cls: str | None) -> None:
+        for container, value in fill_pairs(inner):
+            if not isinstance(container, (ast.Name, ast.Attribute)):
+                continue
+            if fn is None:
+                q = expr_q(module, container, None, {})
+                if q:
+                    FILLS.setdefault(q, []).append((module, value))
+                continue
+            q = expr_q(module, container, cls, local_scope(module, fn, cls))
+            if q and (qualified(q) or q.split(".")[0] in globals_of(fn)):
                 FILLS.setdefault(q, []).append((module, value))
+            elif q:
+                LOCAL_FILLS.setdefault(q, []).append((id(fn), module, value))
+
+    visit(module.tree, None, None, [])
+
+
+GLOBALS: dict[int, set[str]] = {}
+
+
+def globals_of(fn: ast.AST) -> set[str]:
+    """The names a function declares `global`: a fill of one is the module's container."""
+    if id(fn) not in GLOBALS:
+        GLOBALS[id(fn)] = {name for inner in walk(fn) if isinstance(inner, ast.Global) for name in inner.names}
+    return GLOBALS[id(fn)]
+
+
+def fills_gate(q: str, scope: ast.AST | None) -> bool:
+    """Whether a gate is put in the container `q` names: anywhere, for a module's container (or
+    a bare name filled at module level); for a function's own container, in the function that
+    reads it, one around it (a closure) or one inside it. Memoized: GATED is complete by the time
+    a container is read, and the key carries its size so an early read can't stick."""
+    key = (q, len(GATED))
+    hit = FILL_MEMO.get(key)
+    if hit is None:
+        hit = FILL_MEMO[key] = any(names_gate(m, value, None, {}) for m, value in FILLS.get(q, []))
+    if hit or scope is None or q not in LOCAL_FILLS:
+        return hit
+    local_key = (q, id(scope), len(GATED))
+    hit = FILL_MEMO.get(local_key)
+    if hit is None:
+        related = {id(scope), *ENCLOSING.get(id(scope), [])}
+        hit = FILL_MEMO[local_key] = any(names_gate(m, value, None, {}) for fn, m, value in LOCAL_FILLS[q]
+                                         if fn in related or id(scope) in ENCLOSING.get(fn, []))
+    return hit
 
 
 def names_gate(module: Module | None, node: ast.AST, cls: str | None, local: dict[str, str]) -> bool:
@@ -511,17 +582,18 @@ def inline_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
 
 
 def holds_gate(module: Module | None, node: ast.AST | None, cls: str | None, local: dict[str, str],
-               literals: dict[str, ast.AST], depth: int = 0) -> bool:
-    """A container literal with a gate in it, or a name for one (module-level, or assigned in the def)."""
+               literals: dict[str, ast.AST], depth: int = 0, scope: ast.AST | None = None) -> bool:
+    """A container literal with a gate in it, or a name for one (module-level, or assigned in the
+    def). `scope`: the def being read, whose own containers' fills count (round 11)."""
     if module is None or node is None or depth > 10:
         return False
     if isinstance(node, ast.Subscript):
-        return holds_gate(module, node.value, cls, local, literals, depth + 1)
+        return holds_gate(module, node.value, cls, local, literals, depth + 1, scope)
     if isinstance(node, ast.Name) and node.id in literals:
-        return holds_gate(module, literals[node.id], cls, local, {}, depth + 1)
+        return holds_gate(module, literals[node.id], cls, local, {}, depth + 1, scope)
     if isinstance(node, (ast.Name, ast.Attribute)):
         q = expr_q(module, node, cls, local) or ""
-        if any(names_gate(m, value, None, {}) for m, value in FILLS.get(q, [])):
+        if fills_gate(q, scope):
             return True
         entity = ENT.get(q)
         if entity is None or entity.kind != "alias" or not isinstance(entity.node, CONTAINERS):
@@ -539,7 +611,7 @@ def subscript_gate(module: Module, node: ast.AST, cls: str | None = None) -> boo
     literals = container_names(node)
     for root in roots_of(node):
         for inner in walk(root):
-            if isinstance(inner, ast.Subscript) and holds_gate(module, inner.value, cls, local, literals):
+            if isinstance(inner, ast.Subscript) and holds_gate(module, inner.value, cls, local, literals, scope=node):
                 return True
     return False
 
@@ -560,10 +632,10 @@ def held_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
             if isinstance(inner, ast.Subscript):
                 continue
             if isinstance(inner, (ast.Name, ast.Attribute)) and isinstance(inner.ctx, ast.Load) \
-                    and holds_gate(module, inner, cls, local, literals):
+                    and holds_gate(module, inner, cls, local, literals, scope=node):
                 return True
             if isinstance(inner, CONTAINERS) and not isinstance(getattr(inner, "ctx", ast.Load()), ast.Store) \
-                    and holds_gate(module, inner, cls, local, literals) and not depends_on_gate(module, inner, local):
+                    and holds_gate(module, inner, cls, local, literals, scope=node) and not depends_on_gate(module, inner, local):
                 return True
     return False
 
@@ -629,6 +701,20 @@ def reraises(handler: ast.ExceptHandler) -> bool:
     return bool(handler.body) and isinstance(handler.body[-1], ast.Raise)
 
 
+def never_returns(stmts: list[ast.stmt]) -> bool:
+    """Round 11 (review 9 NIT-2): statements that can only fall through or raise: no `return`
+    (outside a def or class written inside them), no `yield`. A validation guard
+    (`if kind is not None: _trash_kind(kind)`, `if not ok: raise HTTPException(...)`) is one: what
+    follows it runs whenever the request goes on."""
+    def visit(node: ast.AST) -> bool:
+        if isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom)):
+            return False
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            return True
+        return all(visit(child) for child in ast.iter_child_nodes(node))
+    return all(visit(stmt) for stmt in stmts)
+
+
 def calls_now(module: Module, expr: ast.AST, cls: str | None, local: dict[str, str]) -> set[str]:
     """The calls an expression always makes: not those behind `and`/`or` past the first value, a
     conditional expression's branches, a lambda or a comprehension."""
@@ -679,7 +765,10 @@ def unconditional_calls(module: Module, fn: ast.AST, cls: str | None) -> set[str
                 continue
             elif isinstance(stmt, ast.If):
                 out.update(calls_now(module, stmt.test, cls, local))
-                return False
+                # A branch that may return ends the run; one that only falls through or raises
+                # (a guard) doesn't, though its own calls are conditional.
+                if not (never_returns(stmt.body) and never_returns(stmt.orelse)):
+                    return False
             else:
                 return False
         return True
