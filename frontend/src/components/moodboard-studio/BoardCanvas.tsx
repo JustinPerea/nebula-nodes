@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, MutableRefObject, PointerEvent as ReactPointerEvent } from 'react';
 import {
   Background, BackgroundVariant, Panel, ReactFlow, ReactFlowProvider, getViewportForBounds, useReactFlow, useStore, useStoreApi,
   type Node, type NodeChange, type NodeTypes, type Viewport,
@@ -34,6 +34,10 @@ export interface BoardCanvasProps {
   onDropFiles: (files: File[], at: { x: number; y: number }) => void;
   /** Files are uploading: the Add images button waits. */
   uploading?: boolean;
+  /** Set by the board to where a paste lands, in board coordinates: the
+   *  last pointer position over the board, else the middle of the view
+   *  (Cmd+V, Justin decided 2026-10-31). The Studio's paste reads it. */
+  pastePoint?: MutableRefObject<(() => { x: number; y: number }) | null>;
 }
 
 const nodeTypes: NodeTypes = { card: BoardCardNode };
@@ -88,7 +92,7 @@ function BoardDots() {
     color="var(--mb-board-dot)" />;
 }
 
-function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }: BoardCanvasProps) {
+function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pastePoint: pastePointRef }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -263,19 +267,38 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     useBoardCanvasStore.getState().setViewport(boardKey, viewport);
   }, [boardKey]);
 
-  const addFiles = (list: FileList | null) => {
-    const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
-    if (files.length === 0) return;
+  /** The middle of the view, or right of the cards before the board has a size. */
+  const viewPoint = () => {
     const at = visibleFlowCenter(wrapperRef.current, screenToFlowPosition);
-    if (at) {
-      onDropFiles(files, at);
-      return;
-    }
+    if (at) return at;
     // No size yet: to the right of the cards.
     const cards = nodesRef.current;
     const right = cards.reduce((edge, node) => Math.max(edge, node.position.x + (node.width ?? 0)), 0);
-    onDropFiles(files, { x: right + 280, y: cards.length ? Math.min(...cards.map((node) => node.position.y)) + 135 : 0 });
+    return { x: right + 280, y: cards.length ? Math.min(...cards.map((node) => node.position.y)) + 135 : 0 };
   };
+
+  const addFiles = (list: FileList | null) => {
+    const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
+    if (files.length === 0) return;
+    onDropFiles(files, viewPoint());
+  };
+
+  // The pointer over the board, in screen pixels (null once it leaves): a
+  // paste lands there, read through screenToFlowPosition at paste time so a
+  // pan or zoom since is counted.
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    pointer.current = { x: event.clientX, y: event.clientY };
+  };
+  const onPointerLeave = () => { pointer.current = null; };
+  const pasteAt = useRef<() => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
+  pasteAt.current = () => (pointer.current ? screenToFlowPosition(pointer.current) : viewPoint());
+  useEffect(() => {
+    if (!pastePointRef) return undefined;
+    const read = () => pasteAt.current();
+    pastePointRef.current = read;
+    return () => { if (pastePointRef.current === read) pastePointRef.current = null; };
+  }, [pastePointRef]);
 
   const [dropping, setDropping] = useState(false);
   const carriesFiles = (event: ReactDragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -300,7 +323,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
 
   return (
     <div ref={wrapperRef} className={`moodboard-board${dropping ? ' moodboard-board--drop' : ''}`}
-      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+      onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
       {/* Behind the cards, for the reader's ripple while Analyze runs (PR10b). */}
       <div className="moodboard-board__underlay" aria-hidden="true" data-layer="ripple" />
       <BoardWideContext.Provider value={wide}>

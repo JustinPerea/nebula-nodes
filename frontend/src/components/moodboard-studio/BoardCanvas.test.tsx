@@ -186,6 +186,38 @@ describe('files dropped on the board', () => {
   });
 });
 
+describe('where a paste lands (Cmd+V)', () => {
+  const mountWithPoint = () => {
+    const pastePoint = { current: null as (() => { x: number; y: number }) | null };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      pastePoint={pastePoint} />);
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    wrapper.getBoundingClientRect = () => ({ left: 10, top: 20, right: 610, bottom: 420, width: 600, height: 400 }) as DOMRect;
+    return { view, wrapper, pastePoint };
+  };
+
+  it('is the last pointer position over the board, in board coordinates', () => {
+    const { wrapper, pastePoint } = mountWithPoint();
+    fireEvent.pointerMove(wrapper, { clientX: 100, clientY: 40 });
+    fireEvent.pointerMove(wrapper, { clientX: 150, clientY: 60 });
+    expect(pastePoint.current?.()).toEqual({ x: 300, y: 120 });
+  });
+
+  it('is the middle of the view when the pointer is not over the board', () => {
+    const { wrapper, pastePoint } = mountWithPoint();
+    expect(pastePoint.current?.()).toEqual({ x: 620, y: 440 });
+    fireEvent.pointerMove(wrapper, { clientX: 100, clientY: 40 });
+    fireEvent.pointerLeave(wrapper);
+    expect(pastePoint.current?.()).toEqual({ x: 620, y: 440 });
+  });
+
+  it('is gone once the board unmounts, so the List view never places a paste', () => {
+    const { view, pastePoint } = mountWithPoint();
+    view.unmount();
+    expect(pastePoint.current).toBeNull();
+  });
+});
+
 describe('the Add images button', () => {
   it('adds the chosen files in the middle of what the person sees', () => {
     const view = mount();

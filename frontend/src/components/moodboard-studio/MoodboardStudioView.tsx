@@ -50,6 +50,7 @@ import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../.
 import { BoardCanvas, type BoardMove } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
+import { NOTHING_TO_PASTE, isStudioPasteTarget, readClipboardImages } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
@@ -862,6 +863,41 @@ export function MoodboardStudioView() {
     return () => document.removeEventListener('keydown', onKey, true);
   }, []);
 
+  // Cmd+V (Justin decided, 2026-10-31): the clipboard's images join the
+  // board as a drop's do, through the same upload, checks and one undo
+  // step. Board view: at the pointer over the board, else the middle of the
+  // view. List view: at the end, in clipboard order. A paste meant for a
+  // text field (Direction, Avoid, a colour, a note) or a dialog stays the
+  // field's. Bound only while the Studio is mounted, so no other screen
+  // gets it; bubbling, so a paste something before it refused (a tab
+  // following an agent's switch: hooks/useFollowingReadOnly) is left alone,
+  // as a drop is.
+  const pastePoint = useRef<(() => { x: number; y: number }) | null>(null);
+  const pasteHandler = useRef<(event: ClipboardEvent) => void>(() => {});
+  useLayoutEffect(() => {
+    pasteHandler.current = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || loading || !isCurrent() || !isStudioPasteTarget(event.target)) return;
+      const { files, links } = readClipboardImages(event.clipboardData);
+      if (files.length > 0) {
+        event.preventDefault();
+        const at = view === 'board' ? pastePoint.current?.() : undefined;
+        if (at) dropFiles(files, at);
+        else handleFiles(files);
+        return;
+      }
+      // An http(s) link: not added yet (the backend fetches no links for
+      // boards, decision D6), and not reported as nothing to add.
+      if (links.length > 0) return;
+      event.preventDefault();
+      showToast({ text: NOTHING_TO_PASTE });
+    };
+  });
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => pasteHandler.current(event);
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, []);
+
   /** The image the board opens on, or null for #1: a pick, not a reorder,
    *  so no image moves and the analysis stays. One undo step, like any image
    *  change: its batch's `undo` restores the cover field. Picks made before
@@ -1269,7 +1305,7 @@ export function MoodboardStudioView() {
             <>
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} />
+                uploading={uploading} pastePoint={pastePoint} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
           )}
