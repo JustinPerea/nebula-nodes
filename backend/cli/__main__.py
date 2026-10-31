@@ -6,6 +6,8 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS
+
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
 
@@ -197,8 +199,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
     point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
-    point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
-                         help="Gesture to show (default: move, or drag with --from)")
+    point_p.add_argument("--action", choices=CURSOR_ACTIONS, default=None,
+                         help="What you are doing there: move (going there), look (reading), think, type "
+                              "(a prompt or field), click, drag (connecting, with --from), run, propose "
+                              "(waiting for the person's OK), wait (for their answer), error (something "
+                              "failed). Default: move, or drag with --from")
     point_p.add_argument("--as", dest="agent_name",
                          help="Cursor name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 

@@ -16,19 +16,33 @@ Requests with none of these (the browser's own requests) never move a cursor.
 
 Everything here is ephemeral and in memory: cursors expire after
 ``PRESENCE_TTL_SECONDS`` and nothing is written to disk.
+
+Sessions (one cursor per agent session, on the person's tabs only): a
+request may also say which session of its agent it is (presence_session).
+That is display only. It never changes the identity above, the colour, the
+person gate, scene keys or spend. Agents read cursors as the per-agent
+"agent form" of each event (``active()``, the snapshot, the roster, /ws
+listeners), which is exactly what it was before sessions. Only the person's
+verified canvas sockets get the "person form" (person_form): the same event
+plus an opaque session key and its number ("Claude · 2"), and the action the
+backend's own edits really were (a param edit shows as ``type``).
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
 import math
 import re
+import secrets
 import time
+from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
 from services import node_route, universal_ports
+from services.cursor_actions import ACTIONS, ACTIONS_TEXT
 from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 from services.text_cut import safe_cut
@@ -40,7 +54,18 @@ MAX_NAME_CHARS = 32
 MAX_VIEW_NODES = 2000
 MAX_SNAPSHOT_NODES = 300
 
-ACTIONS = ("move", "click", "drag", "look")
+
+# One cursor per agent session, on the person's tabs (person_form).
+SESSIONS_PER_AGENT = 8          # live slots per agent; the frontend caps at the same number
+SESSION_IDLE_SECONDS = 20.0     # = the frontend's AGENT_CURSOR_IDLE_MS
+SESSION_ORDINAL_MEMORY = 64     # session numbers remembered per agent (least recently seen go first)
+SESSION_AGENT_MEMORY = 256      # agents remembered
+SESSION_KEY_CHARS = 12
+# Where a request's session id may come from, besides an agent token's own
+# record (presence_session). X-Nebula-Agent-Session is the MCP server's
+# per-process id (it also keys scene reads; presence only reads it);
+# X-Nebula-Cursor-Session is presence only (the CLI's, under Claude Code).
+SESSION_HEADERS = ("x-nebula-agent-session", "x-nebula-cursor-session")
 NODE_STATES = ("idle", "queued", "executing", "complete", "error", "skipped")
 
 _KNOWN_AGENTS = {
@@ -52,6 +77,7 @@ _NAME_ALLOWED = re.compile(r"[^A-Za-z0-9 ._()\-·]")
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _NODE_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
+_SESSION_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 _request_headers: ContextVar[Mapping[str, str] | None] = ContextVar("presence_request_headers", default=None)
 
@@ -191,6 +217,47 @@ def identify(
     return None
 
 
+def _valid_session(raw: Any) -> str | None:
+    return raw if isinstance(raw, str) and _SESSION_RE.fullmatch(raw) else None
+
+
+def presence_session(
+    headers: Mapping[str, str] | None,
+    *,
+    token_lookup: Callable[[str], dict | None] = _default_token_lookup,
+) -> str | None:
+    """Which session of its agent a request comes from, for its cursor only.
+
+    In order, skipping a missing or invalid value (at most 64 of
+    ``[A-Za-z0-9_.:-]``):
+    1. an in-app chat's agent token: its record's chat session, set by
+       Nebula when it minted the turn's token (never by the agent), as
+       ``chat:<id>``;
+    2. ``X-Nebula-Agent-Session``: an MCP server's own id, one per process
+       (or ``NEBULA_AGENT_SESSION``);
+    3. ``X-Nebula-Cursor-Session``: the CLI's, derived from the Claude Code
+       session it runs in.
+    None gives the agent's one cursor, as before sessions. Display only: the
+    caller uses it for person_form and nothing else.
+    """
+    if not headers:
+        return None
+    lower = {k.lower(): v for k, v in headers.items()}
+    auth = lower.get("authorization", "")
+    if auth.startswith("Agent "):
+        record = token_lookup(auth[6:].strip())
+        chat = record.get("session") if isinstance(record, dict) else None
+        if isinstance(chat, str) and chat:
+            found = _valid_session(f"chat:{chat}")
+            if found is not None:
+                return found
+    for header in SESSION_HEADERS:
+        found = _valid_session(lower.get(header))
+        if found is not None:
+            return found
+    return None
+
+
 def _finite(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise PresenceError(f"{label} must be a number")
@@ -252,6 +319,15 @@ def _clean_say(raw: Any) -> str:
 clean_say = _clean_say
 
 
+@dataclass
+class _SessionSlot:
+    """One live session's cursor, as the person's tabs draw it."""
+    key: str
+    ordinal: int
+    last_t: float
+    target: dict[str, Any] | None
+
+
 class AgentPresence:
     """In-memory cursor state and the browser's latest view report."""
 
@@ -260,6 +336,13 @@ class AgentPresence:
         self._agents: dict[str, dict[str, Any]] = {}
         self._view: dict[str, Any] | None = None
         self._view_at: float = 0.0
+        # Sessions (person_form). Apart from _agents, so nothing an agent
+        # reads (active, here, the snapshot) ever sees them.
+        self._session_secret = secrets.token_bytes(16)
+        # agent id -> raw session ('' for none) -> its number, first seen first
+        self._ordinals: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
+        self._next_ordinal: dict[str, int] = {}
+        self._slots: dict[str, OrderedDict[str, _SessionSlot]] = {}
 
     # -- cursors --------------------------------------------------------
     def point(
@@ -293,8 +376,8 @@ class AgentPresence:
         line when it isn't ``say`` (PR #198 r1): an action whose bubble says
         nothing still has one; the event carries it only when given.
         """
-        if action not in ACTIONS:
-            raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
+        if not isinstance(action, str) or action not in ACTIONS:
+            raise PresenceError(f"action must be one of {ACTIONS_TEXT}")
         now = self._clock()
         event: dict[str, Any] = {
             "type": "agentPresence",
@@ -338,6 +421,9 @@ class AgentPresence:
         current = self._agents.get(identity.id)
         if current is not None:
             return dict(current["target"]), "cursor"
+        return self._view_middle()
+
+    def _view_middle(self) -> tuple[dict[str, Any], str]:
         view = self._view or {}
         viewport, screen = view.get("viewport"), view.get("screen")
         if viewport and screen:
@@ -365,6 +451,102 @@ class AgentPresence:
             for value in sorted(self._agents.values(), key=lambda v: -v["_t"])
         ]
 
+    # -- sessions (the person's tabs only) ------------------------------
+    def session_key(self, agent_id: str, raw: str) -> str:
+        """The opaque key a tab gets for a session: never the raw id, and
+        different per agent and per backend process."""
+        message = f"{agent_id}\0{raw}".encode("utf-8")
+        return hmac.new(self._session_secret, message, hashlib.sha256).hexdigest()[:SESSION_KEY_CHARS]
+
+    def _ordinal(self, agent_id: str, raw: str, keep: int | None = None) -> int:
+        """This session's number for its agent: 1, 2, 3... by first
+        appearance, kept for the process's lifetime (every tab agrees).
+        ``keep`` is a live slot's own number, re-remembered as it is."""
+        numbers = self._ordinals.get(agent_id)
+        if numbers is None:
+            numbers = self._ordinals[agent_id] = OrderedDict()
+            while len(self._ordinals) > SESSION_AGENT_MEMORY:
+                old, _ = self._ordinals.popitem(last=False)
+                self._slots.pop(old, None)
+                self._next_ordinal.pop(old, None)
+        else:
+            self._ordinals.move_to_end(agent_id)
+        if raw in numbers:
+            numbers.move_to_end(raw)
+            return numbers[raw]
+        if keep is not None:
+            number = keep
+        else:
+            number = self._next_ordinal.get(agent_id, 1)
+        self._next_ordinal[agent_id] = max(self._next_ordinal.get(agent_id, 1), number + 1)
+        numbers[raw] = number
+        while len(numbers) > SESSION_ORDINAL_MEMORY:
+            numbers.popitem(last=False)
+        return number
+
+    def _slot(self, agent_id: str, raw: str, now: float) -> _SessionSlot:
+        slots = self._slots.setdefault(agent_id, OrderedDict())
+        for stale in [k for k, slot in slots.items() if now - slot.last_t > PRESENCE_TTL_SECONDS]:
+            del slots[stale]  # its number stays in _ordinals: it comes back as itself
+        slot = slots.get(raw)
+        if slot is None:
+            slot = _SessionSlot(key=self.session_key(agent_id, raw), ordinal=self._ordinal(agent_id, raw),
+                                last_t=now, target=None)
+            slots[raw] = slot
+            if len(slots) > SESSIONS_PER_AGENT:
+                # An agent can't flood the canvas with cursors: the oldest
+                # idle session goes first, else the oldest.
+                others = [(k, v) for k, v in slots.items() if k != raw]
+                idle = [(k, v) for k, v in others if now - v.last_t >= SESSION_IDLE_SECONDS]
+                victim = min(idle or others, key=lambda item: item[1].last_t)[0]
+                del slots[victim]
+        else:
+            self._ordinal(agent_id, raw, keep=slot.ordinal)  # seen again: remembered longer
+        slot.last_t = now
+        return slot
+
+    def live_sessions(self, agent_id: str) -> list[tuple[str, int]]:
+        """(key, number) of an agent's live sessions, oldest first (tests, diagnostics)."""
+        return [(slot.key, slot.ordinal) for slot in (self._slots.get(agent_id) or {}).values()]
+
+    def person_form(
+        self,
+        event: dict[str, Any],
+        identity: AgentIdentity,
+        *,
+        session: str | None,
+        shown: str | None = None,
+        in_place: bool = False,
+    ) -> dict[str, Any]:
+        """The person tabs' copy of ``event`` (the agent form point returned).
+
+        It adds ``session`` ({key, ordinal}) unless this is the agent's only
+        kind of cursor (no session, number 1), and shows ``shown`` (the
+        action a backend edit really was) in place of ``action``. With
+        ``in_place`` (a line said with no target), the target is this
+        session's own cursor, else the middle of the view, never another
+        session's cursor. Returns ``event`` itself when nothing differs, so
+        the caller sends one form, as before sessions.
+        """
+        if "target" not in event:
+            return event  # the Agent log only: no cursor, no session
+        raw = session if session is not None and _valid_session(session) else ""
+        now = self._clock()
+        slot = self._slot(identity.id, raw, now)
+        person = dict(event)
+        if shown is not None and shown in ACTIONS:
+            person["action"] = shown
+        if in_place:
+            if slot.target is not None:
+                person["target"] = dict(slot.target)
+            elif raw or len(self._slots.get(identity.id) or {}) > 1:
+                # A session's first words: not on another session's cursor.
+                person["target"] = self._view_middle()[0]
+        slot.target = dict(person["target"])
+        if raw or slot.ordinal != 1:
+            person["session"] = {"key": slot.key, "ordinal": slot.ordinal}
+        return event if person == event else person
+
     def last_point(self, node_id: str) -> dict[str, float] | None:
         """Where the browser last drew a node (its centre), for pointing at a deleted node."""
         reported = ((self._view or {}).get("nodes") or {}).get(node_id)
@@ -390,6 +572,10 @@ class AgentPresence:
                     del self._agents[key]
                 else:
                     value["target"] = dict(fallback)
+        for slots in self._slots.values():
+            for slot in slots.values():
+                if slot.target is not None and slot.target.get("nodeId") == node_id:
+                    slot.target = None if fallback is None else dict(fallback)
 
     def forget_graph(self) -> None:
         """Drop node anchors after the whole graph is cleared or replaced.
@@ -406,6 +592,10 @@ class AgentPresence:
                 value["did"] = {**did, "nodeId": None}
             if "nodeId" in value["target"]:
                 del self._agents[key]
+        for slots in self._slots.values():
+            for slot in slots.values():
+                if slot.target is not None and "nodeId" in slot.target:
+                    slot.target = None
 
     # -- browser view ---------------------------------------------------
     def report_view(self, body: Any) -> dict[str, Any]:

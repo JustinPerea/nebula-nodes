@@ -39,6 +39,16 @@ export interface ProjectSwitch {
   created?: boolean;
 }
 
+export { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from './agentPresenceActions';
+
+/** Which session of its agent a cursor is: an opaque key the backend derives
+ * (never the agent's own id) and its number by first appearance, the same in
+ * every tab ("Claude · 2"). Display only. */
+export interface AgentPresenceSession {
+  key: string;
+  ordinal: number;
+}
+
 export interface AgentPresenceEvent {
   type: 'agentPresence';
   agent: { id: string; name: string; color: string; verified: boolean };
@@ -46,7 +56,8 @@ export interface AgentPresenceEvent {
    * the Agent log lists it (agentLogStore) and no cursor moves. */
   target?: AgentCursorAnchor;
   from?: AgentCursorAnchor;
-  action: 'move' | 'click' | 'drag' | 'look';
+  /** One of AGENT_CURSOR_ACTIONS; anything else is read as 'move' (forward compatible). */
+  action: string;
   say: string;
   /** The Agent log's words when they differ from the bubble's (GM - Design,
    * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
@@ -63,6 +74,9 @@ export interface AgentPresenceEvent {
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
   did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
+  /** Person tabs only: which session of this agent (display only). Absent
+   * for an agent's one cursor, as before sessions. */
+  session?: AgentPresenceSession;
 }
 
 /** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */

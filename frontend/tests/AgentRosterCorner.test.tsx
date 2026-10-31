@@ -220,6 +220,26 @@ describe('the Agents panel', () => {
     expect(within(list).queryByRole('button', { name: /^Agents/ })).toBeNull();
   });
 
+  it('two live sessions of one agent are still one row (cursors per session, the roster per agent)', async () => {
+    render(<AppAgentNotes />);
+    syncProject();
+    placeNode('n4', 'Hero shots');
+    placeNode('n5', 'Backdrop');
+    const list = await openListRead();
+    emit({ type: 'agentPresence', agent: CODEX, action: 'move', say: '', at: Date.now(), projectId: 'p1',
+      target: { nodeId: 'n4' }, did: { verb: 'Moved', nodeId: 'n4', label: 'Hero shots' },
+      session: { key: '0123456789ab', ordinal: 1 } });
+    emit({ type: 'agentPresence', agent: CODEX, action: 'type', say: '', at: Date.now(), projectId: 'p1',
+      target: { nodeId: 'n5' }, did: { verb: 'Changed', nodeId: 'n5', label: 'Backdrop' },
+      session: { key: 'ba9876543210', ordinal: 2 } });
+    expect(Object.keys(useAgentPresenceStore.getState().agents)).toHaveLength(2);
+    fireEvent.click(await rosterToggle(list));
+    const rows = within(list).getAllByRole('button', { name: /^Codex, .*Show on canvas$/ });
+    expect(rows).toHaveLength(1);
+    // The newest of the two.
+    expect(rows[0].getAttribute('aria-label') ?? rows[0].textContent).toMatch(/Backdrop/);
+  });
+
   it('a new Needs-you item never opens the panel by itself', async () => {
     render(<AppAgentNotes />);
     syncProject();

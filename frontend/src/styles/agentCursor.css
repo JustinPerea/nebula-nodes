@@ -1,11 +1,16 @@
 /* Agent cursors: drawn in flow coordinates inside React Flow's viewport and
    counter-scaled (1/zoom) by AgentCursorLayer so they stay a constant size.
-   Position comes from a spring in JS; CSS only handles fades and the ripple. */
+   Position, lean and opacity come from springs in JS (lib/agentCursorPlanner.ts);
+   CSS only runs the pills, the wire's fade and the ripple, every one on a
+   sampled spring: --agent-cursor-soft and --agent-cursor-ring are set on the
+   layer by AgentCursorLayer from lib/springs.ts. */
 
 .agent-cursor-layer {
   /* The bubble's fade out (GM - Design, round 19): the repo's k 500, c 36
      spring sampled as a linear() easing (provider-switcher.css,
-     workspace-rail.css). 320ms is AGENT_SAY_FADE_MS in agentPresenceStore.ts. */
+     workspace-rail.css). 320ms is AGENT_SAY_FADE_MS in agentPresenceStore.ts.
+     The pill's way in, the name's show and hide and the say pill's move into
+     the name's slot run on the same curve. */
   --agent-cursor-say-fade: 320ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
   position: absolute;
   inset: 0;
@@ -26,7 +31,7 @@
   stroke-linecap: round;
   stroke-dasharray: 6 5;
   opacity: 0;
-  transition: opacity 180ms ease-out;
+  transition: opacity var(--agent-cursor-soft);
 }
 
 .agent-cursor {
@@ -34,23 +39,15 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
-  will-change: transform;
+  will-change: transform, opacity;
   opacity: 0;
-  transition: opacity 160ms ease-out;
-}
-
-.agent-cursor[data-placed='true'] {
-  opacity: 1;
-}
-
-.agent-cursor--idle[data-placed='true'] {
-  opacity: 0.45;
-  transition-duration: 600ms;
 }
 
 .agent-cursor__pointer {
   display: block;
   overflow: visible;
+  /* The lean turns the arrow about its tip, never the pills. */
+  transform-origin: 1.5px 1.5px;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
 }
 
@@ -71,18 +68,32 @@
   gap: 4px;
   white-space: nowrap;
   font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  transition: transform var(--agent-cursor-say-fade);
+}
+
+/* The name is hidden while the cursor moves, and shows with a second cursor,
+   on hover and on a first sighting (GM's agent cursor spec, §4). With it
+   hidden, the say pill moves up into its slot: the name's 20px and the 4px gap. */
+.agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__label {
+  transform: translateY(-24px);
+}
+
+.agent-cursor:is([data-label='say'], [data-label='none']) .agent-cursor__name {
+  opacity: 0;
 }
 
 .agent-cursor__name {
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--agent-color);
-  color: #0b0b0c;
+  /* Picked from the fill's luminance (lib/agentCursorLook.ts inkFor), at least 4.5:1. */
+  color: var(--agent-ink, #0b0b0c);
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
   letter-spacing: 0.01em;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: opacity var(--agent-cursor-say-fade);
 }
 
 .agent-cursor__say {
@@ -105,7 +116,7 @@
   /* GM round 21: a 1px hairline, white at about 12%, so the pill's edge
      shows against a dark node fill. Inset, so the pill keeps its height. */
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 1px 3px rgb(0 0 0 / 0.35);
-  animation: agent-cursor-say-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: agent-cursor-say-in var(--agent-cursor-say-fade);
   transform-origin: 0 0;
 }
 
@@ -122,7 +133,7 @@
   border-radius: 50%;
   border: 2px solid var(--agent-color);
   opacity: 0;
-  animation: agent-cursor-ripple 520ms cubic-bezier(0.2, 0.7, 0.3, 1) 1;
+  animation: agent-cursor-ripple var(--agent-cursor-ring) 1;
 }
 
 @keyframes agent-cursor-ripple {
@@ -159,12 +170,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-cursor,
-  .agent-cursor__wire {
+  .agent-cursor__wire,
+  .agent-cursor__label,
+  .agent-cursor__name {
     transition: none;
   }
   .agent-cursor__say,
-  .agent-cursor__say--leaving {
+  .agent-cursor__say--leaving,
+  .agent-cursor__ripple {
     animation: none;
   }
 }
