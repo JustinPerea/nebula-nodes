@@ -34,7 +34,7 @@ def settings_client(tmp_path, monkeypatch, person):
         "futureSetting": {"preserve": True},
     }
     path.write_text(json.dumps(initial))
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     # Resolve the patched module directly even after other tests reload it.
     monkeypatch.setattr(main, "load_settings", settings.load_settings)

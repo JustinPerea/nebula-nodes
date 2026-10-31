@@ -106,7 +106,7 @@ def test_auto_routing_names_the_provider_the_run_went_to_not_the_nodes_default()
         "Replicate is busy. Wait a moment, then run the node again.")
     assert _card(with_api_status(RuntimeError("Async submit failed (401): no"), 401), "flux-3-video", chosen,
                  keys).person == (
-        "Replicate didn't accept your API token. Check it in Settings, then run the node again.")
+        "Replicate didn't accept your token. Check it in Settings, then run the node again.")
 
 
 def test_a_typed_provider_error_names_its_provider() -> None:
@@ -456,7 +456,7 @@ async def test_a_route_table_run_with_no_key_for_its_route_says_add_it() -> None
     exc = await _araised(router, _node("flux-3-video", {"_provider": "replicate"}), {"prompt": _port("p")}, {})
     assert str(exc) == ("FLUX 3 Video is set to Replicate, which needs REPLICATE_API_TOKEN. "
                         "Add it in Settings > Providers or choose another provider.")
-    assert person_line(exc) == "Add your Replicate API token in Settings, then run the node again."
+    assert person_line(exc) == "Add your Replicate token in Settings, then run the node again."
 
 
 def _settings_label(key: str) -> str:
@@ -507,10 +507,10 @@ async def test_krea_2_style_search_fields_the_account_cant_use() -> None:
                                                                              "filter": "user"}))
     assert str(exc) == ("User, Liked only, Filter needs a Krea API key; the Krea account lists the styles "
                         "available to you. Nothing was sent")
-    assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API token” connection. "
+    assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API key” connection. "
                                 "The “Krea account” connection lists every style you can use. Nothing was sent to Krea.")
     exc = await _araised(_account_style_search, _node("krea-style-search", {"user": "me"}))
-    assert person_line(exc) == ("To use “User”, switch to the “API token” connection. The “Krea account” connection "
+    assert person_line(exc) == ("To use “User”, switch to the “API key” connection. The “Krea account” connection "
                                 "lists every style you can use. Nothing was sent to Krea.")
 
 
@@ -522,7 +522,7 @@ async def test_krea_3_training_settings_the_account_cant_use() -> None:
     exc = await _araised(_account_style_train, node, "mine", "flux_dev", ["https://e.com/a.png"], None)
     assert str(exc) == ("Max steps, Type: Default needs a Krea API key; the Krea account trains with Krea's "
                         "defaults. Nothing was sent")
-    assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API token” connection. "
+    assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API key” connection. "
                                 "The “Krea account” connection trains with Krea's default settings. "
                                 "Nothing was sent to Krea.")
 
@@ -536,7 +536,7 @@ async def test_krea_4_the_api_token_only_renames_styles() -> None:
     exc = await _araised(handle_krea_library_manage, node, {}, {"KREA_API_TOKEN": "fixture"})
     assert str(exc) == ("Only renaming a style works with a Krea API key; use the Krea account for moodboards "
                         "and deletes. Nothing was sent")
-    assert person_line(exc) == ("The “API token” connection can only rename styles. To make moodboards or delete "
+    assert person_line(exc) == ("The “API key” connection can only rename styles. To make moodboards or delete "
                                 "styles, switch to the “Krea account” connection. Nothing was sent to Krea.")
 
 
@@ -547,7 +547,7 @@ async def test_krea_5_job_history_on_the_account() -> None:
     exc = await _araised(handle_krea_job_history, _node("krea-job-history", {"_kreaAuth": "mcp"}), {}, {})
     assert str(exc) == ("Listing job history needs a Krea API key; the Krea account can fetch one job by ID. "
                         "Nothing was sent")
-    assert person_line(exc) == ("Job history needs the “API token” connection. The “Krea account” connection can "
+    assert person_line(exc) == ("Job history needs the “API key” connection. The “Krea account” connection can "
                                 "look up one job by its ID. Nothing was sent to Krea.")
 
 
@@ -601,8 +601,8 @@ async def test_krea_9_a_connection_that_isnt_set(call) -> None:
         from handlers.krea_gateway import handle_krea_gateway
 
         exc = await _araised(handle_krea_gateway, _node("krea-video-bytedance-seedance-2", {"_kreaAuth": "nope"}), {}, {})
-    assert str(exc) == "Unknown Krea connection; choose API token or Krea account"
-    assert person_line(exc) == "This node's Krea connection isn't set. Choose “API token” or “Krea account”."
+    assert str(exc) == "Unknown Krea connection; choose API key or Krea account"
+    assert person_line(exc) == "This node's Krea connection isn't set. Choose “API key” or “Krea account”."
 
 
 APP_ID = "0123abcd-0123-4567-89ab-0123456789ab"

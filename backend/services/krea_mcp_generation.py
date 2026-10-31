@@ -29,8 +29,9 @@ def _balance_reason(value) -> str | None:
         return None
     units = value.get('availableUnits')
     left = f' ({units:g} compute units left)' if isinstance(units, (int, float)) and not isinstance(units, bool) else ''
-    return (f'the connected Krea workspace is out of compute{left}. Add compute or change plan on krea.ai '
-            '(Settings → Krea MCP → Show Krea plans), or switch this node to the API token. Nothing was generated')
+    from handlers.krea import connection_name
+    return (f'the connected Krea workspace is out of compute{left}. Add compute or change plan on krea.ai, '
+            f"or switch this node to the {connection_name('api-token')} connection. Nothing was generated")
 
 
 def rejection_detail(result) -> str:

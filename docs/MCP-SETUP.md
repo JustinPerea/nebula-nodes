@@ -1809,7 +1809,8 @@ A free run goes where it runs: a cost entry's `runsOn` when it has one (a
 key-billing route's host, "huggingface" for Idol's Space; `provider` stays
 the route's maker, "speridlabs"), else its provider, else it runs locally.
 Free runs that are all local say "(runs locally)" when they are the whole
-run.
+run, and "(local)" beside another class, as the paid part is tagged ("1
+paid run (openai) and 1 free (local)").
 
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its

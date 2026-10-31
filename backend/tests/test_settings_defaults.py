@@ -19,7 +19,7 @@ from services import settings as settings_mod
 @pytest.fixture
 def settings_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "settings.json"
-    monkeypatch.setattr(settings_mod, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     monkeypatch.setattr(settings_mod, "_INJECTED_KEYS", {})
     return path
 

@@ -271,7 +271,7 @@ def test_a_loaded_graph_still_meets_the_file_and_billing_guards(api):
 
     api.graph.add_node("text-input", {"text": "keep"})
     before = api.graph.get_state()
-    secret = str(settings_module.SETTINGS_PATH)
+    secret = str(settings_module.settings_path())
     planted_output = {"nodes": [{"id": "a", "definitionId": "image-input", "params": {},
                                  "outputs": {"image": {"type": "Image", "value": secret}}}], "edges": []}
     planted_param = {"nodes": [{"id": "a", "definitionId": "image-input",

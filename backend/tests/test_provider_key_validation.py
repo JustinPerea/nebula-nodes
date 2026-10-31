@@ -164,7 +164,7 @@ def _isolate(monkeypatch):
 def test_provider_credentials_do_not_fallback_to_process_environment(
     monkeypatch, tmp_path
 ):
-    monkeypatch.setattr(settings_service, "SETTINGS_PATH", tmp_path / "missing-settings.json")
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(tmp_path / "missing-settings.json"))
     monkeypatch.setenv("OPENAI_API_KEY", "environment-only-key")
 
     assert settings_service.get_api_key("OPENAI_API_KEY") is None

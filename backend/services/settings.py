@@ -13,41 +13,72 @@ from typing import Any, Callable
 
 import httpx
 
-SETTINGS_PATH = Path(
-    os.environ.get(
-        "NEBULA_SETTINGS_PATH",
-        Path(__file__).resolve().parent.parent.parent / "settings.json",
-    )
-).expanduser()
+# Where settings.json lives when NEBULA_SETTINGS_PATH isn't set: the repo
+# root (browser mode).
+_DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parent.parent.parent / "settings.json"
+
+
+def settings_path() -> Path:
+    """The settings file's path as configured, read from the environment at
+    each call: NEBULA_SETTINGS_PATH when it is set, with "~" expanded to the
+    home folder (never a folder named "~"), else the repo's settings.json.
+    Read at call time, so a test sets the variable (monkeypatch.setenv) and
+    nothing reloads this module (review 13 of PR #203, LOW-2)."""
+    raw = os.environ.get("NEBULA_SETTINGS_PATH")
+    return (Path(raw) if raw is not None else _DEFAULT_SETTINGS_PATH).expanduser()
 
 
 def settings_file() -> Path:
-    """The settings file this backend reads and writes, resolved here for
-    every reader, writer and the 409 lines alike. SETTINGS_PATH is expanded
-    where it is built, so a "~" in NEBULA_SETTINGS_PATH is the home folder,
-    never a folder named "~", for this and for every other reader of
-    SETTINGS_PATH (agent_profiles' deny rules; review 12 of PR #203,
-    LOW-2)."""
-    return Path(SETTINGS_PATH).resolve()
+    """settings_path resolved: the one file every reader, writer and the 409
+    lines use (agent_profiles' deny rules read settings_path too; review 12
+    of PR #203, LOW-2)."""
+    return settings_path().resolve()
 
 
 class SettingsUnreadable(ValueError):
-    """The settings file isn't JSON Nebula can read (cut short, hand-edited).
-    A ValueError, as json.load's own error is, so every reader that failed
-    closed on it still does; the settings routes answer it with the 409
-    (main.SETTINGS_UNREADABLE; review 12, LOW-3)."""
+    """The settings file is there but Nebula can't read it as settings: cut
+    short, hand-edited, not text, not readable for this user, or a folder. A ValueError, as json.load's own error is, so
+    every reader that failed closed on it still does; the settings routes
+    answer it with the 409 (main.SETTINGS_UNREADABLE; review 12, LOW-3;
+    review 13, HIGH-1 and LOW-3)."""
+
+
+# No settings file yet: _read_settings_file's answer, told apart from a file
+# whose JSON is ``null`` (review 13 of PR #203, HIGH-1).
+_MISSING: Any = object()
 
 
 def _read_settings_file() -> Any:
-    """The file's JSON, or None when there is no file yet."""
+    """The file's JSON, or _MISSING when there is no file yet. A file that
+    is there and can't be read (not JSON, not text, no permission, a folder)
+    raises SettingsUnreadable: every OSError but "not found" (review 13 of
+    PR #203, LOW-3)."""
     path = settings_file()
-    if not path.exists():
-        return None
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except FileNotFoundError:
+        return _MISSING
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         raise SettingsUnreadable(str(path)) from exc
+
+
+def _saved_or_default(saved: Any) -> Any:
+    """DEFAULT_SETTINGS with the saved object over it, deep-copied (callers
+    change the nested dicts, apiKeys and routing, which must never change
+    DEFAULT_SETTINGS itself); with no file, the defaults. A file that holds
+    something other than an object (``null``, a list, a string) comes back
+    as it is, nothing to merge into, so every reader fails closed on it and
+    every write gets the 409, as before round 13: ``null`` is no exception
+    (review 13 of PR #203, HIGH-1)."""
+    if saved is _MISSING:
+        return copy.deepcopy(DEFAULT_SETTINGS)
+    if isinstance(saved, dict):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings.update(saved)
+        return settings
+    return saved
+
 
 # ---------------------------------------------------------------------------
 # Injected credentials (desktop mode)
@@ -63,17 +94,23 @@ def _read_settings_file() -> Any:
 # precedence over any file-based values. Browser/dev mode (no env var) leaves
 # this dict empty and the backend reads keys from settings.json as before.
 
-_INJECTED_KEYS: dict[str, str] = {}
-_raw_injected = os.environ.get("NEBULA_INJECTED_KEYS", "")
-if _raw_injected:
+def parse_injected_keys(raw: str) -> dict[str, str]:
+    """NEBULA_INJECTED_KEYS' value as keys: a JSON object of names to keys,
+    without the empty ones. Anything else (empty, not JSON, not an object)
+    is no keys. Read once, at import; tests call this directly rather than
+    reloading the module (review 13 of PR #203, LOW-2)."""
+    if not raw:
+        return {}
     try:
-        _parsed = json.loads(_raw_injected)
-        if isinstance(_parsed, dict):
-            _INJECTED_KEYS = {
-                str(k): str(v) for k, v in _parsed.items() if v
-            }
+        parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        _INJECTED_KEYS = {}
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k): str(v) for k, v in parsed.items() if v}
+
+
+_INJECTED_KEYS: dict[str, str] = parse_injected_keys(os.environ.get("NEBULA_INJECTED_KEYS", ""))
 
 
 def is_injected_mode() -> bool:
@@ -124,15 +161,7 @@ def load_settings() -> dict[str, Any]:
     Settings panel then showed "Settings couldn't load". Values in the file
     always win; loading never writes the file.
     """
-    # Deep copy: callers mutate the nested dicts (apiKeys, routing), which
-    # must never change DEFAULT_SETTINGS itself.
-    settings = copy.deepcopy(DEFAULT_SETTINGS)
-    saved = _read_settings_file()
-    if isinstance(saved, dict):
-        settings.update(saved)
-    elif saved is not None:
-        # Not a JSON object: returned as before, nothing to merge into.
-        settings = saved
+    settings = _saved_or_default(_read_settings_file())
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
     # Non-secret settings from the file (routing, outputPath, etc.) remain.
@@ -197,12 +226,31 @@ def settings_file_shown() -> str:
     ("~/.nebula/settings.json"); anywhere else it stays absolute (GM, PR #203
     r24 item 7)."""
     path = Path(settings_file_path())
+    home = _home_for_shown_paths()
+    if home is None:
+        return str(path)
     try:
-        home = Path.home().resolve()
         rest = path.relative_to(home)
-    except (RuntimeError, KeyError, ValueError):
+    except ValueError:
         return str(path)
     return "~" if not rest.parts else f"~{os.sep}{rest}"
+
+
+def _home_for_shown_paths() -> Path | None:
+    """The home folder a shown path may start "~" for: a real, absolute
+    folder other than the filesystem's root. With HOME empty, relative or
+    "/" (a launchd or sidecar environment can run that way), every path
+    would be "under home", so none is (review 13 of PR #203, LOW-4)."""
+    try:
+        raw = Path.home()
+    except (RuntimeError, KeyError):
+        return None
+    if not raw.is_absolute():
+        return None
+    home = raw.resolve()
+    if home == Path(home.anchor) or not home.is_dir():
+        return None
+    return home
 
 
 def load_saved_settings() -> dict[str, Any]:
@@ -213,13 +261,7 @@ def load_saved_settings() -> dict[str, Any]:
     person didn't change, a padded key, an empty one or one that isn't text,
     is written back as it was (review 9 of PR #203, keys NIT-1). Readers use
     load_settings."""
-    settings = copy.deepcopy(DEFAULT_SETTINGS)
-    saved = _read_settings_file()
-    if isinstance(saved, dict):
-        settings.update(saved)
-    elif saved is not None:
-        settings = saved
-    return settings
+    return _saved_or_default(_read_settings_file())
 
 
 def read_keys(api_keys: dict[str, Any]) -> dict[str, str]:

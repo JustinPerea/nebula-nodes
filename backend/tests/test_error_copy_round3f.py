@@ -326,9 +326,9 @@ def test_every_card_line_follows_gms_rules() -> None:
 def test_every_shared_sentence_a_line_ends_with_is_a_sentence() -> None:
     from execution.maker_routes_minimax_meshy import KREA_ONLY_HINT, MESHY_KREA_HINT
     from execution.person_line import it_was
-    from handlers.krea import NOTHING_SENT_TO_KREA, UNSET_CONNECTION_LINE
+    from handlers.krea import NOTHING_SENT_TO_KREA, unset_connection_line
 
-    for line in (KREA_ONLY_HINT, MESHY_KREA_HINT, NOTHING_SENT_TO_KREA, UNSET_CONNECTION_LINE,
+    for line in (KREA_ONLY_HINT, MESHY_KREA_HINT, NOTHING_SENT_TO_KREA, unset_connection_line(),
                  it_was(3.5), it_was(True), it_was(None), it_was("x" * 80)):
         assert not rule_breaks(line), line
 
@@ -559,7 +559,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     several = {"id": "x", "envKeyName": ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "KREA_API_TOKEN"],
                "directKeyName": "BFL_API_KEY"}
     assert _blocked_key_line(several, "BFL_API_KEY", None) == (
-        "These settings need your fal.ai API key, Replicate API token or Krea API key. Add one in Settings, "
+        "These settings need your fal.ai API key, Replicate token or Krea API key. Add one in Settings, "
         "then run the node again.")
 
 

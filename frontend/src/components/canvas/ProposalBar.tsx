@@ -8,6 +8,7 @@ import {
   countdown,
   ghostBoxes,
   notReadyShown,
+  detailsDisclosure,
   acceptChipTitle,
   proposalChanges,
   proposalMetaLine,
@@ -197,11 +198,7 @@ export function ProposalBar() {
   const { lines: notReadyLines, inDetails: notReadyInDetails } = notReadyShown(notReady, acceptLock);
   const moreNotReady = notReadyInDetails.length > 0;
   const hasDetails = hasChangeLines || noteClamped || moreNotReady;
-  const detailsLabel = hasChangeLines
-    ? (detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes')
-    : noteClamped
-      ? (detailsOpen ? 'Hide the note' : 'Read the whole note')
-      : (detailsOpen ? 'Hide the list' : 'See every node that can’t run');
+  const detailsLabel = detailsDisclosure({ list: moreNotReady, changes: hasChangeLines, note: noteClamped }, detailsOpen);
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -264,7 +261,7 @@ export function ProposalBar() {
           {notReadyLines.length > 0 && (
             // Accept stays as the Run button does for a node without its
             // key: the run is refused at that node, before anything is spent.
-            <ul className="proposal-bar__readiness" aria-label="Can't run here">
+            <ul className="proposal-bar__readiness" aria-label="Can’t run here">
               {notReadyLines.map((line) => (
                 <li key={line.key} className="proposal-bar__not-ready">
                   <span className="proposal-bar__not-ready-mark" aria-hidden="true">&#x26A0;</span>
@@ -295,7 +292,7 @@ export function ProposalBar() {
               )}
               {moreNotReady && (
                 <section className="proposal-bar__group">
-                  <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
+                  <h3 className="proposal-bar__group-title">Can’t run here</h3>
                   {notReadyInDetails.map((line) => (
                     <p key={line.key} className="proposal-bar__line">{line.text}</p>
                   ))}

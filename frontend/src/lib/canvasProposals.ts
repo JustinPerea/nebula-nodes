@@ -232,34 +232,89 @@ export function stillNotReady(
 export function notReadyBarLines(
   rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
   acceptLock: string | null,
-): Array<{ key: string; text: string }> {
-  const lines: Array<{ key: string; text: string }> = [];
+): Array<{ key: string; text: string; accept?: true }> {
+  const lines: Array<{ key: string; text: string; accept?: true }> = [];
+  // Nodes with the same name and the same reason say one line, the count in
+  // front (GM, PR #203 r27 item 7): the line's index and how many said it.
+  const same = new Map<string, { index: number; count: number }>();
   let said = false;
   for (const row of rows) {
     if (row.routeKeyLine && acceptLock) {
-      if (!said) lines.push({ key: row.ref, text: acceptLock });
+      if (!said) lines.push({ key: row.ref, text: acceptLock, accept: true });
       said = true;
       continue;
     }
-    lines.push({ key: row.ref, text: notReadyLine(row) });
+    const text = notReadyLine(row);
+    const seen = same.get(text);
+    if (seen && pluralNotReadyLine(text, 2)) {
+      seen.count += 1;
+      continue;
+    }
+    same.set(text, { index: lines.length, count: 1 });
+    lines.push({ key: row.ref, text });
+  }
+  for (const { index, count } of same.values()) {
+    if (count > 1) lines[index] = { ...lines[index], text: pluralNotReadyLine(lines[index].text, count)! };
   }
   return lines;
+}
+
+// The person's line's verb for several nodes (instance_missing_line's
+// sentences: "needs", "isn't", and the route lines' "can’t").
+const PLURAL_VERBS: Readonly<Record<string, string>> = {
+  needs: 'need', 'isn’t': 'aren’t', "isn't": "aren't", is: 'are', has: 'have', 'can’t': 'can’t', "can't": "can't",
+};
+
+/** A not-ready line for one node said for `count` nodes of the same name and
+ * reason, from that line itself so the two can't drift: "“Krea 2” needs your
+ * Krea plan. Sign in to Krea in Settings." becomes "2 “Krea 2” nodes need
+ * your Krea plan. Sign in to Krea in Settings." (GM, PR #203 r27 item 7).
+ * Null for a line that doesn't start with the quoted name and a verb it
+ * knows: those nodes keep a line each. */
+export function pluralNotReadyLine(line: string, count: number): string | null {
+  const match = /^(“[^”]+”) (\S+)( .*)$/.exec(line);
+  const verb = match ? PLURAL_VERBS[match[2]] : undefined;
+  if (!match || !verb) return null;
+  return `${count} ${match[1]} nodes ${verb}${match[3].replace(/\bits\b/g, 'their')}`;
 }
 
 /**
  * What the bar shows of its not-ready nodes, by the shared rule
  * (errorCopy.countsInstead; GM, PR #203 r24): up to 3 nodes, a line each;
  * from 4, one line that counts them ("4 nodes can’t run here yet."), and
- * every node's line in the details ("See every node that can’t run"). The
+ * every node's line in the details, opened by NOT_READY_DISCLOSURE. The
  * count is of nodes, whatever lines notReadyBarLines merged.
  */
+/** The not-ready list's disclosure: one name, open or closed ("Show the
+ * list" / "Hide the list"; GM, PR #203 r26). The heading inside is "Can’t
+ * run here". Every surface that lists not-ready nodes reads it. */
+export const NOT_READY_DISCLOSURE = { closed: 'Show the list', open: 'Hide the list' } as const;
+/** The disclosure when the details hold the list and something else too
+ * (what Accept writes, the whole note): "Show the details" / "Hide the
+ * details" (GM, PR #203 r27 item 4). */
+export const DETAILS_DISCLOSURE = { closed: 'Show the details', open: 'Hide the details' } as const;
+
+/** The bar's details toggle, by what the details hold: the not-ready list
+ * alone, the list beside other parts, or only the other parts. */
+export function detailsDisclosure(
+  holds: { list: boolean; changes: boolean; note: boolean }, open: boolean,
+): string {
+  const state = open ? 'open' : 'closed';
+  if (holds.list) return (holds.changes || holds.note ? DETAILS_DISCLOSURE : NOT_READY_DISCLOSURE)[state];
+  if (holds.changes) return open ? 'Hide what Accept writes' : 'See what Accept writes';
+  return open ? 'Hide the note' : 'Read the whole note';
+}
+
 export function notReadyShown(
   rows: ReadonlyArray<ProposalNotReady & { routeKeyLine?: true }>,
   acceptLock: string | null,
 ): { lines: Array<{ key: string; text: string }>; inDetails: Array<{ key: string; text: string }> } {
   const lines = notReadyBarLines(rows, acceptLock);
   if (!countsInstead(rows.length)) return { lines, inDetails: [] };
-  return { lines: [{ key: 'count', text: `${rows.length} nodes can’t run here yet.` }], inDetails: lines };
+  // The Accept line stays in view whatever the count: it says why Accept is
+  // locked (review 13 of PR #203, copy NIT-3).
+  const accept = lines.filter((line) => line.accept);
+  return { lines: [{ key: 'count', text: `${rows.length} nodes can’t run here yet.` }, ...accept], inDetails: lines };
 }
 
 /** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in
@@ -554,7 +609,7 @@ export function fullValue(value: unknown): string {
  * proposal may change (backend main._refuse_agent_billing_change), so the bar
  * names it plainly: a route-table node's provider, a Krea node's billing mode. */
 const KREA_BILLING_KEY = '_kreaAuth';
-const KREA_BILLING_VALUES: Record<string, string> = { 'api-token': 'API token balance', mcp: 'Krea plan' };
+const KREA_BILLING_VALUES: Record<string, string> = { 'api-token': 'API balance', mcp: 'Krea plan' };
 
 function changeLine(key: string, to: unknown, from?: unknown, hasFrom = false): ChangeLine {
   if (key === PROVIDER_PARAM) {

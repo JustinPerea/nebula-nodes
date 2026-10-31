@@ -9404,7 +9404,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Job ID',
         type: 'string',
         required: false,
-        placeholder: 'Blank lists recent jobs (API token)',
+        placeholder: 'Blank lists recent jobs (API key)',
       },
       {
         key: 'status',

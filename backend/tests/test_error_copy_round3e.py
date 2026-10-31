@@ -191,7 +191,7 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     assert error.message == node_route.route_unavailable(ROUTES, {"_provider": "replicate"}, keys)["message"]
     assert "REPLICATE_API_TOKEN" in error.message
     assert _clean(error.person) == (
-        "Fixture Image is set to Replicate, which needs your Replicate API token. Add it in Settings, or "
+        "Fixture Image is set to Replicate, which needs your Replicate token. Add it in Settings, or "
         "choose another provider. Black Forest Labs or fal.ai can take it.")
 
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]
@@ -350,9 +350,9 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     assert "person" not in json.dumps(body)
     assert client.get(f"/api/graph/runs/{body['runId']}").json()["errors"] == body["errors"]
     # The agent's cursor on the canvas says the person's line, not the keys.
-    [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "can't run" in str(m.get("say"))]
+    [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "can’t run" in str(m.get("say"))]
     assert "OPENAI_API_KEY" not in said and "'prompt'" not in said
-    assert said.endswith(f"can't run. {PROMPT_LINE} {KEY_LINE}")
+    assert said.endswith(f"can’t run. {PROMPT_LINE} {KEY_LINE}")
 
 
 def test_a_validation_event_serializes_its_person_line():

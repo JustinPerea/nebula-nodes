@@ -20,7 +20,7 @@ def protected_graph(request, tmp_path, monkeypatch):
     if request.param == "commons":
         monkeypatch.setenv("NEBULA_COMMONS_ROOT", str(root))
     else:
-        monkeypatch.setattr("services.settings.SETTINGS_PATH", target)
+        monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(target))
     target.write_text(json.dumps({"nodes": [], "edges": []}))
     return target
 

@@ -252,7 +252,7 @@ export async function promoteCinemaShotVariation(
 }
 
 export async function getSettings(): Promise<Record<string, unknown>> {
-  const response = await apiRequest("Couldn't load your API keys.", '/api/settings');
+  const response = await apiRequest('Couldn’t load your API keys.', '/api/settings');
   return response.json();
 }
 

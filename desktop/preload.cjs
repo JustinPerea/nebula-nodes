@@ -10,7 +10,7 @@ const ipcRenderer = electron.ipcRenderer;
 // Security surface:
 //   - No filesystem, process, or generic Node access.
 //   - No raw ipcRenderer exposure.
-//   - credentials has set / has / clear — deliberately NO get method.
+//   - credentials has set / has / clear / revert — deliberately NO get method.
 //   - migration has status / retry.
 //   - paperLinks has one guarded artwork-opening method.
 //   - folders has one method: show the OS folder chooser, return the pick.
@@ -70,6 +70,9 @@ const credentials = Object.freeze({
   set: (provider, key) => ipcRenderer.invoke('credentials:set', { provider, key }),
   has: (provider) => ipcRenderer.invoke('credentials:has', provider),
   clear: (provider) => ipcRenderer.invoke('credentials:clear', provider),
+  // Undo this launch's last set or clear of one provider (main keeps the
+  // earlier encrypted entry; nothing comes back to the renderer).
+  revert: (provider) => ipcRenderer.invoke('credentials:revert', provider),
 });
 
 /**

@@ -334,7 +334,7 @@ describe('ProposalBar', () => {
     open(keyless);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    const list = screen.getByRole('list', { name: "Can't run here" });
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list.textContent).toContain('GPT Image 2 (+img) needs OPENAI_API_KEY in Settings > Providers');
     // The canvas Run button stays enabled for a node without its key: the
     // backend refuses that node before anything is spent. Accept does the same.
@@ -343,7 +343,7 @@ describe('ProposalBar', () => {
 
     // The person adds the key while the proposal is open: the line goes.
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'set' }, loaded: true } }));
-    expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
   });
 
   it('locks Accept with GM\'s line while its run needs a Hugging Face token (PR #203 r6 item 1)', () => {
@@ -394,12 +394,12 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     // GM r11 item 5: inside the bar the control is Accept, so the line is
     // the Accept line, said once, never the node's Run line.
-    const list = screen.getByRole('list', { name: "Can't run here" });
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list).toHaveTextContent('You can accept this after you add your Hugging Face token in Settings.');
     expect(screen.queryByText(ROW)).toBeNull();
     expect(list.querySelectorAll('li')).toHaveLength(1);
     act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } }));
-    expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
     expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
   });
 
@@ -473,7 +473,7 @@ describe('ProposalBar', () => {
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    return screen.getByRole('list', { name: "Can't run here" });
+    return screen.getByRole('list', { name: 'Can’t run here' });
   };
 
   it('keeps a reason the canvas cannot re-check, a line for each of up to 3 nodes', () => {
@@ -488,12 +488,59 @@ describe('ProposalBar', () => {
   it.each([4, 5])('counts %i nodes in one line and lists every one in the details', (count) => {
     const list = notReadyOf(count);
     expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([`⚠${count} nodes can’t run here yet.`]);
-    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
+    // The details hold the list and what Accept writes: one name for both
+    // (GM, PR #203 r27 item 4), following its state.
+    const toggle = screen.getByRole('button', { name: 'Show the details' });
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Hide the details' })).toBe(toggle);
+    expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list/ })).toBeNull();
     const details = screen.getByLabelText('What Accept writes');
     for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
   });
 
-  it('opens the list with "See every node that can’t run" when there is nothing else to show', () => {
+  // GM, PR #203 r27 item 7: same-named nodes with the same reason say one
+  // line in the person's list, the count in front of the single line's
+  // sentence; another node keeps its own line.
+  const KREA_LINE = '“Krea 2” needs your Krea plan. Sign in to Krea in Settings.';
+  const sameNamed = (krea: number) => {
+    const many = proposal('p_a');
+    many.nodes = [];
+    many.params = [];
+    many.cost = { ...many.cost, notReady: [
+      ...Array.from({ length: krea }, (_, index) => ({ ref: `+k${index}`, nodeId: null, name: 'Krea 2',
+        missing: 'needs the Krea account signed in (Settings > Providers > Krea)', person: KREA_LINE })),
+      { ref: '+c', nodeId: null, name: 'Claude', missing: 'needs ANTHROPIC_API_KEY in Settings > Providers',
+        person: '“Claude” needs your Anthropic API key. Add it in Settings.' },
+    ] };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+  };
+
+  it('says two same-named nodes in one line, the count in front', () => {
+    sameNamed(2);
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      '⚠2 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
+      '⚠“Claude” needs your Anthropic API key. Add it in Settings.',
+    ]);
+  });
+
+  it('counts 4 nodes, and says three same-named ones in one line in the list', () => {
+    sameNamed(3);
+    const list = screen.getByRole('list', { name: 'Can’t run here' });
+    expect(list.textContent).toBe('⚠4 nodes can’t run here yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Show the list' }));
+    expect([...screen.getByLabelText('Details').querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+      '3 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
+      '“Claude” needs your Anthropic API key. Add it in Settings.',
+    ]);
+  });
+
+  // GM, PR #203 r26: one toggle, one name: "Show the list" / "Hide the
+  // list"; the heading inside is "Can’t run here". Its name follows its
+  // state and focus stays on it.
+  it('opens the list with "Show the list" and closes it with "Hide the list", focus kept on the toggle', () => {
     const many = proposal('p_a');
     many.nodes = [];
     many.params = [];
@@ -502,8 +549,21 @@ describe('ProposalBar', () => {
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    fireEvent.click(screen.getByRole('button', { name: 'See every node that can’t run' }));
-    expect(screen.getByLabelText('Details').textContent).toContain('(+d)');
+    const toggle = screen.getByRole('button', { name: 'Show the list' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Hide the list' })).toBe(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveFocus();
+    const details = screen.getByLabelText('Details');
+    expect(details.textContent).toContain('(+d)');
+    expect(details.querySelector('h3')?.textContent).toBe('Can’t run here');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Show the list' })).toBe(toggle);
+    expect(toggle).toHaveFocus();
+    expect(screen.queryByLabelText('Details')).toBeNull();
+    expect(document.body.textContent).not.toContain('See every node');
   });
 
   it("wraps the agent's note and offers the rest in the details", () => {
@@ -714,6 +774,6 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     const accept = screen.getByRole('button', { name: 'Accept and run' });
     expect(accept).not.toHaveAttribute('aria-disabled');
     expect(accept.querySelector('.proposal-bar__count')).toBeNull();
-    expect(screen.queryByRole('list', { name: "Can't run here" })).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
   });
 });

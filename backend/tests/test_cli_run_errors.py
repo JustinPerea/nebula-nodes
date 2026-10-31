@@ -106,7 +106,7 @@ def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch,
 
     assert "OPENAI_API_KEY" in body["error"] and image in body["error"]
     [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-    assert line == (f"Run stopped before it started. {main._node_label(image)} can't run. "
+    assert line == (f"Run stopped before it started. {main._node_label(image)} can’t run. "
                     "Add your OpenAI API key in Settings, then run the node again.")
     assert "OPENAI_API_KEY" not in line and image not in line and "Missing API key" not in line
 

@@ -16,6 +16,8 @@ import { notReadyShown } from '../src/lib/canvasProposals';
 import { agentNameList, countsInstead, nodeNameList, quotedNames } from '../src/lib/errorCopy';
 import { credentialName, credentialNoun, LINK_NOUNS, PROVIDER_KEYS } from '../src/lib/providerCatalog';
 import { keyChangedLine, keyNoun } from '../src/lib/settingsWrites';
+import { KEY_NAMES, keyPhrase, missingKeyLine } from '../src/lib/directRoute';
+import { modelKeyMissingText } from '../src/lib/failureLines';
 import type { ProposalNotReady } from '../src/lib/wsClient';
 
 const SRC = resolve(__dirname, '../src');
@@ -54,7 +56,9 @@ describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
   it('counts nodes, not the lines a key lock merges', () => {
     const locked = rows(4).map((row) => ({ ...row, routeKeyLine: true as const }));
     const shown = notReadyShown(locked, 'You can accept this after you add your Hugging Face token in Settings.');
-    expect(shown.lines.map((line) => line.text)).toEqual(['4 nodes can’t run here yet.']);
+    // The Accept line stays in view beside the count (review 13, copy NIT-3).
+    expect(shown.lines.map((line) => line.text)).toEqual(['4 nodes can’t run here yet.',
+      'You can accept this after you add your Hugging Face token in Settings.']);
     expect(shown.inDetails.map((line) => line.text)).toEqual(['You can accept this after you add your Hugging Face token in Settings.']);
     expect(notReadyShown(locked.slice(0, 3), 'Lock line.').lines.map((line) => line.text)).toEqual(['Lock line.']);
   });
@@ -68,6 +72,11 @@ describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
   });
 });
 
+/** The one run-failure noun still unlike its Settings noun, pending GM:
+ * Vertex's lines say "credentials" ("Add your Google Vertex AI credentials in
+ * Settings, …"), and its notices "key" (GM r26 item 2). */
+const RUN_LINE_PENDING: Readonly<Record<string, string>> = { GOOGLE_VERTEX_CREDENTIALS: 'credentials' };
+
 describe('every provider says the word its link uses (GM r25 item 3)', () => {
   it.each(PROVIDER_KEYS.map((spec) => [spec.key, spec] as const))('%s', (key, spec) => {
     const linkWord = LINK_NOUNS[/ (keys|tokens|service accounts)$/.exec(spec.keyLink)![1]];
@@ -78,6 +87,22 @@ describe('every provider says the word its link uses (GM r25 item 3)', () => {
     expect(credentialNoun(spec)).toBe(linkWord);
     // Said once: never "key key", "API API" or "token key".
     expect(credentialName(spec)).not.toMatch(/\b(\w+) \1\b|key key|token key|API API/i);
+    // Round 14 (GM r26 item 5): the run-failure lines say the same noun,
+    // the backend's person_line.KEY_NAMES included (route_tables.json pins
+    // it to KEY_NAMES here): "Add your Replicate token in Settings."
+    if (Object.hasOwn(RUN_LINE_PENDING, key)) {
+      expect(KEY_NAMES[key][1], key).toBe(RUN_LINE_PENDING[key]);
+      return;
+    }
+    const phrase = keyPhrase([key])!;
+    expect(phrase.endsWith(` ${linkWord}`), phrase).toBe(true);
+    expect(missingKeyLine([key])).toBe(`Add your ${phrase} in Settings, then run the node again.`);
+    expect(modelKeyMissingText('X', [key])).toBe(`Couldn't set up “X”. Add your ${phrase} in Settings.`);
+  });
+
+  it('says "Add your Replicate token in Settings." on a run failure and in the model picker (GM r26 item 5)', () => {
+    expect(missingKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add your Replicate token in Settings, then run the node again.');
+    expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe("Couldn't set up “X”. Add your Replicate token in Settings.");
   });
 
   it('gives a link word one noun: tokens a token, keys and service accounts a key', () => {
@@ -98,7 +123,7 @@ describe('every provider says the word its link uses (GM r25 item 3)', () => {
     expect(named).toMatchObject({
       KREA_API_TOKEN: 'Krea · API key', KREA_USAGE_KEY: 'Krea · usage key', GOOGLE_API_KEY: 'Google · Gemini API key',
       HF_TOKEN: 'Hugging Face token', REPLICATE_API_TOKEN: 'Replicate token', OPENAI_API_KEY: 'OpenAI API key',
-      GOOGLE_VERTEX_CREDENTIALS: 'Google · Vertex AI API key',
+      GOOGLE_VERTEX_CREDENTIALS: 'Google · Vertex AI service account key',
     });
   });
 });

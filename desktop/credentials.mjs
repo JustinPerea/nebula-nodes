@@ -78,6 +78,7 @@ export const CREDENTIAL_CHANNELS = Object.freeze([
   'credentials:set',
   'credentials:has',
   'credentials:clear',
+  'credentials:revert',
   'credentials:migration-status',
   'credentials:retry-migration',
 ]);
@@ -354,6 +355,13 @@ export function createCredentialService(options) {
     existsSync: fsDeps.existsSync ?? existsSync,
   };
 
+  // Each provider's entry as it was before its last set or clear (an
+  // encrypted blob, or undefined when there was none), kept in this process
+  // only, so `revert` can put it back without the renderer ever holding a
+  // key: the renderer undoes a Keychain write the backend then refused
+  // (review 13 of PR #203, LOW-1).
+  const before = new Map();
+
   return {
     /**
      * Encrypt and store a provider key.
@@ -380,6 +388,7 @@ export function createCredentialService(options) {
       }
       const encrypted = await encryptValue(key, safeStorage);
       const store = readCredentialsStore(credentialsPath, fileDeps);
+      before.set(provider, store.providers[provider]);
       store.providers[provider] = encrypted;
       writeCredentialsStore(credentialsPath, store, fileDeps);
       return { ok: true };
@@ -412,10 +421,34 @@ export function createCredentialService(options) {
         throw new UnknownProviderError(provider);
       }
       const store = readCredentialsStore(credentialsPath, fileDeps);
+      before.set(provider, store.providers[provider]);
       if (provider in store.providers) {
         delete store.providers[provider];
         writeCredentialsStore(credentialsPath, store, fileDeps);
       }
+      return { ok: true };
+    },
+
+    /**
+     * Put a provider's entry back as it was before its last `set` or
+     * `clear` in this process: the earlier key, or none. Once only; a
+     * second call has nothing to put back.
+     *
+     * @param {string} provider
+     * @returns {{ ok: true } | { ok: false, error: 'NOTHING_TO_REVERT' }}
+     * @throws {UnknownProviderError}
+     */
+    revert(provider) {
+      if (!isProviderAllowed(provider)) {
+        throw new UnknownProviderError(provider);
+      }
+      if (!before.has(provider)) return { ok: false, error: 'NOTHING_TO_REVERT' };
+      const previous = before.get(provider);
+      before.delete(provider);
+      const store = readCredentialsStore(credentialsPath, fileDeps);
+      if (previous === undefined) delete store.providers[provider];
+      else store.providers[provider] = previous;
+      writeCredentialsStore(credentialsPath, store, fileDeps);
       return { ok: true };
     },
 
@@ -577,6 +610,25 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
     }
   });
   channels.push('credentials:clear');
+
+  // -- credentials:revert --------------------------------------------------
+  ipcMain.handle('credentials:revert', (event, provider) => {
+    if (!validateSender(event)) {
+      return { ok: false, error: 'UNTRUSTED_SENDER' };
+    }
+    if (!isProviderAllowed(provider)) {
+      return { ok: false, error: 'UNKNOWN_PROVIDER' };
+    }
+    try {
+      return service.revert(provider);
+    } catch (credentialErr) {
+      return {
+        ok: false,
+        error: credentialErr.code || credentialErr.message,
+      };
+    }
+  });
+  channels.push('credentials:revert');
 
   // -- credentials:migration-status ----------------------------------------
   ipcMain.handle('credentials:migration-status', (event) => {

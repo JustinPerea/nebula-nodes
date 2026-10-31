@@ -587,7 +587,10 @@ def format_start(start: dict[str, Any]) -> str:
     lines.append("")
     per_run = spend.get("perRunUsd")
     per_run_text = f"{_usd(float(per_run))} per run" if isinstance(per_run, (int, float)) else "no per-run limit"
-    if not spend.get("limited", True):
+    if spend.get("note"):
+        # The limits couldn't be read (a settings file Nebula can't read).
+        lines.append(f"SPEND: {spend['note']}")
+    elif not spend.get("limited", True):
         lines.append(f"SPEND: not limited ({per_run_text} for agents)")
     else:
         limit = spend.get("limitUsd")
@@ -945,13 +948,17 @@ def _cost_line(cost: dict[str, Any]) -> str:
     # providers, as before.
     paid_tag = _tags(paid_ids, paid) if len(paid_ids) == paid else (
         f" ({', '.join(cost.get('providers') or [])})" if cost.get("providers") else "")
-    free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "")
-                for entry in entries if entry.get("kind") == "free"]
-    free_ids = [where for where in free_ids if where][:free]
+    # A free run with no place runs locally, so every free run is counted
+    # once; without an entry for each (an older backend's cost), none is
+    # tagged by place (review 13 of PR #203, copy LOW-2).
+    free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "local")
+                for entry in entries if entry.get("kind") == "free"][:free]
+    if len(free_ids) != free:
+        free_ids = []
     # "run" goes on the first class only and carries through the rest, and
     # a class that stands alone keeps it (GM, PR #203 r25 item 1): "1 paid
     # run (google), 1 on the person's Krea plan and 1 free (fal)", "1 run on
-    # the person's Krea plan and 1 free", "1 free run (fal)".
+    # the person's Krea plan and 1 free (local)", "1 free run (fal)".
     runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
     alone = sum(1 for count in (paid, may, plan, free) if count) <= 1
     parts: list[str] = []
@@ -965,9 +972,11 @@ def _cost_line(cost: dict[str, Any]) -> str:
         parts.append(f"{plan} {first(plan)}on the person's Krea plan")
     if free or not parts:
         if set(free_ids) <= {"local"}:
-            # Every free run is local (or no entry says where): said only
-            # when they are the whole run.
-            where = " (runs locally)" if alone else ""
+            # Every free run is local (or no entry says where): "(runs
+            # locally)" when they are the whole run, else tagged as the
+            # paid part is, "1 paid run (openai) and 1 free (local)" (GM, PR
+            # #203 r27 item 5).
+            where = " (runs locally)" if alone else (" (local)" if free_ids else "")
         else:
             where = _tags(free_ids, free)
         parts.append(f"{free} free {first(free)}".rstrip() + where)

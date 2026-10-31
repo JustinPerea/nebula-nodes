@@ -24,7 +24,7 @@ from jsonschema import Draft202012Validator
 
 from handlers.krea import (
     KREA_BASE_URL, NOTHING_SENT_TO_KREA, _api_key, _auth_headers, _auth_mode, _cancel_krea_job, _clean_str, _int_value,
-    _json_headers, _poll_krea_job, _port_values, _raise_for_krea_response, _upload_asset,
+    _json_headers, _poll_krea_job, _port_values, _raise_for_krea_response, _upload_asset, connection_name,
 )
 from handlers.krea_gateway import _JOB_ID, _asset_data, _http_url
 from models.events import ExecutionEvent
@@ -164,8 +164,8 @@ async def handle_krea_job_history(node: GraphNode, inputs: dict[str, PortValueDi
     if not job_id and mode == "mcp":
         raise with_person_line(
             ValueError("Listing job history needs a Krea API key; the Krea account can fetch one job by ID. Nothing was sent"),
-            "Job history needs the “API token” connection. The “Krea account” connection can look up one job by "
-            f"its ID. {NOTHING_SENT_TO_KREA}")
+            f"Job history needs the {connection_name('api-token')} connection. The {connection_name('mcp')} "
+            f"connection can look up one job by its ID. {NOTHING_SENT_TO_KREA}")
 
     if mode == "mcp":
         from services.krea_account import account_tools

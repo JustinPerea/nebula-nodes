@@ -108,8 +108,8 @@ export function Settings() {
       // GM, round 16 of PR #114: with no answer, the unified line in full
       // ("…, then try again."), beside Try again.
       setLoadFailure(isNoAnswer(error)
-        ? { heading: "Couldn't load your API keys.", reason: NEBULA_NOT_ANSWERING_COPY }
-        : failureCopy(error, { heading: "Couldn't load your API keys.", short: true }));
+        ? { heading: 'Couldn’t load your API keys.', reason: NEBULA_NOT_ANSWERING_COPY }
+        : failureCopy(error, { heading: 'Couldn’t load your API keys.', short: true }));
       setLoadState(useSettingsDraftStore.getState().saved ? 'ready' : 'error');
     });
     return () => { cancelled = true; };

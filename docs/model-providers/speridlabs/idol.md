@@ -245,7 +245,8 @@ $0 and spend tracking never counts it as paid.
     where its runs go as ids, a count each when there are several (GM r22
     item 5, r24 items 1 and 2): "1 paid run (openai) and 1 free
     (huggingface)", "3 paid runs (2 anthropic, 1 krea) and 2 free (1 fal,
-    1 local)". Idol's entry says where it runs as `runsOn`
+    1 local)", and a lone local run is "(local)" beside another class ("1
+    paid run (openai) and 1 free (local)"; GM r27 item 5). Idol's entry says where it runs as `runsOn`
     ("huggingface", `node_route.key_billing_host`); its `provider` stays
     "speridlabs".
     The journal's `proposal.created` has `planRuns` and `mayCostRuns`
@@ -314,22 +315,33 @@ $0 and spend tracking never counts it as paid.
     home folder as "~" ("~/.nebula/settings.json"; anywhere else it stays
     absolute; `settings.settings_file_shown`, GM r24 item 7); a PUT that
     writes no key, or sends only masked `***` values, saves and keeps
-    `apiKeys` as it was. A file that isn't an object at all, or isn't JSON
-    Nebula can read (cut short, hand-edited; `settings.SettingsUnreadable`,
-    review 12, LOW-3), refuses every write, the desktop credential bridge's
-    included: "Nothing was saved because Nebula can’t read <path>. Fix the
-    file, then try again." GET /api/settings answers it with 409 "Nebula
-    can’t read <path>. Fix the file, then try again.", which Settings shows
-    under "Couldn't load your API keys.", never a 500; runs fail closed on
-    it, as before. On desktop the panel asks `credentials/update` with
-    `"check": true` before the Keychain write, so a refused key lands in
-    neither. The path is resolved once (`settings.settings_file`; a "~" in
-    NEBULA_SETTINGS_PATH is the home folder) for reads, writes and the 409
-    (review 12, LOW-2). A value that holds no key (null, [], "", false, 0)
-    is replaced by the write instead (GM r23). No agent surface writes
-    settings (`require_person` runs first), so the save lines reach only
-    the person's Settings panel; `nebula keys` reads GET /api/settings and
-    gets the read line.
+    `apiKeys` as it was. A file that isn't an object at all (`null`
+    included; review 13, HIGH-1), isn't JSON Nebula can read (cut short,
+    hand-edited; `settings.SettingsUnreadable`, review 12, LOW-3), or that
+    Nebula may not read (no permission, a folder at the path; review 13,
+    LOW-3) refuses every write, the desktop credential bridge's included:
+    "Nothing was saved because Nebula can’t read <path>. Fix the file, then
+    try again." GET /api/settings answers it with 409, never a 500, worded
+    for who reads it (GM r27 item 2): the person gets "Nebula can’t read
+    <path>. Fix the file, then try again.", which Settings shows under
+    "Couldn’t load your API keys."; agents (MCP `get_settings`, `nebula
+    keys`) get "Nebula can’t read <path>. Ask the person to fix the
+    file.", and `start_here` (`nebula context`) carries that line in its
+    nodes and spend parts instead of a 500. Runs fail closed on it, as
+    before. `credentials/update` takes `check` only as true or false (422
+    otherwise). On desktop the panel asks `credentials/update` with
+    `"check": true` before the Keychain write, and if the backend still
+    refuses after the Keychain changed, the Keychain is put back
+    (`credentials.revert`; main keeps the earlier entry), so a refused key
+    lands in neither whatever the order (review 13, LOW-1). The path is
+    read from NEBULA_SETTINGS_PATH at each call (`settings.settings_path`,
+    a "~" is the home folder) and resolved for reads, writes and the 409
+    (review 12, LOW-2; review 13, LOW-2: nothing reloads the module). The
+    "~" is used only under a real home folder other than "/" (review 13,
+    LOW-4). A value that holds no key (null, [], "", false, 0) is replaced
+    by the write instead (GM r23). No agent surface writes settings
+    (`require_person` runs first), so the save lines reach only the
+    person's Settings panel.
   - Keys Nebula can't read are no keys for every reader, the spend gate
     included (review 11, HIGH-1, option a): an agent's Idol run then runs
     keyless, and no handler reads a key from the environment instead

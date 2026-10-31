@@ -227,14 +227,15 @@ describe('Published constants', () => {
     ]);
   });
 
-  test('CREDENTIAL_CHANNELS has exactly 5 channels (no get)', () => {
-    assert.equal(CREDENTIAL_CHANNELS.length, 5);
+  test('CREDENTIAL_CHANNELS has exactly 6 channels (no get)', () => {
+    assert.equal(CREDENTIAL_CHANNELS.length, 6);
     assert.ok(!CREDENTIAL_CHANNELS.includes('credentials:get'));
     assert.deepEqual([...CREDENTIAL_CHANNELS].sort(), [
       'credentials:clear',
       'credentials:has',
       'credentials:migration-status',
       'credentials:retry-migration',
+      'credentials:revert',
       'credentials:set',
     ]);
   });
@@ -857,9 +858,9 @@ describe('registerCredentialHandlers', () => {
     return { ipcMain: ipcMain, service: service, validateSender: validateSender, event: event, credsPath: credsPath, migrationPath: migrationPath, ss: ss };
   }
 
-  test('registers exactly 5 channels', () => {
+  test('registers exactly 6 channels', () => {
     const { ipcMain } = makeHarness();
-    assert.equal(ipcMain._channels().length, 5);
+    assert.equal(ipcMain._channels().length, 6);
   });
 
   test('registers all expected channels', () => {
@@ -870,8 +871,44 @@ describe('registerCredentialHandlers', () => {
       'credentials:has',
       'credentials:migration-status',
       'credentials:retry-migration',
+      'credentials:revert',
       'credentials:set',
     ]);
+  });
+
+  // Review 13 of PR #203, LOW-1: the renderer undoes a Keychain write the
+  // backend then refused, and gets nothing back but ok.
+  test('credentials:revert puts back the key a set replaced, once', async () => {
+    const { ipcMain, service, event, credsPath } = makeHarness();
+    await service.set('OPENAI_API_KEY', 'old-key-1234');
+    const old = readCredentialsStore(credsPath).providers.OPENAI_API_KEY;
+    await ipcMain._get('credentials:set')(event, { provider: 'OPENAI_API_KEY', key: 'new-key-5678' });
+    assert.notEqual(readCredentialsStore(credsPath).providers.OPENAI_API_KEY, old);
+    assert.deepEqual(await ipcMain._get('credentials:revert')(event, 'OPENAI_API_KEY'), { ok: true });
+    assert.equal(readCredentialsStore(credsPath).providers.OPENAI_API_KEY, old);
+    assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'old-key-1234' });
+    assert.deepEqual(await ipcMain._get('credentials:revert')(event, 'OPENAI_API_KEY'),
+      { ok: false, error: 'NOTHING_TO_REVERT' });
+  });
+
+  test('credentials:revert removes a key a set added, and restores one a clear removed', async () => {
+    const { ipcMain, service, event, credsPath } = makeHarness();
+    await ipcMain._get('credentials:set')(event, { provider: 'FAL_KEY', key: 'fal-new-1' });
+    assert.deepEqual(await ipcMain._get('credentials:revert')(event, 'FAL_KEY'), { ok: true });
+    assert.ok(!('FAL_KEY' in readCredentialsStore(credsPath).providers));
+    await service.set('FAL_KEY', 'fal-kept-2');
+    await ipcMain._get('credentials:clear')(event, 'FAL_KEY');
+    assert.deepEqual(await ipcMain._get('credentials:revert')(event, 'FAL_KEY'), { ok: true });
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-kept-2' });
+  });
+
+  test('credentials:revert checks the sender and the provider', async () => {
+    const untrusted = makeHarness({ validateSender: () => false });
+    assert.deepEqual(await untrusted.ipcMain._get('credentials:revert')(untrusted.event, 'FAL_KEY'),
+      { ok: false, error: 'UNTRUSTED_SENDER' });
+    const { ipcMain, event } = makeHarness();
+    assert.deepEqual(await ipcMain._get('credentials:revert')(event, 'NOT_A_PROVIDER'),
+      { ok: false, error: 'UNKNOWN_PROVIDER' });
   });
 
   test('does NOT register credentials:get', () => {

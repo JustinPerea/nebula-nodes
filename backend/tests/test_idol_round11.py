@@ -65,7 +65,7 @@ PAID_AND_PLAN = {
      "1 run on the person's Krea plan"),
     ({"paidRuns": 0, "planRuns": 2, "freeRuns": 1,
       "nodes": [_entry("plan", "on Krea plan"), _entry("plan", "on Krea plan"), _entry("free", "free · runs locally")]},
-     "2 runs on the person's Krea plan and 1 free"),
+     "2 runs on the person's Krea plan and 1 free (local)"),
     # A sourced $0 and Idol without a token call a provider: never "runs locally".
     ({"paidRuns": 0, "freeRuns": 1, "nodes": [_entry("free", "free · fal.ai", provider="fal")]}, "1 free run (fal)"),
     ({"paidRuns": 0, "freeRuns": 2, "nodes": [_entry("free", "free · runs locally")] * 2},

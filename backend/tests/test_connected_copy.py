@@ -155,6 +155,6 @@ def test_a_refused_run_bubble_names_the_node_in_quotes(logged):
     node = graph.add_node("gpt-image-2-5-generate", {})
     body = client.post("/api/graph/run", json={"targetNodeId": node}, headers=AGENT).json()
     assert body["status"] == "failed"
-    [said] = [say for say in _says(sent) if "can't run" in str(say)]
-    assert said.startswith("“GPT Image 2.5” can't run.")
-    assert any(line.startswith("Run stopped before it started. GPT Image 2.5 can't run.") for line in lines)
+    [said] = [say for say in _says(sent) if "can’t run" in str(say)]
+    assert said.startswith("“GPT Image 2.5” can’t run.")
+    assert any(line.startswith("Run stopped before it started. GPT Image 2.5 can’t run.") for line in lines)

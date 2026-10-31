@@ -25,10 +25,10 @@ describe('proposalChanges', () => {
       params: { n1: { _kreaAuth: { from: 'api-token', to: 'mcp' } } },
     });
     expect(groups[0].lines).toEqual([{ key: 'Billed to', to: 'Krea plan' }, { key: 'seed', to: '7' }]);
-    expect(groups[1].lines).toEqual([{ key: 'Billed to', from: 'API token balance', to: 'Krea plan' }]);
+    expect(groups[1].lines).toEqual([{ key: 'Billed to', from: 'API balance', to: 'Krea plan' }]);
     // A node that never set it is on the API token, not "(empty)".
     const unset = proposalChanges(view(), { nodes: {}, params: { n1: { _kreaAuth: { from: null, to: 'mcp' } } } });
-    expect(unset[1].lines).toEqual([{ key: 'Billed to', from: 'API token balance', to: 'Krea plan' }]);
+    expect(unset[1].lines).toEqual([{ key: 'Billed to', from: 'API balance', to: 'Krea plan' }]);
   });
 
   it('names a provider switch plainly, with Auto for a node that never set it', () => {

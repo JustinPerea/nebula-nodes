@@ -77,11 +77,13 @@ from models.events import (
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError, unchosen_model_errors
 from execution.sync_runner import get_handler_registry
 from execution import provider_calls
+from execution.person_line import counts_instead
 from services.settings import (
     load_settings,
     load_saved_settings,
     saved_keys_writable,
     settings_file_shown,
+    SettingsUnreadable,
     save_settings,
     get_api_key,
     validate_provider_keys,
@@ -90,10 +92,6 @@ from services.settings import (
     update_injected_keys,
     hf_token_character_line,
 )
-# The module itself too, for its error class: read where it is caught, so a
-# reloaded settings module (tests/test_settings_path.py) raises the class
-# that is caught.
-import services.settings as settings_service
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
@@ -6476,10 +6474,20 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
                if isinstance(p, AssetProposal) and await _commons_proposal_visible(p, headers)]
     # Reads every board file; off the event loop.
     summaries = await asyncio.to_thread(lambda: _moodboard_store().summaries())
-    context = await asyncio.to_thread(_agent_node_context)
-    rows = await asyncio.to_thread(
-        lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
-    spend = await agent_spend_status(request)
+    unreadable = _settings_read_refusal()
+    if unreadable is None:
+        context = await asyncio.to_thread(_agent_node_context)
+        rows = await asyncio.to_thread(
+            lambda: [_agent_node_row(definition, context) for definition in context["definitions"].values()])
+        nodes = agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
+                                       krea="signed in" if context["krea"] else "not signed in", via=via)
+        spend = agent_start.spend_part(await agent_spend_status(request))
+    else:
+        # A settings file Nebula can't read: no node runs (each run fails
+        # closed on it) and the limits can't be read, so both parts carry
+        # the read line instead of a 500 (review 13 of PR #203, LOW-3).
+        nodes = agent_start.nodes_part([], total=len(node_registry.get_all()), notes=[unreadable], via=via)
+        spend = {"note": unreadable}
     return agent_start.build(
         canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
         pins=agent_start.pins_part(pins, via=via),
@@ -6488,9 +6496,8 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
             summaries, active_project_id=active_id,
             project_names={str(pid): str(p.get("name") or pid) for pid, p in projects.items() if isinstance(p, dict)},
             via=via),
-        nodes=agent_start.nodes_part(rows, total=len(rows), notes=_start_node_notes(rows, context, via),
-                                     krea="signed in" if context["krea"] else "not signed in", via=via),
-        spend=agent_start.spend_part(spend),
+        nodes=nodes,
+        spend=spend,
         next=agent_start.next_part({"journal": canvas_events.journal_id, "cursor": canvas_events.latest}, via=via),
     )
 
@@ -9800,12 +9807,12 @@ async def zoom_manifest_entry(body: dict[str, Any]) -> dict:
 async def get_settings() -> dict:
     try:
         settings = load_settings()
-    except settings_service.SettingsUnreadable:
+    except SettingsUnreadable:
         settings = None
     if not isinstance(settings, dict):
         # Cut short, hand-edited or not an object: Settings says the file
         # can't be read, never a 500 (review 12 of PR #203, LOW-3).
-        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE_ON_READ))
+        raise HTTPException(409, _unreadable_on_read())
     masked = dict(settings)
     if "apiKeys" in masked:
         # Justin, Q55 a: "Only the app (your person token) gets the endings.
@@ -10003,6 +10010,12 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             status_code=400,
             detail=f"unknown provider: {provider}",
         )
+    # `check` asks only whether the write would be accepted. Anything but a
+    # boolean is refused, so a typo ("true", 1) never writes the key (review
+    # 13 of PR #203, NIT-2).
+    check = body.get("check", False)
+    if not isinstance(check, bool):
+        raise HTTPException(status_code=422, detail="check must be true or false")
 
     refusal = _key_refusal(provider, key)
     if refusal is not None:
@@ -10010,7 +10023,7 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     # The file holds this backend's other settings: one it can't read gets
     # the 409 before any key changes, as PUT /api/settings does.
     _saved_settings_or_409()
-    if body.get("check") is True:
+    if check:
         return {"status": "ok"}
     before = dict(load_settings().get("apiKeys") or {})
     update_injected_keys(provider, node_route.key_text(key))
@@ -10026,9 +10039,32 @@ async def credentials_update(body: dict[str, Any]) -> dict:
 KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                    "Fix “apiKeys” in that file, then try again.")
 SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
-# GET /api/settings, where nothing was being saved: GM's line without its
-# first clause.
-SETTINGS_UNREADABLE_ON_READ = "Nebula can’t read {path}. Fix the file, then try again."
+# A read (GET /api/settings, start_here), where nothing was being saved: GM's
+# line without its first clause, by who is reading. Agents can't read or fix
+# that file, so theirs says the person must (GM, PR #203 r27 item 2): MCP
+# get_settings, `nebula keys` and start_here's note read the agent's line.
+SETTINGS_UNREADABLE_ON_READ = {
+    "person": "Nebula can’t read {path}. Fix the file, then try again.",
+    "agent": "Nebula can’t read {path}. Ask the person to fix the file.",
+}
+
+
+def _settings_read_refusal() -> str | None:
+    """_unreadable_on_read when the settings file is there and Nebula can't
+    read it as settings (cut short, not text, no permission, a folder, or
+    not an object), else None."""
+    try:
+        readable = isinstance(load_settings(), dict)
+    except SettingsUnreadable:
+        readable = False
+    return None if readable else _unreadable_on_read()
+
+
+def _unreadable_on_read() -> str:
+    """SETTINGS_UNREADABLE_ON_READ for this request's reader: the person's
+    line for the person (_is_person_request), the agents' line for any
+    other caller."""
+    return _unreadable(SETTINGS_UNREADABLE_ON_READ["person" if _is_person_request() else "agent"])
 
 
 def _saved_settings_or_409() -> dict[str, Any]:
@@ -10037,7 +10073,7 @@ def _saved_settings_or_409() -> dict[str, Any]:
     read or isn't an object (review 12 of PR #203, LOW-3: never a 500)."""
     try:
         current = load_saved_settings()
-    except settings_service.SettingsUnreadable:
+    except SettingsUnreadable:
         current = None
     if not isinstance(current, dict):
         raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
@@ -18514,14 +18550,17 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     # lines, not the keys and ids agents read in `error` and `errors` (error
     # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
     person = _validation_person_lines(errors)
-    said = {node_id: f"{_node_label(node_id)} can't run." + (f" {person[node_id]}" if person.get(node_id) else "")
+    said = {node_id: f"{_node_label(node_id)} can’t run." + (f" {person[node_id]}" if person.get(node_id) else "")
             for node_id in per_node}
+    # The shared rule (person_line.counts_instead; GM, PR #203 r24): up to 3
+    # nodes a line each, from 4 one count (review 13 of PR #203, copy LOW-5).
+    told = f"{len(said)} nodes can’t run." if counts_instead(len(said)) else " ".join(said.values())
     publish_action("Run stopped before it started. "
-                   + (" ".join(said.values()) or person.get("") or "Couldn't run the canvas."))
+                   + (told or person.get("") or "Couldn't run the canvas."))
     first = next(iter(per_node), None)
     if first is not None:
         # The cursor quotes the node like every other bubble; the log keeps its line.
-        bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
+        bubble = f"{_quoted(_node_label(first))} can’t run." + (f" {person[first]}" if person.get(first) else "")
         await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,

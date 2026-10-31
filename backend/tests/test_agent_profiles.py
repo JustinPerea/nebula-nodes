@@ -174,10 +174,10 @@ def test_secret_files_are_denied_by_absolute_path(tmp_path):
 
 def test_default_secret_paths_cover_settings_and_env():
     from services.agent_profiles import default_secret_paths
-    from services.settings import SETTINGS_PATH
+    from services.settings import settings_path
 
     paths = default_secret_paths()
-    assert SETTINGS_PATH in paths
+    assert settings_path() in paths
     assert any(p.name == ".env" for p in paths)
 
 

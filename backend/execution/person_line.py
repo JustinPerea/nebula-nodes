@@ -66,6 +66,18 @@ import re
 from collections.abc import Iterable
 from typing import TypeVar
 
+# The shared rule for lists in a person's line: up to 3 things are named,
+# from 4 they are counted (frontend errorCopy.NAMED_AT_MOST and
+# countsInstead, the same number; GM, PR #203 r24; tests/test_idol_round14.py
+# pins the two).
+NAMED_AT_MOST = 3
+
+
+def counts_instead(count: int) -> bool:
+    """Whether a line counts these things rather than naming each."""
+    return count > NAMED_AT_MOST
+
+
 _ATTRIBUTE = "nebula_person_line"
 _PROVIDER_TEXT = "nebula_provider_text"
 
@@ -234,7 +246,7 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
     "OPENAI_API_KEY": ("OpenAI", "API key"),
     "OPENROUTER_API_KEY": ("OpenRouter", "API key"),
     "QUIVER_API_KEY": ("QuiverAI", "API key"),
-    "REPLICATE_API_TOKEN": ("Replicate", "API token"),
+    "REPLICATE_API_TOKEN": ("Replicate", "token"),
     "RUNWAY_API_KEY": ("Runway", "API key"),
     "TYPESAFE_API_KEY": ("TypeSafe", "API key"),
     "WORLDLABS_API_KEY": ("World Labs", "API key"),

@@ -246,10 +246,10 @@ def agent_workspace_env(workdir: Path) -> dict[str, str]:
 
 def default_secret_paths() -> list[Path]:
     """Files holding credentials that no agent may read."""
-    from services.settings import SETTINGS_PATH
+    from services.settings import settings_path
 
     project_root = Path(__file__).resolve().parent.parent.parent
-    return [SETTINGS_PATH, project_root / ".env", project_root / "backend" / ".env"]
+    return [settings_path(), project_root / ".env", project_root / "backend" / ".env"]
 
 
 def secret_deny_rules(secret_paths: list[Path]) -> list[str]:

@@ -36,7 +36,7 @@ def test_protected_aliases_denied(protected, tmp_path, alias):
 def test_configured_secret_and_symlinked_root_denied(tmp_path, monkeypatch):
     import services.settings as settings
     secret = tmp_path / "credentials.json"
-    monkeypatch.setattr(settings, "SETTINGS_PATH", secret)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(secret))
     with pytest.raises(ProtectedPathError):
         require_allowed_path(secret)
     real = tmp_path / "real"

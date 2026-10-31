@@ -83,7 +83,36 @@ def _clean_str(value: Any) -> str:
 # "Nothing was sent to Krea." ({fields}: each label in quotes, joined with
 # "and".)
 NOTHING_SENT_TO_KREA = "Nothing was sent to Krea."
-UNSET_CONNECTION_LINE = "This node's Krea connection isn't set. Choose “API token” or “Krea account”."
+# A node that offers both connections, whose “Krea connection” labels every
+# connection name below is read from: every two-option Krea node shows the
+# same two (tests/test_idol_round14.py).
+KREA_CONNECTION_DEFINITION = "krea-job-history"
+
+
+def connection_name(mode: str) -> str:
+    """A Krea connection, quoted, as the node's “Krea connection” field names
+    it: its option's label before " · " ("API key · API balance" is “API
+    key”), so a line can't quote a connection the node no longer shows
+    (review 13 of PR #203, MEDIUM-1)."""
+    return f"“{connection_label(mode)}”"
+
+
+def connection_label(mode: str) -> str:
+    """connection_name without the quotes ("API key"), for agents' text."""
+    label = option_label(KREA_CONNECTION_DEFINITION, "_kreaAuth", mode) or mode
+    return label.split(" · ")[0].strip()
+
+
+def unset_connection_line() -> str:
+    """The person's line for a Krea connection Nebula doesn't know."""
+    return (f"This node's Krea connection isn't set. Choose {connection_name('api-token')} or "
+            f"{connection_name('mcp')}.")
+
+
+def unset_connection_error() -> Exception:
+    """The agent's error for that, with the person's line on it."""
+    return with_person_line(ValueError(f"Unknown Krea connection; choose {connection_label('api-token')} or "
+                                       f"{connection_label('mcp')}"), unset_connection_line())
 
 
 def _label(definition_id: str, key: str) -> str:
@@ -105,8 +134,7 @@ def _auth_mode(node: GraphNode) -> str:
     """Saved billing choice; nodes saved before the choice existed keep the API token."""
     mode = node.params.get("_kreaAuth", "api-token")
     if mode not in {"api-token", "mcp"}:
-        raise with_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"),
-                               UNSET_CONNECTION_LINE)
+        raise unset_connection_error()
     return mode
 
 
@@ -915,8 +943,9 @@ async def _account_style_search(node: GraphNode) -> dict[str, Any]:
         unsupported = [{"user": "User", "liked": "Liked only", "filter": "Filter"}[key] for key in keys]
         raise with_person_line(
             ValueError(f"{', '.join(unsupported)} needs a Krea API key; the Krea account lists the styles available to you. Nothing was sent"),
-            f"To use {quoted_and([_label('krea-style-search', key) for key in keys])}, switch to the “API token” "
-            f"connection. The “Krea account” connection lists every style you can use. {NOTHING_SENT_TO_KREA}")
+            f"To use {quoted_and([_label('krea-style-search', key) for key in keys])}, switch to the "
+            f"{connection_name('api-token')} connection. The {connection_name('mcp')} connection lists every style "
+            f"you can use. {NOTHING_SENT_TO_KREA}")
     ids = {part.strip() for part in _clean_str(node.params.get("ids")).split(",") if part.strip()}
     model = _clean_str(node.params.get("model"))
     limit = _int_value(node.params.get("limit"), 25, 1, 1000)
@@ -953,8 +982,8 @@ async def _account_style_train(node, name, model, image_values, emit) -> dict[st
     if unsupported:
         raise with_person_line(
             ValueError(f"{', '.join(unsupported)} needs a Krea API key; the Krea account trains with Krea's defaults. Nothing was sent"),
-            f"To use {quoted_and(fields)}, switch to the “API token” connection. The “Krea account” connection "
-            f"trains with Krea's default settings. {NOTHING_SENT_TO_KREA}")
+            f"To use {quoted_and(fields)}, switch to the {connection_name('api-token')} connection. The "
+            f"{connection_name('mcp')} connection trains with Krea's default settings. {NOTHING_SENT_TO_KREA}")
     arguments: dict[str, Any] = {"name": name, "model": model, "train_type": training_type, "images": []}
     trigger_word = _clean_str(node.params.get("trigger_word"))
     if trigger_word:
@@ -1076,8 +1105,8 @@ async def handle_krea_library_manage(
         if action != "rename-style":
             raise with_person_line(
                 ValueError("Only renaming a style works with a Krea API key; use the Krea account for moodboards and deletes. Nothing was sent"),
-                "The “API token” connection can only rename styles. To make moodboards or delete styles, switch to "
-                f"the “Krea account” connection. {NOTHING_SENT_TO_KREA}")
+                f"The {connection_name('api-token')} connection can only rename styles. To make moodboards or delete "
+                f"styles, switch to the {connection_name('mcp')} connection. {NOTHING_SENT_TO_KREA}")
         api_key = _api_key(api_keys)
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.patch(f"{KREA_BASE_URL}/styles/{item_id}", headers=_json_headers(api_key),

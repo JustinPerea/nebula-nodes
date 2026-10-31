@@ -60,7 +60,7 @@ export const KEY_NAMES: Readonly<Record<string, readonly [string, string]>> = {
   OPENAI_API_KEY: ['OpenAI', 'API key'],
   OPENROUTER_API_KEY: ['OpenRouter', 'API key'],
   QUIVER_API_KEY: ['QuiverAI', 'API key'],
-  REPLICATE_API_TOKEN: ['Replicate', 'API token'],
+  REPLICATE_API_TOKEN: ['Replicate', 'token'],
   RUNWAY_API_KEY: ['Runway', 'API key'],
   TYPESAFE_API_KEY: ['TypeSafe', 'API key'],
   WORLDLABS_API_KEY: ['World Labs', 'API key'],

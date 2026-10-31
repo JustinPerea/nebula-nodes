@@ -218,7 +218,7 @@ async def test_a_character_node_with_no_character_names_the_field_not_the_api() 
 @pytest.mark.parametrize(("text", "line"), [
     ("OPENAI_API_KEY is required", "Add your OpenAI API key in Settings, then run the node again."),
     ("FAL_KEY is required", "Add your fal.ai API key in Settings, then run the node again."),
-    ("REPLICATE_API_TOKEN is required", "Add your Replicate API token in Settings, then run the node again."),
+    ("REPLICATE_API_TOKEN is required", "Add your Replicate token in Settings, then run the node again."),
     ("ELEVENLABS_API_KEY or RUNWAY_API_KEY is required",
      "Add your ElevenLabs or Runway API key in Settings, then run the node again."),
     ("GOOGLE_VERTEX_CREDENTIALS is required",

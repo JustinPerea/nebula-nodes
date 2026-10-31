@@ -64,6 +64,10 @@ export interface CredentialBridge {
   readonly has: (provider: string) => Promise<CredentialHasResult>;
   /** Remove a provider key from the Keychain. */
   readonly clear: (provider: string) => Promise<CredentialClearResult>;
+  /** Put a provider's Keychain entry back as it was before this launch's
+   * last set or clear (the earlier key, or none). Never returns a key.
+   * Absent in older shells. */
+  readonly revert?: (provider: string) => Promise<CredentialClearResult>;
 }
 
 /**

@@ -85,7 +85,7 @@ def test_the_free_part_counts_each_place(entries, line):
       _entry("free", "fal", "free · fal.ai"), _entry("free", None, LOCAL)],
      "3 paid runs (2 anthropic, 1 krea) and 2 free (1 fal, 1 local), no list price"),
     ([_entry("paid", "anthropic"), _entry("paid", "anthropic"), _entry("free", None, LOCAL)],
-     "2 paid runs (anthropic) and 1 free, no list price"),
+     "2 paid runs (anthropic) and 1 free (local), no list price"),
     ([_entry("paid", "openai"), _entry("plan", "krea", "on Krea plan"),
       _entry("free", "speridlabs", "free · Hugging Face", runsOn="huggingface")],
      "1 paid run (openai), 1 on the person's Krea plan and 1 free (huggingface), no list price"),
@@ -145,7 +145,7 @@ def test_the_409_shows_the_home_folder_as_a_tilde(sockets, tmp_path, monkeypatch
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"apiKeys": ["kept"]}), encoding="utf-8")
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     shown = f"~{os.sep}.nebula{os.sep}settings.json"
     assert settings.settings_file_shown() == shown
     line = (f"Nothing was saved because Nebula can’t read the keys saved in {shown}. "
@@ -163,14 +163,14 @@ def test_a_path_outside_the_home_folder_stays_absolute(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     (tmp_path / "home").mkdir()
     elsewhere = tmp_path / "elsewhere" / "settings.json"
-    monkeypatch.setattr(settings, "SETTINGS_PATH", elsewhere)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(elsewhere))
     assert settings.settings_file_shown() == str(elsewhere.resolve())
     # A folder that only starts like the home folder isn't under it.
     sibling = tmp_path / "home-other" / "settings.json"
-    monkeypatch.setattr(settings, "SETTINGS_PATH", sibling)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(sibling))
     assert settings.settings_file_shown() == str(sibling.resolve())
     # The home folder's own file.
-    monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "home" / "settings.json")
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(tmp_path / "home" / "settings.json"))
     assert settings.settings_file_shown() == f"~{os.sep}settings.json"
 
 
@@ -247,7 +247,7 @@ def cut_short(sockets, tmp_path, monkeypatch):  # noqa: F811
     path.parent.mkdir(parents=True)
     path.write_text(CUT_SHORT, encoding="utf-8")
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     return path
 
 

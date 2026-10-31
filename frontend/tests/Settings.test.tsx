@@ -66,7 +66,7 @@ import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
-import { resetSettingsWrites } from '../src/lib/settingsWrites';
+import { KEYCHAIN_KEPT, resetSettingsWrites } from '../src/lib/settingsWrites';
 import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
 import { PROVIDER_KEYS } from '../src/lib/providerCatalog';
@@ -122,6 +122,7 @@ afterEach(() => {
 function setupDesktopBridge(overrides?: {
   set?: (provider: string, key: string) => Promise<unknown>;
   clear?: (provider: string) => Promise<unknown>;
+  revert?: (provider: string) => Promise<unknown>;
   plaintextKeyWarning?: string[];
   kreaOpen?: (url: string) => Promise<unknown>;
   choose?: (defaultPath?: string) => Promise<unknown>;
@@ -130,6 +131,7 @@ function setupDesktopBridge(overrides?: {
     set: overrides?.set ?? vi.fn().mockResolvedValue({ ok: true }),
     has: vi.fn().mockResolvedValue({ ok: true, has: false }),
     clear: overrides?.clear ?? vi.fn().mockResolvedValue({ ok: true }),
+    revert: overrides?.revert ?? vi.fn().mockResolvedValue({ ok: true }),
   });
   const folders = Object.freeze({ choose: overrides?.choose ?? vi.fn().mockResolvedValue({ ok: true, path: null }) });
   (window as Record<string, unknown>).nebulaDesktop = Object.freeze({
@@ -183,7 +185,7 @@ function openTab(name: 'Providers' | 'Preferences' | 'Storage') {
 }
 
 async function addKey(label: string, value: string) {
-  fireEvent.click(screen.getByRole('button', { name: `Add ${label} key` }));
+  fireEvent.click(screen.getByRole('button', { name: `Add ${label} API key` }));
   const input = await screen.findByLabelText(`${label} API key`);
   fireEvent.change(input, { target: { value } });
   fireEvent.submit(input.closest('form')!);
@@ -248,19 +250,19 @@ describe('Settings shell', () => {
   // "Settings couldn't load. Check that the Nebula backend is running."
   it.each([
     // Round 16 (GM): with no answer, the unified line in full.
-    [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }),
+    [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: 'Couldn’t load your API keys.' }),
       "Nebula isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError("Couldn't load your API keys.", 503), "Nebula didn't respond."],
-    [new RequestFailedError("Couldn't load your API keys.", 400), "Try again, or reload if it keeps happening."],
+    [new RequestFailedError('Couldn’t load your API keys.', 503), "Nebula didn't respond."],
+    [new RequestFailedError('Couldn’t load your API keys.', 400), "Try again, or reload if it keeps happening."],
     // Review 12 of PR #203, LOW-3: a settings file the backend can't read says so, with its path
     // (the backend's 409 line; it used to answer a cut-short file with a 500).
-    [new RequestFailedError("Couldn't load your API keys.", 409, { detail: 'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.' }),
+    [new RequestFailedError('Couldn’t load your API keys.', 409, { detail: 'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.' }),
       'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.'],
   ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
     getSettingsMock.mockRejectedValueOnce(error);
     render(<Settings />);
     const alert = await screen.findByRole('alert');
-    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe('Couldn’t load your API keys.');
     expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe(reason);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
@@ -268,7 +270,7 @@ describe('Settings shell', () => {
   it('keeps a failed first load actionable, and Try again loads the panel', async () => {
     getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your API keys.");
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your API keys.');
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('searchbox', { name: 'Search providers and models' });
@@ -406,7 +408,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
 
   it('cancels key entry with Escape, discarding the text, without closing Settings', async () => {
     await renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic API key' }));
     const input = await screen.findByLabelText('Anthropic API key');
     await waitFor(() => expect(input).toHaveFocus());
     fireEvent.change(input, { target: { value: 'half-typed' } });
@@ -414,12 +416,12 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(screen.queryByLabelText('Anthropic API key')).not.toBeInTheDocument();
     expect(useUIStore.getState().panels.settings.visible).toBe(true);
     expect(useSettingsDraftStore.getState().keyDrafts).toEqual({});
-    expect(screen.getByRole('button', { name: 'Add Anthropic key' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Add Anthropic API key' })).toHaveFocus();
   });
 
   it('keeps unsaved key text when Settings closes and reopens, but never in browser storage', async () => {
     const rendered = await renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic API key' }));
     fireEvent.change(await screen.findByLabelText('Anthropic API key'), { target: { value: 'fixture-secret' } });
     rendered.unmount();
     await renderSettings();
@@ -436,7 +438,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     await waitFor(() => expect(deleteSettingsApiKeyMock).toHaveBeenCalledWith('ANTHROPIC_API_KEY'));
     await waitFor(() => expect(rowNames(list(/^Connect a provider/))).toContain('Anthropic'));
     expect(screen.getByText('Anthropic key removed.')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Anthropic key' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Anthropic API key' })).toHaveFocus());
   });
 
   it('replaces a saved key without offering Undo (the old key is gone)', async () => {
@@ -599,7 +601,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     await waitFor(() => expect(rowNames(list(/^Add a provider/))).toContain('OpenAI'));
     expect(deleteSettingsApiKeyMock.mock.calls).toEqual([['OPENAI_API_KEY']]);
     expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***ffff' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add OpenAI key' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add OpenAI API key' })).toHaveFocus());
     expect(screen.getByText('OpenAI key removed.')).toBeInTheDocument();
   });
 
@@ -658,7 +660,7 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
   it('updates in place: other rows move with the spring, the row the person is in stays, and the draft is kept', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     // The person is typing an Anthropic key.
-    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic API key' }));
     const input = await screen.findByLabelText('Anthropic API key');
     fireEvent.change(input, { target: { value: 'sk-ant-draft' } });
     expect(input).toHaveFocus();
@@ -1111,7 +1113,7 @@ describe('Settings — Vertex service-account key', () => {
 
   it('takes a chosen key file, shows what it found and saves the JSON', async () => {
     await renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI service account key' }));
     const save = await screen.findByRole('button', { name: 'Save key' });
     expect(save).toBeDisabled();
     const file = new File([key], 'demo-key.json', { type: 'application/json' });
@@ -1127,7 +1129,7 @@ describe('Settings — Vertex service-account key', () => {
 
   it('accepts pasted JSON and explains what is wrong with it', async () => {
     await renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI service account key' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Paste JSON instead' }));
     const area = screen.getByLabelText('Google · Vertex AI service-account JSON');
     fireEvent.change(area, { target: { value: '{"type":"authorized_user"}' } });
@@ -1231,6 +1233,54 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', '', { check: true }]]);
     expect(credentials.clear).not.toHaveBeenCalled();
+  });
+
+  // Review 13 of PR #203, LOW-1: both or neither whatever the call order. A
+  // refusal between the Keychain write and the backend's own call puts the
+  // Keychain back; when it can't, the row says the Keychain kept the change.
+  function refuseTheSecondCall() {
+    updateCredentialMock.mockReset().mockImplementation((_key: string, _value: string, options?: { check?: boolean }) =>
+      options?.check ? Promise.resolve({ status: 'ok' })
+        : Promise.reject(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ })));
+  }
+
+  it('puts the Keychain back when the backend refuses after the Keychain took the key', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings();
+    refuseTheSecondCall();
+    await addKey('OpenAI', 'fixture-openai');
+    expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
+    expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'fixture-openai');
+    expect(credentials.revert).toHaveBeenCalledWith('OPENAI_API_KEY');
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+  });
+
+  it('puts a removed key back in the Keychain when the backend refuses the removal', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    refuseTheSecondCall();
+    removeKey('OpenAI');
+    expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
+    expect(credentials.clear).toHaveBeenCalledWith('OPENAI_API_KEY');
+    expect(credentials.revert).toHaveBeenCalledWith('OPENAI_API_KEY');
+  });
+
+  it('says the Keychain kept the key when it can’t be put back', async () => {
+    const { credentials } = setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'NOTHING_TO_REVERT' }) });
+    await renderSettings();
+    refuseTheSecondCall();
+    await addKey('OpenAI', 'fixture-openai');
+    expect(await screen.findByRole('alert')).toHaveTextContent(KEYCHAIN_KEPT.save);
+    expect(screen.queryByText(CANT_READ)).not.toBeInTheDocument();
+    expect(credentials.revert).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the Keychain lost the key when a removal can’t be put back', async () => {
+    setupDesktopBridge({ revert: vi.fn().mockRejectedValue(new Error('ipc gone')) });
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    refuseTheSecondCall();
+    removeKey('OpenAI');
+    expect(await screen.findByText(KEYCHAIN_KEPT.removal)).toBeInTheDocument();
   });
 
   it('warns about plaintext keys found in the settings file', async () => {
@@ -1736,10 +1786,10 @@ describe('Settings while Nebula is offline', () => {
   it('never loaded: its first-load error and Try again', async () => {
     const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
     noteBackendConnection('offline');
-    getSettingsMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't load your API keys." }));
+    getSettingsMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'), { heading: 'Couldn’t load your API keys.' }));
     render(<Settings />);
     const alert = await screen.findByRole('alert');
-    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't load your API keys.");
+    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe('Couldn’t load your API keys.');
     // GM, round 16: the unified line in full, beside Try again.
     expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe("Nebula isn't answering. Make sure it's running, then try again.");
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();

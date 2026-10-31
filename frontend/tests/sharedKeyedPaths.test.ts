@@ -23,7 +23,7 @@ import type { ProposalView } from '../src/lib/wsClient';
 import type { ModelNodeDefinition, NodeData } from '../src/types';
 
 const ID = 'synthetic-keyed-route';
-const LINE = 'You can run Synthetic after you add your Replicate API token in Settings.';
+const LINE = 'You can run Synthetic after you add your Replicate token in Settings.';
 const KEY = 'REPLICATE_API_TOKEN';
 
 function synthetic(): ModelNodeDefinition {
@@ -124,7 +124,7 @@ describe('the key lock lines live in the shared lock helper', () => {
       cost: { paidRuns: 1, freeRuns: 0, nodes: [] },
     } as unknown as ProposalView;
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({})))
-      .toBe('You can accept this after you add your Replicate API token in Settings.');
+      .toBe('You can accept this after you add your Replicate token in Settings.');
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({ [KEY]: 'set' }))).toBeNull();
   });
 

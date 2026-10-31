@@ -6,7 +6,7 @@ import { useProviderReadinessStore } from '../../../store/providerReadinessStore
 import { keyText } from '../../../lib/directRoute';
 import { keyReadiness } from '../../../lib/providerReadiness';
 import { credentialName as nameOf, credentialNoun, unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalog';
-import { keyNoun, removeKey, saveKey } from '../../../lib/settingsWrites';
+import { removeKey, saveKey } from '../../../lib/settingsWrites';
 import { ProviderRow } from './ProviderRow';
 import { ServiceAccountInput } from './ServiceAccountInput';
 import { cancelRowFocus, focusRowIfItMoves, keyStatus, readServiceAccount, settleRowFocus, takeRowFocus } from './rowHelpers';
@@ -144,7 +144,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
   ) : open === 'edit' ? (
     <button ref={trigger} type="button" className="settings__button settings__button--ghost" onClick={cancelEdit}>Cancel</button>
   ) : (
-    <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${keyNoun(spec.key)}`}
+    <button ref={trigger} type="button" className="settings__button" aria-label={`Add ${credentialName}`}
       aria-expanded={open !== null} aria-controls={bodyId} onClick={() => setOpen('edit')}>Add {noun}</button>
   );
 

@@ -51,7 +51,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't run the node.", () => api.executeNode([], [], 'n1')],
   ["Couldn't start the shot.", () => api.generateCinemaShot([], [], 'n1', 's1')],
   ["Couldn't use that variation.", () => api.promoteCinemaShotVariation('n1', 's1', 0)],
-  ["Couldn't load your API keys.", () => api.getSettings()],
+  ['Couldn’t load your API keys.', () => api.getSettings()],
   ["Couldn't save your settings.", () => api.updateSettings({})],
   ["Couldn't load the connected apps.", () => api.getOutsideSpend()],
   ["Couldn't create the app token.", () => api.createConnectedApp('x', null)],

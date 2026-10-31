@@ -48,10 +48,15 @@ export function credentialNoun(spec: Pick<ProviderKeySpec, 'keyLink'>): string {
 }
 
 /** The row's credential by name, its noun said once: "Hugging Face token",
- * "Replicate token", "OpenAI API key", "Google · Gemini API key", "Krea · API
- * key", "Krea · usage key" (review 12, copy LOW-1: never "Krea · API key API
- * key"). What screen readers hear on the field, Show and Remove. */
+ * "Replicate token", "OpenAI API key", "Google · Gemini API key", "Google ·
+ * Vertex AI service account key", "Krea · API key", "Krea · usage key"
+ * (review 12, copy LOW-1: never "Krea · API key API key"). The one name
+ * screen readers hear for the row's Add, field, Show and Remove (GM, PR #203
+ * r27 item 6). */
 export function credentialName(spec: Pick<ProviderKeySpec, 'keyLink' | 'label'>): string {
+  // Google Cloud's service-account key isn't an API key: "Google · Vertex AI
+  // service account key" (GM, PR #203 r27 item 6).
+  if (LINK_WORD.exec(spec.keyLink)?.[1] === 'service accounts') return `${spec.label} service account key`;
   const noun = credentialNoun(spec);
   if (noun !== 'key') return `${spec.label} ${noun}`;
   if (/\bkey$/i.test(spec.label)) return spec.label;

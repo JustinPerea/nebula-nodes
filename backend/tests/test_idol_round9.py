@@ -106,7 +106,7 @@ def test_the_billing_note_states_the_downstream_rule():
 @pytest.fixture
 def stored(tmp_path, monkeypatch, person):
     path = tmp_path / "settings.json"
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     monkeypatch.setattr(main, "load_settings", settings.load_settings)
     monkeypatch.setattr(main, "save_settings", settings.save_settings)
@@ -202,7 +202,7 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
     with the person token, the desktop bridge) sets the token: the socket hears it."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"apiKeys": {}}), encoding="utf-8")
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     monkeypatch.setattr(main, "load_settings", settings.load_settings)
     monkeypatch.setattr(main, "save_settings", settings.save_settings)

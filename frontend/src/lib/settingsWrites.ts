@@ -93,6 +93,46 @@ function desktopCredentials() {
   return typeof window !== 'undefined' ? window.nebulaDesktop?.credentials : undefined;
 }
 
+/** A Keychain write the backend then refused is undone, so the key is in
+ * both or in neither whatever the order of the calls (review 13 of PR #203,
+ * LOW-1): the bridge puts the entry back as it was (desktop credentials
+ * `revert`; main keeps the earlier entry, the renderer never holds it).
+ * When it can't, the row says the Keychain kept the change instead of
+ * "Nothing was saved" (KEYCHAIN_KEPT). */
+export const KEYCHAIN_KEPT = {
+  save: 'Nebula couldn’t take this key, but the Keychain kept it. Try again, or remove the key.',
+  removal: 'Nebula still has this key, but it was removed from the Keychain. Try again.',
+} as const;
+
+class KeychainKept extends Error {
+  readonly line: string;
+  constructor(line: string, cause: unknown) {
+    super(line, { cause });
+    this.line = line;
+  }
+}
+
+type CredentialBridge = NonNullable<ReturnType<typeof desktopCredentials>>;
+
+/** The Keychain step, then the backend's: the backend's refusal after the
+ * Keychain changed puts the Keychain back, or throws KeychainKept. */
+async function keychainThenBackend(bridge: CredentialBridge, key: string, write: () => Promise<{ ok: boolean }>,
+  backend: () => Promise<unknown>, kept: string) {
+  const result = await write();
+  if (!result.ok) throw new Error('Credential storage failed');
+  try {
+    await backend();
+  } catch (error) {
+    let undone = false;
+    try {
+      undone = (await bridge.revert?.(key))?.ok === true;
+    } catch {
+      undone = false;
+    }
+    throw undone ? error : new KeychainKept(kept, error);
+  }
+}
+
 function labelFor(key: string) {
   return PROVIDER_KEY_SPECS[key]?.label ?? key;
 }
@@ -167,15 +207,15 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
         // key lands in both the Keychain and the backend, or in neither
         // (review 12 of PR #203, LOW-3).
         await updateCredential(key, value, { check: true });
-        const result = await bridge.set(key, value);
-        if (!result.ok) throw new Error('Credential storage failed');
-        await updateCredential(key, value);
+        await keychainThenBackend(bridge, key, () => bridge.set(key, value), () => updateCredential(key, value),
+          KEYCHAIN_KEPT.save);
       } else {
         await updateSettings({ apiKeys: { [key]: value } });
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, unreadableSettingsLine(error) ?? "The key couldn't be saved. Your text is still here; try again.", error);
+      fail(key, error instanceof KeychainKept ? error.line
+        : unreadableSettingsLine(error) ?? "The key couldn't be saved. Your text is still here; try again.", error);
       return false;
     }
     const { saved, keyDrafts, openRow } = useSettingsDraftStore.getState();
@@ -200,15 +240,15 @@ export function removeKey(key: string): Promise<boolean> {
       const bridge = desktopCredentials();
       if (bridge) {
         await updateCredential(key, '', { check: true });
-        const result = await bridge.clear(key);
-        if (!result.ok) throw new Error('Credential removal failed');
-        await updateCredential(key, '');
+        await keychainThenBackend(bridge, key, () => bridge.clear(key), () => updateCredential(key, ''),
+          KEYCHAIN_KEPT.removal);
       } else {
         await deleteSettingsApiKey(key);
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, unreadableSettingsLine(error) ?? "The key couldn't be removed. Try again.", error);
+      fail(key, error instanceof KeychainKept ? error.line
+        : unreadableSettingsLine(error) ?? "The key couldn't be removed. Try again.", error);
       return false;
     }
     const { saved, openRow } = useSettingsDraftStore.getState();

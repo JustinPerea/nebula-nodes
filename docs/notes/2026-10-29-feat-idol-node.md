@@ -1810,7 +1810,8 @@ run or accepted.
 `nodeNameList`, `agentNameList`, `quotedNames` and the proposal bar's
 not-ready lines read it. In the bar, up to 3 nodes get a line each; from
 4 it is one line, "4 nodes can’t run here yet.", and every node's line is
-under "See every node that can’t run" (`canvasProposals.notReadyShown`).
+under the details toggle (`canvasProposals.notReadyShown`; round 14 names
+it "Show the list" / "Hide the list").
 It counts nodes, not the lines a key lock merges. The old "and N more in
 the details" line is gone.
 
@@ -1818,8 +1819,10 @@ the details" line is gone.
 
 - The path shows the home folder as "~" ("~/.nebula/settings.json");
   anywhere else, a sibling folder that only starts like home included, it
-  stays absolute (`settings.settings_file_shown`). Agents never see it:
-  every settings write runs `require_person` first.
+  stays absolute (`settings.settings_file_shown`). The save lines are the
+  person's alone (every settings write runs `require_person` first); the
+  read line also reaches agents, through MCP `get_settings` and `nebula
+  keys` (corrected in round 14, where agents get their own words).
 - One resolved path for reads, writes and the line: `settings_file()`
   expands and resolves `SETTINGS_PATH`, which is also expanded where it is
   built. A "~" in NEBULA_SETTINGS_PATH was read as a folder named "~"
@@ -1827,11 +1830,10 @@ the details" line is gone.
 - A file that isn't JSON Nebula can read (cut short, hand-edited) raises
   `settings.SettingsUnreadable`, a ValueError as json.load's own error is,
   so every reader that failed closed still does (runs included). `main`
-  catches it as `settings_service.SettingsUnreadable`, read through the
-  module where it is caught: tests/test_settings_path.py reloads the
-  settings module, and a class imported by name before the reload was no
-  longer the one raised (the wide run caught that). The settings routes
-  answer it:
+  caught it as `settings_service.SettingsUnreadable`, read through the
+  module where it is caught, because tests/test_settings_path.py reloaded
+  the settings module (the wide run caught that; round 14 removed the
+  reloads and put the plain import back). The settings routes answer it:
   - a save, a key's removal and `credentials/update`: 409 "Nothing was
     saved because Nebula can’t read ~/.nebula/settings.json. Fix the
     file, then try again." The file is untouched.
@@ -1977,3 +1979,178 @@ current. No full suite ran on the Mac.
 - Replicate's run-failure line still says "Add your Replicate API key in
   Settings." (error-copy round 15). Should it say "token" too?
 
+
+## Round 14 (GM r26 and r27, review 13)
+
+Base 389a7c76. GM r26 agreed with round 13's five questions (the GET line,
+Vertex's "key", the Krea plan line and the per-provider paid part stay)
+and asked for two changes; review 13 and GM r27 added the rest.
+
+### Replicate's run-failure line (GM r26 item 5)
+
+- "Add your Replicate token in Settings." Both KEY_NAMES (backend
+  `person_line`, frontend `directRoute`, pinned to each other through
+  route_tables.json) say `('Replicate', 'token')`, and the model picker's
+  own "Replicate API key" phrase is gone, so every run-failure line takes
+  the provider's noun from the one source.
+- Round 13's noun test now checks each provider's run-failure lines too
+  (`missingKeyLine`, `modelKeyMissingText`). Vertex is the one listed
+  exception: its run lines say "credentials" (veo.py and google_vertex.py
+  say "Google Cloud credentials" throughout) while its notices say "key".
+  Left for GM (question below).
+
+### The not-ready disclosure (GM r26; GM r27 item 4; review 13 copy LOW-1)
+
+- One toggle, named by what the details hold (`canvasProposals.
+  detailsDisclosure`): the list alone is "Show the list" / "Hide the
+  list"; the list beside what Accept writes (or a long note) is "Show the
+  details" / "Hide the details"; the other two are as before. The heading
+  inside stays "Can’t run here", now with a curly apostrophe (and the list's
+  aria-label too).
+- The name follows `aria-expanded`, and focus stays on the toggle (tests,
+  and live from the keyboard at 1440 and 700).
+- "See every node that can’t run" is gone from code, tests, docs and the
+  PR body; one test checks it never shows.
+
+### Same-named nodes (GM r27 item 7; review 13 copy NIT-4)
+
+- In the person's list, nodes with the same name and the same reason say
+  one line, the count in front of the single line's own sentence with the
+  plural verb: "2 “Claude” nodes need your Anthropic API key. Add it in
+  Settings." (`pluralNotReadyLine`, built from the single line so the two
+  can't drift; "needs" → "need", "isn’t" → "aren’t", "its" → "their"). A
+  line that doesn't start with the quoted name and a verb it knows keeps
+  a line per node. The count line still counts nodes.
+- Agent text (CLI, MCP, HTTP) is unchanged: every node by id.
+
+### The Accept line stays (review 13 copy NIT-3)
+
+From 4 nodes, the visible lines are the count and, when Accept is
+key-locked, the Accept line; the details still hold every line.
+
+### A `null` settings file (review 13 HIGH-1)
+
+`_read_settings_file` returns a `_MISSING` sentinel for no file; a file
+whose JSON is `null` is like any other non-object again: `load_settings`
+returns it as it is, so every run fails closed, GET and every write get the
+409 and the file isn't overwritten. Both agent runs the review saw go
+through on 389a7c76 (a free text node; Nano Banana with its key in the
+Keychain) are tests now, and both fail on 389a7c76.
+
+### Files Nebula may not read (review 13 LOW-3; GM r27 item 3)
+
+Every OSError reading the file except "not found" (no permission, a folder
+at the path) is `SettingsUnreadable`: the same 409 and fail-closed runs. An
+AST scan of the settings readers found no handler that catches OSError
+without ValueError, so no reader's outcome moves. start_here answers 200
+on any file Nebula can't read: its nodes part says the read line (0 ready)
+and its spend part is `{"note": <line>}`; `nebula context` prints "SPEND:
+<line>". Not done: a file Nebula can read but not write (chmod 444) still
+500s on save; that needs a line of its own.
+
+### The read line by audience (GM r27 item 2)
+
+`main.SETTINGS_UNREADABLE_ON_READ` holds both lines, keyed by audience: the
+person "Nebula can’t read <path>. Fix the file, then try again.", agents
+(MCP `get_settings`, `nebula keys`, start_here) "Nebula can’t read <path>.
+Ask the person to fix the file." Tested through the real MCP tool and the
+real `nebula keys` command against the app.
+
+### No module reload (review 13 LOW-2)
+
+`settings.settings_path()` reads NEBULA_SETTINGS_PATH at each call, so tests
+set the variable with monkeypatch and nothing reloads; `SETTINGS_PATH` is
+gone. Injected keys parse through `parse_injected_keys`, which the tests
+call directly (and one child process checks the import reads the
+variable). test_settings_path.py and test_credential_injection.py no
+longer reload `services.settings` or `main` (a guard test fails on any
+reload of either), main catches the imported `SettingsUnreadable`, and
+conftest's teardown check reads the variable. agent_profiles' deny rules
+read `settings_path()`.
+
+### Smaller items
+
+- "~" only under a real, absolute home folder other than "/" (an empty,
+  relative or "/" HOME shows the absolute path; review 13 LOW-4).
+- `check` on credentials/update is true or false, else 422 "check must be
+  true or false" and nothing is written (NIT-2).
+- Desktop both-or-neither whatever the order (LOW-1): if the backend
+  refuses after the Keychain changed, the panel calls the new
+  `credentials.revert`, and main puts the provider's earlier encrypted
+  entry back (kept in main's memory; nothing reaches the renderer). If it
+  can't, the row says so instead of "Nothing was saved" (new lines, GM
+  question below). desktop/main.mjs is unchanged: the channel is
+  registered in credentials.mjs.
+- Krea (MEDIUM-1; GM r27 item 1): every quoted connection is read from the
+  option label before " · " (`handlers.krea.connection_name`): “API key”,
+  “Krea account”. The five person lines, the agents' unknown-connection
+  error, the out-of-compute reason (its "Settings → Krea MCP → Show Krea
+  plans" path, which doesn't exist, is gone), the Job ID placeholder and
+  the bar's billing value ("API balance") changed. A test scans code and
+  docs for any quoted connection that isn't a real label.
+- The Agent Log's refused-run line names up to 3 nodes and counts from 4
+  ("4 nodes can’t run."), with curly apostrophes (copy LOW-5). The
+  backend's `person_line.NAMED_AT_MOST` is pinned to the frontend's.
+- The CLI's free part (copy LOW-2; GM r27 item 5): a free run with no place
+  is local, so every free run is counted once; a lone local run beside
+  another class is "(local)": "1 paid run (openai) and 1 free (local)".
+  Without an entry for each free run (an older backend), no place tag.
+- Screen-reader names (copy LOW-3; GM r27 item 6): Add, the field, Show and
+  Remove say one name per row, `credentialName` ("Add OpenAI API key",
+  "Google · Vertex AI service account key").
+- Curly apostrophes: "Couldn’t load your API keys." (Settings and api.ts).
+- Docs: idol.md, the user guide, MCP-SETUP.md and KREA-MCP.md follow all of
+  the above.
+- Round 13's one-off round 9 socket failure (NIT-3): I can't tell whether
+  it was the socket-leak family. That pass ran while settings.py was being
+  edited, it passed alone, in that order and in the second pass, and
+  review 13's reload-order run passed, so the mid-run edit is the likelier
+  cause, but nothing proves it.
+
+### Gates
+
+All sandboxed, every npm and npx with the update notifier off. tsc -b and
+lint pass. Focused vitest (100 files importing a module this round changed,
+plus every changed test file): 2,294 passed, no errors, no timeouts.
+Backend: 87 files that exercise the changed names (grepped for the
+functions, routes and strings), isolated: 4,496 passed, 46 skipped, first
+pass. Desktop credential, Paper-links and folder-picker tests: 160 passed.
+vite build and the budget pass (461,610 bytes raw). check-node-contracts,
+the model reference and the route tables are current. No full suite ran.
+
+### Base check and mutants
+
+- On 389a7c76 (a temp worktree): round 14's backend file fails 30 of 33
+  (the 3 that pass are guards: no file still reads as the defaults, a lone
+  local run alone, an older backend's cost); the changed backend tests fail
+  16 more; the frontend files fail 53 tests; the desktop file fails 6.
+- 36 mutants, each against its covering tests in a separate worktree: all
+  killed. Two survived at first and were fixed: an empty HOME that the
+  test didn't tell from a missing file (the test now works under the
+  working folder) and a revert mutant that changed only the returned
+  channel list (replaced by one that renames the handler).
+
+### Live (8793/5793, sandboxed, fake keys)
+
+Canaries first: 8000, 8005, 5173, api.x.ai, huggingface.co, api.krea.ai
+and api.anthropic.com were blocked in the browser; inside the backend's
+sandbox api.x.ai, api.meshy.ai, api.ideogram.ai, huggingface.co and
+1.1.1.1:443 were refused. Those were the only requests off localhost.
+Nothing was run or accepted. Shots in scratchpad/idol/shots14 (9, distinct
+md5s): the list closed and open at 1440 and 700, the "details" toggle
+closed and open at 1440 and 700, and two same-named Claude nodes in one
+line.
+
+### Questions for GM
+
+- Vertex's run-failure lines say "Google Cloud credentials" while its
+  notices and screen-reader names say "key". Keep, or "key" there too?
+- Desktop, when the Keychain can't be put back after the backend refuses:
+  "Nebula couldn’t take this key, but the Keychain kept it. Try again, or
+  remove the key." and, for a removal, "Nebula still has this key, but it
+  was removed from the Keychain. Try again." OK?
+- The node card's provider switcher says "Add key for Replicate in
+  Settings" (Replicate's noun is "token" everywhere else). Change it?
+- A settings file Nebula can read but not write still 500s on save. Its
+  line, e.g. "Nothing was saved because Nebula can’t write <path>. Check
+  the file's permissions, then try again."?

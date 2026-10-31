@@ -51,12 +51,15 @@ keys saved in <the file's path, with your home folder as "~">. Fix
 the macOS Keychain, not in that file, so this doesn't apply there; saving
 any setting clears keys found in the file.
 
-If Nebula can't read the settings file at all (cut short, or not JSON),
-nothing runs until it's fixed. Settings says "Nebula can’t read <the
+If Nebula can't read the settings file at all (cut short, not JSON, not
+an object, or a file Nebula isn't allowed to read), nothing runs until
+it's fixed. Settings says "Nebula can’t read <the
 path>. Fix the file, then try again.", and any save, in the browser or
 the desktop app, is refused with "Nothing was saved because Nebula can’t
 read <the path>. Fix the file, then try again." On the desktop app the
-key isn't written to the Keychain either.
+key isn't written to the Keychain either. An agent that reads your
+settings is told "Nebula can’t read <the path>. Ask the person to fix the
+file."
 Nebula shows Idol at $0 a run, since
 [Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
 Any bill for time past your allowance is between you and Hugging Face;
