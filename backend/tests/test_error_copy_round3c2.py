@@ -222,7 +222,7 @@ async def test_a_character_node_with_no_character_names_the_field_not_the_api() 
     ("ELEVENLABS_API_KEY or RUNWAY_API_KEY is required",
      "Add your ElevenLabs or Runway API key in Settings, then run the node again."),
     ("GOOGLE_VERTEX_CREDENTIALS is required",
-     "Add your Google Vertex AI credentials in Settings, then run the node again."),
+     "Add your Vertex AI service account key in Settings, then run the node again."),
 ])
 def test_a_missing_key_says_add_it_in_settings(text: str, line: str) -> None:
     from execution.missing_credential import MissingCredentialError

@@ -1856,36 +1856,77 @@ def route_unavailable_line(
     every card line). The message itself stays the agents' text. None when
     the run can start. ``title`` names the node as the line's reader sees it
     (the proposal bar's “Name”, node_readiness.instance_missing_line); the
-    card names it by its type."""
-    from execution.person_line import key_phrase, missing_key_line
+    card names it by its type, and on Auto with no key set keeps its run
+    line, ", then run the node again" (GM, PR #203 r29 item 1)."""
+    from execution.person_line import missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
     if found is None:
         return None
+    reason = _route_reason(definition, params, found)
+    if reason is None:
+        return missing_key_line(found[0].missing) if title is None else None
+    return reason.line(title or str(definition.get("displayName") or "This node"))
+
+
+def route_unavailable_reason(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+) -> Any:
+    """Why a route-table run can't start, for a list that names the node
+    (person_line.NotReadyReason: the proposal bar, the Agent Log), or None
+    when it can start. On Auto with no key set: "needs your Black Forest
+    Labs or fal.ai API key. Add one in Settings." (GM, PR #203 r29 item 1;
+    review 14, copy MEDIUM-1: the line named no node)."""
+    from execution.person_line import NotReadyReason, key_phrase
+
+    found = _unavailable_route(definition, params, api_keys)
+    if found is None:
+        return None
+    reason = _route_reason(definition, params, found)
+    if reason is not None:
+        return reason
+    route = found[0]
+    phrase = key_phrase(route.missing) if route.missing else None
+    if not phrase:
+        return NotReadyReason.of("not_set_up")
+    return NotReadyReason.of("key", phrase=phrase, it="one" if len(route.missing) > 1 else "it")
+
+
+def _route_reason(definition: Mapping[str, Any], params: Mapping[str, Any] | None, found: Any) -> Any:
+    """The NotReadyReason for a stop route_unavailable_line and
+    route_unavailable_reason say alike, or None for Auto with no key set
+    (each says that one its own way)."""
+    from execution.person_line import NotReadyReason, key_phrase
+
     route, alternatives, keyless = found
-    name = title or str(definition.get("displayName") or "This node")
     spec = route_by_id(definition, route.route_id) if route.route_id else None
     others = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in alternatives]
-    keyless_labels = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in keyless]
+    keyless_specs = [route_by_id(definition, alt) or {} for alt in keyless]
+    keyless_labels = [provider_label(spec_.get("provider")) for spec_ in keyless_specs]
+    # GM, PR #203 r29 item 2: the key by its name, never "its key" (it read
+    # as the node's): "Replicate can take it. Add your Replicate token in
+    # Settings."
+    keyless_phrase = key_phrase([key for spec_ in keyless_specs for key in keys(spec_.get("keys"))])
     also = (f" {_or_list(others)} can take it." if others
+            else f" {_or_list(keyless_labels)} can take it. Add your {keyless_phrase} in Settings."
+            if keyless_labels and keyless_phrase
             else f" {_or_list(keyless_labels)} can take it. Add its key in Settings." if keyless_labels
             else "")
     block = route.block
     if block is not None and block.reason == UNKNOWN_PROVIDER:
-        return f"{name} is set to a provider it doesn't have. Choose one in the node's provider switcher."
+        return NotReadyReason.of("unknown_provider")
     if block is not None and spec is not None:
-        why = _why_person(definition, spec, block, params)
-        fix = _fix_person(definition, spec, block, params)
-        return f"{name} can't run on {provider_label(spec.get('provider'))}{why}. {fix}{also}"
-    phrase = key_phrase(route.missing) if route.missing else None
+        return NotReadyReason.of("route_block", provider=provider_label(spec.get("provider")),
+                                 why=_why_person(definition, spec, block, params),
+                                 fix=_fix_person(definition, spec, block, params), also=also)
     own = missing_key_line_for(definition, route)
     if own:
-        return own
+        return NotReadyReason(own=own)
     if spec is not None:
-        needed = f"your {phrase}" if phrase else "a provider key"
-        return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
-                f"Add it in Settings, or choose another provider.{also}")
-    return missing_key_line(route.missing)
+        phrase = key_phrase(route.missing) if route.missing else None
+        return NotReadyReason.of("route_key", provider=provider_label(spec.get("provider")),
+                                 needed=f"your {phrase}" if phrase else "a provider key", also=also)
+    return None
 
 
 # -- the routes contract --------------------------------------------------------

@@ -21,6 +21,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { withKeyLock } from '../../lib/runKeyLock';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
+import { DetailsBox } from './DetailsBox';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
@@ -283,7 +284,7 @@ export function ProposalBar() {
             </button>
           )}
           {detailsOpen && hasDetails && (
-            <div className="proposal-bar__details" aria-label={hasChangeLines ? 'What Accept writes' : 'Details'}>
+            <DetailsBox>
               {noteClamped && (
                 <section className="proposal-bar__group">
                   <h3 className="proposal-bar__group-title">Note</h3>
@@ -323,7 +324,7 @@ export function ProposalBar() {
                   )}
                 </section>
               ))}
-            </div>
+            </DetailsBox>
           )}
           {errorLeave.shown && (
             <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>

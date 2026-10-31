@@ -84,7 +84,9 @@ from services.settings import (
     saved_keys_writable,
     settings_file_shown,
     SettingsUnreadable,
+    SettingsUnwritable,
     save_settings,
+    settings_writable,
     get_api_key,
     validate_provider_keys,
     clear_provider_validation_cache,
@@ -3041,7 +3043,7 @@ def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = Tr
     way the canvas node it names does (_billing_choice: a route-table node's
     provider, a dual-mode Krea node's billing mode). A node that isn't on the
     canvas, or is there as another definition, starts on the defaults (Auto,
-    the API token).
+    the API key connection).
 
     It reads the params the run runs with: the engine migrates retired params
     before a node runs (execution/engine.py _with_current_params), and not
@@ -4718,7 +4720,14 @@ async def agent_context(request: Request) -> dict[str, Any]:
 @app.get("/api/agent/spend")
 async def agent_spend_status(request: Request) -> dict[str, Any]:
     """The spending limits and what the calling agent's session has used, so an
-    agent can plan before it runs anything. The person's canvas isn't limited."""
+    agent can plan before it runs anything. The person's canvas isn't limited.
+    A settings file Nebula can't read answers as start_here's spend part
+    does, 200 with the read line and its code (review 14, settings-gate
+    LOW-2: a 500 before, or the default limits for a file that isn't an
+    object): MCP get_spend_limits and `nebula spend` say it."""
+    unreadable = _settings_read_refusal()
+    if unreadable is not None:
+        return {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
     settings = load_settings()
     caps = agent_spend.caps_from_settings(settings)
     limits = {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}
@@ -5306,7 +5315,7 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if modes:
         result["kreaModes"] = modes
         if len(modes) > 1:
-            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API token. "
+            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API key connection. "
                                   'To bill the signed-in Krea plan instead, propose {"_kreaAuth": "mcp"} with '
                                   "propose_change; direct edits of _kreaAuth are refused.")
     if definition["id"] == model_pricing.CINEMA_SCENE:
@@ -5342,7 +5351,7 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
                 result["priceNote"] = ("Billed to the signed-in Krea plan. Agent runs count against the Krea plan-run "
                                        "limit set in Nebula Settings.")
             elif modes:
-                result["priceNote"] = ("On the API token it has no list price, so agent runs of it must be proposed "
+                result["priceNote"] = ("On the API key connection it has no list price, so agent runs of it must be proposed "
                                        "(propose_change). Switched to the Krea plan (the person's call), agent runs "
                                        "count against the Krea plan-run limit set in Nebula Settings.")
             else:
@@ -6487,7 +6496,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
         # closed on it) and the limits can't be read, so both parts carry
         # the read line instead of a 500 (review 13 of PR #203, LOW-3).
         nodes = agent_start.nodes_part([], total=len(node_registry.get_all()), notes=[unreadable], via=via)
-        spend = {"note": unreadable}
+        spend = {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
     return agent_start.build(
         canvas=agent_start.canvas_part(snapshot, project=project, caller_id=caller.id if caller else None, via=via),
         pins=agent_start.pins_part(pins, via=via),
@@ -7988,6 +7997,15 @@ def _not_ready_nodes(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
                     wired.get(node_id, {}), name=name) or need,
             })
+            # The reason for one node and for several (person_line
+            # NOT_READY_PREDICATES), so the bar merges nodes by it, never by
+            # the words (review 14 of PR #203, copy LOW-1). None for a
+            # route's own line, which stays a line per node.
+            reason = node_readiness.instance_missing_reason(
+                definition, node.get("params") or {}, keys, krea_signed_in, definitions, wired.get(node_id, {}))
+            view = reason.view() if reason is not None else None
+            if view is not None:
+                rows[-1]["reason"] = view
     return rows
 
 
@@ -9812,7 +9830,7 @@ async def get_settings() -> dict:
     if not isinstance(settings, dict):
         # Cut short, hand-edited or not an object: Settings says the file
         # can't be read, never a 500 (review 12 of PR #203, LOW-3).
-        raise HTTPException(409, _unreadable_on_read())
+        raise CodedRefusal(409, _unreadable_on_read(), {"code": SETTINGS_UNREADABLE_CODE})
     masked = dict(settings)
     if "apiKeys" in masked:
         # Justin, Q55 a: "Only the app (your person token) gets the endings.
@@ -9874,7 +9892,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
         # a guess at what they were (review 10 of PR #203, NIT-6). A value
         # that holds nothing (null, [], "", false, 0) has no key to keep, so
         # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
-        raise HTTPException(409, _unreadable(KEYS_UNREADABLE))
+        raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
     if writes_keys:
         current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
         for k, v in body["apiKeys"].items():
@@ -9898,7 +9916,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
     ):
         if key in body:
             current[key] = body[key]
-    save_settings(current)
+    _save_settings_or_409(current)
     # API keys may have changed — drop cached validation results so the next
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
@@ -9967,11 +9985,11 @@ async def remove_settings_api_key(provider: str) -> dict:
     if not saved_keys_writable(current):
         # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
         # A value that holds nothing is replaced with no keys (LOW-3).
-        raise HTTPException(409, _unreadable(KEYS_UNREADABLE))
+        raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
     current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
     current_keys.pop(provider, None)
     current["apiKeys"] = current_keys
-    save_settings(current)
+    _save_settings_or_409(current)
     clear_provider_validation_cache()
     await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "removed"}
@@ -10039,6 +10057,33 @@ async def credentials_update(body: dict[str, Any]) -> dict:
 KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                    "Fix “apiKeys” in that file, then try again.")
 SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
+# A file Nebula can read but isn't allowed to change (GM, PR #203 r28 item
+# 4), by who asked, as SETTINGS_UNREADABLE_ON_READ: the agents' line says
+# the person must check it. Every settings write today is the person's
+# (require_person comes first), so no agent meets its line yet; it is here
+# so that one never reads the person's.
+SETTINGS_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {path}. "
+              "Check the file’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {path}. "
+             "Ask the person to check the file’s permissions.",
+}
+# Each settings refusal's fix sentence on its own, by code and reader, naming
+# the file (GM, PR #203 r29 item 6: "… Fix “apiKeys” in ~/…/settings.json,
+# then try again.").
+SETTINGS_FIX = {
+    "settings_unreadable": {"person": "Fix {path}, then try again.",
+                            "agent": "Ask the person to fix {path}."},
+    "keys_unreadable": {"person": "Fix “apiKeys” in {path}, then try again.",
+                        "agent": "Ask the person to fix “apiKeys” in {path}."},
+    "settings_unwritable": {"person": "Check the permissions of {path}, then try again.",
+                            "agent": "Ask the person to check the permissions of {path}."},
+}
+# The codes beside each settings refusal's `detail` (the frontend's
+# settingsWrites.settingsRefusalLine picks by these, never by the words).
+SETTINGS_UNREADABLE_CODE = "settings_unreadable"
+KEYS_UNREADABLE_CODE = "keys_unreadable"
+SETTINGS_UNWRITABLE_CODE = "settings_unwritable"
 # A read (GET /api/settings, start_here), where nothing was being saved: GM's
 # line without its first clause, by who is reading. Agents can't read or fix
 # that file, so theirs says the person must (GM, PR #203 r27 item 2): MCP
@@ -10060,24 +10105,61 @@ def _settings_read_refusal() -> str | None:
     return None if readable else _unreadable_on_read()
 
 
+def _settings_audience() -> str:
+    """Who a settings line is worded for: "person" for any browser tab, with
+    or without this launch's person token (a tab whose token predates a
+    restart is still the person reading their own Settings), "agent" for an
+    agent caller. refusal_copy.person_reads decides, the one place that
+    picks words and never authority (GM, PR #203 r29 item 5; review 14,
+    settings-gate LOW-1 and copy NIT-2)."""
+    return "person" if refusal_copy.person_reads() else "agent"
+
+
 def _unreadable_on_read() -> str:
-    """SETTINGS_UNREADABLE_ON_READ for this request's reader: the person's
-    line for the person (_is_person_request), the agents' line for any
-    other caller."""
-    return _unreadable(SETTINGS_UNREADABLE_ON_READ["person" if _is_person_request() else "agent"])
+    """SETTINGS_UNREADABLE_ON_READ for this request's reader (_settings_audience)."""
+    return _unreadable(SETTINGS_UNREADABLE_ON_READ[_settings_audience()])
 
 
 def _saved_settings_or_409() -> dict[str, Any]:
     """The settings file as saved (load_saved_settings), copied for a write
     to change; the 409 SETTINGS_UNREADABLE when it isn't JSON Nebula can
-    read or isn't an object (review 12 of PR #203, LOW-3: never a 500)."""
+    read or isn't an object (review 12 of PR #203, LOW-3: never a 500), and
+    the 409 SETTINGS_UNWRITABLE when Nebula can read it but isn't allowed to
+    change it (GM, PR #203 r28 item 4). Every write asks this before it
+    changes anything: PUT and DELETE settings, and the desktop's
+    credentials/update with or without ``check``, so a key lands in both the
+    Keychain and the backend or in neither."""
     try:
         current = load_saved_settings()
     except SettingsUnreadable:
         current = None
     if not isinstance(current, dict):
-        raise HTTPException(409, _unreadable(SETTINGS_UNREADABLE))
+        raise _settings_refusal(SETTINGS_UNREADABLE, SETTINGS_UNREADABLE_CODE)
+    if not settings_writable():
+        raise _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE)
     return copy.deepcopy(current)
+
+
+def _save_settings_or_409(current: dict[str, Any]) -> None:
+    """save_settings, with the 409 SETTINGS_UNWRITABLE for a file that
+    turned read-only after _saved_settings_or_409 read it (its folder too):
+    the file is left as it was."""
+    try:
+        save_settings(current)
+    except SettingsUnwritable:
+        raise _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE) from None
+
+
+def _settings_refusal(line: str | Mapping[str, str], code: str) -> CodedRefusal:
+    """A settings write's 409: ``line`` naming the file (one line, or a line
+    for each reader keyed "person" / "agent"), with ``code`` beside it, so a
+    client picks its line by the cause and never by the words, and ``fix``,
+    the line's fix sentence on its own (SETTINGS_FIX), which the desktop's
+    Keychain line ends with when it still stands (GM, PR #203 r29 item 6)."""
+    audience = _settings_audience()
+    if not isinstance(line, str):
+        line = line[audience]
+    return CodedRefusal(409, _unreadable(line), {"code": code, "fix": _unreadable(SETTINGS_FIX[code][audience])})
 
 
 def _unreadable(line: str) -> str:
@@ -14440,7 +14522,7 @@ def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str,
 # (agent_words.worded: {propose} is propose_change for MCP, `nebula propose`
 # for the CLI; review 9 of PR #203, keys MEDIUM-1).
 KREA_BILLING_REFUSAL = (
-    "Changing how a Krea node is billed (_kreaAuth: the API token's balance or the signed-in Krea "
+    "Changing how a Krea node is billed (_kreaAuth: the API key connection's balance or the signed-in Krea "
     "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
     "change instead with {propose}; the person accepts it on the canvas."
 )
@@ -14490,7 +14572,7 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
     node's run: a route-table node's ``_provider``, or a Krea node's billing
     mode (_billing_choice). ``changes`` are (label, definitionId, params
     before or None for a new node, params after). A new node counts as
-    changed unless it starts on Auto and the default mode (the API token).
+    changed unless it starts on Auto and the default mode (the API key connection).
     The person's own edits and accepted proposals always pass. The refusal
     is _person_only_refusal's: plain for an agent, ``person_required`` for a
     request with no agent marker (a canvas tab not connected as the person).
@@ -18531,6 +18613,66 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     return _hide_run_key_echoes({**response, **synced})
 
 
+# The Agent Log's heading for a run its pre-call check stopped: the card's
+# (GM, PR #203 r29 item 3).
+REFUSED_RUN_HEADING = "Nebula couldn’t start the run."
+
+
+def _refused_run_log_line(node_ids: list[str], person: Mapping[str, str | None]) -> str:
+    """The Agent Log's line for a run the pre-call check stopped (GM, PR #203
+    r29 item 3): the card's heading, then each reason once, its nodes by
+    quoted name and merged by the r28 rule (person_line.merged_not_ready,
+    the bar's table), ending ", then run the node again" ("the nodes" for
+    several): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
+    your OpenAI API key. Add it in Settings, then run the nodes again." A
+    node stopped for another reason (an input not connected) says its card
+    line after its name. From 4 nodes, one count, as the bar's (person_line
+    counts_instead). Agents' text keeps ids (`error`, `errors`)."""
+    from execution.person_line import merged_not_ready, run_again
+
+    if counts_instead(len(node_ids)):
+        return f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
+    reasons: list[tuple[str, Any]] = []
+    others: list[str] = []
+    for node_id in node_ids:
+        reason = _node_not_ready_reason(node_id)
+        if reason is not None:
+            reasons.append((_node_label(node_id), reason))
+        else:
+            line = person.get(node_id)
+            others.append(f"{_quoted(_node_label(node_id))} can’t run." + (f" {line}" if line else ""))
+    told = [run_again(line, count) for line, count in merged_not_ready(reasons)] + others
+    if not told and person.get(""):
+        told = [str(person[""])]
+    return " ".join([REFUSED_RUN_HEADING, *told])
+
+
+def _node_not_ready_reason(node_id: str) -> Any:
+    """Why a canvas node can't run here, as the proposal bar says it
+    (node_readiness.instance_missing_reason), or None when its stop is
+    something else."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definitions = node_registry.get_all()
+    definition = definitions.get(str(node.get("definitionId") or ""))
+    if not definition:
+        return None
+    try:
+        keys = node_readiness.configured_keys(load_settings())
+    except SettingsUnreadable:
+        return None
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
+        krea_signed_in = False
+    wired: dict[str, int] = {}
+    for edge in cli_graph.edges:
+        if str(edge.get("target")) == node_id:
+            handle = str(edge.get("targetHandle") or "")
+            wired[handle] = wired.get(handle, 0) + 1
+    return node_readiness.instance_missing_reason(definition, node.get("params") or {}, keys, krea_signed_in,
+                                                  definitions, wired)
+
+
 async def _refused_cli_run(run_id: str, target: str | None, errors: list[ValidationErrorDetail],
                            pending_skips: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """A CLI run the pre-call check stopped: nothing ran and nothing was spent.
@@ -18550,13 +18692,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     # lines, not the keys and ids agents read in `error` and `errors` (error
     # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
     person = _validation_person_lines(errors)
-    said = {node_id: f"{_node_label(node_id)} can’t run." + (f" {person[node_id]}" if person.get(node_id) else "")
-            for node_id in per_node}
-    # The shared rule (person_line.counts_instead; GM, PR #203 r24): up to 3
-    # nodes a line each, from 4 one count (review 13 of PR #203, copy LOW-5).
-    told = f"{len(said)} nodes can’t run." if counts_instead(len(said)) else " ".join(said.values())
-    publish_action("Run stopped before it started. "
-                   + (told or person.get("") or "Couldn't run the canvas."))
+    publish_action(_refused_run_log_line(list(per_node), person))
     first = next(iter(per_node), None)
     if first is not None:
         # The cursor quotes the node like every other bubble; the log keeps its line.

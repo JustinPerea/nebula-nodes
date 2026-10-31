@@ -1,4 +1,4 @@
-import { keyPhrase } from './directRoute';
+import { addKeyLine } from './directRoute';
 
 /**
  * Failure lines for steps whose request failed (review 12, L-4; GM - Design,
@@ -44,8 +44,8 @@ export function modelKeyMissingText(name: string, keys: readonly string[]): stri
   // Each provider's own noun, as every run-failure line and its Settings
   // row say it: "Add your Replicate token in Settings." (GM, PR #203 r26
   // item 5; no picker-only wording).
-  const phrase = keyPhrase(keys);
-  return phrase ? `${modelSetupFailedText(name)} Add your ${phrase} in Settings.` : modelSetupFailedText(name);
+  const line = addKeyLine(keys);
+  return line ? `${modelSetupFailedText(name)} ${line}` : modelSetupFailedText(name);
 }
 
 /** backend main.MODEL_SETTINGS_FAILURE_HEADER and its values: reading the

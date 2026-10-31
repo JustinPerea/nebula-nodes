@@ -56,6 +56,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/errorCopy.ts', text: '`${heading} ${reason}`', why: 'headedLine itself: the one place the rule is applied' },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} ${WORLD_LABS_NEEDS_CHECK}`',
     why: "GM's own World Labs line: the tail is a fixed sentence, never a named line" },
+  { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`",
+    why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
   { file: 'lib/worldLabsWaiting.ts', text: '`${heading} It${RECOVERY_ID_FORGET_TAIL}`',
     why: "GM's own World Labs line: the tail is a fixed sentence" },
   { file: 'lib/worldLabsWaiting.ts', text: '`Couldn\'t delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`',

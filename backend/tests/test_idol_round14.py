@@ -161,7 +161,7 @@ def test_start_here_says_the_read_line_instead_of_a_500(home_file, content):
         response = client.get("/api/agent/start", headers=headers)
         assert response.status_code == 200, response.text
         start = response.json()
-        assert start["spend"] == {"note": AGENT_READ}
+        assert start["spend"] == {"note": AGENT_READ, "code": "settings_unreadable"}
         assert start["nodes"]["notes"] == [AGENT_READ] and start["nodes"]["ready"] == 0
     from cli.formatter import format_start
     printed = format_start(start)
@@ -302,7 +302,7 @@ def test_the_krea_connection_names_are_the_option_labels():
     assert _connection_heads() == {"API key", "Krea account"}
     assert (connection_name("api-token"), connection_name("mcp")) == ("“API key”", "“Krea account”")
     assert connection_label("api-token") == "API key"
-    assert unset_connection_line() == "This node's Krea connection isn't set. Choose “API key” or “Krea account”."
+    assert unset_connection_line() == "This node’s Krea connection isn’t set. Choose “API key” or “Krea account”."
     from services.node_registry import NodeRegistry
     assert any(p.get("key") == "_kreaAuth" and len(p.get("options") or []) == 2
                for p in NodeRegistry().get_all()[KREA_CONNECTION_DEFINITION]["params"])
@@ -312,15 +312,25 @@ def test_every_quoted_connection_is_a_real_label():
     """Every person or agent line that quotes a Krea connection by name
     quotes one the node shows, in the code and the docs alike."""
     heads = _connection_heads()
-    quoted = re.compile(r"“([^”{}]+)” connection")
+    # Round 15 (review 14, copy LOW-3): any quoted name, curly or straight,
+    # in a sentence that says "connection" or "Choose" (B7: "Choose “API
+    # token” or …"; B8: `Switch to the "API token" connection.`), and the bare
+    # phrase "the API token" in agent text.
+    quoted = re.compile(r"“([^”{}\n]{1,40})”|\"([^\"{}\n]{1,40})\"")
+    sentence = re.compile(r"[^.!?\n]*(?:connection|Choose)[^.!?\n]*", re.IGNORECASE)
+    krea_words = re.compile(r"\b(API (key|token)|Krea (account|plan))\b", re.IGNORECASE)
     found: list[str] = []
     for root, suffixes in ((BACKEND, (".py",)), (REPO / "frontend" / "src", (".ts", ".tsx")), (REPO / "docs", (".md",))):
         for path in root.rglob("*"):
-            if path.suffix not in suffixes or ".venv" in path.parts or "notes" in path.parts or path.name == Path(__file__).name:
+            if path.suffix not in suffixes or ".venv" in path.parts or "notes" in path.parts or "tests" in path.parts:
                 continue
-            for name in quoted.findall(path.read_text(encoding="utf-8", errors="ignore")):
-                if name not in heads and name != "Krea connection":
-                    found.append(f"{path.relative_to(REPO)}: “{name}”")
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for said in sentence.findall(text):
+                for name in (curly or straight for curly, straight in quoted.findall(said)):
+                    if krea_words.search(name) and name not in heads:
+                        found.append(f"{path.relative_to(REPO)}: “{name}”")
+            if path.suffix == ".py" and re.search(r"\bthe API token\b(?! balance)", text):
+                found.append(f"{path.relative_to(REPO)}: says “the API token”")
     assert found == []
     # The billing value the bar shows for the API key's connection.
     bar = (REPO / "frontend" / "src" / "lib" / "canvasProposals.ts").read_text(encoding="utf-8")
@@ -339,8 +349,10 @@ def test_the_out_of_compute_reason_names_the_api_key_connection():
 
 
 @pytest.mark.parametrize("count,line", [
-    (3, None),
-    (4, "Run stopped before it started. 4 nodes can’t run."),
+    # GM, PR #203 r29 item 3: the card's heading, same-named nodes merged.
+    (3, "Nebula couldn’t start the run. 3 “GPT Image 2” nodes need your OpenAI API key. "
+        "Add it in Settings, then run the nodes again."),
+    (4, "Nebula couldn’t start the run. 4 nodes can’t run here yet."),
 ], ids=["three-named", "four-counted"])
 def test_the_agent_logs_refused_run_line_names_up_to_3_and_counts_from_4(monkeypatch, agent_log, count, line):  # noqa: F811
     monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {}})
@@ -356,12 +368,8 @@ def test_the_agent_logs_refused_run_line_names_up_to_3_and_counts_from_4(monkeyp
                                                         "target": image, "targetHandle": "prompt"})
                 images.append(image)
             client.post("/api/graph/run", json={}, headers=MCP)
-            [said] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-            if line is None:
-                for image in images:
-                    assert f"{main._node_label(image)} can’t run." in said
-            else:
-                assert said == line
+            [said] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
+            assert said == line
             assert "can't" not in said
         finally:
             client.delete("/api/graph?force=true")

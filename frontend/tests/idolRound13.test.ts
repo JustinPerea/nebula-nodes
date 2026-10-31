@@ -16,7 +16,7 @@ import { notReadyShown } from '../src/lib/canvasProposals';
 import { agentNameList, countsInstead, nodeNameList, quotedNames } from '../src/lib/errorCopy';
 import { credentialName, credentialNoun, LINK_NOUNS, PROVIDER_KEYS } from '../src/lib/providerCatalog';
 import { keyChangedLine, keyNoun } from '../src/lib/settingsWrites';
-import { KEY_NAMES, keyPhrase, missingKeyLine } from '../src/lib/directRoute';
+import { keyPhrase, missingKeyLine } from '../src/lib/directRoute';
 import { modelKeyMissingText } from '../src/lib/failureLines';
 import type { ProposalNotReady } from '../src/lib/wsClient';
 
@@ -72,11 +72,6 @@ describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
   });
 });
 
-/** The one run-failure noun still unlike its Settings noun, pending GM:
- * Vertex's lines say "credentials" ("Add your Google Vertex AI credentials in
- * Settings, …"), and its notices "key" (GM r26 item 2). */
-const RUN_LINE_PENDING: Readonly<Record<string, string>> = { GOOGLE_VERTEX_CREDENTIALS: 'credentials' };
-
 describe('every provider says the word its link uses (GM r25 item 3)', () => {
   it.each(PROVIDER_KEYS.map((spec) => [spec.key, spec] as const))('%s', (key, spec) => {
     const linkWord = LINK_NOUNS[/ (keys|tokens|service accounts)$/.exec(spec.keyLink)![1]];
@@ -90,10 +85,7 @@ describe('every provider says the word its link uses (GM r25 item 3)', () => {
     // Round 14 (GM r26 item 5): the run-failure lines say the same noun,
     // the backend's person_line.KEY_NAMES included (route_tables.json pins
     // it to KEY_NAMES here): "Add your Replicate token in Settings."
-    if (Object.hasOwn(RUN_LINE_PENDING, key)) {
-      expect(KEY_NAMES[key][1], key).toBe(RUN_LINE_PENDING[key]);
-      return;
-    }
+    // GM r28 item 1 (PR #203 round 15): Vertex too, no exception left.
     const phrase = keyPhrase([key])!;
     expect(phrase.endsWith(` ${linkWord}`), phrase).toBe(true);
     expect(missingKeyLine([key])).toBe(`Add your ${phrase} in Settings, then run the node again.`);

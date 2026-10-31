@@ -105,7 +105,7 @@ def connection_label(mode: str) -> str:
 
 def unset_connection_line() -> str:
     """The person's line for a Krea connection Nebula doesn't know."""
-    return (f"This node's Krea connection isn't set. Choose {connection_name('api-token')} or "
+    return (f"This node’s Krea connection isn’t set. Choose {connection_name('api-token')} or "
             f"{connection_name('mcp')}.")
 
 
@@ -131,7 +131,7 @@ def quoted_and(labels: list[str]) -> str:
 
 
 def _auth_mode(node: GraphNode) -> str:
-    """Saved billing choice; nodes saved before the choice existed keep the API token."""
+    """Saved billing choice; nodes saved before the choice existed keep the API key connection."""
     mode = node.params.get("_kreaAuth", "api-token")
     if mode not in {"api-token", "mcp"}:
         raise unset_connection_error()

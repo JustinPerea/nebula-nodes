@@ -952,7 +952,11 @@ def _cost_line(cost: dict[str, Any]) -> str:
     # once; without an entry for each (an older backend's cost), none is
     # tagged by place (review 13 of PR #203, copy LOW-2).
     free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "local")
-                for entry in entries if entry.get("kind") == "free"][:free]
+                for entry in entries if entry.get("kind") == "free"]
+    # Entries that don't match the count, more or fewer: none is tagged,
+    # not even "(runs locally)", rather than tagging the first few (review
+    # 14, copy NIT-3).
+    free_unsure = bool(free_ids) and len(free_ids) != free
     if len(free_ids) != free:
         free_ids = []
     # "run" goes on the first class only and carries through the rest, and
@@ -976,7 +980,7 @@ def _cost_line(cost: dict[str, Any]) -> str:
             # locally)" when they are the whole run, else tagged as the
             # paid part is, "1 paid run (openai) and 1 free (local)" (GM, PR
             # #203 r27 item 5).
-            where = " (runs locally)" if alone else (" (local)" if free_ids else "")
+            where = "" if free_unsure else (" (runs locally)" if alone else (" (local)" if free_ids else ""))
         else:
             where = _tags(free_ids, free)
         parts.append(f"{free} free {first(free)}".rstrip() + where)

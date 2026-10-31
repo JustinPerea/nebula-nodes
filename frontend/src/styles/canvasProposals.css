@@ -421,19 +421,56 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   transform: rotate(180deg);
 }
 
-/* Every value Accept will write, in full. Scrolls rather than growing the bar. */
+/* Every value Accept will write, in full. Scrolls rather than growing the
+   bar (DetailsBox; GM, PR #203 r28): a box of its own, its rounded border
+   whole, ending above the button row with room under it. */
 .proposal-bar__details {
+  position: relative;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 8px;
-  max-height: 240px;
-  margin-top: 4px;
+  max-height: min(240px, 34vh);
+  margin: 4px 0 6px;
   padding: 8px 10px;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 8px;
-  background: rgb(0 0 0 / 0.25);
+  background: rgb(14 14 16);
   font-size: 11px;
+}
+
+/* A keyboard scrolls it: the shared ring. */
+.proposal-bar__details:focus {
+  outline: none;
+}
+
+.proposal-bar__details:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* 24 px at the bottom while there's more below (data-more), wherever the
+   cut falls; gone at the end. It sticks to the bottom of the scroll view,
+   over the content and inside the border, never over the scrollbar. Its
+   height is taken back by its negative margin (with the column's gap), so
+   showing or hiding it never changes how far the box scrolls. */
+.proposal-bar__details-fade {
+  position: sticky;
+  bottom: -8px;
+  flex-shrink: 0;
+  height: 24px;
+  margin: -24px -10px -8px;
+  border-radius: 0 0 7px 7px;
+  background: linear-gradient(to bottom, rgb(14 14 16 / 0), rgb(14 14 16));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease-out;
+}
+
+.proposal-bar__details[data-more] .proposal-bar__details-fade {
+  opacity: 1;
 }
 
 .proposal-bar__group-title {

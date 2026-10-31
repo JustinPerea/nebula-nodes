@@ -461,8 +461,9 @@ open. Each node that lost a connection that way is a line in `warnings`
 longer exists."; `nebula load` and `nebula project open` print them as
 `note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
-proposal's `cost.notReady` rows add a `person` line beside `missing`: read
-`missing`). A job the
+proposal's `cost.notReady` rows add a `person` line and a `reason`
+(`{one, many}`, the line without the name, which the bar merges by) beside
+`missing`: read `missing`). A job the
 provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
 the provider rather than the key. A run the pre-run check refuses (a missing

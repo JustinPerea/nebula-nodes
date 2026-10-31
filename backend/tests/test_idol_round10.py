@@ -27,7 +27,7 @@ import main
 import services.settings as settings
 from services import agent_spend, agent_words, canvas_proposals, model_pricing, node_route
 from services.node_registry import NodeRegistry
-from tests.conftest import PERSON
+from tests.conftest import PERSON, wait_for_promote
 from tests.test_canvas_proposals import CLAUDE, _propose, api  # noqa: F401 - fixture
 from tests.test_idol_may_bill import SIGNED_IN, _quick, gated  # noqa: F401 - fixture
 from tests.test_idol_proposal_cost import keyed  # noqa: F401 - fixture
@@ -326,16 +326,7 @@ def _heard(socket) -> list[dict]:
     raise AssertionError("no marker")
 
 
-def _promoted(socket) -> None:
-    """Wait for the hello's answer. The hello goes through the socket's
-    receive loop while the marker is sent straight from the portal, so on a
-    busy run the marker can come back before the tab is the person's."""
-    for _ in range(80):
-        kind = socket.receive_json().get("type")
-        if kind == "proposalSync":
-            return
-        assert kind != "personRequired", "the hello was refused"
-    raise AssertionError("no proposalSync after the hello")
+_promoted = wait_for_promote  # round 11 imports it by this name
 
 
 def test_the_signal_reaches_the_persons_tab_and_never_an_agent(sockets):

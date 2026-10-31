@@ -406,8 +406,10 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
         return Readiness(True, f"{flag_note} Uses Vertex AI, billed to your Google Cloud project.",
                          info.acp_flag, info.version, selected, key_blocked)
     if selected in {AUTH_ADC, AUTH_CLOUD_SHELL}:
-        return Readiness(True, f"{flag_note} Uses your Google Cloud credentials.", info.acp_flag, info.version,
-                         selected, key_blocked)
+        # GM r28 item 1 of PR #203: Google's own word for this sign-in
+        # ("credentials") stays out of every person line.
+        return Readiness(True, f"{flag_note} Uses the Google Cloud sign-in of the machine it runs on.",
+                         info.acp_flag, info.version, selected, key_blocked)
     if selected == AUTH_GATEWAY:
         return Readiness(True, f"{flag_note} Uses your AI API gateway.", info.acp_flag, info.version, selected,
                          key_blocked)

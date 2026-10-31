@@ -252,6 +252,20 @@ FORGED_ORIGIN = {"Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}
 PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
 
 
+def wait_for_promote(socket) -> None:
+    """Wait for a hello's answer before acting on the socket. The server
+    promotes a socket only when its receive loop reads the hello, so a write
+    made straight after send_json can broadcast to a socket that isn't the
+    person's yet (round 14's CI). The proposalSync is the observable promote:
+    it is sent on a verified hello and nowhere else (main.websocket_endpoint)."""
+    for _ in range(80):
+        kind = socket.receive_json().get("type")
+        if kind == "proposalSync":
+            return
+        assert kind != "personRequired", "the hello was refused"
+    raise AssertionError("no proposalSync after the hello")
+
+
 class TabHeaders(Mapping):
     """What a canvas tab sends on a graph write: ``base`` (PERSON and
     X-Nebula-Tab) plus the open workspace's revision, read when the request

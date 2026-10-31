@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import errno
 import json
 import os
 import re
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,16 +25,23 @@ def settings_path() -> Path:
     each call: NEBULA_SETTINGS_PATH when it is set, with "~" expanded to the
     home folder (never a folder named "~"), else the repo's settings.json.
     Read at call time, so a test sets the variable (monkeypatch.setenv) and
-    nothing reloads this module (review 13 of PR #203, LOW-2)."""
+    nothing reloads this module (review 13 of PR #203, LOW-2). An empty
+    value is unset, as paper_export_path reads it, never the working folder
+    (review 14, settings-gate NIT-3)."""
     raw = os.environ.get("NEBULA_SETTINGS_PATH")
-    return (Path(raw) if raw is not None else _DEFAULT_SETTINGS_PATH).expanduser()
+    return (Path(raw) if raw else _DEFAULT_SETTINGS_PATH).expanduser()
 
 
 def settings_file() -> Path:
-    """settings_path resolved: the one file every reader, writer and the 409
-    lines use (agent_profiles' deny rules read settings_path too; review 12
-    of PR #203, LOW-2)."""
-    return settings_path().resolve()
+    """settings_path resolved: the one file every reader and writer uses
+    (agent_profiles' deny rules read settings_path too; review 12 of PR
+    #203, LOW-2). A symlink loop on the way is SettingsUnreadable, as any
+    file Nebula can't read, for reads, writes and start_here alike (review
+    14, settings-gate LOW-3: resolve() raised outside every handler)."""
+    try:
+        return settings_path().resolve()
+    except (RuntimeError, OSError) as exc:  # 3.12 raises RuntimeError for a loop, 3.13 OSError
+        raise SettingsUnreadable(str(settings_path())) from exc
 
 
 class SettingsUnreadable(ValueError):
@@ -43,21 +52,55 @@ class SettingsUnreadable(ValueError):
     review 13, HIGH-1 and LOW-3)."""
 
 
+class SettingsUnwritable(PermissionError):
+    """Nebula can read the settings file but isn't allowed to change it: the
+    file is read-only for this user, or its folder is, where a save writes
+    its temp file and renames it over the file, or the disk is mounted
+    read-only. The settings routes answer it with a 409 and the code
+    ``settings_unwritable`` (main.SETTINGS_UNWRITABLE; GM, PR #203 r28 item
+    4), never a 500."""
+
+
+# The OSErrors that mean "not allowed" rather than "something broke": no
+# permission, an operation the filesystem refuses, a read-only filesystem.
+_NOT_ALLOWED_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
+
+
+def settings_writable() -> bool:
+    """Whether a save may write the settings file: the file (when it is
+    there) and its folder writable for this user. Asked before a write
+    changes anything (main._saved_settings_or_409), so a desktop key lands
+    in both the Keychain and the backend or in neither; save_settings still
+    refuses a file that turned read-only after this said yes."""
+    path = settings_file()
+    if path.exists() and not os.access(path, os.W_OK):
+        return False
+    return os.access(path.parent, os.W_OK | os.X_OK)
+
+
+# The OSErrors that say there is no settings file: not found, and a folder
+# on the way that is a file (ENOTDIR: nothing can be there, and before round
+# 14 exists() said False for it; review 14, settings-gate HIGH-1). Every
+# other OSError is a file Nebula can't read.
+_NO_FILE_ERRORS = (FileNotFoundError, NotADirectoryError)
+
+
 # No settings file yet: _read_settings_file's answer, told apart from a file
 # whose JSON is ``null`` (review 13 of PR #203, HIGH-1).
 _MISSING: Any = object()
 
 
 def _read_settings_file() -> Any:
-    """The file's JSON, or _MISSING when there is no file yet. A file that
-    is there and can't be read (not JSON, not text, no permission, a folder)
-    raises SettingsUnreadable: every OSError but "not found" (review 13 of
-    PR #203, LOW-3)."""
+    """The file's JSON, or _MISSING when there is no file yet (not found, a
+    broken symlink, a folder on the way that is a file: _NO_FILE_ERRORS). A
+    file that is there and can't be read (not JSON, not text, no
+    permission, a folder, a symlink loop) raises SettingsUnreadable: every
+    other OSError (review 13 of PR #203, LOW-3; review 14, HIGH-1)."""
     path = settings_file()
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except FileNotFoundError:
+    except _NO_FILE_ERRORS:
         return _MISSING
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         raise SettingsUnreadable(str(path)) from exc
@@ -162,6 +205,13 @@ def load_settings() -> dict[str, Any]:
     always win; loading never writes the file.
     """
     settings = _saved_or_default(_read_settings_file())
+    if not isinstance(settings, dict):
+        # A file that holds something other than an object (null, [], "x"):
+        # every reader fails closed on what it holds, as it is. Checked
+        # first, so no step below meets a non-object (review 14,
+        # settings-gate MEDIUM-1: the desktop's injected keys raised a
+        # TypeError on it, a 500).
+        return settings
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
     # Non-secret settings from the file (routing, outputPath, etc.) remain.
@@ -174,9 +224,9 @@ def load_settings() -> dict[str, Any]:
     # reader alike: the run gate, the handlers, describe_node, the masked
     # GET /api/settings the canvas reads (GM, PR #203 r17 item 1; review 8,
     # LOW-1).
-    if isinstance(settings, dict) and isinstance(settings.get("apiKeys"), dict):
+    if isinstance(settings.get("apiKeys"), dict):
         settings["apiKeys"] = read_keys(settings["apiKeys"])
-    elif isinstance(settings, dict):
+    else:
         # Keys Nebula can't read (an `apiKeys` that isn't an object): no key
         # is set, for every reader, as a key that is empty once trimmed
         # isn't. The file keeps them as saved: a write starts from
@@ -221,36 +271,50 @@ def settings_file_path() -> str:
 
 
 def settings_file_shown() -> str:
-    """settings_file_path as the 409 lines show it, to the person and to
-    agents alike: under the home folder it starts "~", so it wraps less
+    """The settings file as the 409 lines show it, to the person and to
+    agents alike: the path as configured (never what a symlink at it points
+    to, which may be a folder; review 14, settings-gate NIT-2), made
+    absolute. Under the home folder it starts "~", so it wraps less
     ("~/.nebula/settings.json"); anywhere else it stays absolute (GM, PR #203
-    r24 item 7)."""
-    path = Path(settings_file_path())
-    home = _home_for_shown_paths()
-    if home is None:
+    r24 item 7). Never raises: a symlink loop still gets its line."""
+    path = Path(os.path.abspath(settings_path()))
+    homes = _home_for_shown_paths()
+    if homes is None:
         return str(path)
+    for home, shown in ((homes[0], path), (homes[1], _resolved_or(path))):
+        try:
+            rest = shown.relative_to(home)
+        except ValueError:
+            continue
+        return "~" if not rest.parts else f"~{os.sep}{rest}"
+    return str(path)
+
+
+def _resolved_or(path: Path) -> Path:
+    """``path`` with its symlinks resolved, or as it is when they loop."""
     try:
-        rest = path.relative_to(home)
-    except ValueError:
-        return str(path)
-    return "~" if not rest.parts else f"~{os.sep}{rest}"
+        return path.resolve()
+    except (RuntimeError, OSError):
+        return path
 
 
-def _home_for_shown_paths() -> Path | None:
-    """The home folder a shown path may start "~" for: a real, absolute
-    folder other than the filesystem's root. With HOME empty, relative or
-    "/" (a launchd or sidecar environment can run that way), every path
-    would be "under home", so none is (review 13 of PR #203, LOW-4)."""
+def _home_for_shown_paths() -> tuple[Path, Path] | None:
+    """The home folder a shown path may start "~" for, as written and
+    resolved (a path through a symlinked home, or through the folder it
+    points to, is under it either way): a real, absolute folder other than
+    the filesystem's root. With HOME empty, relative or "/" (a launchd or
+    sidecar environment can run that way), every path would be "under
+    home", so none is (review 13 of PR #203, LOW-4)."""
     try:
         raw = Path.home()
     except (RuntimeError, KeyError):
         return None
     if not raw.is_absolute():
         return None
-    home = raw.resolve()
+    home = _resolved_or(raw)
     if home == Path(home.anchor) or not home.is_dir():
         return None
-    return home
+    return Path(os.path.abspath(raw)), home
 
 
 def load_saved_settings() -> dict[str, Any]:
@@ -290,10 +354,41 @@ def save_settings(settings: dict[str, Any]) -> None:
     to_write = dict(settings)
     if _INJECTED_KEYS:
         to_write["apiKeys"] = {}
+    text = json.dumps(to_write, indent=2) + "\n"
 
-    with open(settings_file(), "w", encoding="utf-8") as f:
-        json.dump(to_write, f, indent=2)
-        f.write("\n")
+    # Whole or not at all (PR #203 round 15): the new settings go to a temp
+    # file beside the old one, then replace it in one rename, so a save cut
+    # short never leaves a file Nebula can't read. A file Nebula isn't
+    # allowed to change raises SettingsUnwritable and is left as it was.
+    path = settings_file()
+    if path.exists() and not os.access(path, os.W_OK):
+        # rename() needs only the folder: a read-only file would be replaced.
+        raise SettingsUnwritable(errno.EACCES, "settings file is read-only", str(path))
+    try:
+        mode = path.stat().st_mode & 0o7777
+    except FileNotFoundError:
+        mode = 0o600  # a new file holds keys: this user's only
+    try:
+        fd, temp = tempfile.mkstemp(prefix=".settings-", suffix=".tmp", dir=path.parent)
+    except OSError as exc:
+        if exc.errno in _NOT_ALLOWED_ERRNOS:
+            raise SettingsUnwritable(exc.errno, "settings folder is read-only", str(path.parent)) from exc
+        raise
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temp, mode)
+        os.replace(temp, path)
+    except OSError as exc:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass  # the folder turned read-only too: the temp file is all that's left
+        if exc.errno in _NOT_ALLOWED_ERRNOS:
+            raise SettingsUnwritable(exc.errno, "settings file can't be changed", str(path)) from exc
+        raise
 
 
 def get_api_key(provider_key_name: str | list[str]) -> str | None:

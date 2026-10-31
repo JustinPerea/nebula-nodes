@@ -105,9 +105,10 @@ def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch,
     body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
 
     assert "OPENAI_API_KEY" in body["error"] and image in body["error"]
-    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-    assert line == (f"Run stopped before it started. {main._node_label(image)} can’t run. "
-                    "Add your OpenAI API key in Settings, then run the node again.")
+    # GM, PR #203 r29 item 3: the card's heading and the bar's reason.
+    [line] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
+    assert line == (f"Nebula couldn’t start the run. “{main._node_label(image)}” needs your OpenAI API key. "
+                    "Add it in Settings, then run the node again.")
     assert "OPENAI_API_KEY" not in line and image not in line and "Missing API key" not in line
 
 
@@ -123,8 +124,8 @@ def test_a_graph_wide_refusal_tells_the_agent_log_in_words(canvas, monkeypatch, 
     body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
 
     assert "Graph contains a cycle" in body["error"]
-    [line] = [text for text in agent_log if text.startswith("Run stopped before it started.")]
-    assert line == "Run stopped before it started. Couldn't run the canvas."
+    [line] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
+    assert line == "Nebula couldn’t start the run."
 
 
 def test_every_node_of_an_agent_run_shows_on_the_canvas_and_a_failure_fails_the_run(canvas, monkeypatch):

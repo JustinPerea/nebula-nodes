@@ -520,7 +520,8 @@ The server exposes these tools for building and running (see
   model and its settings). `style_update` returns `previous`, which undoes it
   as one checked write; `style_delete` moves one to Recently deleted. See
   [Styles from the CLI and MCP](#styles-from-the-cli-and-mcp).
-- `get_settings`: what agents need from Settings, from `GET /api/settings`:
+- `get_settings`: what agents need from Settings, from `GET /api/settings`
+  (a 409 with `code` when the settings file can't be read, below):
   `configured` (each provider key's name with `true` or `false`), `routing`,
   `executionMode`, `batchSizeCap`, `exportFolder` and `kreaConnectionMode`.
   No part of a key comes back. The route itself sends a set key's last 4
@@ -530,6 +531,15 @@ The server exposes these tools for building and running (see
   prints this result). It turns each key into true or false as this tool
   does, so even a reply that carried an ending would print none; the CLI
   never has the person token.
+  When Nebula can't use the settings file, the route answers 409 with
+  `detail`, `code` and `fix`: `settings_unreadable` (a file it can't read or
+  parse, or one that isn't a JSON object: "Nebula can’t read <path>. Ask the
+  person to fix the file."), `keys_unreadable` (its `apiKeys` isn't an
+  object; writes only) or `settings_unwritable` (the file or its folder is
+  read-only; writes only, and only the person writes). `fix` is the sentence
+  that says what to do, worded for the reader: an agent's says to ask the
+  person. Every browser tab gets the person's words; only agents get these.
+  An empty `NEBULA_SETTINGS_PATH` means the default path.
 - `provider_status`: whether each key works, from `GET /api/health/providers`
   (free, read-only checks, never a generation; cached 5 minutes, `refresh`
   checks again), and the Krea account connection from
@@ -1810,7 +1820,8 @@ key-billing route's host, "huggingface" for Idol's Space; `provider` stays
 the route's maker, "speridlabs"), else its provider, else it runs locally.
 Free runs that are all local say "(runs locally)" when they are the whole
 run, and "(local)" beside another class, as the paid part is tagged ("1
-paid run (openai) and 1 free (local)").
+paid run (openai) and 1 free (local)"). When the cost's entries don't match
+its `freeRuns` (more or fewer), the free part carries no tag at all.
 
 A named node's entry in the proposal has `name` (the given name) and
 `model` (the model's own name); an unnamed one has only `name`, the name its
@@ -1859,7 +1870,7 @@ already exists); while that file doesn't exist yet it is in `unpriced` and
 
 **Nodes that can't run here.** `cost.notReady` lists every node the run
 reads, upstream nodes with outputs included, that can't run here as set up,
-as `[{ref, nodeId, name, missing, person}]`. `missing` is in the words `find_nodes`
+as `[{ref, nodeId, name, missing, person, reason}]`. `missing` is in the words `find_nodes`
 and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
@@ -1872,7 +1883,15 @@ the bar lists the nodes under its summary (three, then the rest in its
 details), each in its `person` line ("“GPT Image 2” needs your OpenAI API key.
 Add it in Settings.", round 3f, the name in curly quotes; a node on the Krea
 plan: "“Krea 2” needs your Krea plan. Sign in to Krea in Settings."; read
-`missing`, not that). Both re-check keys as the person adds them, so a line goes away
+`missing`, not that). `reason` is that line without the name, for one node
+and for several (`{one, many}`: "needs your OpenAI API key. Add it in
+Settings." and "need your OpenAI API key. Add it in Settings."); the bar
+merges nodes with the same reason into one line ("“Writer” and “Editor” need
+your Anthropic API key. Add it in Settings.", "2 “FLUX.2” nodes need your
+Black Forest Labs or fal.ai API key. Add one in Settings."). A node whose
+provider switcher is set to a route it doesn't list reads "“N” is set to a
+provider that isn’t in its list. Choose one in its provider switcher." A row
+with no `reason` gets a line of its own. Both re-check keys as the person adds them, so a line goes away
 once its key is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
@@ -2769,7 +2788,7 @@ How it works (`backend/services/agent_spend.py`):
     the way the canvas node with its id and definition does (`_kreaAuth`, and
     a multi-provider node's `_provider` too; a Moodboard node can't open
     `send_notes` further), judged on its params after retired ones are
-    renamed; any other node starts on Auto and the API token. A
+    renamed; any other node starts on Auto and the API key connection. A
     run's params are written back to the canvas only onto a node of the same
     definition, and for a run that isn't the person's only what the run
     itself changed, never `_kreaAuth`.
@@ -2799,7 +2818,11 @@ its session has used, to the cent; an amount under half a cent that isn't
 nothing reads "<$0.01" (Settings shows spend the same way, and a Run or
 proposal chip shows any amount under a cent as "<$0.01": "$0" only ever
 means free). `budget` is `chat`, `shared` or `app`; outside callers
-also get `outsideSpent`, the shared 24-hour total.
+also get `outsideSpent`, the shared 24-hour total. When Nebula can't read
+the settings file, it answers 200 with only `note` ("Nebula can’t read
+<path>. Ask the person to fix the file.") and `code:
+"settings_unreadable"`, as `start_here`'s spend part does, and `nebula
+spend` prints "Spending limits: <note>".
 
 ### Personal agents' session tokens
 

@@ -345,7 +345,7 @@ def test_the_shared_helpers_lines_follow_gms_rules() -> None:
     produced += [lines.slow_job_line(provider) for provider in ("fal.ai", "Black Forest Labs", "Krea", "Runway")]
     produced += [lines.status_line(kind, "Runway") for kind in lines.STATUS_LINES]
     produced += [lines.status_line("key", "Replicate", "API token"),
-                 lines.status_line("key", "Google Vertex AI", "credentials")]
+                 lines.status_line("key", "Vertex AI", "service account key")]
     for line in produced:
         assert not rule_breaks(line), line
 

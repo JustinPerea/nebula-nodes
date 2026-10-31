@@ -67,7 +67,7 @@ describe('providerSwitchState', () => {
     expect(chosen.message).toBe(
       'FLUX.2 is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or choose another provider.');
     const unknown = providerSwitchState(flux2, { _provider: 'xyz' }, context({ BFL_API_KEY: KEY }));
-    expect(unknown.message).toBe("FLUX.2 is set to a provider it doesn't have. Choose one in the node's provider switcher.");
+    expect(unknown.message).toBe('FLUX.2 is set to a provider that isn’t in its list. Choose one in its provider switcher.');
     const auto = providerSwitchState(flux2, {}, context({}));
     expect(auto.message).toMatch(/^Add your .* in Settings, then run the node again\.$/);
     for (const state of [chosen, unknown, auto]) {

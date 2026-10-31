@@ -157,4 +157,4 @@ def test_a_refused_run_bubble_names_the_node_in_quotes(logged):
     assert body["status"] == "failed"
     [said] = [say for say in _says(sent) if "can’t run" in str(say)]
     assert said.startswith("“GPT Image 2.5” can’t run.")
-    assert any(line.startswith("Run stopped before it started. GPT Image 2.5 can’t run.") for line in lines)
+    assert any(line.startswith("Nebula couldn’t start the run. “GPT Image 2.5” needs") for line in lines)

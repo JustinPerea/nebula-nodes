@@ -27,7 +27,7 @@ import main
 import services.settings as settings
 from services import node_route
 from services.node_registry import NodeRegistry
-from tests.conftest import PERSON
+from tests.conftest import PERSON, wait_for_promote
 from tests.test_idol_may_bill import SIGNED_IN, _execute, _idol_placeholder, gated  # noqa: F401 - fixture
 from tests.test_canvas_proposals import _propose, api  # noqa: F401 - fixture
 from tests.test_idol_proposal_cost import keyed  # noqa: F401 - fixture
@@ -211,6 +211,9 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
     with tab.websocket_connect("/ws", headers=PERSON) as socket:
         # The person's tab (round 10: the signal goes to their tabs only).
         socket.send_json({"type": "hello", "personToken": PERSON["X-Nebula-Person"]})
+        # The write waits for the promote: sent straight after the hello, it
+        # could broadcast before the socket's loop read it (round 14's CI).
+        wait_for_promote(socket)
         assert other.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_second_client_7777"}}).status_code == 200
         # A marker sent after the PUT answered, so a backend that sends
         # nothing fails here instead of waiting for ever.

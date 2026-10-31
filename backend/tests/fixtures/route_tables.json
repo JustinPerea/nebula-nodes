@@ -77,8 +77,8 @@
    "API key"
   ],
   "GOOGLE_VERTEX_CREDENTIALS": [
-   "Google Vertex AI",
-   "credentials"
+   "Vertex AI",
+   "service account key"
   ],
   "HF_TOKEN": [
    "Hugging Face",

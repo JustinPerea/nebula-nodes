@@ -89,7 +89,7 @@ describe('ProviderSwitcher rows', () => {
     const bfl = row(/^Black Forest Labs/).closest('[data-provider-row]') as HTMLElement;
     expect(within(bfl).getByText('Key set')).toBeVisible();
     expect(within(bfl).getByText('$0.03')).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Add key for fal.ai in Settings' })).toHaveTextContent('Add key →');
+    expect(screen.getByRole('menuitem', { name: 'Add your fal.ai API key in Settings.' })).toHaveTextContent('Add key →');
     expect(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' })).toHaveTextContent('Sign in');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
@@ -110,7 +110,7 @@ describe('ProviderSwitcher rows', () => {
     const open = vi.spyOn(useUIStore.getState(), 'openProviderSetup');
     useUIStore.setState({ openProviderSetup: open });
     render(<Controlled />);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add key for Replicate in Settings' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add your Replicate token in Settings.' }));
     expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'REPLICATE_API_TOKEN' });
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' }));
     expect(open).toHaveBeenLastCalledWith({ kind: 'krea-mcp' });
@@ -225,7 +225,7 @@ describe('ProviderSwitcher keyboard', () => {
     expect(document.activeElement).toBe(row(/^fal\.ai/));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     // The next item in the menu: fal's own "Add key →".
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Add key for fal.ai in Settings' }));
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Add your fal.ai API key in Settings.' }));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row(/^Replicate/));
     fireEvent.keyDown(menu, { key: 'Home' });

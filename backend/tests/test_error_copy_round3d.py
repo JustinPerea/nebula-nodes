@@ -332,7 +332,7 @@ def test_every_paid_poll_timeout_says_the_job_may_still_be_billed() -> None:
 def test_veo_names_the_api_it_polled() -> None:
     raises = {text: wrapper for text, wrapper in _timeout_raises(BACKEND / "handlers" / "veo.py")}
     names = sorted(ast.literal_eval(w.args[1].args[0]) for w in raises.values())
-    assert names == ["Gemini", "Google Vertex AI"]
+    assert names == ["Gemini", "Vertex AI"]
 
 
 def test_the_runway_and_replicate_polls_name_their_provider() -> None:
@@ -360,7 +360,7 @@ def test_a_free_wait_keeps_the_classifiers_line() -> None:
     ("BytePlus ModelArk returned an unexpected response", "seedream-4-5", {"BYTEPLUS_API_KEY": "x"}, "BytePlus"),
     ("Krea MCP returned no usable structured result", "krea-2-generate", {"_kreaAuth": "mcp"}, "Krea"),
     ("Veo (Vertex) completed but returned no video: ['done']", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"},
-     "Google Vertex AI"),
+     "Vertex AI"),
 ])
 def test_an_empty_or_malformed_answer_says_the_provider_returned_no_result(text, definition_id, keys,
                                                                             provider) -> None:
@@ -602,7 +602,7 @@ async def test_krea_9_a_connection_that_isnt_set(call) -> None:
 
         exc = await _araised(handle_krea_gateway, _node("krea-video-bytedance-seedance-2", {"_kreaAuth": "nope"}), {}, {})
     assert str(exc) == "Unknown Krea connection; choose API key or Krea account"
-    assert person_line(exc) == "This node's Krea connection isn't set. Choose “API key” or “Krea account”."
+    assert person_line(exc) == "This node’s Krea connection isn’t set. Choose “API key” or “Krea account”."
 
 
 APP_ID = "0123abcd-0123-4567-89ab-0123456789ab"
@@ -838,7 +838,7 @@ def test_insufficient_balance_reads_as_credits_for_any_provider() -> None:
 @pytest.mark.parametrize("text, definition_id, keys, provider", [
     ("Krea completed without media URLs", "krea-2-generate", {"KREA_API_TOKEN": "x"}, "Krea"),
     ("MiniMax returned Success but no file_id: {}", "minimax-t2v", {"MINIMAX_API_KEY": "x"}, "MiniMax"),
-    ("Veo (Vertex) returned a video with no data", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"}, "Google Vertex AI"),
+    ("Veo (Vertex) returned a video with no data", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"}, "Vertex AI"),
     ("World Labs returned an empty asset: a.spz", "meshy-text-to-3d", {"MESHY_API_KEY": "x"}, "World Labs"),
     ("World Labs world completed without any SPZ assets", "meshy-text-to-3d", {"MESHY_API_KEY": "x"},
      "World Labs"),

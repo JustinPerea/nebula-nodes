@@ -4567,7 +4567,7 @@
         "fixes": [],
         "message": "Fixture Image is set to provider 'midjourney', which it doesn't have. Choose auto, bfl, fal, replicate, openrouter or krea."
       },
-      "unavailableLine": "Fixture Image is set to a provider it doesn't have. Choose one in the node's provider switcher."
+      "unavailableLine": "Fixture Image is set to a provider that isn’t in its list. Choose one in its provider switcher."
     },
     {
       "name": "routes: Krea-maker Auto with the plan picked bills the plan",
@@ -5386,7 +5386,7 @@
         "fixes": [],
         "message": "Fixture Image is set to provider 'nope', which it doesn't have. Choose auto, bfl, fal, replicate, openrouter or krea."
       },
-      "unavailableLine": "Fixture Image is set to a provider it doesn't have. Choose one in the node's provider switcher.",
+      "unavailableLine": "Fixture Image is set to a provider that isn’t in its list. Choose one in its provider switcher.",
       "shownRoute": "bfl",
       "routeParams": [
         {
@@ -7714,7 +7714,7 @@
         ],
         "message": "FLUX 3 Image Klein can't run on OpenRouter: it doesn't offer Seed 7. Clear Seed, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
-      "unavailableLine": "FLUX 3 Image Klein can't run on OpenRouter with “Seed” set to 7. Clear “Seed”, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
+      "unavailableLine": "FLUX 3 Image Klein can't run on OpenRouter with “Seed” set to 7. Clear “Seed”, or switch provider. Black Forest Labs can take it. Add your Black Forest Labs API key in Settings.",
       "paramKeys": [
         "aspect_ratio",
         "resolution",
@@ -9323,7 +9323,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
-      "unavailableLine": "Fixture Hide can't run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
+      "unavailableLine": "Fixture Hide can't run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch provider. Black Forest Labs can take it. Add your Black Forest Labs API key in Settings.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9780,7 +9780,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
-      "unavailableLine": "Fixture Hide can't run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
+      "unavailableLine": "Fixture Hide can't run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch provider. Black Forest Labs can take it. Add your Black Forest Labs API key in Settings.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9979,7 +9979,7 @@
         ],
         "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
-      "unavailableLine": "FLUX.2 can't run on fal.ai with “Safety” set to 5 and “Model” set to FLUX.2 [klein] 9B. Set “Safety” back to 2, or switch provider. Black Forest Labs can take it. Add its key in Settings.",
+      "unavailableLine": "FLUX.2 can't run on fal.ai with “Safety” set to 5 and “Model” set to FLUX.2 [klein] 9B. Set “Safety” back to 2, or switch provider. Black Forest Labs can take it. Add your Black Forest Labs API key in Settings.",
       "shownRoute": "fal",
       "routeParams": [
         {

@@ -88,6 +88,15 @@ def test_a_google_login_with_a_cloud_project_may_be_a_code_assist_license(tmp_pa
     assert result.ready and "Code Assist Standard or Enterprise" in result.note
 
 
+@pytest.mark.parametrize("selected", ["compute-default-credentials", "cloud-shell"])
+def test_a_machine_sign_in_never_says_google_cloud_credentials(tmp_path, home, selected):
+    # GM r28 item 1 (PR #203): Google's own term stays out of every person line.
+    write_settings(home, selected)
+    result = check(fake_gemini(tmp_path, "0.64.0", NEW_HELP), home, tmp_path)
+    assert result.ready and "credentials" not in result.note.lower()
+    assert result.note.endswith("Uses the Google Cloud sign-in of the machine it runs on.")
+
+
 def test_an_api_key_login_needs_a_key_nebula_can_see(tmp_path, home):
     binary = fake_gemini(tmp_path, "0.64.0", NEW_HELP)
     write_settings(home, "gemini-api-key")

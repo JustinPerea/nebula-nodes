@@ -400,8 +400,29 @@ In desktop mode (detected via `window.nebulaDesktop.credentials`):
 - **Remove** (two presses, in the row's ⋯ menu) calls
   `nebulaDesktop.credentials.clear(provider)`, then
   `POST /api/credentials/update` with an empty value.
+- The backend is asked first, with `"check": true`, and the Keychain is
+  written only if it would take the key. `set` and `clear` answer a
+  one-time `writeId`. If the backend then refuses the write with a 4xx,
+  the panel calls `nebulaDesktop.credentials.revert(writeId)`
+  (`credentials:revert`): main puts back the entry it kept from before
+  that write (the earlier key, or none). When the backend takes the write,
+  the panel calls `commit(writeId)` (`credentials:commit`), and nothing can
+  undo it after that. On a 5xx or no answer, the panel reads
+  `GET /api/settings` and commits or reverts by what the backend holds;
+  when it can't tell, it commits and says the key may not be saved (or
+  removed). A failed Keychain write is never reverted, since it changed
+  nothing.
+- `revert` undoes only that provider's latest write, only from the page
+  that made it, and only while `credentials.json` still holds what that
+  write left there (compare-and-swap; otherwise `STORE_CHANGED`). A commit,
+  the page being destroyed, crashing or navigating, a later write of the
+  same provider, or one minute passing (`REVERT_WINDOW_MS`) drops the entry,
+  so a stale or made-up id gets `NOT_THE_LATEST_WRITE` and changes nothing.
+  What's left: the trusted page can undo its own write for up to a minute,
+  which it could do anyway with `set` or `clear`. It never receives a key.
 - The renderer never receives plaintext keys — the preload bridge exposes
-  `set`, `has`, and `clear` but deliberately has no `get` method.
+  `set`, `has`, `clear`, `revert`, and `commit` but deliberately has no
+  `get` method.
 - Non-secret settings (outputPath, executionMode, etc.) still use
   `PUT /api/settings` normally.
 

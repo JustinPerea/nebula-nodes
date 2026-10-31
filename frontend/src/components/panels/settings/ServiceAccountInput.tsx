@@ -43,7 +43,9 @@ export function ServiceAccountInput({ label, value, fileName, onChange, onSubmit
       {pasting ? (
         <textarea
           className="settings-sa__paste"
-          aria-label={`${label} service-account JSON`}
+          // The row's one name (GM, PR #203 r29 item 4); "JSON" stays in the
+          // placeholder and the hint, never in the name.
+          aria-label={label}
           aria-describedby={hintId}
           data-provider-key="GOOGLE_VERTEX_CREDENTIALS"
           value={value}
@@ -64,7 +66,7 @@ export function ServiceAccountInput({ label, value, fileName, onChange, onSubmit
         >
           {check?.ok ? (
             <>
-              <span className="settings-sa__file">✓ {fileName ?? 'Service-account key'}</span>
+              <span className="settings-sa__file">✓ {fileName ?? 'Service account key'}</span>
               <span className="settings-sa__account">{check.email}</span>
               <span className="settings-hint">Project {check.project} · needs the Vertex AI User role</span>
             </>

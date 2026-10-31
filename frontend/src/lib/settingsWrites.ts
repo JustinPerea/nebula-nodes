@@ -1,7 +1,7 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
-import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
+import { deleteSettingsApiKey, getSettings, updateCredential, updateSettings } from './api';
 import { RequestFailedError } from './errorCopy';
-import { keyText } from './directRoute';
+import { keyPhrase, keyText } from './directRoute';
 import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
 import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
 import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
@@ -69,14 +69,21 @@ function confirm(update: Partial<SettingsDraft>) {
   window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));
 }
 
-/** The backend's own line for a settings write it refused because it can't
- * read the settings file (409; main.KEYS_UNREADABLE and
- * SETTINGS_UNREADABLE, GM r22 item 3): it names the file by its full path
- * and what to fix, so the panel says it as it is, not a generic "try
- * again" the person can't act on. Any other failure keeps its own line. */
+/** The codes the backend puts beside a settings write's 409 (main
+ * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE):
+ * the file can't be read, its keys can't, or Nebula isn't allowed to change
+ * it (GM, PR #203 r28 item 4). */
+export const SETTINGS_REFUSAL_CODES: readonly string[] = ['settings_unreadable', 'keys_unreadable', 'settings_unwritable'];
+
+/** The backend's own line for a settings write it refused over the settings
+ * file itself (a 409 with one of SETTINGS_REFUSAL_CODES; GM r22 item 3, r28
+ * item 4): it names the file by its path and what to do, worded for the
+ * person, so the panel says it as it is, not a generic "try again" the
+ * person can't act on. Picked by the code, never by the words. Any other
+ * failure keeps its own line. */
 export function unreadableSettingsLine(error: unknown): string | null {
   if (!(error instanceof RequestFailedError) || error.status !== 409) return null;
-  return typeof error.detail === 'string' && error.detail.startsWith('Nothing was saved because Nebula can’t read ')
+  return error.code && SETTINGS_REFUSAL_CODES.includes(error.code) && typeof error.detail === 'string' && error.detail
     ? error.detail : null;
 }
 
@@ -93,44 +100,152 @@ function desktopCredentials() {
   return typeof window !== 'undefined' ? window.nebulaDesktop?.credentials : undefined;
 }
 
+function bridgeInUse(): boolean {
+  return desktopCredentials() !== undefined;
+}
+
 /** A Keychain write the backend then refused is undone, so the key is in
  * both or in neither whatever the order of the calls (review 13 of PR #203,
  * LOW-1): the bridge puts the entry back as it was (desktop credentials
  * `revert`; main keeps the earlier entry, the renderer never holds it).
- * When it can't, the row says the Keychain kept the change instead of
- * "Nothing was saved" (KEYCHAIN_KEPT). */
-export const KEYCHAIN_KEPT = {
-  save: 'Nebula couldn’t take this key, but the Keychain kept it. Try again, or remove the key.',
-  removal: 'Nebula still has this key, but it was removed from the Keychain. Try again.',
+ * When it can't, the line says what Nebula is using now instead of
+ * "Nothing was saved" (keychainKeptLine). */
+export type KeychainKeptCase = 'save-over' | 'save-new' | 'removal';
+
+/** GM, PR #203 r28 item 2: what Nebula is using now, after a Keychain write
+ * the backend refused and the bridge couldn't put back. `save-over` is a
+ * save over a key Nebula had, `save-new` a save where it had none. Beside
+ * the key's row the line says "this key"; shown as a notice, away from the
+ * row, it names the key from the noun source (directRoute.keyPhrase: "your
+ * OpenAI API key", "your Replicate token"). */
+export function keychainKeptLine(kind: KeychainKeptCase, key: string, placement: 'row' | 'notice', fix?: string | null): string {
+  const phrase = placement === 'notice' ? keyPhrase([key]) : null;
+  const it = phrase ? `your ${phrase}` : 'this key';
+  // GM r29 item 6: a newer refusal's own fix sentence replaces the general one.
+  if (kind === 'removal') return `Nebula removed ${it} from your Keychain but is still using it. ${fix || 'Try again.'}`;
+  if (kind === 'save-over') {
+    return `Nebula couldn’t save ${it} and is still using the one it had. Your Keychain has the new one. ${fix || 'Try again, or remove it.'}`;
+  }
+  return `Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`;
+}
+
+/** GM, PR #203 r29 item 7: Nebula didn't answer (a lost answer, a 5xx), so
+ * whether it took the write isn't known, and the backend couldn't say when
+ * asked again. Saving or removing the same key again is safe: it writes the
+ * same value, mints nothing and rotates nothing. */
+export const KEYCHAIN_UNKNOWN = {
+  save: 'Nebula didn’t respond, so this key may not be saved. Save it again to be sure.',
+  removal: 'Nebula didn’t respond, so this key may not be removed. Remove it again to be sure.',
 } as const;
 
+/** The keys whose Keychain entry and what Nebula uses still differ after a
+ * kept write (keychainKeptLine): the line stays until the two agree again,
+ * a later write the backend takes or a put-back (GM r29 item 6). */
+const keychainDiffers = new Map<string, KeychainKeptCase>();
+
 class KeychainKept extends Error {
-  readonly line: string;
-  constructor(line: string, cause: unknown) {
-    super(line, { cause });
-    this.line = line;
+  readonly kind: KeychainKeptCase;
+  constructor(kind: KeychainKeptCase, cause: unknown) {
+    super(`Keychain kept: ${kind}`, { cause });
+    this.kind = kind;
   }
+}
+
+/** Nebula didn't answer and couldn't say afterwards whether it took the write. */
+class KeychainUnknown extends Error {
+  constructor(cause: unknown) {
+    super('Keychain write not confirmed', { cause });
+  }
+}
+
+/** A refusal that says the backend didn't take the write: a 4xx answer. A
+ * 5xx or a lost answer doesn't say; the backend may hold the new key
+ * already (review 14 of PR #203, keychain LOW-1). */
+function definiteRefusal(error: unknown): boolean {
+  return error instanceof RequestFailedError && error.status >= 400 && error.status < 500;
 }
 
 type CredentialBridge = NonNullable<ReturnType<typeof desktopCredentials>>;
 
-/** The Keychain step, then the backend's: the backend's refusal after the
- * Keychain changed puts the Keychain back, or throws KeychainKept. */
-async function keychainThenBackend(bridge: CredentialBridge, key: string, write: () => Promise<{ ok: boolean }>,
-  backend: () => Promise<unknown>, kept: string) {
+/** The Keychain step, then the backend's (review 13 of PR #203, LOW-1;
+ * review 14, keychain HIGH-1 and LOW-1 to LOW-3):
+ * - the Keychain write failing throws, and nothing is put back (it changed
+ *   nothing);
+ * - the backend taking it commits the write, so nothing can undo it;
+ * - a definite refusal (4xx) puts the Keychain back by the write's id, or
+ *   throws KeychainKept when it can't;
+ * - no answer, or a 5xx: the backend is asked what it holds now (`holds`):
+ *   the new state commits, the old one puts the Keychain back as for a
+ *   refusal, and when it can't say, KeychainUnknown, the Keychain left as
+ *   written. */
+async function keychainThenBackend(bridge: CredentialBridge, write: () => Promise<{ ok: boolean; writeId?: string }>,
+  backend: () => Promise<unknown>, kept: KeychainKeptCase, holds: () => Promise<boolean | null>) {
   const result = await write();
   if (!result.ok) throw new Error('Credential storage failed');
-  try {
-    await backend();
-  } catch (error) {
+  const writeId = result.writeId;
+  const commit = async () => {
+    if (!writeId) return;
+    try {
+      await bridge.commit?.(writeId);
+    } catch {
+      // The window drops it anyway (desktop credentials REVERT_WINDOW_MS).
+    }
+  };
+  const putBack = async (error: unknown): Promise<never> => {
     let undone = false;
     try {
-      undone = (await bridge.revert?.(key))?.ok === true;
+      undone = Boolean(writeId) && (await bridge.revert?.(writeId!))?.ok === true;
     } catch {
       undone = false;
     }
     throw undone ? error : new KeychainKept(kept, error);
+  };
+  try {
+    await backend();
+  } catch (error) {
+    if (definiteRefusal(error) || isOfflineRefusal(error)) return putBack(error);
+    const took = await holds().catch(() => null);
+    if (took === true) return commit();
+    if (took === false) return putBack(error);
+    await commit();
+    throw new KeychainUnknown(error);
   }
+  await commit();
+}
+
+/** What GET /api/settings says the backend holds for `key` now, against
+ * what the write wanted (`after`, a masked value or '' for none) and what
+ * it had (`before`): true when it holds the new state, false when the old,
+ * null when the two look alike or the backend doesn't answer. */
+async function backendHolds(key: string, before: string, after: string): Promise<boolean | null> {
+  if (before === after) return null;
+  try {
+    const settings = await getSettings();
+    const keys = settings.apiKeys && typeof settings.apiKeys === 'object' ? settings.apiKeys as Record<string, unknown> : null;
+    if (!keys) return null;
+    const now = typeof keys[key] === 'string' ? keys[key] as string : '';
+    return now === after ? true : now === before ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The line for a desktop key write that failed: the Keychain's own state
+ * first, while it still differs from what Nebula uses (GM r29 item 6), with
+ * a newer refusal's fix sentence; else the backend's own settings line;
+ * else `fallback`. Records or clears the difference. */
+function desktopFailureLine(key: string, error: unknown, placement: 'row' | 'notice', unknown: string, fallback: string): string {
+  if (error instanceof KeychainKept) keychainDiffers.set(key, error.kind);
+  if (error instanceof KeychainUnknown) {
+    keychainDiffers.delete(key);
+    return unknown;
+  }
+  const differs = keychainDiffers.get(key);
+  if (differs) {
+    const cause = error instanceof KeychainKept ? error.cause : error;
+    return keychainKeptLine(differs, key, placement, cause instanceof RequestFailedError ? cause.fix : null);
+  }
+  return unreadableSettingsLine(error) ?? fallback;
 }
 
 function labelFor(key: string) {
@@ -145,6 +260,10 @@ function labelFor(key: string) {
 export function keyNoun(key: string) {
   const label = labelFor(key);
   const spec = PROVIDER_KEY_SPECS[key];
+  // A service account's key by the noun source's name, without the row's
+  // "Google ·" (GM, PR #203 r29 item 4): "Vertex AI service account key
+  // saved."
+  if (spec?.input === 'service-account') return keyPhrase([key]) ?? `${label} key`;
   const noun = spec ? credentialNoun(spec) : 'key';
   if (noun !== 'key') return `${label} ${noun}`;
   return /\bkey$/i.test(label) ? label : `${label} key`;
@@ -207,15 +326,18 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
         // key lands in both the Keychain and the backend, or in neither
         // (review 12 of PR #203, LOW-3).
         await updateCredential(key, value, { check: true });
-        await keychainThenBackend(bridge, key, () => bridge.set(key, value), () => updateCredential(key, value),
-          KEYCHAIN_KEPT.save);
+        const before = keyText(useSettingsDraftStore.getState().saved?.apiKeys[key]);
+        await keychainThenBackend(bridge, () => bridge.set(key, value), () => updateCredential(key, value),
+          wasConfigured ? 'save-over' : 'save-new', () => backendHolds(key, before, maskKey(value)));
+        keychainDiffers.delete(key);
       } else {
         await updateSettings({ apiKeys: { [key]: value } });
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, error instanceof KeychainKept ? error.line
-        : unreadableSettingsLine(error) ?? "The key couldn't be saved. Your text is still here; try again.", error);
+      const fallback = "The key couldn't be saved. Your text is still here; try again.";
+      fail(key, bridgeInUse() ? desktopFailureLine(key, error, 'row', KEYCHAIN_UNKNOWN.save, fallback)
+        : unreadableSettingsLine(error) ?? fallback, error);
       return false;
     }
     const { saved, keyDrafts, openRow } = useSettingsDraftStore.getState();
@@ -231,8 +353,10 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
   });
 }
 
-/** Remove one provider key from disk or the Keychain. */
-export function removeKey(key: string): Promise<boolean> {
+/** Remove one provider key from disk or the Keychain. `from` is where the
+ * person asked: the key's row, or a notice's Undo (the row is closed then,
+ * so a failure is said in a notice, the key named; GM, PR #203 r28 item 2). */
+export function removeKey(key: string, from: 'row' | 'notice' = 'row'): Promise<boolean> {
   setPending(key, true);
   return enqueue(async () => {
     if (refuseEditWhileOffline()) { setPending(key, false); return false; }
@@ -240,15 +364,23 @@ export function removeKey(key: string): Promise<boolean> {
       const bridge = desktopCredentials();
       if (bridge) {
         await updateCredential(key, '', { check: true });
-        await keychainThenBackend(bridge, key, () => bridge.clear(key), () => updateCredential(key, ''),
-          KEYCHAIN_KEPT.removal);
+        const before = keyText(useSettingsDraftStore.getState().saved?.apiKeys[key]);
+        await keychainThenBackend(bridge, () => bridge.clear(key), () => updateCredential(key, ''), 'removal',
+          () => backendHolds(key, before, ''));
+        keychainDiffers.delete(key);
       } else {
         await deleteSettingsApiKey(key);
       }
     } catch (error) {
       setPending(key, false);
-      fail(key, error instanceof KeychainKept ? error.line
-        : unreadableSettingsLine(error) ?? "The key couldn't be removed. Try again.", error);
+      const fallback = "The key couldn't be removed. Try again.";
+      const line = bridgeInUse() ? desktopFailureLine(key, error, from, KEYCHAIN_UNKNOWN.removal, fallback)
+        : unreadableSettingsLine(error) ?? fallback;
+      if (from === 'notice') {
+        if (!isOfflineRefusal(error)) notify(line);
+      } else {
+        fail(key, line, error);
+      }
       return false;
     }
     const { saved, openRow } = useSettingsDraftStore.getState();
@@ -267,7 +399,7 @@ export function undoAddedKey(noticeIdToUndo: number): Promise<boolean> {
   const notice = useSettingsDraftStore.getState().notice;
   if (!notice || notice.id !== noticeIdToUndo || !notice.undoKey) return Promise.resolve(false);
   useSettingsDraftStore.setState({ notice: null });
-  return removeKey(notice.undoKey);
+  return removeKey(notice.undoKey, 'notice');
 }
 
 /** Save one setting outside API keys. Empty folders mean "use the default". */
@@ -321,6 +453,7 @@ export function saveRunCostConfirm(value: number | null): Promise<boolean> {
 /** For tests: forget queued writes and timers between cases. */
 export function resetSettingsWrites() {
   queue = Promise.resolve();
+  keychainDiffers.clear();
   if (savedMarkTimer) clearTimeout(savedMarkTimer);
   savedMarkTimer = undefined;
 }

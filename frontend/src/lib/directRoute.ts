@@ -49,7 +49,7 @@ export const KEY_NAMES: Readonly<Record<string, readonly [string, string]>> = {
   ELEVENLABS_API_KEY: ['ElevenLabs', 'API key'],
   FAL_KEY: ['fal.ai', 'API key'],
   GOOGLE_API_KEY: ['Gemini', 'API key'],
-  GOOGLE_VERTEX_CREDENTIALS: ['Google Vertex AI', 'credentials'],
+  GOOGLE_VERTEX_CREDENTIALS: ['Vertex AI', 'service account key'],
   HF_TOKEN: ['Hugging Face', 'token'],
   HIGGSFIELD_API_KEY: ['Higgsfield', 'API key'],
   IDEOGRAM_API_KEY: ['Ideogram', 'API key'],
@@ -1148,8 +1148,8 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   return 'Change that setting, or switch provider.';
 }
 
-/** "OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
- * credentials or Gemini API key"; null when a name isn't a key Settings
+/** "OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
+ * account key or Gemini API key"; null when a name isn't a key Settings
  * stores (person_line.key_phrase). */
 export function keyPhrase(keys: readonly string[]): string | null {
   const names = keys.map((key) => (Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key] : null));
@@ -1158,6 +1158,15 @@ export function keyPhrase(keys: readonly string[]): string | null {
   const kinds = new Set(known.map(([, kind]) => kind));
   if (kinds.size === 1) return `${orList(known.map(([provider]) => provider))} ${known[0][1]}`;
   return orList(known.map(([provider, kind]) => `${provider} ${kind}`));
+}
+
+/** "Add your Replicate token in Settings.": the one line that says which
+ * key to add, a sentence with its period (GM, PR #203 r26 item 5 and r28
+ * item 3): the model pickers and every provider switcher row take it from
+ * here. Null when a name isn't a key Settings stores. */
+export function addKeyLine(keys: readonly string[]): string | null {
+  const phrase = keyPhrase(keys);
+  return phrase ? `Add your ${phrase} in Settings.` : null;
 }
 
 /** A missing key as a pre-run line (person_line.missing_key_line). */
@@ -1199,11 +1208,16 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
+  // GM, PR #203 r29 item 2: the key by its name, never "its key" (it read as
+  // the node's): "Replicate can take it. Add your Replicate token in Settings."
+  const keylessPhrase = keyPhrase(keyless.flatMap((alt) => keyList(routeById(definition, alt)?.keys)));
   const also = others.length ? ` ${orList(others)} can take it.`
-    : keylessLabels.length ? ` ${orList(keylessLabels)} can take it. Add its key in Settings.` : '';
+    : keylessLabels.length && keylessPhrase ? ` ${orList(keylessLabels)} can take it. Add your ${keylessPhrase} in Settings.`
+      : keylessLabels.length ? ` ${orList(keylessLabels)} can take it. Add its key in Settings.` : '';
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
-    return `${name} is set to a provider it doesn't have. Choose one in the node's provider switcher.`;
+    // GM, PR #203 r29 item 2 (node_route NOT_READY_PREDICATES "unknown_provider").
+    return `${name} is set to a provider that isn’t in its list. Choose one in its provider switcher.`;
   }
   if (block && spec) {
     const fix = fixPerson(definition, spec, block, params);

@@ -96,11 +96,11 @@ export type ServiceAccountCheck =
 export function readServiceAccount(text: string): ServiceAccountCheck {
   let value: unknown;
   try { value = JSON.parse(text); } catch { return { ok: false, error: "That isn't valid JSON." }; }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: "That isn't a service-account key." };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: "That isn't a service account key." };
   const key = value as Record<string, unknown>;
-  if (key.type !== 'service_account') return { ok: false, error: 'This JSON is not a service-account key ("type" should be "service_account").' };
+  if (key.type !== 'service_account') return { ok: false, error: 'This JSON is not a service account key ("type" should be "service_account").' };
   if (typeof key.private_key !== 'string' || !key.private_key.includes('PRIVATE KEY')) return { ok: false, error: 'The key file has no private key.' };
-  if (typeof key.client_email !== 'string' || !key.client_email.includes('@')) return { ok: false, error: 'The key file has no service-account email.' };
+  if (typeof key.client_email !== 'string' || !key.client_email.includes('@')) return { ok: false, error: 'The key file has no service account email.' };
   if (typeof key.project_id !== 'string' || !key.project_id) return { ok: false, error: 'The key file has no project ID.' };
   return { ok: true, email: key.client_email, project: key.project_id };
 }

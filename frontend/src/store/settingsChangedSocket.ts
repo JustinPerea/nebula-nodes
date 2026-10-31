@@ -17,7 +17,9 @@ import { TAB_ID } from '../lib/tabId';
  * Settings panel, r19 item 6) refreshes. A token set from a second window,
  * the CLI or the desktop app flips an open proposal bar without a reload. A
  * reconnected socket reads them again too ({ source: 'reconnect' }), since a
- * change made while it was away sent nothing it heard; that read clears the
+ * change made while it was away sent nothing it heard, and so does a socket
+ * the backend has just promoted (wsClient's `personPromoted`), since one made
+ * before the promote wasn't sent to it either; that read clears the
  * checks of any key it finds changed (uiStore setSettingsCache). App imports
  * this at start.
  */
@@ -36,7 +38,11 @@ wsClient.subscribe((event) => {
     const keys = Array.isArray(event.keys) ? event.keys.filter((key): key is string => typeof key === 'string') : undefined;
     const detail: SettingsSavedDetail = { source: 'remote', ...(keys ? { keys } : {}) };
     window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail }));
-  } else if (event.type === 'socketReconnected') {
+  } else if (event.type === 'socketReconnected' || event.type === 'personPromoted') {
+    // A promote reads them again too: the backend sends `settingsChanged`
+    // only to a promoted socket, so a change made between this socket's
+    // connect (or the reconnect read above) and its promote sent nothing it
+    // heard (PR #203 round 15; round 14's CI caught the gap in a test).
     window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'reconnect' } satisfies SettingsSavedDetail }));
   }
 });

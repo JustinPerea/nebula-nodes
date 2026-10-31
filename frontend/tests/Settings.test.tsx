@@ -66,7 +66,7 @@ import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
-import { KEYCHAIN_KEPT, resetSettingsWrites } from '../src/lib/settingsWrites';
+import { resetSettingsWrites } from '../src/lib/settingsWrites';
 import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
 import { PROVIDER_KEYS } from '../src/lib/providerCatalog';
@@ -122,16 +122,18 @@ afterEach(() => {
 function setupDesktopBridge(overrides?: {
   set?: (provider: string, key: string) => Promise<unknown>;
   clear?: (provider: string) => Promise<unknown>;
-  revert?: (provider: string) => Promise<unknown>;
+  revert?: (writeId: string) => Promise<unknown>;
+  commit?: (writeId: string) => Promise<unknown>;
   plaintextKeyWarning?: string[];
   kreaOpen?: (url: string) => Promise<unknown>;
   choose?: (defaultPath?: string) => Promise<unknown>;
 }) {
   const credentials = Object.freeze({
-    set: overrides?.set ?? vi.fn().mockResolvedValue({ ok: true }),
+    set: overrides?.set ?? vi.fn().mockResolvedValue({ ok: true, writeId: 'w-set' }),
     has: vi.fn().mockResolvedValue({ ok: true, has: false }),
-    clear: overrides?.clear ?? vi.fn().mockResolvedValue({ ok: true }),
+    clear: overrides?.clear ?? vi.fn().mockResolvedValue({ ok: true, writeId: 'w-clear' }),
     revert: overrides?.revert ?? vi.fn().mockResolvedValue({ ok: true }),
+    commit: overrides?.commit ?? vi.fn().mockResolvedValue({ ok: true }),
   });
   const folders = Object.freeze({ choose: overrides?.choose ?? vi.fn().mockResolvedValue({ ok: true, path: null }) });
   (window as Record<string, unknown>).nebulaDesktop = Object.freeze({
@@ -616,7 +618,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   // GM r22 item 3: a 409 for a settings file Nebula can't read names the file
   // by its full path, in the row, as the backend said it.
   const UNREADABLE = 'Nothing was saved because Nebula can’t read the keys saved in /Users/fixture/.nebula/settings.json. Fix “apiKeys” in that file, then try again.';
-  const unreadable = () => new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE });
+  const unreadable = () => new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE, code: 'keys_unreadable' });
 
   it('says the 409 line with the full path when a save can’t read the settings file', async () => {
     updateSettingsMock.mockRejectedValueOnce(unreadable());
@@ -631,6 +633,27 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     removeKey('OpenAI');
     expect((await screen.findByRole('alert')).textContent).toBe(UNREADABLE);
+  });
+
+  // GM, PR #203 r28 item 4: a file Nebula may read but not change. The
+  // line is picked by the code beside it, never by its words.
+  const UNWRITABLE = 'Nothing was saved because Nebula isn’t allowed to change ~/.nebula/settings.json. '
+    + 'Check the file’s permissions, then try again.';
+
+  it('says the read-only line when Nebula isn’t allowed to change the settings file', async () => {
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409,
+      { detail: UNWRITABLE, code: 'settings_unwritable' }));
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    expect((await screen.findByRole('alert')).textContent).toBe(UNWRITABLE);
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic');
+  });
+
+  it('picks the line by the code: the same words with no code are any other 409', async () => {
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE }));
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
   });
 
   it('keeps its own line for any other 409', async () => {
@@ -1131,9 +1154,9 @@ describe('Settings — Vertex service-account key', () => {
     await renderSettings();
     fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI service account key' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Paste JSON instead' }));
-    const area = screen.getByLabelText('Google · Vertex AI service-account JSON');
+    const area = screen.getByLabelText('Google · Vertex AI service account key');
     fireEvent.change(area, { target: { value: '{"type":"authorized_user"}' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('not a service-account key');
+    expect(screen.getByRole('alert')).toHaveTextContent('not a service account key');
     expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
     fireEvent.change(area, { target: { value: key } });
     expect(screen.getByRole('button', { name: 'Save key' })).toBeEnabled();
@@ -1202,13 +1225,16 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   });
 
   it('keeps the key text and says so when the Keychain refuses it', async () => {
-    setupDesktopBridge({ set: vi.fn().mockResolvedValue({ ok: false, error: 'denied' }) });
+    const { credentials } = setupDesktopBridge({ set: vi.fn().mockResolvedValue({ ok: false, error: 'denied' }) });
     await renderSettings();
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
     // Only the backend's check ran: nothing was written to it.
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', 'fixture-openai', { check: true }]]);
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+    // Review 14, keychain LOW-3: the Keychain write changed nothing, so nothing is put back.
+    expect(credentials.revert).not.toHaveBeenCalled();
+    expect(credentials.commit).not.toHaveBeenCalled();
   });
 
   // Review 12 of PR #203, LOW-3: both or neither. The backend refuses a key
@@ -1216,7 +1242,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   const CANT_READ = 'Nothing was saved because Nebula can’t read ~/Library/Application Support/Nebula/settings.json. Fix the file, then try again.';
   it('writes nothing to the Keychain when the backend can’t read the settings file, and says why', async () => {
     const { credentials } = setupDesktopBridge();
-    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ }));
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' }));
     await renderSettings();
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
@@ -1228,7 +1254,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   it('clears nothing in the Keychain when the backend can’t read the settings file', async () => {
     const { credentials } = setupDesktopBridge();
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ }));
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' }));
     removeKey('OpenAI');
     expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', '', { check: true }]]);
@@ -1241,7 +1267,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   function refuseTheSecondCall() {
     updateCredentialMock.mockReset().mockImplementation((_key: string, _value: string, options?: { check?: boolean }) =>
       options?.check ? Promise.resolve({ status: 'ok' })
-        : Promise.reject(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ })));
+        : Promise.reject(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' })));
   }
 
   it('puts the Keychain back when the backend refuses after the Keychain took the key', async () => {
@@ -1251,7 +1277,9 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
     expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'fixture-openai');
-    expect(credentials.revert).toHaveBeenCalledWith('OPENAI_API_KEY');
+    // By the write's own id (review 14, keychain HIGH-1).
+    expect(credentials.revert).toHaveBeenCalledWith('w-set');
+    expect(credentials.commit).not.toHaveBeenCalled();
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
   });
 
@@ -1262,25 +1290,157 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     removeKey('OpenAI');
     expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
     expect(credentials.clear).toHaveBeenCalledWith('OPENAI_API_KEY');
-    expect(credentials.revert).toHaveBeenCalledWith('OPENAI_API_KEY');
+    expect(credentials.revert).toHaveBeenCalledWith('w-clear');
   });
 
-  it('says the Keychain kept the key when it can’t be put back', async () => {
+  // GM, PR #203 r28 item 2: each line says what Nebula is using now.
+  it('a first save the Keychain kept: Nebula has no key, the Keychain has it (beside the row)', async () => {
     const { credentials } = setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'NOTHING_TO_REVERT' }) });
     await renderSettings();
     refuseTheSecondCall();
     await addKey('OpenAI', 'fixture-openai');
-    expect(await screen.findByRole('alert')).toHaveTextContent(KEYCHAIN_KEPT.save);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Nebula couldn’t save this key, but your Keychain has it. Try again, or remove it.');
     expect(screen.queryByText(CANT_READ)).not.toBeInTheDocument();
     expect(credentials.revert).toHaveBeenCalledTimes(1);
   });
 
-  it('says the Keychain lost the key when a removal can’t be put back', async () => {
+  it('a save over a key Nebula had: it is still using that one, the Keychain has the new one (beside the row)', async () => {
+    setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'NOTHING_TO_REVERT' }) });
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    refuseTheSecondCall();
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t save this key and is still using '
+      + 'the one it had. Your Keychain has the new one. Try again, or remove it.');
+  });
+
+  it('a removal the Keychain kept: Nebula is still using the key (beside the row)', async () => {
     setupDesktopBridge({ revert: vi.fn().mockRejectedValue(new Error('ipc gone')) });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     refuseTheSecondCall();
     removeKey('OpenAI');
-    expect(await screen.findByText(KEYCHAIN_KEPT.removal)).toBeInTheDocument();
+    expect(await screen.findByText('Nebula removed this key from your Keychain but is still using it. Try again.'))
+      .toBeInTheDocument();
+  });
+
+  it('a notice’s Undo the Keychain kept: the notice names the key, since its row is closed', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({}));
+    setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'NOTHING_TO_REVERT' }) });
+    await renderSettings();
+    await addKey('OpenAI', 'fixture-openai');
+    // The save lands first; only the removal meets the refusal.
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    refuseTheSecondCall();
+    fireEvent.click(undo);
+    expect(await screen.findByText('Nebula removed your OpenAI API key from your Keychain but is still using it. '
+      + 'Try again.')).toBeInTheDocument();
+    // Said once, in the notice: no line waits in the closed row.
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('commits a write the backend took, so nothing can undo it', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings();
+    await addKey('OpenAI', 'fixture-openai');
+    await waitFor(() => expect(credentials.commit).toHaveBeenCalledWith('w-set'));
+    expect(credentials.revert).not.toHaveBeenCalled();
+  });
+
+  // Review 14, keychain LOW-1: only a 4xx says the backend didn't take it.
+  function failTheSecondCall(error: unknown) {
+    updateCredentialMock.mockReset().mockImplementation((_key: string, _value: string, options?: { check?: boolean }) =>
+      options?.check ? Promise.resolve({ status: 'ok' }) : Promise.reject(error));
+  }
+  const LOST = () => new ConnectionLostError(new TypeError('Failed to fetch'));
+
+  it('a lost answer, and the backend then holds the new key: saved, committed, nothing put back', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    failTheSecondCall(LOST());
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***-new' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByText('OpenAI key saved. Checking it now.');
+    expect(credentials.revert).not.toHaveBeenCalled();
+    expect(credentials.commit).toHaveBeenCalledWith('w-set');
+  });
+
+  it('a 500, and the backend still holds the old key: the Keychain is put back', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    failTheSecondCall(new RequestFailedError("Couldn't save the API key.", 500));
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(credentials.revert).toHaveBeenCalledWith('w-set'));
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
+  });
+
+  it('a 503, and the backend holds the new key after all: committed, never put back (a 5xx isn’t a refusal)', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    failTheSecondCall(new RequestFailedError("Couldn't save the API key.", 503));
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***-new' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByText('OpenAI key saved. Checking it now.');
+    expect(credentials.commit).toHaveBeenCalledWith('w-set');
+    expect(credentials.revert).not.toHaveBeenCalled();
+  });
+
+  it('a lost answer Nebula can’t settle: GM’s line, and the Keychain left as written (GM r29 item 7)', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings();
+    failTheSecondCall(LOST());
+    getSettingsMock.mockRejectedValue(LOST());
+    await addKey('OpenAI', 'fixture-openai');
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe('Nebula didn’t respond, so this key may not be saved. Save it again to be sure.');
+    expect(credentials.revert).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+  });
+
+  it('a removal Nebula can’t settle says to remove it again', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    failTheSecondCall(LOST());
+    getSettingsMock.mockRejectedValue(LOST());
+    removeKey('OpenAI');
+    expect(await screen.findByText('Nebula didn’t respond, so this key may not be removed. Remove it again to be sure.'))
+      .toBeInTheDocument();
+    expect(credentials.revert).not.toHaveBeenCalled();
+  });
+
+  it('the kept line stays until the two agree, ending in a newer refusal’s fix (GM r29 item 6)', async () => {
+    setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'STORE_CHANGED' }) });
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    refuseTheSecondCall();
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByRole('alert');
+    // The retry: the check itself is refused, with its own fix.
+    const fix = 'Fix “apiKeys” in ~/.nebula/settings.json, then try again.';
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409,
+      { detail: 'Nothing was saved because …', code: 'keys_unreadable', fix }));
+    fireEvent.submit(screen.getByLabelText('OpenAI API key').closest('form')!);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Nebula couldn’t save this key and is still '
+      + `using the one it had. Your Keychain has the new one. ${fix}`));
   });
 
   it('warns about plaintext keys found in the settings file', async () => {

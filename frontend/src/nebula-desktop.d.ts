@@ -20,6 +20,8 @@
 export interface CredentialSetResult {
   readonly ok: boolean;
   readonly error?: string;
+  /** The write's one-time id, for `revert` and `commit` (absent in older shells). */
+  readonly writeId?: string;
 }
 
 /** Result of a credential `has` operation. */
@@ -33,6 +35,8 @@ export interface CredentialHasResult {
 export interface CredentialClearResult {
   readonly ok: boolean;
   readonly error?: string;
+  /** A clear's one-time id, as a set's (absent in older shells and on revert/commit). */
+  readonly writeId?: string;
 }
 
 /** Result of a migration `status` operation. */
@@ -64,10 +68,14 @@ export interface CredentialBridge {
   readonly has: (provider: string) => Promise<CredentialHasResult>;
   /** Remove a provider key from the Keychain. */
   readonly clear: (provider: string) => Promise<CredentialClearResult>;
-  /** Put a provider's Keychain entry back as it was before this launch's
-   * last set or clear (the earlier key, or none). Never returns a key.
-   * Absent in older shells. */
-  readonly revert?: (provider: string) => Promise<CredentialClearResult>;
+  /** Undo one write, by the `writeId` set or clear answered: the entry back
+   * as it was before (the earlier key, or none), only while that write is
+   * the provider's latest and the store still holds what it wrote. Never
+   * returns a key. Absent in older shells. */
+  readonly revert?: (writeId: string) => Promise<CredentialClearResult>;
+  /** The backend took that write: drop what `revert` would need, so
+   * nothing can undo it. Absent in older shells. */
+  readonly commit?: (writeId: string) => Promise<CredentialClearResult>;
 }
 
 /**

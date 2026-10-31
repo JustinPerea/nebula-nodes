@@ -165,7 +165,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
               }} />
             </div>
             <p className="settings-hint">
-              {serviceAccount ? 'Service-account key saved.' : <>Saved {noun} ending in <span className="settings-mono">{saved.replace(/^\*+/, '') || '····'}</span>.</>}
+              {serviceAccount ? 'Service account key saved.' : <>Saved {noun} ending in <span className="settings-mono">{saved.replace(/^\*+/, '') || '····'}</span>.</>}
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
@@ -183,7 +183,7 @@ export function KeyRow({ spec, configured, moved = false }: { spec: ProviderKeyS
         {open === 'edit' && (
           <form id={bodyId} className="settings-row__edit" onSubmit={(event) => { event.preventDefault(); submit(); }}>
             {serviceAccount ? (
-              <ServiceAccountInput label={spec.label} value={draft} fileName={fileName}
+              <ServiceAccountInput label={credentialName} value={draft} fileName={fileName}
                 onChange={(text, name) => { setDraft(text); setFileName(name); }} onSubmit={submit} />
             ) : (
               <div className="settings-key">

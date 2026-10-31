@@ -122,6 +122,15 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
+/** Said by this client, never the backend: the server promoted this socket
+ *  to the person's tab (its proposalSync on a verified hello). Until then the
+ *  socket hears no `settingsChanged`, so a key change made between the
+ *  connect and the promote reached nothing here; the tab reads its settings
+ *  again on this (store/settingsChangedSocket.ts, PR #203 round 15). */
+export interface PersonPromotedEvent {
+  type: 'personPromoted';
+}
+
 /** A saved moodboard, character or Style changed (backend main.py
  *  _broadcast_stored_asset), so a card or list that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
@@ -224,6 +233,18 @@ export interface ProposalNotReady {
   /** The person's line (round 3f, node_readiness.instance_missing_line): "GPT Image 2 needs your
    *  OpenAI API key. Add it in Settings." Absent from a backend older than 3f. */
   person?: string;
+  /** Why it can't run, for one node and for several (PR #203 round 15:
+   *  node_readiness.instance_missing_reason, person_line.NOT_READY_PREDICATES):
+   *  what follows the quoted name ("needs your OpenAI API key. Add it in
+   *  Settings." / "need …"). The bar merges nodes by it. Absent for a route's
+   *  own line and from an older backend. */
+  reason?: NotReadyReason;
+}
+
+/** A not-ready reason's predicate, for one node and for several. */
+export interface NotReadyReason {
+  one: string;
+  many: string;
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
@@ -397,6 +418,7 @@ export type ExecutionEvent = (
   | QuestionsSyncEvent
   | QuestionsClosedEvent
   | SocketReconnectedEvent
+  | PersonPromotedEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
@@ -494,11 +516,13 @@ class WebSocketClient {
             // only (backend websocket_endpoint), by whatever path the hello
             // came: a new link, the same link again, a reconnect, the desktop
             // app's token. The hold and the banner follow it.
-            if (parsed.type === 'proposalSync' && this.ws === socket) {
+            const promotedNow = parsed.type === 'proposalSync' && this.ws === socket;
+            if (promotedNow) {
               this.promoted = socket;
               notePersonPromoted();
             }
             this.dispatch(parsed);
+            if (promotedNow) this.dispatch({ type: 'personPromoted' });
           } catch (err) {
             console.error('[ws] failed to parse message:', err);
           }

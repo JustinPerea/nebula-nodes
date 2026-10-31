@@ -1365,8 +1365,8 @@ def edit_canvas(
     usual (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”
     (`no Style “Neon dusk”`); a next call is in backticks.
-    Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
-    or the Krea plan) and a multi-provider node's route (`_provider`: a route id
+    Who bills a run is the person's call: Krea billing (`_kreaAuth`: the API
+    key connection or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
     OpenRouter, Nous Portal and Replicate nodes take their ports from their

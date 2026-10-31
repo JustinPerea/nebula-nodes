@@ -17,6 +17,7 @@
 
 import { join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // Published constants
@@ -73,12 +74,16 @@ export const MIGRATION_STATUSES = Object.freeze([
   'failed',
 ]);
 
+/** How long a write may still be undone by `revert` before it is dropped. */
+export const REVERT_WINDOW_MS = 60_000;
+
 /** The complete set of credential IPC channels (no `credentials:get`). */
 export const CREDENTIAL_CHANNELS = Object.freeze([
   'credentials:set',
   'credentials:has',
   'credentials:clear',
   'credentials:revert',
+  'credentials:commit',
   'credentials:migration-status',
   'credentials:retry-migration',
 ]);
@@ -347,6 +352,7 @@ export function createCredentialService(options) {
     migrationStatePath,
     safeStorage,
     fs: fsDeps = {},
+    revertWindowMs = REVERT_WINDOW_MS,
   } = options;
 
   const fileDeps = {
@@ -355,12 +361,43 @@ export function createCredentialService(options) {
     existsSync: fsDeps.existsSync ?? existsSync,
   };
 
-  // Each provider's entry as it was before its last set or clear (an
-  // encrypted blob, or undefined when there was none), kept in this process
-  // only, so `revert` can put it back without the renderer ever holding a
-  // key: the renderer undoes a Keychain write the backend then refused
-  // (review 13 of PR #203, LOW-1).
-  const before = new Map();
+  // Each provider's latest write, while it may still be undone (review 13
+  // of PR #203, LOW-1; review 14, keychain HIGH-1): its one-time id, the
+  // entry as it was before (an encrypted blob, or undefined for none), what
+  // the write left there (undefined for a clear), the page that made it and
+  // its expiry timer. Kept in this process only: the renderer never holds a
+  // key. `revert(id)` undoes only that write, only while the store still
+  // holds what it wrote; `commit(id)`, the page going away or the window
+  // running out drops it. After that nothing can be undone, so revert can
+  // undo only the renderer's own write in flight, which set and clear could
+  // do anyway.
+  const pending = new Map();
+
+  function remember(provider, previous, wrote, owner) {
+    drop(provider);
+    const id = randomUUID();
+    const timer = setTimeout(() => {
+      if (pending.get(provider)?.id === id) pending.delete(provider);
+    }, revertWindowMs);
+    timer.unref?.();
+    pending.set(provider, { id, previous, wrote, owner, timer });
+    return id;
+  }
+
+  function drop(provider) {
+    const entry = pending.get(provider);
+    if (entry) clearTimeout(entry.timer);
+    pending.delete(provider);
+  }
+
+  /** The provider whose latest write has this id, from this page, or null. */
+  function latest(writeId, owner) {
+    if (typeof writeId !== 'string' || !writeId) return null;
+    for (const [provider, entry] of pending) {
+      if (entry.id === writeId && entry.owner === owner) return provider;
+    }
+    return null;
+  }
 
   return {
     /**
@@ -376,7 +413,7 @@ export function createCredentialService(options) {
      * @throws {CredentialError} when key is empty
      * @throws {SafeStorageUnavailableError}
      */
-    async set(provider, key) {
+    async set(provider, key, owner = null) {
       if (!isProviderAllowed(provider)) {
         throw new UnknownProviderError(provider);
       }
@@ -388,10 +425,10 @@ export function createCredentialService(options) {
       }
       const encrypted = await encryptValue(key, safeStorage);
       const store = readCredentialsStore(credentialsPath, fileDeps);
-      before.set(provider, store.providers[provider]);
+      const previous = store.providers[provider];
       store.providers[provider] = encrypted;
       writeCredentialsStore(credentialsPath, store, fileDeps);
-      return { ok: true };
+      return { ok: true, writeId: remember(provider, previous, encrypted, owner) };
     },
 
     /**
@@ -416,40 +453,63 @@ export function createCredentialService(options) {
      * @returns {{ ok: true }}
      * @throws {UnknownProviderError}
      */
-    clear(provider) {
+    clear(provider, owner = null) {
       if (!isProviderAllowed(provider)) {
         throw new UnknownProviderError(provider);
       }
       const store = readCredentialsStore(credentialsPath, fileDeps);
-      before.set(provider, store.providers[provider]);
+      const previous = store.providers[provider];
       if (provider in store.providers) {
         delete store.providers[provider];
         writeCredentialsStore(credentialsPath, store, fileDeps);
       }
+      return { ok: true, writeId: remember(provider, previous, undefined, owner) };
+    },
+
+    /**
+     * Undo one write: the provider's entry back as it was before it (the
+     * earlier key, or none). Only the provider's latest write, by its
+     * one-time id, from the page that made it, while it is pending, and only
+     * when the store still holds what that write left there
+     * (compare-and-swap). Anything else refuses and changes nothing.
+     *
+     * @param {string} writeId
+     * @param {unknown} [owner] the page asking (its webContents)
+     * @returns {{ ok: true } | { ok: false, error: 'NOT_THE_LATEST_WRITE' | 'STORE_CHANGED' }}
+     */
+    revert(writeId, owner = null) {
+      const provider = latest(writeId, owner);
+      if (provider === null) return { ok: false, error: 'NOT_THE_LATEST_WRITE' };
+      const entry = pending.get(provider);
+      drop(provider);
+      const store = readCredentialsStore(credentialsPath, fileDeps);
+      if (store.providers[provider] !== entry.wrote) return { ok: false, error: 'STORE_CHANGED' };
+      if (entry.previous === undefined) delete store.providers[provider];
+      else store.providers[provider] = entry.previous;
+      writeCredentialsStore(credentialsPath, store, fileDeps);
       return { ok: true };
     },
 
     /**
-     * Put a provider's entry back as it was before its last `set` or
-     * `clear` in this process: the earlier key, or none. Once only; a
-     * second call has nothing to put back.
+     * The backend took this write: nothing may undo it now. Drops the
+     * entry kept for `revert`.
      *
-     * @param {string} provider
-     * @returns {{ ok: true } | { ok: false, error: 'NOTHING_TO_REVERT' }}
-     * @throws {UnknownProviderError}
+     * @param {string} writeId
+     * @param {unknown} [owner]
+     * @returns {{ ok: true } | { ok: false, error: 'NOT_THE_LATEST_WRITE' }}
      */
-    revert(provider) {
-      if (!isProviderAllowed(provider)) {
-        throw new UnknownProviderError(provider);
-      }
-      if (!before.has(provider)) return { ok: false, error: 'NOTHING_TO_REVERT' };
-      const previous = before.get(provider);
-      before.delete(provider);
-      const store = readCredentialsStore(credentialsPath, fileDeps);
-      if (previous === undefined) delete store.providers[provider];
-      else store.providers[provider] = previous;
-      writeCredentialsStore(credentialsPath, store, fileDeps);
+    commit(writeId, owner = null) {
+      const provider = latest(writeId, owner);
+      if (provider === null) return { ok: false, error: 'NOT_THE_LATEST_WRITE' };
+      drop(provider);
       return { ok: true };
+    },
+
+    /** A page went away (destroyed, or navigated): its writes can't be undone. */
+    forgetOwner(owner) {
+      for (const [provider, entry] of [...pending]) {
+        if (entry.owner === owner) drop(provider);
+      }
     },
 
     /**
@@ -548,6 +608,27 @@ export function createCredentialService(options) {
  * @returns {string[]} registered channel names
  */
 export function registerCredentialHandlers(ipcMain, service, validateSender) {
+  // The page that made a write owns it; when it is destroyed or navigates
+  // away, its writes can't be undone any more (review 14, keychain HIGH-1).
+  const watched = new WeakSet();
+  function watchedOwner(event) {
+    const sender = event?.sender ?? null;
+    if (sender && typeof sender === 'object' && typeof sender.on === 'function' && !watched.has(sender)) {
+      watched.add(sender);
+      const forget = () => service.forgetOwner?.(sender);
+      sender.on('destroyed', forget);
+      sender.on('render-process-gone', forget);
+      sender.on('did-start-navigation', (details, ...rest) => {
+        // Electron passes the details object first; older versions pass
+        // (event, url, isInPlace, isMainFrame).
+        const sameDocument = details?.isSameDocument ?? rest[1];
+        const mainFrame = details?.isMainFrame ?? rest[2] ?? true;
+        if (!sameDocument && mainFrame) forget();
+      });
+    }
+    return sender;
+  }
+
   const channels = [];
 
   // -- credentials:set -----------------------------------------------------
@@ -563,7 +644,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
       return { ok: false, error: 'EMPTY_KEY' };
     }
     try {
-      return await service.set(provider, key);
+      return await service.set(provider, key, watchedOwner(event));
     } catch (credentialErr) {
       return {
         ok: false,
@@ -601,7 +682,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
       return { ok: false, error: 'UNKNOWN_PROVIDER' };
     }
     try {
-      return service.clear(provider);
+      return service.clear(provider, watchedOwner(event));
     } catch (credentialErr) {
       return {
         ok: false,
@@ -611,24 +692,28 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
   });
   channels.push('credentials:clear');
 
-  // -- credentials:revert --------------------------------------------------
-  ipcMain.handle('credentials:revert', (event, provider) => {
-    if (!validateSender(event)) {
-      return { ok: false, error: 'UNTRUSTED_SENDER' };
-    }
-    if (!isProviderAllowed(provider)) {
-      return { ok: false, error: 'UNKNOWN_PROVIDER' };
-    }
-    try {
-      return service.revert(provider);
-    } catch (credentialErr) {
-      return {
-        ok: false,
-        error: credentialErr.code || credentialErr.message,
-      };
-    }
-  });
-  channels.push('credentials:revert');
+  // -- credentials:revert / credentials:commit -----------------------------
+  // By a write's one-time id (set and clear return it), from the page that
+  // made it (review 14 of PR #203, keychain HIGH-1).
+  for (const [channel, method] of [['credentials:revert', 'revert'], ['credentials:commit', 'commit']]) {
+    ipcMain.handle(channel, (event, writeId) => {
+      if (!validateSender(event)) {
+        return { ok: false, error: 'UNTRUSTED_SENDER' };
+      }
+      if (typeof writeId !== 'string' || !writeId) {
+        return { ok: false, error: 'NOT_THE_LATEST_WRITE' };
+      }
+      try {
+        return service[method](writeId, event.sender ?? null);
+      } catch (credentialErr) {
+        return {
+          ok: false,
+          error: credentialErr.code || credentialErr.message,
+        };
+      }
+    });
+    channels.push(channel);
+  }
 
   // -- credentials:migration-status ----------------------------------------
   ipcMain.handle('credentials:migration-status', (event) => {

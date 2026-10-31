@@ -9,8 +9,9 @@ export const SETTINGS_SAVED_EVENT = 'nebula:settings-saved';
 
 /** Where a settings signal came from: 'local' for a save in this tab,
  * 'remote' for the backend's signal, 'reconnect' for a socket that came
- * back. `keys` lists the keys whose value changed, when it is known (names
- * only, never a value). */
+ * back or was just promoted (a change it may have missed). `keys` lists
+ * the keys whose value changed, when it is known (names only, never a
+ * value). */
 export interface SettingsSavedDetail {
   source: 'remote' | 'reconnect' | 'local';
   keys?: string[];

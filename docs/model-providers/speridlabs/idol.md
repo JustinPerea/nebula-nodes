@@ -332,8 +332,18 @@ $0 and spend tracking never counts it as paid.
     otherwise). On desktop the panel asks `credentials/update` with
     `"check": true` before the Keychain write, and if the backend still
     refuses after the Keychain changed, the Keychain is put back
-    (`credentials.revert`; main keeps the earlier entry), so a refused key
-    lands in neither whatever the order (review 13, LOW-1). The path is
+    (`credentials.revert(writeId)`; main keeps the earlier entry), so a
+    refused key lands in neither whatever the order (review 13, LOW-1).
+    `set` and `clear` answer a one-time `writeId`; revert takes only that
+    id, from the page that made it, while the store still holds what the
+    write left (compare-and-swap), and `credentials.commit(writeId)`, the
+    page going away or a minute drops it (review 14, keychain HIGH-1). Only
+    a definite 4xx reverts; on a 5xx or no answer the panel reads
+    GET /api/settings and commits or reverts by what the backend holds,
+    else says "Nebula didn’t respond, so this key may not be saved. Save it
+    again to be sure." (GM r29 item 7). Saving the same key again changes
+    nothing the second time: the file's bytes and the running key are the
+    same, and `settingsChanged` names no key. The path is
     read from NEBULA_SETTINGS_PATH at each call (`settings.settings_path`,
     a "~" is the home folder) and resolved for reads, writes and the 409
     (review 12, LOW-2; review 13, LOW-2: nothing reloads the module). The

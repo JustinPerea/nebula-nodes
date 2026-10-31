@@ -2154,3 +2154,185 @@ line.
 - A settings file Nebula can read but not write still 500s on save. Its
   line, e.g. "Nothing was saved because Nebula can’t write <path>. Check
   the file's permissions, then try again."?
+
+## Round 15 (CI flake, GM r28 and r29, review 14)
+
+Base 04c0131f.
+
+### The CI flake (section 0)
+
+- `test_a_token_set_from_a_second_client_reaches_an_open_socket` raced:
+  the backend promotes a socket's hello only when its receive loop reads
+  it, so a key change sent right after the hello could reach the socket
+  before it was promoted, and `settingsChanged` (sent only to promoted
+  sockets) never arrived. An injected 0.3 s delay before the read made it
+  fail every time. The test now waits for the promote it can see
+  (`proposalSync`, `conftest.wait_for_promote`), with no sleeps.
+- The same gap was real for the person: a tab missed a key change made
+  between its connect (or reconnect) and its promote, and showed the old
+  state until a reload. The tab now reads the settings again when the
+  backend promotes it (`wsClient` dispatches `personPromoted` after
+  `proposalSync` on the current socket; `settingsChangedSocket` rereads).
+- Only round 9's test had the send-hello-then-act shape. Loops: 25 of 25
+  plain and 9 of 9 with the delay; rounds 9, 10 and 11: 119 passed.
+
+### GM r28 and r29: the lines
+
+- Not-ready reasons come from one table (`person_line.
+  NOT_READY_PREDICATES`, a `NotReadyReason` with `one` and `many`).
+  `cost.notReady` rows carry `reason: {one, many}`, and the bar merges
+  rows by it, never by the words: "“Writer” and “Editor” need your
+  Anthropic API key. Add it in Settings.", "2 “GPT Image 2” nodes and
+  “OpenAI TTS” need …". A row with no reason gets a line of its own.
+  `scripts/generate-not-ready-reasons.py` writes every reason the
+  registry gives to `backend/tests/fixtures/not_ready_reasons.json`; the
+  backend checks the file is current and every line starts with the
+  quoted name, and the frontend merges every one for one node and two.
+- FLUX on Auto with no key names the node in the bar: "“FLUX.2” needs
+  your Black Forest Labs or fal.ai API key. Add one in Settings." The card
+  keeps ", then run the node again".
+- Switcher: "“N” is set to a provider that isn’t in its list. Choose one
+  in its provider switcher." and its plural; the keyless route's "also"
+  is "Replicate can take it. Add your Replicate token in Settings." Every
+  add-key line comes from `addKeyLine` ("Add your … in Settings.").
+- The Agent Log line (the in-app chat turn's): "Nebula couldn’t start the
+  run." then each reason once, merged, ending ", then run the node again"
+  or "the nodes". Counted from 4 nodes as before.
+- Vertex: the field's name is "Google · Vertex AI service account key",
+  the notice "Vertex AI service account key saved.", the run lines "your
+  Vertex AI service account key"; no hyphen anywhere (docs too).
+- Keychain lines (GM r28 item 2) say what Nebula is using now, beside the
+  row or, from a notice's Undo, in a notice naming the key. The line stays
+  until the two agree. A refusal's fix sentence (the 409's new `fix`
+  field) replaces "Try again, or remove it." (GM r29 item 6).
+- The details box: its own scroll box above the buttons, max
+  min(240px, 34vh), a 24 px fade while there's more below
+  (`hasMoreBelow`, a pixel of slack), a focusable region named "Details"
+  with the shared ring.
+
+### The settings gate (GM r28 item 4; review 14 settings-gate)
+
+- A file or folder Nebula can't write: every write gets 409
+  `settings_unwritable`, "Nothing was saved because Nebula isn’t allowed to
+  change <path>. Check the file’s permissions, then try again." Checked
+  before anything is written (`settings_writable`), and `save_settings`
+  still refuses a file that turned read-only after the check.
+- `save_settings` is atomic now: a temp file beside the old one, fsync,
+  then one rename. It keeps the file's mode; a new file is 0600 (it holds
+  keys). Only EACCES, EPERM and EROFS are "not allowed"; ENOSPC and the
+  rest still raise.
+- Every settings 409 has `code` (`settings_unreadable`,
+  `keys_unreadable`, `settings_unwritable`) and `fix`, worded for the
+  reader. Settings picks its line by the code.
+- HIGH-1: ENOTDIR (a folder on the way that is a file) is "no file", as
+  before round 14. MEDIUM-1: the object check runs first, so a desktop
+  file holding `null` or `[]` gets the read line on GET, every write,
+  start_here and spend, never a 500. LOW-2: GET /api/agent/spend answers
+  `{note, code}` (MCP `get_spend_limits`; `nebula spend` prints
+  "Spending limits: <note>"). LOW-3: a symlink loop is a file Nebula can't
+  read everywhere. NITs: a broken symlink is still "no file" (pinned); a
+  symlink to a folder is named by the configured path; an empty
+  NEBULA_SETTINGS_PATH is unset. LOW-1: the words follow
+  `refusal_copy.person_reads`, so every browser tab, with or without a
+  current token, reads the person's line.
+- Saving the same key again is safe: the file's bytes don't change, the
+  running key is the same and `settingsChanged` names no key. The
+  Keychain re-encrypts the same value (no rotation, no new token). Tested.
+
+### The Keychain write id (review 14 keychain)
+
+- `credentials.set` and `clear` answer a one-time `writeId`. `revert`
+  takes only that id, from the page that made it, while it is the
+  provider's latest write and the store still holds what it wrote
+  (compare-and-swap, else `STORE_CHANGED`). `commit(writeId)`, the page
+  being destroyed, crashing or navigating (main frame, new document), a
+  later write of the provider, or a minute drops the entry. Seven
+  channels now; the preload exposes `revert` and `commit`.
+- What's left: the trusted page can undo its own write in flight for up
+  to a minute, which `set` and `clear` let it do anyway. It never reads a
+  key. main.mjs: only its comment changed (the brief asked not to change
+  the file otherwise).
+- The panel reverts only on a definite 4xx (or an offline refusal). On a
+  5xx or a lost answer it reads GET /api/settings: the new value means
+  commit, the old one means revert, anything else commits and says
+  "Nebula didn’t respond, so this key may not be saved. Save it again to
+  be sure." ("… removed. Remove it again …" for a removal). A failed
+  Keychain write is never reverted.
+
+### Smaller items
+
+- Krea: agent and doc text says "the API key connection" (never "the API
+  token"); the scan checks every quoted connection name in source and
+  docs. Straight apostrophes fixed in krea.py and the Agent Log heading.
+- CLI: a free part whose entries don't match `freeRuns` is untagged, not
+  even "(runs locally)".
+- Gemini CLI's ADC and Cloud Shell line: "Uses the Google Cloud sign-in of
+  the machine it runs on."
+- Out of scope but on the way: a parent path that is a file now gets the
+  unwritable 409 on a write instead of a 500; `credentials/update` refuses
+  on an unwritable file although it writes nothing to disk (both or
+  neither). The read-only-folder case says "the file’s permissions" too.
+- The notes above from rounds 3 to 13 that quote "Add key for Hugging
+  Face" are history: the switcher's button reads "Add key →" with the name
+  "Add your Hugging Face token in Settings."
+
+### Gates
+
+All sandboxed, every npm and npx with the update notifier off. tsc -b and
+lint pass. Focused vitest (52 files importing a module this round changed,
+plus every changed test file): 1,729 passed, no errors, no timeouts, one
+run. Backend: 41 files that exercise the changed names, isolated: 2,261
+passed; the round 15 file alone after its last additions: 45 passed.
+Desktop credential, navigation and folder-picker tests: 137 passed. vite
+build and the budget pass (463,281 bytes raw). check-node-contracts, the
+model reference, the route tables and the not-ready reasons are current.
+No full suite ran.
+
+### Base check and mutants
+
+- On 04c0131f (an exported tree): the round 15 backend file fails 34 of
+  43; the 9 that pass are guards (a writable file saves, the agent gate,
+  MCP and `nebula keys` on a read-only file, a broken symlink, the person,
+  MCP, CLI and bare audiences, and the idempotent save). Its two later
+  tests call names 04c0131f doesn't have. The frontend files fail 24 tests
+  and idolRound15 fails to import; the desktop file fails 27 (with the
+  missing export stubbed so it loads).
+- 41 mutants, each against its covering tests in a copy: all killed.
+  Three survived at first and got tests: the `reason` field dropped from
+  rows, `route_unavailable_reason` returning nothing (the fallback gave the
+  same line), and a 5xx that reverts (no test had a 5xx with the new key
+  held).
+
+### Live (8793/5793, sandboxed, fake keys)
+
+Canaries first: 8000, 8005, 5173, 8790, api.x.ai, huggingface.co,
+api.krea.ai, api.openai.com and 1.1.1.1 were blocked in the browser;
+inside the backend's sandbox api.x.ai, api.meshy.ai, api.ideogram.ai,
+huggingface.co and 1.1.1.1:443 were refused. Those were the only requests
+off localhost. Nothing was accepted. The one run request was an agent's
+on a subgraph whose two Claude nodes had no key: the pre-call check
+refused it and nothing ran. Shots in scratchpad/idol/shots15 (10, distinct
+md5s): the merged line at 1440 and 700, a same-name group and a single
+name, the switcher line (a FLUX node saved on a provider it no longer
+lists, set in the scratch project's saved state, since Nebula refuses to
+set one now), the details box at 700 at the top (fade), at the end (no
+fade) and focused, the read-only line in Settings, the Agent log, and a
+Keychain line beside its row (a stand-in bridge in the browser, the real
+backend refusing the write after the file turned read-only).
+
+### Questions for GM
+
+- The canvas Agent log, for an outside agent's (MCP or CLI) refused run,
+  shows the cursor's line for the first node only: "“Editor” can’t run.
+  Add your Anthropic API key in Settings, then run the node again." while
+  "Writer" couldn't run either. The merged line reaches the log only in
+  an in-app chat turn. Should the outside agent's entry read the merged
+  line too?
+- On the first refusal after the Keychain took a key, the line ends with
+  the refusal's fix ("… but your Keychain has it. Check the permissions of
+  ~/.nebula/settings.json, then try again.") rather than "Try again, or
+  remove it." OK?
+- The switcher's button shows "Add key →" but its screen-reader name is
+  "Add your Replicate token in Settings.", which doesn't contain the
+  visible words (WCAG 2.5.3). "Add key: Add your Replicate token in
+  Settings." or keep?

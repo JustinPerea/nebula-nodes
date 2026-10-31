@@ -235,7 +235,7 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
     "ELEVENLABS_API_KEY": ("ElevenLabs", "API key"),
     "FAL_KEY": ("fal.ai", "API key"),
     "GOOGLE_API_KEY": ("Gemini", "API key"),
-    "GOOGLE_VERTEX_CREDENTIALS": ("Google Vertex AI", "credentials"),
+    "GOOGLE_VERTEX_CREDENTIALS": ("Vertex AI", "service account key"),
     "HF_TOKEN": ("Hugging Face", "token"),
     "HIGGSFIELD_API_KEY": ("Higgsfield", "API key"),
     "IDEOGRAM_API_KEY": ("Ideogram", "API key"),
@@ -259,8 +259,8 @@ def _or_list(items: list[str]) -> str:
 
 
 def key_phrase(keys: Iterable[str]) -> str | None:
-    """"OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
-    credentials or Gemini API key"; None when a name isn't a key Settings stores."""
+    """"OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
+    account key or Gemini API key"; None when a name isn't a key Settings stores."""
     names = [KEY_NAMES.get(key) for key in keys]
     if not names or any(name is None for name in names):
         return None
@@ -284,8 +284,8 @@ def key_name(key: str) -> tuple[str, str] | None:
 # GM's lines for a provider's answer (round 3d), one table: the engine applies
 # it (execution/provider_status.py) where the handler wrote no line.
 # GM: "{Provider} didn't accept your API key. ..." The key's own name stands
-# in for "API key" where Settings calls it something else ("API token",
-# "credentials"), as the missing-key line does.
+# in for "API key" where Settings calls it something else ("token",
+# "service account key"), as the missing-key line does.
 STATUS_LINES: dict[str, str] = {
     "key": "{provider} didn't accept your {credential}. Check {it} in Settings, then run the node again.",
     "credits": "Your {provider} account is out of credits. Add credits, then run the node again.",
@@ -506,3 +506,92 @@ def joined_lines(lines: Iterable[str | None]) -> str | None:
         if line.strip() not in kept:  # type: ignore[union-attr]
             kept.append(line.strip())  # type: ignore[union-attr]
     return " ".join(kept)
+
+
+# -- not-ready reasons: a node that can't run here, said for one node or several --
+#
+# Each reason says what follows the node's quoted name, for one node and for
+# several (review 14 of PR #203, copy LOW-1: the plural came from a regex on
+# English). The line is a subject, the quoted name for one node or the
+# shared name list for several (not_ready_subject), then the predicate for
+# that count. The proposal bar, its layer (frontend canvasProposals) and the
+# Agent Log merge nodes by the reason, never by the words. GM's wording:
+# r20 item 3 (quoted names), r21 (Krea's "Sign in"), r28 (merges), r29
+# items 1 and 2 (route-table Auto, the switcher, Replicate's key).
+NOT_READY_PREDICATES: dict[str, tuple[str, str]] = {
+    "key": ("needs your {phrase}. Add {it} in Settings.",
+            "need your {phrase}. Add {it} in Settings."),
+    "krea_plan": ("needs your Krea plan. Sign in to Krea in Settings.",
+                  "need your Krea plan. Sign in to Krea in Settings."),
+    "unknown_provider": ("is set to a provider that isn’t in its list. Choose one in its provider switcher.",
+                         "are set to a provider that isn’t in their list. "
+                         "Choose one in each node’s provider switcher."),
+    "route_key": ("is set to {provider}, which needs {needed}. Add it in Settings, or choose another provider.{also}",
+                  "are set to {provider}, which needs {needed}. Add it in Settings, or choose another provider.{also}"),
+    "route_block": ("can't run on {provider}{why}. {fix}{also}",
+                    "can't run on {provider}{why}. {fix}{also}"),
+    "not_set_up": ("isn’t set up to run here yet. Check its provider in Settings.",
+                   "aren’t set up to run here yet. Check their provider in Settings."),
+}
+
+
+class NotReadyReason:
+    """Why a node can't run here, as NOT_READY_PREDICATES says it: ``one``
+    and ``many`` follow the node's quoted name. ``own`` is a route's own
+    whole line (RouteSpec.missingKeyLine: "You can run “Idol” after you add
+    your Hugging Face token in Settings."), said as it is, never merged."""
+
+    __slots__ = ("one", "many", "own")
+
+    def __init__(self, one: str = "", many: str = "", own: str | None = None) -> None:
+        self.one, self.many, self.own = one, many, own
+
+    @classmethod
+    def of(cls, kind: str, **fields: str) -> "NotReadyReason":
+        one, many = NOT_READY_PREDICATES[kind]
+        return cls(one.format(**fields), many.format(**fields))
+
+    def line(self, subject: str) -> str:
+        """The line for one node: its quoted name (or "This node"), the singular."""
+        return self.own if self.own is not None else f"{subject} {self.one}"
+
+    def view(self) -> dict[str, str] | None:
+        """What the proposal's notReady row carries for the merge (frontend
+        canvasProposals.notReadyBarLines): None for a route's own line."""
+        return None if self.own is not None else {"one": self.one, "many": self.many}
+
+
+def not_ready_subject(names: list[str]) -> str:
+    """The shared name-list rule (frontend errorCopy.nodeNameList): up to 3
+    nodes by name, a same-name group as its own item ("2 “Claude” nodes"),
+    "4 nodes" from 4."""
+    if counts_instead(len(names)):
+        return f"{len(names)} nodes"
+    groups: dict[str, int] = {}
+    for name in names:
+        groups[name] = groups.get(name, 0) + 1
+    return and_list(f"“{name}”" if count == 1 else f"{count} “{name}” nodes" for name, count in groups.items())
+
+
+def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]]) -> list[tuple[str, int]]:
+    """Each reason once, in the order first met, with every node that has it
+    (GM, PR #203 r28): (the line, how many nodes say it). A route's own line
+    stays a line per node."""
+    groups: dict[object, tuple[NotReadyReason, list[str]]] = {}
+    for index, (name, reason) in enumerate(rows):
+        key: object = ("own", index) if reason.own is not None else reason.one
+        groups.setdefault(key, (reason, []))[1].append(name)
+    lines: list[tuple[str, int]] = []
+    for reason, names in groups.values():
+        if reason.own is not None or len(names) == 1:
+            lines.append((reason.line(f"“{names[0]}”"), 1))
+        else:
+            lines.append((f"{not_ready_subject(names)} {reason.many}", len(names)))
+    return lines
+
+
+def run_again(line: str, nodes: int) -> str:
+    """A not-ready line as a run's refusal says it (GM, PR #203 r29 item 3):
+    its last sentence ends ", then run the node again." ("the nodes" for
+    several)."""
+    return f"{line.rstrip().rstrip('.')}, then run the {'node' if nodes == 1 else 'nodes'} again."

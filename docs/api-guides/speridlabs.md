@@ -60,6 +60,22 @@ read <the path>. Fix the file, then try again." On the desktop app the
 key isn't written to the Keychain either. An agent that reads your
 settings is told "Nebula can’t read <the path>. Ask the person to fix the
 file."
+
+If the settings file or its folder is read-only, every save is refused
+with "Nothing was saved because Nebula isn’t allowed to change <the
+path>. Check the file’s permissions, then try again." Nebula reads the
+file as before, and saving the same key twice changes nothing the second
+time.
+
+In the desktop app, a key goes to the macOS Keychain and then to the
+running Nebula. If Nebula refuses it after the Keychain took it, the
+Keychain is put back. If that fails, the row says what each one has, for
+example "Nebula couldn’t save this key and is still using the one it had.
+Your Keychain has the new one. Try again, or remove it." The line stays
+until the two agree. If Nebula doesn't answer and Settings can't tell whether it took the key,
+the row says "Nebula didn’t respond, so this key may not be saved. Save
+it again to be sure." ("…may not be removed. Remove it again to be sure."
+for a removal).
 Nebula shows Idol at $0 a run, since
 [Hugging Face offers ZeroGPU free](https://huggingface.co/docs/hub/spaces-zerogpu).
 Any bill for time past your allowance is between you and Hugging Face;

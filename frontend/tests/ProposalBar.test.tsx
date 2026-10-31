@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ProposalView } from '../src/lib/wsClient';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
+import { reasonFor } from './helpers/notReadyReasons';
 
 const flow = vi.hoisted(() => ({ fitBounds: vi.fn(), getInternalNode: vi.fn() }));
 const graph = vi.hoisted(() => ({
@@ -315,7 +316,7 @@ describe('ProposalBar', () => {
     });
     render(<ProposalBar />);
     fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
-    const details = screen.getByLabelText('What Accept writes');
+    const details = screen.getByRole('region', { name: 'Details' });
     expect(details.textContent).toContain('New Nano Banana (+up)');
     expect(details.textContent).toContain('num_images8');
     expect(details.textContent).toContain(long);
@@ -494,7 +495,7 @@ describe('ProposalBar', () => {
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Hide the details' })).toBe(toggle);
     expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list/ })).toBeNull();
-    const details = screen.getByLabelText('What Accept writes');
+    const details = screen.getByRole('region', { name: 'Details' });
     for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
   });
 
@@ -508,9 +509,11 @@ describe('ProposalBar', () => {
     many.params = [];
     many.cost = { ...many.cost, notReady: [
       ...Array.from({ length: krea }, (_, index) => ({ ref: `+k${index}`, nodeId: null, name: 'Krea 2',
-        missing: 'needs the Krea account signed in (Settings > Providers > Krea)', person: KREA_LINE })),
+        missing: 'needs the Krea account signed in (Settings > Providers > Krea)', person: KREA_LINE,
+        reason: reasonFor(KREA_LINE) })),
       { ref: '+c', nodeId: null, name: 'Claude', missing: 'needs ANTHROPIC_API_KEY in Settings > Providers',
-        person: '“Claude” needs your Anthropic API key. Add it in Settings.' },
+        person: '“Claude” needs your Anthropic API key. Add it in Settings.',
+        reason: reasonFor('“Claude” needs your Anthropic API key. Add it in Settings.') },
     ] };
     open(many);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });

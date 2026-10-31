@@ -75,7 +75,7 @@ a node onto the plan themselves, or onto another provider: changing
 (``main._refuse_agent_billing_change``). That holds on every way in: the
 edit routes, project snapshots, and the run routes, which take params in the
 request (a run may only bill a node the way its canvas node does, and a node
-that exists only for the run starts on Auto and the API token).
+that exists only for the run starts on Auto and the API key connection).
 
 A cinema scene is a local node that calls its base image model once per
 shot, so it is priced, limited and counted as that model, times its shots

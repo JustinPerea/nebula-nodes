@@ -2,11 +2,11 @@ import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../types';
 import { apiFetch } from './backend';
 import { apiRequest } from './apiRequest';
-import { countsInstead, RequestFailedError } from './errorCopy';
+import { countsInstead, nodeNameList, RequestFailedError } from './errorCopy';
 import { formatChipEstimate } from './pricing';
 import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import { resolveAnchor, type Point } from './agentCursorMotion';
-import type { ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
+import type { NotReadyReason, ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
 import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
 import { classCounts, costChip, costClass } from './costClass';
 import { keyBillingAccount, keyBillingLabel, keyPhrase, PROVIDER_PARAM } from './directRoute';
@@ -234,9 +234,12 @@ export function notReadyBarLines(
   acceptLock: string | null,
 ): Array<{ key: string; text: string; accept?: true }> {
   const lines: Array<{ key: string; text: string; accept?: true }> = [];
-  // Nodes with the same name and the same reason say one line, the count in
-  // front (GM, PR #203 r27 item 7): the line's index and how many said it.
-  const same = new Map<string, { index: number; count: number }>();
+  // Nodes with the same reason say one line, whatever their names (GM, PR
+  // #203 r28; r27 item 7 merged only the same name), by the reason the
+  // backend sent (row.reason: person_line.NOT_READY_PREDICATES), never by
+  // the words (review 14, copy LOW-1): the line's index, the reason and
+  // every node's name in order.
+  const same = new Map<string, { index: number; reason: NotReadyReason; names: string[] }>();
   let said = false;
   for (const row of rows) {
     if (row.routeKeyLine && acceptLock) {
@@ -245,37 +248,38 @@ export function notReadyBarLines(
       continue;
     }
     const text = notReadyLine(row);
-    const seen = same.get(text);
-    if (seen && pluralNotReadyLine(text, 2)) {
-      seen.count += 1;
+    const reason = row.person?.trim() && isReason(row.reason) ? row.reason : null;
+    if (!reason) {
+      // A route's own line, or a backend older than round 15: a line each.
+      lines.push({ key: row.ref, text });
       continue;
     }
-    same.set(text, { index: lines.length, count: 1 });
+    const seen = same.get(reason.one);
+    if (seen) {
+      seen.names.push(row.name);
+      continue;
+    }
+    same.set(reason.one, { index: lines.length, reason, names: [row.name] });
     lines.push({ key: row.ref, text });
   }
-  for (const { index, count } of same.values()) {
-    if (count > 1) lines[index] = { ...lines[index], text: pluralNotReadyLine(lines[index].text, count)! };
+  for (const { index, reason, names } of same.values()) {
+    if (names.length > 1) lines[index] = { ...lines[index], text: mergedNotReadyLine(names, reason) };
   }
   return lines;
 }
 
-// The person's line's verb for several nodes (instance_missing_line's
-// sentences: "needs", "isn't", and the route lines' "can’t").
-const PLURAL_VERBS: Readonly<Record<string, string>> = {
-  needs: 'need', 'isn’t': 'aren’t', "isn't": "aren't", is: 'are', has: 'have', 'can’t': 'can’t', "can't": "can't",
-};
+function isReason(value: unknown): value is NotReadyReason {
+  return Boolean(value) && typeof (value as NotReadyReason).one === 'string' && typeof (value as NotReadyReason).many === 'string';
+}
 
-/** A not-ready line for one node said for `count` nodes of the same name and
- * reason, from that line itself so the two can't drift: "“Krea 2” needs your
- * Krea plan. Sign in to Krea in Settings." becomes "2 “Krea 2” nodes need
- * your Krea plan. Sign in to Krea in Settings." (GM, PR #203 r27 item 7).
- * Null for a line that doesn't start with the quoted name and a verb it
- * knows: those nodes keep a line each. */
-export function pluralNotReadyLine(line: string, count: number): string | null {
-  const match = /^(“[^”]+”) (\S+)( .*)$/.exec(line);
-  const verb = match ? PLURAL_VERBS[match[2]] : undefined;
-  if (!match || !verb) return null;
-  return `${count} ${match[1]} nodes ${verb}${match[3].replace(/\bits\b/g, 'their')}`;
+/** One reason said for several nodes: their names through the shared
+ * name-list rule (errorCopy.nodeNameList: up to 3 by name, a same-name group
+ * as its own item, a count from 4 nodes), then the reason's own plural (GM,
+ * PR #203 r28): "“Writer” and “Editor” need your Anthropic API key. Add it
+ * in Settings.", "2 “Claude” nodes and “Writer” need …", "4 nodes need …".
+ * One node says its singular after its quoted name. */
+export function mergedNotReadyLine(names: string[], reason: NotReadyReason): string {
+  return names.length === 1 ? `“${names[0]}” ${reason.one}` : `${nodeNameList(names)} ${reason.many}`;
 }
 
 /**

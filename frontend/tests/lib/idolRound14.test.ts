@@ -4,23 +4,27 @@ import {
   DETAILS_DISCLOSURE,
   detailsDisclosure,
   NOT_READY_DISCLOSURE,
+  mergedNotReadyLine,
   notReadyShown,
-  pluralNotReadyLine,
   type ProposalNotReady,
 } from '../../src/lib/canvasProposals';
+import { reasonFor } from '../helpers/notReadyReasons';
 
 const row = (ref: string, name: string, person: string, extra: Partial<ProposalNotReady & { routeKeyLine: true }> = {}) =>
-  ({ ref, nodeId: null, name, missing: `needs X (${ref})`, person, ...extra });
+  ({ ref, nodeId: null, name, missing: `needs X (${ref})`, person, reason: reasonFor(person), ...extra });
 
 const KREA = '“Krea 2” needs your Krea plan. Sign in to Krea in Settings.';
 
 describe('same-named nodes say one line (GM, PR #203 r27 item 7)', () => {
-  it('puts the count in front of the single line, with the plural verb', () => {
-    expect(pluralNotReadyLine(KREA, 2)).toBe('2 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.');
-    expect(pluralNotReadyLine('“Idol” isn’t set up to run here yet. Check its provider in Settings.', 3))
+  it('puts the count in front, with the reason’s own plural (round 15: from the backend’s table)', () => {
+    expect(mergedNotReadyLine(['Krea 2', 'Krea 2'], reasonFor(KREA)!))
+      .toBe('2 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.');
+    const notSetUp = { one: 'isn’t set up to run here yet. Check its provider in Settings.',
+      many: 'aren’t set up to run here yet. Check their provider in Settings.' };
+    expect(mergedNotReadyLine(['Idol', 'Idol', 'Idol'], notSetUp))
       .toBe('3 “Idol” nodes aren’t set up to run here yet. Check their provider in Settings.');
-    // A line that doesn't start with the quoted name and a known verb isn't merged.
-    expect(pluralNotReadyLine('You can run “Idol” after you add your Hugging Face token in Settings.', 2)).toBeNull();
+    // A route's own line has no reason: no merge.
+    expect(reasonFor('You can run “Idol” after you add your Hugging Face token in Settings.')).toBeUndefined();
   });
 
   it('merges only the same name and the same reason, and keeps a line each otherwise', () => {
