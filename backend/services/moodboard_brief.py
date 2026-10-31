@@ -719,8 +719,11 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
     count, has_images, outside_only = steering_count(board)
     view["keywords"] = keywords
+    # A fully transparent image that steers says so here too (analysis version 6).
+    transparent = [item["number"] for item in view.get("images") or []
+                   if isinstance(item, dict) and item.get("transparent") and isinstance(item.get("number"), int)]
     view["summary"] = _summary(mode, count, palette, accents, notes, has_images=has_images,
-                               outside_only=outside_only)
+                               outside_only=outside_only, transparent=transparent)
     view["tasteProfile"] = _taste_profile(mode, keywords, palette)
     if not notes_sent:
         view["subjectBias"] = []
@@ -779,6 +782,12 @@ def with_brief(board: Any) -> Any:
         logger.exception("Moodboard %s: brief not composed", board.get("id"))
         return {**board, "brief": None}
     mode, choices, send_notes = board_options(board)
+    analysis = board.get("analysis")
+    if isinstance(analysis, dict) and analysis.get("outdated"):
+        # The saved colours are out of date (moodboard_analysis.with_alpha_outdated):
+        # this brief is built from them, and a run analyzes again and sends a new one.
+        from services.moodboard_analysis import BRIEF_OUTDATED
+        brief = {**brief, "outdated": BRIEF_OUTDATED}
     return {**board, "clashMode": mode, "colorChoices": choices, "sendNotes": send_notes, "colorCheck": check,
             "brief": brief}
 

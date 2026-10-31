@@ -1361,3 +1361,62 @@ def test_show_says_a_board_at_strength_zero_sends_nothing(capsys, monkeypatch):
     shown = capsys.readouterr().out
     assert "Brief sent to generators" not in shown
     assert "not sent: board strength is 0" in shown and "Quiet coastal mornings." in shown
+
+
+# -- alpha: transparent pixels aren't a colour (tests/test_colour_alpha.py) ---------------
+
+def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_path, capsys):
+    import re
+
+    from services.moodboard_analysis import ALPHA_OUTDATED, analyze_moodboard
+    from services.moodboard_store import MoodboardStore
+    from tests.test_colour_alpha import clear, mark_74
+
+    folder = tmp_path / "sprites"
+    folder.mkdir()
+    mark_74().save(folder / "1-mark.png")
+    clear().save(folder / "2-clear.png")
+    _cli(app, ["moodboard", "new", "Sprites", str(folder)], capsys)
+    board = boards.get_board(app.api, "sprites")
+
+    out = _cli(app, ["moodboard", "analyze", board["id"]], capsys)
+    assert re.search(r"#111413\s+90%\s+#1 90%", out) and re.search(r"#e8593c\s+10%\s+#1 10%", out)
+    assert "#2 is too transparent to add colors." in out
+    assert "#040" not in out and "#000000" not in out
+
+    analyzed = mcp_server.moodboard_analyze(board["id"])["analysis"]
+    assert analyzed["palette"] == ["#111413", "#e8593c"]
+    assert [c["share"] for c in analyzed["colors"]] == [0.9, 0.1]
+    assert analyzed["images"][1]["transparent"] is True and "outdated" not in analyzed
+
+    # An analysis saved before alpha counted reads as out of date everywhere.
+    store = MoodboardStore()
+    store.update(board["id"], analysis={**analyze_moodboard(store.get(board["id"])), "version": 5})
+    line = "These colors counted transparent areas as dark. Analyze again to update them."  # GM r1, verbatim
+    assert ALPHA_OUTDATED == line
+    assert mcp_server.moodboard_get(board["id"])["analysis"]["outdated"] == line
+    assert [b["analysis"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [line]
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert f"{line} `nebula moodboard analyze {board['id']}`" in out
+    assert "2 reference images analyzed as look." in out and "(s)" not in out
+    out = _cli(app, ["moodboard", "analyze", board["id"], "--dry-run"], capsys)
+    assert ALPHA_OUTDATED in out and "changes include edits to the board" not in out
+
+    # Its brief is built from those colours, and says so on every surface
+    # (review 1 M1, GM r2 verbatim): a run analyzes again and sends a new one.
+    brief_line = "This brief uses the old colors. The next run analyzes the board again and sends an updated one."
+    assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == brief_line
+    assert [b["brief"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [brief_line]
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert f"  Brief sent to generators (generated):\n    {brief_line}\n" in out
+    # One "analyze again", not a second one for the colour sources.
+    old = {**analyze_moodboard(store.get(board["id"])), "version": 5}
+    old["colors"] = [{k: v for k, v in c.items() if k != "sources"} for c in old["colors"]]
+    store.update(board["id"], analysis=old)
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert line in out and "Analyze again to see which images each colour comes from" not in out
+
+    # Analyzed again: neither line, anywhere.
+    _cli(app, ["moodboard", "analyze", board["id"]], capsys)
+    got = mcp_server.moodboard_get(board["id"])
+    assert "outdated" not in got["analysis"] and "outdated" not in got["brief"]

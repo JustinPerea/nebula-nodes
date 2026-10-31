@@ -1,0 +1,40 @@
+{
+  "about": "How Nebula reads colour from pixels with alpha. backend/cinema/color.py (ALPHA_MIN, the reader surfaces) and frontend/src/lib/paletteExtract.ts (ALPHA_MIN, pixelWeight) both follow it; backend/tests/test_colour_alpha.py and frontend/tests/colourAlphaContract.test.ts fail if either drifts.",
+  "alphaMin": 16,
+  "weight": "alpha / 255 when alpha >= alphaMin; not counted below it",
+  "weightCases": [
+    { "alpha": 0, "weight": 0 },
+    { "alpha": 15, "weight": 0 },
+    { "alpha": 16, "weight": 0.0627451 },
+    { "alpha": 64, "weight": 0.2509804 },
+    { "alpha": 128, "weight": 0.5019608 },
+    { "alpha": 255, "weight": 1 }
+  ],
+  "readerSurfaces": {
+    "commons": {
+      "hex": "#0a0a0a",
+      "layer": "rgba(255, 255, 255, 0.04)",
+      "layerToken": "--sr-node-media-bg",
+      "under": "#000000",
+      "underToken": "--sr-canvas",
+      "where": "every Commons tile and the detail stage"
+    },
+    "moodboard": {
+      "hex": "#080808",
+      "layer": "rgba(255, 255, 255, 0.03)",
+      "layerRule": ".moodboard-card",
+      "under": "#000000",
+      "underToken": "--sr-canvas",
+      "where": "the board card in Moodboard Studio"
+    },
+    "canvasNode": {
+      "hex": "#0a0a0a",
+      "layer": "rgba(255, 255, 255, 0.04)",
+      "layerToken": "--sr-node-media-bg",
+      "layerRule": ".model-node--image-surface .model-node__preview-image",
+      "under": "#000000",
+      "underToken": "--sr-canvas",
+      "where": "an image on a canvas node (the Vision node's and QC's inputs)"
+    }
+  }
+}

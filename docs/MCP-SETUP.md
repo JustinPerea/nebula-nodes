@@ -445,7 +445,16 @@ The server exposes these tools for building and running (see
   `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
   own text, unchanged) and, since error-copy round 3, `asset.last_error_kind`:
   `unavailable` (network, a timeout or the provider down), `unreadable` (the
-  model declined or couldn't read the image) or `other`. Curating (corrections, regions, a reference's role,
+  model declined or couldn't read the image) or `other`. The reader sees a
+  reference with transparency composited onto #0a0a0a, the tile and stage
+  surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
+  transparent to add colors (no pixel at alpha 16 of 255) is never sent and
+  is marked failed with `last_error` "too transparent to add colors; not sent
+  to the reader" and kind `unreadable`, which the Commons shows as "The
+  analyzer couldn't read this image." References measured before
+  `measure-2` keep their palettes until analyzed again. The Vision node and
+  QC send an image with transparency as it shows on a canvas node (#0a0a0a)
+  too. Curating (corrections, regions, a reference's role,
   why or inbox place) is the person's: agents propose it, see
   [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
@@ -4451,7 +4460,7 @@ nebula moodboard delete <board>
   lists also catch up on a change made while their tab's socket was closed
   (a backend restart), once it opens again. A Preview of the run
   counts only the images that steer ("4 images"), weight 0 left out like
-  the switch, and so does the analysis's summary ("4 reference image(s)
+  the switch, and so does the analysis's summary ("4 reference images
   analyzed"). The Moodboard node's bundle leaves weight-0 images out of
   `images`, `analysis.images` and `representativeImages` as it does switched ones. When nothing
   steers, the analysis warns "Every reference is set aside, so none of them
@@ -4536,6 +4545,39 @@ nebula moodboard delete <board>
   (its part of the board share), largest first. `show` prints them as
   `#4 0.35%, #5 0.26%`. An analysis from before sources existed has none;
   `analyze` again to see them.
+- Colour counts alpha (analysis version 6, Commons `measure-2`): pixels
+  under alpha 16 of 255 aren't counted, the rest count by their alpha, and
+  a share is of what's seen. An image with transparency is read at 256 px
+  by an area filter that weighs each pixel by its alpha, so a thin stroke
+  still counts, with its own colour. An image with no pixel at 16 or above
+  (clear, or a faint haze) has no colours: its `analysis.images` entry has
+  `transparent: true`, `colors: []` and null `lightness` and `saturation`,
+  and the summary and `warnings` say `#N is too transparent to add
+  colors.` It takes no part of the board's weight; any other image counts
+  as one full reference however much of it is clear.
+- Nebula stores on each image entry whether its file has transparency
+  (`hasTransparency`), read once when the image is added, and once at
+  startup (in the background) for the images of boards analyzed before
+  version 6; a read only looks at it and never decodes an image. A client
+  that sends the images back may echo it; what it sends is ignored. An
+  unreadable or missing file has none, which never marks a board out of
+  date.
+- A saved analysis older than version 6 on a board with an image that has
+  transparency (set aside or not) has out-of-date colours. On every read
+  its analysis carries `outdated` ("These colors counted transparent areas
+  as dark. Analyze again to update them.", which Moodboard Studio and
+  `show` print), and the composed `brief` carries `outdated` too ("This
+  brief uses the old colors. The next run analyzes the board again and
+  sends an updated one."), printed by "Brief sent to generators". Neither
+  is ever saved. The dry run's `saved` has `outdated` beside `current`,
+  which still says only whether the analysis describes the board. The
+  Moodboard node analyzes such a board again and warns "The board’s saved
+  colors counted transparent areas as dark, so this run analyzed it again.
+  Analyze it in Moodboard Studio to save the new analysis." An older
+  analysis of a board with no transparency stays as it is.
+- Summaries count in a real plural: "1 reference image analyzed as look.",
+  "7 reference images analyzed as look."; one saved with "image(s)" reads
+  with today's.
 - `analyze --dry-run` (`moodboard_analyze` with `dry_run`) calls
   `POST /api/moodboards/{id}/analyze/dry-run`: the analysis and the brief
   generators would get, plus `changes` against what's saved (palette and
@@ -4587,6 +4629,14 @@ nebula moodboard delete <board>
     `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
     says who read (`source: "model"`). Board and image
     notes go only when the board's `sendNotes` is on; private notes never.
+  - A reference with transparency is sent as it shows on the board card:
+    composited onto #080808 (the card's rgba(255, 255, 255, 0.03) over the
+    black canvas), never onto the colour hidden under its alpha. An opaque
+    one is sent exactly as before. One too transparent to add colors (no
+    pixel at alpha 16) is never sent or priced: `--estimate` lists it in
+    `transparent` ("Too transparent, so not read: #N"), and the read shows
+    "#N is too transparent to add colors." and "#N Unsorted: it's too
+    transparent".
     A reference that isn't a file on this computer is skipped and listed.
   - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
 

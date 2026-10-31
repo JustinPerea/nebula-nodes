@@ -2074,7 +2074,19 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     {active, stale}. It is null on a Nebula too old to send it. At
     `strength` 0 the board is off and no node it's connected to gets any of
     it, images included (the run note "Board strength is 0: board not
-    sent"). Don't use
+    sent").
+
+    Colours count alpha: a pixel under alpha 16 of 255 isn't counted and the
+    rest count by their alpha, so a transparent background is never a
+    colour. An analysis.images entry with `transparent: true` (`colors` [],
+    `lightness` and `saturation` null) is too transparent to add colors, and
+    the summary says "#N is too transparent to add colors.". `analysis.outdated`
+    ("These colors counted transparent areas as dark. Analyze again to update
+    them.") marks colours measured before alpha counted on a board with
+    transparency; `brief.outdated` ("This brief uses the old colors. The next
+    run analyzes the board again and sends an updated one.") then says the
+    brief here is built from them, while a Moodboard node run analyzes the
+    board again and sends a new one. moodboard_analyze updates both. Don't use
     analysis.styleBrief as the brief: it leaves out Direction, pinned colours
     and a hand-written brief, and keeps colours the brief left out.
 
@@ -2350,7 +2362,9 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     default 40), `accent_separation` (dE00 0-100, default 10) and
     `merge_delta_e` (dE00 0-50, default 5) try other colour thresholds for
     that run only; without `dry_run` they are refused, since nothing saves
-    custom thresholds.
+    custom thresholds. Its `saved` is {analyzed, current (the saved analysis
+    still describes the board), and `outdated` when its colours were
+    measured before alpha counted (see moodboard_get)}.
 
     `read_with` (a reader model, "gemini-4-argon") reads the references with
     that vision model and says how Analyze would sort them into looks. It is
@@ -2358,8 +2372,9 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     person can raise that model's per-run limit in Settings. Only
     `dry_run=True` exists yet: nothing is saved and nothing moves, and the
     call waits for the whole read. `estimate_only=True` returns the price
-    ({count, batches, low, high, unconfirmed, sources}) and reads nothing:
-    check it first. `only` limits the read to some images (numbers or ids);
+    ({count, batches, low, high, unconfirmed, sources}, plus `transparent`:
+    the numbers of images too transparent to add colors, which are never
+    sent or priced) and reads nothing: check it first. `only` limits the read to some images (numbers or ids);
     `thinking_level` is low, medium or high. The answer has `summary`, each
     image's result ({number, id, look, fit, reason, status, newLook}),
     `suggestions` (alsoIn and hybrid), `spent`, and the last 20 trace

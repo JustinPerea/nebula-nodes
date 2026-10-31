@@ -124,8 +124,18 @@ async def handle_cinema_color(
                 raise with_person_line(
                     ValueError(f"Source image not found: {source_ref}"),
                     "The node's palette source image can't be found. Choose it again, or clear it.")
+            # The source's own pixels, alpha and all: a transparent
+            # background isn't a colour to match (cinema.color.visible_pixels).
             with Image.open(require_allowed_path(source_path)) as src_img:
-                swatches = extract_palette(src_img.convert("RGB"))
+                swatches = extract_palette(src_img)
+            if not swatches:
+                raise with_person_line(
+                    ValueError(f"Source image {source_ref} is too transparent to match colors from: no pixel "
+                               "reaches alpha 16 of 255. Choose a source image with visible pixels, or add hex "
+                               "swatches to the palette."),
+                    f"The image in “{field_label('cinema-color', 'source_image')}” is too transparent to match "
+                    f"colors from. Choose another image, or add hex swatches to "
+                    f"“{field_label('cinema-color', 'palette')}”.")
 
     # An empty palette would pass the image through unchanged, which reads as
     # "the node did nothing". Surface it as actionable feedback instead of a
@@ -147,10 +157,11 @@ async def handle_cinema_color(
 
     method = str(params.get("method", "lab-transfer"))
 
+    # The image as it is, alpha and all: the colour channels are graded and a
+    # transparent image keeps its alpha (cinema.color.transfer_to_palette).
     with Image.open(require_allowed_path(abs_path)) as img:
-        result = transfer_to_palette(
-            img.convert("RGB"), swatches, strength=strength, method=method
-        )
+        img.load()
+        result = transfer_to_palette(img, swatches, strength=strength, method=method)
 
     url = _save_output_image(result)
     return {"image": {"type": "Image", "value": url}}

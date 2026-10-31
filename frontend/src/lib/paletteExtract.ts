@@ -26,8 +26,16 @@ export function paletteNotice(fileName: string, reason: PaletteFailure): string 
   return line ? `${heading}\n${line}` : heading;
 }
 
-/** Pixels under this alpha are left out, so the palette is the visible colour. */
-const VISIBLE_ALPHA = 128;
+/** The backend's rule (cinema/color.py ``ALPHA_MIN``): a pixel under this
+ *  alpha (of 255) isn't counted, and the rest count by alpha / 255, so a
+ *  half-transparent pixel is half a pixel. contracts/fixtures/colour/alpha.json
+ *  holds the number; tests on both sides check it, so the two can't drift. */
+export const ALPHA_MIN = 16;
+
+/** How much a pixel with this alpha counts: alpha / 255, or 0 under ALPHA_MIN. */
+export function pixelWeight(alpha: number): number {
+  return alpha < ALPHA_MIN ? 0 : alpha / 255;
+}
 
 function clampByte(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)));
@@ -38,9 +46,11 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-/** Deterministic k-means over RGB pixels. Fixed initial centroids (evenly
- *  sampled) + fixed iteration count → stable output for the same image. */
-function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][] {
+/** Deterministic k-means over RGB pixels, each counting by its weight (its
+ *  alpha, ``pixelWeight``). Fixed initial centroids (evenly sampled) + fixed
+ *  iteration count → stable output for the same image. With every weight 1
+ *  (an opaque image) it is the unweighted k-means, number for number. */
+function kMeansColors(pixels: number[][], weights: number[], k: number, iterations = 8): number[][] {
   if (pixels.length === 0) return [];
   const clusterCount = Math.min(k, pixels.length);
   // Deterministic seeding: evenly spaced samples across the pixel list.
@@ -53,7 +63,8 @@ function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][]
   for (let iter = 0; iter < iterations; iter++) {
     const sums = centroids.map(() => [0, 0, 0]);
     const counts = new Array(clusterCount).fill(0);
-    for (const px of pixels) {
+    pixels.forEach((px, index) => {
+      const weight = weights[index];
       let best = 0;
       let bestDist = Infinity;
       for (let c = 0; c < clusterCount; c++) {
@@ -66,11 +77,11 @@ function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][]
           best = c;
         }
       }
-      sums[best][0] += px[0];
-      sums[best][1] += px[1];
-      sums[best][2] += px[2];
-      counts[best] += 1;
-    }
+      sums[best][0] += px[0] * weight;
+      sums[best][1] += px[1] * weight;
+      sums[best][2] += px[2] * weight;
+      counts[best] += weight;
+    });
     for (let c = 0; c < clusterCount; c++) {
       if (counts[c] > 0) {
         centroids[c] = [
@@ -84,7 +95,7 @@ function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][]
 
   // Order clusters by population (most-dominant first) for a stable, useful order.
   const finalCounts = new Array(clusterCount).fill(0);
-  for (const px of pixels) {
+  pixels.forEach((px, index) => {
     let best = 0;
     let bestDist = Infinity;
     for (let c = 0; c < clusterCount; c++) {
@@ -97,25 +108,30 @@ function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][]
         best = c;
       }
     }
-    finalCounts[best] += 1;
-  }
+    finalCounts[best] += weights[index];
+  });
   return centroids
     .map((c, i) => ({ c, n: finalCounts[i] }))
     .sort((a, b) => b.n - a.n)
     .map((entry) => entry.c);
 }
 
-/** The `k` dominant colours of RGBA pixel data, or why there are none. */
+/** The `k` dominant colours of RGBA pixel data (straight alpha, as canvas
+ *  `getImageData` gives it), or why there are none. Alpha counts as on the
+ *  backend (``pixelWeight``). */
 export function paletteFromPixels(data: Uint8ClampedArray, k = 6): PaletteResult {
   const pixels: number[][] = [];
+  const weights: number[] = [];
   let anyAlpha = false;
   for (let i = 0; i + 3 < data.length; i += 4) {
     if (data[i + 3] > 0) anyAlpha = true;
-    if (data[i + 3] < VISIBLE_ALPHA) continue;
+    const weight = pixelWeight(data[i + 3]);
+    if (weight === 0) continue;
     pixels.push([data[i], data[i + 1], data[i + 2]]);
+    weights.push(weight);
   }
   if (pixels.length === 0) return { ok: false, reason: data.length > 0 && !anyAlpha ? 'transparent' : 'other' };
-  return { ok: true, colors: kMeansColors(pixels, k).map((c) => rgbToHex(c[0], c[1], c[2])) };
+  return { ok: true, colors: kMeansColors(pixels, weights, k).map((c) => rgbToHex(c[0], c[1], c[2])) };
 }
 
 /** Decode the picked file, downscale it onto a canvas and find its `k`

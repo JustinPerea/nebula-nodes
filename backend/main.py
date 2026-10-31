@@ -3356,8 +3356,10 @@ async def _moodboard_brief_fields_startup() -> None:
     """Give boards saved before Direction / Avoid / pinned colours existed those
     fields, once, backing each file up first (services/moodboard_brief.py).
     Then save the colour check (gap 18) on boards whose saved one is missing
-    or stale, so it isn't run again on every generation and read."""
-    from services.moodboard_store import migrate_brief_fields, save_colour_checks
+    or stale, so it isn't run again on every generation and read. Then store
+    whether each image of a board analyzed before alpha counted has
+    transparency (``stamp_transparency_once``)."""
+    from services.moodboard_store import migrate_brief_fields, save_colour_checks, stamp_transparency_once
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
@@ -3366,6 +3368,20 @@ async def _moodboard_brief_fields_startup() -> None:
         await asyncio.to_thread(save_colour_checks)
     except Exception as exc:  # never block startup; the check runs in memory until a board is saved
         print(f"[main] moodboard colour check not saved: {type(exc).__name__}: {exc}", flush=True)
+    # Whether each image of a board analyzed before alpha counted has
+    # transparency, stored once so reads never decode an image. In the
+    # background: it decodes images, and a board reads as current until then.
+    _MOODBOARD_STARTUP_TASKS.add(asyncio.create_task(_stamp_moodboard_transparency(stamp_transparency_once)))
+
+
+_MOODBOARD_STARTUP_TASKS: set[asyncio.Task] = set()
+
+
+async def _stamp_moodboard_transparency(stamp: Any) -> None:
+    try:
+        await asyncio.to_thread(stamp)
+    except Exception as exc:  # never fatal; such a board reads as current until it's stored
+        print(f"[main] moodboard transparency not stored: {type(exc).__name__}: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -18837,6 +18853,10 @@ class MoodboardImageModel(BaseModel):
     # Where its cards sit (services/moodboard_layout.py). Ignored on an
     # image already on the board; on a new one, where it goes.
     placements: list[MoodboardPlacementModel] | None = None
+    # Whether its file has transparency: Nebula stores it
+    # (services/moodboard_analysis.HAS_TRANSPARENCY). A client that sends the
+    # board's images back may echo it; what it sends is ignored.
+    hasTransparency: bool | None = None
 
 
 class MoodboardPinnedColorsModel(BaseModel):

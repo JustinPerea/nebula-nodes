@@ -44,6 +44,9 @@ async def test_prepare_is_atomic_private_and_preimport(store, source):
         assert conn.execute('SELECT count(*) FROM quarantine').fetchone()[0] == 15
         manifest = json.loads(conn.execute('SELECT manifest FROM evaluation_batch').fetchone()[0])
     assert len(manifest['tuning']) == 30
+    # The snapshots are RGB PNGs (alpha dropped), so measure-1 measured them,
+    # not measure-2 (review 1 on #208).
+    assert manifest['measurement_version'] == 'measure-1'
     assert len({x['cluster'] for x in manifest['heldout'] + manifest['tuning']}) == 45
     assert {x['rel'].split('/')[0] for x in manifest['heldout']} == {'folder-0','folder-1','folder-2'}
     with pytest.raises(evaluation.EvaluationError):

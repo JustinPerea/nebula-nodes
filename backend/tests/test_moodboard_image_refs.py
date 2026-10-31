@@ -444,7 +444,7 @@ def test_agents_are_told_board_images_must_be_nebulas_own():
 # ------------------------------------------------------------- review fixes (Q98)
 
 def _counted(summary: str, count: int) -> bool:
-    return summary.startswith(f"{count} reference image(s) analyzed as ")
+    return summary.startswith(f"{count} reference image{'' if count == 1 else 's'} analyzed as ")
 
 
 @pytest.mark.asyncio

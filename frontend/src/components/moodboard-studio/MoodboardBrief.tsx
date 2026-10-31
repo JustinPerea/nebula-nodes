@@ -55,6 +55,8 @@ export function BriefPanel({
         <span className="moodboard-swatches__label">Brief sent to generators</span>
         <span className="moodboard-brief__source">{override?.text.trim() ? (byAgent ? 'Written by an agent' : 'Written by you') : 'Generated'}</span>
       </div>
+      {/* The saved colours are out of date: this brief uses them, a run sends a new one (GM r2 on #208). */}
+      {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
       {stale && (
         <div className="moodboard-brief__stale" role="status">
           <span>{byAgent ? 'Board changed since an agent wrote this.' : 'Board changed since you edited this.'}</span>

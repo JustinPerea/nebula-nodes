@@ -19,8 +19,8 @@ describe('paletteFromPixels', () => {
   });
 
   it("doesn't call a faint image fully transparent", () => {
-    // Every pixel under the visibility cut, but not all of them clear.
-    expect(paletteFromPixels(pixels([10, 20, 30, 40], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'other' });
+    // Every pixel under the visibility cut (alpha 16, as the backend), but not all of them clear.
+    expect(paletteFromPixels(pixels([10, 20, 30, 15], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'other' });
   });
 
   it('has no reason for an empty image', () => {

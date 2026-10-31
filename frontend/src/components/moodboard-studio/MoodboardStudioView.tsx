@@ -29,7 +29,7 @@ import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel, type ColorChoice } from './MoodboardBrief';
-import { BoardSwatches, SourcesOutdated } from './MoodboardColors';
+import { AnalysisOutdated, BoardSwatches, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { assetHome, emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
@@ -1235,11 +1235,7 @@ export function MoodboardStudioView() {
           <BoardSwatches label="Accents" role="accent" analysis={analysis} leftOut={brief?.leftOut} />
           <SourcesOutdated analysis={analysis} />
           <div className="moodboard-analysis__summary">{analysis.summary}</div>
-          {analysis.version < 2 && (
-            <div className="moodboard-analysis__outdated">
-              Made by the older analyzer, which ignored image weights and dropped small accent colors. Analyze again to update it.
-            </div>
-          )}
+          <AnalysisOutdated analysis={analysis} />
         </div>
       ) : (
         <div className="moodboard-analysis__empty">

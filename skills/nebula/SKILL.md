@@ -518,6 +518,17 @@ nebula moodboard delete <board>
   `show`, and the colour's share of that image); `--json` has the full
   `sources` (number, id, share, contribution). An older analysis has none
   until you `analyze` again.
+- Colours are what's seen: transparent pixels don't count and partly
+  transparent ones count by their alpha, so a sprite or logo on a clear
+  background gives its own colours, not black, and a thin stroke still
+  counts. An image with no pixel at alpha 16 of 255 (clear or a faint haze)
+  adds none, and the summary says so (`#2 is too transparent to add
+  colors.`). An analysis saved before this, on a board with transparent
+  images, carries `outdated`, and so does its `brief` ("This brief uses the
+  old colors. The next run analyzes the board again and sends an updated
+  one."), since a Moodboard node run analyzes it again; `analyze` again to
+  update both. The vision reader gets a transparent reference as it shows
+  on the board card, and never one too transparent to add colors.
 - `analyze --dry-run` shows what analyzing would give and what would change
   (palette and accents added, removed or reordered; the brief generators get;
   the negatives), and saves nothing, so you can run it without asking. With
