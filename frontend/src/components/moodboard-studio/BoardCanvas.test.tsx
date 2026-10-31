@@ -45,7 +45,14 @@ vi.mock('../../lib/viewportSpring', () => ({
   },
 }));
 
-import { BoardCanvas, type BoardMove } from './BoardCanvas';
+// The edge chip, recorded: the props the board hands it.
+const chip = vi.hoisted(() => ({ props: null as null | { tiles: unknown; onShow: (rects: Array<{ x: number; y: number; width: number; height: number }>) => void; onDone: () => void } }));
+vi.mock('./OutsideChip', () => ({
+  OutsideChip: (props: NonNullable<typeof chip.props>) => { chip.props = props; return <button type="button">chip</button>; },
+}));
+import { BoardCanvas, type BoardMove, type BoardTarget } from './BoardCanvas';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { useGraphStore } from '../../store/graphStore';
@@ -64,9 +71,10 @@ const images = [
 
 let moves: BoardMove[][] = [];
 let drops: Array<{ files: File[]; at: { x: number; y: number } }> = [];
+let targets: BoardTarget[] = [];
 function mount(list = images) {
   return render(<BoardCanvas boardKey="k1" images={list} onMove={(next) => moves.push(next)}
-    onDropFiles={(files, at) => drops.push({ files, at })} />);
+    onDropFiles={(files, target) => { drops.push({ files, at: target.at }); targets.push(target); }} />);
 }
 const props = () => flow.props!;
 const nodeById = (id: string) => props().nodes.find((node) => node.id === id)!;
@@ -75,6 +83,7 @@ beforeEach(() => {
   flow.props = null;
   moves = [];
   drops = [];
+  targets = [];
   useBoardCanvasStore.setState({ selection: {}, viewports: {}, frameRequest: null });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -183,6 +192,104 @@ describe('files dropped on the board', () => {
     Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
     fireEvent(target, drop);
     expect(drops).toEqual([{ files: [file], at: { x: 200, y: 80 } }]);
+  });
+});
+
+describe('where a paste lands (Cmd+V)', () => {
+  const mountWithPoint = () => {
+    const pasteTarget = { current: null as (() => BoardTarget) | null };
+    const pastePoint = { get current() { return pasteTarget.current ? () => pasteTarget.current!().at : null; } };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      pasteTarget={pasteTarget} />);
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    wrapper.getBoundingClientRect = () => ({ left: 10, top: 20, right: 610, bottom: 420, width: 600, height: 400 }) as DOMRect;
+    return { view, wrapper, pastePoint, pasteTarget };
+  };
+
+  it('is the last pointer position over the board, in board coordinates', () => {
+    const { wrapper, pastePoint } = mountWithPoint();
+    fireEvent.pointerMove(wrapper, { clientX: 100, clientY: 40 });
+    fireEvent.pointerMove(wrapper, { clientX: 150, clientY: 60 });
+    expect(pastePoint.current?.()).toEqual({ x: 300, y: 120 });
+  });
+
+  it('is the middle of the view when the pointer is not over the board', () => {
+    const { wrapper, pastePoint } = mountWithPoint();
+    expect(pastePoint.current?.()).toEqual({ x: 620, y: 440 });
+    fireEvent.pointerMove(wrapper, { clientX: 100, clientY: 40 });
+    fireEvent.pointerLeave(wrapper);
+    expect(pastePoint.current?.()).toEqual({ x: 620, y: 440 });
+  });
+
+  it('carries the view at paste time (the board less the inset), and is not aimed', () => {
+    const { pasteTarget } = mountWithPoint();
+    expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 52, y: 72, width: 1136, height: 736 }, aim: false });
+  });
+
+  it('is gone once the board unmounts, so the List view never places a paste', () => {
+    const { view, pastePoint } = mountWithPoint();
+    view.unmount();
+    expect(pastePoint.current).toBeNull();
+  });
+});
+
+describe('where new tiles go (lib/boardPlacement targets)', () => {
+  const sized = (view: ReturnType<typeof mount>) => {
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    wrapper.getBoundingClientRect = () => ({ left: 10, top: 20, right: 610, bottom: 420, width: 600, height: 400 }) as DOMRect;
+    const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
+    bar.getBoundingClientRect = () => ({ left: 25, top: 370, right: 250, bottom: 405, width: 225, height: 35 }) as DOMRect;
+    return { wrapper, bar };
+  };
+
+  it('a drop is aimed; its view is the board less the inset and the toolbar', () => {
+    const view = mount();
+    const { wrapper } = sized(view);
+    const file = new File(['x'], 'ref.png', { type: 'image/png' });
+    const drop = createEvent.drop(wrapper, { dataTransfer: { files: [file], types: ['Files'] } });
+    Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
+    fireEvent(wrapper, drop);
+    // Screen (26, 36)-(594, 354), doubled by the stand-in screenToFlowPosition.
+    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: true }]);
+  });
+
+  it('Add images follows the free-spot rule from the middle of the view', () => {
+    const view = mount();
+    sized(view);
+    fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+    expect(targets).toEqual([{ at: { x: 620, y: 440 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: false }]);
+  });
+
+  it('the toolbar is the board\'s bottom bar: the notice stack sits the gap above its measured top', () => {
+    const view = mount();
+    sized(view);
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-clearance')).toBe(`${window.innerHeight - 370}px`);
+    // The region's foot is that clearance plus the notice gap (styles/noticeRegion.css).
+    const css = readFileSync(resolve(__dirname, '../../styles/noticeRegion.css'), 'utf8');
+    expect(css).toMatch(/bottom: calc\(var\(--bottom-bar-clearance[^;]*\) \+ var\(--notice-gap\)\);/);
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-clearance')).toBe('');
+  });
+});
+
+describe('the outside-the-view chip on the board', () => {
+  it('shows for the tiles it is given; its press frames them on the board\'s spring', () => {
+    const done = vi.fn();
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={done} />);
+    expect(chip.props?.tiles).toBe(tiles);
+    spring.calls = [];
+    act(() => { chip.props!.onShow(tiles.rects); });
+    expect(spring.calls).toHaveLength(1);
+    chip.props!.onDone();
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('is not drawn with nothing outside', () => {
+    chip.props = null;
+    mount();
+    expect(chip.props).toBeNull();
   });
 });
 

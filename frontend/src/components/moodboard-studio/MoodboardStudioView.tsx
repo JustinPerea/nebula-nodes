@@ -44,12 +44,14 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
   fieldChanges, type BoardFieldKey, type MoodboardEditResult, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
-import { dropLayout, provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
+import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
+import { placeTiles } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
-import { BoardCanvas, type BoardMove } from './BoardCanvas';
+import { BoardCanvas, type BoardMove, type BoardTarget, type OutsideTiles } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
+import { LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
@@ -258,6 +260,11 @@ export function MoodboardStudioView() {
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
   const [uploading, setUploading] = useState(false);
+  // Tiles the last add placed outside the view: the board's edge chip (GM, #210).
+  const [outsideTiles, setOutsideTiles] = useState<OutsideTiles | null>(null);
+  const outsideSeq = useRef(0);
+  const dismissOutside = useCallback(() => setOutsideTiles(null), []);
+  useEffect(() => { setOutsideTiles(null); }, [key]);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
   // The saved override comes with it, so Studio can say who wrote it.
@@ -295,6 +302,20 @@ export function MoodboardStudioView() {
     setToast({ ...next, id: toastSeq.current, key });
   }, [key]);
   const dismissToast = useCallback(() => setToast(null), []);
+  // An info line (a paste's nothing-to-add or links line) never replaces a
+  // toast with an action (GM, #210 review answer 1): it shows only when no
+  // Undo or Redo is up, isn't queued, and is announced politely either way.
+  const [spoken, setSpoken] = useState('');
+  const showInfoLine = (text: string) => {
+    const up = toast && toast.key === key ? toast : null;
+    if (up?.action) {
+      setSpoken('');
+      window.requestAnimationFrame(() => setSpoken(text));
+      return;
+    }
+    showToast({ text });
+  };
+  const spokenLine = <span className="moodboard-board__sr-only" role="status" aria-live="polite">{spoken}</span>;
   // Undo steps are this board's, in this tab, at this epoch: a board switch,
   // a new epoch or leaving the Studio clears them (plan section 5.4).
   // Board field steps (Q83, fieldSteps.ts) go with them.
@@ -645,10 +666,10 @@ export function MoodboardStudioView() {
       .then((data: { url: string }) => data.url);
   }));
 
-  const handleFiles = (files: FileList | File[] | null) => {
-    if (!files || files.length === 0) return;
+  const handleFiles = (files: FileList | File[] | null): Promise<void> => {
+    if (!files || files.length === 0) return Promise.resolve();
     setUploading(true);
-    uploadFiles(Array.from(files))
+    return uploadFiles(Array.from(files))
       .then((urls) => addImageUrls(urls.filter(Boolean)))
       .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
       .finally(() => { if (isCurrent()) setUploading(false); });
@@ -660,18 +681,29 @@ export function MoodboardStudioView() {
     handleFiles(files);
   };
 
-  /** Files dropped on the Board view: each lands where it was dropped (the
-   *  first centred at the pointer, the rest in a row beside it), sized from
-   *  its aspect, as one step sent at once. */
-  const dropFiles = (files: File[], at: { x: number; y: number }) => {
-    if (files.length === 0 || !isCurrent()) return;
+  /** Files dropped, added or pasted on the Board view, sized from their
+   *  aspect and placed by lib/boardPlacement (one helper for all three, GM's
+   *  #210 rulings): never on top of a tile, in view when there's room, else
+   *  just outside it with the edge chip. One step, sent at once. */
+  const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
+    if (files.length === 0 || !isCurrent()) return Promise.resolve();
+    // Each new add replaces the last one's chip.
+    setOutsideTiles(null);
     setUploading(true);
-    Promise.all([uploadFiles(files), Promise.all(files.map((file) => readImageAspect(file)))])
+    return Promise.all([uploadFiles(files), Promise.all(files.map((file) => readImageAspect(file)))])
       .then(([urls, aspects]) => {
         if (!isCurrent()) return;
         const placed = urls.map((url, index) => ({ url, aspect: aspects[index] })).filter((item) => item.url);
         if (placed.length === 0) return;
-        const spots = dropLayout(at, placed.map((item) => sizeFor(1, item.aspect)));
+        const sizes = placed.map((item) => sizeFor(1, item.aspect));
+        const occupied = (draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
+          .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h })));
+        const { spots, outside } = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
+        if (outside.length > 0) {
+          outsideSeq.current += 1;
+          setOutsideTiles({ id: outsideSeq.current, thumb: placed[outside[0]].url,
+            rects: outside.map((index) => ({ ...spots[index], width: sizes[index][0], height: sizes[index][1] })) });
+        }
         const ops: MoodboardOp[] = placed.map((item, index) => ({
           op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: spots[index] }));
         const count = (draftNow()?.images ?? []).length;
@@ -860,6 +892,80 @@ export function MoodboardStudioView() {
     const onKey = (event: KeyboardEvent) => keyHandler.current(event);
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // Cmd+V (Justin decided, 2026-10-31): the clipboard's images join the
+  // board as a drop's do, through the same upload, checks and one undo
+  // step. Board view: the shared placement from the pointer, else the middle
+  // of the view (lib/boardPlacement). List view: at the end, in clipboard
+  // order. A paste meant for a text field (Direction, Avoid, a colour, a
+  // note) or a dialog stays the field's. Bound only while the Studio is
+  // mounted, so no other screen gets it. A paste another listener already
+  // handled (defaultPrevented) is left alone. Nothing in the Studio refuses
+  // a paste for a tab following an agent's switch, as nothing refuses a
+  // drop there (hooks/useFollowingReadOnly is the canvas's only).
+  const pasteTarget = useRef<(() => BoardTarget) | null>(null);
+  const pasteHandler = useRef<(event: ClipboardEvent) => void>(() => {});
+  // One physical press is one paste (GM, #210 review answer 2): the paste
+  // events of a held Cmd/Ctrl+V's repeats are ignored, until the key is up.
+  // Edit > Paste (no keydown) and separate presses always add.
+  const heldPaste = useRef(false);
+  // The backstop if the shell's key events aren't reliable: files still
+  // uploading from an earlier paste, by size, type and bytes hash. A paste
+  // of an identical file while it uploads is ignored; a different one goes.
+  const pasteUploading = useRef(new Map<string, number>());
+  const pasteFiles = async (files: File[], target: BoardTarget | undefined) => {
+    const signatures = await Promise.all(files.map(fileSignature));
+    const fresh = files.filter((_, index) => !pasteUploading.current.has(signatures[index]));
+    if (fresh.length === 0) return;
+    const mine = signatures.filter((_, index) => fresh.includes(files[index]));
+    for (const signature of mine) pasteUploading.current.set(signature, (pasteUploading.current.get(signature) ?? 0) + 1);
+    try {
+      await (target ? dropFiles(fresh, target) : handleFiles(fresh));
+    } finally {
+      for (const signature of mine) {
+        const left = (pasteUploading.current.get(signature) ?? 1) - 1;
+        if (left > 0) pasteUploading.current.set(signature, left);
+        else pasteUploading.current.delete(signature);
+      }
+    }
+  };
+  useLayoutEffect(() => {
+    pasteHandler.current = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || loading || !isCurrent() || !isStudioPasteTarget(event.target)) return;
+      if (heldPaste.current) {
+        event.preventDefault();
+        return;
+      }
+      const { files, links } = readClipboardImages(event.clipboardData);
+      // The next paste replaces the last one's chip, whatever it holds.
+      setOutsideTiles(null);
+      if (files.length > 0) {
+        event.preventDefault();
+        void pasteFiles(files, view === 'board' ? pasteTarget.current?.() : undefined);
+        return;
+      }
+      event.preventDefault();
+      // Only links: Nebula fetches none for a board yet (decision D6; pasted
+      // links come in their own PR), so it says so and adds nothing (GM, #210 item 2).
+      showInfoLine(links.length > 0 ? LINKS_NOT_ADDED : NOTHING_TO_PASTE);
+    };
+  });
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => pasteHandler.current(event);
+    const isPasteKey = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'v';
+    const onKeyDown = (event: KeyboardEvent) => { if (isPasteKey(event)) heldPaste.current = event.repeat; };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'v' || event.key === 'Meta' || event.key === 'Control') heldPaste.current = false;
+    };
+    document.addEventListener('paste', onPaste);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      document.removeEventListener('paste', onPaste);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('keyup', onKeyUp, true);
+    };
   }, []);
 
   /** The image the board opens on, or null for #1: a pick, not a reorder,
@@ -1269,7 +1375,8 @@ export function MoodboardStudioView() {
             <>
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} />
+                uploading={uploading} pasteTarget={pasteTarget}
+                outside={outsideTiles} onOutsideDone={dismissOutside} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
           )}
@@ -1283,6 +1390,7 @@ export function MoodboardStudioView() {
           </BoardSidePanel>
         )}
         {trashToast}
+        {spokenLine}
       </div>
     );
   }
@@ -1325,6 +1433,7 @@ export function MoodboardStudioView() {
       </main>
       <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
       {trashToast}
+      {spokenLine}
     </div>
   );
 }

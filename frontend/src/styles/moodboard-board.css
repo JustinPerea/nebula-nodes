@@ -513,3 +513,95 @@ html body .moodboard-board-panel .moodboard-def__row {
     animation: notice-fade-in 180ms ease-out both;
   }
 }
+
+/* Tiles added outside the view (GM - Design, #210 answer 1): a chip on the
+   view's edge nearest the first tile, its arrow pointing at it. It enters by
+   sliding 8 px in from that edge on the board's spring (no fade); with
+   reduced motion it simply appears. OutsideChip sets its place along the edge. */
+.moodboard-board__outside-chip {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--mb-board-edge-strong);
+  border-radius: 6px;
+  background: var(--mb-board-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  color: var(--mb-board-ink);
+  font: inherit;
+  font-family: var(--mb-board-font);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: 420ms var(--mb-board-spring) both;
+}
+
+.moodboard-board__outside-chip:hover,
+.moodboard-board__outside-chip:focus-visible {
+  border-color: var(--mb-board-select);
+}
+
+.moodboard-board__outside-chip--right {
+  right: 12px;
+  transform: translateY(-50%);
+  animation-name: mb-outside-in-right;
+}
+
+.moodboard-board__outside-chip--left {
+  left: 12px;
+  padding: 4px 4px 4px 10px;
+  transform: translateY(-50%);
+  animation-name: mb-outside-in-left;
+}
+
+.moodboard-board__outside-chip--top {
+  top: 12px;
+  transform: translateX(-50%);
+  animation-name: mb-outside-in-top;
+}
+
+.moodboard-board__outside-chip--bottom {
+  /* OutsideChip puts its foot on the lowest line clear of the toolbar and
+     the notice band (lib/bottomBar.ts floatingBottomLimit). */
+  transform: translate(-50%, -100%);
+  animation-name: mb-outside-in-bottom;
+}
+
+.moodboard-board__outside-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.moodboard-board__outside-arrow {
+  font-size: 14px;
+}
+
+.moodboard-board__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes mb-outside-in-right { from { transform: translate(8px, -50%); } to { transform: translate(0, -50%); } }
+@keyframes mb-outside-in-left { from { transform: translate(-8px, -50%); } to { transform: translate(0, -50%); } }
+@keyframes mb-outside-in-top { from { transform: translate(-50%, -8px); } to { transform: translate(-50%, 0); } }
+@keyframes mb-outside-in-bottom { from { transform: translate(-50%, calc(-100% + 8px)); } to { transform: translate(-50%, -100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .moodboard-board__outside-chip {
+    animation: none;
+  }
+}
