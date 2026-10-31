@@ -1827,28 +1827,31 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 
 
 def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
-                params: Mapping[str, Any] | None = None) -> str:
+                params: Mapping[str, Any] | None = None) -> Any:
     """What the person can change where the node is, as the action's first
     clause (person_line.route_action names who else can take the run; GM, PR
-    #203 r31 item 3: never "or switch provider")."""
+    #203 r31 item 3: never "or switch provider"), a person_line.Fix that says
+    how many options it lists (r32 item 1: "Pick A, B or C, or switch to …")."""
+    from execution.person_line import Fix
+
     param = str(block.param or "")
     spec = param_definition(definition, param) if param else None
     if block.reason == HIDDEN:
-        return _hidden_fix_person(definition, param)
+        return Fix(_hidden_fix_person(definition, param))
     values = _accepted_values(route, block)
     label = f"“{_param_label(spec, param)}”"
     if (spec or {}).get("type") == "boolean" and block.reason in (UNSUPPORTED, BLOCKED):
         on = match_value((params or {}).get(param)) in {"true", WIRED}
-        return f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}"
+        return Fix(f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}")
     if block.reason == BLOCKED:
-        return f"Clear {label}"
+        return Fix(f"Clear {label}")
     if values:
-        return f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}"
+        return Fix(f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}", len(values))
     if block.reason == PORTS:
-        return "Disconnect the extra inputs"
+        return Fix("Disconnect the extra inputs")
     if block.reason == REQUIRES:
-        return f"Set “{_param_label(spec, param)}”"
-    return "Change that setting"
+        return Fix(f"Set “{_param_label(spec, param)}”")
+    return Fix("Change that setting")
 
 
 def route_unavailable_line(
@@ -1861,7 +1864,7 @@ def route_unavailable_line(
     every card line). The message itself stays the agents' text. None when
     the run can start. ``title`` names the node as the line's reader sees it
     (the proposal bar's “Name”, node_readiness.instance_missing_line); the
-    card names it by its type, and on Auto with no key set keeps its run
+    card names it by its type, in quotes (card_subject), and on Auto with no key set keeps its run
     line, ", then run the node again" (GM, PR #203 r29 item 1)."""
     from execution.person_line import missing_key_line
 
@@ -1871,7 +1874,16 @@ def route_unavailable_line(
     reason = _route_reason(definition, params, found)
     if reason is None:
         return missing_key_line(found[0].missing) if title is None else None
-    return reason.line(title or str(definition.get("displayName") or "This node"))
+    return reason.line(title or card_subject(definition))
+
+
+def card_subject(definition: Mapping[str, Any]) -> str:
+    """How a card's route line names its node: the type's name in quotes, as
+    the bar and the Agent log quote every name (GM, PR #203 r32: "“FLUX 3
+    Image” is set to Replicate…"), or "This node" when it has none. A run's
+    node carries no label, so the card names it by its type."""
+    name = str(definition.get("displayName") or "").strip()
+    return f"“{name}”" if name else "This node"
 
 
 def route_unavailable_reason(

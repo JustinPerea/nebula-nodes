@@ -614,10 +614,13 @@ function frameOwner(event) {
   return { key: frameKey(frame) ?? frame, sender: event?.sender ?? null };
 }
 
-/** Two owners are the same frame (frameOwner), or the same value. */
+/** Two owners are the same frame in the same page (frameOwner: its ids
+ * and its webContents; review 16 of PR #203, settings NIT-4), or the same
+ * value. */
 function sameOwner(a, b) {
   if (a === b) return true;
-  return Boolean(a && b && typeof a === 'object' && typeof b === 'object' && 'key' in a && 'key' in b && a.key === b.key);
+  return Boolean(a && b && typeof a === 'object' && typeof b === 'object' && 'key' in a && 'key' in b
+    && a.key === b.key && a.sender === b.sender);
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +674,11 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
         const mainFrame = details?.isMainFrame ?? rest[2] ?? true;
         if (!sameDocument && mainFrame) forget();
       });
+      // The new document committed (did-navigate is the main frame's
+      // cross-document commit; a same-document one is did-navigate-in-page):
+      // a write the old document made after its navigation started is final
+      // too (review 16 of PR #203, settings NIT-1).
+      sender.on('did-navigate', forget);
     }
     return frameOwner(event);
   }

@@ -81,8 +81,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'components/canvas/PinComposer.tsx', text: '`${headingText} ${targetNode}`',
     why: 'PR #200\'s note composer: an accessible name (the heading and the node id when two cards share a title), never a failure line' },
   { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'lib/directRoute.ts', text: '`${name} can\'t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`',
-    why: 'GM\'s direct-route line: the tail is its own fixed "fix" sentences' },
   { file: 'store/providerReadinessStore.ts', text: '`${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',

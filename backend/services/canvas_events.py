@@ -144,6 +144,11 @@ EVENT_KINDS = frozenset({
     "project.renamed",
     "project.deleted",
     "project.restored",
+    # Nebula put settings.json back from the copy it kept for an in-place
+    # save that was cut short and left the file unreadable (at start;
+    # services/settings.restore_settings_from_backup): data {file}, the
+    # file's shown path. Never a key or a setting.
+    "settings.restored",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",

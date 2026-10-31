@@ -441,6 +441,11 @@ def test_every_not_ready_line_starts_with_the_quoted_name_and_the_table_is_curre
     assert (BACKEND / "tests" / "fixtures" / "not_ready_reasons.json").read_text(encoding="utf-8") == built
     reasons = json.loads(built)["reasons"]
     assert len(reasons) > 40
+    # Every kind of reason appears, so a kind no node reaches is caught
+    # (review 16 of PR #203, tests LOW-1).
+    from execution import person_line
+
+    assert {reason["kind"] for reason in reasons} == set(person_line.NOT_READY_PREDICATES)
     for reason in reasons:
         assert reason["line"] == f"“{reason['name']}” {reason['one']}", reason
         assert reason["many"] != reason["one"] or reason["one"].startswith("can’t run on"), reason

@@ -10,10 +10,11 @@ import stat
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import httpx
 
@@ -90,7 +91,9 @@ def settings_write_block() -> SettingsUnwritable | None:
 
     - A folder on the way that is a file: "not_a_folder", naming that file.
     - Folders that aren't there yet are made (a fresh install) when the
-      nearest one that is takes a new folder; else "folder".
+      nearest one that is takes a new folder; else "folder", naming that
+      nearest folder: the one whose permissions the person can change (GM,
+      PR #203 r33 item 5: "~/ro", never the "~/ro/nebula" that isn't there).
     - A file that is there: writable for this user is enough (in place when
       its folder takes no temp file); read-only is "file".
     - No file yet: its folder must take one ("folder")."""
@@ -104,7 +107,7 @@ def settings_write_block() -> SettingsUnwritable | None:
     if nearest != folder:
         if os.access(nearest, os.W_OK | os.X_OK):
             return None
-        return SettingsUnwritable(errno.EACCES, "settings folder can't be made", folder, "folder")
+        return SettingsUnwritable(errno.EACCES, "settings folder can't be made", nearest, "folder")
     if path.exists():
         if os.access(path, os.W_OK):
             return None
@@ -404,41 +407,72 @@ def save_settings(settings: dict[str, Any]) -> None:
         to_write["apiKeys"] = {}
     text = json.dumps(to_write, indent=2) + "\n"
 
-    # Whole or not at all where that is safe (PR #203 round 15): the new
-    # settings go to a temp file beside the old one, then replace it in one
-    # rename, so a save cut short never leaves a file Nebula can't read.
-    # Where a rename would lose what an in-place write kept, or the folder
-    # takes no temp file, the file is written in place as before round 15,
-    # so no save that worked then is refused now (review 15, settings-keychain
-    # MEDIUM-1 and NIT-1). Refused only when neither way can write
-    # (settings_write_block); the file is then left as it was.
+    # Whole or not at all wherever the file can be replaced (PR #203 round
+    # 15; review 16, settings MEDIUM-1): the new settings go to a temp file
+    # beside the old one, which takes the old file's mode, owner, ACL and
+    # extended attributes, then replace it in one rename. Only a file a
+    # rename would break (a second name, another owner Nebula can't give it
+    # back to) or one whose folder takes no temp file, whose metadata can't
+    # be carried, or whose rename is refused, is written in place. That
+    # write isn't atomic, and it is bounded so no failure loses the old
+    # settings: the file grows first, then the new text goes over the old,
+    # then it is cut to length (_overwrite), with a verified copy of the old
+    # file kept in Nebula's own folder until it is done (_keep_backup;
+    # restored at the next start when the file doesn't parse,
+    # restore_settings_from_backup). The whole save holds an exclusive lock
+    # (_save_lock), so two Nebulas never interleave. Refused only when
+    # neither way can write (settings_write_block); the file is then left as
+    # it was.
     block = settings_write_block()
     if block is not None:
         raise block
     path = settings_file()
-    if not path.parent.is_dir():
-        # A fresh install: its folder isn't there yet (review 15, LOW-1).
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
-        before = path.stat()
-    except FileNotFoundError:
-        before = None
-    if before is not None and not _replace_keeps_the_file(path, before):
-        _write_in_place(path, text)
-        return
-    try:
-        _write_atomically(path, text, before)
-    except _InPlaceInstead:
-        _write_in_place(path, text)
+    _make_folders(path.parent)
+    for _attempt in range(3):
+        with _save_lock(path):
+            try:
+                before = os.lstat(path)
+            except FileNotFoundError:
+                before = None
+            if before is None or not stat.S_ISLNK(before.st_mode):
+                try:
+                    _write(path, text.encode("utf-8"), before, backup=True)
+                    return
+                except _Changed:
+                    pass
+        # The file changed under the save (a symlink swapped in, another
+        # file put in its place): decided again, as a new save would be.
+        path = settings_file()
+    raise OSError(errno.EAGAIN, "the settings file kept changing during the save", str(path))
 
 
 class _InPlaceInstead(Exception):
-    """The atomic save can't keep what the file has (its group, its folder
-    takes no temp file, or the rename is refused): write it in place."""
+    """The atomic save can't keep what the file has (its owner or group,
+    its ACL or attributes, its folder takes no temp file, or the rename is
+    refused): write it in place."""
 
 
-# Extended attributes every new file gets on its own, so a replace loses
-# nothing by them: macOS stamps com.apple.provenance on files a process
+class _Changed(Exception):
+    """The file isn't the one the save decided on any more (NIT-3 of review
+    16: a symlink or another file swapped in): decide again."""
+
+
+def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bool) -> None:
+    """``data`` to ``path`` (resolved, never a symlink): atomically when the
+    file can be replaced, else in place (save_settings). ``backup``: keep a
+    copy of the old file while it is written in place (off for the restore,
+    whose copy is the one being put back)."""
+    if before is not None and not _replace_keeps_the_file(path, before):
+        _write_in_place(path, data, before, backup=backup)
+        return
+    try:
+        _write_atomically(path, data, before)
+    except _InPlaceInstead:
+        _write_in_place(path, data, before, backup=backup)  # type: ignore[arg-type] - only raised with a file there
+
+
+# Extended attributes every new file gets on its own, so a temp file needs
+# no copy of them: macOS stamps com.apple.provenance on files a process
 # writes, and SELinux labels new files by policy.
 _OWN_XATTRS = frozenset({"com.apple.provenance", "security.selinux"})
 
@@ -447,17 +481,15 @@ def _replace_keeps_the_file(path: Path, before: os.stat_result) -> bool:
     """Whether replacing ``path`` (resolved: never a symlink) with a new
     file keeps what an in-place write keeps: a regular file with one name
     (a hard link's other names would keep the old settings), owned by this
-    user (a rename makes the file this user's), with no ACL and no extended
-    attribute of its own (review 15, settings-keychain NIT-1). Unknown is
-    no."""
+    user or one Nebula can give the new file back to (it runs as root). Its
+    mode, group, ACL and extended attributes are carried onto the new file
+    (_write_atomically); one that can't be carried falls back to in place
+    (review 16 of PR #203, settings MEDIUM-1). Unknown is no."""
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
         return False
-    if hasattr(os, "geteuid") and before.st_uid != os.geteuid():
+    if hasattr(os, "geteuid") and before.st_uid != os.geteuid() and os.geteuid() != 0:
         return False
-    try:
-        return not _has_own_metadata(path)
-    except OSError:
-        return False
+    return True
 
 
 def _has_own_metadata(path: Path) -> bool:
@@ -471,11 +503,20 @@ def _has_own_metadata(path: Path) -> bool:
     return False
 
 
-def _darwin_metadata(path: Path) -> bool:
+def _libc() -> Any:
     import ctypes
     import ctypes.util
 
-    libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+    return ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+
+
+_ACL_TYPE_EXTENDED = 0x00000100
+
+
+def _darwin_metadata(path: Path) -> bool:
+    import ctypes
+
+    libc = _libc()
     raw = os.fsencode(path)
     libc.listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
     libc.listxattr.restype = ctypes.c_ssize_t
@@ -492,7 +533,7 @@ def _darwin_metadata(path: Path) -> bool:
             return True
     libc.acl_get_file.argtypes = [ctypes.c_char_p, ctypes.c_int]
     libc.acl_get_file.restype = ctypes.c_void_p
-    acl = libc.acl_get_file(raw, 0x00000100)  # ACL_TYPE_EXTENDED
+    acl = libc.acl_get_file(raw, _ACL_TYPE_EXTENDED)
     if not acl:
         if ctypes.get_errno() in (errno.ENOENT, 0):
             return False
@@ -502,16 +543,92 @@ def _darwin_metadata(path: Path) -> bool:
     return True
 
 
-def _write_atomically(path: Path, text: str, before: os.stat_result | None) -> None:
+# copyfile(3)'s flags: the ACL and the extended attributes, nothing else
+# (the data is the new settings, the mode is set on its own).
+_COPYFILE_ACL = 1 << 0
+_COPYFILE_XATTR = 1 << 2
+
+
+def _carry_metadata(path: Path, temp: str) -> None:
+    """Give the temp file the old file's ACL and extended attributes, so the
+    rename loses neither (review 16 of PR #203, settings MEDIUM-1 a): macOS
+    through copyfile(3) with COPYFILE_ACL | COPYFILE_XATTR, Linux by copying
+    each xattr (its POSIX ACL is system.posix_acl_access). A copy that
+    fails, or a system with neither, writes the file in place instead."""
+    try:
+        if not _has_own_metadata(path):
+            return
+    except OSError:
+        pass  # unknown: the copy says whether it can be carried
+    try:
+        if sys.platform == "darwin":
+            _darwin_copy_metadata(path, temp)
+        elif hasattr(os, "listxattr"):
+            for name in os.listxattr(path, follow_symlinks=False):
+                if name not in _OWN_XATTRS:
+                    os.setxattr(temp, name, os.getxattr(path, name, follow_symlinks=False), follow_symlinks=False)
+        else:
+            raise OSError(errno.ENOTSUP, "no way to carry the file's metadata", str(path))
+    except OSError as exc:
+        raise _InPlaceInstead from exc
+
+
+def _darwin_copy_metadata(path: Path, temp: str) -> None:
+    import ctypes
+
+    libc = _libc()
+    libc.copyfile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32]
+    libc.copyfile.restype = ctypes.c_int
+    if libc.copyfile(os.fsencode(path), os.fsencode(temp), None, _COPYFILE_ACL | _COPYFILE_XATTR) < 0:
+        raise OSError(ctypes.get_errno(), "copyfile failed", str(path))
+
+
+def _darwin_clear_acl(path: str) -> None:
+    """Take a copied ACL off a temp file again, so one that denies delete
+    doesn't keep the temp file (with the keys) from being removed."""
+    import ctypes
+
+    libc = _libc()
+    libc.acl_init.argtypes = [ctypes.c_int]
+    libc.acl_init.restype = ctypes.c_void_p
+    libc.acl_set_file.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+    libc.acl_set_file.restype = ctypes.c_int
+    libc.acl_free.argtypes = [ctypes.c_void_p]
+    acl = libc.acl_init(0)
+    if acl:
+        try:
+            libc.acl_set_file(os.fsencode(path), _ACL_TYPE_EXTENDED, acl)
+        finally:
+            libc.acl_free(acl)
+
+
+def _remove_temp(temp: str) -> None:
+    try:
+        os.unlink(temp)
+        return
+    except PermissionError:
+        if sys.platform != "darwin":
+            return
+    except OSError:
+        return  # the folder turned read-only too: swept at the next start
+    try:
+        _darwin_clear_acl(temp)
+        os.unlink(temp)
+    except OSError:
+        pass
+
+
+def _write_atomically(path: Path, data: bytes, before: os.stat_result | None) -> None:
     """The temp file (this user's only from the start), written whole, given
-    the old file's mode and group, then renamed over the file. It is removed
-    on any failure, whatever was raised, so no copy of the keys is left
-    beside the file (review 15, settings-keychain LOW-2); a folder that takes
-    no temp file, or a rename that is refused, falls back to the in-place
-    write (_InPlaceInstead)."""
+    the old file's owner and group, mode, ACL and extended attributes, then
+    renamed over the file. It is removed on any failure, whatever was
+    raised, so no copy of the keys is left beside the file (review 15,
+    settings-keychain LOW-2); a folder that takes no temp file, an owner,
+    group or metadata that can't be carried, or a rename that is refused,
+    falls back to the in-place write (_InPlaceInstead)."""
     mode = before.st_mode & 0o7777 if before is not None else 0o600  # a new file holds keys
     try:
-        fd, temp = tempfile.mkstemp(prefix=TEMP_PREFIX, suffix=TEMP_SUFFIX, dir=path.parent)  # 0600
+        fd, temp = tempfile.mkstemp(prefix=_temp_prefix(), suffix=TEMP_SUFFIX, dir=path.parent)  # 0600
     except OSError as exc:
         if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
             raise _InPlaceInstead from exc
@@ -522,16 +639,16 @@ def _write_atomically(path: Path, text: str, before: os.stat_result | None) -> N
         raise
     done = False
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        if before is not None and os.stat(temp).st_gid != before.st_gid:
-            try:
-                os.chown(temp, -1, before.st_gid)
-            except OSError as exc:
-                raise _InPlaceInstead from exc
-        os.chmod(temp, mode)
+        try:
+            _write_all(fd, data)
+            os.fsync(fd)
+            if before is not None:
+                _carry_owner(fd, before)
+            os.fchmod(fd, mode)
+        finally:
+            os.close(fd)
+        if before is not None:
+            _carry_metadata(path, temp)
         try:
             _replace(temp, path)
         except OSError as exc:
@@ -543,62 +660,410 @@ def _write_atomically(path: Path, text: str, before: os.stat_result | None) -> N
         done = True
     finally:
         if not done:
-            try:
-                os.unlink(temp)
-            except OSError:
-                pass  # the folder turned read-only too: swept at the next start
+            _remove_temp(temp)
 
 
-def _write_in_place(path: Path, text: str) -> None:
-    """The file written where it is, as every save was before round 15: its
-    name, links, owner, ACL and attributes stay. Not atomic."""
+def _carry_owner(fd: int, before: os.stat_result) -> None:
+    """The temp file takes the old file's owner and group where they differ
+    (a setgid folder, a chgrp-ed file; another owner only as root); one
+    Nebula can't give it writes the file in place (review 16, settings
+    LOW-2: mutant S15)."""
+    info = os.fstat(fd)
+    uid = before.st_uid if before.st_uid != info.st_uid else -1
+    gid = before.st_gid if before.st_gid != info.st_gid else -1
+    if uid == -1 and gid == -1:
+        return
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
+        _chown(fd, uid, gid)
     except OSError as exc:
+        raise _InPlaceInstead from exc
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        written = os.write(fd, view)
+        view = view[written:]
+
+
+def _pwrite_all(fd: int, data: bytes, offset: int) -> None:
+    view = memoryview(data)
+    while view:
+        written = _pwrite(fd, view, offset)
+        if written <= 0:
+            raise OSError(errno.EIO, "the settings file took no bytes")
+        view, offset = view[written:], offset + written
+
+
+def _read_all(fd: int, size: int) -> bytes:
+    parts: list[bytes] = []
+    offset = 0
+    while True:
+        chunk = os.pread(fd, max(size - offset, 65536), offset)
+        if not chunk:
+            return b"".join(parts)
+        parts.append(chunk)
+        offset += len(chunk)
+
+
+def _write_in_place(path: Path, data: bytes, before: os.stat_result, *, backup: bool) -> None:
+    """The file written where it is, so its names, owner, ACL and attributes
+    stay. Opened without following a symlink and checked to be the file the
+    save decided on (review 16, settings NIT-3), with a verified copy of the
+    old file kept in Nebula's own folder while it is written (_keep_backup),
+    and written so no failure loses the old JSON (_overwrite). Not atomic:
+    a crash part way through the new text can leave the file mixed on a
+    filesystem that copies blocks on write, and the copy puts it back at
+    the next start."""
+    flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOENT):
+            raise _Changed from exc
         if exc.errno in _NOT_ALLOWED_ERRNOS:
             raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
         raise
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino):
+            raise _Changed
+        old = _read_all(fd, info.st_size)
+        if backup:
+            _keep_backup(path, old)
+        try:
+            _overwrite(fd, data, old)
+        except OSError as exc:
+            # The old bytes written back where that still works; the copy
+            # stays for the next start where it doesn't.
+            if _put_back(fd, old) and backup:
+                _drop_backup(path)
+            if exc.errno in _NOT_ALLOWED_ERRNOS:
+                raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+            raise
+    finally:
+        os.close(fd)
+    if backup:
+        _drop_backup(path)
 
 
-# The rename that puts a temp file in place: a seam tests patch by name, so
-# no other os.replace in a request is touched (review 15, sockets-tests NIT-2).
+def _overwrite(fd: int, data: bytes, old: bytes) -> None:
+    """Write ``data`` over ``old`` so the file parses at every step (review
+    16 of PR #203, settings MEDIUM-1 b): JSON followed by spaces still
+    parses. First grow the file with spaces to the new length (a full disk
+    fails here, before the old JSON changes), then write the new JSON at 0,
+    padded with spaces to the old length when it is shorter, then cut the
+    file to the new length; an fsync after each."""
+    old_len, new_len = len(old), len(data)
+    if new_len > old_len:
+        _pwrite_all(fd, b" " * (new_len - old_len), old_len)
+        os.fsync(fd)
+    _pwrite_all(fd, data + b" " * (old_len - new_len), 0)
+    os.fsync(fd)
+    if new_len < old_len:
+        _truncate(fd, new_len)
+        os.fsync(fd)
+
+
+def _put_back(fd: int, old: bytes) -> bool:
+    try:
+        _pwrite_all(fd, old, 0)
+        _truncate(fd, len(old))
+        os.fsync(fd)
+        return True
+    except OSError:
+        return False
+
+
+# -- the copy kept while the file is written in place -----------------------------------
+#
+# Before any in-place write, the old file's bytes go to Nebula's own folder
+# (NEBULA_STATE_DIR, else ~/.nebula: the settings folder may take no new
+# file, which is why the write is in place), 0600 and fsync'd, read back to
+# check it, and named for the settings path. It is removed once the write
+# is done. At the next start, a settings.json that doesn't parse while its
+# copy does is put back from it (restore_settings_from_backup; review 16 of
+# PR #203, settings MEDIUM-1 d).
+
+BACKUP_PREFIX = "settings-backup-"
+
+
+def _state_dir() -> Path:
+    raw = os.environ.get("NEBULA_STATE_DIR")
+    return (Path(raw) if raw else Path.home() / ".nebula").expanduser()
+
+
+def backup_path(path: Path) -> Path:
+    """Where the copy of ``path`` is kept while it is written in place."""
+    import hashlib
+
+    digest = hashlib.sha256(os.fsencode(path)).hexdigest()[:16]
+    return _state_dir() / f"{BACKUP_PREFIX}{digest}.json"
+
+
+def _keep_backup(path: Path, old: bytes) -> None:
+    """The verified copy of ``old`` (the file's bytes before the write). A
+    file that doesn't parse has nothing to keep. A copy Nebula isn't allowed
+    to make refuses the save, naming its folder, before the file changes."""
+    try:
+        json.loads(old)
+        text = old.decode("utf-8")
+    except ValueError:
+        return
+    body = json.dumps({"path": str(path), "text": text}).encode("utf-8")
+    target = backup_path(path)
+    folder = target.parent
+    try:
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd, temp = tempfile.mkstemp(prefix=_temp_prefix(), suffix=TEMP_SUFFIX, dir=folder)  # 0600
+        done = False
+        try:
+            try:
+                _write_all(fd, body)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.replace(temp, target)
+            done = True
+        finally:
+            if not done:
+                _remove_temp(temp)
+        if target.read_bytes() != body:
+            raise OSError(errno.EIO, "the settings copy didn't read back", str(target))
+    except OSError as exc:
+        if exc.errno in _NOT_ALLOWED_ERRNOS:
+            raise SettingsUnwritable(exc.errno, "Nebula's folder takes no copy of the settings", folder,
+                                     "folder") from exc
+        raise
+
+
+def _drop_backup(path: Path) -> None:
+    try:
+        backup_path(path).unlink()
+    except OSError:
+        pass
+
+
+def restore_settings_from_backup() -> Path | None:
+    """At start: when a copy kept for an in-place write is still there (the
+    write was cut short) and settings.json reads but doesn't parse while the
+    copy does, put the copy back and return the settings path; the caller
+    journals and logs it. A file that parses (the write finished, or was cut
+    after the new JSON was whole) drops the copy. A file that is gone or
+    can't be read is left, with its copy, as it is. Never raises."""
+    try:
+        path = settings_file()
+        target = backup_path(path)
+        raw = target.read_bytes()
+    except (SettingsUnreadable, OSError):
+        return None
+    try:
+        kept = json.loads(raw)
+        text = kept["text"]
+        json.loads(text)
+        for_this_file = kept["path"] == str(path)
+    except (ValueError, KeyError, TypeError):
+        _drop_backup(path)
+        return None
+    if not for_this_file:
+        return None
+    try:
+        current = path.read_bytes()
+    except FileNotFoundError:
+        _drop_backup(path)
+        return None
+    except OSError:
+        return None
+    try:
+        json.loads(current)
+        _drop_backup(path)
+        return None
+    except ValueError:
+        pass
+    try:
+        with _save_lock(path):
+            _write(path, text.encode("utf-8"), os.lstat(path), backup=False)
+    except Exception:  # noqa: BLE001 - left with its copy for the next start
+        return None
+    _drop_backup(path)
+    return path
+
+
+# -- one save at a time -------------------------------------------------------------------
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows: no lock
+    fcntl = None  # type: ignore[assignment]
+
+# How long a save waits for another process's save to finish.
+LOCK_TIMEOUT_SECONDS = 10.0
+
+
+@contextmanager
+def _save_lock(path: Path) -> Iterator[None]:
+    """An exclusive flock for the whole save (review 16 of PR #203, settings
+    MEDIUM-1 c): on the file when it is there, else on its folder. A save
+    that waited while another replaced the file holds a lock on the old
+    file, so it locks again until its lock is on the file that is there
+    now. No lock where the system has none or the file and its folder can't
+    be opened to read; never a save refused for that."""
+    fd = _locked(path)
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)  # releases the lock
+
+
+def _locked(path: Path) -> int | None:
+    if fcntl is None:
+        return None
+    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+    told = False
+    while True:
+        fd = _lock_target(path)
+        if fd is None:
+            return None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            if not told:
+                told = True
+                _lock_waiting()
+            if time.monotonic() > deadline:
+                raise OSError(errno.EAGAIN, "another save holds the settings file", str(path)) from None
+            time.sleep(0.02)
+            continue
+        except OSError:
+            os.close(fd)
+            return None  # this filesystem takes no lock
+        if _lock_holds(fd, path):
+            return fd
+        os.close(fd)
+
+
+def _lock_target(path: Path) -> int | None:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    try:
+        return os.open(path, flags | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        pass
+    try:
+        return os.open(path.parent, flags)
+    except OSError:
+        return None
+
+
+def _lock_holds(fd: int, path: Path) -> bool:
+    """Whether the lock on ``fd`` is the save's: the file that is at
+    ``path`` now, or its folder while there is no file."""
+    info = os.fstat(fd)
+    try:
+        now = os.lstat(path)
+    except FileNotFoundError:
+        return stat.S_ISDIR(info.st_mode)
+    except OSError:
+        return True
+    if stat.S_ISDIR(info.st_mode):
+        # The folder's lock is the save's while the file can't be opened to
+        # read (every save falls back to the folder alike); a file that can
+        # be opened now is locked instead.
+        try:
+            os.close(os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)))
+        except OSError:
+            return True
+        return False
+    return (info.st_dev, info.st_ino) == (now.st_dev, now.st_ino)
+
+
+def _lock_waiting() -> None:
+    """Called once when a save starts waiting for another's lock: a seam
+    tests use to see the wait."""
+
+
+def _make_folders(folder: Path) -> None:
+    """Every folder on the way that isn't there yet, each this user's only
+    (0700: a fresh install's settings hold keys; review 16, settings NIT-2).
+    One Nebula isn't allowed to make names the folder that refuses it."""
+    missing: list[Path] = []
+    level = folder
+    while not os.path.lexists(level) and level != level.parent:
+        missing.append(level)
+        level = level.parent
+    for level in reversed(missing):
+        try:
+            os.mkdir(level, 0o700)
+        except FileExistsError:
+            continue
+        except OSError as exc:
+            if exc.errno in _NOT_ALLOWED_ERRNOS:
+                raise SettingsUnwritable(exc.errno, "settings folder can't be made", level.parent, "folder") from exc
+            if exc.errno == errno.ENOTDIR:
+                raise SettingsUnwritable(exc.errno, "a folder on the way is a file", level.parent,
+                                         "not_a_folder") from exc
+            raise
+        os.chmod(level, 0o700)
+
+
+# The seams tests patch by name, so no other call in a request is touched
+# (review 15, sockets-tests NIT-2): the rename that puts a temp file in
+# place, the in-place write's positioned write and cut, and the temp file's
+# chown.
 _replace = os.replace
+_pwrite = os.pwrite
+_truncate = os.ftruncate
+_chown = os.fchown
 
-TEMP_PREFIX = ".settings-"
+# Nebula's temp files: the marker and the process id in the name, then
+# mkstemp's 8 characters (review 16, settings LOW-1: the sweep removes only
+# these, never a file the person named like one).
+TEMP_PREFIX = ".settings-nebula-"
 TEMP_SUFFIX = ".tmp"
+_TEMP_NAME = re.compile(r"\.settings-nebula-\d+-[a-z0-9_]{8}\.tmp")
 # A temp file older than this is a save that never finished (killed between
 # the write and the rename); a newer one may be another process's save.
 STALE_TEMP_SECONDS = 60.0
 
 
+def _temp_prefix() -> str:
+    return f"{TEMP_PREFIX}{os.getpid()}-"
+
+
 def sweep_stale_temp_files(now: float | None = None) -> list[Path]:
-    """Remove temp files a save left beside settings.json when it was cut
-    short (a kill, a power cut): each is a full copy of the settings, keys
-    included (review 15, settings-keychain LOW-2). Run at startup. Only this
-    module's names, only regular files, only ones older than
-    STALE_TEMP_SECONDS. Never raises."""
+    """Remove temp files a save left beside settings.json or in Nebula's
+    own folder (the in-place write's copy) when it was cut short (a kill, a
+    power cut): each is a full copy of the settings, keys included (review
+    15, settings-keychain LOW-2). Run at startup. Only Nebula's own names
+    (_TEMP_NAME), only regular files with one name that this user owns,
+    only ones older than STALE_TEMP_SECONDS (review 16, settings LOW-1).
+    Never raises."""
     removed: list[Path] = []
     try:
-        folder = settings_file().parent
-        entries = list(folder.iterdir())
-    except (SettingsUnreadable, OSError):
-        return removed
+        folders = list(dict.fromkeys([settings_file().parent, _state_dir()]))
+    except SettingsUnreadable:
+        folders = [_state_dir()]
     cutoff = (time.time() if now is None else now) - STALE_TEMP_SECONDS
-    for entry in entries:
-        name = entry.name
-        if not (name.startswith(TEMP_PREFIX) and name.endswith(TEMP_SUFFIX)):
-            continue
+    uid = os.geteuid() if hasattr(os, "geteuid") else None
+    for folder in folders:
         try:
-            info = entry.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_mtime > cutoff:
-                continue
-            entry.unlink()
-            removed.append(entry)
+            entries = list(folder.iterdir())
         except OSError:
             continue
+        for entry in entries:
+            if not _TEMP_NAME.fullmatch(entry.name):
+                continue
+            try:
+                info = entry.lstat()
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mtime > cutoff:
+                    continue
+                if uid is not None and info.st_uid != uid:
+                    continue
+                entry.unlink()
+                removed.append(entry)
+            except OSError:
+                continue
     return removed
 
 

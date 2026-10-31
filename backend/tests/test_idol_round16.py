@@ -222,6 +222,7 @@ def client_delete_ok():
     return _person().delete("/api/settings/api-keys/FAL_KEY").status_code == 200
 
 
+@pytest.mark.unprivileged  # root ignores the ACL, so its rename isn't refused (review 16, tests NIT-2's scan)
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS ACLs (chmod +a)")
 def test_an_acl_that_denies_delete_saves_in_place_and_keeps_the_acl(home_file):
     subprocess.run(["chmod", "+a", "everyone deny delete", str(home_file)], check=True)
@@ -270,11 +271,12 @@ def _xattrs(path):
 
 
 @pytest.mark.skipif(not hasattr(os, "setxattr") and not shutil.which("xattr"), reason="no xattr support")
-def test_a_file_with_its_own_extended_attribute_is_written_in_place_and_keeps_it(home_file):
+def test_a_file_with_its_own_extended_attribute_keeps_it(home_file):
+    """Since round 17 the attribute is carried onto the new file, so the save
+    stays atomic (review 16, settings MEDIUM-1 a; tests/test_idol_round17_settings.py)."""
     _set_xattr(home_file, "nebula-tag", b"kept")
-    inode = home_file.stat().st_ino
     assert _put().status_code == 200
-    assert home_file.stat().st_ino == inode and "nebula-tag" in _xattrs(home_file)
+    assert _saved(home_file) == ["saved"] and "nebula-tag" in _xattrs(home_file)
 
 
 def test_a_file_another_user_owns_or_with_two_names_is_never_replaced(home_file):
@@ -352,12 +354,13 @@ def test_a_missing_settings_folder_is_made_this_users_only_and_the_save_lands(ho
     assert _saved(home_file) == ["saved"]
 
 
-@pytest.mark.unprivileged  # the scan can't prove a parametrized mode keeps access (it does)
-@pytest.mark.parametrize("mode", [0o644, 0o755], ids=["plain-file", "executable-file"])
-def test_a_file_where_the_folder_must_be_gets_its_own_409_never_a_500(home_file, mode):
+@pytest.mark.parametrize("executable", [False, True], ids=["plain-file", "executable-file"])
+def test_a_file_where_the_folder_must_be_gets_its_own_409_never_a_500(home_file, executable):
+    # Literal modes the marker scan proves keep access, so this runs as root
+    # too (review 16, tests NIT-1).
     shutil.rmtree(home_file.parent)
     home_file.parent.write_text("a file, not a folder", encoding="utf-8")
-    home_file.parent.chmod(mode)
+    home_file.parent.chmod(0o755 if executable else 0o644)
     client = TestClient(main.app, raise_server_exceptions=False, headers=main_person_headers())
     for response in (_put(client), client.delete("/api/settings/api-keys/FAL_KEY")):
         assert _refusal(response) == (409, NOT_A_FOLDER_LINE, "settings_not_a_folder")
@@ -404,60 +407,48 @@ def test_a_save_cut_short_after_the_temp_file_leaves_no_copy(home_file, monkeypa
 
 
 def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, monkeypatch):
+    """Read through the module's own seams only, never a process-wide patch
+    of os.fsync or tempfile.mkstemp (review 16, tests NIT-3): once the keys
+    are written and flushed (_carry_owner, the step after the fsync) the
+    temp file is 0600; it takes the file's mode only after that, just
+    before the rename."""
     home_file.chmod(0o644)
     seen = []
-    real = settings._replace
+    real_owner, real_replace = settings._carry_owner, settings._replace
 
-    def look(src, dst):
-        seen.append(stat.S_IMODE(os.stat(src).st_mode))
-        real(src, dst)
+    def written(fd, before):
+        seen.append(("written", stat.S_IMODE(os.fstat(fd).st_mode), b"fal-secret" in os.pread(fd, 1 << 16, 0)))
+        real_owner(fd, before)
 
-    monkeypatch.setattr(settings, "_replace", look)
-    real_write = settings._write_atomically
+    def renamed(src, dst):
+        seen.append(("renamed", stat.S_IMODE(os.stat(src).st_mode)))
+        real_replace(src, dst)
 
-    def spy(path, text, before):
-        made = settings.tempfile.mkstemp
-
-        def mkstemp(**kwargs):
-            fd, name = made(**kwargs)
-            seen.append(("made", stat.S_IMODE(os.stat(name).st_mode)))
-            return fd, name
-
-        real_fsync = settings.os.fsync
-
-        def fsync(fd):  # the keys are written by now: the temp file's mode while it holds them
-            seen.append(("written", stat.S_IMODE(os.fstat(fd).st_mode)))
-            real_fsync(fd)
-
-        monkeypatch.setattr(settings.tempfile, "mkstemp", mkstemp)
-        monkeypatch.setattr(settings.os, "fsync", fsync)
-        try:
-            real_write(path, text, before)
-        finally:
-            monkeypatch.setattr(settings.tempfile, "mkstemp", made)
-            monkeypatch.setattr(settings.os, "fsync", real_fsync)
-
-    monkeypatch.setattr(settings, "_write_atomically", spy)
-    settings.save_settings({"favorites": []})
-    assert seen == [("made", 0o600), ("written", 0o600), 0o644]
+    monkeypatch.setattr(settings, "_carry_owner", written)
+    monkeypatch.setattr(settings, "_replace", renamed)
+    settings.save_settings({"apiKeys": {"FAL_KEY": "fal-secret-1"}, "favorites": []})
+    assert seen == [("written", 0o600, True), ("renamed", 0o644)]
 
 
 def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
+    """Only Nebula's own temp names since round 17 (review 16, settings
+    LOW-1; tests/test_idol_round17_settings.py has the person's look-alikes)."""
     folder = home_file.parent
-    old = folder / ".settings-abc123.tmp"
+    old = folder / ".settings-nebula-123-abc12345.tmp"
     old.write_text(json.dumps(SAVED), encoding="utf-8")
-    fresh = folder / ".settings-def456.tmp"
+    fresh = folder / ".settings-nebula-123-def45678.tmp"
     fresh.write_text("{}", encoding="utf-8")
     other = folder / "notes.tmp"
     other.write_text("x", encoding="utf-8")
-    shaped_folder = folder / ".settings-dir.tmp"
+    shaped_folder = folder / ".settings-nebula-123-dir00000.tmp"
     shaped_folder.mkdir()
     past = time.time() - settings.STALE_TEMP_SECONDS - 5
     for path in (old, other, shaped_folder):
         os.utime(path, (past, past))
     with TestClient(main.app):
         pass
-    assert _left(folder) == [".settings-def456.tmp", ".settings-dir.tmp", "notes.tmp", "settings.json"]
+    assert _left(folder) == [".settings-nebula-123-def45678.tmp", ".settings-nebula-123-dir00000.tmp",
+                             "notes.tmp", "settings.json"]
 
 
 # -- GM r31 item 4: the Vertex paste error -----------------------------------

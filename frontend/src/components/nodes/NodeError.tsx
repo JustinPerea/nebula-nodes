@@ -18,6 +18,9 @@ interface NodeErrorProps {
   surface?: NodeErrorSurface;
   /** A heading other than the surface's own. */
   heading?: string;
+  /** Nebula refused the run before it started (node data `errorNotStarted`):
+   * "Nebula couldn’t start the run." (GM, PR #203 r32). */
+  notStarted?: boolean;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
   className?: string;
@@ -33,8 +36,8 @@ interface NodeErrorProps {
  * no category and shows as it is. Safety/moderation blocks keep their calmer
  * treatment.
  */
-export function NodeError({ category, friendly, person, providerText, provider, surface, heading, raw, className = 'model-node__error' }: NodeErrorProps) {
-  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading });
+export function NodeError({ category, friendly, person, providerText, provider, surface, heading, notStarted, raw, className = 'model-node__error' }: NodeErrorProps) {
+  const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading, notStarted });
   const blocked = category === 'blocked' && !person;
   const modifier = `${className.split(' ').at(-1)}--blocked`;
   return (
@@ -56,13 +59,13 @@ export function NodeError({ category, friendly, person, providerText, provider, 
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider'>;
+  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
       friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText}
-      provider={data.errorProvider} />
+      provider={data.errorProvider} notStarted={data.errorNotStarted} />
   );
 }

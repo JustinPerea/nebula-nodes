@@ -920,7 +920,7 @@ def validate_graph(
                         port_id="",
                         message=f"Missing API key: {env_key}",
                         person=missing_key_line([env_key]),
-                    )
+                    ).marked("reason")
                 )
             continue
 
@@ -933,7 +933,7 @@ def validate_graph(
                             port_id=port["id"],
                             message=f"Required input port {port['id']} is not connected",
                             person=port_line(port.get("label") or ""),
-                        )
+                        ).marked("input", str(port.get("label") or ""))
                     )
 
         env_key = node_def.get("envKeyName", [])
@@ -961,7 +961,7 @@ def validate_graph(
                     node_id=node.id, port_id="",
                     message="Sign in to Krea in Settings before running this recipe",
                     # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
-                    person="Sign in to Krea in Settings, then run the node again."))
+                    person="Sign in to Krea in Settings, then run the node again.").marked("reason"))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never
@@ -972,7 +972,7 @@ def validate_graph(
             if unavailable is not None:
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="", message=unavailable["message"],
-                    person=node_route.route_unavailable_line(node_def, routed, api_keys)))
+                    person=node_route.route_unavailable_line(node_def, routed, api_keys)).marked("reason"))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
@@ -981,7 +981,7 @@ def validate_graph(
                     port_id="",
                     message=f"Missing API key: {key_display}",
                     person=missing_key_line(key_names),
-                )
+                ).marked("reason")
             )
 
         if node.definition_id == "gemini-omni-flash":

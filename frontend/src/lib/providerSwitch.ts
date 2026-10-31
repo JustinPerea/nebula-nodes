@@ -3,7 +3,7 @@ import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
   addKeyLine, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
-  routeTakesValue,
+  routesThatCanTake, routeTakesValue, orList,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
   type RouteFix,
 } from './directRoute';
@@ -136,18 +136,19 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
 
 /** A row's block note: what this route doesn't take of the recipe, the
  * setting by its label in quotes (error copy round 3f, GM: "Switcher notes
- * become "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
+ * become "Doesn't take “{Label}”." / "Needs “{Label}”.""), with curly
+ * apostrophes (GM, PR #203 r32 item 2). */
 function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Params): string {
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
-    return `Doesn't take ${blockedSetting(definition, block, params)}.`;
+    return `Doesn’t take ${blockedSetting(definition, block, params)}.`;
   }
   if (block.reason === 'requires') return `Needs ${blockedSetting(definition, block, params)}.`;
-  if (block.reason === 'size') return "Can't make that size.";
+  if (block.reason === 'size') return 'Can’t make that size.';
   if (block.reason === 'retired') return 'Retired by the maker.';
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
     const name = personWords(portLimitName(block.param ?? '', limit));
-    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn't take connected ${name}.`;
+    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn’t take connected ${name}.`;
   }
   return `${personWords(String(block.detail ?? block.reason))}.`;
 }
@@ -162,7 +163,7 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   if (!spec) return 'no route can take it';
   if (!block) return `no ${label} key`;
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
-    return `${label} doesn't take ${blockedSetting(definition, block, params)}`;
+    return `${label} doesn’t take ${blockedSetting(definition, block, params)}`;
   }
   if (block.reason === 'requires') return `${label} needs ${blockedSetting(definition, block, params)}`;
   if (block.reason === 'ports') {
@@ -189,7 +190,7 @@ export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
 function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
   if (!unavailable.routeId && unavailable.missing.length) return AUTO_NEEDS_A_KEY;
-  return `Auto · can't run: ${autoReason(definition, unavailable, params)}`;
+  return `Auto · can’t run: ${autoReason(definition, unavailable, params)}`;
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
@@ -291,15 +292,24 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     chip: chipText(chipName, named(shortProvider), blocked),
     chipName,
     blocked,
-    message: unavailable?.message
-      // GM, PR #203 r21 item 6, verbatim: a run on the plan, never "billed".
-      ?? (signInNeeded ? `“${definition.displayName}” runs on your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
+    message: unavailable?.message ?? (signInNeeded ? kreaSignInLine(definition, routed, route.routeId ?? null, context) : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({
       routeId, label: providerLabel(routeById(definition, routeId)?.provider),
       writes: billingWrites(definition, routeId, false),
     })),
     fixes: (unavailable?.fixes ?? []).map((fix) => ({ ...fix, label: fixLabel(definition, fix) })),
   };
+}
+
+/** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6,
+ * verbatim: a run on the plan, never "billed"), naming who can take it when
+ * Nebula knows (r32 item 4: "…Sign in to Krea in Settings, or switch to
+ * fal.ai."); "or choose another provider" only when no route can. */
+function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
+  const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
+    .map((routeId) => providerLabel(routeById(definition, routeId)?.provider));
+  const switchTo = others.length ? `switch to ${orList([...new Set(others)])}` : 'choose another provider';
+  return `“${definition.displayName}” runs on your Krea plan. Sign in to Krea in Settings, or ${switchTo}.`;
 }
 
 /** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)

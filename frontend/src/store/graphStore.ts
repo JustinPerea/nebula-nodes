@@ -389,6 +389,7 @@ function markNodesErrored(
         errorPerson: hidden ? failureCopy(failure).reason : undefined,
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
+        errorNotStarted: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -424,6 +425,7 @@ function markNodesWithValidationErrors(
         errorPerson: reading.errorPerson,
         errorProviderText: undefined,
         errorProvider: undefined,
+        errorNotStarted: reading.errorNotStarted,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -9698,7 +9700,7 @@ function mergeSyncedNode(incoming: Node<NodeData>, existing: Node<NodeData> | un
         ...(cliNode.data.state === 'error' ? {
           errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
           errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
-          errorProvider: cliNode.data.errorProvider,
+          errorProvider: cliNode.data.errorProvider, errorNotStarted: cliNode.data.errorNotStarted,
         } : {}),
         keyStatus,
         ...(changedOutput ? clearBatchPreview() : {}),
@@ -14127,6 +14129,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           errorPerson: event.person ?? undefined,
           errorProviderText: event.providerText || undefined,
           errorProvider: event.provider || undefined,
+          errorNotStarted: undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -14143,6 +14146,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
               errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
+              errorNotStarted: reading.errorNotStarted,
             });
           }
         }

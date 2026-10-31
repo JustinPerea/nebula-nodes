@@ -64,7 +64,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
 
 # The shared rule for lists in a person's line: up to 3 things are named,
 # from 4 they are counted (frontend errorCopy.NAMED_AT_MOST and
@@ -555,7 +555,17 @@ def again_end(nodes: int, *, after_clause: bool = False) -> str:
     return f". Then run the {what} again." if after_clause else f", then run the {what} again."
 
 
-def route_action(fix: str | None, others: list[str], needs_key: list[str], key: str | None) -> tuple[str, bool]:
+class Fix(NamedTuple):
+    """What the person can change where the node is, as a route line's first
+    action ("Turn “Raw” off", "Pick 1K, 2K or 4K"), and how many options it
+    offers: a fix that lists two or more holds its own "or", so the switch
+    after it is a second clause (GM, PR #203 r32 item 1)."""
+
+    text: str
+    options: int = 1
+
+
+def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str], key: str | None) -> tuple[str, bool]:
     """A route line's one action sentence, without its end (GM, PR #203 r31
     item 3), and whether it holds a comma clause (again_end):
 
@@ -567,15 +577,21 @@ def route_action(fix: str | None, others: list[str], needs_key: list[str], key: 
       added (``key`` names that key): "…, or add your fal.ai API key in
       Settings and switch to fal.ai".
 
-    Never a separate "… can take it." sentence: the named switch replaces it."""
+    Two actions take a comma between them when the fix lists options (GM,
+    PR #203 r32 item 1: "Pick A, B or C, or switch to fal.ai"; the comma
+    separates two clauses, not list items). Never a separate "… can take
+    it." sentence: the named switch replaces it."""
+    text, listed = (fix.text, fix.options > 1) if isinstance(fix, Fix) else (fix, False)
     if others:
         switch = f"switch to {or_list(others)}"
-        return (f"{fix} or {switch}" if fix else switch[:1].upper() + switch[1:]), False
+        if not text:
+            return switch[:1].upper() + switch[1:], False
+        return (f"{text}, or {switch}", True) if listed else (f"{text} or {switch}", False)
     if needs_key:
         add = f"add your {key} in Settings" if key else "add its key in Settings"
         clause = f"{add} and switch to {or_list(needs_key)}"
-        return (f"{fix}, or {clause}" if fix else clause[:1].upper() + clause[1:]), bool(fix)
-    return fix or "Check its provider in Settings", False
+        return (f"{text}, or {clause}" if text else clause[:1].upper() + clause[1:]), bool(text)
+    return text or "Check its provider in Settings", False
 
 
 class NotReadyReason:
@@ -595,8 +611,9 @@ class NotReadyReason:
         self.again = again if again is not None else (one, many)
 
     @classmethod
-    def of(cls, kind: str, *, after_clause: bool = False, **fields: str) -> "NotReadyReason":
-        one, many = NOT_READY_PREDICATES[kind]
+    def of(cls, kind: str, *, after_clause: bool = False, table: dict[str, tuple[str, str]] | None = None,
+           **fields: str) -> "NotReadyReason":
+        one, many = (NOT_READY_PREDICATES if table is None else table)[kind]
         return cls(one.format(end=CARD_END, **fields), many.format(end=CARD_END, **fields),
                    again=(one.format(end=again_end(1, after_clause=after_clause), **fields),
                           many.format(end=again_end(2, after_clause=after_clause), **fields)), kind=kind)
@@ -609,6 +626,44 @@ class NotReadyReason:
         """What the proposal's notReady row carries for the merge (frontend
         canvasProposals.notReadyBarLines): None for a route's own line."""
         return None if self.own is not None else {"one": self.one, "many": self.many}
+
+
+# -- input needs: a required input with no wire, in the Agent Log's merge --
+#
+# A refused run's other stops merge as its reasons do (GM, PR #203 r33 item
+# 1): every node that needs the same input is one line, by the shared name
+# list (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from
+# 4), the plural naming the input again in the action, never "one" after a
+# count: "2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then
+# run the nodes again."; "“GPT Image 2” needs a prompt. Connect one, then
+# run the node again." Every input kind takes the same pattern from this one
+# table: {input} is the input in words (input_words), {one} what the
+# singular's action connects ("one" for "a prompt", "it" for "audio", "them"
+# for "images"). An input named by its own label (a numbered or lettered
+# one, a pass-through: connect_line) takes the "port" row, the label in
+# quotes as the card says it.
+INPUT_NEED_PREDICATES: dict[str, tuple[str, str]] = {
+    "input": ("needs {input}. Connect {one}{end}",
+              "need {input}. Connect {input} to each{end}"),
+    "port": ("needs an output connected to “{port}”. Connect one{end}",
+             "need an output connected to “{port}”. Connect one to “{port}” on each{end}"),
+}
+
+
+def _one(words: str) -> str:
+    if words.startswith(("a ", "an ")):
+        return "one"
+    return "it" if words.split()[-1].lower() in _MASS_NOUNS else "them"
+
+
+def input_need(label: object) -> NotReadyReason:
+    """A required input with no wire as the Agent Log merges it
+    (INPUT_NEED_PREDICATES), from the input's label."""
+    name = port_name(label)
+    if re.search(r"\s(\d+|[A-Z])$", name) or name.lower() == "through":
+        return NotReadyReason.of("port", table=INPUT_NEED_PREDICATES, port=str(label or "").strip())
+    words = input_words(label) if name else "an input"
+    return NotReadyReason.of("input", table=INPUT_NEED_PREDICATES, input=words, one=_one(words))
 
 
 def not_ready_subject(names: list[str]) -> str:

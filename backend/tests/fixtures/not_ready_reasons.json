@@ -745,31 +745,31 @@
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Black Forest Labs.",
-   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Black Forest Labs.",
-   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Black Forest Labs.",
-   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Black Forest Labs.",
+   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Black Forest Labs.",
+   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Black Forest Labs.",
+   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9 or switch to Replicate.",
-   "many": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9 or switch to Replicate.",
-   "line": "“Fixture Image” can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9 or switch to Replicate.",
-   "logOne": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9 or switch to Replicate, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9 or switch to Replicate, then run the nodes again."
+   "one": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9, or switch to Replicate.",
+   "many": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9, or switch to Replicate.",
+   "line": "“Fixture Image” can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9, or switch to Replicate.",
+   "logOne": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9, or switch to Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick auto, 1:1 or 16:9, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate or OpenRouter.",
-   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate or OpenRouter.",
-   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate or OpenRouter.",
-   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate or OpenRouter, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate or OpenRouter, then run the nodes again."
+   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate or OpenRouter.",
+   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate or OpenRouter.",
+   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate or OpenRouter.",
+   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate or OpenRouter. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate or OpenRouter. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -855,31 +855,31 @@
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate.",
-   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate.",
-   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate.",
-   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k or switch to Replicate, then run the nodes again."
+   "one": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate.",
+   "many": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate.",
+   "line": "“Fixture Image” can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate.",
+   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5k. Pick 768sq, 1k, 2k or 4k, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K or switch to Replicate.",
-   "many": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K or switch to Replicate.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K or switch to Replicate.",
-   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K or switch to Replicate, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K or switch to Replicate, then run the nodes again."
+   "one": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
+   "many": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
+   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2 or switch to Black Forest Labs.",
-   "many": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2 or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2 or switch to Black Forest Labs.",
-   "logOne": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2 or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2 or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch to Black Forest Labs.",
+   "many": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch to Black Forest Labs.",
+   "logOne": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Aspect ratio” set to 9:21. Pick Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -925,11 +925,11 @@
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD or switch to Black Forest Labs.",
-   "many": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Video” can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD or switch to Black Forest Labs.",
-   "logOne": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD, or switch to Black Forest Labs.",
+   "many": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Video” can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD, or switch to Black Forest Labs.",
+   "logOne": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on Krea with “Resolution” set to UHD. Pick HD or Full HD, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -995,11 +995,11 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B or switch to fal.ai.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B, or switch to fal.ai.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Model” set to FLUX 2 Flash. Pick FLUX.2 [pro], FLUX.2 [max], FLUX.2 [flex], FLUX.2 [klein] 9B or FLUX.2 [klein] 4B, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",

@@ -36,10 +36,13 @@ from services.text_cut import safe_cut
 PRESENCE_TTL_SECONDS = 120.0
 VIEW_STALE_SECONDS = 30.0
 MAX_SAY_CHARS = 140
-# The Agent log's own line (``log``) is a list entry, not a bubble: it is
-# Nebula's words, never an agent's, and a refused run's merged line can name
-# three nodes and their reasons (GM, PR #203 r30 item 1), so it gets more room
-# than a bubble, still bounded.
+# The Agent log's own line (``log``) is a list entry, not a bubble, so it gets
+# more room than a bubble. A line that carries what an agent sent (the raw
+# keys of "Set “Seed” and seed_mode") is cut at MAX_LOG_CHARS, never through
+# a character. Nebula's own whole line (a refused run's: clean_log ``whole``)
+# is never cut (GM, PR #203 r33 item 2): main._refused_run_log_line switches
+# to its count form past MAX_LOG_CHARS instead, and a line still longer than
+# that is shown whole.
 MAX_LOG_CHARS = 600
 MAX_NAME_CHARS = 32
 MAX_VIEW_NODES = 2000
@@ -257,15 +260,16 @@ def _clean_say(raw: Any) -> str:
 clean_say = _clean_say
 
 
-def clean_log(raw: Any) -> str:
+def clean_log(raw: Any, *, whole: bool = False) -> str:
     """The Agent log's line (main._show_agent's ``log``): cleaned as a bubble
-    is, with MAX_LOG_CHARS of room."""
+    is, with MAX_LOG_CHARS of room. ``whole``: Nebula's own line, which is
+    never cut (MAX_LOG_CHARS)."""
     if raw is None:
         return ""
     if not isinstance(raw, str):
         raise PresenceError("log must be text")
     text = " ".join(raw.split())
-    return text[:safe_cut(text, MAX_LOG_CHARS)]
+    return text if whole else text[:safe_cut(text, MAX_LOG_CHARS)]
 
 
 class AgentPresence:
@@ -289,6 +293,7 @@ class AgentPresence:
         did: Mapping[str, Any] | None = None,
         project_id: str | None = None,
         log: Any = None,
+        log_whole: bool = False,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -308,6 +313,8 @@ class AgentPresence:
         lists a cursor only in its own project. ``log`` is the Agent log's
         line when it isn't ``say`` (PR #198 r1): an action whose bubble says
         nothing still has one; the event carries it only when given.
+        ``log_whole``: ``log`` is Nebula's own whole line, never cut
+        (clean_log).
         """
         if action not in ACTIONS:
             raise PresenceError(f"action must be one of {', '.join(ACTIONS)}")
@@ -320,7 +327,7 @@ class AgentPresence:
             "at": int(now * 1000),
             "projectId": project_id,
         }
-        logged = clean_log(log)
+        logged = clean_log(log, whole=log_whole)
         if logged:
             event["log"] = logged
         if target is None:

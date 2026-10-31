@@ -74,7 +74,8 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category", "person", "providerText", "provider"} and value}
+                               if key in {"error", "hint", "category", "person", "providerText", "provider", "notStarted"}
+                               and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
             }
@@ -143,10 +144,15 @@ class NodeErrors:
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
                category: str | None = None, person: str | None = None, provider_text: bool = False,
-               provider: str | None = None) -> None:
+               provider: str | None = None, not_started: bool = False) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
+        # The pre-call check refused the run (record_validation): the card's
+        # heading is "Nebula couldn’t start the run." (GM, PR #203 r32), as
+        # the Agent log's. Card-only, like the person line.
+        if not_started:
+            entry["notStarted"] = "1"
         # The person's line (error copy round 3c): the card shows it, agents
         # never get it from here (get() is the specific text, word for word).
         if person:
@@ -192,7 +198,8 @@ class NodeErrors:
                 lines.setdefault(node_id, []).append(getattr(error, "person", None))
         for node_id, messages in by_node.items():
             person = joined_lines(lines.get(node_id, []))
-            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown")
+            self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown",
+                        not_started=True)
 
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""
@@ -232,7 +239,8 @@ class NodeErrors:
                 **({"errorCategory": category} if category else {}),
                 **({"errorProvider": entry["provider"]} if entry.get("provider") else {}),
                 **({"errorPerson": entry["person"]} if entry.get("person") else {}),
-                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {})}
+                **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {}),
+                **({"errorNotStarted": True} if entry.get("notStarted") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

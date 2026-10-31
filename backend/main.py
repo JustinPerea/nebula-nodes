@@ -88,6 +88,7 @@ from services.settings import (
     save_settings,
     settings_write_block,
     shown_path,
+    restore_settings_from_backup,
     sweep_stale_temp_files,
     get_api_key,
     validate_provider_keys,
@@ -155,6 +156,7 @@ from services.agent_presence import (
     AgentIdentity,
     PresenceError,
     RequestHeadersContext,
+    MAX_LOG_CHARS,
     agent_presence,
     clean_log,
     clean_say,
@@ -3303,7 +3305,18 @@ async def _sweep_settings_temp_files() -> None:
     """A save cut short between its temp file and the rename leaves a full
     copy of settings.json beside it, keys included: removed at each start
     (services/settings.sweep_stale_temp_files; review 15 of PR #203,
-    settings-keychain LOW-2)."""
+    settings-keychain LOW-2). First, an in-place write cut short that left
+    settings.json unparseable is put back from the copy kept for it
+    (services/settings.restore_settings_from_backup; review 16, settings
+    MEDIUM-1 d), journaled as settings.restored and logged."""
+    restored = restore_settings_from_backup()
+    if restored is not None:
+        shown = shown_path(restored)
+        logging.getLogger("nebula.settings").warning(
+            "%s didn't parse after a save was cut short; Nebula put back the copy it kept before that save", shown)
+        _journal("settings.restored", data={"file": shown},
+                 summary=f"Nebula put back {shown} from the copy it kept before a save that was cut short",
+                 actor={"kind": "system"})
     sweep_stale_temp_files()
 
 
@@ -4044,13 +4057,14 @@ async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
     `errors`) keeps every node by id."""
     node_ids = [node_id for node_id in _validation_messages(errors) if node_id]
     person = _validation_person_lines(errors)
-    line = _refused_run_log_line(node_ids, person)
+    line = _refused_run_log_line(errors)
     first = node_ids[0] if node_ids else None
     if first is None or identify_agent(current_request_headers()) is None:
         return line
-    # The cursor quotes the node like every other bubble; the log has the run's line.
+    # The cursor quotes the node like every other bubble; the log has the
+    # run's line, whole: Nebula's own line is never cut (GM, PR #203 r33 item 2).
     bubble = f"{_quoted(_node_label(first))} can’t run." + (f" {person[first]}" if person.get(first) else "")
-    await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first), log=line)
+    await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first), log=line, log_whole=True)
     return None
 
 
@@ -5508,6 +5522,7 @@ async def _show_agent(
     did: dict[str, Any] | None = None,
     log: str | None = None,
     words: Callable[[], tuple[str, str]] | None = None,
+    log_whole: bool = False,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -5517,7 +5532,9 @@ async def _show_agent(
     bubble leaves it out: GM - Design, round 16 of PR #195); an action with
     neither is logged in the Agents panel's words ("Changed “Hero”"), so no
     action is left out of the log (MCP-SETUP.md, PR #198 r1). ``words``
-    computes (say, log) inside the guard (_set_params_bubble). Never fails
+    computes (say, log) inside the guard (_set_params_bubble). ``log_whole``:
+    ``log`` is Nebula's own whole line (a refused run's), never cut
+    (agent_presence.clean_log). Never fails
     the route that called it: presence is decoration on top of an edit that
     already succeeded.
     """
@@ -5533,9 +5550,10 @@ async def _show_agent(
         if not say and not log and did is not None and did.get("verb"):
             log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
         # The event carries ``log`` only when it isn't the bubble's own words (PR #195).
-        if log is not None and clean_log(log) == clean_say(say):
+        if log is not None and clean_log(log, whole=log_whole) == clean_say(say):
             log = None
-        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
+        event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log,
+                       log_whole=log_whole)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
@@ -18704,37 +18722,72 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 REFUSED_RUN_HEADING = "Nebula couldn’t start the run."
 
 
-def _refused_run_log_line(node_ids: list[str], person: Mapping[str, str | None]) -> str:
+def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
     """The Agent Log's line for a run the pre-call check stopped (GM, PR #203
-    r29 item 3): the card's heading, then each reason once, its nodes by
+    r29 item 3): the card's heading, then each stop once, its nodes by
     quoted name and merged by the r28 rule (person_line.merged_not_ready,
     the bar's table), each action sentence ending ", then run the node
     again" ("the nodes" for several; ". Then run the node again." after a
     comma clause): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
-    your OpenAI API key. Add it in Settings, then run the nodes again." A
-    node stopped for another reason (an input not connected) says its card
-    line after its name. From 4 nodes, one count, as the bar's (person_line
-    counts_instead). Agents' text keeps ids (`error`, `errors`)."""
-    from execution.person_line import merged_not_ready
+    your OpenAI API key. Add it in Settings, then run the nodes again."
 
+    - The not-ready reasons first (a key, a route, a Krea plan), then the
+      inputs with no wire, merged the same way from one table (GM r33 item
+      1, person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a
+      prompt. Connect a prompt to each, then run the nodes again.". A node
+      with a reason and another stop keeps both (review 16, L1).
+    - Any other stop says its card line after the node's name.
+    - From 4 nodes, one count, as the bar's (person_line counts_instead):
+      "4 nodes can’t run here yet." A named line longer than the log's room
+      (agent_presence.MAX_LOG_CHARS) takes the count form early, so it stays
+      whole and true; one node's line has no shorter form and is said whole
+      (GM r33 item 2). The line is never cut.
+
+    Agents' text keeps ids (`error`, `errors`)."""
+    from execution.person_line import input_need, joined_lines, merged_not_ready
+
+    by_node: dict[str, list[ValidationErrorDetail]] = {}
+    for error in errors:
+        by_node.setdefault(error.node_id, []).append(error)
+    node_ids = [node_id for node_id in by_node if node_id]
+    counted = f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
     if counts_instead(len(node_ids)):
-        return f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
+        return counted
     reasons: list[tuple[str, Any]] = []
+    needs: list[tuple[str, Any]] = []
     others: list[str] = []
     for node_id in node_ids:
+        label = _node_label(node_id)
         reason = _node_not_ready_reason(node_id)
         if reason is not None:
-            reasons.append((_node_label(node_id), reason))
-        else:
-            line = person.get(node_id)
-            others.append(f"{_quoted(_node_label(node_id))} can’t run." + (f" {line}" if line else ""))
-    # Each reason's Agent Log form: its action sentence ends in the run-again
+            reasons.append((label, reason))
+        said: list[str] = []
+        rest: list[str | None] = []
+        for error in by_node[node_id]:
+            if reason is not None and error._stop == "reason":
+                continue  # the reason says it
+            if error._stop == "input":
+                need = input_need(error._need)
+                if need.one not in said:
+                    said.append(need.one)
+                    needs.append((label, need))
+                continue
+            rest.append(error.person)
+        if rest:
+            line = joined_lines(rest)
+            others.append(f"{_quoted(label)} can’t run." + (f" {line}" if line else ""))
+    # Each line's Agent Log form: its action sentence ends in the run-again
     # ending, built in its end slot (person_line.NOT_READY_PREDICATES; GM, PR
     # #203 r31 item 3), never appended to the last sentence.
-    told = [line for line, _count in merged_not_ready(reasons, again=True)] + others
-    if not told and person.get(""):
-        told = [str(person[""])]
-    return " ".join([REFUSED_RUN_HEADING, *told])
+    told = [line for line, _count in merged_not_ready(reasons, again=True)]
+    told += [line for line, _count in merged_not_ready(needs, again=True)] + others
+    if not told and by_node.get(""):
+        graph_wide = joined_lines(error.person for error in by_node[""])
+        told = [graph_wide] if graph_wide else []
+    named = " ".join([REFUSED_RUN_HEADING, *told])
+    if len(named) > MAX_LOG_CHARS and len(node_ids) > 1:
+        return counted
+    return named
 
 
 def _node_not_ready_reason(node_id: str) -> Any:

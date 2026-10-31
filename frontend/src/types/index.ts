@@ -830,6 +830,10 @@ export interface NodeData {
    *  the ErrorEvent's `provider`): the card's general line says "Details
    *  shows what {Provider} said." Never read from `error`'s text. */
   errorProvider?: string;
+  /** Nebula refused the run before it started (the pre-call check): the
+   *  card's heading is "Nebula couldn’t start the run." (GM, PR #203 r32),
+   *  the Agent log's. Card-only (node_errors.card), like errorPerson. */
+  errorNotStarted?: boolean;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

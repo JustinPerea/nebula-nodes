@@ -1016,7 +1016,7 @@ export function nodeTitle(definition: (RoutedDefinition & Pick<ModelNodeDefiniti
   return isDefaultTitle(definition, label) ? canvasTitle(definition) : label!;
 }
 
-function orList(items: string[]): string {
+export function orList(items: string[]): string {
   return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }
 
@@ -1134,33 +1134,45 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
 /** What the person can change where the node is, for a route stop, as the
  * action's first clause (node_route._fix_person; routeAction names who else
  * can take the run). */
-function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
+/** What the person can change where the node is, as a route line's first
+ * action, and how many options it lists (person_line.Fix): a fix that lists
+ * two or more holds its own "or" (GM, PR #203 r32 item 1). */
+export interface FixClause {
+  text: string;
+  options: number;
+}
+
+function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): FixClause {
   const param = block.param ?? '';
   const spec = param ? paramDef(definition, param) : undefined;
-  if (block.reason === 'hidden') return hiddenFixSentence(definition, param);
+  const one = (text: string): FixClause => ({ text, options: 1 });
+  if (block.reason === 'hidden') return one(hiddenFixSentence(definition, param));
   const values = acceptedValues(route, block);
   const label = `“${spec?.label || param}”`;
   if (spec?.type === 'boolean' && (block.reason === 'unsupported' || block.reason === 'blocked')) {
     const on = ['true', WIRED].includes(matchValue(params[param]));
-    return `Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}`;
+    return one(`Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}`);
   }
-  if (block.reason === 'blocked') return `Clear ${label}`;
-  if (values.length) return `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}`;
-  if (block.reason === 'ports') return 'Disconnect the extra inputs';
-  if (block.reason === 'requires') return `Set ${label}`;
-  return 'Change that setting';
+  if (block.reason === 'blocked') return one(`Clear ${label}`);
+  if (values.length) return { text: `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}`, options: values.length };
+  if (block.reason === 'ports') return one('Disconnect the extra inputs');
+  if (block.reason === 'requires') return one(`Set ${label}`);
+  return one('Change that setting');
 }
 
 /** A route line's one action sentence, with its period (GM, PR #203 r31
  * item 3; person_line.route_action is the same): `fix`, then who can take
  * the run, named: "… or switch to fal.ai" for providers with a key set,
  * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
- * whose key isn't added. Never a separate "… can take it." sentence. The
- * card has no run-again ending; the Agent Log's comes from the backend. */
-export function routeAction(fix: string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
-  if (others.length) return `${fix} or switch to ${orList([...others])}.`;
-  if (needsKey.length) return `${fix}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
-  return `${fix}.`;
+ * whose key isn't added. Two actions take a comma between them when the fix
+ * lists options (r32 item 1: "Pick A, B or C, or switch to fal.ai"). Never
+ * a separate "… can take it." sentence. The card has no run-again ending;
+ * the Agent Log's comes from the backend. */
+export function routeAction(fix: FixClause | string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
+  const { text, options } = typeof fix === 'string' ? { text: fix, options: 1 } : fix;
+  if (others.length) return `${text}${options > 1 ? ',' : ''} or switch to ${orList([...others])}.`;
+  if (needsKey.length) return `${text}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
+  return `${text}.`;
 }
 
 /** "OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
@@ -1219,14 +1231,16 @@ export function routeMissingKeyLine(definition: ModelNodeDefinition, route: Node
 
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
   params: Record<string, unknown> = {}): string {
-  const name = definition.displayName || 'This node';
+  // Quoted, as the bar and the Agent log quote every name (GM, PR #203 r32;
+  // node_route.card_subject).
+  const name = definition.displayName ? `“${definition.displayName}”` : 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   // GM, PR #203 r29 item 2: the key by its name, never "its key" (it read as
   // the node's); r31 item 3: who can take the run is named in the action.
   const keylessPhrase = keyPhrase(keyless.flatMap((alt) => keyList(routeById(definition, alt)?.keys)));
-  const action = (fix: string) => routeAction(fix, others, keylessLabels, keylessPhrase);
+  const action = (fix: FixClause | string) => routeAction(fix, others, keylessLabels, keylessPhrase);
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
     // GM, PR #203 r29 item 2 (node_route NOT_READY_PREDICATES "unknown_provider").
@@ -1279,10 +1293,7 @@ export function routeUnavailable(
   const values = params ?? {};
   const route = selectRoute(definition, values, apiKeys);
   if (route.kind !== 'unset') return null;
-  const alternatives = routesOf(definition)
-    .filter((candidate) => candidate.id !== route.routeId && candidate.plan !== 'only'
-      && canRunKeyed(candidate, apiKeys) && routeBlock(definition, candidate, values) === null)
-    .map((candidate) => candidate.id);
+  const alternatives = routesThatCanTake(definition, values, apiKeys, route.routeId ?? null);
   const hidden = route.block?.reason === 'hidden';
   const honoredBy = hidden ? route.block?.on : null;
   const honoredSpec = honoredBy ? routeById(definition, honoredBy) : undefined;
@@ -1296,6 +1307,17 @@ export function routeUnavailable(
     fixes: hidden ? [hiddenFix(definition, route.block?.param ?? '')] : [],
     message: routeUnavailableMessage(definition, route, alternatives, keyless, values),
   };
+}
+
+/** The routes other than `except` with a key set that take these
+ * (routed) params as they are: who a line can name as able to take the run
+ * (the one-click switches; Krea's sign-in line, GM, PR #203 r32 item 4). */
+export function routesThatCanTake(definition: ModelNodeDefinition, params: Record<string, unknown>, apiKeys: ApiKeys,
+  except: string | null): string[] {
+  return routesOf(definition)
+    .filter((candidate) => candidate.id !== except && candidate.plan !== 'only'
+      && canRunKeyed(candidate, apiKeys) && routeBlock(definition, candidate, params) === null)
+    .map((candidate) => candidate.id);
 }
 
 /** `param` as one route offers it (node_route._narrowed): an enum's options

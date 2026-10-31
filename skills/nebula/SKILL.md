@@ -408,8 +408,9 @@ refused while a job is still waiting keep their exact text for you. A node's run
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one, or a line for the
-provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
-you shouldn't parse. A failed Cinema shot's `output` works the same: read its
+provider's answer such as "Meshy is busy. ..." with `errorProviderText`, and
+`errorNotStarted` when Nebula refused the run before it started) that you
+shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
 `errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
 A new Cinema scene needs only `{"scene": {"shots": [{"id": "s1", "prompt": "…"}]}}`:
@@ -846,6 +847,15 @@ keeps its shape, and an answer to it (`— resolved by …`) on its own line
 after the note (over MCP, `pins[].text` holds `\n`; a channel push prints it
 the same way inside `<pin>…</pin>`). `nebula watch`
 keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
+`settings.restored` (from `nebula watch` after a restart) means Nebula put
+settings.json back at start from the copy it keeps while it writes the file
+in place, after a save that was cut short; its `file` names the file, never
+a key.
+
+A run Nebula refuses before it starts is one line in the person's Agent log,
+in their words and never cut ("Nebula couldn’t start the run. 2 “GPT Image
+2” nodes need a prompt. Connect a prompt to each, then run the nodes
+again."). Read `errors` for each node's own text.
 
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run

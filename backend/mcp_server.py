@@ -681,7 +681,9 @@ def wait_for_canvas_change(
     or look_at_canvas `events.journal`): if Nebula restarted in between,
     the result has `reset` instead of reading the new journal from an old
     cursor. Projects made, renamed, deleted or restored are `project.*`
-    events; a held paid start is `provider.hold`.
+    events; a held paid start is `provider.hold`; settings.json put back
+    at start from Nebula's copy, after a save cut short, is
+    `settings.restored`.
     `kinds` filters by group or exact kind, e.g. ["node", "run.failed"];
     ["board"] returns on any moodboard write. `board.fields` is a change to
     a board's own fields (Direction, Avoid, notes, strength...): its

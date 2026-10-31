@@ -2415,20 +2415,26 @@ def test_a_check_whose_deadline_passes_before_its_task_starts_is_still_cancelled
     assert listener._check_out == ["pin_00000001"]
 
 
-def test_the_pin_check_gives_up_after_a_few_seconds(nebula):
+def test_the_pin_check_gives_up_after_a_few_seconds(nebula, monkeypatch):
     # The real server against a Nebula whose pins listing hangs: the check
     # times out after PIN_CHECK_TIMEOUT (it was 15 s), and the person's edit
-    # that waited with the pin goes then, gated, without it.
+    # that waited with the pin goes then, gated, without it. The shipped
+    # timeout is checked as a number; the behaviour runs on a short one, with
+    # deadlines only as hang guards, so a loaded runner can't fail it (review
+    # 16 of PR #203, tests LOW-3: it waited out the real 4 s inside a 9 s budget).
+    shipped = mcp_channel.PIN_CHECK_TIMEOUT
+    assert 3.0 <= shipped <= 5.0
+    monkeypatch.setattr(mcp_channel, "PIN_CHECK_TIMEOUT", 0.3)
     pushes: list[dict] = []
     nebula.pins_hang.set()
 
     async def main():
         async with _connected(channel=True, pushes=pushes) as (session, _, _done):
-            await _until(lambda: nebula.polls)
+            await _until(lambda: nebula.polls, timeout=30.0)
             nebula.add("pin.added", node="n7", data={"pinId": "pin_aaaaaaaa", "text": "warmer", "anchor": {"nodeId": "n7"}})
             nebula.add("node.params", node="n8", data={"keys": ["prompt"]}, summary="set prompt on Hero (n8)")
             started = time.monotonic()
-            await _until(lambda: pushes, timeout=9.0)
+            await _until(lambda: pushes, timeout=30.0)
             return time.monotonic() - started
 
     try:
@@ -2438,7 +2444,8 @@ def test_the_pin_check_gives_up_after_a_few_seconds(nebula):
         nebula.pins_released.set()
     assert pushes[0]["meta"]["wake"] == "change" and pushes[0]["meta"]["gate"] == "change"
     assert "<pin" not in pushes[0]["content"] and nebula.pin_checks >= 1
-    assert took < 9.0 and 3.0 <= mcp_channel.PIN_CHECK_TIMEOUT <= 5.0
+    # It waited for the check to give up (never pushed before it did).
+    assert took >= 0.3, took
 
 
 def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:

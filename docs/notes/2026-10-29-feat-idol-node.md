@@ -2371,11 +2371,15 @@ backend refusing the write after the file turned read-only).
   graph-wide refusal) goes to an in-app chat turn's log once
   (`publish_action`), never twice. The log line has its own room,
   `MAX_LOG_CHARS` 600 (`clean_log`), since a bubble's 140 would cut a
-  merged line of three reasons. Agents' replies are unchanged.
+  merged line of three reasons. (Corrected in round 17: 600 wasn't enough
+  for three route reasons, and the cut went through a word; Nebula's own
+  line is now never cut.) Agents' replies are unchanged.
 - **The first Keychain refusal** keeps the backend's fix: no change.
 - **The switcher's setup button** shows the provider's noun from the one
-  source Settings uses (`credentialNoun`): "Add token →" for Replicate and
-  Hugging Face, "Add key →" for the rest, the arrow aria-hidden. Its
+  source Settings uses (`credentialNoun`): "Add token →" for Replicate
+  ("Add key →" for the rest; Hugging Face's word is "token" too, but no
+  switcher row shows it: Idol's Speridlabs row is keyless, corrected in
+  round 17), the arrow aria-hidden. Its
   accessible name is the visible label; the add-key line ("Add your
   Replicate token in Settings.") is its description through
   aria-describedby (a visually hidden span). Krea's plan row: "Sign in",
@@ -2459,11 +2463,14 @@ backend refusing the write after the file turned read-only).
   key.", "That isn’t valid JSON."). Pins updated together.
 - **The generated reasons table** (LOW-2, sockets-tests LOW-1) now also
   walks every route_cases.json case (setting stops, hidden stops, too many
-  inputs, sizes, keys only another route has, alternatives that need
-  their key) and a node Settings can't set up: 120 reasons, every kind
-  (key 45, route_block 44, route_key 28, unknown_provider, krea_plan,
-  not_set_up), each with its kind and the Agent log's forms
-  (`logOne`, `logMany`). A test asserts every kind appears. UTF-8 with
+  inputs, keys only another route has, alternatives that need their key)
+  and a node Settings can't set up: 120 reasons, every kind (key 45,
+  route_block 44, route_key 28, unknown_provider, krea_plan, not_set_up),
+  each with its kind and the Agent log's forms (`logOne`, `logMany`).
+  (Corrected in round 17: no registry route table sets a size or retired
+  rule, so the table has no row for either; round 17 pins both with a
+  fixture route. The "every kind appears" test was missing until round
+  17.) UTF-8 with
   "\n" on read and write (NIT-3).
 - **Vertex paste error (GM r31 item 4):** "The Vertex AI service account
   key saved in Settings isn’t a valid key file. Paste the whole key file
@@ -2490,7 +2497,7 @@ backend refusing the write after the file turned read-only).
 ### What agents see this round
 
 - The presence event's `log` on a refused run is now the merged line (up
-  to 600 characters); MCP-SETUP.md says so.
+  to 600 characters; corrected in round 17: never cut); MCP-SETUP.md says so.
 - `cost.notReady` rows' `person` and `reason` read the new route shape;
   agents are told to read `missing`.
 - A new 409 code, `settings_not_a_folder`, and the folder line under
@@ -2554,3 +2561,296 @@ backend refusing the write after the file turned read-only).
   ("Provider for X: Auto …"); it holds them in order, so it passes Label
   in Name, but the visible text isn't one run in it.
 - Krea's "or choose another provider" (r21, verbatim) is unchanged.
+
+## Round 17 (CI on c91de4bf, GM r32 and r33, review 16)
+
+### 0. CI: the ratchet's stale entry
+
+- errorCopy.namedLine.test.ts listed round 15's hand-built form of the
+  direct-route line under HAND_BUILT. Round 16 builds that line from the
+  shared parts (the reason template, then `action(fixPerson(...))`), so the
+  scanner no longer reads it as hand-built and the entry was stale. The
+  entry is deleted; the matcher and the stale check are unchanged. 7/7.
+- Why round 16's focused list missed it: the list came from tests that
+  import what changed. This test imports nothing from directRoute.ts; it
+  reads the source files HAND_BUILT names as text. A grep for imports
+  can't find it.
+- Checklist step, from this round on: grep HAND_BUILT in
+  frontend/tests/lib/errorCopy.namedLine.test.ts for every file a round
+  touches, and run that test whenever one matches. It is in the focused
+  list every round.
+
+### 1. GM r32
+
+- **Quoted names on the card:** "“FLUX 3 Image” is set to Replicate, which
+  needs your Replicate token. Add it in Settings or switch to fal.ai."
+  (backend `node_route.card_subject`, frontend `routeUnavailable`); "This
+  node" when a type has no name. A run's node carries no label, so the card
+  names it by its type. route_cases.json's 49 card lines were recomputed.
+- **One heading over a refused run:** "Nebula couldn’t start the run."
+  on the card when the pre-call check refused it. node_errors keeps the
+  mark (`notStarted`) across a reload, and the graph carries
+  `errorNotStarted: true`, until the node runs or fails again. It is on
+  the model card, a universal model's card, the Batch card and Create
+  Studio's result. A busy or network failure to start keeps "Couldn't
+  start the run.", and a started run that failed keeps "Couldn't run the
+  node.". The shot panel keeps its own heading. The proposal bar shows a
+  proposal, not a refused run, so it keeps "Can’t run here".
+  `errorNotStarted` is a runtime field: canvas undo leaves it alone.
+- **The two-action comma:** a fix that lists two or more options holds
+  its own "or", so the switch after it is a second clause: "Pick 1K, 2K
+  or 4K, or switch to fal.ai." In the log, an action with a comma clause
+  ends ". Then run the node again." (`person_line.Fix(text, options)`;
+  the frontend's `FixClause`).
+- **Curly apostrophes in the switcher's notes:** "Doesn’t take …",
+  "Can’t make that size.", "Doesn’t take connected …", "Auto · can’t run:".
+- **Accessible names start with the visible text, as one run:** the chip
+  and the pill have no aria-label. Their names are their visible text, and
+  "Provider for X: <chip>[. <why it can't run>]" is the description
+  (aria-describedby). The WCAG test now also checks that a name starts
+  with the whole visible text.
+- **Krea's line names who can take the run:** "“Krea 2” runs on your Krea
+  plan. Sign in to Krea in Settings, or switch to fal.ai." when a route
+  with its key set can take it (`routesThatCanTake`), else "…, or choose
+  another provider." Both are tested. Krea's own API-balance row is the
+  same route, so it doesn't count as another provider. I added no "Switch
+  to" button for this case.
+
+### 2. Review 16
+
+**Settings (MEDIUM-1, now LOW): no save loses settings.json.**
+
+- (a) **Atomic whenever the metadata can be carried.** The temp file
+  takes the old file's owner and group (`_carry_owner`, through
+  `os.fchown`; another owner only as root), its mode, then its ACL and
+  extended attributes (`_carry_metadata`). On macOS that is copyfile(3)
+  through ctypes with COPYFILE_ACL | COPYFILE_XATTR; on Linux each xattr
+  is copied, which carries system.posix_acl_access. Then one rename. The
+  file is written in place only when:
+  - it has a second name (nlink > 1);
+  - another user owns it and Nebula isn't root;
+  - its folder takes no temp file;
+  - the owner, group or metadata can't be carried;
+  - or the rename is refused (an ACL that denies delete).
+  A copied ACL is taken off the temp file again before it is removed, so
+  one that denies delete can't keep a copy of the keys beside the file.
+- (b) **The in-place write parses at every step** (`_overwrite`):
+  1. grow the file with spaces to the new length, then fsync (a full disk
+     fails here, and old JSON plus spaces still parses);
+  2. write the new JSON at 0, padded with spaces to the old length when
+     it is shorter, then fsync;
+  3. cut the file to the new length, then fsync.
+  On a failure the old bytes are written back. Seams for tests:
+  `settings._pwrite`, `_truncate`, `_chown`, `_replace`.
+- (c) **One save at a time:** an exclusive `fcntl.flock` for the whole
+  save, on the file (opened with O_NOFOLLOW), or on its folder while there
+  is no file. A save that waited while another replaced the file locks
+  again until its lock is on the file at the path now. Polling with
+  LOCK_NB, it gives up after 10 s (OSError, a 500, nothing written).
+  There is no lock where the system has none or the file and folder can't
+  be opened to read; no save is refused for that.
+- (d) **A verified copy before any in-place write**, in Nebula's own
+  folder (NEBULA_STATE_DIR, else ~/.nebula): `settings-backup-<sha256 of
+  the path, 16 hex>.json`, holding `{path, text}`. It is 0600 (mkstemp),
+  fsync'd, renamed into place, read back, and removed once the write is
+  done or the old bytes are back. At start, before the temp sweep, a
+  settings.json that reads but doesn't parse while its copy does is put
+  back from it (`restore_settings_from_backup`, through the same
+  locked write). That is journaled as `settings.restored` (data `{file}`,
+  the shown path, actor `system`) and logged as a warning on
+  nebula.settings. A file that parses drops its copy. A file that is gone,
+  can't be read, or another path's copy is left as it is. Until that
+  start, every reader gets the unreadable answer, as today.
+  - **My call:** a copy Nebula isn't allowed to make refuses the save
+    before the file changes, with the folder line naming Nebula's folder
+    ("Nothing was saved because Nebula isn’t allowed to change
+    ~/.nebula."). A copy that fails for another reason (a full disk, or a
+    read-back that doesn't match) raises, with nothing written.
+- (e) The PR body says the in-place write isn't atomic and how (b) to (d)
+  bound it.
+- **LOW-1:** temp names are `.settings-nebula-<pid>-<mkstemp's 8>.tmp`
+  (`_TEMP_NAME`). The sweep removes only those: a regular file with one
+  name, owned by this user, older than a minute. It sweeps the settings
+  folder and Nebula's own folder (the copy's temp files).
+- **LOW-2:** S15 (the temp file's group) and S16 (an in-place EACCES or
+  EPERM is the 409's file line) have tests. D8 (frameKey) has one too:
+  two frame objects with the same process and routing ids can undo the
+  write, and another routing id can't.
+- **NIT-1:** the main frame's `did-navigate` (the new document's commit)
+  drops the old document's writes too.
+- **NIT-2:** every missing folder level is made 0700. A folder that can't
+  be made names the existing folder that refuses it (GM r33 item 5):
+  "Nothing was saved because Nebula isn’t allowed to change ~/ro."
+  (tested with two missing levels).
+- **NIT-3:** the in-place write opens with O_NOFOLLOW and checks the
+  file's dev and inode against the decision. A symlink or another file
+  swapped in makes the save decide again from the path, as a new save
+  would. On a symlinked path a save writes through to the target, as it
+  always has.
+- **NIT-4:** `sameOwner` compares the webContents too.
+
+**Copy (GM r33):**
+
+- **M1:** an input with no wire merges as a reason does, from one table
+  (`person_line.INPUT_NEED_PREDICATES`, `input_need`), through the shared
+  name list.
+  - One node: "“GPT Image 2” needs a prompt. Connect one, then run the
+    node again."
+  - Several: "2 “GPT Image 2” nodes need a prompt. Connect a prompt to
+    each, then run the nodes again."
+  - Different names merge, and the subject counts from 4 ("4 nodes need
+    a prompt…").
+  - Each check marks its kind where it is made, never sent
+    (`ValidationErrorDetail.marked`: "reason" for the key, route and Krea
+    stops; "input" for a required input with no wire). The log reads the
+    mark, not the words.
+  - Other input kinds take the same pattern. The singular's word is
+    "one" for "a prompt", "it" for "audio" or "text", "them" for
+    "images". A numbered or lettered input, or a pass-through, is named
+    by its label: "needs an output connected to “Item 1”. Connect one…".
+- **L1:** a node with a reason and another stop keeps both, the reason
+  first. Any other stop (a World Labs batch line, the Gemini check) still
+  says its card line after the node's name.
+- **M2:** Nebula's own Agent log line is never cut (`clean_log(...,
+  whole=True)`, `agent_presence.point(log_whole=True)`, from
+  `_say_refused_run` only). A `log` built from what an agent sent (raw
+  field keys) is still cut at 600. A named line longer than 600 takes the
+  count form early ("Nebula couldn’t start the run. 3 nodes can’t run here
+  yet."). One node's line has no shorter form and is said whole. The
+  frontend never cut it.
+- **N1:** the size and retired clauses are pinned on both sides with a
+  fixture route.
+- **N2:** corrected the round 16 notes above (600, the table walking
+  sizes, "Add token" for Hugging Face) and the generator's docstring (no
+  "every kind" test existed; a route_key line names another route only
+  when its key is set). The PR body and MCP-SETUP are corrected too.
+- **N3:** route_clients.refuse_unwired is left for the wording batch (GM
+  r33 item 3).
+- **GM r33 item 4:** the missing-key line is unchanged. A test pins that
+  it names another provider only when that provider's key is set, on
+  both sides.
+
+**Tests-ci:**
+
+- **LOW-1:** test_idol_round15 asserts the generated table's kinds equal
+  `NOT_READY_PREDICATES` (mutant G2 is killed).
+- **LOW-2:** the reopened-expiry test runs on the proposals' clock and on
+  events. The clock stands still until the undo is inside p2's slow
+  Update, so p1 reopens whatever the load; then p1 and p3 fall due, and
+  the undo waits there until p1's own timer has expired them. A 15 s
+  deadline is only a hang guard. With a 0.6 s stall injected before the
+  undo, the old form fails and the new one passes.
+- **LOW-3:** the pin give-up test checks the shipped timeout as a number
+  (3 to 5 s) and runs on 0.3 s, with 30 s hang guards, asserting
+  took >= 0.3. With a 5.5 s stall where the check falls due, the old form
+  fails (9.6 s against its 9 s budget) and the new one passes.
+- **LOW-4 and NIT-2:** the scan's cases now include a `|` whose right
+  side brings the owner's bit back, a bare `chmod`, a starred and a `**`
+  mode (unproven), and a chmod command in a list (an octal string is
+  read; anything else is unproven). A chmod in a shell string isn't read
+  (the docstring says so). The scan's new reach found three ACL tests
+  (`chmod +a`) whose behaviour root ignores; they carry the marker now.
+- **NIT-1:** the not-a-folder test writes literal modes (`0o755 if
+  executable else 0o644`) and lost its marker, so it runs as root too.
+- **NIT-3:** the temp-file mode test reads through the module's own
+  seams (`_carry_owner`, after the keys are flushed, and `_replace`). It
+  no longer patches os.fsync or tempfile.mkstemp.
+
+### What agents see this round
+
+- `errorNotStarted: true` on a node whose run the pre-call check refused
+  (graph data, the canvas's only). `error` is unchanged.
+- The card's route lines quote the node's name, and a listed fix takes a
+  comma before the switch (`person`, `reason`).
+- The Agent log's refused-run line merges inputs with no wire, keeps a
+  reason and another stop, and is never cut. `error` and `errors` are
+  unchanged.
+- A new journal kind, `settings.restored` (MCP-SETUP table,
+  wait_for_canvas_change's description, the nebula skill).
+- A folder that can't be made names the existing folder in the 409's
+  line and `fix`.
+- MCP-SETUP.md and skills/nebula/SKILL.md say all of this.
+
+### Checks (round 17)
+
+- tsc -b --noEmit and lint pass. vite build passes; budget 462,281 bytes
+  raw, 142,058 gzip. check-node-contracts (309), generate-model-reference
+  --check, generate-route-tables --check and generate-not-ready-reasons
+  --check are current.
+- Focused vitest (52 files, --maxWorkers=2, run beside the backend set and
+  the mutants): 1,742 passed, Errors 0, no timeouts, so no rerun.
+- Focused backend (59 files: every file that names a function, route,
+  string or payload field this round touched): 2,344 passed, 1 skipped,
+  2 failed. One was real: MCP-SETUP.md's new paragraph said "with no
+  wire", which the docs ratchet refuses; it now says "with nothing
+  connected". The other was test_project_save_event_loop's 0.3 s stall
+  check, at 1.78 s while the mutants, a vite build and the live check ran
+  beside it (a project save doesn't write settings). Both files again
+  alone, three times: 77 passed each. test_canvas_proposals and the
+  round 17 log tests after the doc change: 112 passed.
+- Desktop (node --test, every file, in the local-only sandbox): 396 pass,
+  9 skipped, 1 fail: sidecar.test.mjs's stdin-token test, at `spawnSync
+  ps EPERM`, because the sandbox refuses `ps`. That file is unchanged
+  since c91de4bf. credential-service.test.mjs: 132 pass.
+- person_gate.py is byte-identical to c91de4bf. No private question ids
+  in the diff.
+- Base check (c91de4bf with the new tests): backend 84 of 90 fail. The 6
+  that pass guard what already worked: the fixture's card lines already
+  quoted, a run error after a refusal (no mark existed), the count form
+  from 4 on MCP, the CLI and chat, and a file that turns read-only before
+  the in-place write gets the file line. Frontend 29 of 32 fail; the 3
+  that pass are "or choose another provider" with no key, the Krea API
+  key as the same route, and the started run's heading. Desktop: the 3
+  new did-navigate, other-page and watched-events tests fail; "same
+  frame, another object or routingId" passes as a guard.
+- Mutants: section 0 and 1 C1 to C19, copy L1 to L16, settings S1 to
+  S27, tests T1 to T4, desktop D8 to D10: 72, all killed. One, C12 (a
+  later refused start keeps the mark), was killed only by a 5-second
+  timeout under load; alone it survived. A test now covers it (a busy
+  start after a refusal drops the mark, and the card keeps its own
+  heading). Alone again it is killed, and the test fails on c91de4bf.
+  idolRound17.cards.test.tsx with that test: 8 passed.
+- Live on 8793/5793 (sandboxed backend and Vite, the browser's proxy
+  dead, canaries blocked for 8000, 8005, 8010, 5173, 8790, 8760 and six
+  real hosts from the browser, and the backend's own canary; fake keys
+  only, no Space call, every run request refused by the pre-call check):
+  1. A FLUX 3 node set to Replicate with only a fal.ai key, an MCP run
+     refused: the card's heading "Nebula couldn’t start the run." over
+     "“FLUX 3 Image” is set to Replicate, which needs your Replicate token.
+     Add it in Settings or switch to fal.ai."; the log said the same with
+     ", then run the node again."
+  2. FLUX 3 on fal.ai at 1.5K with a Replicate token: the switcher's line
+     "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K.
+     Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate."
+  3. Krea 3 on the Krea plan, signed out, with a fal.ai key: "“Krea 3”
+     runs on your Krea plan. Sign in to Krea in Settings, or switch to
+     fal.ai."
+  4. FLUX Kontext with neither input connected, an MCP run refused: two
+     sentences, each with its own run-again ending (a question for GM
+     below).
+  Shots in scratchpad/idol/shots17, four distinct md5s, each opened. No
+  page errors; the 7 console errors are the canaries' own blocked loads.
+
+### Questions for GM (round 17)
+
+- From 4 nodes the log keeps the whole run's count line ("4 nodes can’t
+  run here yet.", r24), so "4 nodes need a prompt…" shows only where the
+  shared name list counts a group. Should a run whose 4 or more nodes all
+  share one stop say "4 nodes need a prompt. Connect a prompt to each,
+  then run the nodes again." instead?
+- The input kinds GM didn't name: "“OpenAI TTS” needs text. Connect it,
+  then run the node again.", "needs images. Connect them…", and for a
+  numbered input "“Batch” needs an output connected to “Item 1”. Connect
+  one, then run the node again." (plural "…Connect one to “Item 1” on
+  each…").
+- A node with a reason and an input need says two sentences, each ending
+  "then run the node again.". Keep it, or one ending for both? The same
+  holds for one node with two inputs with nothing connected (live, FLUX
+  Kontext): "“FLUX Kontext” needs a prompt. Connect one, then run the
+  node again. “FLUX Kontext” needs an image. Connect one, then run the
+  node again." Or "“FLUX Kontext” needs a prompt and an image. Connect
+  them, then run the node again."?
+- Past 600 characters, 2 or 3 nodes take "2 nodes can’t run here yet.",
+  which drops the actions. Is that right?
+- A save that can't keep its copy in ~/.nebula (the folder refuses it)
+  is refused with the folder line naming ~/.nebula.

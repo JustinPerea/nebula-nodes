@@ -413,14 +413,17 @@ In desktop mode (detected via `window.nebulaDesktop.credentials`):
   removed). A failed Keychain write is never reverted, since it changed
   nothing.
 - `revert` undoes only that provider's latest write, only from the frame
-  that made it (the page's main frame: every credential call from a
+  that made it, in the same page (the frame's process and routing ids and
+  its webContents; the page's main frame: every credential call from a
   subframe is refused, `UNTRUSTED_SENDER`), and only while
   `credentials.json` still holds what that write left there
   (compare-and-swap; otherwise `STORE_CHANGED`). A commit, the page being
   destroyed, crashing or navigating, a later write of the same provider, or
   one minute passing (`REVERT_WINDOW_MS`) drops the entry, so a stale or
   made-up id gets `NOT_THE_LATEST_WRITE` and changes nothing. A write that
-  lands after its page started navigating is committed at once.
+  lands after its page started navigating is committed at once, and one
+  the old document makes after its navigation started is dropped when the
+  new document commits (`did-navigate`).
 - What's left: the trusted page can undo its own write for up to a minute,
   and only back to the entry as it was just before that write, so revert
   never makes a state the store didn't already have. That is narrower than

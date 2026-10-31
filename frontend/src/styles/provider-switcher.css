@@ -414,8 +414,9 @@ body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta);
   box-shadow: 0 0 6px rgba(110, 231, 183, 0.45);
 }
 
-/* The setup button's description (aria-describedby): read, never shown
-   (GM, PR #203 r30 item 3). */
+/* A switcher button's description (aria-describedby): read, never shown.
+   The setup button's add-key line (GM, PR #203 r30 item 3); the chip's and
+   the pill's node, provider and reason (r32 item 3). */
 .provider-switcher__hint {
   position: absolute;
   width: 1px;

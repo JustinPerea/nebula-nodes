@@ -1066,7 +1066,8 @@ describe('registerCredentialHandlers', () => {
     const event = pageEvent(sender);
     for (const key of ['a', 'b', 'c']) await set(ipcMain, event, 'FAL_KEY', key);
     await call(ipcMain, 'credentials:clear', event, 'FAL_KEY');
-    assert.deepEqual(['destroyed', 'render-process-gone', 'did-start-navigation'].map((name) => sender.count(name)), [1, 1, 1]);
+    assert.deepEqual(['destroyed', 'render-process-gone', 'did-start-navigation', 'did-navigate'].map((name) => sender.count(name)),
+      [1, 1, 1, 1]);
   });
 
   test('a write can be undone only inside the window', async (t) => {
@@ -1145,6 +1146,44 @@ describe('registerCredentialHandlers', () => {
     const { writeId } = await service.set('FAL_KEY', 'fal-new', main);
     assert.deepEqual(service.revert(writeId, other), NOT_LATEST);
     assert.deepEqual(service.revert(writeId, { key: '11:1', sender }), { ok: true });
+  });
+
+  // Review 16 of PR #203, settings LOW-2 (mutant D8), NIT-1 and NIT-4.
+  test('another object for the same frame can undo its write; another routing id cannot', async () => {
+    // Electron's WebFrameMain: distinct instances can refer to one frame.
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const wrote = await set(ipcMain, pageEvent(sender), 'FAL_KEY', 'fal-new');
+    const sameFrame = { senderFrame: { ...sender.mainFrame }, sender };
+    assert.notEqual(sameFrame.senderFrame, sender.mainFrame);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', sameFrame, wrote.writeId), { ok: true });
+    const again = await set(ipcMain, pageEvent(sender), 'FAL_KEY', 'fal-newer');
+    sender.mainFrame = { ...sender.mainFrame, routingId: sender.mainFrame.routingId + 1 };
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', pageEvent(sender), again.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-newer' });
+  });
+
+  test('a write the old document makes after its navigation started is final once the new one commits', async () => {
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const event = pageEvent(sender);
+    sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: true });
+    const before = await set(ipcMain, event, 'FAL_KEY', 'fal-a');
+    // Still the old document's own write until the new one commits.
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, before.writeId), { ok: true });
+    const after = await set(ipcMain, event, 'FAL_KEY', 'fal-b');
+    sender.emit('did-navigate', {}, 'file:///app/dist/index.html', 200, 'OK');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, after.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-b' });
+  });
+
+  test('the same frame ids in another page are another owner', async () => {
+    const { service } = makeHarness();
+    const one = createSender();
+    const two = createSender();
+    const { writeId } = await service.set('FAL_KEY', 'fal-new', { key: '11:1', sender: one });
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender: two }), NOT_LATEST);
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender: one }), { ok: true });
   });
 
   test('an event with no main frame to check against is refused (fails closed)', async () => {

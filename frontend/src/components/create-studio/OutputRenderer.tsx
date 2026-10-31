@@ -25,6 +25,7 @@ export function OutputRenderer({
   errorPerson,
   errorProviderText,
   errorProvider,
+  errorNotStarted,
   streamingText,
   streamingPartials,
   streamingSvg,
@@ -39,6 +40,8 @@ export function OutputRenderer({
   errorProviderText?: boolean;
   /** The provider the run called (round 3f): GM's general line names it. */
   errorProvider?: string;
+  /** Nebula refused the run before it started: the card's heading (round 17). */
+  errorNotStarted?: boolean;
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
   streamingSvg?: { index: number; svg: string; isFinal: boolean };
@@ -68,7 +71,7 @@ export function OutputRenderer({
     // line or GM's, the raw provider text only behind Details.
     return <NodeError className="create-output create-output--error" raw={error ?? 'Generation failed'}
       category={errorCategory} friendly={errorFriendly} person={errorPerson} providerText={errorProviderText}
-      provider={errorProvider} />;
+      provider={errorProvider} notStarted={errorNotStarted} />;
   }
 
   const isComplete = state === 'complete';

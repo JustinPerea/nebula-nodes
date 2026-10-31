@@ -11,8 +11,12 @@ node_readiness.instance_missing_reason over:
 - every case of backend/tests/fixtures/route_cases.json (the registry's and
   the fixture's route-table nodes, with the params, keys and connected
   inputs that stop a route: a setting it can't take, a hidden stop, too many
-  inputs, a size, a key only another route has, one that needs its key);
+  inputs, a key only another route has, one that needs its key);
 - a node whose key Settings doesn't store (not_set_up).
+
+No registry route table sets a size or retired rule today, so no row
+carries those clauses; backend/tests/test_idol_round17_log.py pins both
+with a fixture route (review 16 of PR #203, copy NIT-1).
 
 Each distinct reason (person_line NOT_READY_PREDICATES filled in) once,
 with its kind, the node it came from, the line the proposal bar shows for
@@ -20,9 +24,10 @@ one node, and the Agent Log's forms (the run-again ending in the action
 sentence's end slot; review 15 of PR #203, copy LOW-2, sockets-tests LOW-1).
 frontend/tests/lib/idolRound15.test.tsx merges every one of them through
 canvasProposals.notReadyShown, for one node and for two, and
-backend/tests/test_idol_round15.py and test_idol_round16.py check this file
-is current, that every kind appears, and that every line starts with the
-node's quoted name (review 14 of PR #203, copy MEDIUM-1 and LOW-1).
+backend/tests/test_idol_round15.py checks this file is current, that every
+kind in person_line.NOT_READY_PREDICATES appears in it (review 16, tests
+LOW-1), and that every line starts with the node's quoted name (review 14
+of PR #203, copy MEDIUM-1 and LOW-1).
 
 Usage:
   backend/.venv/bin/python scripts/generate-not-ready-reasons.py          # rewrite
@@ -71,9 +76,12 @@ def build() -> str:
         if definition.get("routes"):
             variants += [{"_provider": str(route.get("id"))} for route in definition["routes"]]
             variants.append({"_provider": "not-a-route"})
-        # No key set, then each route's own keys alone (so the other routes
-        # need their key: "…, or add your Replicate token in Settings and
-        # switch to Replicate.").
+        # No key set, then each route's own keys alone: a route whose key is
+        # set is named as the switch ("… or switch to fal.ai"), and a stop
+        # names the routes that need their key ("…, or add your Black Forest
+        # Labs API key in Settings and switch to Black Forest Labs."). A
+        # missing-key line names another route only when its key is set (GM,
+        # PR #203 r33 item 4).
         key_sets: list[list[str]] = [[]] + [list(_keys(route.get("keys"))) for route in definition.get("routes") or []]
         for params in variants:
             for keys in key_sets:

@@ -185,12 +185,15 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
             </span>
+            {/* The name is the row's visible text, one run in reading order
+                (GM, PR #203 r32 item 3): a space between its parts, which the
+                grid and the column don't render. */}
             <span className="provider-switcher__name">
               <span className="provider-switcher__label">{row.label}</span>
-              {row.block && <span className="provider-switcher__block">{row.block}</span>}
+              {row.block && <>{' '}<span className="provider-switcher__block">{row.block}</span></>}
             </span>
-            <span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
-            {row.info && <span className="provider-switcher__info">{row.info}</span>}
+            {' '}<span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
+            {row.info && <>{' '}<span className="provider-switcher__info">{row.info}</span></>}
           </button>
           {row.routeId !== null && keyCell(row, setup)}
         </div>
@@ -247,6 +250,7 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const hintId = useId();
   const close = useCallback((returnFocus: boolean) => {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus({ preventScroll: true });
@@ -256,11 +260,13 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
     : `param-pill provider-switcher__pill${state.blocked ? ' provider-switcher__pill--blocked' : ''}`;
   return (
     <>
+      {/* The name is the visible text as one run ("Provider Auto · runs on
+          fal.ai", "Auto · BFL"); what it doesn't show is the description: the
+          node, the full provider name and, blocked, the reason itself, never
+          a "Can't run" prefix (GM, PR #203 r6 item 2; r32 item 3). */}
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        // Blocked, the name ends with the reason itself, never a "Can't run"
-        // prefix (GM, PR #203 r6 item 2): each reason is a whole sentence.
-        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
+        aria-describedby={hintId}
         title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
@@ -268,12 +274,15 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
           if (event.key === 'ArrowDown' && !open) { event.preventDefault(); setOpen(true); }
         }}>
         {state.blocked && <span className="provider-switcher__warning" aria-hidden="true">&#x26A0;</span>}
-        {variant === 'pill' && <span className="param-pill__label">Provider</span>}
+        {variant === 'pill' && <><span className="param-pill__label">Provider</span>{' '}</>}
         {/* The card chip has room for a short name only where the full one
             can't fit (chipText); Create Studio's pill wraps, so it names it in full. */}
         <span className="provider-switcher__chip-text">{variant === 'pill' ? state.chipName : state.chip}</span>
         {variant === 'pill' && <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />}
       </button>
+      <span id={hintId} className="provider-switcher__hint">
+        {`Provider for ${displayName}: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
+      </span>
       {open && (
         <ProviderPopover anchorRef={triggerRef} id={menuId} onClose={close}>
           <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for ${displayName}`} onClose={close} />
