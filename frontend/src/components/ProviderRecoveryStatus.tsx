@@ -54,7 +54,7 @@ export function ProviderRecoveryStatus() {
   };
 
   return (
-    <div className="provider-recovery-status" role="alert" aria-live="assertive">
+    <div className="provider-recovery-status" role="alert" aria-live="assertive" data-line-box="">
       <span>
         <strong>{ambiguity
           ? WORLD_LABS_RUN_NEEDS_CHECK

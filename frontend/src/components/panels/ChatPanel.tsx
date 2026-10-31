@@ -59,6 +59,8 @@ import {
 } from '../../lib/chatCancellation';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 type ChatAgent = ChatAgentId;
 /** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
@@ -683,6 +685,8 @@ export function ChatPanel() {
     };
   }, [agent]);
 
+  // PR #204 round 10 (GM r15): the ChatGPT sign-in is the person's alone (require_person).
+  const codexLock = usePersonLock('sign in to Codex');
   const handleStartCodexChatGPTLogin = useCallback(async (deviceAuth = false) => {
     setCodexLoginBusy(true);
     setCodexLoginError(null);
@@ -2118,7 +2122,8 @@ export function ChatPanel() {
                     <button
                       type="button"
                       className="chat-panel__connect-btn chat-panel__connect-btn--primary"
-                      onClick={() => handleStartCodexChatGPTLogin(false)}
+                      {...codexLock.control()}
+                      onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(false))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
                       <LogIn
@@ -2133,12 +2138,14 @@ export function ChatPanel() {
                     <button
                       type="button"
                       className="chat-panel__connect-btn"
-                      onClick={() => handleStartCodexChatGPTLogin(true)}
+                      {...codexLock.control()}
+                      onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(true))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
                       Device Code
                     </button>
                   </div>
+                  <PersonLockLine lock={codexLock} />
                   {(codexLoginState || codexLoginError) && (
                     <div className="chat-panel__connect-progress">
                       <LineText text={codexLoginError || codexLoginState?.message} />

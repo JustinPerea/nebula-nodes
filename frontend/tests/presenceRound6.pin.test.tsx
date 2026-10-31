@@ -1,6 +1,7 @@
 // PR #204 round 6, GM r7 (3): the pin's Send note reads the one held state (useTabHeld, held,
 // demoted or not answered yet) with the same lock and the 150 ms rule, never personGateHeld.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { blocked, lockLine } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
@@ -59,12 +60,13 @@ async function openWithNote() {
 describe('GM r7 (3): Send note reads the one held state', () => {
   it('demoted with the banner closed (only the one state says so): Send note waits, with its reason', async () => {
     await openWithNote();
-    expect(send().disabled).toBe(false);
+    expect(blocked(send())).toBe(false);
     act(() => { session.reportPersonRequired(); session.setPersonBannerLine(null); });
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(send().title).toBe('');
     act(() => { session.notePersonPromoted(); });
-    expect(send().disabled).toBe(false);
+    expect(blocked(send())).toBe(false);
   });
 
   it('a fresh page not answered yet: the first 150 ms keep Send note\'s look and send nothing; then it greys', async () => {
@@ -77,7 +79,8 @@ describe('GM r7 (3): Send note reads the one held state', () => {
     await act(async () => { fireEvent.click(send()); });
     expect(api.createPin).not.toHaveBeenCalled();
     await act(async () => { vi.advanceTimersByTime(HELD_LOOK_DELAY_MS + 10); });
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(send().title).toBe('');
   });
 });

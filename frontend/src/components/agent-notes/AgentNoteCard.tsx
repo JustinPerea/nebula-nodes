@@ -2,6 +2,8 @@ import { type CSSProperties, type Ref } from 'react';
 import { X } from 'lucide-react';
 import type { AgentNote, AgentNoteAction } from '../../lib/agentNotes';
 import { noteLabel, noteText } from '../../lib/agentNotesView';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { AuthorDot, NoteButtons, RunOutcomeIcon, RunThumbnail, type AgentNotesAdapter } from './AgentNoteParts';
 
 interface HoldHandlers {
@@ -38,6 +40,9 @@ export function AgentNoteCard({
   onShow: (anchor?: HTMLElement) => void;
 }) {
   const label = noteLabel(note);
+  // PR #204 round 10 (GM r15): dismissing is the person's alone (POST .../agent-notes/{id}/dismiss:
+  // require_person), so × locks through the one lock, its line at the foot of the card.
+  const dismissLock = usePersonLock('dismiss updates');
   return (
     <div
       ref={cardRef}
@@ -59,16 +64,17 @@ export function AgentNoteCard({
           type="button"
           className="agent-note-card__close"
           aria-label="Dismiss this update"
-          title="Dismiss (it stays in Updates)"
+          title={dismissLock.locked ? undefined : 'Dismiss (it stays in Updates)'}
+          {...dismissLock.control()}
           onClick={(event) => {
             event.stopPropagation();
-            onDismiss();
+            if (!dismissLock.locked) onDismiss();
           }}
         >
           <X size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>
       </div>
-      <p className="agent-note-card__text" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
+      <p className="agent-note-card__text" data-agent-text="" onClick={(event) => { onRead(); if (note.refs.length > 0) onShow(event.currentTarget); }}>
         <RunOutcomeIcon run={note.run} />
         {noteText(note, adapter.numberFor)}
       </p>
@@ -79,6 +85,7 @@ export function AgentNoteCard({
         onAction={(action, anchor) => { onRead(); onAction(action, anchor); }}
         onShow={(anchor) => { onRead(); onShow(anchor); }}
       />
+      <PersonLockLine lock={dismissLock} className="agent-note-card__held-line" />
     </div>
   );
 }

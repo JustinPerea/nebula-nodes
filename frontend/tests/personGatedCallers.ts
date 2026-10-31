@@ -46,6 +46,15 @@ export function gatedRoutes(files?: Record<string, string>): GatedRoute[] {
   return [...readGateRoutes(files).routes].sort((a, b) => `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`));
 }
 
+/**
+ * PR #204 round 10: the routes that refuse anyone but the person every time (personGateRoutes.py
+ * personOnly: require_person, person_only or the Commons' human_dep, reached unconditionally),
+ * the set whose controls lock (tests/personLockSweep.ratchet.test.ts).
+ */
+export function personOnlyRoutes(files?: Record<string, string>): GatedRoute[] {
+  return [...readGateRoutes(files).personOnly].sort((a, b) => `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`));
+}
+
 /** A route form personGateRoutes.py can't read (round 7): it is listed, never skipped. */
 export interface UnreadableRouteForm {
   file: string; line: number; form: string;
@@ -61,7 +70,7 @@ export function unreadableRouteForms(files?: Record<string, string>): Unreadable
   return [...readGateRoutes(files).unreadable];
 }
 
-interface GateScan { routes: GatedRoute[]; unreadable: UnreadableRouteForm[] }
+interface GateScan { routes: GatedRoute[]; unreadable: UnreadableRouteForm[]; personOnly: GatedRoute[] }
 let realScan: GateScan | undefined;
 
 /** One run of the script per backend: the real one is read once per test file. */
@@ -133,9 +142,71 @@ function constantText(node: ts.Node): string | null {
   return null;
 }
 
+/**
+ * Round 10 (review 8 LOW-1): the `const` a name refers to when it is declared in a block around
+ * the name inside a function (a top-level one is constantText's). Null for anything else: a
+ * declaration, a property's name, a parameter, a top-level name.
+ */
+function localConst(node: ts.Node): ts.VariableDeclaration | null {
+  if (!ts.isIdentifier(node) || !isValueReference(node)) return null;
+  for (let scope: ts.Node | undefined = node.parent; scope && !ts.isSourceFile(scope); scope = scope.parent) {
+    if (!ts.isBlock(scope)) continue;
+    for (const statement of scope.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && declaration.name.text === node.text) return declaration;
+      }
+    }
+  }
+  return null;
+}
+/** A name that stands for its value here: not one being declared, nor a property's name. */
+function isValueReference(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  if (ts.isPropertyAccessExpression(parent)) return parent.expression === node;
+  if (ts.isShorthandPropertyAssignment(parent)) return true;
+  return (parent as { name?: ts.Node }).name !== node;
+}
+const isConstList = (declaration: ts.VariableDeclaration): boolean =>
+  ts.isVariableDeclarationList(declaration.parent) && (declaration.parent.flags & ts.NodeFlags.Const) !== 0;
+
+/** What a function-local `const` holds as a path, read through parentheses and a conditional
+ * whose branches are both read; null when any part of it can't be read. */
+function readableTexts(node: ts.Node, depth = 0): string[] | null {
+  let e = node;
+  while (ts.isParenthesizedExpression(e)) e = e.expression;
+  if (ts.isConditionalExpression(e)) {
+    const whenTrue = readableTexts(e.whenTrue, depth);
+    const whenFalse = readableTexts(e.whenFalse, depth);
+    return whenTrue && whenFalse ? [...whenTrue, ...whenFalse] : null;
+  }
+  if (ts.isIdentifier(e)) {
+    const top = constantText(e);
+    if (top !== null) return [top];
+    return depth < 4 ? localConstTexts(e, depth + 1) : null;
+  }
+  const texts = literalTexts(e);
+  return texts.length > 0 ? texts : null;
+}
+/** The texts of the function-local `const` a name refers to (null: not one, or not read). */
+function localConstTexts(node: ts.Node, depth = 0): string[] | null {
+  const declaration = localConst(node);
+  if (!declaration || !isConstList(declaration) || !declaration.initializer) return null;
+  return readableTexts(declaration.initializer, depth);
+}
+/** A placeholder's or a `+` part's text: a top-level const, or a function-local one of one text. */
+function nameText(node: ts.Node): string | null {
+  const top = constantText(node);
+  if (top !== null) return top;
+  const local = localConstTexts(node);
+  return local && local.length === 1 ? local[0] : null;
+}
+
 /** A literal's texts: one, or, for a template whose placeholder picks between two strings
- * (`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/…`), one per choice (round 7). */
+ * (`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/…`), one per choice (round 7).
+ * Round 10: a name that refers to a function-local `const` path is that path, written here. */
 function literalTexts(node: ts.Node): string[] {
+  if (ts.isIdentifier(node)) return localConstTexts(node) ?? [];
   if (ts.isTemplateExpression(node)) {
     let out = [node.head.text];
     for (const span of node.templateSpans) {
@@ -143,7 +214,7 @@ function literalTexts(node: ts.Node): string[] {
       while (ts.isParenthesizedExpression(e)) e = e.expression;
       const choices = ts.isConditionalExpression(e) && [e.whenTrue, e.whenFalse].every((b) => ts.isStringLiteral(b) || ts.isNoSubstitutionTemplateLiteral(b))
         ? [e.whenTrue, e.whenFalse].map((b) => (b as ts.StringLiteral).text)
-        : [constantText(span.expression) ?? '\uE000'];
+        : [nameText(span.expression) ?? '\uE000'];
       out = out.flatMap((head) => choices.map((choice) => head + choice + span.literal.text));
     }
     return out;
@@ -156,12 +227,12 @@ function literalText(node: ts.Node): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   // Round 7 (gates-security LOW-1): a placeholder that names a top-level string const is its text
   // (`${API}presets` with `const API = '/api/'`).
-  if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `${constantText(span.expression) ?? '\uE000'}${span.literal.text}`).join('');
+  if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `${nameText(span.expression) ?? '\uE000'}${span.literal.text}`).join('');
   if (ts.isParenthesizedExpression(node)) return literalText(node.expression);
   // Round 6 (review 4 LOW-1): '/api/' + 'presets', `${BASE}/api/…` + id.
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = literalText(node.left) ?? constantText(node.left);
-    const right = literalText(node.right) ?? constantText(node.right);
+    const left = literalText(node.left) ?? nameText(node.left);
+    const right = literalText(node.right) ?? nameText(node.right);
     if (left === null && right === null) return null;
     return (left ?? '\uE000') + (right ?? '\uE000');
   }
@@ -378,7 +449,9 @@ function build(files: Parsed[]): Frontend {
         // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
         // sends nothing (round 7: no longer a caller to follow).
         if (describesOnly(node)) return;
-        if (path === null || !unit || unplaced || unreadUse(node, false)) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
+        const held = heldPath(node);
+        if (held === 'followed') return;
+        if (path === null || !unit || unplaced || held === 'unread' || unreadUse(node, false)) untraced.push({ file, line, text: text.replace(/\uE000/g, '${…}') });
         else literals.push({ text: path, method: methodOf(node), unit, node });
       }
       if (texts.some((text) => text.includes('/api/'))) return; // the parts of a `+` are read with it
@@ -392,7 +465,7 @@ function build(files: Parsed[]): Frontend {
     const [file, name] = id.split('#');
     for (const reference of references.get(name) ?? []) {
       if (reference.file !== file && !imports.get(reference.file)?.has(file)) continue;
-      if (helperCall(reference.node) === reference.node || !unreadUse(reference.node, true)) continue;
+      if (!helperPassed(reference.node) && (helperCall(reference.node) === reference.node || !unreadUse(reference.node, true))) continue;
       const line = reference.node.getSourceFile().getLineAndCharacterOfPosition(reference.node.getStart()).line + 1;
       untraced.push({ file: reference.file, line, text: text.replace(/\uE000/g, '${…}') });
     }
@@ -452,11 +525,24 @@ const PATH_WRAPPERS = new Set(['String', 'backendUrl', 'backendUrlSync', 'joinBa
 const calleeName = (call: ts.CallExpression): string => ts.isIdentifier(call.expression) ? call.expression.text
   : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '';
 
-/** The expression a helper's reference makes its path with: `helper()`, `paths.helper()`. */
+/** The expression a helper's reference makes its path with: `helper()`, `paths.helper()`, and
+ * (round 10, review 8 LOW-1) `paths['helper']()`. */
 function helperCall(at: ts.Node): ts.Node {
-  let n = at;
-  if (n.parent && ts.isPropertyAccessExpression(n.parent) && n.parent.name === n) n = n.parent;
+  const n = helperName(at);
   return n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n ? n.parent : at;
+}
+/** A helper's reference with the object it is read from: `paths.helper`, `paths['helper']`. */
+function helperName(at: ts.Node): ts.Node {
+  if (at.parent && ts.isPropertyAccessExpression(at.parent) && at.parent.name === at) return at.parent;
+  if (at.parent && ts.isElementAccessExpression(at.parent) && at.parent.argumentExpression === at) return at.parent;
+  return at;
+}
+/** Round 10 (review 8 LOW-1, fail closed): a path helper handed to a call uncalled
+ * (`send(presetsPath)`): the call that makes its path isn't read, so it is listed. */
+function helperPassed(at: ts.Node): boolean {
+  let n = helperName(at);
+  while (n.parent && (ts.isParenthesizedExpression(n.parent) || reshapes(n.parent))) n = n.parent;
+  return !!n.parent && (ts.isCallExpression(n.parent) || ts.isNewExpression(n.parent)) && !!n.parent.arguments?.includes(n as ts.Expression);
 }
 
 /**
@@ -485,6 +571,43 @@ function unreadUse(at: ts.Node, helper: boolean): boolean {
     if (ts.isExpressionStatement(parent)) return ts.isBinaryExpression(top) && top.operatorToken.kind === ts.SyntaxKind.EqualsToken;
     return !(ts.isVariableDeclaration(parent) && parent.initializer === top && (ts.isCallExpression(top) || isFunctionLike(top)));
   }
+}
+
+const isAssignment = (node: ts.Node): boolean => ts.isBinaryExpression(node)
+  && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
+
+/**
+ * Round 10 (review 8 LOW-1, fail closed): a path held in a name or an object inside a function.
+ * - 'followed': the whole value of a function-local `const` (read through a conditional whose
+ *   branches are both read), used by name: each use is read as the path written there
+ *   (literalTexts), so this one isn't.
+ * - 'unread': a `let` or `var`, a name or property assigned (`u = '/api/…'`), a destructured
+ *   const, a conditional with a branch that can't be read, a const never used, an object's
+ *   property (`const cfg = { url: '/api/…' }`, `{ u }`). Listed.
+ * - null: anything else, read as before.
+ */
+function heldPath(node: ts.Node): 'followed' | 'unread' | null {
+  const top = climbPath(node);
+  for (let m: ts.Node = node; m !== top.parent && m; m = m.parent) if (isAssignment(m)) return 'unread';
+  const parent = top.parent;
+  if (!parent) return null;
+  if (ts.isVariableDeclaration(parent) && parent.initializer === top) {
+    const statement = parent.parent?.parent;
+    if (statement && ts.isVariableStatement(statement) && ts.isSourceFile(statement.parent)) return null; // a top-level const: followed as its own unit
+    const name = ts.isIdentifier(parent.name) ? parent.name : null;
+    if (!name || !isConstList(parent) || readableTexts(top) === null) return 'unread';
+    let used = false;
+    const visit = (n: ts.Node) => {
+      if (used) return;
+      if (ts.isIdentifier(n) && n !== name && n.text === name.text && localConst(n) === parent) used = true;
+      ts.forEachChild(n, visit);
+    };
+    if (statement?.parent) visit(statement.parent);
+    return used ? 'followed' : 'unread';
+  }
+  // Held in an object the trace doesn't read into.
+  if (ts.isPropertyAssignment(parent) || ts.isShorthandPropertyAssignment(parent)) return 'unread';
+  return null;
 }
 
 /** /api/ text the trace can't follow to a function: each must be declared (round 6, fail closed). */
@@ -977,8 +1100,9 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const caller = unitOf(reference.file, reference.node);
       if (!caller || (caller.file === unit.file && caller.name === unit.name)) continue;
       followed += 1;
-      // Round 9: a path helper's call whose use can't be read (listed as untraced) drops here.
-      if (helpers.has(id) && helperCall(reference.node) !== reference.node && unreadUse(reference.node, true)) {
+      // Round 9: a path helper's call whose use can't be read (listed as untraced) drops here;
+      // round 10, so does a helper handed to a call uncalled (`send(presetsPath)`).
+      if (helpers.has(id) && (helperPassed(reference.node) || helperCall(reference.node) !== reference.node && unreadUse(reference.node, true))) {
         keep(`${caller.file}#${caller.name}`, caller, 'drops');
         continue;
       }

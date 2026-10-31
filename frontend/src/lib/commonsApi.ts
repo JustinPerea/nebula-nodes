@@ -1,3 +1,4 @@
+import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
 import {
@@ -16,6 +17,7 @@ let session: Promise<string> | null = null;
 
 export function resetCommonsSessionForTests(): void {
   session = null;
+  holdCommonsCalls(false);
   resetPersonSessionForTests();
 }
 
@@ -52,6 +54,7 @@ const lostConnection = (heading: string, cause: unknown) =>
   new CommonsRequestError(CONNECTION_LOST_COPY, NO_ANSWER_STATUS, { cause, heading });
 
 async function send(heading: string, path: string, init: RequestInit, sentAt?: number): Promise<Response> {
+  if (commonsCallsHeld()) throw sessionLost(heading, sentAt); // a demote holds the Commons (lib/commonsHold)
   let token: string;
   try {
     token = await resolveCommonsToken();

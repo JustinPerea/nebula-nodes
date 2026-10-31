@@ -16,6 +16,8 @@ import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
 import { LineText } from '../LineText';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
@@ -284,8 +286,10 @@ function deletedByNote(entry: TrashedProject): string {
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
+function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className, lock }: {
   label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
+  /** A person-only action's lock (components/PersonLock): it never arms while locked. */
+  lock?: PersonLock;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -293,7 +297,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
   if (!armed) {
     // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
     return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
-      onClick={() => setArmed(true)}>{label}</button>;
+      {...lock?.control()} onClick={() => { if (!lock?.locked) setArmed(true); }}>{label}</button>;
   }
   return (
     <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
@@ -301,7 +305,8 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className
     }}>
       <span className="project-home__confirm-prompt">{prompt}</span>
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
-      <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
+      <button type="button" className="project-home__danger" disabled={busy} {...lock?.control()}
+        onClick={() => { setArmed(false); if (!lock?.locked) onConfirm(); }}>{confirmLabel}</button>
     </span>
   );
 }
@@ -313,6 +318,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
   const [open, setOpen] = useState(false);
   // Read the clock when the list opens, not on every render.
   const [now, setNow] = useState(() => Date.now());
+  // PR #204 round 10 (GM r15, r17 item 1): deleting for good is the person's alone (DELETE
+  // /api/projects/trash/{id}, POST .../trash/empty: require_person). Empty and every Delete
+  // forever lock as one group with one line under the heading.
+  const purgeLock = usePersonLock('delete projects for good');
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
       <div className="project-home__trash-header">
@@ -326,8 +335,9 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
           </button>
         </h2>
         {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
-          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
+          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" lock={purgeLock} />}
       </div>
+      {open && <PersonLockLine lock={purgeLock} />}
       {open && (
         <div id="recently-deleted-list">
           <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
@@ -339,7 +349,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
                 <span className="project-home__trash-actions">
                   <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
-                    onConfirm={() => onPurge(entry.id)} />
+                    onConfirm={() => onPurge(entry.id)} lock={purgeLock} />
                 </span>
               </li>
             ))}
@@ -521,7 +531,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             onDownload={onDownloadEdits} onContinue={onContinueWithoutEdits} /></div>
             : editsSavedAs && <div {...track('saved')}><div tabIndex={-1} className="project-home__notice" role="status">
               {editsSavedLine(editsSavedAs.name)}</div></div>}
-          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1}>
+          {showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={shortLine(error!)} /> : <LineText text={error} />}</span>}

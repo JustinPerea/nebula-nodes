@@ -91,7 +91,7 @@ import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
   PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, refusalError, requestError,
-  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy,
+  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
 import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { sentUnderPromote } from '../lib/personSession';
@@ -13075,7 +13075,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       // the canvas, never "try again" (a second Generate would add them again).
       const generateRefused = Boolean(createOrigin) && isPersonRefusal(error);
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
-        generateRefused ? generateRefusedCopy(true) : failureMessage(error, "Couldn't start the run."), error, generateRefused) }));
+        // GM r16 Q3 (round 10): any other reason says the nodes are there too, never "try again".
+        generateRefused ? generateRefusedCopy(true) : createOrigin ? generateStartFailedCopy(error)
+          : failureMessage(error, "Couldn't start the run."), error, Boolean(createOrigin)) }));
     }
   },
 

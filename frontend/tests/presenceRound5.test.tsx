@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { blocked, lockLine, reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
@@ -60,7 +61,6 @@ const { coverProposal } = await import('../src/test/assetProposalFixtures');
 const session = await import('../src/lib/personSession');
 const { apiFetch } = await import('../src/lib/backend');
 const { PERSON_REQUIRED_CODE, RequestFailedError, MARK_READ_REFUSED_COPY, requestError } = await import('../src/lib/errorCopy');
-const { PROPOSAL_GATE_COPY } = await import('../src/lib/canvasProposals');
 const { pendingPromoteClears, pendingPromoteRetries } = await import('../src/lib/clearsOnPromote');
 const { HELD_LOOK_DELAY_MS } = await import('../src/hooks/useHeldLook');
 
@@ -122,7 +122,7 @@ const asks = (root: ParentNode) => [...root.querySelectorAll<HTMLButtonElement>(
 const look = (button: HTMLElement) => ({
   locked: button.getAttribute('aria-disabled'),
   pending: button.hasAttribute('data-held-pending'),
-  title: button.getAttribute('title'),
+  title: reasonOf(button),
 });
 const rows = (list: HTMLElement) => [...list.querySelectorAll<HTMLElement>('[data-group="needsYou"]')];
 
@@ -304,7 +304,7 @@ describe('GM r5 2a: a fresh tab is locked from load until the socket\'s first an
     fireEvent.click(button);
     expect(accept).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(HELD_LOOK_DELAY_MS + 10); });
-    expect([button.disabled, button.hasAttribute('data-held-pending'), button.title]).toEqual([true, false, PROPOSAL_GATE_COPY.accept]);
+    expect([blocked(button), button.hasAttribute('data-held-pending'), button.title, lockLine(button)]).toEqual([true, false, '', REVIEW_LOCK]);
   });
 });
 
@@ -318,14 +318,14 @@ describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => 
     const accept = () => document.querySelector<HTMLButtonElement>('.asset-proposal__button--accept')!;
     expect(asks(list).map((button) => button.getAttribute('aria-disabled'))).toEqual([null, null, null]);
     expect(rows(list).map((row) => row.getAttribute('aria-disabled'))).toEqual([null, null, null]);
-    expect(accept().disabled).toBe(false);
+    expect(blocked(accept())).toBe(false);
 
     act(() => { session.reportPersonRequired(); }); // the server's demote
-    expect(asks(list).map((button) => [button.getAttribute('aria-disabled'), button.getAttribute('title')]))
+    expect(asks(list).map((button) => [button.getAttribute('aria-disabled'), reasonOf(button)]))
       .toEqual([['true', REVIEW_LOCK], ['true', ANSWER_LOCK], ['true', REVIEW_LOCK]]);
-    expect(rows(list).map((row) => [row.getAttribute('aria-disabled'), row.getAttribute('title')]))
+    expect(rows(list).map((row) => [row.getAttribute('aria-disabled'), reasonOf(row)]))
       .toEqual([['true', REVIEW_LOCK], ['true', ANSWER_LOCK], ['true', REVIEW_LOCK]]);
-    expect([accept().disabled, accept().title]).toEqual([true, PROPOSAL_GATE_COPY.accept]);
+    expect([blocked(accept()), accept().title, lockLine(accept())]).toEqual([true, '', REVIEW_LOCK]);
     // What it synced stays listed: the asks are still there, only locked.
     expect(Object.keys(useCanvasProposalsStore.getState().proposals)).toEqual(['p_canvas']);
     expect(useAgentQuestionsStore.getState().sets.qs_2).toBeDefined();
@@ -337,7 +337,7 @@ describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => 
 
     promoteAsks();
     expect(asks(list).map((button) => button.getAttribute('aria-disabled'))).toEqual([null, null, null]);
-    expect(accept().disabled).toBe(false);
+    expect(blocked(accept())).toBe(false);
   });
 
   it('the arrival card of a demoted tab locks too', async () => {
@@ -351,7 +351,7 @@ describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => 
       expect(found).not.toBeNull();
       return found!;
     });
-    expect(asks(card).map((button) => [button.getAttribute('aria-disabled'), button.getAttribute('title')]))
+    expect(asks(card).map((button) => [button.getAttribute('aria-disabled'), reasonOf(button)]))
       .toEqual([['true', ANSWER_LOCK]]);
     fireEvent.click(asks(card)[0]);
     await act(async () => { await Promise.resolve(); });

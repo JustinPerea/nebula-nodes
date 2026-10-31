@@ -353,6 +353,11 @@ if (typeof window !== 'undefined') {
  */
 let personPromotionsNow = 0;
 export const personPromotions = (): number => personPromotionsNow;
+/** PR #204 round 10 (GM r17 item 6): whether the server has promoted this tab at all. A held tab
+ * that was promoted is a demoted one (hooks/useTabHeld useDemotedView); the count above never
+ * resets (its stamps compare against it), this does, with the session in tests. */
+let personWasPromotedNow = false;
+export const personWasPromoted = (): boolean => personWasPromotedNow;
 /** Review 4 LOW-1 (round 6): the promote count each answer's request was sent under, recorded
  * at send time, so "sent before the promote" is read against the promotes so far whenever it is
  * asked (at parse, at a line's registration), never frozen when the answer was parsed. */
@@ -378,6 +383,7 @@ export function sentBeforePromote(response: object): boolean {
  * on promote, and only then). Clears the hold and the banner. */
 export function notePersonPromoted(): void {
   personPromotionsNow += 1;
+  personWasPromotedNow = true;
   setPersonGateHeld(false);
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PERSON_PROMOTED_EVENT));
 }
@@ -414,6 +420,7 @@ if (typeof window !== 'undefined') {
 export function resetPersonSessionForTests({ unanswered = false }: { unanswered?: boolean } = {}): void {
   setPersonBannerLine(null);
   setPersonGateHeld(false);
+  personWasPromotedNow = false;
   if (unanswered) {
     personGateAnsweredNow = false;
     personGateListeners.forEach((listener) => listener());

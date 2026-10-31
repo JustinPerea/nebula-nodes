@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 
 /**
@@ -120,7 +121,7 @@ const header = (list: HTMLElement) => list.querySelector('.agent-notes-panel__co
 const asks = (root: ParentNode) => [...root.querySelectorAll<HTMLButtonElement>('button[data-op="proposal.review"], button[data-op="question.answer"]')];
 const look = (root: ParentNode) => asks(root).map((button) => [
   button.closest('[data-note-id]')?.getAttribute('data-note-id') ?? 'card', button.textContent,
-  button.getAttribute('aria-disabled'), button.getAttribute('title')]);
+  button.getAttribute('aria-disabled'), reasonOf(button)]);
 
 beforeEach(() => {
   notePersonPromoted(); // nothing left waiting from another test
@@ -174,7 +175,7 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
     const show = [...list.querySelectorAll<HTMLButtonElement>('[data-note-id="u_cover"] button')]
       .find((button) => button.textContent === 'Show on canvas');
     expect(show).toBeDefined();
-    expect([show!.getAttribute('aria-disabled'), show!.getAttribute('title'), show!.classList.contains('agent-notes-btn--held')])
+    expect([show!.getAttribute('aria-disabled'), reasonOf(show!), show!.classList.contains('agent-notes-btn--held')])
       .toEqual([null, null, false]);
     expect(look(list)[0]).toEqual(['u_cover', 'Review', 'true', REVIEW_LOCK]);
   });

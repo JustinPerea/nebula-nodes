@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { blocked, lockLine } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, RequestFailedError } from '../src/lib/errorCopy';
 
@@ -51,8 +52,9 @@ describe('GM r24: the toast beside the person-gate banner', () => {
     expect(PIN_REFUSAL_COPY.notAdded).toBe('Your note wasn’t added.');
     expect(field().value).toBe('warmer please');
     // The banner's up now, so Send note waits too.
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe('You can send notes when this tab is connected as you.');
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe('You can send notes when this tab is connected as you.');
+    expect(send().title).toBe('');
     const live = [...document.querySelectorAll('[role="status"], [aria-live]')].filter((el) => el.textContent?.includes('Your note wasn’t added.'));
     expect(live).toHaveLength(1);
   });
@@ -67,8 +69,9 @@ describe('GM r24: the toast beside the person-gate banner', () => {
     expect(bannerText()).toBeNull();
     expect(toastText()).toBe(PERSON_REQUIRED_COPY);
     // × hides the banner, not the condition: Send note waits with its reason.
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(send().title).toBe('');
     await act(async () => { fireEvent.submit(field().closest('form')!); });
     expect(api.createPin).toHaveBeenCalledTimes(1);
   });
@@ -89,8 +92,9 @@ describe('GM r24: Send note waits while the banner shows', () => {
     act(() => session.reportPersonRequired());
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
     fireEvent.change(field(), { target: { value: 'a note' } });
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe(PIN_REFUSAL_COPY.sendWhenConnected);
+    expect(send().title).toBe('');
     await act(async () => { fireEvent.submit(field().form!); });
     expect(api.createPin).not.toHaveBeenCalled();
     expect(toastText()).toBeNull();
@@ -98,9 +102,9 @@ describe('GM r24: Send note waits while the banner shows', () => {
     // Connected: Send note is live again once the server promotes this tab
     // (GM r29 item 3, fix round 19); a link taken in alone isn't enough.
     act(() => { window.dispatchEvent(new CustomEvent('nebula:person-connected')); });
-    expect(send().disabled).toBe(true);
+    expect(blocked(send())).toBe(true);
     act(() => session.notePersonPromoted());
-    expect(send().disabled).toBe(false);
+    expect(blocked(send())).toBe(false);
   });
 
   it('banner arriving while the dialog is open disables it then', () => {
@@ -108,10 +112,11 @@ describe('GM r24: Send note waits while the banner shows', () => {
     useCanvasPinsStore.setState({ drafts: { '': 'make it warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<><PersonRequiredBanner /><PinComposer /></>);
-    expect(send().disabled).toBe(false);
+    expect(blocked(send())).toBe(false);
     act(() => session.reportPersonRequired());
-    expect(send().disabled).toBe(true);
-    expect(send().title).toBe('You can send notes when this tab is connected as you.');
+    expect(blocked(send())).toBe(true);
+    expect(lockLine(send())).toBe('You can send notes when this tab is connected as you.');
+    expect(send().title).toBe('');
   });
 });
 

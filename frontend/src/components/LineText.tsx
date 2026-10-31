@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { isBecauseLine, registerLine } from '../lib/notConnectedLine';
+import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
 import '../styles/becauseLine.css';
 
 const ANCHOR_STYLE = { display: 'none' } as const;
@@ -24,17 +24,31 @@ export const BECAUSE_ATTR = 'data-line-because';
 export function LineText({ text, className, children }: { text: string | null | undefined; className?: string; children?: ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
+  const registration = useRef<LineRegistration | null>(null);
+  const words = text || null;
+  // Review 8 MEDIUM-3 (round 10): one registration while the line is mounted (keyed to its
+  // element), its words updated in place below, so a change of words keeps what the observer
+  // said and the notice never flashes back. Unmounted (or no words): unregistered.
   useLayoutEffect(() => {
     const element = own ? ref.current : ref.current?.parentElement;
-    if (!element || !text) return undefined;
-    const because = isBecauseLine(text);
-    if (because) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
-    const unregister = registerLine(element, text);
+    if (!element || words === null) return undefined;
+    const held = registerLine(element, words);
+    registration.current = held;
     return () => {
-      unregister();
-      if (because) element.removeAttribute(BECAUSE_ATTR);
+      held();
+      registration.current = null;
+      element.removeAttribute(BECAUSE_ATTR);
     };
-  }, [text, own]);
+    // The words are read once here, then by the update below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [own, words === null]);
+  useLayoutEffect(() => {
+    const element = own ? ref.current : ref.current?.parentElement;
+    if (!element || words === null) return;
+    registration.current?.update(words);
+    if (isBecauseLine(words)) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
+    else element.removeAttribute(BECAUSE_ATTR);
+  }, [own, words]);
   if (!text) return null;
   if (own) return <span ref={ref} className={className}>{children ?? text}</span>;
   return <>{children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;

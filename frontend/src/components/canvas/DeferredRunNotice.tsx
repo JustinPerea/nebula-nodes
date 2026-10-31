@@ -2,6 +2,8 @@ import { Play, X } from 'lucide-react';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import '../../styles/canvasProposals.css';
 import { useLeave } from '../../lib/noticeLeave';
 
@@ -20,6 +22,9 @@ export function DeferredRunNotice() {
   // A run waiting for its inputs counts as starting (review 15, M-B).
   const runStarting = useGraphStore((s) => s.runStarting);
   const lock = useCanvasLock();
+  // PR #204 round 10 (GM r15): Dismiss releases the run's approval (DELETE
+  // /api/canvas/approvals: require_person), so it locks through the one lock.
+  const dismissLock = usePersonLock('dismiss this');
   // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
   const leave = useLeave(deferredRun);
   if (!leave.shown) return null;
@@ -40,10 +45,12 @@ export function DeferredRunNotice() {
           <Play size={13} aria-hidden="true" />
           Run
         </button>
-        <button type="button" className="proposal-bar__button" aria-label="Dismiss" onClick={dismissDeferred}>
+        <button type="button" className="proposal-bar__button" aria-label="Dismiss" {...dismissLock.control()}
+          onClick={dismissLock.guard(dismissDeferred)}>
           <X size={13} aria-hidden="true" />
         </button>
       </div>
+      <PersonLockLine lock={dismissLock} className="proposal-bar__held-line" />
     </div>
   );
 }

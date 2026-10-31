@@ -18,7 +18,7 @@ const { AgentQuestionsForm } = await import('../src/components/agent-notes/Agent
 const { useAgentQuestionsStore } = await import('../src/store/agentQuestionsStore');
 const { toolKindWord } = await import('../src/lib/acpToolKind');
 const session = await import('../src/lib/personSession');
-const { HELD_QUESTIONS_LINE } = await import('../src/store/heldAssetProposals');
+const { heldQuestionsLine } = await import('../src/store/heldAssetProposals');
 
 const part = (extra: Record<string, unknown> = {}) => ({
   kind: 'permission' as const, requestId: 'r-1', title: 'Run npm test', toolKind: 'execute', input: { command: 'npm test' },
@@ -34,7 +34,7 @@ describe('GM r10 (1): the permission card on a held tab', () => {
     render(<PermissionCard part={part()} agentName="Codex" onDecision={onDecision} />);
     act(() => session.reportPersonRequired());
     const card = screen.getByRole('group', { name: 'Codex asks permission' });
-    const line = within(card).getByText(HELD_QUESTIONS_LINE);
+    const line = within(card).getByText(heldQuestionsLine());
     expect(line.tagName).toBe('P');
     const actions = card.querySelector('.permission-card__actions')!;
     // Its own row, after the buttons' row, not inside it.
@@ -56,7 +56,7 @@ describe('GM r10 (1): the permission card on a held tab', () => {
   it('connected: no line, no description, and a press decides', () => {
     const onDecision = vi.fn();
     render(<PermissionCard part={part()} agentName="Codex" onDecision={onDecision} />);
-    expect(screen.queryByText(HELD_QUESTIONS_LINE)).toBeNull();
+    expect(screen.queryByText(heldQuestionsLine())).toBeNull();
     const deny = screen.getByRole('button', { name: 'Deny' });
     expect(deny).not.toHaveAttribute('aria-describedby');
     fireEvent.click(deny);
@@ -67,9 +67,9 @@ describe('GM r10 (1): the permission card on a held tab', () => {
     const onDecision = vi.fn();
     render(<PermissionCard part={part()} agentName="Codex" onDecision={onDecision} />);
     act(() => session.reportPersonRequired());
-    expect(screen.getByText(HELD_QUESTIONS_LINE)).toBeTruthy();
+    expect(screen.getByText(heldQuestionsLine())).toBeTruthy();
     act(() => session.notePersonPromoted());
-    expect(screen.queryByText(HELD_QUESTIONS_LINE)).toBeNull();
+    expect(screen.queryByText(heldQuestionsLine())).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }));
     expect(onDecision).toHaveBeenCalledWith('r-1', 'allow');
   });
@@ -107,7 +107,7 @@ describe('GM r10 (1) and (5): the question form on a held tab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Warm dusk' }));
     act(() => session.reportPersonRequired());
     const foot = document.querySelector('.agent-questions-form__foot')!;
-    const line = within(foot as HTMLElement).getByText(HELD_QUESTIONS_LINE);
+    const line = within(foot as HTMLElement).getByText(heldQuestionsLine());
     const buttons = [...foot.querySelectorAll('button')];
     expect(buttons.map((button) => button.textContent?.trim())).toEqual(['Dismiss', 'Send']);
     for (const button of buttons) {

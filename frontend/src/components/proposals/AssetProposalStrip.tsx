@@ -5,9 +5,9 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { takeReview } from '../../store/assetProposalReviewRequest';
 import type { AssetProposalKind, AssetProposalView, CommonsEdit } from '../../lib/assetProposals';
 import { proposalsFor, useAssetProposalsStore, type AssetProposalEntry } from '../../store/assetProposalsStore';
-import { PROPOSAL_GATE_COPY } from '../../lib/canvasProposals';
-import { useLockPending, useTabHeld } from '../agent-notes/heldLock';
-import { askedOrder, HELD_PROPOSAL_LINE, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
+import { askedOrder, heldProposalLine, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 import { LineText } from '../LineText';
 
@@ -194,10 +194,10 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
   // the server's promote clears it and its demote brings it back.
   // GM, #204 r5 item 2: one state, held or not answered yet since load (useTabHeld), with the
   // first 150 ms before the socket's first answer in its own look (as ProposalBar).
-  const gateHeld = useTabHeld();
-  const gatePending = useLockPending(gateHeld);
-  const gateGrey = gateHeld && !gatePending;
-  const pendingLook = gatePending ? { 'aria-disabled': true as const, 'data-held-pending': '' } : {};
+  // PR #204 round 10 (GM r15): through the one lock (components/PersonLock): aria-disabled, no
+  // tooltip, one line under both buttons.
+  const gate = usePersonLock('review this');
+  const gateHeld = gate.locked;
   return (
     <div role="group" aria-label={`${view.agent.name} ${said}`} tabIndex={-1} data-proposal-id={view.id}
       className={`asset-proposal${closing ? ' asset-proposal--closing' : ''}${inPlace ? ' asset-proposal--in-place' : ''}`}
@@ -213,13 +213,13 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
       {error && <p className="asset-proposal__error" role="alert"><LineText text={error} /></p>}
       <div className="asset-proposal__foot">
         <span className="asset-proposal__expires">{closing ? '' : minutesLeft(view, Math.max(now, shownAt))}</span>
-        <button type="button" className="asset-proposal__button" disabled={busy || gateGrey}
-          title={gateGrey ? PROPOSAL_GATE_COPY.reject : undefined} {...pendingLook}
+        <button type="button" className="asset-proposal__button" disabled={busy} {...gate.control()}
           onClick={() => { if (!gateHeld) void reject(view.id); }}>{pending === 'reject' ? 'Saying no…' : words.reject}</button>
-        <button type="button" className="asset-proposal__button asset-proposal__button--accept" disabled={busy || gateGrey}
-          title={gateGrey ? PROPOSAL_GATE_COPY.accept : undefined} {...pendingLook}
+        <button type="button" className="asset-proposal__button asset-proposal__button--accept" disabled={busy}
+          {...gate.control()}
           onClick={() => { if (!gateHeld) void accept(view.id); }}>{pending === 'accept' ? 'Accepting…' : words.accept}</button>
       </div>
+      <PersonLockLine lock={gate} className="asset-proposal__held-line" />
     </div>
   );
 }
@@ -251,7 +251,7 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
         <span className="asset-proposal__agent">{held.agentName}</span>
         <span className="asset-proposal__asks">{held.header}</span>
       </div>
-      <p className="asset-proposal__held-line">{HELD_PROPOSAL_LINE}</p>
+      <p className="asset-proposal__held-line"><LineText text={heldProposalLine()} /></p>
     </div>
   );
 }

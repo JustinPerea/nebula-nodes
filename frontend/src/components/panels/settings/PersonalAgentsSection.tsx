@@ -13,6 +13,9 @@ import '../../../styles/personal-agents.css';
 import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
 import { LineText } from '../../LineText';
+import { PersonLockLine, type LockProps } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
+import { useDemotedView } from '../../../hooks/useTabHeld';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
   ready: 'Ready',
@@ -40,7 +43,7 @@ function personalAgentBusy(agent: PersonalAgent): boolean {
 type Run = (work: () => Promise<unknown>) => Promise<void>;
 
 /** Gemini: hand the CLI the Gemini API key saved in Settings, only when the person turns it on. */
-function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; run: Run }) {
+function KeyOption({ agent, busy, run, lock }: { agent: PersonalAgent; busy: boolean; run: Run; lock: LockProps }) {
   const option = agent.keyOption;
   if (!option) return null;
   const blocked = option.blocked ?? (!option.keySaved && !option.enabled
@@ -49,7 +52,7 @@ function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; 
     <span className="personal-agents__option" data-testid="personal-agent-key-option">
       <label className="personal-agents__option-label">
         <input type="checkbox" role="switch" className="settings-switch" checked={option.enabled}
-          disabled={busy || (Boolean(blocked) && !option.enabled)}
+          disabled={busy || (Boolean(blocked) && !option.enabled)} {...lock}
           onChange={(event) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: event.target.checked }))} />
         Use my Gemini API key from Nebula
       </label>
@@ -60,7 +63,7 @@ function KeyOption({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; 
 }
 
 /** Antigravity: the pinned download and Google's sign-in, run by Google's own server. */
-function DownloadAndSignIn({ agent, busy, run }: { agent: PersonalAgent; busy: boolean; run: Run }) {
+function DownloadAndSignIn({ agent, busy, run, lock }: { agent: PersonalAgent; busy: boolean; run: Run; lock: LockProps }) {
   const install = agent.install;
   if (!install) return null;
   const job = install.job;
@@ -77,29 +80,29 @@ function DownloadAndSignIn({ agent, busy, run }: { agent: PersonalAgent; busy: b
       ) : job?.state === 'failed' ? <span className="settings-row__error" role="alert">{job.message}</span> : null}
       <span className="personal-agents__actions">
         {(install.state === 'missing' || install.state === 'changed') && (
-          <button type="button" className="settings__button settings__button--primary" disabled={busy}
+          <button type="button" className="settings__button settings__button--primary" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('install'))}>
             {install.state === 'changed' ? 'Download again' : `Download ${install.version} (${megabytes(install.sizeBytes)})`}
           </button>
         )}
         {install.state === 'downloading' && (
-          <button type="button" className="settings__button" disabled={busy}
+          <button type="button" className="settings__button" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('remove'))}>Stop download</button>
         )}
         {install.state === 'installed' && signIn?.state === 'signed_out' && (
-          <button type="button" className="settings__button settings__button--primary" disabled={busy}
+          <button type="button" className="settings__button settings__button--primary" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('sign-in'))}>Sign in with Google</button>
         )}
         {signIn?.state === 'waiting' && (
-          <button type="button" className="settings__button" disabled={busy}
+          <button type="button" className="settings__button" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('cancel-sign-in'))}>Cancel sign-in</button>
         )}
         {signIn?.state === 'signed_in' && (
-          <button type="button" className="settings__button settings__button--neutral" disabled={busy}
+          <button type="button" className="settings__button settings__button--neutral" disabled={busy} {...lock}
             onClick={() => void run(() => antigravityAction('sign-out'))}>Sign out</button>
         )}
         {(install.state === 'installed' || install.state === 'changed') && (
-          <button type="button" className="settings__button settings__button--danger" disabled={busy || signIn?.state === 'waiting'}
+          <button type="button" className="settings__button settings__button--danger" disabled={busy || signIn?.state === 'waiting'} {...lock}
             onClick={() => void run(() => antigravityAction('remove'))}>Remove download</button>
         )}
       </span>
@@ -128,6 +131,13 @@ export function PersonalAgentsSection() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
+  // PR #204 round 10 (GM r15, r17 item 4): every route here is the person's alone. A listed
+  // agent's switches, Remove and Antigravity's download and sign-in lock as a group, with one
+  // line under the heading; Add has its own line (GM's words).
+  const rowLock = usePersonLock('change your agents');
+  const addLock = usePersonLock('add an agent');
+  // GM r17 item 6 (b): a demoted tab shows what a tab that never connected shows.
+  const { demoted, epoch } = useDemotedView();
 
   const load = useCallback(function readAgain() {
     fetchPersonalAgents()
@@ -143,10 +153,10 @@ export function PersonalAgentsSection() {
       });
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, epoch]);
 
   // Follow a download or sign-in while it runs.
-  const following = (list?.agents ?? []).some(personalAgentBusy);
+  const following = !demoted && (list?.agents ?? []).some(personalAgentBusy);
   useEffect(() => {
     if (!following) return undefined;
     const timer = window.setInterval(load, POLL_MS);
@@ -154,6 +164,8 @@ export function PersonalAgentsSection() {
   }, [following, load]);
 
   const run = async (work: () => Promise<unknown>) => {
+    // Every change here is the person's alone (aria-disabled doesn't stop a click or a change).
+    if (rowLock.locked) return;
     setBusy(true);
     setError(null);
     try {
@@ -177,6 +189,8 @@ export function PersonalAgentsSection() {
     setDraft({ id: '', displayName: '', command: '', args: '' });
   });
 
+  const agents = demoted ? [] : (list?.agents ?? []);
+  const shownError = demoted ? notConnectedBecause('load your agents') : error;
   return (
     <section aria-labelledby="settings-personal-agents-heading" data-testid="settings-personal-agents">
       <div className="settings-label"><h3 id="settings-personal-agents-heading">Personal agents</h3></div>
@@ -185,9 +199,10 @@ export function PersonalAgentsSection() {
         canvas tools and counts their runs in the budget for agents outside Nebula&rsquo;s chats. The agent keeps its
         own shell, network and files; Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
       </p>
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      {agents.length > 0 && <PersonLockLine lock={rowLock} />}
+      {shownError && <p className="settings-row__error" role="alert"><LineText text={shownError} /></p>}
       <div className="settings-list">
-        {(list?.agents ?? []).map((agent) => (
+        {agents.map((agent) => (
           <div className="settings-pref settings-model-limit" key={agent.id} data-testid="personal-agent-row"
             data-agent-id={agent.id}>
             <span className="settings-pref__text">
@@ -202,18 +217,19 @@ export function PersonalAgentsSection() {
                 <code>{[agent.command, ...agent.args].join(' ')}</code>
                 {agent.termsNote && <span className="personal-agents__terms" role="note">{agent.termsNote}</span>}
               </span>
-              <KeyOption agent={agent} busy={busy} run={run} />
-              <DownloadAndSignIn agent={agent} busy={busy} run={run} />
+              <KeyOption agent={agent} busy={busy} run={run} lock={rowLock.control()} />
+              <DownloadAndSignIn agent={agent} busy={busy} run={run} lock={rowLock.control()} />
             </span>
             <span className="settings-model-limit__controls">
               {agent.startable && (
                 <input type="checkbox" role="switch" className="settings-switch" checked={agent.enabled}
-                  aria-label={`Use ${agent.displayName} in chat`} disabled={busy}
+                  aria-label={`Use ${agent.displayName} in chat`} disabled={busy} {...rowLock.control()}
                   onChange={(event) => void run(() => updatePersonalAgent(agent.id, { enabled: event.target.checked }))} />
               )}
               {agent.kind === 'custom' && (
                 <button type="button" className="settings__button settings__button--danger" disabled={busy}
-                  aria-label={`Remove ${agent.displayName}`} onClick={() => void run(() => deletePersonalAgent(agent.id))}>
+                  aria-label={`Remove ${agent.displayName}`} {...rowLock.control()}
+                  onClick={() => void run(() => deletePersonalAgent(agent.id))}>
                   Remove
                 </button>
               )}
@@ -221,7 +237,10 @@ export function PersonalAgentsSection() {
           </div>
         ))}
         <form className="settings-pref settings-model-limit settings-apps__new"
-          onSubmit={(event) => { event.preventDefault(); if (draft.id.trim() && draft.command.trim()) void addCustom(); }}>
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (draft.id.trim() && draft.command.trim() && !addLock.locked) void addCustom();
+          }}>
           <span className="settings-pref__text">
             <span className="settings-pref__title">Add an ACP agent</span>
             <span className="settings-pref__description">
@@ -240,8 +259,9 @@ export function PersonalAgentsSection() {
             <input className="settings-folder__input" aria-label="Custom agent arguments" placeholder="--acp"
               value={draft.args} disabled={busy} onChange={(event) => setDraft({ ...draft, args: event.target.value })} />
             <button type="submit" className="settings__button settings__button--primary"
-              disabled={busy || !draft.id.trim() || !draft.command.trim()}>Add</button>
+              disabled={busy || !draft.id.trim() || !draft.command.trim()} {...addLock.control()}>Add</button>
           </span>
+          <PersonLockLine lock={addLock} />
         </form>
       </div>
     </section>

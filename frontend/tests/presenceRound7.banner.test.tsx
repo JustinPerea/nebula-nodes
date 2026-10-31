@@ -14,7 +14,7 @@ const { currentFixLine, registerLine, resetLinesForTests } = await import('../sr
 const { LineText } = await import('../src/components/LineText');
 const session = await import('../src/lib/personSession');
 const { notConnectedBecause, personRequiredCopy } = await import('../src/lib/errorCopy');
-const { HELD_QUESTIONS_LINE } = await import('../src/store/heldAssetProposals');
+const { heldQuestionsLine } = await import('../src/store/heldAssetProposals');
 
 const banner = () => document.querySelector('.person-required');
 const handle: { showLine: (line: string | null) => void } = { showLine: () => {} };
@@ -53,9 +53,9 @@ describe('GM r8 (1): one notice, not two', () => {
   });
 
   it('beside the locked question form (its lock says it in a tooltip only), the notice stays', async () => {
-    expect(HELD_QUESTIONS_LINE).toBe('You can answer this when this tab is connected as you.');
-    render(<Screen title={HELD_QUESTIONS_LINE} />);
-    expect(document.querySelector(`[title="${HELD_QUESTIONS_LINE}"]`)).not.toBeNull();
+    expect(heldQuestionsLine()).toBe('You can answer this when this tab is connected as you.');
+    render(<Screen title={heldQuestionsLine()} />);
+    expect(document.querySelector(`[title="${heldQuestionsLine()}"]`)).not.toBeNull();
     act(() => session.reportPersonRequired());
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(null))); });
     expect(banner()).not.toBeNull();

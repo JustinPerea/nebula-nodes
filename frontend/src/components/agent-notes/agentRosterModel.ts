@@ -1,7 +1,7 @@
 import type { QuestionSetView } from '../../lib/agentQuestions';
 import type { AssetProposalKind, AssetProposalView } from '../../lib/assetProposals';
 import type { ProposalView } from '../../lib/wsClient';
-import { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { heldProposalLine, heldQuestionsLine } from '../../store/heldAssetProposals';
 import { isWaiting, proposalCount, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
 
 /**
@@ -217,7 +217,7 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
     const next = items[0];
     // The same rule as an Update's own Review and Answer (heldLock heldLockFor): every row
     // locks while the tab isn't confirmed, held asks and synced ones alike.
-    const locked = tabHeld ? (next.kind === 'questions' ? HELD_QUESTIONS_LINE : HELD_PROPOSAL_LINE) : null;
+    const locked = tabHeld ? (next.kind === 'questions' ? heldQuestionsLine() : heldProposalLine()) : null;
     const tooltip = locked ?? (counts.questions > 0 && counts.proposals > 0
       ? OPEN_NEXT : counts.questions > 0 ? OPEN_QUESTIONS : OPEN_PROPOSAL);
     const counted = countLine(counts);
@@ -225,7 +225,9 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
       agent, group: 'needsYou', counts, countLine: counted, statusText,
       // GM: "A blocked agent 'looking at' a node tells the person nothing."
       line: statusText ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
-      flyTo, next, tooltip, locked, ariaLabel: `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
+      flyTo, next, tooltip, locked,
+      // A locked row's reason is its line (aria-describedby, AgentRoster), not said twice in its name.
+      ariaLabel: locked ? `${who}, ${counted}.` : `${who}, ${counted}. ${tooltip}`, sortAt: next.createdAt,
     };
   }
 

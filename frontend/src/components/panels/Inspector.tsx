@@ -33,11 +33,14 @@ import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, notConnectedBecause } from '../../lib/errorCopy';
+import { clearSetterOnPromote, isPersonRefusal } from '../../lib/clearsOnPromote';
 import { extractPaletteFromImage, paletteNotice } from '../../lib/paletteExtract';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -92,6 +95,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
   const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
+  // PR #204 round 10 (GM r15, r17 items 1 and 5): a universal node's model picker and Fetch
+  // Schema set the model through POST /api/graph/node/{id}/model, and a favorite is PUT
+  // /api/settings, both the person's alone. The pickers lock as one group with one line; the
+  // star has its own.
+  const modelLock = usePersonLock('change the model');
+  const favoriteLock = usePersonLock('save favorites');
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const visible = embedded ? selectedNodeId !== null : panelVisible;
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
@@ -124,6 +133,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
 
   // Load favorites from settings
   useEffect(() => {
@@ -473,8 +483,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <select
           className="inspector__field"
           value={selectedModel}
-          disabled={readOnly} {...lock.mark}
+          disabled={readOnly} {...lock.mark} {...modelLock.control()}
           onChange={(e) => {
+            if (modelLock.locked) return;
             const selected = openRouterModels.find((m) => m.id === e.target.value);
             if (selected) {
               configureOpenRouterModel(activeNode.id, selected.id, selected);
@@ -488,6 +499,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </option>
           ))}
         </select>
+        <PersonLockLine lock={modelLock} />
         {modelLoadError && universalProvider === 'nous' && (
           <div className="inspector__model-error">
             <LineText text={modelLoadError} />
@@ -503,17 +515,27 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   ? 'inspector__favorite-button inspector__favorite-button--active inspector__favorite-remove'
                   : 'inspector__favorite-button inspector__favorite-remove'
               }
-              title={isFavorite ? 'Remove favorite' : 'Add favorite'}
+              title={favoriteLock.locked ? undefined : isFavorite ? 'Remove favorite' : 'Add favorite'}
               aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
               aria-pressed={isFavorite}
-              disabled={readOnly} {...lock.mark}
+              disabled={readOnly} {...lock.mark} {...favoriteLock.control()}
               onClick={() => {
+                if (favoriteLock.locked) return;
                 const updated = isFavorite
                   ? favoriteIds.filter((modelId: string) => modelId !== selectedModel)
                   : [...favoriteIds, selectedModel];
                 const newFavorites = { ...favorites, [universalProvider]: updated };
+                const before = favorites;
                 setFavorites(newFavorites);
-                updateSettings({ favorites: newFavorites }).catch(() => undefined);
+                // Review of the sweep (GM r17 item 5): a refused save no longer drops silently. The
+                // star goes back and the line says why (the same rule as every other setting).
+                setFavoriteError(null);
+                updateSettings({ favorites: newFavorites }).catch((exc: unknown) => {
+                  setFavorites(before);
+                  const line = isPersonRefusal(exc) ? notConnectedBecause('save the favorite') : failureMessage(exc, 'Couldn’t save the favorite.');
+                  setFavoriteError(line);
+                  clearSetterOnPromote(exc, setFavoriteError, line, null); // clears-on-promote: inspector.favorite
+                });
               }}
             >
               <Star
@@ -527,6 +549,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </button>
           </div>
         )}
+        {selectedModel !== '' && <PersonLockLine lock={favoriteLock} />}
+        {favoriteError && <div className="inspector__model-error" role="alert"><LineText text={favoriteError} /></div>}
       </div>
     );
   }
@@ -927,8 +951,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
             type="button"
             className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
             disabled={schemaLoading || !activeNodeData.params.model_id || readOnly}
-            {...lock.mark}
+            {...lock.mark} {...modelLock.control()}
             onClick={async () => {
+              if (modelLock.locked) return;
               const modelId = String(activeNodeData.params.model_id ?? '');
               if (!modelId.includes('/')) return;
               const [owner, name] = modelId.split('/', 2);
@@ -950,6 +975,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             <span>{schemaLoading ? 'Fetching…' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
           </button>
         )}
+        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && <PersonLockLine lock={modelLock} />}
       </div>
     );
   }

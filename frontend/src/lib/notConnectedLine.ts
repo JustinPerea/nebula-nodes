@@ -25,7 +25,18 @@ import { DEFERS_TO_NOTICE, saysPersonRequired } from './errorCopy';
  *   view doesn't count), `display: none` and a closed popover;
  * - and nothing IntersectionObserver can't see hides it: `hidden`, `aria-hidden`, `inert`,
  *   `visibility: hidden` or opacity 0 (checkVisibility in the browser, computed styles in jsdom).
- *   A change to those attributes, or an animation's end, checks the registered lines again.
+ *   A change to those attributes, or an animation's end, checks the registered lines again;
+ * - and nothing opaque covers it (review 8 MEDIUM-2, round 10): a line under Settings' dock
+ *   doesn't count. When the lines settle, a line counts only if `elementFromPoint` at one of a
+ *   few points of its rect, clipped to the window, lands inside it (or on what holds it, when the
+ *   line itself takes no pointer events). A dock opening or closing, a panel moving, a resize or
+ *   a scroll settles them again. Not IntersectionObserver v2's trackVisibility: it reports
+ *   opacity and transforms only, at a cost on every frame.
+ *
+ * Round 10 (review 8 MEDIUM-3, LOW-3): a line registers once and its words update in place
+ * (registerLine returns `update`), so a line whose words change keeps what the observer said of it
+ * and the notice never flashes back meanwhile. An element holds a registration per owner (two
+ * LineTexts in one element don't lose each other); it counts while any of them is a `fix` line.
  */
 export type NotConnectedKind = 'fix' | 'defers' | 'lock';
 
@@ -70,7 +81,12 @@ interface Registered { readonly text: string; readonly kind: NotConnectedKind }
 
 const LIVE = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
 
-const lines = new Map<Element, Registered>();
+/** Set on an element while a line is registered on it: tests/setup.ts's runtime ratchet reads it
+ * (review 8 LOW-1), whichever copy of this module a test loaded. */
+export const LINE_ATTR = 'data-line-registered';
+
+/** Each element's registrations, one per owner (a LineText), in the order they came. */
+const owners = new Map<Element, Map<symbol, Registered>>();
 /** What the IntersectionObserver last said of each line; a line it hasn't reported yet doesn't count. */
 const inView = new Map<Element, boolean>();
 const listeners = new Set<() => void>();
@@ -82,13 +98,39 @@ let frame = 0;
 const same = (a: FixLine | null, b: FixLine | null) => a === b || (!!a && !!b && a.text === b.text && a.live === b.live);
 const ioAvailable = () => typeof IntersectionObserver === 'function';
 
+/** The element's line as it counts: its first `fix` registration, else its first of any kind. */
+function lineOf(element: Element): Registered | undefined {
+  const all = [...(owners.get(element)?.values() ?? [])];
+  return all.find((line) => line.kind === 'fix') ?? all[0];
+}
+
+/** Points of the element's rect, clipped to the window, where something could cover it. */
+function samplePoints(element: Element): [number, number][] {
+  const rect = element.getBoundingClientRect();
+  const left = Math.max(rect.left, 0), right = Math.min(rect.right, window.innerWidth);
+  const top = Math.max(rect.top, 0), bottom = Math.min(rect.bottom, window.innerHeight);
+  if (right <= left || bottom <= top) return [];
+  const at = (fx: number, fy: number): [number, number] => [left + (right - left) * fx, top + (bottom - top) * fy];
+  return [at(0.5, 0.5), at(0.15, 0.5), at(0.85, 0.5), at(0.5, 0.2), at(0.5, 0.8)];
+}
+
+/** Review 8 MEDIUM-2: nothing opaque covers the whole line. A browser with no hit testing
+ * (jsdom) has nothing to ask, so the line counts. */
+export function lineUncovered(element: Element): boolean {
+  if (typeof document.elementFromPoint !== 'function') return true;
+  return samplePoints(element).some(([x, y]) => {
+    const hit = document.elementFromPoint(x, y);
+    return hit !== null && (element.contains(hit) || hit.contains(element));
+  });
+}
+
 function computeFixLine(): FixLine | null {
-  const shown = [...lines].filter(([element, line]) => line.kind === 'fix' && element.isConnected
-    && (ioAvailable() ? inView.get(element) === true : true) && lineRendered(element));
+  const shown = [...owners.keys()].filter((element) => lineOf(element)?.kind === 'fix' && element.isConnected
+    && (ioAvailable() ? inView.get(element) === true : true) && lineRendered(element) && lineUncovered(element));
   // The first in the page's order, so the answer never depends on which mounted first.
-  shown.sort(([a], [b]) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  shown.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
   const first = shown[0];
-  return first ? { text: first[1].text, live: first[0].closest(LIVE) !== null } : null;
+  return first ? { text: lineOf(first)!.text, live: first.closest(LIVE) !== null } : null;
 }
 
 function settle() {
@@ -105,17 +147,22 @@ function schedule() {
 }
 
 function startWatching() {
-  // What IntersectionObserver can't see: these attributes anywhere above a line, and a fade's end.
+  // What IntersectionObserver can't see: these attributes anywhere above a line, a fade's end, and
+  // (review 8 MEDIUM-2) what may cover one: a dock or panel added, removed, moved or resized.
   const attributes = new MutationObserver(() => schedule());
-  attributes.observe(document.body, { subtree: true, attributes: true,
+  attributes.observe(document.body, { subtree: true, childList: true, attributes: true,
     attributeFilter: ['hidden', 'aria-hidden', 'inert', 'class', 'style'] });
   const settled = () => schedule();
   document.addEventListener('animationend', settled, true);
   document.addEventListener('transitionend', settled, true);
+  window.addEventListener('resize', settled);
+  document.addEventListener('scroll', settled, true);
   stopWatching = () => {
     attributes.disconnect();
     document.removeEventListener('animationend', settled, true);
     document.removeEventListener('transitionend', settled, true);
+    window.removeEventListener('resize', settled);
+    document.removeEventListener('scroll', settled, true);
   };
 }
 
@@ -123,35 +170,65 @@ function ensureObserver(): IntersectionObserver | null {
   if (!ioAvailable()) return null;
   observer ??= new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (lines.has(entry.target)) inView.set(entry.target, entry.isIntersecting && entry.intersectionRatio > 0);
+      if (owners.has(entry.target)) inView.set(entry.target, entry.isIntersecting && entry.intersectionRatio > 0);
     }
     schedule();
   }, { root: null, threshold: [0, 0.01] });
   return observer;
 }
 
+/** A line's registration: call it (or `unregister`) when the line goes; `update` when its words
+ * change, which keeps what the observer said of the element (review 8 MEDIUM-3). */
+export interface LineRegistration {
+  (): void;
+  update(text: string): void;
+  unregister(): void;
+}
+
 /**
- * Registers a line's element under the kind its words give (none: nothing registers). Returns
- * the unregister. Registering the same element again replaces its entry (StrictMode's double
- * mount leaves one).
+ * Registers a line's element under the kind its words give, for one owner. Words of no kind
+ * register nothing until `update` gives them one. The element is observed while any owner holds
+ * a registration on it; StrictMode's double mount leaves one per owner.
  */
-export function registerLine(element: Element, text: string): () => void {
-  const kind = notConnectedKind(text);
-  if (kind === null) return () => {};
-  const first = lines.size === 0;
-  lines.set(element, { text, kind });
-  if (first) startWatching();
-  const io = ensureObserver();
-  if (io) { inView.delete(element); io.observe(element); }
-  schedule();
-  return () => {
-    if (lines.get(element)?.text !== text) return;
-    lines.delete(element);
-    inView.delete(element);
-    observer?.unobserve(element);
-    if (lines.size === 0) stopWatching();
+export function registerLine(element: Element, text: string): LineRegistration {
+  const owner = Symbol('line');
+  let live = true;
+  const set = (words: string) => {
+    const kind = notConnectedKind(words);
+    const held = owners.get(element);
+    if (kind === null) {
+      if (held?.delete(owner) && held.size === 0) drop(element);
+      schedule();
+      return;
+    }
+    const first = owners.size === 0;
+    if (held) held.set(owner, { text: words, kind });
+    else {
+      element.setAttribute(LINE_ATTR, '');
+      owners.set(element, new Map([[owner, { text: words, kind }]]));
+      if (first) startWatching();
+      const io = ensureObserver();
+      if (io) { inView.delete(element); io.observe(element); }
+    }
     schedule();
   };
+  const unregister = () => {
+    if (!live) return;
+    live = false;
+    const held = owners.get(element);
+    if (held?.delete(owner) && held.size === 0) drop(element);
+    schedule();
+  };
+  set(text);
+  return Object.assign(unregister, { update: (words: string) => { if (live) set(words); }, unregister });
+}
+
+function drop(element: Element) {
+  owners.delete(element);
+  element.removeAttribute(LINE_ATTR);
+  inView.delete(element);
+  observer?.unobserve(element);
+  if (owners.size === 0) stopWatching();
 }
 
 /** Calls `onChange` (at most once a frame) when the `fix` line on screen changes. */
@@ -166,14 +243,14 @@ export function currentFixLine(): FixLine | null {
   return listeners.size > 0 ? cached : computeFixLine();
 }
 
-/** What is registered, for tests and the ratchet's runtime check. */
+/** What is registered (each element's line as it counts), for tests and the runtime ratchet. */
 export function registeredLines(): ReadonlyMap<Element, Registered> {
-  return lines;
+  return new Map([...owners.keys()].map((element) => [element, lineOf(element)!]));
 }
 
 export function resetLinesForTests(): void {
-  for (const element of lines.keys()) observer?.unobserve(element);
-  lines.clear();
+  for (const element of owners.keys()) { observer?.unobserve(element); element.removeAttribute(LINE_ATTR); }
+  owners.clear();
   inView.clear();
   stopWatching();
   stopWatching = () => {};

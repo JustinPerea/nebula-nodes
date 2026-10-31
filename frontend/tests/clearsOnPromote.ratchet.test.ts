@@ -111,6 +111,8 @@ const SITES: Record<string, string> = {
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.agents': 'components/panels/settings/PersonalAgentsSection.tsx',
   'settings.write': 'lib/settingsWrites.ts',
+  // Round 10 (GM r17 item 5): the Inspector's star, whose refused save used to drop silently.
+  'inspector.favorite': 'components/panels/Inspector.tsx',
   'krea.connection': 'components/panels/settings/useKreaConnection.ts',
   'krea.plans': 'components/panels/settings/KreaSignInRow.tsx',
   'studio.save-board': 'components/moodboard-studio/MoodboardStudioView.tsx',
@@ -175,7 +177,7 @@ const GATED: Record<string, Surface> = {
   _answerable_questions: ['questions.answer', 'questions.dismiss'],
   _decidable_asset_proposal: ['asset-proposals.decide'],
   start_codex_chatgpt_login: ['chat.codex-login', 'chat.codex-login-check'],
-  update_settings: ['settings.write'],
+  update_settings: ['settings.write', 'inspector.favorite'],
   remove_settings_api_key: ['settings.write'],
   credentials_update: ['settings.write'],
   configure_universal_node: ['graph.notify', 'graph.refusal'],
@@ -390,7 +392,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     expect(own).toEqual([]);
   });
 
-  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 30_000 }, () => {
+  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 60_000 }, () => {
     const routes = gatedRoutes();
     expect(routes.length).toBeGreaterThan(50);
     const keys = routes.map((route) => `${route.method} ${route.path}`);

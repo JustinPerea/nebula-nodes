@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type 
 import type { AgentQuestion } from '../../lib/agentQuestions';
 import { canSend, useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { AuthorDot } from './AgentNoteParts';
-import { useLockPending, useTabHeld } from './heldLock';
-import { HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { LineText } from '../LineText';
 
 /**
@@ -39,14 +39,9 @@ export function AgentQuestionsForm({
   // they are (aria-disabled, still focusable, the 150 ms rule) and unlock in place on the
   // promote. The store refuses them too (agentQuestionsStore). GM r10 (1): the reason shows
   // on its own row under the buttons, as on the permission card, and they point at it.
-  const tabHeld = useTabHeld();
-  const lockPending = useLockPending(tabHeld);
-  const lineId = useId();
-  const lockShown = tabHeld && !lockPending;
-  const lockProps = tabHeld ? {
-    'aria-disabled': true as const, 'data-held-pending': lockPending ? '' : undefined,
-    'aria-describedby': lockShown ? lineId : undefined,
-  } : {};
+  const lock = usePersonLock('answer this');
+  const tabHeld = lock.locked;
+  const lockProps = lock.control();
   const lockClass = tabHeld ? ' agent-notes-btn--held' : '';
 
   // Focus starts on the first control, so Tab walks the questions in order.
@@ -169,7 +164,7 @@ export function AgentQuestionsForm({
         >
           Send
         </button>
-        {lockShown && <p id={lineId} className="agent-questions-form__held-line">{HELD_QUESTIONS_LINE}</p>}
+        <PersonLockLine lock={lock} className="agent-questions-form__held-line" />
       </div>
     </div>
   );

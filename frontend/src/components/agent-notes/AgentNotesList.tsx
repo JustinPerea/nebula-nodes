@@ -117,7 +117,7 @@ export function AgentNotesList({
           {label && <span className="agent-notes-entry__label">{label}</span>}
           <time className="agent-notes-entry__time" dateTime={note.at}>{clockTime(note.at, today)}</time>
         </div>
-        <p className="agent-notes-entry__text"><RunOutcomeIcon run={note.run} />{noteText(note, adapter.numberFor)}</p>
+        <p className="agent-notes-entry__text" data-agent-text=""><RunOutcomeIcon run={note.run} />{noteText(note, adapter.numberFor)}</p>
         <RunThumbnail run={note.run} />
         <QuestionAnswersFor note={note} />
         <NoteButtons

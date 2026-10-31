@@ -42,7 +42,7 @@ describe('GM r14 (5): Connect locks while this tab isn\'t connected as you', () 
     expect(button.hasAttribute('title')).toBe(false);
     const line = document.getElementById(button.getAttribute('aria-describedby')!)!;
     expect(line.textContent).toBe(LINE);
-    expect(line.className).toBe('settings-apps__held-line');
+    expect(line.classList.contains('settings-apps__held-line')).toBe(true);
     fireEvent.click(button);
     fireEvent.submit(button.closest('form')!);
     expect(createConnectedApp).not.toHaveBeenCalled();

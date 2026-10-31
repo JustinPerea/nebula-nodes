@@ -5,6 +5,8 @@ import { targetsOf, useAssetProposalsStore } from '../../store/assetProposalsSto
 import { openOnce } from '../../store/assetProposalReviewRequest';
 import { useUIStore } from '../../store/uiStore';
 import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } from '../../lib/commonsApi';
+import { holdCommonsCalls } from '../../lib/commonsHold';
+import { useDemotedView } from '../../hooks/useTabHeld';
 import type { FailureCopy } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
@@ -276,7 +278,23 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
   );
 }
 
+/**
+ * PR #204 round 10 (GM r17 item 6, option b): the Commons is the person's to read, so a demoted
+ * tab shows exactly what a tab that never connected shows. Once a demote has lasted the held
+ * rule's 150 ms (useDemotedView), every Commons call answers as it does with no person token
+ * (lib/commonsHold: the not-connected line, nothing sent) and the view mounts
+ * afresh, so each pane shows its not-connected state. The promote mounts it again, which reads
+ * everything again. A quick reconnect never switches.
+ */
 export function CommonsView() {
+  const { demoted, epoch } = useDemotedView();
+  // Set while rendering, before the panes below mount and load: an effect here would run after
+  // theirs. It only mirrors `demoted`, so a second render sets the same value.
+  holdCommonsCalls(demoted);
+  return <CommonsViewBody key={demoted ? 'demoted' : `live-${epoch}`} />;
+}
+
+function CommonsViewBody() {
   const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
@@ -637,7 +655,7 @@ export function CommonsView() {
         <div className="commons-messages">
           <CommonsErrorLine line={shownError} />
           {uploadFailures.length > 0 && (
-            <p className="commons-notice commons-notice--error" role="alert">
+            <p className="commons-notice commons-notice--error" role="alert" data-line-box="">
               <span className="commons-notice__list">
                 {uploadFailures.map((failure, index) => <FailureLines key={index} failure={failure} />)}
               </span>

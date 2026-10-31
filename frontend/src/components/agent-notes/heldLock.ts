@@ -1,6 +1,8 @@
 import { useLockPending, useTabHeld } from '../../hooks/useTabHeld';
+import { type PersonLock } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import type { AgentNote } from '../../lib/agentNotes';
-import { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { heldProposalLine, heldQuestionsLine } from '../../store/heldAssetProposals';
 import { heldAsks } from './agentNeedsYou';
 
 /**
@@ -30,9 +32,19 @@ export { useLockPending, useTabHeld };
  * a demoted tab keeps the proposals it synced listed, but can't open them (GM r5 2b). */
 export function heldLockFor(note: AgentNote, tabHeld = true): string | null {
   if (!tabHeld) return null;
+  const verb = heldVerbFor(note);
+  if (!verb) return null;
+  return verb === ANSWER ? heldQuestionsLine() : heldProposalLine();
+}
+
+const ANSWER = 'answer this';
+const REVIEW = 'review this';
+/** The lock verb for an Update's open ask (PR #204 round 10: the line comes from the one lock,
+ * components/PersonLock), or null when it asks nothing. */
+export function heldVerbFor(note: AgentNote): typeof ANSWER | typeof REVIEW | null {
   const [ask] = heldAsks([note], () => false);
   if (!ask) return null;
-  return ask.kind === 'questions' ? HELD_QUESTIONS_LINE : HELD_PROPOSAL_LINE;
+  return ask.kind === 'questions' ? ANSWER : REVIEW;
 }
 
 /** The ops a held lock greys: the ones that open the ask. Show on canvas and Not now stay. */
@@ -40,4 +52,11 @@ export const HELD_OPS: ReadonlySet<string> = new Set(['proposal.review', 'questi
 
 export function useHeldLock(note: AgentNote): string | null {
   return heldLockFor(note, useTabHeld());
+}
+
+/** An Update's lock through the one lock (PR #204 round 10): its Review or Answer is
+ * aria-disabled with the line under the buttons, no tooltip. */
+export function useNoteLock(note: AgentNote): PersonLock {
+  const verb = heldVerbFor(note);
+  return usePersonLock(verb ?? REVIEW, verb !== null);
 }

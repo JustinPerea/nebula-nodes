@@ -1270,3 +1270,145 @@ The first full backend run on the merged tree failed 9 tests.
   refusal's line, which clears on the promote (`settings.apps`). They aren't locked (not asked).
 - Not built: GM's batch item (the save-board heading's missing "Nebula"), left for the wording
   batch.
+
+## Round 10 (review 8 on 343abb99; GM r15, r16, r17)
+
+### The person-only control sweep (GM r15, r16 (2) and (4), r17)
+- One lock for every control whose route is the person's alone: `hooks/usePersonLock` and
+  `components/PersonLock` (`PersonLockLine`). The control stays in place and focusable
+  (`aria-disabled`, the first-moment rule), its line sits under it, or once under its group's
+  heading with every control pointing at it (`aria-describedby`), there is no tooltip, and both
+  lift on the promote. A demoted tab locks too. `guard()` wraps a handler, since `aria-disabled`
+  doesn't stop a click; where a section sends through one `run`, the check sits in `run` itself
+  (ConnectedApps, PersonalAgentsSection) so the caller trace still sees the call and its catch.
+- The words: "You can <verb> when this tab is connected as you.", "window" in the app through one
+  word (`errorCopy.lockPlace`, `personLockLine`). The old constants (`HELD_PROPOSAL_LINE`,
+  `HELD_QUESTIONS_LINE`, `PROPOSAL_GATE_COPY`, the pin's send line) go through it, so the app's
+  word reaches them too.
+- What locks, by GM r17's list (the full map is `tests/personLockSweep.ratchet.test.ts` CALLERS):
+  Providers' keys (one line), the Krea sign-in and trial, Agent spending (one line), connected
+  agents ("change connected agents": limit, colour, Revoke), personal agents and Antigravity
+  ("change your agents"), Add under "Add an ACP agent", Storage ("change storage settings"),
+  Preferences' run cost, the Codex sign-in, the personal-agent warning, the proposal bar and the
+  asset strip ("review this", one line for Accept and Reject), the question form and permission
+  card, Send note, Delete note, Dismiss on an Update and on the deferred-run notice, the
+  Inspector's model and Fetch Schema, its favorite star ("save favorites"), Enhance, and both
+  trash views ("delete projects for good", "delete items for good").
+- The star's refused save used to drop silently: the star now goes back and the line says why
+  (`clears-on-promote: inspector.favorite`, in both ratchets).
+- The agent apps list, personal agents and the Commons on a demote (GM r17 (6), option b): once a
+  demote lasts the 150 ms held rule (`useTabHeld.useDemotedView`), each shows what a tab that
+  never connected shows: no rows and the not-connected load line; the Commons holds every call
+  (`lib/commonsHold`, read by `commonsApi.send`: the not-connected line under the call's heading,
+  nothing sent) and mounts afresh. The promote reads them again. "Demoted" is held after a
+  promote in this session (`personSession.personWasPromoted`, reset with the session in tests;
+  the promote count never resets, since its stamps compare against it).
+- The ratchet: `tests/personGateRoutes.py` now also lists the routes that are the person's in
+  every case (`require_person` called unconditionally, `person_only`, or the Commons'
+  `human_dep`): 73, 40 main and Krea plus 33 Commons. `personLockSweep.ratchet` maps each
+  frontend caller to its lock verb and host file (the host must call `usePersonLock('<verb>'`
+  and render its line), or says why it has none; a stale entry fails. The Commons check pins
+  the send guard, the view's wrapper, and that only `commonsApi` sends to `/api/commons`.
+- The tracer gap the sweep list named (lib/agentNotes builds `${base(surface)}/read` and
+  `/dismiss`) is not fixed in the tracer: the sweep ratchet lists those four routes by sender
+  and path tail (`UNTRACED`) and fails if either changes. The sweep list's "fixed" was
+  inexact; this is what was done.
+- Boundary: no route changes access or spends without the person gate. `/api/krea/tools/call`
+  accepts only `KREA_READONLY_TOOLS`. The 22 conditional routes stay live (GM r17 (7)).
+- Seen live, not changed: a held tab's load sends the run-cost migration's `PUT /api/settings`
+  (`lib/runCostConfirm`), which the gate refuses with 403, three times in one session.
+
+### Review 8
+- MEDIUM-1: the box a because line sits in goes neutral (GM r16 (1)): text, rail, border and
+  fill. Each box that draws a warning carries `data-line-box` (NodeError, Projects' error,
+  UnsavedEditsNotice, ProviderRecoveryStatus, the Commons detail's analysis failure and upload
+  failures, both pin toasts), and `styles/becauseLine.css` turns `[data-line-box]:has([data-line-because])`
+  neutral. `becauseLine.ratchet` now walks every element around a line up to its component's
+  root, through callbacks, and resolves `className` props, defaults and what callers pass
+  (NodeError's default, NodeRunError's template); a box that draws a warning must carry the
+  mark. Live: the card's box reads ink 0.55 on a neutral rail and fill, and Projects' box the
+  same. The PR body's "neutral on every surface" now names the boxes too.
+- MEDIUM-2: a line covered by something opaque doesn't count. When the lines settle,
+  `lineUncovered` samples `elementFromPoint` at five points of the line's rect clipped to the
+  window; one landing inside the line (or on what holds it) counts. A dock opening or closing
+  (child list changes), a panel moving (class or style), a resize or a scroll settles them
+  again. Not IntersectionObserver v2. Live: the card's line under Settings brings the notice
+  back, and closing Settings sends it away.
+- MEDIUM-3: a line registers once and updates its words in place (`registerLine` returns
+  `update`). The notice's live region says something new only when the swap changes (notice,
+  line, nothing), not when a line's words change. Live: one because line swapped for another, no
+  flash and nothing announced (the region had said the line twice before this).
+- LOW-1: the runtime ratchet (`tests/helpers/bareLines.ts`, run after every test from
+  `tests/setup.ts`): a "connected as you" text outside a registered element fails the test,
+  whatever form put it there. `presenceRound10.bareLines` pins F1-F6. The general notice, its
+  live region and an agent's quoted words (`data-agent-text`, on an Update's text in
+  AgentNoteCard and AgentNotesList) are exempt. The lock helpers are in the scan's sentence list
+  (M22's probe now pins each helper).
+- LOW-2: a Generate start that fails for another reason: "Nebula added the nodes to the canvas
+  but couldn’t start the generation. <reason>", where a fix ending "try again" becomes "then run
+  them from the canvas" (GM r16 (3)). One rule (`errorCopy.thenRunFromCanvas`) words this and
+  the not-connected case.
+- LOW-3: the ratio guard, the unregister guard, and two lines in one element (both orders) are
+  tested.
+- NIT-1: `noticeWaiting.ts` cites `presenceRound9.band.test.tsx`. NIT-2: "window" in every lock
+  line, through `personLockLine`.
+
+### Gates-trace (review 8)
+- LOW-1 (`tests/personGatedCallers.ts`): a path argument that names a `const` in the same
+  function is read as that path wherever it's used (a template part, a `+` part, a const of a
+  const, a conditional only when both branches read). Listed untraced instead, failing closed: a
+  `let` or `var`, any reassignment, a conditional or `??` with an unreadable branch, a path held
+  in an object property, and a path helper handed uncalled to another call (`send(presetsPath)`).
+  `x['name']()` reads like `x.name()`. `presenceRound10.trace` pins B1, B6, B24 and J5 (`drops`),
+  B2 and B10 (untraced 1), B23 (`drops`, untraced 1), with resolved, fail-closed and `keeps`
+  controls. The trace of the real src is unchanged (21 untraced).
+- LOW-2: `joinBackendPath` stays in `PATH_WRAPPERS` (lib/backend calls it) and W1 needs it; an
+  inline `"person_" + "required"` code and the add_api_route and `app.api_route(...)(fn)`
+  unreadable labels are pinned in `presenceRound10.routes`.
+- NIT-1 (`tests/personGateRoutes.py`): a code built by `%`, `"_".join([...])` or `.format` is
+  read; a gate container held as a class attribute is listed unreadable; a module container
+  filled by `.append`, `.extend`, an item assignment or `+=` counts as holding the gate (inside a
+  handler, `.append(require_person)` was already gated). Negative controls stay empty. The real
+  backend: 67 routes, 0 unreadable, 73 person-only, byte-identical before and after.
+- NIT-2: the PR body's Tests line is fixed.
+
+### Agent-visible
+Nothing. The locks, the lines and the demoted views are the tab's own; every route answers as
+before, and the Generate card line is set in the tab when no run started (no run record carries
+it). No MCP tool, CLI command, route or server response changed.
+
+### Round 10 verification
+- Gates: `tsc` (app and node configs, no incremental) and lint on the 79 changed files are clean.
+- vitest, focused (explicit lists, two workers; full suites are left to CI):
+  - The 68 files nearest the change, then 150 more that import a changed module or read the lock
+    or line copy: the first runs found 30 tests still expecting the tooltip and `disabled` (now
+    the line and `aria-disabled`, read through `tests/helpers/personLock.ts`), 69 in 8 Commons
+    files whose API mocks lacked the new hold (moved to `lib/commonsHold`, so no mock needs it),
+    and a demote check that read the never-reset promote count. All fixed and rerun clean.
+  - The final set, 71 files: 718 of 721 passed, Errors 0; the 3 were timeouts. Rerun with the
+    trace and route files (14 files): 383 of 384; the one timeout, the round 5 gated-route
+    ratchet, passes alone (9 of 9). Its test takes 9.9 s alone against 4.4 s on 343abb99, since
+    the trace now reads local consts, so its timeout is 60 s.
+- On 343abb99 with the new tests copied in: 29 of 49 fail in the eight round 10 files; the 20
+  that pass are controls (the not-connected Generate line, a canvas start, a quick reconnect,
+  the ratio guard, the scan's own probes). The trace file fails 25 of 28 and the routes file 16
+  of 29; the rest are controls and pins of existing behaviour.
+- Mutations: 28 frontend mutants, 27 caught. The one left (Add's own submit check) is
+  equivalent: the section's `run` refuses too, and removing that one is caught by the switch
+  test. The trace lane: 43 mutants plus review 8's three survivors, all caught.
+- Live on 8795/5795 (backend from the worktree in an isolated state; Vite from a scratch copy of
+  the frontend with its own node_modules), 28 of 28 over two runs, after the harness was fixed
+  (a fit-to-view that hid the card, and an awaited `goHome` that lost its page):
+  - Blocked by interception (any host but these two ports fails) and a dead proxy behind it;
+    canaries to 8000, 8001, 5173, `canary.invalid` and example.com were refused, and nothing else
+    left after them.
+  - The card's box and Projects' box compute neutral (ink 0.55, a neutral rail, border and fill).
+  - A because line swapped for another: no flash, nothing announced (before the fix the region
+    said the new line).
+  - The card's line under Settings brings the notice back; closing Settings sends it away.
+  - Providers: one line for the keys, every key control pointing at it, a click sending nothing;
+    the Krea sign-in, the run cost, Storage and Add under "Add an ACP agent" lock with their
+    lines and no tooltip.
+  - The Commons on a demoted tab shows the never-connected line and no references; the promote
+    reads it again. The demote and promote are the frontend's own calls (staged).
+  - Nothing was accepted, rejected, answered, executed, or run against a provider.

@@ -167,6 +167,135 @@ export function lineClasses(sources = files(SRC, /\.tsx$/)): Map<string, string[
   return found;
 }
 
+/** A component's own name for a JSX tag's function, when the tag is one (capitalised). */
+const isComponent = (tag: string) => /^[A-Z]/.test(tag);
+
+/**
+ * Review 8 MEDIUM-1 (PR #204 round 10): every element around a line, up to its component's root
+ * (the box it sits in: a rail, a border, a fill), with each className resolved: written words, a
+ * prop's default (`className = 'model-node__error'`) and the words every caller passes for it.
+ * `boxed`: the element carries `data-line-box`, so styles/becauseLine.css neutralises it while a
+ * because line is inside; any other box must colour itself neutrally whatever it holds.
+ */
+export function boxClasses(
+  sources: { path: string; text: string }[] = files(SRC, /\.tsx$/).map((path) => ({ path, text: readFileSync(path, 'utf8') })),
+): Map<string, { where: string[]; boxed: boolean }> {
+  const parsed = sources.map(({ path, text }) => ({ path, file: ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) }));
+  // Every JSX use of each component, by name: its words for className are read on demand, through
+  // a caller that hands on its own className prop (NodeRunError -> NodeError), a few levels deep.
+  const uses = new Map<string, ts.JsxOpeningLikeElement[]>();
+  for (const { file } of parsed) {
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && isComponent(node.tagName.getText())) {
+        const name = node.tagName.getText().split('.').pop()!;
+        uses.set(name, [...(uses.get(name) ?? []), node]);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+  }
+  const passed = (component: string, depth = 0): string[] => depth > 4 ? [] : (uses.get(component) ?? [])
+    .flatMap((use) => [...classWords(use), ...resolvedClassName(use, (name) => passed(name, depth + 1))]);
+  const found = new Map<string, { where: string[]; boxed: boolean }>();
+  const add = (word: string, where: string, boxed: boolean) => {
+    const entry = found.get(word) ?? { where: [], boxed: true };
+    found.set(word, { where: [...entry.where, where], boxed: entry.boxed && boxed });
+  };
+  for (const { path, file } of parsed) {
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && LINE_TAGS.has(node.tagName.getText())) {
+        let nearest = true;
+        for (let up: ts.Node | undefined = (ts.isJsxOpeningElement(node) ? node.parent : node).parent; up; up = up.parent) {
+          // The component's root: its own element is the last one walked. A callback inside it (a
+          // .map's, a render prop's) is walked through, up to the component.
+          if (ts.isFunctionDeclaration(up) || ts.isArrowFunction(up) || ts.isFunctionExpression(up)) {
+            const name = ts.isFunctionDeclaration(up) ? up.name?.text
+              : ts.isVariableDeclaration(up.parent) ? up.parent.name.getText() : undefined;
+            if (name === undefined || isComponent(name)) { if (name !== undefined || !ts.isCallExpression(up.parent)) break; }
+          }
+          if (!ts.isJsxElement(up)) continue;
+          if (nearest) { nearest = false; continue; } // the line's own element: lineClasses' rule
+          const opening = up.openingElement;
+          const boxed = opening.attributes.properties.some((a) => ts.isJsxAttribute(a) && a.name.getText() === 'data-line-box');
+          const words = [...classWords(opening), ...resolvedClassName(opening, passed)];
+          for (const word of words) add(word, rel(path), boxed);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+  }
+  return found;
+}
+
+/** The words a className expression gets from a prop: its default and what callers pass. */
+function resolvedClassName(element: ts.JsxOpeningLikeElement, passed: (component: string) => string[]): string[] {
+  const words: string[] = [];
+  for (const attribute of element.attributes.properties) {
+    if (!ts.isJsxAttribute(attribute) || attribute.name.getText() !== 'className' || !attribute.initializer) continue;
+    const names = new Set<string>();
+    const visit = (node: ts.Node) => { if (ts.isIdentifier(node)) names.add(node.text); ts.forEachChild(node, visit); };
+    visit(attribute.initializer);
+    for (let up: ts.Node | undefined = element.parent; up; up = up.parent) {
+      if (!(ts.isFunctionDeclaration(up) || ts.isArrowFunction(up) || ts.isFunctionExpression(up))) continue;
+      const [props] = up.parameters;
+      if (props && ts.isObjectBindingPattern(props.name)) {
+        for (const binding of props.name.elements) {
+          const local = binding.name.getText();
+          if (!names.has(local)) continue;
+          if (binding.initializer && ts.isStringLiteralLike(binding.initializer)) words.push(...binding.initializer.text.split(/\s+/));
+          const component = ts.isFunctionDeclaration(up) ? up.name?.text : ts.isVariableDeclaration(up.parent) ? up.parent.name.getText() : undefined;
+          if (component && (binding.propertyName?.getText() ?? local) === 'className') words.push(...passed(component));
+        }
+      }
+      break;
+    }
+  }
+  return words.filter((word) => /^[a-z][\w-]*$/i.test(word));
+}
+
+/** Elements around a line that aren't its box, and why: a card's selection state is the card's. */
+const NOT_BOXES: Record<string, string> = {
+  'batch-node--selected': 'the batch card\'s selection outline (the card, not the line\'s box)',
+  'paper-source-node--selected': 'the Paper card\'s selection outline',
+  'result-card--compared': 'a Create result picked for comparing',
+  'mesh-modal__fallback': 'the 3D preview\'s fallback ground, tinted by the node\'s category colour',
+};
+
+/** Box properties: what draws the box a line sits in, and the colour it hands down. */
+const BOX_PROPS = /^(?:color|background(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-start|-end)?)?(?:-color)?|outline(?:-color)?|box-shadow)$/;
+
+/** Each rule that gives a box around a line a warning rail, border, fill or colour. Inside a box no
+ * token is neutralised (the sheet's overrides sit on the line's element), so a warning token counts
+ * as much as a literal. */
+export function warningBoxes(sheets: { file: string; text: string }[], classes: Set<string>): string[] {
+  const wrong: string[] = [];
+  for (const { file, text } of sheets) {
+    if (file === SHEET) continue;
+    for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = rule[1].trim().split(/,(?![^(]*\))/).map((part) => part.trim());
+      const hits = selectors.filter((selector) => {
+        const last = selector.split(/\s*[>+~]\s*|\s+(?![^(]*\))/).pop() ?? '';
+        if (/:(?:hover|focus|focus-visible|active|disabled)\b/.test(last)) return false;
+        const words = [...last.replace(/:(?:is|where|not|has)\([^)]*\)/g, '').matchAll(/\.([\w-]+)/g)].map((match) => match[1]);
+        return words.some((word) => classes.has(word));
+      });
+      if (!hits.length) continue;
+      for (const declaration of rule[2].split(';')) {
+        const [prop, ...rest] = declaration.split(':');
+        const name = prop?.trim();
+        const value = rest.join(':').trim();
+        if (!name || !value || !BOX_PROPS.test(name)) continue;
+        const tokens = [...value.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1]);
+        if (tokens.some((token) => WARNING_TOKEN.test(token) && !(token in NOT_LINE_TOKENS)) || warningLiteral(value)) {
+          wrong.push(`${file}: ${hits[0]} { ${name}: ${value} }`);
+        }
+      }
+    }
+  }
+  return wrong;
+}
+
 /** A literal colour's hue family: whether it is a warning (red, orange, amber, yellow). */
 export function warningLiteral(value: string): boolean {
   const withoutVars = value.replace(/var\((?:[^()]|\([^()]*\))*\)/g, '');
@@ -256,5 +385,50 @@ describe('GM r14 (4): no line element takes a warning colour another way', () =>
     expect(probe('color: rgba(255, 255, 255, 0.55); background: #222;')).toHaveLength(0);
     expect(warningDeclarations([{ file: 'probe.css', text: '.x-line:hover, .other { color: #e5484d }' }], classes, covered)).toHaveLength(1);
     expect(warningDeclarations([{ file: 'probe.css', text: '.x-line .icon { color: #e5484d }' }], classes, covered)).toHaveLength(0);
+  });
+});
+
+describe('review 8 MEDIUM-1: the box around a because line goes neutral too (GM r16 Q1)', () => {
+  it('walks every element up to the component root, with className props and their defaults', () => {
+    const boxes = boxClasses();
+    expect(boxes.get('model-node__error')?.boxed, 'NodeError: the default className').toBe(true);
+    expect(boxes.get('project-home__error')?.boxed, 'Projects ' + JSON.stringify(boxes.get('project-home__error'))).toBe(true);
+    // A caller's className for NodeError is read too (the card's own run-error class).
+    expect([...boxes.keys()].some((word) => /__run-error$/.test(word))).toBe(true);
+  });
+
+  it('every box that isn\'t marked data-line-box colours itself neutrally', () => {
+    const unmarked = new Set([...boxClasses()].filter(([word, entry]) => !entry.boxed && !(word in NOT_BOXES)).map(([word]) => word));
+    expect(warningBoxes(css, unmarked)).toEqual([]);
+  });
+
+  it('a marked box: the sheet neutralises its rail, border and fill while a because line is inside', () => {
+    expect(sheet()).toMatch(/\[data-line-box\]:has\(\[data-line-because\]\)/);
+    const rule = sheet().slice(sheet().lastIndexOf('[data-line-box]:has([data-line-because]) {'));
+    const body = rule.slice(0, rule.indexOf('}'));
+    for (const prop of ['color', 'background-color', 'border-color']) expect(body).toMatch(new RegExp(`\\b${prop}:[^;]*!important`));
+  });
+
+  it('catches each way round it', () => {
+    const classes = new Set(['x-box']);
+    const probe = (body: string) => warningBoxes([{ file: 'probe.css', text: `.x-box { ${body} }` }], classes);
+    expect(probe('border-left: 2px solid var(--sr-accent);')).toHaveLength(1);
+    expect(probe('background: var(--sr-error-soft);')).toHaveLength(1);
+    expect(probe('border: 1px solid var(--sr-error-border);')).toHaveLength(1);
+    expect(probe('background: rgba(255, 90, 31, 0.12);')).toHaveLength(1);
+    expect(probe('color: var(--sr-warning);')).toHaveLength(1);
+    expect(probe('background: var(--sr-node-error-bg); border: 1px solid var(--sr-edge-strong);')).toHaveLength(0);
+    // A default className and a caller's className are both read.
+    const text = 'function Box({ className = "x-default" }) { return <div className={className}><p><LineText text="t" /></p></div>; }\n'
+      + 'function Use() { return <Box className="x-passed" />; }\n'
+      + 'function Marked() { return <div className="x-marked" data-line-box=""><p><LineText text="t" /></p></div>; }\n'
+      + 'function Deep() { return <section className="x-outer"><div><p><LineText text="t" /></p></div></section>; }\n'
+      + 'function List({ items }) { return <ul className="x-list">{items.map((i) => <li key={i}><p><LineText text="t" /></p></li>)}</ul>; }\n'
+      + 'function Run({ className }) { return <Box className={`${className} x-run`} />; }\n'
+      + 'function UseRun() { return <Run className="x-card__run-error" />; }';
+    const found = boxClasses([{ path: join(SRC, 'probe.tsx'), text }]);
+    expect([...found.keys()].sort()).toEqual(['x-card__run-error', 'x-default', 'x-list', 'x-marked', 'x-outer', 'x-passed', 'x-run']);
+    expect(found.get('x-marked')!.boxed).toBe(true);
+    expect(found.get('x-default')!.boxed).toBe(false);
   });
 });

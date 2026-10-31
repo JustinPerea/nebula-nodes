@@ -6,6 +6,7 @@ import { useAssetProposalsStore } from '../../store/assetProposalsStore';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { AuthorDot } from './AgentNoteParts';
+import { LineText } from '../LineText';
 import { selectCanvasList, useAgentNotesStore } from '../../store/agentNotesStore';
 import { answerableQuestions, heldAsks, openViews } from './agentNeedsYou';
 import { holdsAskIn, useLockPending, useTabHeld } from './heldLock';
@@ -196,6 +197,7 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   onOpen: (next: RosterNext, anchor: HTMLElement) => void;
 }) {
   const lineId = useId();
+  const lockId = useId();
   const needsYou = row.group === 'needsYou';
   // GM r5 2a: before the socket's first answer, the lock's first moment keeps the row's look.
   const pending = useLockPending(Boolean(row.locked));
@@ -206,6 +208,10 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
         <span className="agent-roster__name">{row.agent.name}</span>
         {needsYou && <span className="agent-roster__count">{row.countLine}</span>}
         {row.line && <span id={lineId} className="agent-roster__line" title={row.line}>{row.line}</span>}
+        {/* PR #204 round 10: a locked row's reason is a line, not a tooltip (the one lock's form). */}
+        {row.locked && !pending && (
+          <span id={lockId} className="agent-roster__line agent-roster__held-line"><LineText text={row.locked} /></span>
+        )}
       </span>
     </>
   );
@@ -219,9 +225,10 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   };
   return (
     // aria-disabled, not disabled: it keeps its focus and its tooltip (the shared disabled look, disabled-buttons.css).
-    <button type="button" className="agent-roster__row" data-group={row.group} title={pending ? undefined : row.tooltip}
+    <button type="button" className="agent-roster__row" data-group={row.group} title={row.locked ? undefined : row.tooltip}
       aria-disabled={row.locked ? true : undefined} data-held-pending={pending ? '' : undefined}
-      aria-label={row.ariaLabel} aria-describedby={needsYou && row.line ? lineId : undefined} onClick={click}>
+      aria-label={row.ariaLabel} aria-describedby={[needsYou && row.line ? lineId : undefined, row.locked && !pending ? lockId : undefined].filter(Boolean).join(' ') || undefined}
+      onClick={click}>
       {content}
     </button>
   );

@@ -71,11 +71,23 @@ export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + DEFERS_TO_NOTICE;
 
+/** PR #204 round 10 (GM r16 Q2): the one word every lock line uses for where this page runs:
+ * "window" in the desktop app, "tab" in a browser. */
+export function lockPlace(desktop: boolean = inDesktopShell()): 'window' | 'tab' {
+  return desktop ? 'window' : 'tab';
+}
+
+/** PR #204 round 10 (GM r15): a control whose route is the person's alone, while this tab isn't
+ * connected as them: "You can <verb> when this tab is connected as you." Every lock line comes
+ * from here (components/PersonLock.tsx and the held cards), so the word is the same everywhere. */
+export function personLockLine(verb: string, desktop: boolean = inDesktopShell()): string {
+  return `You can ${verb} when this ${lockPlace(desktop)} is connected as you.`;
+}
+
 /** GM r14 (5), PR #204 round 9: Settings' Connect (and Create token) while this tab isn't connected
- * as the person. The server refuses it (POST /api/agent/spend/apps: require_person), so it locks
- * in place with this line under it; "window" in the desktop app, as its other lines say. */
+ * as the person. The server refuses it (POST /api/agent/spend/apps: require_person). */
 export function connectAgentLockCopy(desktop: boolean = inDesktopShell()): string {
-  return `You can connect an agent when this ${desktop ? 'window' : 'tab'} is connected as you.`;
+  return personLockLine('connect an agent', desktop);
 }
 
 /** Line 3 for where this page runs: `desktop` is personSession's
@@ -131,10 +143,36 @@ export const CLUSTER_NOT_ADDED = 'Its nodes weren’t added to the canvas.';
 export function generateRefusedCopy(clusterAdded: boolean, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
   if (!clusterAdded) return `${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`;
-  const lead = 'Nebula added the nodes to the canvas but couldn’t start the generation because';
-  if (!desktop) return `${lead} this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.`;
+  const lead = `${ADDED_LEAD} because`;
+  if (!desktop) return `${lead} this tab isn’t connected as you. ${thenRunFromCanvas('Open the link Nebula printed when it started.', true)}`;
   if (reason === 'debug-port' || reason === 'dev-renderer') return `${lead} this window isn’t connected as you. ${DEFERS_TO_NOTICE}`;
-  return `${lead} this window isn’t connected as you. Quit Nebula and open it again, then run them from the canvas.`;
+  return `${lead} this window isn’t connected as you. ${thenRunFromCanvas('Quit Nebula and open it again.', true)}`;
+}
+
+const ADDED_LEAD = 'Nebula added the nodes to the canvas but couldn’t start the generation';
+
+/**
+ * GM r16 Q3 (PR #204 round 10): Generate's nodes are on the canvas, so pressing Generate again
+ * would add them twice. A fix that ends "try again" becomes "then run them from the canvas"; the
+ * not-connected case (`always`) ends that way after its own fix too. One rule for both.
+ */
+export function thenRunFromCanvas(fix: string, always = false): string {
+  const text = fix.trim();
+  if (/^try again\.$/i.test(text)) return 'Run them from the canvas.';
+  const tail = text.match(/^([\s\S]*?)(?:,|;)?\s+(?:and\s+|then\s+)?try again\.$/i);
+  if (tail) {
+    const before = tail[1].trimEnd();
+    // "… respond. Try again." is its own sentence; "Wait a moment, then try again." isn't.
+    return /[.!?]$/.test(before) ? `${before} Run them from the canvas.` : `${before}, then run them from the canvas.`;
+  }
+  if (always && text.endsWith('.')) return `${text.slice(0, -1)}, then run them from the canvas.`;
+  return text;
+}
+
+/** GM r16 Q3: Generate's start failed for a reason other than this tab: the nodes are there. */
+export function generateStartFailedCopy(error: unknown): string {
+  const { reason } = failureCopy(error);
+  return reason ? `${ADDED_LEAD}. ${thenRunFromCanvas(reason)}` : `${ADDED_LEAD}.`;
 }
 
 export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),

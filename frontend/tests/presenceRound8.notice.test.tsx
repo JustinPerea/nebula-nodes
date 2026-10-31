@@ -16,7 +16,7 @@ const { notConnectedKind, currentFixLine, registerLine, resetLinesForTests, line
 const { LineText } = await import('../src/components/LineText');
 const session = await import('../src/lib/personSession');
 const copy = await import('../src/lib/errorCopy');
-const { HELD_PROPOSAL_LINE, HELD_QUESTIONS_LINE } = await import('../src/store/heldAssetProposals');
+const { heldProposalLine, heldQuestionsLine } = await import('../src/store/heldAssetProposals');
 
 const banner = () => document.querySelector('.person-required');
 const announced = () => document.querySelector('.person-required__announce')?.textContent ?? null;
@@ -61,8 +61,8 @@ describe('GM r11: the three kinds of line', () => {
   });
 
   it('a lock line names no fix', () => {
-    expect(notConnectedKind(HELD_QUESTIONS_LINE)).toBe('lock');
-    expect(notConnectedKind(HELD_PROPOSAL_LINE)).toBe('lock');
+    expect(notConnectedKind(heldQuestionsLine())).toBe('lock');
+    expect(notConnectedKind(heldProposalLine())).toBe('lock');
     expect(notConnectedKind('You can accept proposals when this tab is connected as you.')).toBe('lock');
     expect(notConnectedKind('You can send notes when this window is connected as you.')).toBe('lock');
   });
@@ -96,7 +96,7 @@ describe('GM r11: the notice beside each kind', () => {
   it('LOW-3: the held proposal card\'s line is a lock line, so both show', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
-    act(() => handle.show(HELD_PROPOSAL_LINE));
+    act(() => handle.show(heldProposalLine()));
     await nextFrame();
     await nextFrame();
     expect(banner()).not.toBeNull();

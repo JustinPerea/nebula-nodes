@@ -10,6 +10,8 @@ import { failureMessage } from '../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { lockedAction, refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -67,8 +69,11 @@ export function CreateComposer({
     if (promptRef.current) autoGrow(promptRef.current);
   }, [prompt]);
 
+  // PR #204 round 10 (GM r15): Enhance calls an LLM with the person's keys (POST
+  // /api/enhance-prompt: require_person), so it locks through the one lock, its line under the bar.
+  const enhanceLock = usePersonLock('enhance prompts');
   const handleEnhance = async () => {
-    if (!canEnhance) return;
+    if (!canEnhance || enhanceLock.locked) return;
     setEnhancing(true);
     setEnhanceError(null);
     const original = prompt;
@@ -154,7 +159,8 @@ export function CreateComposer({
           className="create-composer__enhance"
           onClick={handleEnhance}
           disabled={!canEnhance}
-          title="Enhance prompt with AI"
+          {...enhanceLock.control()}
+          title={enhanceLock.locked ? undefined : 'Enhance prompt with AI'}
         >
           <Wand2 size={15} strokeWidth={1.8} aria-hidden="true" />
           {enhancing ? 'Enhancing…' : 'Enhance'}
@@ -183,6 +189,7 @@ export function CreateComposer({
           {activeCount > 0 ? `Generating… (${activeCount})` : 'Generate'}
         </button>
       </div>
+      <PersonLockLine lock={enhanceLock} className="create-composer__held-line" />
     </div>
   );
 }

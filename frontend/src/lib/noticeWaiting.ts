@@ -11,7 +11,7 @@ import { useLayoutEffect, useSyncExternalStore } from 'react';
  * clearance a modal reads, hooks/useNoticeClearance): the model picker, the Lightbox, the
  * comparison, Styles, the context menu, the connection menu, the provider menu, the size panel
  * and the node's inspector popover. Each holds `useCappedPopover()` while it is open
- * (tests/noticeBand.ratchet.test.ts checks every one does).
+ * (tests/presenceRound9.band.test.tsx checks every one does).
  *
  * The notice region (components/NoticeRegion) keeps each item's arrival order and, while any
  * capped popover is open, marks every item but the newest `data-notice-waiting` (drawn as

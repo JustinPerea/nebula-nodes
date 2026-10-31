@@ -15,6 +15,8 @@ import { NousRow } from './NousRow';
 import { KREA_ROW, NOUS_ROW } from './rowHelpers';
 import { useKreaConnection } from './useKreaConnection';
 import { LineText } from '../../LineText';
+import { PersonLockLine } from '../../PersonLock';
+import { usePersonLock } from '../../../hooks/usePersonLock';
 
 const NODES = Object.values(NODE_DEFINITIONS);
 const KREA_ACCOUNT_NODES = NODES.filter((node) => supportsKreaAccount(node));
@@ -43,6 +45,9 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const [query, setQuery] = useState('');
   const health = useProviderReadinessStore();
   const krea = useKreaConnection();
+  // PR #204 round 10 (GM r15, r17 item 1): every key's Add, Replace, Save and Remove is the
+  // person's alone, so they lock as one group with one line at the top of the tab.
+  const keyLock = usePersonLock('change keys');
   const setupTarget = useUIStore((s) => s.settingsProviderTarget);
   const root = useRef<HTMLDivElement>(null);
   // Offline (GM, round 16 of PR #114): the search stays usable; everything
@@ -61,7 +66,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       const connected = !!saved.apiKeys[spec.key]?.trim();
       return { id: spec.key, connected, reach: unlockCount(spec), order,
         matches: (q: string) => providerMatches(spec, q),
-        render: () => <KeyRow key={spec.key} spec={spec} configured={connected} /> };
+        render: () => <KeyRow key={spec.key} spec={spec} configured={connected} lock={keyLock} /> };
     }),
     { id: KREA_ROW, connected: !!kreaStatus && kreaStatus !== 'disconnected', reach: KREA_ACCOUNT_NODES.length, order: PROVIDER_KEYS.length,
       matches: (q: string) => 'krea sign-in workspace'.includes(q.trim().toLowerCase())
@@ -130,6 +135,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
         />
       </label>
       <fieldset className="settings__fieldset settings__fieldset--providers" disabled={offline} {...offlineMark(offline)}>
+      <PersonLockLine lock={keyLock} />
 
       {connected.length > 0 && (
         <section aria-labelledby="settings-connected-heading">

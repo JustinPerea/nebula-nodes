@@ -34,7 +34,7 @@ export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLine
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
-const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|shortReason|noticeText)$/;
+const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personLockLine|connectAgentLockCopy|heldProposalLine|heldQuestionsLine|generateStartFailedCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|shortReason|noticeText)$/;
 
 /** The parts of a child expression whose value lands as text: through `&&`, `||`, `??`, `? :` and parentheses. */
 function textLeaves(expression: ts.Expression): ts.Expression[] {
@@ -144,15 +144,18 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'settings.apps': [{ file: 'components/panels/settings/ConnectedApps.tsx', expr: 'error' }],
   'settings.spend-load': [{ file: 'components/panels/settings/AgentSpendSection.tsx', expr: 'error' }],
   'settings.spend-load-retry': { none: 'a retry: its line is settings.spend-load' },
-  'settings.agents-load': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'error' }],
+  // Round 10 (GM r17 item 6): a demoted tab shows the never-connected line in the same place.
+  'settings.agents-load': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
   'settings.agents-load-retry': { none: 'a retry: its line is settings.agents-load' },
-  'settings.agents': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'error' }],
+  'settings.agents': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
   // useSettingsDraftStore errors[id], by the row that wrote it.
   'settings.write': [
     { file: 'components/panels/settings/KeyRow.tsx', expr: 'error' },
     { file: 'components/panels/settings/StorageTab.tsx', expr: 'telemetryError' },
     { file: 'components/panels/settings/PreferencesTab.tsx', expr: 'costError' },
   ],
+  // Round 10 (GM r17 item 5): a favorite the server refused no longer drops silently.
+  'inspector.favorite': [{ file: 'components/panels/Inspector.tsx', expr: 'favoriteError' }],
   'krea.connection': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'problem' }],
   'krea.plans': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'error' }],
   'studio.save-board': [{ file: 'components/moodboard-studio/MoodboardStudioView.tsx', expr: 'saveError' }],
@@ -246,7 +249,9 @@ describe('PR #204 round 9: every line that can be not-connected registers itself
     for (const file of ['components/failure/FailureLines.tsx', 'components/commons/CommonsErrorLine.tsx']) {
       expect(registeredExpressions(file, read(file)).length, file).toBeGreaterThan(0);
     }
-    expect(read('components/LineText.tsx')).toMatch(/registerLine\(element, text\)/);
+    // Round 10 (review 8 MEDIUM-3): registered once, its words updated in place.
+    expect(read('components/LineText.tsx')).toMatch(/registerLine\(element, words\)/);
+    expect(read('components/LineText.tsx')).toMatch(/registration\.current\?\.update\(words\)/);
   });
 
   it('catches each way a line can skip it', () => {
@@ -262,5 +267,16 @@ describe('PR #204 round 9: every line that can be not-connected registers itself
     expect(probe('const A = () => <p title={error}>{"Couldn\'t."}</p>;')).toEqual([]);
     expect(probe('const A = () => <LineText text={shown.text}>{noticeText(shown.text, mono)}</LineText>;')).toEqual([]);
     expect(probe('const A = () => <span>{noticeText(shown.text, mono)}</span>;')).toEqual(['noticeText(shown.text, mono)']);
+  });
+
+  it('round 10 (review 8 LOW-1, M22): every helper that words a not-connected line is one the scan follows', () => {
+    // Each helper of lib/errorCopy (and the lock helpers) whose words can say "connected as you".
+    const helpers = ['notConnectedBecause', 'personRequiredCopy', 'personRequiredMessage', 'markReadRefusedCopy',
+      'generateRefusedCopy', 'generateStartFailedCopy', 'commonsNotConnectedCopy', 'personLockLine', 'connectAgentLockCopy',
+      'heldProposalLine', 'heldQuestionsLine'];
+    for (const name of helpers) {
+      const probe = unregisteredLines([{ path: 'probe.tsx', text: `const A = () => <p>{${name}('x')}</p>;` }]).map((f) => f.text);
+      expect(probe, name).toEqual([`${name}('x')`]);
+    }
   });
 });

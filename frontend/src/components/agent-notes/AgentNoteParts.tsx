@@ -1,6 +1,7 @@
 import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { LeaveBusyContext } from './leaveBusy';
-import { HELD_OPS, useHeldLock, useLockPending } from './heldLock';
+import { HELD_OPS, useNoteLock } from './heldLock';
+import { PersonLockLine, type PersonLock } from '../PersonLock';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
 import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
@@ -112,24 +113,22 @@ export function RunOutcomeIcon({ run }: { run: AgentNoteRun | null | undefined }
  * A corner button that reads "Saving…" while the Commons' save in progress
  * holds the leave it asked for (commons-leave, LeaveBusyContext).
  */
-export function BusyButton({ className, onClick, children, op, locked }: {
+export function BusyButton({ className, onClick, children, op, lock }: {
   className: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
   /** The action's kind, for the corner to find this button again (focus after a popover). */
   op?: string;
-  /** Why it can't act yet (heldLock): aria-disabled, still focusable, the reason as its tooltip. */
-  locked?: string | null;
+  /** Why it can't act yet (heldLock useNoteLock, components/PersonLock): aria-disabled, still
+   * focusable, pointing at the line under the buttons; no tooltip (PR #204 round 10). */
+  lock?: PersonLock | null;
 }) {
   const [element, setElement] = useState<HTMLButtonElement | null>(null);
   const busy = useContext(LeaveBusyContext) === element && element !== null;
-  // GM r5 2a: before the socket's first answer, the lock's first moment keeps the button's look.
-  const pending = useLockPending(Boolean(locked));
+  const locked = Boolean(lock?.locked);
   return (
     <button ref={setElement} type="button" className={locked ? `${className} agent-notes-btn--held` : className}
-      aria-busy={busy || undefined} data-op={op} aria-disabled={locked ? true : undefined}
-      data-held-pending={pending ? '' : undefined}
-      title={(!pending && locked) || undefined} onClick={onClick}>
+      aria-busy={busy || undefined} data-op={op} {...lock?.control()} onClick={onClick}>
       {busy ? 'Saving…' : children}
     </button>
   );
@@ -150,8 +149,10 @@ export function NoteButtons({
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
   // GM, #204 r3 item 2: an ask this tab doesn't hold yet keeps its Review or Answer, locked.
-  const held = useHeldLock(note);
+  const lock = useNoteLock(note);
+  const held = lock.locked;
   if (controls.buttons.length === 0 && !controls.state) return null;
+  const holds = controls.buttons.some((button) => button.kind === 'action' && HELD_OPS.has(button.action.op.kind));
   return (
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
@@ -160,7 +161,7 @@ export function NoteButtons({
           key={button.kind === 'show' ? 'show' : button.label}
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
           op={button.kind === 'action' ? button.action.op.kind : undefined}
-          locked={button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? held : null}
+          lock={button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? lock : null}
           onClick={(event) => {
             event.stopPropagation();
             if (button.kind === 'show') onShow(event.currentTarget);
@@ -170,6 +171,7 @@ export function NoteButtons({
           {button.label}
         </BusyButton>
       ))}
+      {holds && <PersonLockLine lock={lock} className="agent-notes-acts__held-line" />}
     </div>
   );
 }

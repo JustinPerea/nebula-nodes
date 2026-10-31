@@ -15,7 +15,8 @@
  */
 [data-line-because],
 :has(> [data-line-because='own']),
-:has(> .failure-lines > [data-line-because='own']) {
+:has(> .failure-lines > [data-line-because='own']),
+[data-line-box]:has([data-line-because]) {
   --line-warning: var(--sr-ink-light);
   --line-warning-soft: var(--sr-surface-control);
   --line-warning-edge: var(--sr-edge-strong);
@@ -40,4 +41,19 @@
   --sr-error-border: var(--sr-edge-strong);
   --sr-danger-border: var(--sr-edge-strong);
   --sr-danger-edge: var(--sr-edge-strong);
+}
+
+/*
+ * Review 8 MEDIUM-1, GM r16 Q1 (PR #204 round 10): the box a because line sits in (a card's
+ * error panel, the Projects error, a toast) goes neutral too: its rail, border and fill, and the
+ * colour it hands down. The box carries `data-line-box`; while a because line is inside it reads
+ * the neutral tokens above, and these win over its own literals and its sheet's specificity.
+ * tests/becauseLine.ratchet.test.tsx walks every element around a line up to its component's
+ * root: a box that draws in a warning colour has to carry the mark.
+ */
+[data-line-box]:has([data-line-because]) {
+  color: var(--sr-ink-light) !important;
+  background-image: none !important;
+  background-color: var(--sr-surface-control) !important;
+  border-color: var(--sr-edge-strong) !important;
 }

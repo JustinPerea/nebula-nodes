@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
@@ -182,10 +183,11 @@ describe('GM 2026-10-29: the held needs-you count', () => {
       row.focus();
       expect(document.activeElement).toBe(row);
     }
-    expect([cover, questions, canvas].map((row) => row.getAttribute('title'))).toEqual([REVIEW_LOCK, ANSWER_LOCK, REVIEW_LOCK]);
-    expect(questions.getAttribute('aria-label')).toBe(`Claude Code, unverified, 2 questions. ${ANSWER_LOCK}`);
-    // No placeholder sentence in the row: the lock reason is its tooltip only.
-    expect(list.textContent).not.toContain('when this tab is connected as you');
+    expect([cover, questions, canvas].map((row) => reasonOf(row))).toEqual([REVIEW_LOCK, ANSWER_LOCK, REVIEW_LOCK]);
+    // PR #204 round 10 (GM r15): the reason is a line in the row (its description), never a
+    // tooltip, and not said twice in its name.
+    expect(questions.getAttribute('aria-label')).toBe('Claude Code, unverified, 2 questions.');
+    for (const row of [cover, questions, canvas]) expect(row.hasAttribute('title')).toBe(false);
     // Locked: nothing opens, and nothing moves the person (an open cover ask would go to Projects).
     fireEvent.click(cover);
     fireEvent.click(questions);
@@ -209,7 +211,7 @@ describe('GM 2026-10-29: the held needs-you count', () => {
     expect(chip().querySelector('.agent-notes-needs-badge')?.textContent).toBe('3');
     expect(looks(list)).toEqual(held);
     expect(rows(list).map((row) => row.getAttribute('aria-disabled'))).toEqual([null, null, null]);
-    expect(rows(list).map((row) => row.getAttribute('title'))).toEqual(['Open proposal', 'Open questions', 'Open proposal']);
+    expect(rows(list).map((row) => reasonOf(row))).toEqual(['Open proposal', 'Open questions', 'Open proposal']);
     fireEvent.click(rows(list)[2]);
     await waitFor(() => expect(useCanvasProposalsStore.getState().focusedId).toBe('p_canvas'));
   });

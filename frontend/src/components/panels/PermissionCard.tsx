@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import '../../styles/personal-agents.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
-import { useLockPending, useTabHeld } from '../../hooks/useTabHeld';
-import { HELD_QUESTIONS_LINE } from '../../store/heldAssetProposals';
+import { PersonLockLine } from '../PersonLock';
+import { usePersonLock } from '../../hooks/usePersonLock';
 import { toolKindWord } from '../../lib/acpToolKind';
 
 export type PermissionStatus = 'pending' | 'sent' | 'allowed' | 'denied' | 'timed_out' | 'cancelled';
@@ -63,14 +63,9 @@ export function PermissionCard({ part, agentName, onDecision }: {
   // focusable, the 150 ms rule) and unlock on the promote. The agent's own timeout keeps
   // running. GM r10 (1): GM's line shows on the card, on its own row under the buttons, so the
   // buttons have no tooltip; they point at the line (aria-describedby).
-  const tabHeld = useTabHeld() && open;
-  const lockPending = useLockPending(tabHeld);
-  const lineId = useId();
-  const lockShown = tabHeld && !lockPending;
-  const lockProps = tabHeld ? {
-    'aria-disabled': true as const, 'data-held-pending': lockPending ? '' : undefined,
-    'aria-describedby': lockShown ? lineId : undefined,
-  } : {};
+  const lock = usePersonLock('answer this', open);
+  const tabHeld = lock.locked;
+  const lockProps = lock.control();
   const kindWord = toolKindWord(part.toolKind);
   const decide = (decision: 'allow' | 'deny') => { if (!tabHeld) onDecision(part.requestId, decision); };
   return (
@@ -101,7 +96,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
             {open ? `No answer in ${left}s denies it` : 'Sending…'}
           </span>
         </div>
-        {lockShown && <p id={lineId} className="permission-card__held-line">{HELD_QUESTIONS_LINE}</p>}
+        <PersonLockLine lock={lock} className="permission-card__held-line" />
       </>) : settled ? (
         <div className="permission-card__outcome" role="status">{OUTCOME_TEXT[part.status as keyof typeof OUTCOME_TEXT]}</div>
       ) : null}

@@ -324,7 +324,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
-        <div className="commons-notice commons-notice--error commons-analysis-failure">
+        <div className="commons-notice commons-notice--error commons-analysis-failure" data-line-box="">
           <div className="commons-analysis-failure__text">
             <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
             {asset.last_error && (
