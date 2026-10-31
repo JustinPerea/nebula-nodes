@@ -8,10 +8,13 @@
  *   the board fitted. Anything else that moves the camera ends that: a
  *   person's pan, zoom, wheel, pinch or drag of the canvas (React Flow gives
  *   those a source event; the camera's own springs and fits have none), the
- *   zoom buttons, and an Update's Show, which frames only its cards.
+ *   autopan while a card is dragged to the board's edge (no source event, but
+ *   the person's doing), the zoom buttons, and an Update's Show, which frames
+ *   only its cards.
  * - A column resize refits only while fitted, at most once a frame, with the
  *   size read when the frame runs. The first size the board is measured at
- *   only records it: fit on open (React Flow's fitView) already used it.
+ *   only records it: every open that starts fitted (a fresh one, or one whose
+ *   kept camera was fitted) is fit by React Flow's fitView at that size.
  * - A refit changes the camera, never the column, so it can't call itself.
  */
 export interface BoardFitFollow {
@@ -20,8 +23,13 @@ export interface BoardFitFollow {
   markFitted(): void;
   /** The camera moved for any other reason: the board is no longer fitted. */
   leave(): void;
-  /** React Flow's move start: a person's own when `event` is set. */
-  moveStart(event: unknown): void;
+  /**
+   * React Flow's move start, for a move that isn't the camera's own spring
+   * frame: the person's when it has a source `event`, or when it comes while
+   * a card is dragged (`cardDrag`: React Flow's autopan). Ends the fitted
+   * state and returns true for the person's move.
+   */
+  moveStart(event: unknown, cardDrag?: boolean): boolean;
   /** The board column measured at this size. */
   resize(width: number, height: number): void;
   dispose(): void;
@@ -51,8 +59,10 @@ export function createBoardFitFollow({ fitted, refit, requestFrame = (cb) => win
       isFitted = false;
       cancel();
     },
-    moveStart(event) {
-      if (event) this.leave();
+    moveStart(event, cardDrag = false) {
+      if (!event && !cardDrag) return false;
+      this.leave();
+      return true;
     },
     resize(width, height) {
       if (!width || !height) return;
@@ -60,9 +70,10 @@ export function createBoardFitFollow({ fitted, refit, requestFrame = (cb) => win
       if (!first && size!.width === width && size!.height === height) return;
       size = { width, height };
       if (first || !isFitted || frame) return;
+      // Leaving the fitted state cancels this frame, so it runs only while fitted.
       frame = requestFrame(() => {
         frame = 0;
-        if (isFitted) refit();
+        refit();
       });
     },
     dispose: cancel,

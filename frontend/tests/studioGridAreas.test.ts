@@ -24,9 +24,9 @@ import {
 //  1. Ownership: only a studio's own stylesheet sets a grid template on its
 //     root, and a Moodboard Studio template names its variant.
 //  2. Resolution: for every studio and variant, under the Slava skin and with
-//     the skin class removed, at 1000, 1440 and 1600 px (and 700 px for the
-//     narrow layouts), the template that wins in the cascade (helpers/cssCascade)
-//     has a named area for every child that names one, as many tracks as its
+//     the skin class removed, at 700, 1000, 1440 and 1600 px and both sides of
+//     every width breakpoint the app's sheets use (viewports()), the template
+//     that wins in the cascade (helpers/cssCascade) has a named area for every child that names one, as many tracks as its
 //     areas have rows and columns, and no child left to auto-placement.
 // The live check (docs/notes/2026-10-31-fix-moodboard-board-layout.md) reads
 // the same in a real browser from getComputedStyle.

@@ -95,8 +95,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   const selection = useBoardSelection(boardKey);
   const setSelection = useBoardCanvasStore((state) => state.setSelection);
   const savedViewport = useRef(useBoardCanvasStore.getState().viewports[boardKey]).current;
-  // Fitted (#209, GM (a)): a fresh open is (React Flow fits it); a camera kept
-  // from earlier in the visit is only if it was fitted when it was kept.
+  // Fitted (#209, GM (a)): a fresh open is, and so is a camera kept from
+  // earlier in the visit that was fitted when it was kept. Either opens with
+  // React Flow's fit to the column the board has now (fitView below): a
+  // fitted camera kept at another column size, or with cards added since,
+  // would be a stale fit. A camera the person moved opens exactly as kept.
   const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true).current;
 
   // Where cards being dragged or nudged are, until the move is sent.
@@ -202,6 +205,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
 
   // One camera spring at a time: a new move stops the one still running.
   const stopSpring = useRef<(() => void) | null>(null);
+  // Where the running spring is going (null when none is): the store already
+  // holds it, so React Flow's move end for a frame on the way (it can fire
+  // 150 ms later, after the view has closed) doesn't keep a camera mid-spring.
+  const springTarget = useRef<Viewport | null>(null);
+  // True while the spring applies a frame: React Flow calls onMoveStart
+  // inside setViewport, and that move is the camera's own.
+  const applyingSpring = useRef(false);
   // A whole-board fit's refit while its column resizes (#209): `follow` knows
   // whether the camera is still where the last fit left it.
   const fitRef = useRef<() => void>(() => {});
@@ -214,7 +224,16 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     // A new move takes over from the one still running (a refit while the
     // window is dragged starts from where the last one had got to).
     stopSpring.current?.();
-    stopSpring.current = springViewport(getViewport(), to, (viewport) => { void setViewport(viewport); });
+    springTarget.current = to;
+    stopSpring.current = springViewport(getViewport(), to, (viewport) => {
+      if (viewport === to) springTarget.current = null; // the last frame: the spring has landed
+      applyingSpring.current = true;
+      try {
+        void setViewport(viewport);
+      } finally {
+        applyingSpring.current = false;
+      }
+    });
     // Where the camera lands is kept for the visit, as a pan or scroll is.
     useBoardCanvasStore.getState().setViewport(boardKey, to, fitted);
   }, [getViewport, setViewport, boardKey]);
@@ -287,11 +306,21 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   }, [fit]);
 
   // A move the person makes (React Flow passes its source event; the
-  // camera's own springs and fit on open have none) ends the fitted state.
-  const onMoveStart = useCallback((event: unknown) => follow.current!.moveStart(event), []);
+  // camera's own springs and fit on open have none), or the autopan while
+  // they drag a card to the edge, ends the fitted state and takes the camera
+  // from a spring still running, so the spring can't undo it.
+  const onMoveStart = useCallback((event: unknown) => {
+    if (applyingSpring.current) return;
+    if (!follow.current!.moveStart(event, dragging.current)) return;
+    stopSpring.current?.();
+    stopSpring.current = null;
+    springTarget.current = null;
+  }, []);
   // Kept for the visit with whether it is still fitted (a person's move has
-  // already ended that at its start).
+  // already ended that at its start). While a spring runs, the store holds
+  // where it lands (springTo).
   const rememberViewport = useCallback((_event: unknown, viewport: Viewport) => {
+    if (springTarget.current) return;
     useBoardCanvasStore.getState().setViewport(boardKey, viewport, follow.current!.fitted);
   }, [boardKey]);
 
@@ -346,8 +375,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           onSelectionDragStop={onSelectionDragStop}
           onMoveStart={onMoveStart}
           onMoveEnd={rememberViewport}
-          defaultViewport={savedViewport}
-          fitView={!savedViewport}
+          defaultViewport={startsFitted ? undefined : savedViewport}
+          fitView={startsFitted}
           fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}

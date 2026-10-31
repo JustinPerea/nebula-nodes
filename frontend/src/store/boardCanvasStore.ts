@@ -61,7 +61,7 @@ interface BoardCanvasState {
   /** Whether that camera was where a whole-board fit left it (#209: a board kept
    *  fitted refits when its column resizes; components/moodboard-studio/boardFitFollow.ts). */
   fitted: Record<string, boolean>;
-  setViewport: (boardKey: string, viewport: Viewport, fitted?: boolean) => void;
+  setViewport: (boardKey: string, viewport: Viewport, fitted: boolean) => void;
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
@@ -92,7 +92,7 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
   },
   viewports: {},
   fitted: {},
-  setViewport: (boardKey, viewport, fitted = false) => set((state) => ({ viewports: { ...state.viewports,
+  setViewport: (boardKey, viewport, fitted) => set((state) => ({ viewports: { ...state.viewports,
     [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } }, fitted: { ...state.fitted, [boardKey]: fitted } })),
   studioBoard: null,
   setStudioBoard: (board) => {

@@ -204,3 +204,69 @@ CI's Frontend tests part 1 timed out two studioGridAreas tests at 5 s. With brea
 - **A new check** confirms that each rule's key is a class its subject requires, and that the index finds the same rules as a full scan on the Board view's and Commons' DOM. Its mutant (keying a rule by an ancestor's class) is killed.
 - **Mutants re-run after the speedup**, all killed: M1, M2, M3, M7, M9, M10, M11, M12, M13, M13b, M15, M16, M17, M18 and M19.
 - **Found, not changed.** For a selector whose subject is only a state or a pseudo-element, the helper's `base` loses its trailing `*`: `sel.toString().trim()` drops the space before the check that would add it. So `.commons-evaluation :focus-visible` is matched as `.commons-evaluation:focus-visible`. This affects six rules: two in commons-evaluation.css, and four `::-webkit-scrollbar` rules in slava-restraint.css. It predates this PR and doesn't touch the studio ratchet.
+
+## Round 3: review 2's fit-follow findings
+
+### MEDIUM-1: a board kept fitted came back from List with a stale fit
+
+- **Cause.** A kept camera flagged fitted was shown as saved, and the follower's "the first size only records it" rule assumed fitView had just used that size. That's true for a fresh open but not for a kept camera fitted to an earlier column, so nothing refit until the next resize.
+- **Second path.** React Flow's onMoveEnd runs on a 150 ms timer (panOnScroll), so leaving 60 ms into a refit saved a camera halfway, flagged fitted.
+- **Choice: fit on mount when fitted, not "store the column size with the flag".**
+  - A fitted camera is a function of the column and the cards, so storing the size would keep a second copy of state that can go stale. Cards added or removed while List showed would still leave a stale fit.
+  - `fitView={startsFitted}` uses React Flow's own instant fit at the size it measures, and keeps the follower's first-size rule true for every open.
+  - `defaultViewport` is passed only for a camera the person moved, which reopens exactly as kept.
+- **No mid-spring save.**
+  - `springTarget` holds where the running spring lands, and springTo has already stored it.
+  - rememberViewport ignores move ends while it's set, including the late timer after unmount (the cleanup stops the spring but leaves the target set).
+  - The spring's last frame (`viewport === to`) and a person's move clear it.
+
+### LOW-1 and LOW-2: the person takes the camera
+
+- **A move with a source event during a spring.** The spring is stopped at once (`stopSpring`), the target is cleared, and the board leaves the fitted state.
+- **Autopan.** React Flow's drag autopan calls `panBy` → `setViewportConstrained` with no source event. A move start with no event while a card is being dragged (`dragging.current`) is therefore the person's move, as ruling (a) reads.
+- **The spring's own frames.** React Flow calls onMoveStart synchronously inside `setViewport` (d3's `transform` with no duration is synchronous; @xyflow/system 0.0.76 `getD3Transition`). So `applyingSpring` is set around each frame, and those frames are never read as an autopan, even during a drag.
+- **A drag that never autopans** moves no camera and leaves the board fitted.
+- `boardFitFollow.moveStart(event, cardDrag)` now returns whether the move was the person's, so BoardCanvas knows when to stop the spring.
+
+### LOW-3, LOW-4, NIT-1
+
+- **New tests.**
+  - Unit: two refits for two sizes (M18), and a zero size isn't the first size (M1).
+  - Integration: the offline-row case compares the whole viewport, since the zoom is the same at both heights; and a refit pending at unmount never runs (M10).
+- **Equivalent mutants.**
+  - The refit frame's `if (isFitted)` re-check is removed. leave() cancels the frame, so it only ever runs while fitted, which makes M4 and M5/M6 killable.
+  - springTo's store write is now load-bearing (M11): move ends during a spring are ignored.
+  - The store's `fitted` parameter is required, so M14 has no default to fall back on.
+  - One guard stays equivalent: clearing `springTarget` on the spring's last frame (R9 below). Nothing moves the camera without a source event after a landing except an autopan, which clears it anyway. It's kept so the ref means what its comment says, a spring is running, and a future programmatic move can't be silently dropped.
+
+### Round 3 tests and mutants
+
+- **Tests that fail on 68706483 (8).** Restored fitted at another size opens fitted; closed mid-refit; closed mid-zoom; a pan during a refit; an autopan drag; and three follower unit tests for the new `moveStart` contract. The LOW-3/LOW-4 tests pass there too, since they pin behaviour that was already right, and they kill their mutants.
+- **Mutants (R1–R20) on the 5 BoardCanvas/store test files.** All killed except R9 (above):
+  - fitView and defaultViewport reverted (R1, R2, R19);
+  - no mid-spring skip, no target, no store write (R3, R20, R4);
+  - the person's move not stopping the spring or not clearing the target (R5, R6);
+  - no applying guard, or the guard never reset (R7, R16);
+  - autopan ignored (R8, R17);
+  - moveStart not leaving (R18);
+  - the frame reset, the dispose wiring and the zero-size guard (R10, R11, R12);
+  - leave() not cancelling (R13), resize ignoring fitted (R14), and the store dropping the flag (R15).
+
+### Round 3 live (8794/5794, the coordinator's serve_isolated.py launcher)
+
+- **28/28 checks passed:**
+  - H under both skins: fitted at 1440, List, narrowed to 1000, back. The cards sit 23 px from each side, and Fit doesn't move the camera.
+  - H4: List 60 ms into a refit, then back. Fitted, cards inside.
+  - A moved camera through List and a narrow comes back exactly.
+  - L: a pan 40 ms into a refit. The spring never moved the camera after the pan, and the next resize keeps the view.
+  - J: autopan moved x from 46 to -534.5 and a narrow kept it. J2: a plain drag stays fitted.
+  - Case 1 again.
+- **The launcher.** It strips every `*TOKEN*` variable, so the person token comes from the link it prints to a terminal. The script runs it under a pty (`pty.spawn`), reads the link, and redacts it from the log. blocked.log holds only the canary lines and `canary ok`. The browser side (dead proxy, CDP blocks, canary) is unchanged.
+- Shots are in scratchpad `boardfix/shots3/` (8). md5 `uniq -d` is empty, and each was opened.
+
+### Round 3 gates
+
+- `tsc -b --noEmit`: 0. `npm run lint`: passed.
+- Focused vitest, `--maxWorkers=2`, 115 files with studioGridAreas: 1829 passed, Errors 0.
+- Build budget: 444,245 bytes raw (limit 512,000).
+- The ratchet's header comment now lists the widths it checks: the breakpoints as well as 700/1000/1440/1600. The test title already said "at every breakpoint".

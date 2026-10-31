@@ -59,7 +59,7 @@ describe('the board stays fitted when its column resizes', () => {
   it('a person\'s pan or zoom (a move with a source event) keeps their view', () => {
     const { follow, refit, flush } = harness();
     follow.resize(870, 851);
-    follow.moveStart(new Event('wheel'));
+    expect(follow.moveStart(new Event('wheel'))).toBe(true);
     follow.resize(430, 851);
     flush();
     expect(follow.fitted).toBe(false);
@@ -69,12 +69,41 @@ describe('the board stays fitted when its column resizes', () => {
   it('the camera\'s own moves (no source event: the fit spring, fit on open) keep it fitted', () => {
     const { follow, refit, flush } = harness();
     follow.resize(870, 851);
-    follow.moveStart(null);
-    follow.moveStart(undefined);
+    expect(follow.moveStart(null)).toBe(false);
+    expect(follow.moveStart(undefined, false)).toBe(false);
     follow.resize(430, 851);
     flush();
     expect(follow.fitted).toBe(true);
     expect(refit).toHaveBeenCalledTimes(1);
+  });
+
+  it('an autopan while a card is dragged (no source event) is the person\'s move', () => {
+    const { follow, refit, flush } = harness();
+    follow.resize(870, 851);
+    expect(follow.moveStart(null, true)).toBe(true);
+    follow.resize(430, 851);
+    flush();
+    expect(follow.fitted).toBe(false);
+    expect(refit).not.toHaveBeenCalled();
+  });
+
+  it('each new size after a refit refits again', () => {
+    const { follow, refit, flush } = harness();
+    follow.resize(870, 851);
+    follow.resize(430, 851);
+    flush();
+    follow.resize(430, 300);
+    flush();
+    expect(refit).toHaveBeenCalledTimes(2);
+  });
+
+  it('a zero size (not laid out yet) is not the first size', () => {
+    const { follow, refit, flush } = harness();
+    follow.resize(0, 0);
+    follow.resize(870, 0);
+    follow.resize(870, 851);
+    flush();
+    expect(refit).not.toHaveBeenCalled();
   });
 
   it('a move that lands between a resize and its frame cancels that refit', () => {
