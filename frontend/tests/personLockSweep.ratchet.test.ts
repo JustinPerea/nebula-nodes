@@ -83,7 +83,7 @@ const CALLERS: Record<string, Entry> = {
   'store/agentNotesStore.ts#dismiss': { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
   // Round 13 (review 10 MEDIUM-1): markRead and markReadIds send through sendRead, which sends
   // nothing on a tab that isn't connected as the person (one read per list waits for the promote).
-  'store/agentNotesStore.ts#sendRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card): opening and reading stay live; on a tab not connected as the person nothing is sent and one read per list waits for the promote (lib/personWork whenPerson); a refusal of one sent says markReadRefusedCopy' },
+  'store/agentNotesStore.ts#sendRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card): opening and reading stay live; on a tab not connected as the person nothing is sent and one read per list waits for the promote (lib/personWork whenPerson); one refused in flight shows nothing and re-joins that wait (GM r23 item 5)' },
 };
 
 /** Round 11: controls lockReach reaches that send nothing person-only, by `file attribute={handler}`

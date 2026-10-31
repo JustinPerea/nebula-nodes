@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import { LineText } from '../LineText';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 type Props = {
   path: string;
@@ -42,7 +43,9 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
     };
   }, [path, loadEpoch, line]);
   const current = media?.path === path ? media : undefined;
-  if (error && errorPath === path) return <span role="alert"><LineText text={error} /></span>;
+  // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
+  const shownError = useOfflineFirstBecause(error);
+  if (error && errorPath === path) return shownError ? <span role="alert"><LineText text={shownError} /></span> : null;
   return video ? <video {...props} src={current?.url} /> :
     <img {...props} src={current?.url} alt={alt} loading={loading} />;
 }

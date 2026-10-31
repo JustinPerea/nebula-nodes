@@ -1,15 +1,22 @@
 import { useId, type SyntheticEvent } from 'react';
 import { useLockPending, useTabHeld } from './useTabHeld';
 import { personLockLine } from '../lib/errorCopy';
+import { useBackendOffline } from '../lib/useBackendOffline';
 
 /** Marks a control locked by usePersonLock (tests read it; styles may). Its value is the verb. */
 export const PERSON_LOCK_ATTR = 'data-person-lock';
+
+/** Marks a locked control whose line is held back on purpose (offline comes first, GM r23 3; or
+ * the Commons' Add waiting for the page's because line, GM r23 1): lib/lockPlacement lets it be
+ * without a line on screen. */
+export const LOCK_LINE_HELD_ATTR = 'data-lock-line-held';
 
 export interface LockProps {
   'aria-disabled'?: true;
   'data-held-pending'?: '';
   'aria-describedby'?: string;
   'data-person-lock'?: string;
+  'data-lock-line-held'?: '';
 }
 
 export interface PersonLock {
@@ -17,7 +24,8 @@ export interface PersonLock {
   locked: boolean;
   /** The lock's words ("You can <verb> when this tab is connected as you."), shown or not. */
   line: string;
-  /** The line is on screen (after the first moment: GM r5 2a). */
+  /** The line is on screen (after the first moment: GM r5 2a; never while Nebula is offline:
+   * GM r23 3, offline comes first). */
   shown: boolean;
   /** The line's element id, for aria-describedby. */
   id: string;
@@ -36,12 +44,17 @@ export interface PersonLock {
  * lift on the promote. A demoted tab locks too (GM r16 Q4). The line renders through
  * components/PersonLock; tests/personLockSweep.ratchet.test.ts fails a control that reaches a
  * person-only route without this.
+ *
+ * Round 14 (GM r23 3): offline comes first. While Nebula is offline the control stays locked but
+ * its line is hidden: the offline notice says what is wrong, and connecting this tab wouldn't be
+ * enough. Back online, still not connected, the line shows.
  */
 export function usePersonLock(verb: string, active = true): PersonLock {
   // `active`: whether the control is live at all (an ask still open); a closed one never locks.
   const locked = useTabHeld() && active;
   const pending = useLockPending(locked);
-  const shown = locked && !pending;
+  const offline = useBackendOffline();
+  const shown = locked && !pending && !offline;
   const id = useId();
   const line = personLockLine(verb);
   return {
@@ -51,6 +64,7 @@ export function usePersonLock(verb: string, active = true): PersonLock {
       'data-held-pending': locked && pending ? '' : undefined,
       'aria-describedby': [describedBy, shown ? id : undefined].filter(Boolean).join(' ') || undefined,
       'data-person-lock': locked ? verb : undefined,
+      'data-lock-line-held': locked && !pending && offline ? '' : undefined,
     }),
     guard: (fn) => (...args) => {
       if (locked) {

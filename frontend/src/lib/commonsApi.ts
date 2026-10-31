@@ -8,13 +8,18 @@ import {
   warnFailure, type FailureCopy,
 } from './errorCopy';
 import {
-  forgetPersonCredential, personPromotions, personToken, refreshPersonCredential, resetPersonSessionForTests,
+  dropRefusedPersonToken, personPromotions, personToken, refreshPersonCredential, resetPersonSessionForTests,
 } from './personSession';
 import type {
   AssetDetail, Collection, CommonsStatus, FilterState, FolderLink, Region, Role, SearchRow,
 } from './commonsTypes';
 
 let session: Promise<string> | null = null;
+/** The token each answer was sent with (memory only, never logged), so a 401 drops that one. */
+const sentWith = new WeakMap<Response, string>();
+/** The Commons' explicit answer that the person token sent is invalid (backend commons/actors.py
+ * resolve_actor). tests/presenceRound14.tokenDrop reads the backend file to keep the two in step. */
+export const INVALID_PERSON_TOKEN_DETAIL = 'invalid UI session token';
 
 export function resetCommonsSessionForTests(): void {
   session = null;
@@ -71,7 +76,9 @@ async function send(heading: string, path: string, init: RequestInit, sentAt?: n
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
   try {
-    return await apiFetch(`/api/commons${path}`, { ...init, headers: { ...headers, ...(init.headers as object) } });
+    const response = await apiFetch(`/api/commons${path}`, { ...init, headers: { ...headers, ...(init.headers as object) } });
+    sentWith.set(response, token);
+    return response;
   } catch (error) {
     // apiFetch says a lost connection in words; the caller's own abort passes.
     throw error instanceof ConnectionLostError ? lostConnection(heading, error) : error;
@@ -94,8 +101,13 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
   if (response.status === 401) {
     // Stop browser polling from repeatedly sending a token forgotten by a
     // restarted backend. A new terminal link restores explicit authority.
+    // Justin, 2026-10-31: only the backend's explicit answer that the token is invalid drops it
+    // (lib/personSession dropRefusedPersonToken, the one rule the socket's refusal also uses).
+    // A Commons 401 is that answer only with this detail; "no UI session" (a launch with no
+    // person session) and an agent token's refusal keep it.
     session = null;
-    forgetPersonCredential();
+    const detail = await readDetail(response);
+    if (detail === INVALID_PERSON_TOKEN_DETAIL) dropRefusedPersonToken(sentWith.get(response) ?? null);
     warnFailure(heading, 401, 'no person session');
     throw sessionLost(heading, sentAt);
   }

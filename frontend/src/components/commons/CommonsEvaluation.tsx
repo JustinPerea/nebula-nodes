@@ -10,6 +10,7 @@ import { failureMessage } from '../../lib/errorCopy';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
@@ -249,6 +250,8 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   const [imageError, setImageError] = useState('');
   const [imageEpoch, imageAgain] = useReloadEpoch();
   const imageLine = useCommonsLine(setImageError, '', `commons.evaluation-image-${item.position}`, imageAgain);
+  // Offline comes first (GM r23 3): a because line hides while offline.
+  const shownImageError = useOfflineFirstBecause(imageError);
   const [crosshair, setCrosshair] = useState<AccentPoint>({ x: 0.5, y: 0.5 });
   const canvas = useRef<HTMLCanvasElement>(null);
   const readonly = batch.state !== 'open' || busy;
@@ -285,7 +288,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   return <>
     <div className="evaluation-image">
       <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-      {imageError && <p role="alert"><LineText text={imageError} /></p>}
+      {shownImageError && <p role="alert"><LineText text={shownImageError} /></p>}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
         <canvas ref={canvas} width={item.width} height={item.height} tabIndex={0}

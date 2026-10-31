@@ -261,10 +261,15 @@ body.app-slava-restraint .commons-add {
    (components/commons/CommonsPageLines), under the because line, or alone in the row.
    Round 13 (GM r21 1): it starts where the because line's words start, not at its rail, and at
    the same x when it stands alone, so it never moves between the two. The x is the line's own
-   measure (--commons-line-text-x below), not a second offset. */
+   measure (--commons-line-text-x below), not a second offset.
+   Round 14 (GM r23 2): the line is the focus target (a demote's handover), and its ring hugs the
+   sentence: the line fits its words, set in by a margin of that measure (not padding), so the
+   ring's usual offset sits around the words. The row's padding stays on .commons-messages. */
 body.app-slava-restraint .commons-messages__lock-line {
-  margin: 0;
-  padding-left: var(--commons-line-text-x);
+  width: fit-content;
+  max-width: calc(100% - var(--commons-line-text-x));
+  margin: 0 0 0 var(--commons-line-text-x);
+  padding: 0;
 }
 body.app-slava-restraint .commons-messages > * + .commons-messages__lock-line {
   margin-top: 4px;
@@ -1092,6 +1097,12 @@ body.app-slava-restraint .commons-prompt__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Round 14 (GM r23 4): OK's lock line, right under the buttons, ending where OK ends. */
+body.app-slava-restraint .commons-prompt__card > .person-lock-line {
+  margin: -4px 0 0;
+  text-align: end;
 }
 
 /* -- motion ----------------------------------------------------------------------- */

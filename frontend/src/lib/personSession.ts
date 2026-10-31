@@ -21,6 +21,7 @@
  */
 
 import { originAllowedByPin, pinnedBackendPort, type BackendPortEnv } from './devBackendPort';
+import { afterHealthAnswer } from './backendConnection';
 
 const STORAGE_KEY = 'nebula.person';
 // Commons' old name for the same per-launch secret. Read once, then removed.
@@ -246,6 +247,32 @@ export function forgetPersonCredential(): void {
   } catch {
     /* nothing stored */
   }
+}
+
+/**
+ * Justin, 2026-10-31 (PR #204 round 14): a browser tab drops its stored person token when the
+ * backend answers explicitly that the token it sent is invalid: the canvas socket refusing the
+ * hello that carried it (the backend's `personRequired` answer to that hello), or a Commons call
+ * refused with 401 after the token was looked up again. Then the tab is a plain never-connected
+ * tab; opening the link again stores the new token as before.
+ *
+ * Never on anything else: a network error, a timeout, a 5xx, or any answer that isn't one of
+ * those reach here only through these two callers, and they call this only on that answer.
+ * Never while Nebula is starting: a refusal that comes before the first health answer (a fresh
+ * tab says hello as soon as its socket opens) waits for that answer, and the token is dropped
+ * only if the backend answered online and no promote came in between. Never in the desktop app
+ * (`browserPersonCredential()` is null there: its shell holds the token), and never when the
+ * token sent is no longer this tab's (a new link came meanwhile). The token is a credential: it
+ * is compared here and removed, never logged, put in an event or sent anywhere.
+ */
+export function dropRefusedPersonToken(sent: string | null): void {
+  const promotions = personPromotionsNow;
+  afterHealthAnswer((online) => {
+    if (!online || personPromotionsNow !== promotions) return;
+    // A stored token is never empty, so this also keeps a call that sent none.
+    if (!sent || browserPersonCredential()?.token !== sent) return;
+    forgetPersonCredential();
+  });
 }
 
 export function personUnavailableReason(): PersonUnavailableReason {

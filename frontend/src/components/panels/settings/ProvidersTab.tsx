@@ -17,6 +17,7 @@ import { useKreaConnection } from './useKreaConnection';
 import { LineText } from '../../LineText';
 import { PersonLockLine } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
+import { useGroupLockLine } from './groupLockLines';
 
 const NODES = Object.values(NODE_DEFINITIONS);
 const KREA_ACCOUNT_NODES = NODES.filter((node) => supportsKreaAccount(node));
@@ -85,6 +86,10 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const connected = visible.filter((entry) => entry.connected);
   const toAdd = visible.filter((entry) => !entry.connected);
   const anyConnected = entries.some((entry) => entry.connected);
+  // Round 14 (review 11 NIT-1): the group's line renders under the first listed section's heading
+  // whenever the lock shows it, so it's registered while any row is listed, and the key-added
+  // Undo (SettingsNoticeBar) knows it's there before it renders.
+  useGroupLockLine('change provider settings', keyLock.id, visible.length > 0);
 
   // Read through a ref: Krea's status arriving mid-handoff must not cancel the focus below.
   const kreaStatusRef = useRef(kreaStatus);

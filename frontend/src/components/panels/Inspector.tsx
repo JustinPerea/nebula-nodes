@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
@@ -134,6 +135,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  const shownFavoriteError = useOfflineFirstBecause(favoriteError);
 
   // Load favorites from settings
   useEffect(() => {
@@ -550,7 +553,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           </div>
         )}
         {selectedModel !== '' && <PersonLockLine lock={favoriteLock} place="control" />}
-        {favoriteError && <div className="inspector__model-error" role="alert"><LineText text={favoriteError} /></div>}
+        {shownFavoriteError && <div className="inspector__model-error" role="alert"><LineText text={shownFavoriteError} /></div>}
       </div>
     );
   }

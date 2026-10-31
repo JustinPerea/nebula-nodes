@@ -15,6 +15,7 @@ import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../
 import { LineText } from '../../LineText';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
+import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
@@ -61,8 +62,11 @@ function useOutsideSpend() {
       });
   }, [readsOnPromote]);
   useReadAsPerson(reload, ready, epoch);
-  if (held) return { view: null, error: notConnectedBecause('load the connected apps'), reload, held };
-  return { view, error, reload, held };
+  // Round 14 (GM r23 answer 3): offline comes first, so a not-connected line (the held view's,
+  // or a load refused as not the person) waits until Nebula is back; any other failure shows.
+  const shown = useOfflineFirstBecause(held ? notConnectedBecause('load the connected apps') : error);
+  if (held) return { view: null, error: shown, reload, held };
+  return { view, error: shown, reload, held };
 }
 
 function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, onChange, describedBy, lock }: {

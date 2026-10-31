@@ -34,12 +34,31 @@ describe('Add\'s lock line lines up with the because line\'s words (GM r21 1)', 
 
   it('the lock line in the row starts at that inset, with or without the because line', () => {
     const lock = rule('body.app-slava-restraint .commons-messages__lock-line');
-    expect(lock['padding-left']).toBe('var(--commons-line-text-x)');
-    expect(lock.margin).toBe('0');
+    // Round 14 (GM r23 2): the inset is a margin and the line fits its words, so its focus ring
+    // hugs the sentence; nothing pads it (the row's padding is .commons-messages').
+    expect(lock.margin).toBe('0 0 0 var(--commons-line-text-x)');
+    expect(lock.padding).toBe('0');
+    expect(lock.width).toBe('fit-content');
+    expect(lock['max-width']).toBe('calc(100% - var(--commons-line-text-x))');
+    expect(lock['padding-left']).toBeUndefined();
     // Nothing else moves it sideways: no other rule for it sets a left offset.
     const others = [...css.matchAll(/([^{}]*\.commons-messages__lock-line[^{}]*)\{([^}]*)\}/g)]
       .filter(([, , body]) => /(?:^|;|\s)(?:padding|padding-left|margin|margin-left|left|inset|text-indent)\s*:/.test(body))
       .map(([, selector]) => selector.trim());
     expect(others).toEqual(['body.app-slava-restraint .commons-messages__lock-line']);
+  });
+});
+
+describe('a focused page-row line: the ring hugs the sentence (GM r23 2, PR #204 round 14)', () => {
+  it('no rule draws its own ring or offset on the lock line: the token ring and its usual offset apply', () => {
+    const focusRules = [...css.matchAll(/([^{}]*(?:commons-messages__lock-line|person-lock-line)[^{}]*)\{([^}]*)\}/g)]
+      .filter(([, selector]) => /:focus/.test(selector));
+    expect(focusRules).toEqual([]);
+    const sheet = readFileSync(resolve(__dirname, '../src/styles/personLock.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(sheet).not.toMatch(/outline|:focus/);
+  });
+
+  it('the row keeps its padding on the outer block', () => {
+    expect(rule('body.app-slava-restraint .commons-messages').padding).toBe('8px 16px 0');
   });
 });

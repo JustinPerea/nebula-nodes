@@ -10,18 +10,21 @@ import { PAGE_LINES_ATTR } from '../../lib/lockPlacement';
  * sentence, or takes the row alone when no banner shows. The header keeps its 48 px: nothing of
  * the lock goes in it (tests/presenceRound7.toolbar holds the row to controls and states).
  * The rest of the row (upload failures, a notice, the proposals line) follows.
+ * Round 14 (GM r22): `line` may be several, one per failed load (useCommonsLoadLines), each in
+ * its own line box, in the page's order; Add's line comes after all of them.
  */
 export function CommonsPageLines({ line, lock, children, more = false }: {
-  line: string | null | undefined;
+  line: string | readonly string[] | null | undefined;
   lock: PersonLock;
   /** Whether `children` has anything to show (the row renders only with something in it). */
   more?: boolean;
   children?: ReactNode;
 }) {
-  if (!line && !lock.shown && !more) return null;
+  const lines = (typeof line === 'string' ? [line] : line ?? []).filter(Boolean);
+  if (lines.length === 0 && !lock.shown && !more) return null;
   return (
     <div className="commons-messages" {...{ [PAGE_LINES_ATTR]: '' }}>
-      <CommonsErrorLine line={line} />
+      {lines.map((each) => <CommonsErrorLine key={each} line={each} />)}
       <PersonLockLine lock={lock} place="page" className="commons-messages__lock-line" />
       {children}
     </div>

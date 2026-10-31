@@ -124,8 +124,10 @@ const COMMONS: Shows[] = [
   { file: 'components/commons/CommonsDetail.tsx', expr: 'error' },
   { file: 'components/commons/CommonsSettings.tsx', expr: 'error' },
   { file: 'components/commons/CommonsReview.tsx', expr: 'error' },
-  { file: 'components/commons/CommonsEvaluation.tsx', expr: 'imageError' },
-  { file: 'components/commons/CommonsMedia.tsx', expr: 'error' },
+  // Round 14 (GM r23 3): offline comes first, so these hand on the line useOfflineFirstBecause leaves.
+  { file: 'components/commons/CommonsEvaluation.tsx', expr: 'shownImageError' },
+  { file: 'components/commons/CommonsMedia.tsx', expr: 'shownError' },
+  { file: 'components/commons/CommonsReview.tsx', expr: 'shownError' },
 ];
 
 /**
@@ -157,7 +159,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
     { file: 'components/panels/settings/PreferencesTab.tsx', expr: 'costError' },
   ],
   // Round 10 (GM r17 item 5): a favorite the server refused no longer drops silently.
-  'inspector.favorite': [{ file: 'components/panels/Inspector.tsx', expr: 'favoriteError' }],
+  'inspector.favorite': [{ file: 'components/panels/Inspector.tsx', expr: 'shownFavoriteError' }],
   'krea.connection': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'problem' }],
   'krea.plans': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'error' }],
   'studio.save-board': [{ file: 'components/moodboard-studio/MoodboardStudioView.tsx', expr: 'saveError' }],
@@ -169,8 +171,6 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   ],
   // AgentNotesCorner hands useAgentNotesStore's error to the list.
   'notes.corner': [{ file: 'components/agent-notes/AgentNotesList.tsx', expr: 'error' }],
-  'notes.read': [{ file: 'components/agent-notes/AgentNotesList.tsx', expr: 'error' }],
-  'notes.read-retry': { none: 'a retry: its line is notes.read' },
   'notes.dismiss': [{ file: 'components/agent-notes/AgentNotesList.tsx', expr: 'error' }],
   trash: [{ file: 'components/asset-trash/AssetTrash.tsx', expr: 'error' }],
   'pins.add': [{ file: 'components/canvas/PinComposer.tsx', expr: 'errorLeave.shown' }],
@@ -204,6 +204,9 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   // Round 9: the Commons' lines clear on the promote (components/commons/useCommonsLine).
   'commons.line': COMMONS,
   'commons.reload-retry': { none: 'a retry: the load runs again; its line is commons.line' },
+  // Round 14 (GM r22): the Commons page's load lines (useCommonsLoadLines), shown in its line row.
+  'commons.load-lines': [{ file: 'components/commons/CommonsView.tsx', expr: 'shownError' }],
+  'commons.load-lines-retry': { none: 'a retry: the loads run again; their line is commons.load-lines' },
 };
 
 

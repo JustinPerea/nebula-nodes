@@ -18,6 +18,7 @@ import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
 import { LineText } from '../LineText';
 import { PersonLockLine, type PersonLock } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 export interface ProjectSummary {
@@ -486,7 +487,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const locked = busy || offline;
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
-  const showError = !unsavedEdits && Boolean(error);
+  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  const errorKept = useOfflineFirstBecause(error ?? null);
+  const showError = !unsavedEdits && Boolean(errorKept);
   const noticeKeys: NoticeKey[] = [
     ...(copyNotice ? ['copy' as const] : []),
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),

@@ -6,6 +6,7 @@
  *   composition in the search was cut. Now only the data panes start again: each control is the
  *   same element across the demote and the promote, still focused, and a composition goes on.
  * - NIT-2: a held and a demoted Commons showed different because lines (the last refusal won).
+ *   Round 14 (GM r22): both show one line for the page, with no ranking between loads.
  *   One line by state: the status's.
  * - The promote reads each load once: the loads' own retry on the promote and the new view land
  *   in one render (the old remount's retry ran on the unmounted body and did nothing).
@@ -178,25 +179,28 @@ describe('the data still starts again on a demote and the promote', () => {
   });
 });
 
-describe('one because line by state, not by the last refusal (review 10 NIT-2)', () => {
-  const STATUS_LINE = 'Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+describe('one page line on a held tab, never a load\'s own (review 10 NIT-2, GM r22)', () => {
+  const STATUS_LINE = 'Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
   const lineText = () => document.querySelector('[data-commons-line="not-connected"]')?.textContent;
 
-  it('a tab that never connected: the status line, after the search refuses too, and after a new search', async () => {
+  it('a tab that never connected: the page line, after the search refuses too, and after a new search', async () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);
     await settle(400);
     await flush();
     expect(lineText()).toBe(STATUS_LINE);
-    // A new search refuses later still: the line stays the status's.
+    expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(1);
+    // A new search refuses later still: still the one page line.
     fireEvent.change(document.querySelector('input[name="commons-search"]')!, { target: { value: 'warm' } });
     await settle(400);
     await flush();
     expect(lineText()).toBe(STATUS_LINE);
+    expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(1);
     // The status poll refuses again: the same line.
     await settle(5100);
     await flush();
     expect(lineText()).toBe(STATUS_LINE);
+    expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(1);
   });
 
   it('a demoted tab shows the same line as one that never connected', async () => {
@@ -206,9 +210,11 @@ describe('one because line by state, not by the last refusal (review 10 NIT-2)',
     await settle(400);
     await flush();
     expect(lineText()).toBe(STATUS_LINE);
+    expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(1);
     fireEvent.change(document.querySelector('input[name="commons-search"]')!, { target: { value: 'warm' } });
     await settle(400);
     await flush();
     expect(lineText()).toBe(STATUS_LINE);
+    expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(1);
   });
 });

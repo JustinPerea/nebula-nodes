@@ -1,6 +1,7 @@
 import { isBecauseLine } from '../../lib/notConnectedLine';
 import { LineText } from '../LineText';
 import { FOCUS_LINE_ATTR } from '../../hooks/useFocusHandover';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 /**
  * A Commons screen's failure line (GM r12 (2), PR #204 round 9). A refusal because this tab
@@ -10,7 +11,8 @@ import { FOCUS_LINE_ATTR } from '../../hooks/useFocusHandover';
  * Its words register (components/LineText), so a because line sends the general notice away
  * while it shows.
  */
-export function CommonsErrorLine({ line, className = '' }: { line: string | null | undefined; className?: string }) {
+export function CommonsErrorLine({ line: given, className = '' }: { line: string | null | undefined; className?: string }) {
+  const line = useOfflineFirstBecause(given);
   if (!line) return null;
   // A not-connected refusal (a because line, the general words, or a dev setup's line).
   const person = isBecauseLine(line);

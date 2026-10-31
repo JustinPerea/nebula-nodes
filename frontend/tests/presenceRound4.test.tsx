@@ -61,6 +61,7 @@ const { coverProposal } = await import('../src/test/assetProposalFixtures');
 const { notePersonPromoted, reportPersonRequired } = await import('../src/lib/personSession');
 const { PERSON_REQUIRED_CODE, RequestFailedError, MARK_READ_REFUSED_COPY } = await import('../src/lib/errorCopy');
 const { pendingPromoteRetries } = await import('../src/lib/clearsOnPromote');
+const { personWorkWaiting } = await import('../src/lib/personWork');
 const { sanitizeNotes } = await import('../src/lib/agentNotes');
 const { heldLockFor } = await import('../src/components/agent-notes/heldLock');
 const { useKreaConnection } = await import('../src/components/panels/settings/useKreaConnection');
@@ -246,18 +247,26 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
   });
 });
 
-describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote, the line\'s words', () => {
-  it('a refused read leaves the header unread and says GM\'s line, curly apostrophes', async () => {
+// Round 14 (GM r23 item 5): a mark-read refused in flight is never the person's own press, so it
+// shows nothing (it used to show MARK_READ_REFUSED_COPY): the updates stay unread, the page's
+// because line says why, and the read waits for the promote (lib/personWork), not retryOnPromote.
+const flushReads = async () => { await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); }); };
+
+describe('GM r3 items 1 and 3, GM r23 item 5: a truthful header, a silent retry on the promote, no line', () => {
+  it('a read refused in flight leaves the header unread and shows no line', async () => {
     notesApi.markAgentNotesRead.mockImplementation(refusedInFlight);
     render(<AppAgentNotes />);
     sync();
     const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
-    expect(MARK_READ_REFUSED_COPY).toBe('Nebula couldn’t mark the updates as read because this tab isn’t connected as you. '
-      + 'Open the link Nebula printed when it started.');
+    await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
+    await flushReads();
+    expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true);
+    expect(useAgentNotesStore.getState().error).toBeNull();
+    expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY);
+    expect(list.textContent).not.toContain('couldn’t mark');
     expect(header(list)).toBe('2 · all unread');
-    expect(list.textContent).not.toContain('all read');
-    expect(list.textContent).not.toContain('try again');
+    expect(useAgentNotesStore.getState().lists['canvas:p1'].notes.every((n) => n.readAt === null)).toBe(true);
+    notesApi.markAgentNotesRead.mockResolvedValue({ ids: [], unread: 2, projectId: 'p1' });
   });
 
   it('the promote retries the read once, silently, and the header reaches "all read" for real', async () => {
@@ -265,29 +274,33 @@ describe('GM r3 items 1 and 3: a truthful header, a silent retry on the promote,
     render(<AppAgentNotes />);
     sync();
     const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
-    expect(pendingPromoteRetries()).toBe(1);
+    await waitFor(() => expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true));
+    expect(pendingPromoteRetries()).toBe(0);
     notesApi.markAgentNotesRead.mockResolvedValueOnce({ ids: ['u_cover', 'u_q'], unread: 0, projectId: 'p1' });
     act(() => { notePersonPromoted(); });
     await waitFor(() => expect(header(list)).toBe('2 · all read'));
     expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(2);
     expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY);
-    expect(pendingPromoteRetries()).toBe(0);
+    expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(false);
   });
 
-  it('a retry that fails leaves the header unread and shows no new line', async () => {
+  it('a retry refused again leaves the header unread, shows no line, and waits for the next promote', async () => {
     notesApi.markAgentNotesRead.mockImplementation(refusedInFlight);
     render(<AppAgentNotes />);
     sync();
     const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
+    await waitFor(() => expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true));
     act(() => { notePersonPromoted(); });
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(2));
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await flushReads();
     expect(header(list)).toBe('2 · all unread');
     expect(useAgentNotesStore.getState().error).toBeNull();
     expect(list.textContent).not.toContain('couldn’t mark');
-    expect(pendingPromoteRetries()).toBe(0);
+    expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true); // held again (it used to be dropped)
+    notesApi.markAgentNotesRead.mockReset().mockResolvedValue({ ids: ['u_cover', 'u_q'], unread: 0, projectId: 'p1' });
+    act(() => { notePersonPromoted(); });
+    await waitFor(() => expect(header(list)).toBe('2 · all read'));
+    expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
   });
 
   it('a read refused for another reason keeps its line and isn\'t retried on the promote', async () => {

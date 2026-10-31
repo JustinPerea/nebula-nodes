@@ -16,6 +16,7 @@ import { LineBox } from '../../LineBox';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
+import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
 
 const STATUS_TEXT: Record<PersonalAgent['status'], string> = {
@@ -198,7 +199,9 @@ export function PersonalAgentsSection() {
   });
 
   const agents = demoted ? [] : (list?.agents ?? []);
-  const shownError = demoted ? notConnectedBecause('load your agents') : error;
+  // Round 14 (GM r23 answer 3): offline comes first, so the held view's not-connected line waits
+  // until Nebula is back.
+  const shownError = useOfflineFirstBecause(demoted ? notConnectedBecause('load your agents') : error);
   return (
     <section aria-labelledby="settings-personal-agents-heading" data-testid="settings-personal-agents" ref={sectionRef} onFocus={handover.onFocus}>
       <div className="settings-label"><h3 id="settings-personal-agents-heading" tabIndex={-1}>Personal agents</h3></div>

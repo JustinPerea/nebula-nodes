@@ -1,6 +1,6 @@
 import { backendWebSocketUrl, personTokenForSocket } from './backend';
 import { withTabClaim } from './tabId';
-import { notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
+import { dropRefusedPersonToken, notePersonPromoted, onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type { AgentNotesEvent } from './agentNotes';
@@ -375,6 +375,9 @@ class WebSocketClient {
   /** The socket the server promoted as the person (its person-only
    * `proposalSync` came, which the backend sends on a verified hello only). */
   private promoted: WebSocket | null = null;
+  /** The token each socket's hello carried, so a refusal of that hello can drop exactly that
+   * token (Justin, 2026-10-31). Kept in memory only, never logged. */
+  private helloTokens = new WeakMap<WebSocket, string>();
 
   constructor(path: string) {
     this.path = path;
@@ -390,6 +393,7 @@ class WebSocketClient {
         return;
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
+        this.helloTokens.set(socket, personToken);
         socket.send(JSON.stringify({ type: 'hello', personToken }));
       }
     });
@@ -446,6 +450,10 @@ class WebSocketClient {
             if (parsed.type === 'personRequired') {
               // The server refused this socket's hello: demoted (GM r29 item 3).
               if (this.promoted === socket) this.promoted = null;
+              // Justin, 2026-10-31: that refusal is the backend saying the token this hello
+              // carried is invalid, so the tab drops it (lib/personSession, with its guards).
+              dropRefusedPersonToken(this.helloTokens.get(socket) ?? null);
+              this.helloTokens.delete(socket);
               reportPersonRequired();
               return;
             }

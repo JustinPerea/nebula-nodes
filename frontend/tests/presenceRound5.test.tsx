@@ -62,6 +62,7 @@ const session = await import('../src/lib/personSession');
 const { apiFetch } = await import('../src/lib/backend');
 const { PERSON_REQUIRED_CODE, RequestFailedError, MARK_READ_REFUSED_COPY, requestError } = await import('../src/lib/errorCopy');
 const { pendingPromoteClears, pendingPromoteRetries } = await import('../src/lib/clearsOnPromote');
+const { personWorkWaiting } = await import('../src/lib/personWork');
 const { HELD_LOOK_DELAY_MS } = await import('../src/hooks/useHeldLook');
 
 const CLAUDE = { id: 'ext:claude-code', name: 'Claude Code', color: '#3FC1A5', verified: false };
@@ -193,30 +194,32 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
     expect(session.personGateHeld()).toBe(false);
   });
 
-  it('a refusal of a request sent after the promote is this tab\'s state now: its line waits for the next promote', async () => {
+  // Round 14 (GM r23 item 5): a refused in-flight read shows no line now (these two used to wait
+  // for MARK_READ_REFUSED_COPY); it waits for the promote in lib/personWork, not retryOnPromote.
+  it('a refusal of a request sent after the promote is this tab\'s state now: its read waits for the next promote, with no line', async () => {
     notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
     sync();
     const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
+    await waitFor(() => expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true));
     await act(async () => { await Promise.resolve(); });
     expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
-    expect(pendingPromoteRetries()).toBe(1);
+    expect(list.textContent).not.toContain(MARK_READ_REFUSED_COPY);
+    expect(useAgentNotesStore.getState().error).toBeNull();
   });
 
   it('the retry checks it is still the project it read (keyFor): a read refused on p1 isn\'t sent once p2 is open', async () => {
     notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
     sync();
-    const list = openList();
-    await waitFor(() => expect(list.textContent).toContain(MARK_READ_REFUSED_COPY));
-    expect(pendingPromoteRetries()).toBe(1);
+    openList();
+    await waitFor(() => expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: /^Updates/ })); // closed: nothing reads on its own
     act(() => { useAgentNotesStore.setState({ canvasProjectId: 'p2' }); });
     act(() => { session.notePersonPromoted(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
-    expect(pendingPromoteRetries()).toBe(0);
+    expect(personWorkWaiting('agentNotes.read:canvas:p1')).toBe(false);
   });
 
   it('the real request path: an answer to a request sent before the promote is marked, and holds nothing', async () => {

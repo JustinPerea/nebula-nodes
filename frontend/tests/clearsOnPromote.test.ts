@@ -80,13 +80,14 @@ describe('the mechanism', () => {
 describe('the surfaces', () => {
   const surface = { kind: 'canvas' as const, projectId: null };
 
-  it('the Updates list: "Couldn\'t mark the updates as read…" (refused, not connected) goes on the promote', async () => {
+  it('the Updates list: a read refused because this tab isn\'t connected shows no line at all (round 14)', async () => {
     notesApi.markAgentNotesRead.mockRejectedValue(refused("Couldn't mark the updates as read."));
     await useAgentNotesStore.getState().markRead(surface);
-    // GM, #204 r3 item 3: its own line, no "then try again" (the promote retries it).
-    expect(useAgentNotesStore.getState().error).toBe(MARK_READ_REFUSED_COPY);
-    notePersonPromoted();
+    // GM r23 item 5 (it used to show MARK_READ_REFUSED_COPY until the promote): a mark-read is
+    // never the person's own press, so nothing shows and nothing waits here to clear.
     expect(useAgentNotesStore.getState().error).toBeNull();
+    expect(useAgentNotesStore.getState().error).not.toBe(MARK_READ_REFUSED_COPY);
+    expect(pendingPromoteClears()).toBe(0);
   });
 
   it('the Updates list: a read that failed for another reason keeps its line', async () => {

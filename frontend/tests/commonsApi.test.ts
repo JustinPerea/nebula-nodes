@@ -9,6 +9,7 @@ vi.mock('../src/lib/backend', () => ({
 import { commonsApi, commonsEvaluationApi, filtersToRequest, resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { EMPTY_FILTERS } from '../src/lib/commonsTypes';
 import { CommonsRequestError } from '../src/lib/commonsRequestError';
+import { noteProbeAnswer, resetBackendConnectionForTests, startHealthProbe } from '../src/lib/backendConnection';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -66,12 +67,15 @@ describe('commonsApi', () => {
 
   it('stops sending a forgotten browser session after two rejected requests', async () => {
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
+    // #204 round 14 (Justin): the token is dropped only once Nebula's health has answered online.
+    noteProbeAnswer(startHealthProbe(), 'online');
     // Round 2 (GM): a plain browser tab, where only a fresh terminal link helps.
     await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
     expect(sessionStorage.getItem('nebula.person')).toBeNull();
     await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check the Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(apiFetch).toHaveBeenCalledTimes(2);
+    resetBackendConnectionForTests();
   });
 
   // The Commons' leave popover offers a save again only when it could work:

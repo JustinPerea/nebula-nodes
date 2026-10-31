@@ -80,10 +80,12 @@ export function lockPlacementProblems(root: ParentNode = document): string[] {
       problems.push(`${text}: no place (${LOCK_PLACE_ATTR})`);
     }
   }
-  // Every locked control past the first moment points at a line on screen (none skips the rule).
+  // Every locked control past the first moment points at a line on screen (none skips the rule),
+  // unless its line is held back on purpose (data-lock-line-held, PR #204 round 14: offline comes
+  // first, or Add waiting for the page's because line). The look applies either way.
   for (const control of root.querySelectorAll<HTMLElement>('[data-person-lock]:not([data-held-pending])')) {
     const ids = (control.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
-    if (!ids.some((id) => document.getElementById(id)?.classList.contains('person-lock-line'))) {
+    if (!control.hasAttribute('data-lock-line-held') && !ids.some((id) => document.getElementById(id)?.classList.contains('person-lock-line'))) {
       const name = control.getAttribute('aria-label') || (control.textContent ?? '').trim() || control.tagName.toLowerCase();
       problems.push(`${name} (${control.getAttribute('data-person-lock')}): locked with no lock line`);
     }

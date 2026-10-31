@@ -81,8 +81,9 @@ export function PinComposer() {
   const sendLock = usePersonLock('send notes');
   const tabHeld = sendLock.locked;
   const heldPending = tabHeld && !sendLock.shown && !bannerUp;
-  const gateBanner = bannerUp || sendLock.shown;
   const lock = useCanvasLock();
+  // PR #204 round 14 (GM r23 3): offline comes first; the general notice's Send line waits too.
+  const gateBanner = (bannerUp && !lock.offline) || sendLock.shown;
   // Review 13 L-2: the dialog counts only once the Unicode data is in (its
   // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
   const [textReady, setTextReady] = useState(pinTextSettled);

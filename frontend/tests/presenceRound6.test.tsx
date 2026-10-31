@@ -148,6 +148,9 @@ describe('GM r6 check a: the mark-read, held fresh or demoted (round 13: nothing
     expect(pendingPromoteRetries()).toBe(0); // nothing was refused: the read waits (lib/personWork)
     act(() => { session.notePersonPromoted(); });
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
+    // Round 14 (review 11): waitFor passes at the first call; this proves no second one follows.
+    await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); });
+    expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
   });
 
   it('demoted after reading three: two more arrive, opening the list sends nothing, says nothing; the promote reads the newest once', async () => {
@@ -250,7 +253,7 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
 describe('review 4 NIT-3: the header\'s changes are read out politely', () => {
   it('the count is a polite, atomic status, and the promote changes it once', async () => {
     notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
-    notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: UPDATES, unread: 3 }); // read again on the refusal
+    notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: UPDATES, unread: 3 }); // round 14: no longer read again on the refusal (no line, nothing changed)
     render(<AppAgentNotes />);
     sync();
     const list = openList();

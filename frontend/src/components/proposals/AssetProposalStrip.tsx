@@ -10,6 +10,7 @@ import { usePersonLock } from '../../hooks/usePersonLock';
 import { askedOrder, heldProposalLine, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 import { LineText } from '../LineText';
+import { useCanvasLock } from '../../lib/canvasLock';
 
 /** How often the strip rechecks expiry while one is showing. */
 const TICK_MS = 15_000;
@@ -232,6 +233,8 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
 function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused: (proposalId: string) => void }) {
   const card = useRef<HTMLDivElement>(null);
   const { proposalId } = held;
+  // PR #204 round 14 (GM r23 3): offline comes first; the held line waits until Nebula is back.
+  const { offline } = useCanvasLock();
   // Review 20 NIT-4: Review focuses the placeholder, and the promote swaps it
   // for the real card, another element. Say so while this one still holds
   // focus (a layout cleanup runs before React removes the node), so the strip
@@ -251,7 +254,7 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
         <span className="asset-proposal__agent">{held.agentName}</span>
         <span className="asset-proposal__asks">{held.header}</span>
       </div>
-      <p className="asset-proposal__held-line"><LineText text={heldProposalLine()} /></p>
+      {!offline && <p className="asset-proposal__held-line"><LineText text={heldProposalLine()} /></p>}
     </div>
   );
 }

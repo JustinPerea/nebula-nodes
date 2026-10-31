@@ -10,6 +10,7 @@ import '../../styles/commons-review.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
@@ -192,6 +193,8 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
   const [error, setError] = useState('');
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', `commons.review-image-${item.position}`, loadAgain);
+  // Offline comes first (GM r23 3): a because line hides while offline.
+  const shownError = useOfflineFirstBecause(error);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
     commonsEvaluationApi.image(item.position, controller.signal).then((blob) => {
@@ -200,7 +203,7 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position, loadEpoch, line]);
   return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-    {error ? <p role="alert"><LineText text={error} /></p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : <p>Loading image…</p>}
+    {shownError ? <p role="alert"><LineText text={shownError} /></p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
 }

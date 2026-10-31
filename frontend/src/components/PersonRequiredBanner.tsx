@@ -4,6 +4,7 @@ import { currentPersonBannerLine, onPersonRequired, personRequiredMessage, setPe
 import { clearsOnPromote } from '../lib/clearsOnPromote';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
+import { useBackendOffline } from '../lib/useBackendOffline';
 import { currentFixLine, subscribeToLines, type FixLine } from '../lib/notConnectedLine';
 
 const subscribeToNothing = () => () => {};
@@ -39,15 +40,18 @@ export function PersonRequiredBanner() {
   const fixLine = useFixLine(message !== null);
   const specific = fixLine !== null;
   // It leaves as it entered, a surface (fix round 7, GM r11 answer 2).
-  const leave = useLeave(specific ? null : message);
+  // PR #204 round 14 (GM r23 3): offline comes first. While Nebula is offline only the offline
+  // notice shows; connecting the tab wouldn't be enough, so this one waits until it is back.
+  const offline = useBackendOffline();
+  const leave = useLeave(specific || offline ? null : message);
   // Review 6 NIT-3: one polite live region, mounted while the app is, and empty until there is
   // something to say. A notice that mounts with its text in place often goes unannounced, and a
   // Settings row isn't a live region, so the swap is said here, once: the notice's words, or the
   // line that took its place (unless that line already announces itself).
-  const saying = message === null ? '' : specific ? (fixLine.live ? '' : fixLine.text) : message;
+  const saying = message === null || offline ? '' : specific ? (fixLine.live ? '' : fixLine.text) : message;
   // Review 8 MEDIUM-3 (round 10): a line whose words change in place is not a swap, so nothing new
   // is said. What is said changes only when the swap does (notice, line, or nothing).
-  const swap = message === null ? 'none' : specific ? `line:${fixLine.live}` : `notice:${message}`;
+  const swap = message === null || offline ? 'none' : specific ? `line:${fixLine.live}` : `notice:${message}`;
   const [said, setSaid] = useState({ swap, text: saying });
   if (said.swap !== swap) setSaid({ swap, text: saying });
   const announced = said.swap === swap ? said.text : saying;

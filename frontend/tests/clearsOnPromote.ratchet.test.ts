@@ -32,8 +32,8 @@ import { callersOf, gatedRoutes, socketRefusalGaps } from './personGatedCallers'
  *    its line with the mechanism (a marked call in its body, or a call to a same-file function
  *    that has one) or is in CALLERS: the registrations that clear its line, or why it shows
  *    none. A new gated call that shows a line fails here until it registers or is declared.
- * 6. Exactly one retry on the promote per kind of request (RETRIES): Save and mark-read share
- *    `retryOnPromote`, and nothing else retries on its own.
+ * 6. Exactly one retry on the promote per kind of request (RETRIES): Save uses
+ *    `retryOnPromote` (the Commons loads have their own entry), and nothing else retries on its own.
  */
 
 const ROOT = join(__dirname, '..');
@@ -103,6 +103,8 @@ const SITES: Record<string, string> = {
   'chat.session': 'components/panels/ChatPanel.tsx',
   'commons.line': 'components/commons/useCommonsLine.ts',
   'commons.reload-retry': 'components/commons/useCommonsLine.ts',
+  'commons.load-lines': 'components/commons/useCommonsLine.ts',
+  'commons.load-lines-retry': 'components/commons/useCommonsLine.ts',
   'settings.agent-warning': 'components/panels/PersonalAgentWarning.tsx',
   'settings.apps': 'components/panels/settings/ConnectedApps.tsx',
   'settings.spend-load': 'components/panels/settings/AgentSpendSection.tsx',
@@ -120,8 +122,6 @@ const SITES: Record<string, string> = {
   'studio.brief': 'components/moodboard-studio/MoodboardStudioView.tsx',
   'studio.draft': 'store/assetStudioDraftStore.ts',
   'notes.corner': 'components/agent-notes/AgentNotesCorner.tsx',
-  'notes.read': 'store/agentNotesStore.ts',
-  'notes.read-retry': 'store/agentNotesStore.ts',
   'notes.dismiss': 'store/agentNotesStore.ts',
   trash: 'components/asset-trash/AssetTrash.tsx',
   'pins.add': 'store/canvasPinsStore.ts',
@@ -168,9 +168,10 @@ const GATED: Record<string, Surface> = {
   revoke_agent_app: ['settings.apps'],
   create_canvas_pin: ['pins.add', 'pins.refusal'],
   delete_canvas_pin: ['pins.remove', 'pins.refusal'],
-  read_canvas_agent_notes: ['notes.read', 'notes.read-retry'],
+  // Round 14 (GM r23 item 5): a mark-read refused for this tab shows no line; it waits for the promote.
+  read_canvas_agent_notes: NO_LINE('a mark-read is never the person\'s own press: refused for this tab it shows nothing and waits for the promote (lib/personWork afterPersonRefusal)'),
   dismiss_canvas_agent_note: ['notes.dismiss', 'notes.corner'],
-  read_board_agent_notes: ['notes.read', 'notes.read-retry'],
+  read_board_agent_notes: NO_LINE('as read_canvas_agent_notes: no line for a refusal for this tab, it waits for the promote'),
   dismiss_board_agent_note: ['notes.dismiss', 'notes.corner'],
   _decidable_proposal: ['canvas-proposals.accept', 'canvas-proposals.reject', 'canvas-proposals.refusal'],
   release_run_approval: NO_LINE('lib/canvasProposals releaseApproval swallows every failure: the approval expires on its own'),
@@ -218,6 +219,9 @@ const OTHER_SITES: Record<string, string> = {
   // useCommonsLine (tests/presenceRound9.commons pins that structurally).
   'commons.line': 'every Commons screen\'s failure line, through useCommonsLine',
   'commons.reload-retry': 'a Commons load refused for this tab runs again on the promote (useCommonsLine)',
+  // Round 14 (GM r22): the Commons page's loads and their one page line (useCommonsLoadLines).
+  'commons.load-lines': 'the Commons page\'s load lines, through useCommonsLoadLines',
+  'commons.load-lines-retry': 'the Commons page\'s loads, refused for this tab, run again on the promote (useCommonsLoadLines)',
   'chat.clear-canvas': 'Clear canvas from the chat: DELETE /api/graph has no gate form today; a person_required answer still clears',
 };
 
@@ -310,11 +314,12 @@ const CALLERS: Record<string, Caller> = {
   // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
   // which throws on), whose refusal lands in this function's outer catch (GM r7 2).
   'store/projectStore.ts#followProjectSwitch': ['project.load-retry'],
+  // Round 14 (GM r23 item 5): the Updates mark-read is never the person's own press.
+  'store/agentNotesStore.ts#sendRead': NO_LINE('a mark-read refused for this tab shows nothing: the updates stay unread, the page\'s because line says why, and the read waits for the promote (lib/personWork)'),
 };
 
 /** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
 const RETRIES: Record<string, string> = {
-  'notes.read-retry': 'store/agentNotesStore.ts',
   'project.save-retry': 'store/projectStore.ts',
   'project.load-retry': 'store/projectStore.ts',
   'create.style-retry': 'components/create-studio/CreateView.tsx',
@@ -322,6 +327,7 @@ const RETRIES: Record<string, string> = {
   'settings.agents-load-retry': 'components/panels/settings/PersonalAgentsSection.tsx',
   'cinema.scene-save-retry': 'store/graphStore.ts',
   'commons.reload-retry': 'components/commons/useCommonsLine.ts',
+  'commons.load-lines-retry': 'components/commons/useCommonsLine.ts',
 };
 
 const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'/.test(source)

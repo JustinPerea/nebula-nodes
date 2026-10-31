@@ -3,8 +3,8 @@
  * things the remount used to end now end on their own:
  * - the leave popover the person was asking from: the panes it asked about start again, so it
  *   closes (focus goes on to a control still there);
- * - the New collection prompt is Add's: it goes while Add is locked, as Add's menu does, and
- *   comes back with it on the promote.
+ * - the New collection prompt: round 14 (GM r23 4) keeps it on screen instead, its name kept and
+ *   OK locked (tests/presenceRound14.commonsLock pins the rest).
  */
 import { useEffect, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -83,18 +83,19 @@ describe('what the old remount ended', () => {
     expect(screen.getByRole('button', { name: 'Back to Canvas' })).toBeTruthy();
   });
 
-  it('the New collection prompt goes while Add is locked and comes back on the promote', async () => {
+  it('the New collection prompt stays through the demote and the promote, the same field (GM r23 4)', async () => {
     render(<CommonsView />);
     await flush();
     fireEvent.change(screen.getByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
     await flush();
-    expect(screen.getByRole('textbox', { name: /New collection name/ })).toBeTruthy();
+    const field = screen.getByRole('textbox', { name: /New collection name/ });
 
     await demote();
-    await waitFor(() => expect(screen.queryByRole('textbox', { name: /New collection name/ })).toBeNull());
+    await waitFor(() => expect(document.querySelector('[data-person-lock="create collections"]')).toBeTruthy());
+    expect(screen.getByRole('textbox', { name: /New collection name/ })).toBe(field);
 
     act(() => session.notePersonPromoted());
     await flush();
-    expect(screen.getByRole('textbox', { name: /New collection name/ })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: /New collection name/ })).toBe(field);
   });
 });

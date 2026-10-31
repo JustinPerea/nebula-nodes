@@ -573,7 +573,7 @@ export function ChatPanel() {
 
   // PR #204 round 11: the list of personal agents is the person's to read. A tab that isn't
   // connected as the person doesn't ask (it would only be refused); it reads on the promote.
-  const { ready: personReady } = usePersonView();
+  const { ready: personReady, held: personHeld } = usePersonView();
   useEffect(() => {
     if (!visible || !personReady) return;
     let cancelled = false;
@@ -1994,7 +1994,7 @@ export function ChatPanel() {
         <div>
           <div className="chat-panel__title">Chat</div>
           <ChatModelPicker
-            agent={agent} personalAgents={personalAgents?.agents ?? []} model={providerSelection.model} effort={effort}
+            agent={agent} personalAgents={personalAgents?.agents ?? []} agentsHeld={personHeld} model={providerSelection.model} effort={effort}
             catalog={activeCatalog} loading={catalogLoading} error={catalogError}
             disabled={busy || authorizing}
             onAgentChange={handleAgentChange} onModelChange={handleModelChange}

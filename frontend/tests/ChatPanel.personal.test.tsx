@@ -22,6 +22,7 @@ import { ChatPanel } from '../src/components/panels/ChatPanel';
 import { PersonalAgentsSection } from '../src/components/panels/settings/PersonalAgentsSection';
 import { normalizeAgentEventSource } from '../src/lib/agentEvents';
 import { useUIStore } from '../src/store/uiStore';
+import { notePersonPromoted, reportPersonRequired } from '../src/lib/personSession';
 const initialUI = useUIStore.getState();
 const TOKEN = 'person-token-for-tests';
 
@@ -105,6 +106,24 @@ describe('Personal agents in the chat panel', () => {
     await waitFor(() => expect(within(dialog).queryByRole('radio', { name: 'Sonnet' })).toBeNull());
     expect(within(dialog).getByText(/doesn.t choose its model/)).toBeInTheDocument();
     expect(screen.getByText(/Fake Agent · your agent/)).toBeInTheDocument();
+  });
+
+  it('PR #204 round 14 (GM r23 answer 6): a demoted tab lists no personal agents and says why under the heading', async () => {
+    await connected();
+    act(() => reportPersonRequired());
+    try {
+      await act(() => new Promise<void>((resolve) => { setTimeout(resolve, 200); }));
+      fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Chat model settings' });
+      expect(within(dialog).queryByRole('button', { name: /Fake Agent/ })).toBeNull();
+      expect(within(dialog).getByText('You can pick your agents when this tab is connected as you.')).toBeInTheDocument();
+      act(() => notePersonPromoted());
+      await waitFor(() => expect(within(dialog).getByRole('button', { name: /Fake Agent/ })).toBeInTheDocument());
+      expect(within(dialog).queryByText('You can pick your agents when this tab is connected as you.')).toBeNull();
+    } finally {
+      // A failure above must not leave the next tests on a held tab.
+      act(() => notePersonPromoted());
+    }
   });
 
   it('sends a personal turn without model or effort, then reuses the session', async () => {

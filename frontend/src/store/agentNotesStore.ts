@@ -12,10 +12,10 @@ import {
   type AgentNotesEvent,
   type AgentNotesSurface,
 } from '../lib/agentNotes';
-import { failureMessage, markReadRefusedCopy } from '../lib/errorCopy';
-import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
+import { failureMessage } from '../lib/errorCopy';
+import { clearLineOnPromote, isPersonRefusal } from '../lib/clearsOnPromote';
 import { personUnconfirmed } from '../lib/personSession';
-import { whenPerson } from '../lib/personWork';
+import { afterPersonRefusal, whenPerson } from '../lib/personWork';
 
 /**
  * Updates for every surface, keyed `canvas:<projectId>` and `board:<boardId>`.
@@ -126,13 +126,20 @@ interface ReadWanted {
  * socket's first answer) nothing is sent: one read per list waits, the newest `upTo` and every
  * id asked for, and goes once on the promote (lib/personWork whenPerson). No line: the updates
  * simply stay unread until the tab connects. A read refused after it went out (a demote while it
- * was in flight) joins the same wait.
+ * was in flight, or the promote's own send refused again) joins the same wait, with no line either
+ * (GM, #204 r23 item 5): a mark-read is never the person's own press, the page's because line says
+ * why, and nothing was marked read in the tab, so the updates simply stay unread.
+ *
+ * Round 14 (review 11 LOW-1): `covered` keeps the unread updates an `upTo` read covered when it was
+ * held. An agent's next "since its last turn" update replaces its previous one, so the `upTo` may
+ * have left the list by the promote; the read then goes for those it covered that are still there.
  */
 interface HeldRead {
   surface: AgentNotesSurface;
   all: boolean;
   upTo: string | null;
   ids: Set<string>;
+  covered: Set<string>;
 }
 const heldReads = new Map<string, HeldRead>();
 
@@ -148,16 +155,21 @@ function newerOf(key: string, a: string | null, b: string): string {
 
 /** Add a read to its list's wait (one per list key). */
 function holdRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted): void {
-  const held = heldReads.get(key) ?? { surface, all: false, upTo: null, ids: new Set<string>() };
+  const held = heldReads.get(key) ?? { surface, all: false, upTo: null, ids: new Set<string>(), covered: new Set<string>() };
   if (wanted.ids) wanted.ids.forEach((id) => held.ids.add(id));
-  else if (wanted.upTo) held.upTo = newerOf(key, held.upTo, wanted.upTo);
-  else held.all = true;
+  else if (wanted.upTo) {
+    held.upTo = newerOf(key, held.upTo, wanted.upTo);
+    const notes = (useAgentNotesStore.getState().lists[key] ?? EMPTY).notes;
+    const at = notes.findIndex((n) => n.id === wanted.upTo);
+    if (at >= 0) notes.slice(at).forEach((n) => { if (!n.readAt) held.covered.add(n.id); });
+  } else held.all = true;
   heldReads.set(key, held);
 }
 
 /** Send a list's waiting read, once: what is still unread of it, as one `upTo` (or all) read and
- * one read of the ids it doesn't cover. `retry` as sendRead's. */
-function sendHeldRead(key: string, retry: boolean): void {
+ * one read of the ids it doesn't cover. An `upTo` that has left the list goes as the ids it
+ * covered that are still listed (review 11 LOW-1). */
+function sendHeldRead(key: string): void {
   const held = heldReads.get(key);
   heldReads.delete(key);
   if (!held) return;
@@ -167,33 +179,70 @@ function sendHeldRead(key: string, retry: boolean): void {
   const notes = (state.lists[key] ?? EMPTY).notes;
   const at = held.all ? notes.length : held.upTo === null ? -1 : notes.findIndex((n) => n.id === held.upTo);
   if (held.all ? notes.some((n) => !n.readAt) : at >= 0 && notes.slice(at).some((n) => !n.readAt)) {
-    void sendRead(held.surface, key, held.all ? {} : { upTo: held.upTo! }, retry);
+    void sendRead(held.surface, key, held.all ? {} : { upTo: held.upTo! });
   }
-  const ids = [...held.ids].filter((id) => {
+  const wantedIds = at < 0 ? new Set([...held.ids, ...held.covered]) : held.ids;
+  const ids = [...wantedIds].filter((id) => {
     const index = notes.findIndex((n) => n.id === id);
     return index >= 0 && (at < 0 || index < at) && !notes[index].readAt;
   });
-  if (ids.length > 0) void sendRead(held.surface, key, { ids }, retry);
+  if (ids.length > 0) void sendRead(held.surface, key, { ids });
 }
+
+/**
+ * Round 14 (review 11 NIT-3): the reads on their way, by list and what they read, so the same read
+ * asked again while one is in flight (the promote's held read, then the list opened again at once)
+ * waits for that one instead of going twice.
+ */
+const readsInFlight = new Map<string, Promise<void>>();
+const readKey = (key: string, wanted: ReadWanted) =>
+  `${key}|${wanted.ids ? `ids:${[...wanted.ids].sort().join(',')}` : wanted.upTo ? `upTo:${wanted.upTo}` : 'all'}`;
 
 /**
  * Send a read; the Updates read only when the server says so (GM, #204 r3 item 1: the
  * header says "all read" for real or not at all), from its `ids` and count. On failure
  * nothing was read, so nothing changes but the line. A refusal only because this tab
- * isn't the person's: GM's line, gone on the promote, which sends the list's read once,
- * silently (`retry` false then: a second refusal adds no line).
+ * isn't the person's shows nothing (GM, #204 r23 item 5): the read joins the list's one
+ * wait and goes once on the promote, however many times it was refused.
  */
-async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted, retry = true): Promise<void> {
+async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted): Promise<void> {
   const { getState, setState } = useAgentNotesStore;
   if (personUnconfirmed()) {
     // Not connected as the person: nothing goes, and no line (round 13).
     holdRead(surface, key, wanted);
-    whenPerson(`agentNotes.read:${key}`, () => sendHeldRead(key, true));
+    whenPerson(`agentNotes.read:${key}`, () => sendHeldRead(key));
     return;
   }
+  // The same read already on its way: wait for it instead of sending it twice (NIT-3).
+  const id = readKey(key, wanted);
+  const going = readsInFlight.get(id);
+  if (going) return going;
+  let finish: () => void = () => {};
+  const mine = new Promise<void>((resolve) => { finish = resolve; });
+  readsInFlight.set(id, mine);
+  // Out of the map as soon as its answer comes, before that answer is handled: a refusal's own
+  // retry (sent before the promote, so it goes at once) must not find itself still on its way.
+  const answered = () => { if (readsInFlight.get(id) === mine) readsInFlight.delete(id); };
+  let result: Awaited<ReturnType<typeof markAgentNotesRead>>;
   try {
-    const result = await (wanted.ids ? markAgentNotesRead(surface, undefined, wanted.ids) : markAgentNotesRead(surface, wanted.upTo));
-    if (keyFor(getState(), surface) !== key) return;
+    result = await (wanted.ids ? markAgentNotesRead(surface, undefined, wanted.ids) : markAgentNotesRead(surface, wanted.upTo));
+  } catch (error) {
+    answered();
+    if (isPersonRefusal(error)) {
+      // Refused only because this tab isn't connected as the person (a demote while it was in
+      // flight): no line, nothing marked read here; it re-joins the list's one wait (round 14).
+      holdRead(surface, key, wanted);
+      afterPersonRefusal(`agentNotes.read:${key}`, error, () => sendHeldRead(key));
+    } else {
+      setState({ error: failureMessage(error, "Couldn't mark the notes read.") });
+      // (A board's list is read again by the corner when this error shows.)
+      if (surface.kind === 'canvas') void getState().hydrateCanvas();
+    }
+    finish();
+    return;
+  }
+  answered();
+  if (keyFor(getState(), surface) === key) {
     const read = new Set(Array.isArray(result.ids) ? result.ids : []);
     const at = new Date().toISOString();
     setState((state) => ({
@@ -202,24 +251,14 @@ async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWan
         return { ...list, notes, unread: typeof result.unread === 'number' ? result.unread : countUnread(notes) };
       }),
     }));
-  } catch (error) {
-    if (!retry) return;
-    const line = isPersonRefusal(error) ? markReadRefusedCopy() : failureMessage(error, "Couldn't mark the notes read.");
-    setState({ error: line });
-    // Refused only because this tab isn't connected as the person: gone on the promote (GM, #204 r3).
-    clearLineOnPromote(error, () => getState().error, line, () => setState({ error: null })); // clears-on-promote: notes.read
-    if (isPersonRefusal(error)) holdRead(surface, key, wanted);
-    retryOnPromote(error, `agentNotes.read:${key}`, () => { // clears-on-promote: notes.read-retry
-      sendHeldRead(key, false);
-    });
-    // (A board's list is read again by the corner when this error shows.)
-    if (surface.kind === 'canvas') void getState().hydrateCanvas();
   }
+  finish();
 }
 
 /** Tests: forget the reads waiting for the promote. */
 export function forgetHeldReadsForTests(): void {
   heldReads.clear();
+  readsInFlight.clear();
 }
 
 export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
@@ -386,6 +425,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
   clearError: () => set({ error: null }),
   reset: () => {
     heldReads.clear();
+    readsInFlight.clear();
     set(initialState());
   },
 }));

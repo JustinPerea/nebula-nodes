@@ -740,28 +740,53 @@ function paramWrapper(at: ts.Node): 'responds' | 'unread' | 'unknown' | null {
   if (TRANSPORT_NAMES.has(calleeName(call))) return null;
   const found = calledFunction(call);
   if (found === 'unknown') return 'unknown';
-  const fn = found;
-  const param = fn?.parameters[call.arguments.indexOf(top as ts.Expression)]?.name;
-  if (!fn?.body || !param || !ts.isIdentifier(param)) return null;
+  return found ? wrapperOutcome(found, call.arguments.indexOf(top as ts.Expression)) : null;
+}
+
+/** What a wrapper does with the path its parameter `index` takes: as paramWrapper. Round 14
+ * (review 11 LOW-4, P3): a body that hands the parameter on to another of the trace's functions
+ * (`post = (u) => send(u)`) is followed there; one the trace can't read is 'unknown'. */
+function wrapperOutcome(fn: ts.FunctionLikeDeclaration, index: number, depth = 0): 'responds' | 'unread' | 'unknown' | null {
+  const param = fn.parameters[index]?.name;
+  if (!fn.body || !param || !ts.isIdentifier(param)) return null;
+  const isParam = (expression: ts.Expression): boolean => {
+    let arg = expression;
+    while (ts.isParenthesizedExpression(arg) || reshapes(arg)) arg = (arg as ts.ParenthesizedExpression).expression;
+    return ts.isIdentifier(arg) && arg.text === param.text;
+  };
   const sends: ts.CallExpression[] = [];
+  const handed: { call: ts.CallExpression; at: number }[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ANSWERS_WITH_RESPONSE.has(calleeName(node)) && node.arguments[0]) {
-      let arg: ts.Expression = node.arguments[0];
-      while (ts.isParenthesizedExpression(arg) || reshapes(arg)) arg = (arg as ts.ParenthesizedExpression).expression;
-      if (ts.isIdentifier(arg) && arg.text === param.text) sends.push(node);
+    if (ts.isCallExpression(node)) {
+      if (ANSWERS_WITH_RESPONSE.has(calleeName(node)) && node.arguments[0] && isParam(node.arguments[0])) sends.push(node);
+      else if (!TRANSPORT_NAMES.has(calleeName(node))) {
+        const at = node.arguments.findIndex(isParam);
+        if (at >= 0) handed.push({ call: node, at });
+      }
     }
     ts.forEachChild(node, visit);
   };
   visit(fn.body);
-  if (sends.length === 0) return null;
   const returned = (send: ts.Node): boolean => {
     let n = send;
     while (n.parent && (ts.isAwaitExpression(n.parent) || ts.isParenthesizedExpression(n.parent) || reshapes(n.parent))) n = n.parent;
     return n.parent === fn && fn.body === n || ts.isReturnStatement(n.parent) && enclosingFunction(n.parent) === fn;
   };
-  if (sends.every(returned)) return 'responds';
+  // Handed on to another of the trace's functions: what that one does, as this one's answer.
+  const onward: ('responds' | 'unread' | 'unknown' | null)[] = [];
+  for (const { call, at } of handed) {
+    const next = calledFunction(call);
+    if (next === null) continue; // not the trace's own (a global, a package, a parameter): read as before
+    const outcome = next === 'unknown' || depth >= 5 ? 'unknown' : wrapperOutcome(next, at, depth + 1);
+    // As a direct send: kept and checked so that every failure throws is the catch's to decide.
+    onward.push(outcome === 'responds' && !returned(call) ? (throwsOnFailure(call) ? null : 'unread') : outcome);
+  }
+  if (onward.includes('unknown')) return 'unknown';
+  const all = [...sends.map((send) => (returned(send) ? 'responds' : throwsOnFailure(send) ? null : 'unread')), ...onward];
+  if (all.length === 0) return null;
+  if (all.every((outcome) => outcome === 'responds')) return 'responds';
   // One that throws on every failure answer is a throwing call: the catch around it decides.
-  return sends.every((send) => returned(send) || throwsOnFailure(send)) ? null : 'unread';
+  return all.includes('unread') ? 'unread' : null;
 }
 
 /** The transports and path wrappers by name: a path handed to one is its request (transportAround,
@@ -818,6 +843,10 @@ function objectMember(object: ts.ObjectLiteralExpression, member: string): ts.Fu
 function exportedValue(module: string, name: string, depth = 0): ts.FunctionLikeDeclaration | ts.ObjectLiteralExpression | 'unknown' | null {
   const source = currentFiles?.get(module);
   if (!source || depth > 5) return null;
+  if (name === 'default') {
+    const value = defaultExport(source);
+    if (value) return value;
+  }
   const own = topFunction(source, name) ?? topObject(source, name);
   if (own) return own;
   const known = new Set(currentFiles!.keys());
@@ -839,6 +868,35 @@ function exportedValue(module: string, name: string, depth = 0): ts.FunctionLike
   }
   return declaresTop(source, name) ? 'unknown' : null;
 }
+/** The module `local` is the default import of (`import post from '../lib/post'`), or null. */
+function defaultImportOf(source: ts.SourceFile, local: string): string | null {
+  if (!currentFiles) return null;
+  const known = new Set(currentFiles.keys());
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (statement.importClause?.name?.text !== local) continue;
+    return resolveModule(fileOf(source), statement.moduleSpecifier.text, known);
+  }
+  return null;
+}
+/** What `export default` holds in `source`: a function (`export default function …`, an arrow, a
+ * function expression), an object literal, the top-level function or object it names, 'unknown'
+ * (a default export the trace can't read), or null (no `export default` here; `export { a as
+ * default }` is read with the other export lists). */
+function defaultExport(source: ts.SourceFile): ts.FunctionLikeDeclaration | ts.ObjectLiteralExpression | 'unknown' | null {
+  for (const statement of source.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.body
+      && statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) return statement;
+    if (!ts.isExportAssignment(statement) || statement.isExportEquals) continue;
+    let value: ts.Expression = statement.expression;
+    while (ts.isParenthesizedExpression(value) || reshapes(value)) value = (value as ts.ParenthesizedExpression).expression;
+    if (isFunctionLike(value)) return value as ts.ArrowFunction;
+    if (ts.isObjectLiteralExpression(value)) return value;
+    if (ts.isIdentifier(value)) return topFunction(source, value.text) ?? topObject(source, value.text) ?? 'unknown';
+    return 'unknown';
+  }
+  return null;
+}
 /**
  * Round 13 (review 10 LOW-3): the function a call's callee names, where the trace can read it:
  * a same-file function (runnerNamed), one imported by name (an alias, a re-export), a namespace
@@ -857,8 +915,14 @@ function calledFunction(call: ts.CallExpression): ts.FunctionLikeDeclaration | '
     if (own) return own;
     const bound = importOf(source, callee.text);
     if (bound) return bound.name === null ? 'unknown' : asFunction(exportedValue(bound.module, bound.name));
+    // Round 14 (review 11 LOW-4, P1): `import post from '…'`, through its `export default`.
+    const module = defaultImportOf(source, callee.text);
+    if (module) return asFunction(exportedValue(module, 'default'));
     return null;
   }
+  // Round 14 (P13): a function a call returns (`usePost()(…)`): when that call is the trace's own,
+  // which function it returns isn't read.
+  if (ts.isCallExpression(callee)) return calledFunction(callee) === null ? null : 'unknown';
   if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) return null;
   const object = callee.expression.text;
   const member = callee.name.text;
