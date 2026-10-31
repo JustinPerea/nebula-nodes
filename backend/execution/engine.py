@@ -65,6 +65,7 @@ from models.events import (
 from execution import gating, provider_calls
 from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
+from execution.run_origin import ProposalNeeded
 from execution.person_line import (carries_provider_text, is_job_failure, missing_file_line, missing_key_line,
                                    person_line, port_line, with_person_line)
 from execution.provider_status import card_line
@@ -863,6 +864,9 @@ def validate_graph(
     """Every pre-call refusal of a run. ``name_of``: a node's name for the
     lines that name it (the canvas's label), else its type's name."""
     errors: list[ValidationErrorDetail] = []
+    # Each node's missing key (key names), for its one combined card line
+    # (_combine_needs; GM, PR #203 r38 item 1).
+    missing_keys: dict[str, tuple[ValidationErrorDetail, list[str]]] = {}
     errors.extend(unchosen_model_errors(nodes, edges, api_keys, name_of=name_of))
     errors.extend(_iterator_validation_errors(nodes, edges))
 
@@ -916,14 +920,14 @@ def validate_graph(
             }
             env_key = DYNAMIC_ENV_KEYS.get(node.definition_id)
             if env_key and not api_keys.get(env_key):
-                errors.append(
-                    ValidationErrorDetail(
-                        node_id=node.id,
-                        port_id="",
-                        message=f"Missing API key: {env_key}",
-                        person=missing_key_line([env_key]),
-                    ).marked("reason")
-                )
+                missing = ValidationErrorDetail(
+                    node_id=node.id,
+                    port_id="",
+                    message=f"Missing API key: {env_key}",
+                    person=missing_key_line([env_key]),
+                ).marked("reason")
+                errors.append(missing)
+                missing_keys[node.id] = (missing, [env_key])
             continue
 
         for port in node_def["inputPorts"]:
@@ -977,14 +981,14 @@ def validate_graph(
                     person=node_route.route_unavailable_line(node_def, routed, api_keys)).marked("reason"))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
-            errors.append(
-                ValidationErrorDetail(
-                    node_id=node.id,
-                    port_id="",
-                    message=f"Missing API key: {key_display}",
-                    person=missing_key_line(key_names),
-                ).marked("reason")
-            )
+            missing = ValidationErrorDetail(
+                node_id=node.id,
+                port_id="",
+                message=f"Missing API key: {key_display}",
+                person=missing_key_line(key_names),
+            ).marked("reason")
+            errors.append(missing)
+            missing_keys[node.id] = (missing, list(key_names))
 
         if node.definition_id == "gemini-omni-flash":
             prompt = ""
@@ -1027,7 +1031,30 @@ def validate_graph(
                     )
                 )
 
+    _combine_needs(errors, missing_keys)
     return errors
+
+
+def _combine_needs(errors: list[ValidationErrorDetail],
+                   missing_keys: Mapping[str, tuple[ValidationErrorDetail, list[str]]]) -> None:
+    """A node with several needs (inputs with no wire, and its missing key)
+    says them in one card line, ending once (GM, PR #203 r38 item 1;
+    person_line.needs_card_line): each of those checks carries that line,
+    so the card (each line once) reads it once. One need keeps its own."""
+    from execution.person_line import key_phrase, needs_card_line
+
+    inputs: dict[str, list[ValidationErrorDetail]] = {}
+    for error in errors:
+        if error._stop == "input":
+            inputs.setdefault(error.node_id, []).append(error)
+    for node_id, unwired in inputs.items():
+        missing = missing_keys.get(node_id)
+        key = key_phrase(missing[1]) if missing is not None else None
+        line = needs_card_line([error._need or "" for error in unwired], key)
+        if line is None:
+            continue
+        for error in [*unwired, *([missing[0]] if missing is not None and key else [])]:
+            error.person = line
 
 
 NodeHandler = Callable[
@@ -1691,6 +1718,7 @@ async def _execute_graph(
                     friendly=friendly,
                     missing_credential=isinstance(exc, MissingCredentialError)
                     and handler_calls.get(nid, 0) <= 1,
+                    proposal_needed=isinstance(exc, ProposalNeeded),
                     person=card.person,
                     provider_text=card.provider_text,
                     provider=card.provider,

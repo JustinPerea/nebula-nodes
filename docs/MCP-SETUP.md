@@ -113,14 +113,17 @@ The server exposes these tools for building and running (see
   the person's own ZeroGPU allowance, Nebula still prices it at $0, but on a
   PRO, Team or Enterprise token Hugging Face can bill GPU time past the
   daily quota from the person's prepaid credits ($1 per 10 minutes). So
-  with the token set, every agent run route (`run_nodes`, `nebula run`,
-  `nebula quick`, the HTTP run routes, a Cinema shot) refuses a run that
-  includes Idol, at any spending limit, even when the node asked for comes
-  after Idol, and says why and what to do: propose the run, or run only
-  nodes that don't need Idol. The refusal names the reader's own way to
-  propose, worded where it is written: over MCP "Propose it instead:
-  propose_change (run: n2). The person accepts on the canvas, and the
-  canvas runs it.", from the CLI `` `nebula propose --note "<why>" --run n2` ``.
+  with the token set, an agent's run (`run_nodes`, `nebula run`, `nebula
+  quick`, the HTTP run routes, a Cinema shot) starts as usual: the nodes
+  before Idol run, and an Idol node whose last result is reused passes, but
+  an Idol node that must call Hugging Face stops there, before anything is
+  sent, and the nodes after it don't run (Justin decided, 2026-10-31: only
+  the call is gated). Its error event on the canvas has `proposalNeeded: true`,
+  and the error text in the run result says why and names the reader's own way to propose, worded
+  where it is written: over MCP "Propose it instead: propose_change (run:
+  n2). The person accepts on the canvas, and the canvas runs it.", from the
+  CLI `` `nebula propose --note "<why>" --run n2` ``. A run whose origin
+  Nebula can't tell stops there too.
   The CLI sends `X-Nebula-Surface: cli` on every request and prints a
   refusal exactly as it came; any other caller reads MCP words. The header
   says which surface is asking and nothing else: it is no agent marker and
@@ -130,9 +133,9 @@ The server exposes these tools for building and running (see
   worded the same way. The person's
   own Run, and an accepted proposal, run it as usual. The `billing` note
   says which state holds now ("Free here" or "May cost here"), and both
-  state the downstream rule (no agent run that includes it, "even for a
-  node after it"); `nebula info` prints it as its `BILLING:` line in the
-  CLI's words. Whether the token is set is read one way everywhere: a key
+  state the rule (an agent's run stops at the node before calling Hugging
+  Face); `nebula info` prints it as its `BILLING:` line in the CLI's
+  words. Whether the token is set is read one way everywhere: a key
   that is only spaces or invisible characters once trimmed is unset, even
   one already saved that way, and PUT /api/settings refuses one (400:
   "Nothing was saved because the key is empty once spaces and invisible
@@ -538,12 +541,24 @@ The server exposes these tools for building and running (see
   object; writes only), `settings_unwritable` (the file is read-only, or
   its folder is and the file can't be written in place: the line names the
   file or the folder; a folder that can't be made names the existing folder
-  that refuses it; and when Nebula's own folder, `~/.nebula` or the desktop
-  app's state folder, takes no copy for an in-place save: "Nothing was saved
-  because Nebula isn’t allowed to change ~/.nebula, where it keeps a copy
-  while it saves. Ask the person to check the folder’s permissions.") or
-  `settings_not_a_folder` (a folder on the way to the file, or to Nebula's
-  copy folder, is a file, named in the line). A save replaces the file whole
+  that refuses it; and when Nebula's own folder takes no copy for an
+  in-place save, the line names the folder that refuses: Nebula's state
+  folder (`~/.nebula`, or the desktop app's
+  `~/Library/Application Support/Nebula Nodes/state`), its `settings-copy`
+  folder, as in "Nothing was saved because Nebula isn’t allowed to change
+  ~/.nebula/settings-copy, where it keeps a copy while it saves. Ask the
+  person to check the folder’s permissions.", or, when a folder above the
+  state folder refuses so the state folder can't be made, both: "Nothing
+  was saved because Nebula isn’t allowed to change ~/ro, so it can’t make
+  ~/ro/deeper/state, where it keeps a copy while it saves. Ask the person
+  to check the permissions of ~/ro."), `settings_not_a_folder` (a folder on
+  the way to the file, or to Nebula's copy folder, is a file, named in the
+  line; or a folder sits at one of the save's own file names, the temp file
+  or the copy, also named: "… is a folder, and Nebula needs to put a file
+  there.") or `settings_busy` (another Nebula's save held the file past the
+  wait, about 10 seconds: "Nothing was saved because another Nebula is
+  saving your settings. Try again in a moment."; nothing changed, and
+  trying again later is fine). A save replaces the file whole
   (keeping its mode, owner, ACL and extended attributes) through one temp
   file beside it, `.settings.json.nebula-tmp`; a file with a second name or
   another owner, a folder that takes no new file, metadata that can't be
@@ -551,10 +566,14 @@ The server exposes these tools for building and running (see
   a copy kept in Nebula's `settings-copy` folder until the write is done, and
   a file left unreadable by a write cut short is put back from that copy at
   the next start, the file it replaced kept beside the copy (the
-  `settings.restored` event). Every save holds an exclusive lock where the
-  filesystem supports flock, and PUT and DELETE settings hold it from their
-  read to their save. No agent can read the temp file or the `settings-copy`
-  folder: both are on every agent deny list. The last two codes are for writes only, and
+  `settings.restored` event), or, when Nebula can't write the file then, left
+  for the next start (the `settings.not_restored` event). Every save holds an
+  exclusive lock where the filesystem supports flock, and PUT and DELETE
+  settings hold it from their read to their save. Where the filesystem takes
+  no flock (some network mounts), a save that finds another save's temp file
+  waits for it and then answers `settings_busy`; it never replaces a temp
+  file another save may still be writing. No agent can read the temp file or the `settings-copy`
+  folder: both are on every agent deny list. The last three codes are for writes only, and
   only the person writes; a desktop Keychain save (`credentials/update`)
   never writes the file, so it gets only the read codes. `fix` is the sentence
   that says what to do, worded for the reader: an agent's says to ask the
@@ -823,6 +842,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read); never a key or a setting |
+| `settings.not_restored` | at start, Nebula found the copy it keeps for an in-place save that was cut short but couldn't put it back, because it isn't allowed to change the file (or its folder); the copy is kept and tried again at the next start, and nothing is kept aside. Attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line: "Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed to change <path>. It tries again at the next start." Tell the person; only they can change the file's permissions | `file` (the settings file's path as the person sees it); never a key or a setting |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |

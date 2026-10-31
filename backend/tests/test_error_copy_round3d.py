@@ -455,7 +455,7 @@ async def test_a_route_table_run_with_no_key_for_its_route_says_add_it() -> None
     router = maker_routes.multi_route({})
     exc = await _araised(router, _node("flux-3-video", {"_provider": "replicate"}), {"prompt": _port("p")}, {})
     assert str(exc) == ("FLUX 3 Video is set to Replicate, which needs REPLICATE_API_TOKEN. "
-                        "Add it in Settings > Providers or choose another provider.")
+                        "Add it in Settings > Providers, or choose another provider.")
     assert person_line(exc) == "Add your Replicate token in Settings, then run the node again."
 
 

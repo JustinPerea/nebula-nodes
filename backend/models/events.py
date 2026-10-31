@@ -110,6 +110,11 @@ class ErrorEvent(RunScopedEvent):
     # The handler stopped at its own key check, before any provider request
     # (execution.missing_credential), so the node cost nothing.
     missing_credential: bool = False
+    # The node stopped at its call, before any request, because an agent's
+    # run may not make it (execution/run_origin.ProposalNeeded: Idol with
+    # the person's Hugging Face token set, Justin decided 2026-10-31): the
+    # agent proposes the run instead. Additive.
+    proposal_needed: bool = False
     # The person's line for this failure, when the handler wrote one
     # (execution/person_line.py, error copy round 3c): what the canvas card
     # shows, with no ids or record names. `error` keeps the specific text

@@ -204,7 +204,11 @@ export function autoNeedsCredential(missing: readonly string[]): string {
   return nouns.size === 1 ? `Auto · needs a ${[...nouns][0]}` : AUTO_NEEDS_A_KEY;
 }
 
-function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
+/** The Auto row's label when the run can't start. Exported for its tests:
+ * the "{provider} needs a key" fragment (a route chosen with no block) is a
+ * guard no shipped node reaches today (review 18 of PR #203, copy-ui NIT-2,
+ * F8), so it is pinned on a built answer. */
+export function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
   if (!unavailable.routeId && unavailable.missing.length) return autoNeedsCredential(unavailable.missing);
   return `Auto · ${autoReason(definition, unavailable, params)}`;

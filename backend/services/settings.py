@@ -68,16 +68,35 @@ class SettingsUnwritable(PermissionError):
     - "copy_folder": Nebula's own folder takes no copy of the file for an
       in-place write (settings_copy_folder; GM, PR #203 r36 item B6a);
     - "not_a_folder": a folder on the way to it (or to the copy folder) is a
-      file, so nothing can be saved there.
+      file, so nothing can be saved there;
+    - "in_the_way": a folder is at one of the save's fixed file names (the
+      temp file beside settings.json, the copy or its temp; review 18 of PR
+      #203, settings NIT-1), so the file can't be made there.
 
     ``where`` is the path the line names: the file, its folder, the folder
-    that refuses the copy, or the file that is in the way. The settings routes answer it with a 409, never a
-    500."""
+    that refuses the copy, or the file that is in the way. ``creates``: for
+    "copy_folder" when the folder that refuses is above Nebula's state
+    folder, the state folder it can't make (GM, PR #203 r38 item 4: the line
+    names both); else None. The settings routes answer it with a 409, never
+    a 500."""
 
-    def __init__(self, err: int, message: str, where: str | Path, cause: str = "file") -> None:
+    def __init__(self, err: int, message: str, where: str | Path, cause: str = "file",
+                 creates: str | Path | None = None) -> None:
         super().__init__(err, message, str(where))
         self.cause = cause
         self.where = Path(where)
+        self.creates = Path(creates) if creates is not None else None
+
+
+class SettingsBusy(OSError):
+    """Another Nebula's save holds the settings file past the wait
+    (LOCK_TIMEOUT_SECONDS): its lock, or, where the filesystem takes no
+    lock, its temp file (_open_temp). Nothing was written. The settings
+    routes answer it with a 409 (main SETTINGS_BUSY; review 18 of PR #203,
+    copy-ui LOW-3 and settings LOW-1), never a 500."""
+
+    def __init__(self, message: str, where: str | Path) -> None:
+        super().__init__(errno.EAGAIN, message, str(where))
 
 
 # The OSErrors that mean "not allowed" rather than "something broke": no
@@ -434,14 +453,14 @@ def save_settings(settings: dict[str, Any]) -> None:
     path = settings_file()
     _make_folders(path.parent)
     for _attempt in range(3):
-        with _save_lock(path):
+        with _save_lock(path) as locked:
             try:
                 before = os.lstat(path)
             except FileNotFoundError:
                 before = None
             if before is None or not stat.S_ISLNK(before.st_mode):
                 try:
-                    _write(path, text.encode("utf-8"), before, backup=True)
+                    _write(path, text.encode("utf-8"), before, backup=True, locked=locked)
                     return
                 except _Changed:
                     pass
@@ -462,16 +481,18 @@ class _Changed(Exception):
     16: a symlink or another file swapped in): decide again."""
 
 
-def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bool) -> None:
+def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bool, locked: bool = True) -> None:
     """``data`` to ``path`` (resolved, never a symlink): atomically when the
     file can be replaced, else in place (save_settings). ``backup``: keep a
     copy of the old file while it is written in place (off for the restore,
-    whose copy is the one being put back)."""
+    whose copy is the one being put back). ``locked``: the save holds the
+    flock (_save_lock), so a temp file found at the fixed name is a save cut
+    short (_open_temp)."""
     if before is not None and not _replace_keeps_the_file(path, before):
         _write_in_place(path, data, before, backup=backup)
         return
     try:
-        _write_atomically(path, data, before)
+        _write_atomically(path, data, before, locked=locked)
     except _InPlaceInstead:
         _write_in_place(path, data, before, backup=backup)  # type: ignore[arg-type] - only raised with a file there
 
@@ -630,7 +651,7 @@ def _remove_temp(temp: str) -> None:
         pass
 
 
-def _write_atomically(path: Path, data: bytes, before: os.stat_result | None) -> None:
+def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *, locked: bool = True) -> None:
     """The temp file (this user's only from the start), written whole, given
     the old file's owner and group, mode, ACL and extended attributes, then
     renamed over the file, and the folder synced. It is removed on any
@@ -641,15 +662,20 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None) ->
 
     The temp file has one fixed name beside the file (temp_path_for), which
     the agents' deny lists name (agent_profiles.default_secret_paths;
-    review 17 of PR #203, settings MEDIUM-1): the save holds the lock, so
-    one found there is a save that was cut short, and it is replaced."""
+    review 17 of PR #203, settings MEDIUM-1). One found there is a save cut
+    short when this save holds the lock, and is replaced; without the lock
+    it may be another save in flight (_open_temp)."""
     mode = before.st_mode & 0o7777 if before is not None else 0o600  # a new file holds keys
     temp = str(temp_path_for(path))
     try:
-        fd = _open_temp(temp)  # 0600
+        fd = _open_temp(temp, locked=locked)  # 0600
+    except SettingsBusy:
+        raise
     except OSError as exc:
         if before is not None and exc.errno in (*_NOT_ALLOWED_ERRNOS, errno.EEXIST):
             raise _InPlaceInstead from exc
+        if exc.errno == errno.EEXIST:  # a folder at the temp file's name, and no file to write in place
+            raise SettingsUnwritable(exc.errno, "a folder is where the temp file goes", temp, "in_the_way") from exc
         if exc.errno in _NOT_ALLOWED_ERRNOS:
             raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
         if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
@@ -688,21 +714,52 @@ def temp_path_for(path: Path) -> Path:
     return path.with_name(f".{path.name}{TEMP_SUFFIX_FIXED}")
 
 
-def _open_temp(temp: str) -> int:
+def _open_temp(temp: str, *, locked: bool) -> int:
     """The temp file, new and this user's only (0600), never through a
-    symlink. One already there is a save cut short (every save holds the
-    lock): removed, then made again."""
+    symlink. A file already there (review 18 of PR #203, settings LOW-1):
+
+    - with the lock (``locked``), a save cut short: removed, then made again;
+    - without it (a filesystem that takes no flock), another save in flight
+      while it is younger than STALE_TEMP_SECONDS: never removed. This save
+      waits for it to go, up to LOCK_TIMEOUT_SECONDS, then refuses
+      (SettingsBusy), so two saves never share the one name and a rename
+      never puts another save's half-written file in place. An older one
+      is a save cut short, removed as with the lock.
+
+    A folder there raises FileExistsError (the caller's 409)."""
     flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
-    try:
-        return os.open(temp, flags, 0o600)
-    except FileExistsError:
+    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+    waited = False
+    while True:
+        try:
+            return os.open(temp, flags, 0o600)
+        except FileExistsError:
+            pass
         try:
             info = os.lstat(temp)
         except FileNotFoundError:
-            info = None
-        if info is not None and not stat.S_ISDIR(info.st_mode):
-            os.unlink(temp)
-        return os.open(temp, flags, 0o600)
+            continue  # gone since: make it now
+        if stat.S_ISDIR(info.st_mode):
+            raise FileExistsError(errno.EEXIST, "a folder is where the temp file goes", temp)
+        if locked or time.time() - info.st_mtime > STALE_TEMP_SECONDS:
+            try:
+                os.unlink(temp)
+            except FileNotFoundError:
+                pass
+            if locked:
+                return os.open(temp, flags, 0o600)
+            continue
+        if not waited:
+            waited = True
+            _temp_waiting()
+        if time.monotonic() > deadline:
+            raise SettingsBusy("another save's temp file is still being written", temp)
+        time.sleep(0.02)
+
+
+def _temp_waiting() -> None:
+    """Called once when a save without the lock starts waiting for another
+    save's temp file: a seam tests use to see the wait."""
 
 
 def _sync(fd: int) -> None:
@@ -913,7 +970,15 @@ def _make_copy_folder() -> Path:
     allowed to make is "copy_folder", naming the folder that refuses; a file
     on the way is "not_a_folder"."""
     folder = settings_copy_folder()
-    _make_folders(folder, cause="copy_folder")
+    try:
+        _make_folders(folder, cause="copy_folder")
+    except SettingsUnwritable as exc:
+        state = _state_dir()
+        if exc.cause == "copy_folder" and exc.where != state and state not in exc.where.parents:
+            # A folder above the state folder refuses: the line names both
+            # (GM, PR #203 r38 item 4; review 18, settings NIT-2).
+            exc.creates = state
+        raise
     info = os.lstat(folder)
     if not stat.S_ISDIR(info.st_mode):
         raise SettingsUnwritable(errno.ENOTDIR, "a folder on the way is a file", folder, "not_a_folder")
@@ -947,22 +1012,36 @@ def _keep_backup(path: Path, old: bytes, new: bytes) -> None:
         _write_copy(target, body)
         if _read_ours(target) != body:
             raise OSError(errno.EIO, "the settings copy didn't read back", str(target))
-    except SettingsUnwritable:
+    except (SettingsUnwritable, SettingsBusy):
         raise
     except OSError as exc:
         if exc.errno in _NOT_ALLOWED_ERRNOS:
             raise SettingsUnwritable(exc.errno, "Nebula's folder takes no copy of the settings", folder,
                                      "copy_folder") from exc
+        in_the_way = _folder_at(target, temp_path_for(target))
+        if exc.errno in (errno.EEXIST, errno.EISDIR, errno.ENOTEMPTY) and in_the_way is not None:
+            raise SettingsUnwritable(exc.errno, "a folder is where the copy goes", in_the_way, "in_the_way") from exc
         if exc.errno == errno.ENOTDIR:
             raise SettingsUnwritable(exc.errno, "a folder on the way is a file", folder, "not_a_folder") from exc
         raise
+
+
+def _folder_at(*paths: Path) -> Path | None:
+    """The first of ``paths`` that is a folder (not through a symlink), or None."""
+    for path in paths:
+        try:
+            if stat.S_ISDIR(os.lstat(path).st_mode):
+                return path
+        except OSError:
+            continue
+    return None
 
 
 def _write_copy(target: Path, body: bytes) -> None:
     """``body`` to ``target`` through its fixed temp file in the same
     folder, synced, renamed, then the folder synced."""
     temp = str(temp_path_for(target))
-    fd = _open_temp(temp)
+    fd = _open_temp(temp, locked=_holds_lock())
     done = False
     try:
         try:
@@ -1011,6 +1090,17 @@ def _drop_backup(path: Path) -> None:
         pass
 
 
+class NotRestored(NamedTuple):
+    """A verified copy restore_settings_from_backup couldn't put back: the
+    settings file (``path``) and why (``why``: what settings_write_block
+    found, or the write's own error). The copy is left for the next start,
+    and nothing is kept aside first (review 18 of PR #203, settings LOW-2);
+    the caller logs and journals it."""
+
+    path: Path
+    why: OSError
+
+
 class Restored(NamedTuple):
     """What restore_settings_from_backup did: the settings file it put
     back, where the file it replaced is kept, and whether that file was a
@@ -1023,7 +1113,7 @@ class Restored(NamedTuple):
     unfinished: bool
 
 
-def restore_settings_from_backup() -> Restored | None:
+def restore_settings_from_backup() -> Restored | NotRestored | None:
     """At start: when a copy kept for an in-place write is still there (the
     write was cut short) and settings.json reads but doesn't parse while the
     copy is verified as Nebula's (marker, hash, this path, the file checks
@@ -1044,13 +1134,13 @@ def restore_settings_from_backup() -> Restored | None:
     except SettingsUnreadable:
         return None
     try:
-        with _save_lock(path):
-            return _restore(path)
+        with _save_lock(path) as locked:
+            return _restore(path, locked)
     except Exception:  # noqa: BLE001 - left with its copy for the next start
         return None
 
 
-def _restore(path: Path) -> Restored | None:
+def _restore(path: Path, locked: bool = True) -> Restored | NotRestored | None:
     target = backup_path(path)
     try:
         raw = _read_ours(target)
@@ -1086,8 +1176,16 @@ def _restore(path: Path) -> Restored | None:
         pass
     old = text.encode("utf-8")
     unfinished = _cut_short(current, old, next_text.encode("utf-8"))
+    # A file Nebula can't write keeps nothing aside: the copy waits for a
+    # start that can put it back (review 18 of PR #203, settings LOW-2).
+    block = settings_write_block()
+    if block is not None:
+        return NotRestored(path, block)
     aside = _keep_aside(current)
-    _write(path, old, os.lstat(path), backup=False)
+    try:
+        _write(path, old, os.lstat(path), backup=False, locked=locked)
+    except OSError as exc:
+        return NotRestored(path, exc)
     _drop_backup(path)
     return Restored(path, aside, unfinished)
 
@@ -1107,16 +1205,25 @@ def _cut_short(current: bytes, old: bytes, new: bytes) -> bool:
 
 
 def _keep_aside(current: bytes) -> Path:
-    """The file a restore replaces, kept in the copy folder (0600, a new
-    name, synced) so nothing in it is lost (review 17, settings LOW-2)."""
+    """The file a restore replaces, kept in the copy folder (0600, synced)
+    so nothing in it is lost (review 17, settings LOW-2), named by a hash of
+    its bytes (review 18, settings LOW-2): the same file is kept once,
+    however many starts meet it. One already kept under that name is used
+    when it is Nebula's own file with these bytes; anything else there is
+    left, and this one goes under a numbered name."""
     folder = _make_copy_folder()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    digest = hashlib.sha256(current).hexdigest()[:16]
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     for n in range(1000):
-        target = folder / f"{REPLACED_PREFIX}{stamp}{f'-{n}' if n else ''}.json"
+        target = folder / f"{REPLACED_PREFIX}{digest}{f'-{n}' if n else ''}.json"
         try:
             fd = os.open(target, flags, 0o600)
         except FileExistsError:
+            try:
+                if _read_ours(target) == current:
+                    return target
+            except OSError:
+                pass
             continue
         try:
             _write_all(fd, current)
@@ -1171,6 +1278,11 @@ def _save_lock(path: Path) -> Iterator[bool]:
             os.close(fd)  # releases the lock
 
 
+def _holds_lock() -> bool:
+    """Whether this thread's save holds the flock (_save_lock)."""
+    return getattr(_HELD, "path", None) is not None
+
+
 @contextmanager
 def settings_transaction() -> Iterator[None]:
     """The save's lock from a settings write's read to its save (review 17
@@ -1204,7 +1316,7 @@ def _locked(path: Path) -> int | None:
                 told = True
                 _lock_waiting()
             if time.monotonic() > deadline:
-                raise OSError(errno.EAGAIN, "another save holds the settings file", str(path)) from None
+                raise SettingsBusy("another save holds the settings file", path) from None
             time.sleep(0.02)
             continue
         except OSError:
@@ -1217,7 +1329,7 @@ def _locked(path: Path) -> int | None:
         # again, never past the deadline (round 18: a path that never held
         # still spun here forever).
         if time.monotonic() > deadline:
-            raise OSError(errno.EAGAIN, "the settings file kept changing during the lock", str(path))
+            raise SettingsBusy("the settings file kept changing during the lock", path)
 
 
 def _lock_target(path: Path) -> int | None:

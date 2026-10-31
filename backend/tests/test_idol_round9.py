@@ -95,9 +95,11 @@ def test_a_key_billing_route_that_is_no_space_gets_its_note_from_the_class():
 
 def test_the_billing_note_states_the_downstream_rule():
     """Review 8, NIT-2: an agent that reads only describe_node or find_nodes
-    learns the rule before its first refusal."""
-    assert "or any run that includes it, even for a node after it" in main.HF_SPACE_BILLING_TOKEN
-    assert "or any run that includes it" in main.HF_SPACE_BILLING_FREE
+    learns the rule before its first stop (at the call since round 19,
+    Justin decided 2026-10-31)."""
+    assert ("An agent's run goes ahead up to it, and a result it reuses passes, but while the token is set the "
+            "node stops before calling Hugging Face and the nodes after it don't run") in main.HF_SPACE_BILLING_TOKEN
+    assert "then an agent's run that reaches it stops at it, before anything is sent" in main.HF_SPACE_BILLING_FREE
 
 
 # -- one key state (GM r17 item 1; review 8, LOW-1) ------------------------------------------

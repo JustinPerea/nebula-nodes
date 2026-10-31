@@ -4122,7 +4122,7 @@
           "fal"
         ],
         "fixes": [],
-        "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. Black Forest Labs or fal.ai can take it."
+        "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers, or choose another provider. Black Forest Labs or fal.ai can take it."
       },
       "unavailableLine": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai."
     },
@@ -4159,7 +4159,7 @@
           "openrouter"
         ],
         "fixes": [],
-        "message": "Fixture Image is set to Black Forest Labs, which needs BFL_API_KEY. Add it in Settings > Providers or choose another provider. fal.ai, Replicate or OpenRouter can take it."
+        "message": "Fixture Image is set to Black Forest Labs, which needs BFL_API_KEY. Add it in Settings > Providers, or choose another provider. fal.ai, Replicate or OpenRouter can take it."
       },
       "unavailableLine": "“Fixture Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter."
     },
@@ -4338,7 +4338,7 @@
         "fixes": [],
         "message": "Fixture Image can't run on Black Forest Labs: it doesn't take safety_tolerance 5. Change that setting, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai."
+      "unavailableLine": "“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai."
     },
     {
       "name": "routes: explicit OpenRouter with five images wired is over its port limit",
@@ -4692,7 +4692,7 @@
         "fixes": [],
         "message": "Fixture Krea can't run on Krea: it doesn't take resolution 4K. Change that setting, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Krea” can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai."
+      "unavailableLine": "“Fixture Krea” can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai."
     },
     {
       "name": "routes: Krea-maker plan its route refuses unless a port is wired is unset",
@@ -4730,7 +4730,7 @@
         "fixes": [],
         "message": "Fixture Krea can't run on Krea: it doesn't take 2K without a style image. Change that setting, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Krea” can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai."
+      "unavailableLine": "“Fixture Krea” can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai."
     },
     {
       "name": "routes: Krea-maker plan unblocked by a wired port bills the plan",
@@ -5243,9 +5243,9 @@
           "fal"
         ],
         "fixes": [],
-        "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. fal.ai can take it."
+        "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers, or choose another provider. fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.",
+      "unavailableLine": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.",
       "shownRoute": "replicate",
       "routeParams": [
         {
@@ -7592,7 +7592,7 @@
         "fixes": [],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
+      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate.",
       "paramKeys": [
         "aspect_ratio",
         "enable_prompt_expansion",
@@ -7765,7 +7765,7 @@
         ],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7812,7 +7812,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take connected keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs.",
       "paramKeys": [
         "aspect_ratio",
         "duration",
@@ -7859,7 +7859,7 @@
         "fixes": [],
         "message": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take a video continuation longer than 15 s. Change that setting, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai.",
       "paramKeys": [
         "aspect_ratio",
         "draft",
@@ -8252,7 +8252,7 @@
         "fixes": [],
         "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image (fal.ai takes it on krea/v3/edit only). Change that setting, or switch provider. Krea can take it."
       },
-      "unavailableLine": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea.",
+      "unavailableLine": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
       "paramKeys": [
         "image_size",
         "model",
@@ -8330,7 +8330,7 @@
         "fixes": [],
         "message": "Krea 3 can't run on Krea: it doesn't take a regional edit without a reference image. Change that setting, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Krea 3” can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai.",
+      "unavailableLine": "“Krea 3” can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai.",
       "paramKeys": [
         "aspect_ratio",
         "regional_edit",
@@ -8831,7 +8831,7 @@
         ],
         "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai.",
+      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -8892,7 +8892,7 @@
         ],
         "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider. Black Forest Labs can take it."
       },
-      "unavailableLine": "“FLUX.2” can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs.",
+      "unavailableLine": "“FLUX.2” can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs.",
       "paramKeys": [
         "enable_safety_checker",
         "guidance_scale",
@@ -9229,7 +9229,7 @@
         ],
         "message": "Fixture Hide can't run on fal.ai: it doesn't offer Quality High with Mode Fast. Set Quality back to Low, or switch provider. Black Forest Labs can take it."
       },
-      "unavailableLine": "“Fixture Hide” can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs.",
+      "unavailableLine": "“Fixture Hide” can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs.",
       "shownRoute": "b",
       "routeParams": [
         {
@@ -9700,7 +9700,7 @@
         ],
         "message": "Fixture Hide can't run on Black Forest Labs: it doesn't offer Sharpen. Turn Sharpen off, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Hide” can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai.",
+      "unavailableLine": "“Fixture Hide” can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai.",
       "shownRoute": "a",
       "routeParams": [
         {
@@ -10769,7 +10769,7 @@
         ],
         "message": "Krea 3 can't run on Krea: it doesn't offer Model Jam (speed). Set Model back to Berry (quality), or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“Krea 3” can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai.",
+      "unavailableLine": "“Krea 3” can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai.",
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -11785,9 +11785,9 @@
           "hf-space"
         ],
         "fixes": [],
-        "message": "Fixture Keyless is set to fal.ai, which needs FAL_KEY. Add it in Settings > Providers or choose another provider. Speridlabs can take it."
+        "message": "Fixture Keyless is set to fal.ai, which needs FAL_KEY. Add it in Settings > Providers, or choose another provider. Speridlabs can take it."
       },
-      "unavailableLine": "“Fixture Keyless” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs.",
+      "unavailableLine": "“Fixture Keyless” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs.",
       "paramKeys": [
         "seed"
       ]

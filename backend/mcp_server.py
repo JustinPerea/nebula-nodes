@@ -1182,7 +1182,8 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
     GPU-minutes, though Nebula prices it at $0. The note is worded for the
     token as set now ("Free here" or "May cost here"). With the token set an
-    agent can't run it (run tools refuse it): propose it with propose_change.
+    agent's run stops at it before calling Hugging Face (its error says so,
+    and the nodes after it don't run): propose it with propose_change.
     A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
@@ -1663,12 +1664,13 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A run that
-    includes a node that can bill the person's own provider account is
-    refused at any limit (Idol with HF_TOKEN set: a Hugging Face PRO, Team or
-    Enterprise account's prepaid credits past its daily allowance), even
-    when the node you run comes after it: propose the run, or run only nodes
-    that don't need it. A node priced
+    usually send the same nodes as propose_change with `run`. A node that
+    can bill the person's own provider account (Idol with HF_TOKEN set: a
+    Hugging Face PRO, Team or Enterprise account's prepaid credits past its
+    daily allowance) doesn't refuse the run: the run goes ahead, a result
+    it reuses passes, and the node stops before calling Hugging Face, its
+    error saying so and the nodes after it not run: propose
+    that run with propose_change. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this

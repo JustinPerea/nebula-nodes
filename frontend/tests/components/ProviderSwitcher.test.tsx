@@ -423,7 +423,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn’t take “Reasoning level”.");
     const reset = within(menu).getByRole('menuitem', { name: 'Set Reasoning level back to Low' });
     expect(within(menu).getByRole('menuitem', { name: 'Switch to fal.ai' })).toBeVisible();
-    expect(screen.getByRole('status')).toHaveTextContent('“Krea 3” can’t run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low or switch to fal.ai.');
+    expect(screen.getByRole('status')).toHaveTextContent('“Krea 3” can’t run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low, or switch to fal.ai.');
     fireEvent.click(reset);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ reasoning_level: 'low' });
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();

@@ -121,10 +121,12 @@ def test_claude_needs_messages_connect_them(monkeypatch, agent_log, chat_turn, p
     assert agent_log == [f"{HEADING} “Claude” needs messages. Connect them, then run the node again."]
 
 
+# "Media" left the mass nouns in round 19 (GM r37 item 2: "a media input";
+# test_idol_round19_copy.py).
 @pytest.mark.parametrize("label,pronoun", [("Audio", "it"), ("Text", "it"), ("Context", "it"), ("Lighting", "it"),
-                                           ("Media", "it"), ("Messages", "them"), ("Guidance", "it")])
+                                           ("Messages", "them"), ("Guidance", "it")])
 def test_every_mass_noun_takes_the_pronoun_of_its_number(label, pronoun):
-    assert set(person_line._MASS_NOUNS) == {"audio", "text", "context", "lighting", "media", "messages", "guidance"}
+    assert set(person_line._MASS_NOUNS) == {"audio", "text", "context", "lighting", "messages", "guidance"}
     need = person_line.input_need(label)
     assert need.again[0] == f"needs {label.lower()}. Connect {pronoun}, then run the node again."
 
@@ -134,7 +136,8 @@ def test_every_mass_noun_takes_the_pronoun_of_its_number(label, pronoun):
 def test_one_option_and_two_providers_take_the_comma():
     assert route_action(person_line.Fix("Pick 1K", 1), ["fal.ai", "Replicate"], [], None) == (
         "Pick 1K, or switch to fal.ai or Replicate", True)
-    assert route_action(person_line.Fix("Pick 1K", 1), ["fal.ai"], [], None) == ("Pick 1K or switch to fal.ai", False)
+    # GM r37 item 1 since: every second action takes the comma.
+    assert route_action(person_line.Fix("Pick 1K", 1), ["fal.ai"], [], None) == ("Pick 1K, or switch to fal.ai", True)
     reason = NotReadyReason.of("route_block", after_clause=True, provider="Black Forest Labs",
                                why=" with “Resolution” set to 1.5K", action="Pick 1K, or switch to fal.ai or Replicate")
     assert reason.one.endswith("Pick 1K, or switch to fal.ai or Replicate.")
@@ -161,12 +164,16 @@ def test_a_route_line_that_opens_with_the_name_is_the_bubble_alone(monkeypatch, 
 
 
 @WHO
-def test_a_line_that_doesnt_open_with_the_name_keeps_the_bubbles_prefix(monkeypatch, agent_log, bubbles,  # noqa: F811
+def test_an_unwired_input_is_the_bubbles_needs_line_with_the_name_once(monkeypatch, agent_log, bubbles,  # noqa: F811
                                                                         chat_turn, person, who):
+    # GM, PR #203 r38 items 1-2: the bubble says the needs in r34's form, the node named once,
+    # with no "then run it again" (the "can’t run." prefix stays for a line with no name of its
+    # own; test_idol_round19_review18 pins that one).
     body = _run(monkeypatch, [("claude-chat", {})], _headers(who, chat_turn), agent_log, bubbles)
     assert body["status"] == "failed"
     [bubble] = bubbles
-    assert bubble.startswith("“Claude” can’t run. Connect ")
+    assert bubble.startswith("“Claude” needs ") and bubble.count("“Claude”") == 1, bubble
+    assert "can’t run" not in bubble and "run it again" not in bubble, bubble
 
 
 # -- NIT-2: runway-gen4-turbo's image ----------------------------------------------------

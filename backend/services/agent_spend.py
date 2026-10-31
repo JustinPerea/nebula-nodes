@@ -793,15 +793,13 @@ def decide(
     def refuse(reason: str) -> Decision:
         return decision(f"Needs the person's approval: {reason} {how_to_ask}")
 
-    # A run that may bill the person's own provider account (a keyless route
-    # run with its optional key: Idol with HF_TOKEN set) always needs a
-    # proposal, limits or not. Its list price stays $0, so it never counts
-    # toward a budget; the person's own Run is their consent, and Accept
-    # makes the run theirs.
-    may_bill = may_bill_nodes(items, definitions, api_keys)
-    if may_bill:
-        params_of = {str(item["id"]): item.get("params") or {} for item in items}
-        return refuse(may_bill_reason(may_bill, labels, definitions, definition_of, params_of, api_keys))
+    # A node that may bill the person's own provider account (a keyless
+    # route run with its optional key: Idol with HF_TOKEN set) no longer
+    # refuses the whole run here. Justin decided (2026-10-31) to gate only
+    # the call: the run starts, and the node stops at its call, before
+    # anything is sent, when an agent started the run
+    # (handlers/speridlabs_idol.run_idol, execution/run_origin.py). Its list
+    # price stays $0, so it never counts toward a budget.
 
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
@@ -863,21 +861,15 @@ def decide(
     return decision(None)
 
 
-# Who a may-bill run can bill, by the account it runs on
-# (node_route.key_billing_account). Agent-facing, so plain facts:
+# Who a may-bill call can bill, by the account it runs on: the agent's
+# detail when its run stops at that call (handlers/speridlabs_idol
+# agent_call_stop). Agent-facing, so plain facts:
 # https://huggingface.co/docs/hub/spaces-zerogpu, "Extending quota with credits".
-# Why a may-bill node stops an agent's run, by its account: the key
-# that is set, the account it can bill, and how. Review 7 of PR #203, NIT-3:
-# the rule stays conservative (an agent can't start any run that includes
-# Idol while the token is set, even for a node after it), and the line says
-# why and what to do instead.
 MAY_BILL_WHO = {
     "Hugging Face": ("the person's Hugging Face token is set",
                  "their Hugging Face account: a PRO, Team or Enterprise account's prepaid credits are billed past "
                  "its daily ZeroGPU allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit"),
 }
-MAY_BILL_GENERIC = ("the person's own key is set",
-                    "their own provider account past its free allowance, a cost Nebula can't see or limit")
 
 
 def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Mapping[str, Any]],
@@ -895,25 +887,6 @@ def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Map
                                                    api_keys) == model_pricing.MAY_COST:
             found.append(str(item["id"]))
     return found
-
-
-def may_bill_reason(ids: list[str], labels: Mapping[str, str], definitions: Mapping[str, Mapping[str, Any]],
-                    definition_of: Mapping[str, str], params_of: Mapping[str, Mapping[str, Any]] | None = None,
-                    api_keys: Mapping[str, Any] | None = None) -> str:
-    """Why an agent can't start a run with these may-bill nodes itself."""
-    # The account each may bill, from the one cost class (node_route
-    # key_billing_account; review 8 of PR #203, LOW-3), never re-read from
-    # the route table here.
-    accounts = {node_route.key_billing_account(definitions.get(definition_of.get(node_id, "")) or {},
-                                               (params_of or {}).get(node_id) or {}, api_keys or {})
-                for node_id in ids}
-    only = next(iter(accounts)) if len(accounts) == 1 else None
-    key, account = MAY_BILL_WHO[only] if only in MAY_BILL_WHO else MAY_BILL_GENERIC
-    one = len(ids) == 1
-    it, them = ("it", "it") if one else ("they", "them")
-    return (f"{_names(ids, labels)} {'is' if one else 'are'} in this run and {key}, so {it} can bill {account}. "
-            f"An agent can't start a run that includes {them}, at any spending limit, even for a node after "
-            f"{them}: propose the run, or run only nodes that don't need {them}.")
 
 
 def propose_hint(run_ids: list[str], where: str = "mcp") -> str:

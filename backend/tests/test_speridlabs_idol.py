@@ -16,8 +16,9 @@ from typing import Any
 import httpx
 import pytest
 
-from execution import route_clients
+from execution import route_clients, run_origin
 from execution.person_line import carries_provider_text, person_line
+from execution.run_origin import RunOrigin
 from handlers import speridlabs_idol as idol
 from models.graph import GraphNode, PortValueDict
 from services import node_readiness, node_route
@@ -65,8 +66,12 @@ async def run_node(params: dict[str, Any] | None = None, inputs=None, keys: dict
     defaults = {p["key"]: p.get("default") for p in node_route.all_param_definitions(registry()["speridlabs-idol"])
                 if p["key"] != "_provider"}
     saved = {**defaults, "_provider": "auto", **(params or {})}
-    return await registry_handler("speridlabs-idol")(node(**saved), image() if inputs is None else inputs,
-                                                     dict(SIGNED_IN if keys is None else keys))
+    # These tests are the call itself, so they run as the person's own Run:
+    # an agent's run with the token set stops before the call (Justin
+    # decided, 2026-10-31; tests/test_idol_round19_gate.py).
+    with run_origin.running(RunOrigin(person=True)):
+        return await registry_handler("speridlabs-idol")(node(**saved), image() if inputs is None else inputs,
+                                                         dict(SIGNED_IN if keys is None else keys))
 
 
 def keyless_idol() -> dict[str, Any]:
@@ -99,7 +104,8 @@ async def run_direct(inputs=None, keys=None, **params: Any):
     """The handler itself, with the Space's own param names and values."""
     saved = {"mode": "Synthetic", "gaussians": "262,144", "steps": 50, "cfg_scale": 3.0, "rescale_t": 3.0,
              "seed": 42, **params}
-    return await idol.run_idol(node(**saved), image() if inputs is None else inputs, dict(keys or {}))
+    with run_origin.running(RunOrigin(person=True)):  # the person's own Run, as run_node
+        return await idol.run_idol(node(**saved), image() if inputs is None else inputs, dict(keys or {}))
 
 
 def world_of(out: dict[str, Any]) -> dict[str, Any]:

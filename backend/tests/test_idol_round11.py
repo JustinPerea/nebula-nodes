@@ -109,21 +109,10 @@ def test_the_journal_counts_each_class(api):  # noqa: F811
     assert (event["data"]["paidRuns"], event["data"]["planRuns"], event["data"]["mayCostRuns"]) == (0, 1, 0)
 
 
-# -- `nebula run`'s refusal over HTTP (review 10, LOW-1: B14) --------------------------------
-
-
-@pytest.mark.parametrize("headers,expect,never", [
-    (CLAUDE, "Propose it instead: propose_change (run: {idol})", "`nebula"),
-    ({**CLAUDE, **CLI}, "Propose it instead: `nebula propose --note \"<why>\" --run {idol}`", "propose_change"),
-], ids=["mcp", "cli"])
-def test_nebula_runs_idol_refusal_names_its_own_command(gated, headers, expect, never):  # noqa: F811
-    _, idol = _idol_graph(gated)
-    gated.keys(SIGNED_IN)
-    response = gated.client.post("/api/graph/run", headers=headers, json={"wait": 5, "targetNodeId": idol})
-    assert response.status_code == 403, response.text
-    detail = response.json()["detail"]
-    assert expect.format(idol=idol) in detail and never not in detail
-    assert gated.ran == []
+# -- `nebula run`'s words over HTTP (review 10, LOW-1: B14) ---------------------------------
+# Idol's stop now comes at its call, so each surface's own command is pinned
+# on the real engine: tests/test_idol_round19_gate.py,
+# test_an_agents_run_that_must_call_stops_before_any_request[mcp|cli].
 
 
 @pytest.mark.parametrize("headers,expect,never", [
@@ -386,7 +375,7 @@ def test_a_route_line_names_the_node_in_quotes():
 @pytest.mark.parametrize("params,wired,line", [
     ({"_provider": "krea", "_kreaAuth": "api-token"}, {"keyframes": 1},
      "“Clip” can’t run on Krea with keyframes connected. Disconnect the extra inputs."),
-    ({"_provider": "fal"}, {}, "“Clip” is set to fal.ai, which needs your fal.ai API key. Add it in Settings "
+    ({"_provider": "fal"}, {}, "“Clip” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, "
                                "or switch to Krea."),
 ], ids=["route-blocked", "route-key"])
 def test_a_route_tables_person_line_quotes_the_name(params, wired, line):

@@ -118,22 +118,19 @@ Enterprise account's prepaid Hugging Face credits. The route says so with its
 own flag, `mayBillWithKey: true`, not a price: Idol's price stays the sourced
 $0 and spend tracking never counts it as paid.
 
-- **Agents propose first** (a product decision: "Agents ask first when a token
-  is set; without one they run as now."). `agent_spend.decide` refuses an
-  agent's run that includes a node on a `mayBillWithKey` route with one of its
-  `optionalKeys` set (`node_route.may_bill`), at any spending limit, and says
-  to propose instead. It sits in the spend check every agent run goes
-  through (`main._require_spend_approval`), so it covers `/api/execute`,
-  `/api/execute-node`, `/api/graph/run` (`nebula run`, MCP `run_nodes`),
-  `/api/quick` (`nebula quick`) and `/api/cinema/generate-shot`, each pinned
-  in `backend/tests/test_idol_may_bill.py`, at every limit, all of them off
-  included. The rule is conservative: a run that includes Idol is refused
-  even when the node the agent asked for comes after it, and the refusal
-  says why and what to do: "n1 (Idol) is in this run and the person's Hugging
-  Face token is set, so it can bill their Hugging Face account: … An agent
-  can't start a run that includes it, at any spending limit, even for a node
-  after it: propose the run, or run only nodes that don't need it." (review
-  7, NIT-3), then how to propose in the reader's own words. Each refusal is
+- **Agents propose the call** (Justin decided, 2026-10-31: "Only gate the
+  call: the agent's run goes ahead, and if it reaches an Idol node that has
+  to call Hugging Face, it stops there before anything is sent and tells the
+  agent to propose."). `agent_spend.decide` no longer refuses an agent's run
+  that includes Idol. The check sits in `handlers/speridlabs_idol.run_idol`,
+  the one function that calls the Space: with the token set and a run not
+  started by the person (`execution/run_origin.py`, recorded by every run
+  route from the request, as every person-only check reads it; an unknown
+  origin counts as an agent's), it raises before any request, the nodes
+  after it don't run, and the canvas's error event carries `proposalNeeded: true`.
+  A result reused from the run cache never reaches it. The person's own Run
+  and an accepted proposal (the person's tab starts it) go through. The
+  agent's text says why and how to propose, in its reader's words. Each is
   worded where it is written (review 9, keys MEDIUM-1): the CLI sends
   `X-Nebula-Surface: cli` on every request, and `services/agent_words`
   (one table of each surface's calls) fills the refusal's `{propose}` and
@@ -376,6 +373,37 @@ $0 and spend tracking never counts it as paid.
     key"; a Krea copy that needs sign-in says "… an API key doesn’t replace
     it."; person lines name "Krea API key" (GM r22 item 4).
 
+### Saving settings: what an agent can see
+
+Only the person saves settings (PUT /api/settings and DELETE
+/api/settings/api-keys/{provider} are person-only), so an agent never gets
+these 409s from its own call. It sees their effects: the person's Settings
+says the line, and the canvas events journal says what happened at start.
+Every 409 carries `detail`, `code` and `fix`, worded for the reader; the
+full list, with the lines, is in [MCP-SETUP.md](../../MCP-SETUP.md) under
+`get_settings`. What an agent should do with each:
+
+| `code` | Means | What an agent does |
+| --- | --- | --- |
+| `settings_unreadable` / `keys_unreadable` | settings.json, or its `apiKeys`, isn't JSON Nebula can read | Tell the person the file named in the line needs fixing. Runs fail closed until then. |
+| `settings_unwritable` | the file, its folder, or Nebula's own copy folder (`~/.nebula`, its `settings-copy`, or the desktop app's state folder; when a folder above the state folder refuses, both folders are named) can't be changed | Tell the person to check the permissions of the folder the line names. Never retry in a loop. |
+| `settings_not_a_folder` | a file sits where a folder must be, or a folder sits at one of the save's own file names (the temp file `.settings.json.nebula-tmp`, the copy, or its temp) | Tell the person to move or rename what the line names. |
+| `settings_busy` | another Nebula held the save's lock (or, with no flock, its temp file) past the wait, about 10 s | Nothing changed. The person can try again in a moment. |
+
+The save holds an exclusive lock where the filesystem supports flock, and
+PUT and DELETE hold it from their read to their save, so two writes of
+different keys both survive. Where there is no flock (some network mounts),
+a save never removes another save's fresh temp file: it waits, then answers
+`settings_busy`. An in-place save keeps a copy in `settings-copy` until it
+is done. At the next start, a file that write left unreadable is put back
+(`settings.restored`, data `file` and `keptAt`: where the replaced file is
+kept), or, when Nebula can't write the file then, left for the start after
+(`settings.not_restored`, data `file`). Both are attributed to Nebula
+(`actor.kind` `system`), and neither carries a key. After either, tell the
+person once; the person sees `settings.restored`'s line at the top of
+Settings until they dismiss it. No agent can read the temp file or the
+`settings-copy` folder.
+
 ## Request contract
 
 `/run` takes, in order: `image` (ImageData), `mode` ("Synthetic" or "Real
@@ -542,7 +570,7 @@ Hugging Face PRO to allow GPU tasks up to 40 min" on an API call for no
 account or a free one). Nothing in the copy promises a free account can run
 Idol on its own allowance until a run with a free account's token shows it.
 
-## Errors## Errors
+## Errors
 
 The card's lines are GM's (PR #203 r1 to r4 and r12), with curly
 apostrophes. None of the ZeroGPU refusals has been seen live: the quota,

@@ -223,6 +223,7 @@ print("B SAVED")
 
 RESTORE = """
 import services.settings as s
+s.LOCK_TIMEOUT_SECONDS = 120  # events decide the wait, never the clock (round 19, tests-ci LOW-1)
 s._lock_waiting = lambda: open({waiting!r}, "w").close()
 print("RESTORED", s.restore_settings_from_backup())
 """
@@ -258,9 +259,9 @@ def test_the_restore_reads_judges_writes_and_drops_inside_the_lock(keyed, monkey
     held = []
     real = settings._restore
 
-    def look(path):
+    def look(path, locked=True):
         held.append(getattr(settings._HELD, "path", None))
-        return real(path)
+        return real(path, locked)
 
     monkeypatch.setattr(settings, "_restore", look)
     settings.restore_settings_from_backup()
@@ -298,12 +299,21 @@ def test_a_restore_keeps_the_file_it_replaces_aside_this_users_only(home_state, 
     assert not settings.backup_path(keyed).exists()
 
 
-def test_a_second_restore_in_the_same_second_keeps_both_files(home_state, keyed, monkeypatch):
+def test_two_restores_of_the_same_broken_file_keep_it_once_and_of_another_keep_both(home_state, keyed):
+    """Round 19 (review 18, settings LOW-2 and tests-ci NIT-1): an aside
+    file is named by a hash of its bytes, not by the time, so no clock
+    decides this: the same file twice is kept once, a different one apart."""
     kept = []
     for _ in range(2):
         _cut_copy(keyed)
         kept.append(settings.restore_settings_from_backup().kept)
+    assert len(set(kept)) == 1 and kept[0].exists()
+    keyed.write_text(json.dumps({**NEW, "favorites": ["another"]}, indent=2) + "\n", encoding="utf-8")
+    _cut_copy(keyed)
+    kept.append(settings.restore_settings_from_backup().kept)
     assert len(set(kept)) == 2 and all(path.exists() for path in kept)
+    assert sorted(path.name for path in settings.settings_copy_folder().glob("settings-replaced-*")) == sorted(
+        {path.name for path in kept})
 
 
 def test_a_restore_that_cant_keep_the_file_aside_changes_nothing(home_state, keyed, monkeypatch):
@@ -469,16 +479,28 @@ print("A SAVED")
 def test_two_interleaved_settings_writes_of_different_keys_both_survive(keyed, tmp_path, monkeypatch, write):
     """A (another Nebula) has read the file inside its transaction and
     waits; this backend's PUT or DELETE starts then and must wait at its
-    read, so A's key and this write both survive."""
+    read, so A's key and this write both survive.
+
+    Round 19 (review 18, tests-ci LOW-1): the wait's deadline is set past
+    anything the test waits for, so events decide it, never the wall clock;
+    the request's own exception is kept as its answer."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
+    monkeypatch.setattr(settings, "LOCK_TIMEOUT_SECONDS", 120)
     waiting = threading.Event()
     monkeypatch.setattr(settings, "_lock_waiting", waiting.set)
     inside, go = tmp_path / "A-inside", tmp_path / "go"
     a = _popen(HOLD_TRANSACTION.format(inside=str(inside), go=str(go)))
     answers: list = []
-    request = threading.Thread(target=lambda: answers.append(
-        _person().put("/api/settings", json={"apiKeys": {"GEMINI_API_KEY": "gm-from-B-1111"}}) if write == "put"
-        else _person().delete("/api/settings/api-keys/FAL_KEY")))
+
+    def write_settings():
+        try:
+            answers.append(
+                _person().put("/api/settings", json={"apiKeys": {"GEMINI_API_KEY": "gm-from-B-1111"}})
+                if write == "put" else _person().delete("/api/settings/api-keys/FAL_KEY"))
+        except BaseException as exc:  # noqa: BLE001 - the test reads it as the answer
+            answers.append(exc)
+
+    request = threading.Thread(target=write_settings)
     try:
         _wait_for(inside, a, "A inside its transaction")
         request.start()
@@ -491,7 +513,8 @@ def test_two_interleaved_settings_writes_of_different_keys_both_survive(keyed, t
         go.touch()
         _stop(a)
     assert out_a.strip() == "A SAVED", err_a
-    assert [answer.status_code for answer in answers] == [200]
+    assert not request.is_alive(), "the write never finished"
+    assert [getattr(answer, "status_code", answer) for answer in answers] == [200]
     keys = _parses(keyed)["apiKeys"]
     assert keys["OPENAI_API_KEY"] == "sk-from-A-1111"
     if write == "put":

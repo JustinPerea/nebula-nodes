@@ -71,11 +71,12 @@ function confirm(update: Partial<SettingsDraft>) {
 
 /** The codes the backend puts beside a settings write's 409 (main
  * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE,
- * SETTINGS_NOT_A_FOLDER_CODE): the file can't be read, its keys can't,
- * Nebula isn't allowed to change it or its folder (GM, PR #203 r28 item 4,
- * r31 item 1), or a file is where its folder must be (r31 item 2). */
+ * SETTINGS_NOT_A_FOLDER_CODE, SETTINGS_BUSY_CODE): the file can't be read,
+ * its keys can't, Nebula isn't allowed to change it or its folder (GM, PR
+ * #203 r28 item 4, r31 item 1), a file is where its folder must be (r31
+ * item 2), or another Nebula is saving the settings (r38 item 3). */
 export const SETTINGS_REFUSAL_CODES: readonly string[] = [
-  'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder',
+  'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder', 'settings_busy',
 ];
 
 /** The backend's own line for a settings write it refused over the settings

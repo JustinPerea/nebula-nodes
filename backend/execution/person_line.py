@@ -435,10 +435,14 @@ _INPUT_WORDS = {
     "krea 3d job": "a Krea 3D job", "krea job": "a Krea job", "extend video": "a video to extend",
     "edit video": "a video to edit", "continue session": "a session to continue",
 }
-_MASS_NOUNS = {"audio", "text", "context", "lighting", "media", "messages", "guidance"}
+_MASS_NOUNS = {"audio", "text", "context", "lighting", "messages", "guidance"}
 # The mass nouns above that are plural ("needs messages. Connect them"); the
-# rest take "it" (GM r36 B2).
+# rest are one thing the person connects and take "it" (GM r36 B2).
 _PLURAL_MASS_NOUNS = {"messages"}
+# Nouns that aren't one thing the person connects, said as the port they
+# fill: "a media input" (GM, PR #203 r37 item 2: never "it"; "Connect one",
+# and after a count "Connect a media input to each").
+_PORT_NOUNS = {"media"}
 _NAMES = {"krea"}
 
 
@@ -469,6 +473,8 @@ def input_words(label: object) -> str:
         return "the node's inputs"
     phrase = re.sub(r"\bRefs\b", "references", _words(name), flags=re.IGNORECASE)
     last = phrase.split()[-1].lower()
+    if last in _PORT_NOUNS:
+        phrase, last = f"{phrase} input", "input"
     if last in _MASS_NOUNS or (last.endswith("s") and not last.endswith("ss")):
         return phrase
     return f"{_article(phrase)} {phrase}"
@@ -476,10 +482,11 @@ def input_words(label: object) -> str:
 
 def connect_line(label: object) -> str:
     """GM's rule 6 line for an input with no wire, from its label."""
-    name = port_name(label)
     # A numbered or lettered input ("Item 1", "Image A") and a pass-through
-    # are named by their label: "an item" wouldn't say which one.
-    if re.search(r"\s(\d+|[A-Z])$", name) or name.lower() == "through":
+    # are named by their label: "an item" wouldn't say which one. One rule
+    # for the card and the log (_named_by_label; review 18 of PR #203,
+    # copy-ui NIT-2).
+    if _named_by_label(label):
         # The label exactly as the node shows it (round 3g, GM: ports in quotes).
         return f"Connect an output to “{str(label or '').strip()}”, then run the node again."
     return f"Connect {input_words(label)} to this node, then run it again."
@@ -561,8 +568,8 @@ def again_end(nodes: int, *, after_clause: bool = False) -> str:
 class Fix(NamedTuple):
     """What the person can change where the node is, as a route line's first
     action ("Turn “Raw” off", "Pick 1K, 2K or 4K"), and how many options it
-    offers: a fix that lists two or more holds its own "or", so the switch
-    after it is a second clause (GM, PR #203 r32 item 1)."""
+    offers (GM, PR #203 r32 item 1). Since r37 every second action takes the
+    comma (route_action), however many options the fix lists."""
 
     text: str
     options: int = 1
@@ -580,20 +587,22 @@ def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str],
       added (``key`` names that key): "…, or add your fal.ai API key in
       Settings and switch to fal.ai".
 
-    Two actions take a comma between them when either holds an "or" of its
-    own: the fix lists options (GM, PR #203 r32 item 1: "Pick A, B or C, or
-    switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K, or
-    switch to fal.ai or Replicate."); the comma separates two clauses, not
-    list items. Never a separate "… can take it." sentence: the named
-    switch replaces it."""
-    text, listed = (fix.text, fix.options > 1) if isinstance(fix, Fix) else (fix, False)
+    Two actions always take a comma between them (GM, PR #203 r37 item 1:
+    "Pick 1K, or switch to fal.ai."; r32 item 1 and r36 B4 were the first
+    cases), and the second action makes the sentence a comma clause, so the
+    Agent Log's ending is its own sentence (again_end: ". Then run the node
+    again."): ", then run…" after it would read as applying only to the
+    switch. This is the one place the comma is decided; the card, the bar,
+    the log, MCP, the CLI and chat all read the line built here (the
+    frontend's directRoute.routeAction is pinned to it by route_cases.json).
+    Never a separate "… can take it." sentence: the named switch replaces
+    it."""
+    text = fix.text if isinstance(fix, Fix) else fix
     if others:
         switch = f"switch to {or_list(others)}"
         if not text:
             return switch[:1].upper() + switch[1:], False
-        if listed or " or " in f" {text} " or len(others) > 1:
-            return f"{text}, or {switch}", True
-        return f"{text} or {switch}", False
+        return f"{text}, or {switch}", True
     if needs_key:
         add = f"add your {key} in Settings" if key else "add its key in Settings"
         clause = f"{add} and switch to {or_list(needs_key)}"
@@ -683,8 +692,81 @@ def _one(words: str) -> str:
 
 
 def _named_by_label(label: object) -> bool:
+    """An input the lines name by its own label, in quotes: a numbered or
+    lettered one ("Item 1", "Image A") or a pass-through ("Through"). The
+    one rule the card (connect_line) and the Agent log (input_need) read."""
     name = port_name(label)
     return bool(re.search(r"\s(\d+|[A-Z])$", name)) or name.lower() == "through"
+
+
+def _definite(words: str) -> str:
+    """An input's words with "the": "the prompt", "the audio", "the images"."""
+    for article in ("a ", "an "):
+        if words.startswith(article):
+            return f"the {words[len(article):]}"
+    return f"the {words}"
+
+
+def _connect_item(label: object, *, definite: bool = False) -> str:
+    """What a combined line connects for one input: "a prompt" ("the
+    prompt" beside a key), or "an output to “Item 1”" for an input named by
+    its label."""
+    if _named_by_label(label):
+        return f"an output to “{str(label or '').strip()}”"
+    words = input_words(label) if port_name(label) else "an input"
+    return _definite(words) if definite else words
+
+
+def _once(items: Iterable[str]) -> list[str]:
+    kept: list[str] = []
+    for item in items:
+        if item not in kept:
+            kept.append(item)
+    return kept
+
+
+def needs_card_line(labels: Iterable[object], key: str | None = None) -> str | None:
+    """The card's one line for a node with several needs (GM, PR #203 r38
+    item 1, r34's form; one "then run it again" at the end, never one per
+    need), from its inputs with no wire, in the node's input order, and its
+    missing key (``key``: key_phrase's words):
+
+    - inputs only: "Connect a prompt and an image to this node, then run it
+      again." (an input named by its label: "Connect a prompt and an output
+      to “Text 1”, then run it again.");
+    - an input and a key: "Connect the prompt and add your Anthropic API key
+      in Settings, then run it again." (two or more inputs: "Connect the
+      prompt and the image, and add …").
+
+    None when there is only one need: its own line stands."""
+    labels = list(labels)
+    if not labels or (key is None and len(labels) < 2):
+        return None
+    if key is None:
+        items = _once(_connect_item(label) for label in labels)
+        if len(items) < 2:
+            return None
+        where = "" if any(_named_by_label(label) for label in labels) else " to this node"
+        return f"Connect {and_list(items)}{where}, then run it again."
+    items = _once(_connect_item(label, definite=True) for label in labels)
+    joined = and_list(items) + ("," if len(items) > 1 else "")
+    return f"Connect {joined} and add your {key} in Settings, then run it again."
+
+
+def needs_bubble(labels: Iterable[object], key: str | None = None) -> str | None:
+    """The cursor bubble's words after the node's name for the same needs
+    (GM, PR #203 r38 item 1; the bubble drops "then run it again"):
+    "needs a prompt and an image. Connect both."; "needs a prompt and your
+    Anthropic API key. Connect the prompt and add the key in Settings."
+    None with no input to connect."""
+    labels = list(labels)
+    if not labels:
+        return None
+    if key is None:
+        return input_needs(labels).one
+    items = _once(_connect_item(label, definite=True) for label in labels)
+    joined = and_list(items) + ("," if len(items) > 1 else "")
+    return f"needs {and_list([*need_words(labels), f'your {key}'])}. Connect {joined} and add the key in Settings."
 
 
 def _need_words(label: object) -> str:

@@ -138,7 +138,8 @@ describe('the switcher row’s size note (review 17 LOW-4)', () => {
 describe('two actions take a comma when either holds its own "or" (GM r36 B4)', () => {
   it.each([
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai', 'Replicate'], 'Pick 1K, or switch to fal.ai or Replicate.'],
-    [{ text: 'Pick 1K', options: 1 }, ['fal.ai'], 'Pick 1K or switch to fal.ai.'],
+    // GM r37 item 1 since: every second action takes the comma (idolRound19.test.ts).
+    [{ text: 'Pick 1K', options: 1 }, ['fal.ai'], 'Pick 1K, or switch to fal.ai.'],
     [{ text: 'Pick 1K or 2K', options: 2 }, ['fal.ai'], 'Pick 1K or 2K, or switch to fal.ai.'],
     [{ text: 'Turn “Raw” off', options: 1 }, ['fal.ai', 'Replicate'], 'Turn “Raw” off, or switch to fal.ai or Replicate.'],
   ] as const)('%o with %o', (fix, others, expected) => {

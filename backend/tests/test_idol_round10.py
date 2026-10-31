@@ -224,18 +224,8 @@ def test_a_billing_refusal_is_worded_where_it_is_raised(monkeypatch, headers, ex
     assert "(`nebula propose`)" not in caught.value.detail
 
 
-@pytest.mark.parametrize("surface,expect,never", [
-    ({}, "Add it to the canvas instead (edit_canvas, a speridlabs-idol node), then propose the run: "
-         "propose_change (run: <node id>).", "`nebula"),
-    ({"X-Nebula-Surface": "cli"}, "Add it to the canvas instead (`nebula create speridlabs-idol`), then propose the run: "
-                                  "`nebula propose --note \"<why>\" --run <node id>`.", "propose_change"),
-], ids=["mcp", "cli"])
-def test_quick_points_each_surface_at_its_own_commands(gated, monkeypatch, surface, expect, never):  # noqa: F811
-    gated.keys(SIGNED_IN)
-    response, called = _quick(gated, monkeypatch, {**CLAUDE, **surface})
-    assert response.status_code == 403, response.text
-    detail = response.json()["detail"]
-    assert expect in detail and never not in detail and called == []
+# `nebula quick`'s words for Idol with the token set come at the call now:
+# tests/test_idol_round19_gate.py, test_an_agents_quick_run_stops_and_points_at_a_canvas_node.
 
 
 def test_the_spend_hint_is_worded_per_surface():

@@ -47,6 +47,15 @@ vi.mock('../src/lib/api', () => ({
   antigravityAction: vi.fn(),
 }));
 
+// The line at the top of Settings (settings.restored, GM, PR #203 r38 item 5)
+// has its own module and tests (tests/lib/idolRound19Review18.test.tsx):
+// none here, so the fetch counts below stay the panel's own.
+vi.mock('../src/lib/settingsNotice', async (original) => ({
+  ...await original<typeof import('../src/lib/settingsNotice')>(),
+  getSettingsNotice: vi.fn().mockResolvedValue(null),
+  dismissSettingsNotice: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/kreaConnection')>(),
   getKreaConnection: (...args: unknown[]) => getKreaConnectionMock(...args),

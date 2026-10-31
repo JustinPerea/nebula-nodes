@@ -1691,7 +1691,7 @@ def route_unavailable_message(
         return own
     if spec is not None:
         return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
-                f"Add it in Settings > Providers or choose another provider.{also}")
+                f"Add it in Settings > Providers, or choose another provider.{also}")
     return f"{name} needs {needed} in Settings > Providers."
 
 

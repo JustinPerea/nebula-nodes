@@ -57,6 +57,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 
+from execution import run_origin
 from execution.person_line import as_person_line, with_api_status, with_call_facts, with_person_line, with_provider_line
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -358,6 +359,37 @@ def space_starting_error(*, stage: str) -> IdolSpaceError:
 def timeout_error(*, what: str) -> IdolSpaceError:
     return with_person_line(IdolSpaceError(f"The Idol Space didn't answer in time ({what})"),
                             "Idol took too long to answer. Try again in a few minutes.")
+
+
+class IdolProposalNeeded(run_origin.ProposalNeeded):
+    """An agent's run reached an Idol node that would call the Space with the
+    person's Hugging Face token set: stopped before any request (Justin
+    decided, 2026-10-31). Worded for agents (the text) and for the person
+    (its person line)."""
+
+
+# DRAFT (round 19): both lines go to GM through the coordinator before they
+# are final; the tests pin them as written here.
+AGENT_STOP_PERSON = ("An agent’s run stopped here before calling Hugging Face, because your Hugging Face token is "
+                     "set and this run could bill your account. Run it yourself to go ahead.")
+
+
+def agent_call_stop(node: GraphNode) -> IdolProposalNeeded:
+    """The stop at the call (run_idol): the agent is told to propose the run."""
+    from services import agent_spend
+
+    key, account = agent_spend.MAY_BILL_WHO["Hugging Face"]
+    origin = run_origin.current()
+    surface = origin.surface if origin is not None else "mcp"
+    if origin is not None and origin.ask:
+        # A quick run: no canvas node to name, and nothing after it.
+        return with_person_line(IdolProposalNeeded(
+            f"Idol stopped before calling Hugging Face: {key}, so this call can bill {account}. "
+            f"Nothing was sent. An agent can't make this call. {origin.ask}"), AGENT_STOP_PERSON)
+    return with_person_line(IdolProposalNeeded(
+        f"{node.id} (Idol) stopped before calling Hugging Face: {key}, so this call can bill {account}. "
+        "Nothing was sent, and the nodes after it didn't run. An agent can't make this call. "
+        f"{agent_spend.propose_hint([node.id], surface)}"), AGENT_STOP_PERSON)
 
 
 def token_refused(*, status: int = 401) -> IdolSpaceError:
@@ -838,15 +870,20 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
         image.value if image is not None else None)
     if not image_value:
         raise as_person_line(ValueError("Idol needs an image. Connect one, then run it again."))
-    # A run on a PRO, Team or Enterprise token can be billed by Hugging Face
-    # past the daily quota ($1 per 10 GPU minutes,
-    # https://huggingface.co/docs/hub/spaces-zerogpu). So with the token set
-    # an agent can't start it: the spend gate sends it to a proposal
-    # (agent_spend.may_bill_nodes, the route's mayBillWithKey), and every
-    # agent surface says so (main.hf_space_billing_note). The person's own
-    # Run and an accepted proposal run here as usual.
     # Settings and the settings check trim too; this is the backstop.
     token = clean_token(api_keys.get(TOKEN_KEY))
+    # A run on a PRO, Team or Enterprise token can be billed by Hugging Face
+    # past the daily quota ($1 per 10 GPU minutes,
+    # https://huggingface.co/docs/hub/spaces-zerogpu). Justin decided
+    # (2026-10-31) to gate only this call: an agent's run goes ahead, and an
+    # Idol node that must call the Space with the token set stops here,
+    # before anything is sent, pointing the agent at a proposal. This is the
+    # one function that calls the Space, so no path reaches it without the
+    # check. The person's own Run and the run an Accept approved (the
+    # person's tab starts it) go on; a run whose origin wasn't recorded
+    # stops (execution/run_origin.py). With no token, nothing changes.
+    if token and not run_origin.by_person():
+        raise agent_call_stop(node)
     params = dict(node.params)
     mode = str(params.get("mode") or MODES[0])
     gaussians_label = str(params.get("gaussians") or "262,144")

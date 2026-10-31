@@ -75,11 +75,11 @@
    "kind": "route_key",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai.",
-   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai.",
-   "line": "“FLUX.2” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai.",
-   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, then run the node again.",
-   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, then run the nodes again."
+   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai.",
+   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai.",
+   "line": "“FLUX.2” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai.",
+   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai. Then run the node again.",
+   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_key",
@@ -95,11 +95,11 @@
    "kind": "route_key",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Black Forest Labs.",
-   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Black Forest Labs.",
-   "line": "“FLUX.2” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Black Forest Labs.",
-   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Black Forest Labs, then run the node again.",
-   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Black Forest Labs, then run the nodes again."
+   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Black Forest Labs.",
+   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Black Forest Labs.",
+   "line": "“FLUX.2” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Black Forest Labs.",
+   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "unknown_provider",
@@ -125,41 +125,41 @@
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Replicate.",
-   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Replicate.",
-   "line": "“FLUX 3 Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Replicate.",
-   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Replicate, then run the node again.",
-   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Replicate, then run the nodes again."
+   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Replicate.",
+   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Replicate.",
+   "line": "“FLUX 3 Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Replicate.",
+   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Replicate. Then run the node again.",
+   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to OpenRouter.",
-   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to OpenRouter.",
-   "line": "“FLUX 3 Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to OpenRouter.",
-   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to OpenRouter, then run the node again.",
-   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to OpenRouter, then run the nodes again."
+   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to OpenRouter.",
+   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to OpenRouter.",
+   "line": "“FLUX 3 Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to OpenRouter.",
+   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to OpenRouter. Then run the node again.",
+   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to OpenRouter. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Replicate.",
-   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Replicate.",
-   "line": "“FLUX 3 Image” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Replicate.",
-   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Replicate, then run the node again.",
-   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Replicate, then run the nodes again."
+   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Replicate.",
+   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Replicate.",
+   "line": "“FLUX 3 Image” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Replicate.",
+   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Replicate. Then run the node again.",
+   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to OpenRouter.",
-   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to OpenRouter.",
-   "line": "“FLUX 3 Image” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to OpenRouter.",
-   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to OpenRouter, then run the node again.",
-   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to OpenRouter, then run the nodes again."
+   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to OpenRouter.",
+   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to OpenRouter.",
+   "line": "“FLUX 3 Image” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to OpenRouter.",
+   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to OpenRouter. Then run the node again.",
+   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to OpenRouter. Then run the nodes again."
   },
   {
    "kind": "route_key",
@@ -175,31 +175,31 @@
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs.",
-   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs.",
-   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs, then run the node again.",
-   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs, then run the nodes again."
+   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs.",
+   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs.",
+   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.",
-   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.",
-   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.",
-   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai, then run the node again.",
-   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai, then run the nodes again."
+   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.",
+   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.",
+   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.",
+   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai. Then run the node again.",
+   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to OpenRouter.",
-   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to OpenRouter.",
-   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to OpenRouter.",
-   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to OpenRouter, then run the node again.",
-   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to OpenRouter, then run the nodes again."
+   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to OpenRouter.",
+   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to OpenRouter.",
+   "line": "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to OpenRouter.",
+   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to OpenRouter. Then run the node again.",
+   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to OpenRouter. Then run the nodes again."
   },
   {
    "kind": "route_key",
@@ -215,31 +215,31 @@
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Black Forest Labs.",
-   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Black Forest Labs.",
-   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Black Forest Labs, then run the node again.",
-   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Black Forest Labs, then run the nodes again."
+   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Black Forest Labs.",
+   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Black Forest Labs.",
+   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to fal.ai.",
-   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to fal.ai.",
-   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to fal.ai.",
-   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to fal.ai, then run the node again.",
-   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to fal.ai, then run the nodes again."
+   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to fal.ai.",
+   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to fal.ai.",
+   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to fal.ai.",
+   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to fal.ai. Then run the node again.",
+   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Replicate.",
-   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Replicate.",
-   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Replicate.",
-   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Replicate, then run the node again.",
-   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Replicate, then run the nodes again."
+   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Replicate.",
+   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Replicate.",
+   "line": "“FLUX 3 Image” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Replicate.",
+   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Replicate. Then run the node again.",
+   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "key",
@@ -265,41 +265,41 @@
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Krea.",
-   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Krea.",
-   "line": "“FLUX 3 Video” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Krea.",
-   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Krea, then run the node again.",
-   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to Krea, then run the nodes again."
+   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Krea.",
+   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Krea.",
+   "line": "“FLUX 3 Video” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Krea.",
+   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Krea. Then run the node again.",
+   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to Krea. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Krea.",
-   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Krea.",
-   "line": "“FLUX 3 Video” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Krea.",
-   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Krea, then run the node again.",
-   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Krea, then run the nodes again."
+   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Krea.",
+   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Krea.",
+   "line": "“FLUX 3 Video” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Krea.",
+   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Krea. Then run the node again.",
+   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Krea. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Krea.",
-   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Krea.",
-   "line": "“FLUX 3 Video” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Krea.",
-   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Krea, then run the node again.",
-   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Krea, then run the nodes again."
+   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Krea.",
+   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Krea.",
+   "line": "“FLUX 3 Video” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Krea.",
+   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Krea. Then run the node again.",
+   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Krea. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Krea.",
-   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Krea.",
-   "line": "“FLUX 3 Video” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Krea.",
-   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Krea, then run the node again.",
-   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings or switch to Krea, then run the nodes again."
+   "one": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Krea.",
+   "many": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Krea.",
+   "line": "“FLUX 3 Video” is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Krea.",
+   "logOne": "is set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Krea. Then run the node again.",
+   "logMany": "are set to OpenRouter, which needs your OpenRouter API key. Add it in Settings, or switch to Krea. Then run the nodes again."
   },
   {
    "kind": "route_key",
@@ -315,41 +315,41 @@
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to Black Forest Labs.",
-   "many": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings or switch to Black Forest Labs.",
-   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to Black Forest Labs, then run the node again.",
-   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to Black Forest Labs, then run the nodes again."
+   "one": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Black Forest Labs.",
+   "many": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Black Forest Labs.",
+   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to fal.ai.",
-   "many": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to fal.ai.",
-   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings or switch to fal.ai.",
-   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to fal.ai, then run the node again.",
-   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to fal.ai, then run the nodes again."
+   "one": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to fal.ai.",
+   "many": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to fal.ai.",
+   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings, or switch to fal.ai.",
+   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to fal.ai. Then run the node again.",
+   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to Replicate.",
-   "many": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to Replicate.",
-   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings or switch to Replicate.",
-   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to Replicate, then run the node again.",
-   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to Replicate, then run the nodes again."
+   "one": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Replicate.",
+   "many": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to Replicate.",
+   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Replicate.",
+   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to Replicate. Then run the node again.",
+   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to OpenRouter.",
-   "many": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to OpenRouter.",
-   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings or switch to OpenRouter.",
-   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings or switch to OpenRouter, then run the node again.",
-   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings or switch to OpenRouter, then run the nodes again."
+   "one": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to OpenRouter.",
+   "many": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to OpenRouter.",
+   "line": "“FLUX 3 Video” is set to Krea, which needs your Krea API key. Add it in Settings, or switch to OpenRouter.",
+   "logOne": "is set to Krea, which needs your Krea API key. Add it in Settings, or switch to OpenRouter. Then run the node again.",
+   "logMany": "are set to Krea, which needs your Krea API key. Add it in Settings, or switch to OpenRouter. Then run the nodes again."
   },
   {
    "kind": "key",
@@ -775,11 +775,11 @@
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai.",
-   "line": "“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai.",
+   "line": "“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety tolerance” set to 5. Change that setting, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -805,21 +805,21 @@
    "kind": "route_block",
    "node": "routes-krea",
    "name": "Fixture Krea",
-   "one": "can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai.",
-   "many": "can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai.",
-   "line": "“Fixture Krea” can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai.",
-   "logOne": "can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Krea with “Resolution” set to 4K. Change that setting or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai.",
+   "many": "can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai.",
+   "line": "“Fixture Krea” can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai.",
+   "logOne": "can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Krea with “Resolution” set to 4K. Change that setting, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "routes-krea",
    "name": "Fixture Krea",
-   "one": "can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai.",
-   "many": "can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai.",
-   "line": "“Fixture Krea” can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai.",
-   "logOne": "can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Krea with 2K without a style image. Change that setting or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai.",
+   "many": "can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai.",
+   "line": "“Fixture Krea” can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai.",
+   "logOne": "can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Krea with 2K without a style image. Change that setting, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -865,11 +865,11 @@
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
-   "many": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate.",
-   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate. Then run the node again.",
-   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 x 768, 1K, 2K or 4K, or switch to Replicate. Then run the nodes again."
+   "one": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate.",
+   "many": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate.",
+   "logOne": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Resolution” set to 1.5K. Pick 768 × 768, 1K, 2K or 4K, or switch to Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -895,31 +895,31 @@
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai.",
-   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai.",
-   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai.",
-   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
+   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
+   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
+   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs.",
-   "many": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs.",
-   "line": "“FLUX 3 Video” can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs.",
-   "logOne": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs.",
+   "many": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs.",
+   "line": "“FLUX 3 Video” can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs.",
+   "logOne": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with keyframes connected. Disconnect the extra inputs, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai.",
-   "line": "“FLUX 3 Video” can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai.",
+   "line": "“FLUX 3 Video” can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with a video continuation longer than 15 seconds. Change that setting, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -975,21 +975,21 @@
    "kind": "route_block",
    "node": "krea-3",
    "name": "Krea 3",
-   "one": "can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea.",
-   "many": "can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea.",
-   "line": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea.",
-   "logOne": "can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea, then run the node again.",
-   "logMany": "can’t run on fal.ai with high reasoning without a reference image. Change that setting or switch to Krea, then run the nodes again."
+   "one": "can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
+   "many": "can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
+   "line": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
+   "logOne": "can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea. Then run the node again.",
+   "logMany": "can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "krea-3",
    "name": "Krea 3",
-   "one": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai.",
-   "many": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai.",
-   "line": "“Krea 3” can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai.",
-   "logOne": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai.",
+   "many": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai.",
+   "line": "“Krea 3” can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai.",
+   "logOne": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Krea with a regional edit without a reference image. Turn “Regional edit” off, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1005,21 +1005,21 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs.",
-   "many": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs.",
-   "line": "“FLUX.2” can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs.",
-   "logOne": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs.",
+   "many": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs.",
+   "line": "“FLUX.2” can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs.",
+   "logOne": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1045,11 +1045,11 @@
    "kind": "route_block",
    "node": "routes-hide",
    "name": "Fixture Hide",
-   "one": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs.",
-   "many": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs.",
-   "line": "“Fixture Hide” can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs.",
-   "logOne": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low or switch to Black Forest Labs, then run the nodes again."
+   "one": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs.",
+   "many": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs.",
+   "line": "“Fixture Hide” can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs.",
+   "logOne": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Quality” set to High and “Mode” set to Fast. Set “Quality” back to Low, or switch to Black Forest Labs. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1075,11 +1075,11 @@
    "kind": "route_block",
    "node": "routes-hide",
    "name": "Fixture Hide",
-   "one": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai.",
-   "line": "“Fixture Hide” can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai.",
+   "line": "“Fixture Hide” can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Sharpen” on. Turn “Sharpen” off, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1105,11 +1105,11 @@
    "kind": "route_block",
    "node": "krea-3",
    "name": "Krea 3",
-   "one": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai.",
-   "many": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai.",
-   "line": "“Krea 3” can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai.",
-   "logOne": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai, then run the node again.",
-   "logMany": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry or switch to fal.ai, then run the nodes again."
+   "one": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai.",
+   "many": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai.",
+   "line": "“Krea 3” can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai.",
+   "logOne": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1185,11 +1185,11 @@
    "kind": "route_key",
    "node": "routes-keyless",
    "name": "Fixture Keyless",
-   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs.",
-   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs.",
-   "line": "“Fixture Keyless” is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs.",
-   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs, then run the node again.",
-   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings or switch to Speridlabs, then run the nodes again."
+   "one": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs.",
+   "many": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs.",
+   "line": "“Fixture Keyless” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs.",
+   "logOne": "is set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs. Then run the node again.",
+   "logMany": "are set to fal.ai, which needs your fal.ai API key. Add it in Settings, or switch to Speridlabs. Then run the nodes again."
   },
   {
    "kind": "not_set_up",

@@ -12,6 +12,7 @@ import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import { SettingsTabs } from './settings/SettingsTabs';
 import { SettingsNoticeBar } from './settings/SettingsNoticeBar';
+import { SettingsTopNotice } from './settings/SettingsTopNotice';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import '../../styles/panels.css';
 import '../../styles/settings.css';
@@ -179,6 +180,7 @@ export function Settings() {
         </button>
       </div>
       <SettingsTabs tab={tab} onChange={setTab} />
+      <SettingsTopNotice visible={visible} />
       <ScrollFade className="panel__body settings__body">
         {loadState === 'error' && !saved ? (
           <div className="settings__load-error" role="alert">

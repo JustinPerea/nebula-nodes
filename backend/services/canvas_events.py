@@ -50,8 +50,9 @@ MAX_SUMMARY_CHARS = 200
 # A summary Nebula words itself around a path the person must find, cut
 # nowhere: settings.restored names where the replaced settings file is kept
 # (GM, PR #203 r36 item B6b), and the desktop app's state folder alone runs
-# past 200 characters with the line.
-SUMMARY_CHARS_BY_KIND = {"settings.restored": 1200}
+# past 200 characters with the line. settings.not_restored names the path
+# that refuses the same way (review 18 of PR #203, settings LOW-2).
+SUMMARY_CHARS_BY_KIND = {"settings.restored": 1200, "settings.not_restored": 1200}
 MAX_LISTED_IDS = 50
 MAX_TRACKED_RUNS = 256
 
@@ -154,6 +155,10 @@ EVENT_KINDS = frozenset({
     # services/settings.restore_settings_from_backup): data {file}, the
     # file's shown path. Never a key or a setting.
     "settings.restored",
+    # A verified copy Nebula couldn't put back at start (the file or its
+    # folder refuses; services/settings.NotRestored): data {file}. The copy
+    # is left for the next start.
+    "settings.not_restored",
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",

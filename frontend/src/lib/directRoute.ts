@@ -1135,8 +1135,9 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
  * action's first clause (node_route._fix_person; routeAction names who else
  * can take the run). */
 /** What the person can change where the node is, as a route line's first
- * action, and how many options it lists (person_line.Fix): a fix that lists
- * two or more holds its own "or" (GM, PR #203 r32 item 1). */
+ * action, and how many options it lists (person_line.Fix, GM, PR #203 r32
+ * item 1). Since r37 every second action takes the comma (routeAction),
+ * however many options the fix lists. */
 export interface FixClause {
   text: string;
   options: number;
@@ -1164,16 +1165,15 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
  * item 3; person_line.route_action is the same): `fix`, then who can take
  * the run, named: "… or switch to fal.ai" for providers with a key set,
  * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
- * whose key isn't added. Two actions take a comma between them when either
- * holds an "or" of its own: the fix lists options (r32 item 1: "Pick A, B or
- * C, or switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K,
- * or switch to fal.ai or Replicate."). Never a separate "… can take it."
- * sentence. The card has no run-again ending; the Agent Log's comes from
- * the backend. */
+ * whose key isn't added. Two actions always take a comma between them (GM,
+ * PR #203 r37 item 1: "Pick 1K, or switch to fal.ai."), as person_line.
+ * route_action builds them; route_cases.json pins the two alike. Never a
+ * separate "… can take it." sentence. The card has no run-again ending; the
+ * Agent Log's comes from the backend (". Then run the node again." after
+ * the comma clause). */
 export function routeAction(fix: FixClause | string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
-  const { text, options } = typeof fix === 'string' ? { text: fix, options: 1 } : fix;
-  const comma = options > 1 || / or /.test(` ${text} `) || others.length > 1;
-  if (others.length) return `${text}${comma ? ',' : ''} or switch to ${orList([...others])}.`;
+  const text = typeof fix === 'string' ? fix : fix.text;
+  if (others.length) return `${text}, or switch to ${orList([...others])}.`;
   if (needsKey.length) return `${text}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
   return `${text}.`;
 }

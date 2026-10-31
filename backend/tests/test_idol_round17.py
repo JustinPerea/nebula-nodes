@@ -33,20 +33,20 @@ def _pick(options: list[str]) -> Fix:
 # -- item 1: the two-action comma ------------------------------------------------
 
 @pytest.mark.parametrize("options, with_switch, alone", [
-    (["1K"], "Pick 1K or switch to fal.ai", "Pick 1K"),
+    (["1K"], "Pick 1K, or switch to fal.ai", "Pick 1K"),  # GM r37 item 1: the comma always
     (["1K", "2K"], "Pick 1K or 2K, or switch to fal.ai", "Pick 1K or 2K"),
     (["1K", "2K", "4K"], "Pick 1K, 2K or 4K, or switch to fal.ai", "Pick 1K, 2K or 4K"),
 ], ids=["one", "two", "three"])
 def test_two_actions_take_a_comma_when_the_fix_lists_options(options, with_switch, alone):
-    assert route_action(_pick(options), ["fal.ai"], [], None) == (with_switch, len(options) > 1)
+    assert route_action(_pick(options), ["fal.ai"], [], None) == (with_switch, True)
     assert route_action(_pick(options), [], [], None) == (alone, False)
 
 
 def test_the_other_action_shapes_keep_their_words():
     assert route_action(_pick(["1K", "2K", "4K"]), ["fal.ai", "Replicate"], [], None) == (
         "Pick 1K, 2K or 4K, or switch to fal.ai or Replicate", True)
-    assert route_action(person_line.Fix("Turn “Raw” off"), ["fal.ai"], [], None) == ("Turn “Raw” off or switch to fal.ai", False)
-    assert route_action("Add it in Settings", ["fal.ai"], [], None) == ("Add it in Settings or switch to fal.ai", False)
+    assert route_action(person_line.Fix("Turn “Raw” off"), ["fal.ai"], [], None) == ("Turn “Raw” off, or switch to fal.ai", True)
+    assert route_action("Add it in Settings", ["fal.ai"], [], None) == ("Add it in Settings, or switch to fal.ai", True)
     assert route_action(_pick(["1K", "2K"]), [], ["fal.ai"], "fal.ai API key") == (
         "Pick 1K or 2K, or add your fal.ai API key in Settings and switch to fal.ai", True)
 
@@ -73,7 +73,7 @@ def test_a_real_stop_with_four_resolutions_lists_them_then_the_comma():
 def test_the_card_quotes_the_node_name_as_the_log_does():
     flux3 = NodeRegistry().get_all()["flux-3-image"]
     assert node_route.route_unavailable_line(flux3, {"_provider": "replicate"}, {"FAL_KEY": "set"}) == (
-        "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.")
+        "“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.")
     assert node_route.card_subject({"displayName": "FLUX 3 Image"}) == "“FLUX 3 Image”"
     assert node_route.card_subject({"displayName": "  "}) == "This node"
 

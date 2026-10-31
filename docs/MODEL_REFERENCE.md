@@ -146,7 +146,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 | Grounding (web + image search) | `grounding` | bool | true | — | always |
 
@@ -155,7 +155,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 | Prompt expansion | `enable_prompt_expansion` | bool | false | — | always |
 
@@ -164,7 +164,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 | Grounding (web + image search) | `grounding` | bool | true | — | always |
 
@@ -173,7 +173,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 
 ---
@@ -203,7 +203,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 | Seed | `seed` | int | — | 0–4294967295 | always |
 | Steps | `steps` | int | 16 | 1–16 | always |
@@ -214,7 +214,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
-| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 × 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
 | Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 
 ---
@@ -313,7 +313,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Size | enum | landscape_4_3 | Square HD (1024×1024), Square (512×512), Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
+| Image Size | enum | landscape_4_3 | Square HD (1024 × 1024), Square (512 × 512), Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
 | Steps | int | 4 | 1–4 |
 | Guidance Scale | float | 3.5 | 1–5 |
 | Count | int | 1 | 1–4 |
@@ -339,7 +339,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | 1024x1024 | 1024x1024, 1536x1024, 1024x1536 |
+| Size | enum | 1024x1024 | 1024 × 1024, 1536 × 1024, 1024 × 1536 |
 | Quality | enum | high | Low, Medium, High |
 | Background | enum | auto | Auto, Transparent, Opaque |
 | Count | int | 1 | 1–4 |
@@ -362,7 +362,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536 |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
 | Quality | enum | high | Low, Medium, High |
 | Input Fidelity | enum | high | Low, High |
 | Background | enum | auto | Auto, Transparent, Opaque |
@@ -388,7 +388,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-sunburst | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
 | Count | int | 1 | 1–10 |
-| Size | enum | auto | Auto, 1024×1024, 1536×1024, 1024×1536 |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
@@ -411,7 +411,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-flare | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
-| Size | enum | auto | Auto, 1024×1024, 1536×1024, 1024×1536 |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
@@ -434,7 +434,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-flare | Flare · fast, Sunburst · most precise |
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 2560x1440, 3840x2160 (4K landscape, experimental), … |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 (4K landscape, experimental), … |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Background | enum | auto | Auto, Opaque, Transparent (PNG/WebP) |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -459,7 +459,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-flare | Flare · fast, Sunburst · most precise |
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 2560x1440, 3840x2160 (4K landscape, experimental), … |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 (4K landscape, experimental), … |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Background | enum | auto | Auto, Opaque, Transparent (PNG/WebP) |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -483,7 +483,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 3840x2160 (4K landscape), 2160x3840 (4K portrait) |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 (4K landscape), 2160 × 3840 (4K portrait) |
 | Quality | enum | auto | Auto, Low, Medium, High |
 | Format | enum | png | PNG, JPEG, WebP |
 | Compression | int | 90 | 0–100 |
@@ -506,7 +506,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, Square HD (1024x1024), Square (512x512), Portrait 4:3 (768x1024), Portrait 16:9 (576x1024), Landscape 4:3 (1024x768), Landscape 16:9 (1024x576) |
+| Size | enum | auto | Auto, Square HD (1024 × 1024), Square (512 × 512), Portrait 4:3 (768 × 1024), Portrait 16:9 (576 × 1024), Landscape 4:3 (1024 × 768), Landscape 16:9 (1024 × 576) |
 | Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -529,7 +529,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | landscape_4_3 | Square HD (1024x1024), Square (512x512), Portrait 4:3 (768x1024), Portrait 16:9 (576x1024), Landscape 4:3 (1024x768), Landscape 16:9 (1024x576) |
+| Size | enum | landscape_4_3 | Square HD (1024 × 1024), Square (512 × 512), Portrait 4:3 (768 × 1024), Portrait 16:9 (576 × 1024), Landscape 4:3 (1024 × 768), Landscape 16:9 (1024 × 576) |
 | Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -552,7 +552,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536, 2048x2048, 2048x1152, 3840x2160 (4K landscape), 2160x3840 (4K portrait) |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 (4K landscape), 2160 × 3840 (4K portrait) |
 | Quality | enum | auto | Auto, Low, Medium, High |
 | Format | enum | png | PNG, JPEG, WebP |
 | Compression | int | 90 | 0–100 |
@@ -770,7 +770,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Image Weight | int | — | 1–100 |
-| Resolution (2K) | enum | — | Auto, 2048x2048, 1440x2880, 2880x1440, 1664x2496, 2496x1664, 1792x2240, 2240x1792, … |
+| Resolution (2K) | enum | — | Auto, 2048 × 2048, 1440 × 2880, 2880 × 1440, 1664 × 2496, 2496 × 1664, 1792 × 2240, 2240 × 1792, … |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
 | Copyright Detection | bool | false | — |
 
@@ -887,7 +887,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Resolution (2K) | enum | 2048x2048 | 2048x2048, 1440x2880, 2880x1440, 1664x2496, 2496x1664, 1792x2240, 2240x1792, 1440x2560, … |
+| Resolution (2K) | enum | 2048x2048 | 2048 × 2048, 1440 × 2880, 2880 × 1440, 1664 × 2496, 2496 × 1664, 1792 × 2240, 2240 × 1792, 1440 × 2560, … |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
 | Copyright Detection | bool | false | — |
 
@@ -2176,7 +2176,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Nano Banana Pro (Gemini 3), GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro, Seedream 5.0 Lite |
-| Ratio | enum | 1360:768 | 1360x768 (16:9), 720x1280 (9:16), 1024x1024 (1:1), 1080x1080, 1168x880, 1440x1080, 1080x1440, 1920x1080, … |
+| Ratio | enum | 1360:768 | 1360 × 768 (16:9), 720 × 1280 (9:16), 1024 × 1024 (1:1), 1080 × 1080, 1168 × 880, 1440 × 1080, 1080 × 1440, 1920 × 1080, … |
 | Seed | int | — | 0–4294967295 |
 | Web grounding | bool | false | — |
 
@@ -2200,7 +2200,7 @@ Nodes: 309 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | 4.5 | Seedream 4.5, Seedream 5.0 Lite |
-| Size | enum | square_hd | Square HD (2048x2048), Square (512x512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
+| Size | enum | square_hd | Square HD (2048 × 2048), Square (512 × 512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
 | Generations | int | 1 | 1–6 |
 | Images per Generation | int | 1 | 1–6 |
 
@@ -3945,7 +3945,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Body Control | bool | false | — |
 | Expression Intensity | int | 3 | 1–5 |
-| Ratio | enum | 1280:720 | 1280x720 (16:9), 720x1280 (9:16), 960x960 (1:1), 1104x832 (4:3), 832x1104 (3:4), 1584x672 (21:9) |
+| Ratio | enum | 1280:720 | 1280 × 720 (16:9), 720 × 1280 (9:16), 960 × 960 (1:1), 1104 × 832 (4:3), 832 × 1104 (3:4), 1584 × 672 (21:9) |
 | Seed | int | — | 0–4294967295 |
 
 ---
@@ -3987,7 +3987,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | gen4.5 | Gen-4.5, Seedance 2.0, Seedance 2.0 Fast, HappyHorse 1.0, Gen-4 Turbo, Veo 3.1, Veo 3.1 Fast, Seedance 2.0 Mini, … |
 | Duration | enum | 5 | 2 s, 3 s, 4 s, 5 s, 6 s, 7 s, 8 s, 9 s, … |
-| Ratio | enum | 1280:720 | 1280x720 (16:9), 720x1280 (9:16), 1104x832 (4:3), 832x1104 (3:4), 960x960 (1:1), 1584x672 (21:9), 1080x1920 (9:16), 1920x1080 (16:9), … |
+| Ratio | enum | 1280:720 | 1280 × 720 (16:9), 720 × 1280 (9:16), 1104 × 832 (4:3), 832 × 1104 (3:4), 960 × 960 (1:1), 1584 × 672 (21:9), 1080 × 1920 (9:16), 1920 × 1080 (16:9), … |
 | Seed | int | — | 0–4294967295 |
 | Resolution (with image) | enum | 720p | 720p, 1080p |
 | Audio | bool | true | — |
@@ -5871,7 +5871,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Target Resolution | enum | 1024x1024 | 1024x1024, 1280x800, 800x1280, 1344x768, 768x1344, 1152x896, 896x1152, 1216x832, … |
+| Target Resolution | enum | 1024x1024 | 1024 × 1024, 1280 × 800, 800 × 1280, 1344 × 768, 768 × 1344, 1152 × 896, 896 × 1152, 1216 × 832, … |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
 
 ---

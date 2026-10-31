@@ -258,7 +258,7 @@ ROUTE_KEY = "“FLUX.2” is set to Black Forest Labs, which needs your Black Fo
 @pytest.mark.parametrize("keys,line", [
     ({}, f"{ROUTE_KEY}."),
     ({"REPLICATE_API_TOKEN": "set"}, f"{ROUTE_KEY}."),
-    ({"FAL_KEY": "set"}, f"{ROUTE_KEY} or switch to fal.ai."),
+    ({"FAL_KEY": "set"}, f"{ROUTE_KEY}, or switch to fal.ai."),
 ], ids=["nothing-set", "an-unrelated-key", "fal-key-set"])
 def test_the_missing_key_line_names_another_provider_only_when_its_key_is_set(keys, line):
     from services import node_readiness, node_route
@@ -269,7 +269,9 @@ def test_the_missing_key_line_names_another_provider_only_when_its_key_is_set(ke
     assert node_route.route_unavailable_line(flux2, {"_provider": "bfl"}, keys) == line
     reason = node_readiness.instance_missing_reason(flux2, {"_provider": "bfl"}, set(keys), False, definitions, {})
     assert reason.line("“FLUX.2”") == line
-    assert reason.again[0] == line.removeprefix("“FLUX.2” ").removesuffix(".") + ", then run the node again."
+    # GM r37 item 1: after the comma clause the ending is its own sentence.
+    end = ". Then run the node again." if ", or switch" in line else ", then run the node again."
+    assert reason.again[0] == line.removeprefix("“FLUX.2” ").removesuffix(".") + end
 
 
 # -- review 16, N1: the size and retired why-clauses, pinned with a fixture route --------

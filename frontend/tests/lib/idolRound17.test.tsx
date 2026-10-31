@@ -52,7 +52,7 @@ describe('the card quotes the node’s name (GM r32)', () => {
     const flux3 = NODE_DEFINITIONS['flux-3-image'];
     const stop = routeUnavailable(flux3, { _provider: 'replicate' }, { FAL_KEY: KEY });
     expect(stop?.message).toBe('“FLUX 3 Image” is set to Replicate, which needs your Replicate token. '
-      + 'Add it in Settings or switch to fal.ai.');
+      + 'Add it in Settings, or switch to fal.ai.');
   });
 
   it('every route-table node’s stop line opens with its quoted name or a route’s own line', () => {
@@ -73,7 +73,7 @@ describe('two actions take a comma when the fix lists options (GM r32 item 1)', 
     : `${options.slice(0, -1).join(', ')} or ${options.at(-1)}`}`, options: options.length });
 
   it.each([
-    [['1K'], 'Pick 1K or switch to fal.ai.', 'Pick 1K.'],
+    [['1K'], 'Pick 1K, or switch to fal.ai.', 'Pick 1K.'], // GM r37 item 1: the comma always
     [['1K', '2K'], 'Pick 1K or 2K, or switch to fal.ai.', 'Pick 1K or 2K.'],
     [['1K', '2K', '4K'], 'Pick 1K, 2K or 4K, or switch to fal.ai.', 'Pick 1K, 2K or 4K.'],
   ])('%j', (options, withSwitch, alone) => {
@@ -84,8 +84,8 @@ describe('two actions take a comma when the fix lists options (GM r32 item 1)', 
   it('two providers to switch to, and a fix with no options', () => {
     expect(routeAction({ text: 'Pick 1K, 2K or 4K', options: 3 }, ['fal.ai', 'Replicate'], [], null))
       .toBe('Pick 1K, 2K or 4K, or switch to fal.ai or Replicate.');
-    expect(routeAction('Turn “Raw” off', ['fal.ai'], [], null)).toBe('Turn “Raw” off or switch to fal.ai.');
-    expect(routeAction('Add it in Settings', ['fal.ai'], [], null)).toBe('Add it in Settings or switch to fal.ai.');
+    expect(routeAction('Turn “Raw” off', ['fal.ai'], [], null)).toBe('Turn “Raw” off, or switch to fal.ai.');
+    expect(routeAction('Add it in Settings', ['fal.ai'], [], null)).toBe('Add it in Settings, or switch to fal.ai.');
   });
 
   it('a provider whose key isn’t added keeps its comma whatever the fix', () => {
@@ -203,7 +203,7 @@ describe('every switcher button’s name starts with its visible text as one run
 });
 
 describe('one heading over a refused run: "Nebula couldn’t start the run." (GM r32)', () => {
-  const line = '“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to fal.ai.';
+  const line = '“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.';
 
   it('the pre-call check’s reading says it refused the run', () => {
     const { byNode, global } = validationReadings([
@@ -245,7 +245,7 @@ describe('a route’s missing key names another provider only when its key is se
   it.each([
     ['no key set anywhere', {}, `${line}.`],
     ['a key no other route takes', { REPLICATE_API_TOKEN: KEY }, `${line}.`],
-    ['fal.ai’s key set', { FAL_KEY: KEY }, `${line} or switch to fal.ai.`],
+    ['fal.ai’s key set', { FAL_KEY: KEY }, `${line}, or switch to fal.ai.`],
   ])('%s', (_case, keys, expected) => {
     expect(routeUnavailable(flux2, { _provider: 'bfl' }, keys)?.message).toBe(expected);
   });

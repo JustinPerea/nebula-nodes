@@ -303,8 +303,9 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // only matters if that changes. See desktop_renderer_cors in backend/main.py.)
 const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
 // Settings answers saved keys' endings only to the person (Justin, Q55 a);
-// everyone else learns which keys are set.
-const PERSON_READ_PATHS = ['/api/settings'];
+// everyone else learns which keys are set. The line at the top of Settings
+// (settings.restored's, GM, PR #203 r38 item 5) is the person's only.
+const PERSON_READ_PATHS = ['/api/settings', '/api/settings/notice'];
 
 function wantsPersonHeader(path: string, method: string): boolean {
   if (getInjectedApiBaseUrl()) return true;

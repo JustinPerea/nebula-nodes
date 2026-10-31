@@ -1,18 +1,18 @@
 """Agents propose Idol runs when a Hugging Face token is set (a product
-decision, PR #203 round 7).
+decision, PR #203 round 7; where the check sits, Justin decided 2026-10-31).
 
 With HF_TOKEN set, an Idol run uses the person's own ZeroGPU allowance, and
 past it Hugging Face bills a PRO, Team or Enterprise account's prepaid
 credits. Nebula prices Idol at $0 (sourced) and keeps it that way: the route
-carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``), and
-``agent_spend.decide`` refuses an agent's run that includes such a node, at
-any spending limit, pointing it at a proposal. Every agent run route goes
-through that check (``main._require_spend_approval``): /api/execute and
-/api/execute-node (the canvas's runs and an agent's apply and run),
-/api/graph/run (MCP run_nodes and `nebula run` post it), /api/quick
-(`nebula quick`) and /api/cinema/generate-shot. Without the token
-nothing can bill, so an agent runs Idol like any free node. The person's own
-run is their consent, and an accepted proposal's run is theirs.
+carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``). Until
+round 19 ``agent_spend.decide`` refused an agent's whole run that included
+such a node; now only the Hugging Face call is gated: every agent run route
+(/api/execute, /api/execute-node, /api/graph/run, /api/quick and
+/api/cinema/generate-shot) starts the run, and the Idol node stops at its
+call (handlers/speridlabs_idol.run_idol; tests/test_idol_round19_gate.py
+runs the real engine). These tests pin that the spend check no longer
+refuses on the flag, at any limit and on every route. The person's own run
+is their consent, and an accepted proposal's run is theirs.
 """
 from __future__ import annotations
 
@@ -47,21 +47,17 @@ TEXT = {"id": "t1", "definitionId": "text-input", "params": {"value": "a"}}
 # -- the rule ------------------------------------------------------------------
 
 
-def test_an_agent_run_with_idol_and_a_token_needs_a_proposal_at_any_limit():
-    # Review 7, LOW-3: with every limit off, too.
+def test_the_spend_check_lets_an_agents_run_with_idol_and_a_token_start_at_any_limit():
+    """Justin decided (2026-10-31): only the Hugging Face call is gated, at
+    the call. The spend check refuses nothing for the flag, at any limit."""
     every_limit_off = {"runCostConfirmUsd": None,
                        "agentSpend": {"sessionUsd": None, "outsideDailyUsd": None, "models": {}}}
-    for settings in ({}, {"runCostConfirmUsd": 100}, every_limit_off):
+    for settings in ({}, {"runCostConfirmUsd": 100}, {"runCostConfirmUsd": 0.01}, every_limit_off):
         decision = _decide([TEXT, IDOL], SIGNED_IN, **settings)
-        assert decision.refusal is not None
-        assert decision.refusal.startswith("Needs the person's approval: n1 (Idol) " + WHO)
-        assert "PRO, Team or Enterprise account's prepaid credits" in decision.refusal
-        # Review 7, NIT-3: why, and what to do instead.
-        assert decision.refusal.endswith(
-            "An agent can't start a run that includes it, at any spending limit, even for a node after it: "
-            "propose the run, or run only nodes that don't need it. Propose it.")
+        assert decision.refusal is None
         # Idol is never counted as paid: its price stays the sourced $0.
         assert decision.charge.get("speridlabs-idol", 0) == 0
+    assert not hasattr(agent_spend, "may_bill_reason")
 
 
 def test_without_a_token_an_agent_runs_idol_with_no_proposal():
@@ -92,11 +88,8 @@ def test_the_flag_not_the_price_decides():
     assert agent_spend.may_bill_nodes([IDOL], {**definitions, "speridlabs-idol": unflagged}, SIGNED_IN) == []
 
 
-def test_two_flagged_nodes_are_named_together():
-    decision = _decide([IDOL, {**IDOL, "id": "n2"}], SIGNED_IN)
-    assert decision.refusal.startswith("Needs the person's approval: n1 (Idol), n2 (Idol) are in this run and the "
-                                       "person's Hugging Face token is set, so they can bill their Hugging Face account")
-    assert "includes them" in decision.refusal and "don't need them" in decision.refusal
+def test_two_flagged_nodes_start_too():
+    assert _decide([IDOL, {**IDOL, "id": "n2"}], SIGNED_IN).refusal is None
 
 
 # -- every agent run route -------------------------------------------------------
@@ -132,17 +125,14 @@ def _execute(api, headers, run_id, target=None):
 
 
 @pytest.mark.parametrize("node_run", [False, True], ids=["execute", "execute-node"])
-def test_an_agents_run_with_idol_and_a_token_is_sent_to_a_proposal(gated, node_run):
+def test_an_agents_run_with_idol_and_a_token_starts(gated, node_run):
+    """The run starts (the stop is at Idol's call, in the real engine)."""
     _, idol = _idol_graph(gated)
     gated.keys(SIGNED_IN)
     response = _execute(gated, CLAUDE, "r1", idol if node_run else None)
-    assert response.status_code == 403, response.text
-    detail = response.json()["detail"]
-    # MCP's words; the CLI prints its own command (review 8 of PR #203, NIT-4).
-    assert WHO in detail and "Propose it instead: propose_change (run: " in detail
-    assert "nebula propose" not in detail
-    assert f"propose_change (run: {idol})" in detail or not node_run
-    assert gated.ran == []
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "started" and WHO not in response.text
+    assert any(idol in ran for ran in gated.ran)
 
 
 @pytest.mark.parametrize("node_run", [False, True], ids=["execute", "execute-node"])
@@ -184,13 +174,12 @@ def _quick(api, monkeypatch, headers):
     return response, called
 
 
-def test_quick_with_a_token_sends_an_agent_to_a_proposal_and_runs_the_persons(gated, monkeypatch):
+def test_quick_with_a_token_starts_for_an_agent_and_the_person(gated, monkeypatch):
+    """The stop is at the call (tests/test_idol_round19_gate.py runs it)."""
     gated.keys(SIGNED_IN)
     response, called = _quick(gated, monkeypatch, CLAUDE)
-    assert response.status_code == 403, response.text
-    detail = response.json()["detail"]
-    assert detail.startswith("Needs the person's approval: ") and WHO in detail
-    assert "edit_canvas, a speridlabs-idol node" in detail and called == []
+    assert response.status_code == 200, response.text
+    assert called == [1]
     response, called = _quick(gated, monkeypatch, PERSON)
     assert response.status_code == 200, response.text
     assert called == [1]
@@ -204,15 +193,16 @@ def test_quick_without_a_token_runs_for_an_agent(gated, monkeypatch):
 
 
 @pytest.mark.parametrize("target", [False, True], ids=["whole-canvas", "one-node"])
-def test_nebula_run_and_mcp_run_nodes_send_an_agents_idol_run_with_a_token_to_a_proposal(gated, target):
+def test_nebula_run_and_mcp_run_nodes_start_an_agents_idol_run_with_or_without_a_token(gated, target):
     """`nebula run` and MCP run_nodes post /api/graph/run (cli/client.py,
-    mcp_server.run_nodes): the same check, before anything runs."""
+    mcp_server.run_nodes): the run starts either way."""
     _, idol = _idol_graph(gated)
     body = {"wait": 5, **({"targetNodeId": idol} if target else {})}
     gated.keys(SIGNED_IN)
     response = gated.client.post("/api/graph/run", headers=CLAUDE, json=body)
-    assert response.status_code == 403, response.text
-    assert WHO in response.json()["detail"] and gated.ran == []
+    assert response.status_code == 200, response.text
+    assert WHO not in response.text and any(idol in ran for ran in gated.ran)
+    gated.ran.clear()
     gated.keys({})
     response = gated.client.post("/api/graph/run", headers=CLAUDE, json=body)
     assert response.status_code == 200, response.text
@@ -235,11 +225,12 @@ def _idol_shot(api, headers):
                            json={"nodes": nodes, "edges": edges, "nodeId": cine, "shotId": "a"}), idol
 
 
-def test_an_agents_cinema_shot_reading_idol_with_a_token_is_sent_to_a_proposal(gated):
+def test_an_agents_cinema_shot_reading_idol_with_a_token_is_not_held_for_idol(gated):
+    """The shot's spend check no longer refuses for Idol: any refusal is the
+    scene's own, never Idol's (the stop is at Idol's call)."""
     gated.keys(SIGNED_IN)
-    response, idol = _idol_shot(gated, CLAUDE)
-    assert response.status_code == 403, response.text
-    assert WHO in response.json()["detail"] and gated.ran == []
+    response, _idol = _idol_shot(gated, CLAUDE)
+    assert WHO not in response.text and "Hugging Face" not in response.text
 
 
 def test_an_agents_cinema_shot_reading_idol_without_a_token_is_not_held_for_idol(gated):
@@ -305,7 +296,7 @@ def test_an_invisible_only_token_is_unset_for_the_gate_and_the_handler(token):
     from handlers.speridlabs_idol import clean_token
 
     keys = {"HF_TOKEN": token}
-    assert _decide([TEXT, IDOL], keys).refusal is None
+    assert agent_spend.may_bill_nodes([TEXT, IDOL], NodeRegistry().get_all(), keys) == []
     assert node_route.key_billing(NodeRegistry().get("speridlabs-idol"), {}, keys) == "free"
     assert clean_token(token) is None
     assert node_route.key_set(keys, "HF_TOKEN") is False
@@ -317,7 +308,7 @@ def test_a_padded_token_is_set_for_all_three_and_sent_trimmed():
     from services.settings import PROVIDER_CHECKS, hf_token_character_line
 
     keys = {"HF_TOKEN": f"\ufeff{TOKEN}\u200b\n"}
-    assert _decide([TEXT, IDOL], keys).refusal is not None
+    assert agent_spend.may_bill_nodes([TEXT, IDOL], NodeRegistry().get_all(), keys) == ["n1"]
     assert clean_token(keys["HF_TOKEN"]) == TOKEN
     assert node_route.key_set(keys, "HF_TOKEN") is True
     # The Settings check trims the same way, so it checks the token the run sends.

@@ -3084,7 +3084,8 @@ backend refusing the write after the file turned read-only).
   The Linux in-place test patches `_setxattr` and reads real user xattrs,
   so on Linux it runs the real branch, and it skips on macOS. M1 (a
   refused copy swallowed) is still killed. No Linux container ran here
-  (Docker isn't running on this Mac); from the code, every settings path
+  (Docker isn't running on this Mac; CI run 41235808554 on 7e998982 has
+  since run the Linux tests green); from the code, every settings path
   the tests take on Linux is the one they take here except `_PLATFORM`'s
   branch, which the simulated test runs here.
 - test_project_save_event_loop is driven by events (LOW-1): the stand-in
@@ -3211,8 +3212,11 @@ backend refusing the write after the file turned read-only).
   (the 0644 case is a guard); idolRound18.test.ts fails 13 of 22 (Krea's
   named switch, the size note and two single-provider comma cases pin
   code that was already right).
-- Mutants: all 57 killed, rerun together on the final code (the 19 from
-  sections 0 to 1b, M3 and M4 pointed at the new `_setxattr` seam, and 38
+- Mutants: all 57 killed on the final code (the 19 from sections 0 to 1b,
+  M3 and M4 pointed at the new `_setxattr` seam, and 38. Corrected in round
+  19, review 18 NIT-6: 55 ran together in `mut-all.out`; M3 and M4 show
+  NOT APPLIED there and were killed in a separate run three minutes later,
+  `scratchpad/idol18/mutants-r18-M3-M4.json`
   for section 2): S1 the copy folder not protected, S2 the temp file not a
   secret path, S3 the restore without the lock, S4 no keep-aside, S5/S5b/
   S5c no marker, hash or file checks, S6/S6b PUT or DELETE without the
@@ -3267,3 +3271,420 @@ backend refusing the write after the file turned read-only).
   noun here). Confirm.
 - B3: the busy-start toast and the Cinema line are main's, not Idol's, so
   they are left for the wording batch.
+
+## Round 19 (GM r37; Justin's Idol gate decisions, 2026-10-31)
+
+### GM r37
+
+- **The comma.** Every route line that offers a second action after "or"
+  takes the comma, built once in `person_line.route_action` (and
+  `directRoute.routeAction`, held to it by `route_cases.json`): "Add it in
+  Settings, or switch to Black Forest Labs or fal.ai." With the comma the
+  log's ending is its own sentence, ". Then run the node again."; a single
+  action keeps ", then run the node again.". The agents' route message
+  takes it too ("Add it in Settings > Providers, or choose another
+  provider."). 15 card lines in `route_cases.json` gained the comma, and 4
+  agent messages changed.
+- **Media.** "media" left `_MASS_NOUNS` for `_PORT_NOUNS`, nouns that name
+  a kind of input: "“X” needs a media input. Connect one, then run the node
+  again."; after a count "Connect a media input to each, then run the
+  nodes again.". The mass nouns that are one thing ("Connect it") are
+  audio, text, context, lighting and guidance; "messages" takes "them". A
+  test walks every input label any node has against the one rule. No
+  catalog node has a required Media input today, so the media lines are
+  pinned on a fixture node in the registry every surface reads, and can't
+  be shown live.
+- **Sizes.** 253 option labels in each catalog (the TS definitions and
+  `node_definitions.json`, by hand, as the JSON-only fixes need) read
+  "768 × 768": the × sign with spaces. The switcher showed × before only
+  because Inter draws "x" between digits as ×; the card's monospace font
+  drew "x". Every surface reads the option's own label
+  (`person_line.option_label`), and a test fails when a line builder
+  (`person_line`, `node_route`, `cli/formatter`, `mcp_server`) formats a
+  size itself; the CLI's canvas box size (`nebula look`, pixels, not an
+  option) is the one allowed `}×{`. `docs/MODEL_REFERENCE.md` regenerated.
+
+### Justin's decisions on the Idol gate (2026-10-31)
+
+Justin decided all three; they are built as he wrote them.
+
+1. **Only the Hugging Face call is gated.** The plan-time refusal in
+   `agent_spend.decide` is gone (`may_bill_reason` and `MAY_BILL_GENERIC`
+   with it; `may_bill_nodes` and `MAY_BILL_WHO` stay for the cost classes
+   and the stop's words). The check is in `speridlabs_idol.run_idol`, the
+   one function that calls the Space, right after the token is cleaned:
+   with a token set and a run not started by the person, it raises
+   `IdolProposalNeeded` (a `run_origin.ProposalNeeded`) before any
+   request. The engine marks that node's error event `proposal_needed`
+   (`proposalNeeded` on the canvas), the nodes after it are skipped as on
+   any node failure, and other branches finish.
+   - **Who started the run:** `execution/run_origin.py`, a ContextVar set
+     by `main._run_graph`, which every run route now calls instead of
+     `execute_graph` (execute, execute-node, the Cinema shot pass,
+     `/api/graph/run` and quick). It reads the request as every person-only
+     check does (`_is_person_request`), so the person's own Run and the run
+     an Accept approved (only the person's tab starts it,
+     `_check_run_approval`) are the person's. With no origin recorded,
+     `by_person()` is False: fail closed.
+   - **The agent's answer:** the error text names the node, why, that
+     nothing was sent and the nodes after it didn't run, and the reader's
+     own proposal ("Propose it instead: propose_change (run: n2). …" over
+     MCP, `nebula propose --note "<why>" --run n2` from the CLI). `nebula
+     quick` has no canvas node, so it gets a 403 with its own hint ("Add it
+     to the canvas instead (…), then propose the run: …"), carried on the
+     origin as `ask`. The billing notes (`describe_node`, `find_nodes`),
+     MCP-SETUP, the skill and the Idol guide say the new rule.
+   - **The done card and the Agent log** say it stopped, not failed. The
+     line is long, so the Agent log gets it whole (`log_whole`) while the
+     bubble keeps its 140 characters; the draft is short enough to fit it
+     for the usual agent names. A run of Idol alone says it in one
+     sentence, so "stopped" isn't said twice.
+   - **Other paths:** every handler call goes through the engine, and the
+     engine only through `_run_graph`; a path that skipped it would carry
+     no origin and stop, never call.
+
+### Drafts for GM (round 19)
+
+New lines, plain drafts, sent to the coordinator for GM:
+
+- The Idol card, and the person's line on the error event
+  (`speridlabs_idol.AGENT_STOP_PERSON`): "An agent’s run stopped here
+  before calling Hugging Face, because your Hugging Face token is set and
+  this run could bill your account. Run it yourself to go ahead."
+- The done card and the Agent log (`run_done_cards.STOPPED`):
+  - "Claude Code finished 1 of 3 nodes. “Idol” stopped before calling
+    Hugging Face: your token is set, so it waits for you to run it."
+  - "Codex's run of “Idol” stopped before calling Hugging Face: your token
+    is set, so it waits for you to run it."
+  - "Codex's run of 3 nodes didn't finish. “Idol” stopped before calling
+    Hugging Face: your token is set, so it waits for you to run it."
+- The agents' error text (`speridlabs_idol.agent_call_stop`): "n2 (Idol)
+  stopped before calling Hugging Face: the person's Hugging Face token is
+  set, so this call can bill their Hugging Face account: a PRO, Team or
+  Enterprise account's prepaid credits are billed past its daily ZeroGPU
+  allowance ($1 per 10 GPU-minutes), a cost Nebula can't see or limit.
+  Nothing was sent, and the nodes after it didn't run. An agent can't make
+  this call. Propose it instead: propose_change (run: n2). The person
+  accepts on the canvas, and the canvas runs it." (the CLI's command from
+  the CLI; `nebula quick`: "Idol stopped before … Nothing was sent. An
+  agent can't make this call. Add it to the canvas instead (…), then
+  propose the run: …").
+2. **Unreadable keys read as no keys for the gate too.** Pinned by
+   `test_unreadable_apikeys_read_as_no_keys_for_the_gate` (an `apiKeys`
+   list with `HF_TOKEN` in it, and `HF_TOKEN` in the environment: the
+   agent's run goes keyless, doesn't stop and sends no token) and
+   `test_no_node_takes_a_token_from_the_environment`. Round 12 already pins
+   the environment rule from the code's side:
+   `test_no_handler_falls_back_to_a_token_in_the_environment` and
+   `test_no_backend_module_reads_a_provider_key_from_the_environment`.
+3. **The settings copy stays in the denied folder, as built.** No change.
+
+`person_gate.py` is untouched.
+
+### Tests and checks (round 19)
+
+- New: `test_idol_round19_copy.py` (GM r37, every surface) and
+  `test_idol_round19_gate.py` (Justin's gate, on the real engine with
+  intercepted HTTP: an agent's run that must call stops with zero
+  requests, the node before it ran and the one after it didn't; MCP, CLI
+  and an in-app chat turn; `nebula quick` for each surface; a reused
+  result passes with no request; the person's run, an accepted proposal
+  and no token make the call; an unknown origin stops; an agent and the
+  person, and two agents, reaching the same Idol node at once; the run's
+  other branches finish; the done card and the Agent log), and
+  `idolRound19.test.ts`.
+- On 7e998982 (the new tests copied in): 19 of 22 copy tests fail; the 3
+  that pass are the comma cases the old rule already covered and the
+  single-action case, kept beside the new ones. The gate file can't import
+  there (no `run_origin`); with only that module copied in, 14 of 20 fail,
+  and the 6 that pass are the "no stop" guarantees that must hold before
+  and after (the person's run, no token, an accepted proposal, the
+  person's quick run, unreadable keys, no token from the environment).
+  Mutants kill those.
+- Mutants, all killed: section 1 (9: the comma back to the old condition,
+  backend and frontend; media a mass noun again; the port-noun clause
+  off; the labels back to "768 x 768", backend and frontend; option_label
+  rewriting a label; the agents' message without its comma; the done line
+  for Idol alone); section 1b (13: the gate line removed; an unknown
+  origin passing; every run recorded as the person's, or as an agent's;
+  the engine's flag off; the done card ignoring the stop; the origin not
+  reset; the quick 403 off; quick's hint ignored; the log line cut; the
+  observer dropping the stop; `_run_graph` not recording the origin; the
+  surface ignored).
+- The old plan-time tests moved to the call: `test_idol_may_bill.py` now
+  pins that every agent run route starts at every limit; round 10's quick
+  words and round 11's `nebula run` words are pinned at the call in the
+  gate file; round 9's billing note reads the new rule. The handler tests
+  in `test_speridlabs_idol.py` run as the person's own Run.
+- Live on 8793/5793 (sandboxed, canaries first, fake keys only, every run
+  refused or stopped before a provider): the card with "Add it in
+  Settings, or switch to Black Forest Labs or fal.ai.", its Agent log line
+  ending ". Then run the node again.", the size card "Pick 768 × 768, 1K,
+  2K or 4K, or switch to Black Forest Labs or Replicate.", and an MCP
+  agent's Idol run with a fake token: the image input ran, Idol stopped
+  before any request, the reroute after it didn't run, the card shows the
+  person's line and the Agent log "Claude Code finished 1 of 3 nodes.
+  “Idol” stopped before calling Hugging Face: your token is set, so it
+  waits for you to run it.". Shots in scratchpad/idol/shots19, five
+  distinct md5s, each opened. The media line can't be shown live.
+
+### The gate table and the HTTP matrix, 7e998982 against round 19
+
+Regenerated with the review's tools (`agent_spend.decide` over every
+definition, route, key set and limit; every agent run route over HTTP for
+every caller), before and after:
+
+- **Gate table:** 157,905 rows both sides (before md5 8ff8a96c…, the
+  review's). 652 rows changed, every one a row whose before was Idol's
+  "can bill their Hugging Face account" refusal with `HF_TOKEN` set (the
+  `HF_TOKEN` and all-keys sets): Idol alone (24), Idol wired from an image
+  (8), Idol with no or null params (2), and Idol beside another node (618).
+  Of those, 280 now have no refusal, and 372 (Idol beside a node Nebula
+  can't price, at a limit) now show that node's own refusal ("Nebula has
+  no list price for n (…)"); Idol's refusal used to come first. Charge,
+  plan and per-node columns are identical in every changed row. The other
+  157,253 rows are byte-identical, and no Idol billing refusal is left.
+- **HTTP matrix:** 330 cases both sides (before md5 858c49c0…, the
+  review's). 33 cases changed, 99 cells, all an agent caller (anonymous,
+  MCP, CLI) whose before was Idol's billing 403 on execute, execute-node,
+  `/api/graph/run` (whole and one node), quick or a raw settings file: 87
+  are now 200 with the run started (the matrix's fake engine; the real
+  stop is at the call), and 12 (Idol beside Nano Banana at a threshold)
+  stay 403 with the paid node's own limit refusal. The person's and the
+  tabs' cells are unchanged, and the other 297 cases are byte-identical.
+- **The fs cases** weren't rerun to the end: optional this round, and
+  sections 0 to 1b changed nothing in the settings save path they
+  exercise (section 2 does; its own tests are below). They ran
+  about a tenth as fast as in round 18 on the loaded Mac, so they were
+  stopped.
+
+### Review 18 (section 2): each item and its proof
+
+Tests are in `backend/tests/test_idol_round19_review18.py` and
+`frontend/tests/lib/idolRound19Review18.test.tsx`. Mutants (S…, O…, N…,
+C…, B14) are in `scratchpad/idol19/mut/mut2.py`: 23 run, 23 killed.
+
+1. **LOW-1, no flock.** `_open_temp(temp, *, locked)` removes a temp found
+   at the fixed name only while the save holds the flock. Without it, a
+   temp younger than STALE_TEMP_SECONDS is another save in flight. This
+   save waits for it to go (`_temp_waiting`, a seam), up to
+   LOCK_TIMEOUT_SECONDS, then raises `SettingsBusy`, the 409. It never
+   unlinks it. A stale one is removed as before. `_write_copy` passes
+   `_holds_lock()`, so the copy's temp follows the same rule. The fixed,
+   deny-listed name stays: the coordinator's decision, a veto item for
+   Justin. Proofs:
+   - the two-process p8 test (`_locked` returning None; B killed or
+     finishing): the file is never torn, and A's "saved" is what it holds;
+   - the unit tests: fresh temp waited for, stale replaced, a folder at the
+     name never waited on;
+   - mutants S1, S2, S3.
+   The body's flock sentence now says what happens where flock doesn't
+   exist.
+2. **LOW-2.** `_restore` asks `settings_write_block()` before it keeps
+   anything aside. A blocked or failed write returns
+   `NotRestored(path, why)`; the start logs a warning and journals
+   `settings.not_restored` (data `file`, summary whole: a 1200-character
+   cap like `settings.restored`). Aside files are
+   `settings-replaced-<sha256[:16]>.json`; one already kept with these
+   bytes is reused (a different file under that name gets `-1`, `-2`).
+   Proofs:
+   - two restores against a 0400 file: both NotRestored, nothing aside;
+   - two restores whose write fails: one aside file;
+   - the start's log and journal through MCP, the CLI and chat;
+   - mutants S4, S5, N1.
+   There is no retention rule: Justin's question.
+3. **The 409s.**
+   - NIT-1: a folder at the temp's name (no settings.json yet), the copy's
+     name, or the copy temp's name is `SettingsUnwritable(cause=
+     "in_the_way")`, a 409 with code `settings_not_a_folder` and the draft
+     line `SETTINGS_IN_THE_WAY`. A folder at the temp's name beside an
+     existing file still saves in place. Mutants S7, S8.
+   - LOW-3: `_locked`'s two deadline raises are `SettingsBusy`.
+     `main._settings_write()` wraps `settings_transaction` for PUT and
+     DELETE, and `_save_settings_or_409` catches it too: 409
+     `settings_busy`, GM's line, fix "Try again in a moment.". It is also
+     in SETTINGS_REFUSAL_CODES, so Settings says the line as it is.
+     Mutant S6, and the PUT and DELETE tests with a child holding the
+     flock.
+   - `_save_settings_or_409`'s own SettingsBusy catch is redundant on
+     today's two routes (`_settings_write` catches it as the exception
+     unwinds), so no mutant can kill it. It is kept for any later caller
+     outside a transaction.
+4. **NIT-3.** The body says what the checks prove: a damaged copy, a copy
+   for another path, a file that isn't this user's own regular single-name
+   file. Not who wrote it.
+5. **NIT-4/5.** The body lists what the sweep and deny lists leave:
+   - the legacy name clash;
+   - temps and copies for a previous NEBULA_SETTINGS_PATH;
+   - round 17's temps until the first start.
+   It lists the transaction's limits too:
+   - no lock before the folder exists;
+   - no lock without flock (two in-place writes then aren't serialized);
+   - re-entry keyed on the path.
+   None of these is fixed here.
+6. **NIT-6.** Corrected above, at round 18's mutants line.
+7. **NIT-7.** One test per guard, each killing its mutant:
+   - O1: a symlinked settings.json; both temp spellings in
+     `secret_temp_paths` and `default_secret_paths`.
+   - O19: the copy's temp, as opened, is inside the copy folder.
+   - O24: a waiter stops at a 0.3 s deadline while a child holds the flock.
+   - O26: an existing 0500 copy folder gives the copy-folder line naming
+     `~/.nebula/settings-copy`.
+8. **NIT-2.** `SettingsUnwritable.creates`: `_make_copy_folder` sets it to
+   the state folder when the folder that refuses is above it. So the line
+   can name the exact folder Nebula would make (GM r38 item 4 uses it).
+   Mutants S9, S10.
+9. **LOW-4.** idol.md has "Saving settings: what an agent can see": each
+   code, what it means and what an agent does; the lock; `settings.restored`
+   and `settings.not_restored`. It points to MCP-SETUP for the lines.
+   Unrelated fix: the doubled "## Errors## Errors" heading, already on
+   base.
+10. **NIT-1 copy-ui.** MCP-SETUP's `get_settings` says the copy-folder
+    line names the state folder (`~/.nebula` or the desktop app's), its
+    `settings-copy`, or both folders. It also lists the new
+    `settings_not_a_folder` case, `settings_busy`, the no-flock wait, and a
+    `settings.not_restored` row in the events table.
+11. **NIT-2 copy-ui.**
+    - `connect_line` reads `_named_by_label`, the one rule the log's
+      `input_need` reads.
+    - B14: a test for "Through" on the card and in the log; mutant B14.
+    - F8: `autoLabel` exported; a test for "Auto · fal.ai needs a key".
+12. Section 3 below.
+13. **Tests-ci LOW-1.** The two interleaved-write tests set
+    LOCK_TIMEOUT_SECONDS to 120, and their request's exception is kept as
+    its answer. The RESTORE child sets it too.
+14. **Tests-ci NIT-1.** Moot: aside files are named by hash, not by time.
+    The test was rewritten: the same broken file twice is kept once, and
+    another file is kept beside it.
+15. **Tests-ci NIT-2.** The body's Tests section now has:
+    - three load-dependent tests;
+    - the marker scan's forms;
+    - this round's tests.
+    The Linux CI run 41235808554 is cited above.
+
+### GM r38 (section 3)
+
+1. **Several needs, one line.**
+   - `engine._combine_needs` gives every error of a node whose stops are
+     only unwired inputs and at most one missing key the same line,
+     `person_line.needs_card_line`. The card's joined line dedups it, so it
+     shows once.
+   - The bubble's words come from `main._bubble_needs` →
+     `person_line.needs_bubble`: the same need list, in the node's input
+     order.
+   - Pinned word for word on GM's four forms and on 1, 2 and 3 inputs with
+     and without a key. The bubble is tested over MCP, the CLI and chat.
+   - Mutants C1, C2, C5.
+   - Cases GM didn't write, built by the same rule:
+     - two or more inputs and a key: "Connect the prompt and the image, and
+       add your fal.ai API key in Settings, then run it again." (comma
+       before "and add");
+     - a named port with no key: "Connect an output to “Image A” and an
+       output to “Image B”, then run it again." (no "to this node");
+     - "messages": "Connect the messages and add your Anthropic API key …".
+2. **One name helper.** `main._bubble_line` names the node by
+   `_node_label`: the person's label when renamed, else the type's name.
+   - A card line that opens with the quoted label or type name keeps its
+     predicate after the name ("“Hero shot” can’t run on fal.ai with
+     “Resolution” set to 1.5K. …").
+   - Any other line follows "“Hero shot” can’t run.". The predicate is
+     written once.
+   - Changed bubble lines: the refused run's bubble (`_say_refused_run`),
+     its needs form and its route or other lines. The other bubbles that
+     name a node (Added, Connecting, Moved, Running, Disconnected) already
+     read `_node_label`; Renamed and Removed name the label they were
+     given; the done card names nodes by `_node_label` too.
+     Nothing else changed.
+   - Not changed, wording batch: a card line itself still names the type,
+     not the label ("“FLUX 3 Image” can’t run on fal.ai …" on the
+     renamed node's own card).
+   - Mutant C3.
+3. **The lock-wait line**: SETTINGS_BUSY, word for word, neutral.
+4. **The copy-folder line naming both folders**:
+   SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE, by reader, with fix "Check the
+   permissions of ~/ro, then try again.". When the state folder (or its
+   `settings-copy`) is the one that refuses, today's line stands.
+5. **settings.restored, seen once.** Stop-and-report: Updates can't take a
+   system card without changing what agents read. Its cards are notes,
+   which agents list (MCP `list_notes`), and a note's author kind is only
+   agent or reader. So the fallback is built:
+   - the line at the top of Settings, word for word, the path in mono and
+     selectable, neutral, until the person dismisses it
+     (`SettingsTopNotice`, `GET /api/settings/notice` and `POST
+     /api/settings/notice/dismiss`, both person-only; mutants N2, N3);
+   - the fetch has its own module (`lib/settingsNotice.ts`), so tests that
+     mock `api.ts` aren't touched; Settings.test.tsx mocks it, since it
+     counts every fetch.
+   - Limit: the notice lives in the backend's memory for this launch. A
+     restart before the person opens Settings drops it (the journal and
+     the log still have it).
+   - "System cards in Updates" goes on the follow-up list.
+
+New this round, not asked:
+- **Bubble lines longer than the bubble holds** (MAX_SAY_CHARS, 140) keep
+  their whole sentences (`main._whole_sentences`). They used to be cut
+  inside a sentence: "…, and add".
+  - The three-input-plus-key bubble is now its first sentence only: "“FLUX
+    Fill (Inpaint)” needs a prompt, a base image, a mask and your fal.ai
+    API key." The Agent log keeps the line whole.
+  - A question for GM. Mutant C4.
+- The `settings.not_restored` summary isn't cut at 200 characters
+  (`SUMMARY_CHARS_BY_KIND`), as with `settings.restored`.
+
+### Drafts for GM (sections 2 and 3)
+
+- SETTINGS_IN_THE_WAY: "Nothing was saved because <path> is a folder,
+  and Nebula needs to put a file there. Move or rename that folder, then
+  try again." (agents: "… Ask the person to move or rename that folder.").
+- SETTINGS_NOT_RESTORED (log and journal only): "Nebula has a saved copy
+  of your settings but couldn’t put it back, because it isn’t allowed to
+  change <path>. It tries again at the next start."
+- Several inputs and a key on the card: "Connect the prompt and the image,
+  and add your fal.ai API key in Settings, then run it again."
+- A long bubble cut to its first sentence (above).
+
+### Checks (round 19, sections 2 and 3)
+
+- **Backend, focused:** 59 files (every test naming the settings save
+  path, the settings routes, the need lines, the refused run's bubble or
+  the deny lists): 2,608 passed, 14 skipped, 2 failed. Both are fixed and
+  their files rerun (141 passed):
+  - the fence ratchet now lists `POST /api/settings/notice/dismiss` (no
+    graph);
+  - the notice test resets the module's notice, which an earlier test's
+    start had set.
+- **Frontend, focused:** 113 files (everything importing providerSwitch,
+  settingsWrites or the Settings panel, and every ratchet that reads src/
+  or styles/ from disk): 2,132 passed, 3 failed.
+  - `agentPresenceFollowups.ratchet` (120 s) and `proposalBarStacking`
+    (5 s) timed out under load.
+  - The promotion test ran against the component before its listener
+    existed.
+  - All three passed serially, with `lib/backend.test.ts` (145 then 142).
+- **Frontend checks:** tsc, lint and the build with its budget (463,634
+  bytes raw) passed. dist was removed.
+- **Mutants:** 23 for sections 2 and 3, all killed
+  (`scratchpad/idol19/mut/mut2.out`).
+- **Not found:** a test named a "line-registration ratchet". The new lines
+  are pinned word for word in the new test files, and the copy ratchets
+  that read src/ ran in the focused set.
+- **Live, 1440 × 900**, isolated backend 8793 and Vite 5793, fake keys
+  only, every canary blocked (12 of 12 per phase), no run accepted. Shots
+  are in `scratchpad/idol/shots19`, md5 distinct:
+  - 6: the bubble with mixed needs, word for word GM's form. The bubble
+    shows one line, cut by an ellipsis on screen (the canvas's own CSS).
+  - 7: the renamed node's card with the line once.
+  - 8: the renamed route-line bubble, "“Hero shot” can’t run on fal.ai …",
+    no "FLUX 3". The card under it still says "“FLUX 3 Image” can’t run
+    …" (wording batch).
+  - 9: the lock-wait line in Settings, after a 10.5 s wait while another
+    process held the flock. It shows in the row's error colour.
+  - 10: the two-folder copy line, ~/ro 0555, word for word.
+  - 11 and 11b: the restored line at the top of Settings, path in mono
+    and selectable. Dismiss hides it, the route then answers null, and an
+    agent gets 403. The harness's state folder isn't under its HOME, so
+    the path shows in full there.
+- **Found live and fixed:** the notice's GET carried no person header
+  (`PERSON_READ_PATHS` didn't list it), so it was refused (403) and the
+  line never showed. It is listed now (`lib/backend.test.ts` pins it), and
+  the line asks again when the server promotes the tab.
