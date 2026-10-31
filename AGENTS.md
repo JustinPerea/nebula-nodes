@@ -2,6 +2,20 @@
 
 AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 308 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and mirrored in `backend/data/node_definitions.json`, which the backend and every script read. `scripts/export-node-defs.ts` writes the JSON from the TS, but four existing nodes (`gemini-tts`, `veo-3`, `gemini-omni-flash`, `quiver-arrow-generate`) carry JSON-only fixes it would undo, so check its diff before keeping it. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
+## Where tests run
+
+- Full suites run in a Claude Code cloud session or in GitHub CI on a pushed branch, never on the person's Mac. That covers the backend's pytest, the frontend's vitest, lint and build, and the contract scripts. On the Mac, run only the focused tests for what you changed.
+- A cloud session installs what CI installs on its own. `.claude/settings.json` runs `scripts/cloud-session-setup.sh` at every start and resume.
+  - The script does nothing unless `CLAUDE_CODE_REMOTE` is `true`, which Claude Code sets only in cloud sessions.
+  - It makes `backend/.venv` and runs `npm ci` in `frontend`, then puts the venv first on `PATH`, so CI's own commands work as written. Its first lines in the session say what's ready.
+  - A cloud session with several repositories, or a project's cloud thread, doesn't run repository hooks. There, run `CLAUDE_CODE_REMOTE=true bash scripts/cloud-session-setup.sh` by hand.
+- These stay on the Mac:
+  - driving the person's live canvas with the `nebula` CLI, and the person's own Nebula instance and `~/.nebula`;
+  - the desktop app (Electron, the Keychain);
+  - paid generation runs and anything that needs the person's own keys;
+  - optional local model nodes;
+  - Flora MCP work and the Codex runner.
+
 ## Standing task: Flora gap audit
 
 We also produce content in Flora (app.flora.ai, via the `user-flora` MCP). Flora's catalog (~369 models) is a scouting list for Nebula's roadmap.

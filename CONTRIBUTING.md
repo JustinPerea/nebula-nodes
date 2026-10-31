@@ -28,6 +28,11 @@ npm --prefix desktop test
 See [desktop/README.md](desktop/README.md) for runtime and integration-test setup.
 Document any check you could not run rather than reporting it as passed.
 
+A Claude Code cloud session installs the backend and frontend dependencies at
+start, through `.claude/settings.json` and `scripts/cloud-session-setup.sh`, so
+these checks run there as written. The script does nothing outside the cloud.
+[AGENTS.md](AGENTS.md#where-tests-run) says which checks belong where.
+
 ## Running a second, isolated dev instance
 
 Test runs, screenshot scripts and agents often start their own backend and Vite
