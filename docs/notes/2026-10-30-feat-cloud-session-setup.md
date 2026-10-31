@@ -138,6 +138,19 @@ Round 5:
   - **contracts:** passed in 1 s.
 - **The PR comment failed:** `gh api …/issues/206/comments` answered 403, "GitHub access to this repository is not enabled for this session." The results were read back with `claude --teleport <id> -p …`, with tools denied.
 
+### Results on 662bec1d, the node hook (team account, session_01KEDcyGVD52K7MhyGbfbJqK)
+
+- **Cold setup: 42 s**, through the exec-form `node …/cloud-session-setup.mjs` hook. The hook's lines were in the session's context.
+- **Warm path: 0.018 s.** Both halves were up to date.
+- **backend:** 12,334 passed, with the same 8 root-only failures, in 679 s.
+- **frontend:** `npm test` passed 8,531 of 8,531 (621 s), and lint and build passed. The build came to 444,245 bytes raw.
+- **contracts:** passed.
+- **The wrapper mutations on Linux:**
+  - Dropping the `CLAUDE_CODE_REMOTE` check fails the `[None]` and `[false]` cases.
+  - Dropping `stdio: 'inherit'` fails `[true]`.
+  - Both are killed, and the plain run passes 3 of 3.
+- **The PR comment** got the same 403.
+
 ### Round 7: what the cloud run found
 
 - **Root-safe permission tests.** `@pytest.mark.unprivileged` (registered in `tests/conftest.py`) skips a test as root. It's on the nine tests that take away a file's read or write permission: the eight that failed, and `test_startup_keeps_every_file_when_the_store_cant_be_read[unreadable]`, which passed as root only because its store was still readable. CI runs them all.
