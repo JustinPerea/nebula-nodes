@@ -10,6 +10,7 @@ import asyncio
 import os
 from typing import Callable
 
+from cinema.color import COMMONS_READER_SURFACE, composite_on
 from commons import analysis_errors
 from commons import media, records
 from commons.db import now_iso
@@ -27,6 +28,9 @@ def _env_budget() -> int | None:
     raw = os.environ.get("NEBULA_COMMONS_CALL_BUDGET", "").strip()
     return int(raw) if raw else None
 
+
+# Why a fully transparent reference was never sent to the reader.
+CLEAR_ERROR = "too transparent to add colors; not sent to the reader"
 
 class AnalysisWorker:
     def __init__(self, store, *, reader=read_image, load_avg: Callable[[], float] | None = None,
@@ -101,10 +105,22 @@ class AnalysisWorker:
                       code_version=asset.get("code_version") or "measure-1")
         try:
             data = store.blob_path(asset["blob_key"]).read_bytes()
-            png = media.encode_png(media.load_image(data, asset["mime"]), max_edge=1568)
+            # As the person sees it in Commons: a transparent reference over
+            # the tile's surface, never over the colour hidden under its
+            # alpha. An opaque one is sent exactly as before.
+            seen = composite_on(media.load_image(data, asset["mime"], keep_alpha=True), COMMONS_READER_SURFACE)
+            png = None if seen is None else media.encode_png(seen, max_edge=1568)
         except (media.MediaError, OSError) as exc:
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=f"cannot load image: {exc}",
                                     raw_output=None, fewshot_ids=[], error_kind=analysis_errors.UNREADABLE, **common)
+            self.state = "running"
+            return "failed"
+        if png is None:
+            # Fully transparent: nothing to read, so it is never sent and no
+            # call is counted. It fails for good (no retries: it won't change).
+            await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=CLEAR_ERROR,
+                                    raw_output=None, fewshot_ids=[], error_kind=analysis_errors.UNREADABLE,
+                                    max_attempts=0, **common)
             self.state = "running"
             return "failed"
         palette = (asset.get("measurements") or {}).get("palette") or []

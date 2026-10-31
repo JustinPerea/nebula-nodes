@@ -261,4 +261,4 @@ def test_palette_fidelity_on_a_transparent_output_is_unverifiable(store, tmp_pat
                              region_id=None, used_in={"kind": "nebula_output", "ref": "/api/outputs/run-2/clear.png"},
                              why="w", scope_ids=search.scope_collection_ids(store, None))
     assert borrow.run_fidelity(store, b["id"]) == {
-        "status": "unverifiable", "reason": "output is fully transparent, so it has no palette"}
+        "status": "unverifiable", "reason": "output is too transparent, so it has no palette"}

@@ -30,6 +30,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
+from cinema.color import NODE_MEDIA_SURFACE, seen_on
 from PIL import Image
 
 from execution.missing_credential import MissingCredentialError
@@ -119,7 +120,9 @@ def estimated_tokens(width: int, height: int) -> int:
 
 
 def _data_uri(image: Image.Image) -> str:
-    frame = image.convert("RGB")
+    # A frame or reference with transparency as it shows on a canvas node,
+    # never over the black hidden under its alpha; an opaque one as before.
+    frame = seen_on(image, NODE_MEDIA_SURFACE)
     frame.thumbnail((FRAME_LONG_SIDE, FRAME_LONG_SIDE), Image.Resampling.LANCZOS)
     buffer = io.BytesIO()
     frame.save(buffer, format="JPEG", quality=92)

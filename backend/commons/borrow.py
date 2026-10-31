@@ -223,7 +223,7 @@ def run_fidelity(store, borrowing_id: str) -> dict:
                                  {"status": "unverifiable", "reason": f"output unreadable: {exc}"})
         if not palette:
             return _set_fidelity(store, borrowing_id,
-                                 {"status": "unverifiable", "reason": "output is fully transparent, so it has no palette"})
+                                 {"status": "unverifiable", "reason": "output is too transparent, so it has no palette"})
         target = hex_to_lab(b["value"]["hex"])
         best = min(float(delta_e00(hex_to_lab(p["hex"]), target)) for p in palette)
         return _set_fidelity(store, borrowing_id, {"status": "pass" if best <= PALETTE_TOLERANCE else "fail",

@@ -64,9 +64,9 @@ describe('MoodboardColors', () => {
     expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
   });
 
-  it('says when an analysis was made before transparent pixels were left out', () => {
-    const line = 'Made before Nebula left transparent pixels out of the colors, and this board has images with '
-      + 'transparency. Analyze again to update it.';
+  it('says when the saved colors counted transparent areas as dark', () => {
+    // GM r1 on #208, verbatim: the backend sends it, the Studio shows it as is.
+    const line = 'These colors counted transparent areas as dark. Analyze again to update them.';
     const old = analysis({ version: 3, outdated: line, colors: [{ ...NAVY, sources: undefined }] });
     const { container } = render(<><AnalysisOutdated analysis={old} /><SourcesOutdated analysis={old} /></>);
     expect(container.textContent).toBe(line);

@@ -135,6 +135,9 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
+    if composed.get("outdated"):
+        # The saved colours are out of date, and a run sends a new brief.
+        print(f"    {composed['outdated']}")
     if composed.get("styleBrief"):
         print(f"    {composed['styleBrief']}")
     else:
@@ -283,7 +286,8 @@ def _print_colours(analysis: dict[str, Any], board_id: Any, indent: str = "    "
         print(f"{indent}{label} (share of the board · images it comes from, with its share of each):")
         for colour in (c for c in colours if c.get("role") == role):
             print(f"{indent}  {colour.get('hex')}  {_pct(colour.get('share')):>6}  {_sources_text(colour)}")
-    if (analysis.get("palette") or analysis.get("accents")) and not with_sources:
+    # An out-of-date analysis already says to analyze again, once (as Studio).
+    if (analysis.get("palette") or analysis.get("accents")) and not with_sources and not analysis.get("outdated"):
         print(f"{indent}Analyze again to see which images each colour comes from: "
               f"`nebula moodboard analyze {board_id}`")
 
@@ -396,6 +400,8 @@ def _print_estimate(est: dict[str, Any]) -> None:
           f"{_price_text(est)}.")
     if est.get("unreadable"):
         print(f"  Not on this computer, so not read: {', '.join(f'#{n}' for n in est['unreadable'])}")
+    if est.get("transparent"):
+        print(f"  Too transparent, so not read: {', '.join(f'#{n}' for n in est['transparent'])}")
     price = est.get("price") or {}
     low = price.get("low") or {}
     if low:

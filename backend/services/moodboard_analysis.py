@@ -44,9 +44,9 @@ from urllib.parse import urlparse
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-from cinema.color import ALPHA_MIN, has_transparency
+from cinema.color import as_rgb, as_rgba, has_transparency, visible_pixels
 from commons.colour import delta_e00, hex_to_lab, lab_to_hex
-from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MERGE_DELTA_E, measure_image
+from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MAX_DIM, MERGE_DELTA_E, measure_image
 from services.file_access import ProtectedPathError, require_allowed_path
 from services.moodboard_brief import DEFECT_NEGATIVES, compose, generated_brief
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
@@ -163,12 +163,18 @@ ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes th
 # An image saved before board writes were checked that links to another site.
 OUTSIDE_IMAGE_WARNING = ("#{number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
                          "gets it. Replace it with an upload in Moodboard Studio.")
-# An image with no visible pixel: every one is fully transparent.
-TRANSPARENT_IMAGE_LINE = "#{number} is fully transparent, so it adds no colors."
+# An image with no pixel at alpha 16 or above, clear or faint (GM r2 on #208).
+TRANSPARENT_IMAGE_LINE = "#{number} is too transparent to add colors."
 # A saved analysis from before alpha counted, on a board with an image that
 # has transparency (``with_alpha_outdated``).
-ALPHA_OUTDATED = ("Made before Nebula left transparent pixels out of the colors, and this board has images "
-                  "with transparency. Analyze again to update it.")
+ALPHA_OUTDATED = "These colors counted transparent areas as dark. Analyze again to update them."
+# The Moodboard node's warning when it analyzes such a board again (handlers/moodboard.py).
+# By "Brief sent to generators" while the saved colours are out of date
+# (GM r2 on #208): the brief shown is the saved one, and a run sends a new one.
+BRIEF_OUTDATED = ("This brief uses the old colors. The next run analyzes the board again and sends an "
+                  "updated one.")
+ALPHA_RERUN_WARNING = ("The board’s saved colors counted transparent areas as dark, so this run analyzed it again. "
+                       "Analyze it in Moodboard Studio to save the new analysis.")
 # The summary of a board with images none of which steers.
 NONE_STEER_SUMMARY = "No reference image steers this board: every one is set aside."
 # The same when the images that would steer are all links from outside Nebula
@@ -461,9 +467,24 @@ def analysis_is_current(moodboard: dict[str, Any], analysis: Any) -> bool:
         version = int(analysis.get("version") or 1)
     except (TypeError, ValueError):
         return False
-    if analysis.get("sourceHash") != source_hash(moodboard, version):
-        return False
-    return not predates_alpha(moodboard, analysis)
+    return analysis.get("sourceHash") == source_hash(moodboard, version)
+
+
+def colours_current(moodboard: dict[str, Any], analysis: Any) -> bool:
+    """Whether a saved analysis describes the board (``analysis_is_current``)
+    and its colours are right: not made before alpha counted on a board with
+    transparency (``predates_alpha``). Only a run (which analyzes again when
+    not) and the out-of-date line use it; everything else that asks whether
+    an analysis describes the board keeps ``analysis_is_current``."""
+    return analysis_is_current(moodboard, analysis) and not predates_alpha(moodboard, analysis)
+
+
+# The image entry's stored fact: whether its file has a pixel less than
+# opaque. Nebula writes it (at intake, and once for older images by
+# ``stamp_transparency`` at startup, off the event loop); reads only look at
+# it, so listing or opening a board never decodes an image. Missing means
+# unknown, which never marks a board out of date.
+HAS_TRANSPARENCY = "hasTransparency"
 
 
 def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
@@ -479,48 +500,64 @@ def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
         return False
     if version >= ALPHA_VERSION:
         return False
-    for img in moodboard.get("images") or []:
-        if not isinstance(img, dict):
-            continue
-        path = resolve_moodboard_image_path(str(img.get("url") or ""))
-        if path is not None and _path_has_transparency(path):
-            return True
-    return False
+    # Every image, set aside or not: the saved colours came from all of them.
+    return any(isinstance(img, dict) and img.get(HAS_TRANSPARENCY) is True
+               for img in moodboard.get("images") or [])
 
 
-def _path_has_transparency(path: Path) -> bool:
-    try:
-        stat = path.stat()
-    except OSError:
-        return False
-    return _file_has_transparency(str(path), stat.st_mtime_ns, stat.st_size)
-
-
-@functools.lru_cache(maxsize=1024)
-def _file_has_transparency(path: str, mtime_ns: int, size: int) -> bool:
-    """Whether an image file has a pixel less than opaque. The key's mtime
-    and size check a changed file again. An unreadable file is left to the
-    analysis, which says so."""
+def image_has_transparency(url: str) -> bool | None:
+    """Whether a board image's file has a pixel less than opaque, read from
+    the file (a full decode, so never on the event loop). None when it isn't
+    a file on this computer or can't be read: unknown, not transparent."""
+    path = resolve_moodboard_image_path(str(url or ""))
+    if path is None:
+        return None
     try:
         with Image.open(path) as pil:
             return has_transparency(pil)
     except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
-        return False
+        return None
+
+
+def stamp_transparency(images: Any) -> bool:
+    """Give each image entry in ``images`` without one its stored
+    ``hasTransparency``, read from its file; an unknown file stays without
+    it. Whether any entry changed. Decodes images: call it off the loop."""
+    changed = False
+    for img in images if isinstance(images, list) else []:
+        if not isinstance(img, dict) or HAS_TRANSPARENCY in img:
+            continue
+        found = image_has_transparency(str(img.get("url") or ""))
+        if found is not None:
+            img[HAS_TRANSPARENCY] = found
+            changed = True
+    return changed
 
 
 def with_alpha_outdated(moodboard: dict[str, Any]) -> dict[str, Any]:
     """The board with ``outdated`` on its saved analysis when that analysis
     predates alpha (``predates_alpha``), in memory, so Moodboard Studio, the
-    CLI and MCP all say it's out of date; the board as it is otherwise."""
+    CLI and MCP all say so, and without it otherwise. Worked out again on
+    every read, never kept from the file (the store strips it before it
+    writes); the composed brief is marked from it (moodboard_brief.with_brief)."""
     analysis = moodboard.get("analysis")
-    if not isinstance(analysis, dict) or analysis.get("outdated") == ALPHA_OUTDATED:
+    if not isinstance(analysis, dict):
         return moodboard
-    if not predates_alpha(moodboard, analysis):
-        return moodboard
-    return {**moodboard, "analysis": {**analysis, "outdated": ALPHA_OUTDATED}}
+    if predates_alpha(moodboard, analysis):
+        return {**moodboard, "analysis": {**analysis, "outdated": ALPHA_OUTDATED}}
+    if "outdated" in analysis:
+        return {**moodboard, "analysis": {k: v for k, v in analysis.items() if k != "outdated"}}
+    return moodboard
 
 
-_COUNTED = re.compile(r"^\d+ reference image\(s\) analyzed as ")
+# A summary's count: "1 reference image", "7 reference images", or the
+# "(s)" form saved before 2026-10-31 (GM r1 on #208).
+_COUNTED = re.compile(r"^(\d+) reference image(?:\(s\)|s)? analyzed as ")
+
+
+def counted_images(count: int) -> str:
+    """"1 reference image", "7 reference images": a summary's count."""
+    return f"{count} reference image{'' if count == 1 else 's'}"
 _EMPTY_SUMMARY_START = "Empty moodboard;"
 
 
@@ -550,14 +587,21 @@ def with_steering_count(moodboard: dict[str, Any]) -> dict[str, Any]:
     counted = _COUNTED.match(summary)
     if not counted and not summary.startswith(_EMPTY_SUMMARY_START):
         return moodboard
+    current = analysis_is_current(moodboard, analysis)
+    if not current:
+        # Out of date: the count stays the analyzer's, in today's plural.
+        if not counted:
+            return moodboard
+        fixed = f"{counted_images(int(counted.group(1)))} analyzed as {summary[counted.end():]}"
+        return moodboard if fixed == summary else {**moodboard, "analysis": {**analysis, "summary": fixed}}
     count, has_images, outside_only = steering_count(moodboard)
     if count == 0:
         fixed = OUTSIDE_ONLY_SUMMARY if outside_only else NONE_STEER_SUMMARY if has_images else summary
     elif counted:
-        fixed = f"{count} reference image(s) analyzed as {summary[counted.end():]}"
+        fixed = f"{counted_images(count)} analyzed as {summary[counted.end():]}"
     else:  # "Empty moodboard" over a board with images that steer: not this analysis's board
         return moodboard
-    if fixed == summary or not analysis_is_current(moodboard, analysis):
+    if fixed == summary:
         return moodboard
     return {**moodboard, "analysis": {**analysis, "summary": fixed}}
 
@@ -697,7 +741,7 @@ def _measure_file(path: str, mtime_ns: int, size: int, accent_min_chroma: float,
     # Alpha is kept: a transparent pixel isn't a colour (Commons' measure
     # and _image_stats count it out). An opaque image reads as RGB, as before.
     with Image.open(path) as pil:
-        image = pil.convert("RGBA") if has_transparency(pil) else pil.convert("RGB")
+        image = as_rgba(pil) if has_transparency(pil) else as_rgb(pil)
     measured = measure_image(image, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
                              merge_delta_e=merge_delta_e)
     lightness, saturation = _image_stats(image)
@@ -839,10 +883,10 @@ def _clamp_float(raw: Any, default: float, lower: float, upper: float) -> float:
 
 
 def _image_stats(img: Image.Image) -> tuple[float | None, float | None]:
-    """Mean lightness and saturation (0-255). An RGBA image counts each pixel
-    by its alpha and leaves out those under ALPHA_MIN (Pillow's RGBA resize
-    premultiplies, so colours stay straight); a fully transparent one has
-    neither (None, None). An RGB image reads as before."""
+    """Mean lightness and saturation (0-255). An RGBA image reads the same
+    pixels its palette does (``visible_pixels``, at the palette's size), each
+    by its weight, so an image with colours always has both, and one with
+    nothing seen has neither (None, None). An RGB image reads as before."""
     if img.mode != "RGBA":
         arr = np.asarray(img.resize((64, 64), Image.Resampling.BILINEAR), dtype=np.float64)
         maxc = arr.max(axis=2)
@@ -850,11 +894,12 @@ def _image_stats(img: Image.Image) -> tuple[float | None, float | None]:
         lightness = float(((maxc + minc) / 2.0).mean())
         saturation = np.where(maxc == 0, 0.0, (maxc - minc) / np.maximum(maxc, 1.0) * 255.0)
         return lightness, float(saturation.mean())
-    rgba = np.asarray(img.resize((64, 64), Image.Resampling.BILINEAR), dtype=np.float64).reshape(-1, 4)
-    seen = rgba[:, 3] >= ALPHA_MIN
-    if not seen.any():
+    rgb, weights = visible_pixels(img, MAX_DIM)
+    if rgb.shape[0] == 0:
         return None, None
-    arr, weights = rgba[seen, :3], rgba[seen, 3] / 255.0
+    arr = rgb.astype(np.float64)
+    if weights is None:
+        weights = np.ones(arr.shape[0])
     maxc = arr.max(axis=1)
     minc = arr.min(axis=1)
     lightness = float(np.average((maxc + minc) / 2.0, weights=weights))
@@ -862,10 +907,14 @@ def _image_stats(img: Image.Image) -> tuple[float | None, float | None]:
     return lightness, float(np.average(saturation, weights=weights))
 
 
-def _weighted_mean(images: list[dict[str, Any]], value: Any) -> float:
-    """Mean of ``value(image)`` over images that steer the board, by weight."""
-    weights = np.array([float(img["weight"]) for img in images])
-    return float(np.average([value(img) for img in images], weights=weights))
+def _weighted_mean(images: list[dict[str, Any]], value: Any) -> float | None:
+    """Mean of ``value(image)`` over images that steer the board, by weight,
+    leaving out an image with no value (nothing seen); None when none has one."""
+    pairs = [(float(img["weight"]), v) for img in images if (v := value(img)) is not None]
+    weights = np.array([w for w, _ in pairs])
+    if not pairs or weights.sum() <= 0:
+        return None
+    return float(np.average([v for _, v in pairs], weights=weights))
 
 
 def _keywords_from_analysis(
@@ -883,7 +932,7 @@ def _keywords_from_analysis(
     if images:
         lightness = _weighted_mean(images, lambda img: img.get("lightness", 128))
         saturation = _weighted_mean(images, lambda img: img.get("saturation", 64))
-        for label, pred in _PALETTE_WORDS:
+        for label, pred in _PALETTE_WORDS if lightness is not None and saturation is not None else []:
             if pred(lightness, saturation):
                 keywords.append(label)
 
@@ -913,7 +962,7 @@ def _summary(mode: str, count: int, palette: list[str], accents: list[str], note
     accent_text = f" Accents: {', '.join(accents)}." if accents else ""
     clear_text = "".join(f" {TRANSPARENT_IMAGE_LINE.format(number=number)}" for number in transparent or [])
     note_text = f" Notes emphasize: {notes[:180]}" if notes else ""
-    return (f"{count} reference image(s) analyzed as {mode}. Palette: {palette_text}.{accent_text}{clear_text}"
+    return (f"{counted_images(count)} analyzed as {mode}. Palette: {palette_text}.{accent_text}{clear_text}"
             f"{note_text}")
 
 
@@ -927,6 +976,8 @@ def _lighting_hint(images: list[dict[str, Any]]) -> str:
     if not images:
         return "derive lighting from source references"
     lightness = _weighted_mean(images, lambda img: img.get("lightness", 128))
+    if lightness is None:
+        return "derive lighting from source references"
     if lightness < 80:
         return "low-key, shadow-forward lighting"
     if lightness > 180:

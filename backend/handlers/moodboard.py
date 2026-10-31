@@ -7,8 +7,8 @@ from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
-from services.moodboard_analysis import (analysis_is_current, analyze_moodboard, predates_alpha,
-                                         rank_representative_images, steers)
+from services.moodboard_analysis import (ALPHA_RERUN_WARNING, analysis_is_current, analyze_moodboard, colours_current,
+                                         predates_alpha, rank_representative_images, steers)
 from services.moodboard_brief import NODE_NOTES_CHOICES, compose, generator_analysis
 from services.moodboard_store import MoodboardStore, output_image
 from services.stored_image_refs import is_outside_link
@@ -54,17 +54,18 @@ async def handle_moodboard_node(
             "This node's board can't be found. It may have been deleted for good. Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
-    if not analysis_is_current(moodboard, analysis):
+    # Its colours too: an analysis made before alpha counted, of a board with
+    # transparency, describes the board but measured its clear areas as dark.
+    if not colours_current(moodboard, analysis):
         stale = isinstance(analysis, dict) and bool(analysis.get("styleBrief"))
-        before_alpha = stale and predates_alpha(moodboard, analysis)
+        before_alpha = stale and analysis_is_current(moodboard, analysis) and predates_alpha(moodboard, analysis)
         # It reads every image file, so it runs off the event loop.
         analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         if stale:
-            reason = ("The board's saved analysis was made before Nebula left transparent pixels out of the "
-                      "colors" if before_alpha else "The board changed after its saved analysis")
             analysis["warnings"] = [
                 *analysis.get("warnings", []),
-                f"{reason}, so this run analyzed it again. "
+                ALPHA_RERUN_WARNING if before_alpha else
+                "The board changed after its saved analysis, so this run analyzed it again. "
                 "Analyze it in Moodboard Studio to save the new analysis.",
             ]
 

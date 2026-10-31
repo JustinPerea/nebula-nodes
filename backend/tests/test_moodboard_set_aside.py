@@ -156,7 +156,7 @@ def test_the_summary_counts_only_images_that_steer() -> None:
     # Four images: one switched aside, one at weight 0. Weight 0 is set aside
     # too (plan section 4.4), so neither is counted: what the Preview and the
     # node card count.
-    assert summary.startswith("2 reference image(s) analyzed as look.")
+    assert summary.startswith("2 reference images analyzed as look.")
     assert summary == analyze_moodboard(_without(_without(board, "aside"), "zero"))["summary"]
 
 
@@ -251,13 +251,13 @@ def test_krea_references_never_include_a_set_aside_image(tmp_path, monkeypatch) 
         assert [item["url"] for item in bundle["analysis"]["images"]] == [navy, cream]
         assert not any(item.get("setAside") for item in bundle["analysis"]["images"])
         assert all(s["number"] not in (2, 3) for c in bundle["analysis"]["colors"] for s in c["sources"])
-        assert bundle["analysis"]["summary"].startswith("2 reference image(s) analyzed as look.")
+        assert bundle["analysis"]["summary"].startswith("2 reference images analyzed as look.")
     # The saved analysis does list both, measured; its summary counts the two
     # that steer.
     saved_analysis = store.get(created["id"])["analysis"]
     assert [item.get("setAside") for item in saved_analysis["images"]] == [None, True, None, None]
     assert [item["weight"] for item in saved_analysis["images"]] == [0.5, 1.0, 0.0, 0.8]
-    assert saved_analysis["summary"].startswith("2 reference image(s) analyzed as look.")
+    assert saved_analysis["summary"].startswith("2 reference images analyzed as look.")
 
 
 def test_a_saved_analysis_that_counted_weight_zero_reads_with_the_steering_count(tmp_path, monkeypatch) -> None:
@@ -275,7 +275,7 @@ def test_a_saved_analysis_that_counted_weight_zero_reads_with_the_steering_count
     store = MoodboardStore()
     analysis = analyze_moodboard(store.get(created["id"]))
     # As the version 5 analyzer wrote it before this change: weight 0 counted.
-    old = {**analysis, "summary": analysis["summary"].replace("2 reference image(s)", "3 reference image(s)", 1)}
+    old = {**analysis, "summary": analysis["summary"].replace("2 reference images", "3 reference image(s)", 1)}
     assert old["summary"] != analysis["summary"]
     store.update(created["id"], analysis=old)
     path = _find_moodboard_file(_moodboard_root(), created["id"])
@@ -287,12 +287,13 @@ def test_a_saved_analysis_that_counted_weight_zero_reads_with_the_steering_count
     assert analysis_is_current(board, board["analysis"])
     assert board["analysis"]["summary"] == analysis["summary"]
     assert path.read_bytes() == before
-    # One that no longer describes the board is left as it was saved.
+    # One that no longer describes the board keeps its own count, read in
+    # today's plural (GM r1 on #208: no "(s)").
     images = [{**img, "weight": 0.9} if img["url"] == cream else img for img in board["images"]]
     store.update(created["id"], images=images, analysis=old)
     stale = store.get(created["id"])
     assert not analysis_is_current(stale, stale["analysis"])
-    assert stale["analysis"]["summary"] == old["summary"]
+    assert stale["analysis"]["summary"] == old["summary"].replace("3 reference image(s)", "3 reference images", 1)
 
 
 def test_the_cli_brief_says_which_images_are_set_aside() -> None:

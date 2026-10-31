@@ -80,6 +80,73 @@ async def test_the_analysis_records_the_assets_measurement_version(store):
     assert effective(store, old)["analysis"]["code_version"] == "measure-1"
 
 
+def _add_image(store, image: Image.Image, name: str):
+    col = store.ensure_collection("x", "manual")
+    buf = io.BytesIO()
+    image.save(buf, "PNG")
+    return buf.getvalue(), intake.add_bytes(store, buf.getvalue(), filename=name, collection_id=col["id"],
+                                           actor="human:justin", source={"kind": "file"})
+
+
+@pytest.mark.asyncio
+async def test_the_reader_sees_a_transparent_reference_over_the_commons_tile(store):
+    from commons import media
+    from commons.worker import COMMONS_READER_SURFACE
+
+    pixels = np.zeros((40, 40, 4), np.uint8)
+    pixels[:, :20] = (232, 89, 60, 255)  # the left half orange, the rest clear over hidden black
+    _, added = _add_image(store, Image.fromarray(pixels, "RGBA"), "mark.png")
+    seen = []
+
+    async def run(png, palette, fewshots, *, vocab, **kw):
+        seen.append(png)
+        data = good_output(len(palette))
+        return reader.ReaderResult(structured=data, raw=json.dumps(data), model="claude-opus-5-5", duration_ms=5,
+                                   event_types=["result"], error=None)
+
+    w = AnalysisWorker(store, reader=run, load_avg=lambda: 1.0, budget=5)
+    assert await w.run_once() == "analyzed"
+    sent = np.asarray(Image.open(io.BytesIO(seen[0])))
+    assert sent.shape == (40, 40, 3)
+    assert tuple(sent[0, 30]) == COMMONS_READER_SURFACE == (10, 10, 10)
+    assert tuple(sent[0, 5]) == (232, 89, 60)
+    assert media.load_image(seen[0], "image/png").mode == "RGB"
+
+
+@pytest.mark.asyncio
+async def test_an_opaque_reference_is_sent_byte_for_byte_as_before(store):
+    from commons import media
+
+    data, _ = _add_image(store, Image.fromarray(
+        np.random.default_rng(9).integers(0, 255, (30, 50, 3), dtype=np.uint8)).convert("RGBA"), "opaque.png")
+    reader_ = fake_reader()
+    seen = []
+
+    async def run(png, palette, fewshots, *, vocab, **kw):
+        seen.append(png)
+        return await reader_(png, palette, fewshots, vocab=vocab)
+
+    w = AnalysisWorker(store, reader=run, load_avg=lambda: 1.0, budget=5)
+    assert await w.run_once() == "analyzed"
+    # What the worker sent before alpha counted: the RGB decode, as PNG.
+    assert seen == [media.encode_png(media.load_image(data, "image/png"), max_edge=1568)]
+
+
+@pytest.mark.asyncio
+async def test_a_fully_transparent_reference_is_never_sent(store):
+    from commons.worker import CLEAR_ERROR
+
+    _, added = _add_image(store, Image.new("RGBA", (24, 24), (0, 0, 0, 0)), "clear.png")
+    reader_ = fake_reader()
+    w = AnalysisWorker(store, reader=reader_, load_avg=lambda: 1.0, budget=5)
+    assert await w.run_once() == "failed"
+    assert reader_.calls == [] and w.budget_used == 0 and records.meter_today(store)["calls"] == 0
+    asset = store.get_asset(added.asset["id"])
+    assert asset["analysis_state"] == "analysis_failed" and asset["last_error"] == CLEAR_ERROR
+    assert CLEAR_ERROR == "too transparent to add colors; not sent to the reader"
+    assert await w.run_once() == "idle"  # no retry: it won't change
+
+
 @pytest.mark.asyncio
 async def test_invalid_output_is_rejected_whole_and_raw_kept(store):
     aid = add(store).asset["id"]

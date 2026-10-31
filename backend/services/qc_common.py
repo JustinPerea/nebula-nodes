@@ -17,6 +17,7 @@ from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
 import numpy as np
+from cinema.color import NODE_MEDIA_SURFACE, seen_on
 from PIL import Image, ImageDraw, ImageOps
 
 from services.ffmpeg import ffprobe_video, run_ffmpeg
@@ -152,7 +153,9 @@ def open_rgb(path: Path) -> Image.Image:
 
 
 def normalized_rgb(image: Image.Image, size: tuple[int, int] = (320, 180)) -> np.ndarray:
-    resized = ImageOps.fit(image.convert("RGB"), size, method=Image.Resampling.LANCZOS)
+    # A transparent reference is measured as it shows on a canvas node, not
+    # over the black hidden under its alpha; a frame (opaque) as before.
+    resized = ImageOps.fit(seen_on(image, NODE_MEDIA_SURFACE), size, method=Image.Resampling.LANCZOS)
     return np.asarray(resized, dtype=np.float32) / 255.0
 
 

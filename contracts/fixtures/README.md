@@ -53,3 +53,5 @@ Golden request/response bytes for cross-platform parity. **Web pytest is the ora
 **Google parity suite:** `backend/tests/test_google_contract_fixtures.py` (JSON) + `backend/tests/test_google_contract_sse_fixtures.py` (SSE).
 
 `contracts/fixtures/handlers/` is the single golden source. Backend and future Swift/TypeScript parity tests load these same bytes directly; do not create provider-family copies under `backend/tests/fixtures/`.
+
+`colour/alpha.json` holds how colour is read from pixels with alpha (the threshold, the weight and the vision readers' surfaces). `backend/tests/test_colour_alpha.py` and `frontend/tests/colourAlphaContract.test.ts` both read it, so the two sides can't drift.

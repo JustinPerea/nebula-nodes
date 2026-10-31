@@ -177,9 +177,7 @@ def lab_to_rgb(lab: np.ndarray) -> np.ndarray:
 
 def _to_rgb_array(img: Image.Image) -> np.ndarray:
     """Pillow image → (H, W, 3) uint8 RGB array, dropping any alpha."""
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    return np.asarray(img, dtype=np.uint8)
+    return np.asarray(as_rgb(img), dtype=np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +189,28 @@ def _to_rgb_array(img: Image.Image) -> np.ndarray:
 # 8 bits, says little about what's seen. Above it a pixel counts by its alpha
 # (alpha / 255), the part of it that covers what's behind.
 ALPHA_MIN = 16
-# The longest edge pixels are read at, by NEAREST resize: no blending, so
-# each pixel keeps its own colour and alpha.
+# The longest edge pixels are read at. An opaque image is read by NEAREST
+# resize, as it always was. One with transparency is read by an area filter
+# that weights each pixel's colour by its alpha (premultiplied), so a thin
+# stroke survives as a partly covered pixel with its own colour, and no dark
+# fringe comes from the colour hidden under a transparent pixel.
 PIXELS_MAX_DIM = 256
+
+
+def as_rgba(img: Image.Image) -> Image.Image:
+    """``img`` as straight-alpha RGBA. Pillow has no La to RGBA conversion,
+    so La (premultiplied grey, only ever in memory) goes through LA, which
+    un-premultiplies it; RGBa un-premultiplies on its own."""
+    if img.mode == "La":
+        img = img.convert("LA")
+    return img.convert("RGBA")  # a copy, as convert always is
+
+
+def as_rgb(img: Image.Image) -> Image.Image:
+    """``img`` as RGB with alpha dropped (``convert("RGB")``, which La lacks)."""
+    if img.mode == "La":
+        img = img.convert("LA")
+    return img.convert("RGB")  # a copy, as convert always is
 
 
 def has_transparency(img: Image.Image) -> bool:
@@ -201,7 +218,44 @@ def has_transparency(img: Image.Image) -> bool:
     channel that isn't all 255, or a palette or tRNS transparency."""
     if not img.has_transparency_data:
         return False
-    return img.convert("RGBA").getchannel("A").getextrema()[0] < 255
+    return as_rgba(img).getchannel("A").getextrema()[0] < 255
+
+
+def _area_pixels(rgba: np.ndarray, max_dim: int | None) -> tuple[np.ndarray, np.ndarray]:
+    """The seen pixels of an (H, W, 4) straight-alpha array, area-reduced so
+    the longest edge is at most ``max_dim``: each output pixel is a block of
+    ``f`` x ``f`` source pixels, its colour their alpha-weighted mean and its
+    weight their alpha summed over a full block (``f * f * 255``), so it
+    carries the block's coverage. Pixels under ``ALPHA_MIN`` are taken out
+    before the reduce, so a haze never adds up to a colour, and a block with
+    any seen pixel stays: nothing seen at full resolution is lost here."""
+    h, w = rgba.shape[:2]
+    f = 1 if not max_dim or max(w, h) <= max_dim else -(-max(w, h) // max_dim)
+    out_rgb: list[np.ndarray] = []
+    out_w: list[np.ndarray] = []
+    full = float(f * f * 255)
+    for top in range(0, h, f):
+        strip = rgba[top:top + f]
+        a = strip[..., 3].astype(np.uint32)
+        a[a < ALPHA_MIN] = 0
+        pad = (-w) % f
+        rows = strip.shape[0]
+        if pad:
+            a = np.pad(a, ((0, 0), (0, pad)))
+        prem = strip[..., :3].astype(np.uint32) * a[:, :w, None]
+        if pad:
+            prem = np.pad(prem, ((0, 0), (0, pad), (0, 0)))
+        cells = a.shape[1] // f
+        a_sum = a.reshape(rows, cells, f).sum(axis=(0, 2))
+        rgb_sum = prem.reshape(rows, cells, f, 3).sum(axis=(0, 2))
+        seen = a_sum > 0
+        if not seen.any():
+            continue
+        out_rgb.append(np.rint(rgb_sum[seen] / a_sum[seen, None]).astype(np.uint8))
+        out_w.append(a_sum[seen].astype(np.float64) / full)
+    if not out_rgb:
+        return np.zeros((0, 3), dtype=np.uint8), np.zeros((0,), dtype=np.float64)
+    return np.concatenate(out_rgb), np.concatenate(out_w)
 
 
 def visible_pixels(img: Image.Image, max_dim: int | None = PIXELS_MAX_DIM) -> tuple[np.ndarray, np.ndarray | None]:
@@ -209,29 +263,74 @@ def visible_pixels(img: Image.Image, max_dim: int | None = PIXELS_MAX_DIM) -> tu
 
     Returns ``(rgb, weights)``: an (N, 3) uint8 array of straight (not
     premultiplied, never flattened onto black or white) colours, and each
-    pixel's weight, its alpha / 255. Pixels under ``ALPHA_MIN`` are left out,
-    so a fully transparent image gives no pixels at all.
+    pixel's weight, its alpha / 255 (at full resolution; once reduced, the
+    coverage of its block). Pixels under ``ALPHA_MIN`` are left out, so an
+    image with no pixel at ``ALPHA_MIN`` or above (``is_clear``) gives no
+    pixels at all, and any other gives some.
 
     An image with no transparency gives every pixel and ``weights`` None:
     exactly the pixels Nebula read before alpha counted (``convert("RGB")``,
     NEAREST resize to ``max_dim``), so an opaque image measures byte for
     byte as it did.
     """
-    def _small(image: Image.Image) -> Image.Image:
+    if not has_transparency(img):
+        image = as_rgb(img)
         w, h = image.size
         if max_dim and max(w, h) > max_dim:
             scale = max_dim / float(max(w, h))
             image = image.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.Resampling.NEAREST)
-        return image
-
-    if not has_transparency(img):
-        rgb = np.asarray(_small(img.convert("RGB")), dtype=np.uint8)
+        rgb = np.asarray(image, dtype=np.uint8)
         return rgb.reshape(-1, 3), None
-    # PNG and Pillow's RGBA hold straight alpha; a premultiplied mode
-    # (RGBa, La) is un-premultiplied by the conversion.
-    rgba = np.asarray(_small(img.convert("RGBA")), dtype=np.uint8).reshape(-1, 4)
-    keep = rgba[:, 3] >= ALPHA_MIN
-    return rgba[keep, :3].copy(), rgba[keep, 3].astype(np.float64) / 255.0
+    return _area_pixels(np.asarray(as_rgba(img), dtype=np.uint8), max_dim)
+
+
+# The surface each vision reader's references sit on where the person sees
+# them, as RGB: a reference with transparency is sent composited onto it, as
+# it looks in the app, never onto the colour hidden under its alpha.
+# contracts/fixtures/colour/alpha.json holds these and the CSS they come
+# from; tests on both sides check it (backend/tests/test_colour_alpha.py,
+# frontend/tests/colourAlphaContract.test.ts).
+# - Commons: every tile and the detail stage draw images on
+#   --sr-node-media-bg, rgba(255, 255, 255, 0.04), over --sr-canvas #000000.
+# - Moodboards: the board card, rgba(255, 255, 255, 0.03) over the board's
+#   --sr-canvas #000000. The list tile and side panel draw the same images
+#   a few levels darker (rgba(0, 0, 0, 0.22) over their panel); all are near
+#   black, and the board is where the person lays the references out.
+# - A canvas node's image (the Vision node's and QC's inputs):
+#   .model-node__preview-image on --sr-node-media-bg over --sr-canvas.
+COMMONS_READER_SURFACE = (10, 10, 10)
+MOODBOARD_READER_SURFACE = (8, 8, 8)
+NODE_MEDIA_SURFACE = (10, 10, 10)
+
+
+def is_clear(img: Image.Image) -> bool:
+    """Whether no pixel of ``img`` reaches ``ALPHA_MIN``: nothing is seen,
+    so it has no colours and a reader is never sent it. Full resolution."""
+    if not img.has_transparency_data:
+        return False
+    return as_rgba(img).getchannel("A").getextrema()[1] < ALPHA_MIN
+
+
+def composite_on(img: Image.Image, surface: tuple[int, int, int]) -> Image.Image | None:
+    """``img`` as RGB, as the person sees it over ``surface``: for a vision
+    reader. An image with no transparency is ``img.convert("RGB")``, exactly
+    what was sent before; a fully transparent one (``is_clear``) is None, so
+    it is never sent. Straight alpha over the surface, never the colour
+    hidden under a transparent pixel."""
+    if not has_transparency(img):
+        return as_rgb(img)
+    if is_clear(img):
+        return None
+    rgba = as_rgba(img)
+    backdrop = Image.new("RGBA", rgba.size, (*surface, 255))
+    return Image.alpha_composite(backdrop, rgba).convert("RGB")
+
+
+def seen_on(img: Image.Image, surface: tuple[int, int, int]) -> Image.Image:
+    """``composite_on``, but a fully transparent image is the bare surface
+    (what the person sees), for a reader that must send something."""
+    seen = composite_on(img, surface)
+    return Image.new("RGB", img.size, surface) if seen is None else seen
 
 
 def _array_to_image(arr: np.ndarray) -> Image.Image:
@@ -362,14 +461,20 @@ def extract_palette(img: Image.Image, k: int = 6) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _reinhard_match(src_lab: np.ndarray, ref_lab: np.ndarray) -> np.ndarray:
+def _reinhard_match(src_lab: np.ndarray, ref_lab: np.ndarray, weights: np.ndarray | None = None) -> np.ndarray:
     """Reinhard mean/std transfer of ``src_lab`` (N, 3) toward ``ref_lab`` stats.
 
     For each Lab channel: ``out = (src - mean_src) * (std_ref / std_src) + mean_ref``.
-    Guards against zero variance.
+    Guards against zero variance. ``weights`` (N,): the source's stats count
+    each pixel by its alpha weight (0 for one that isn't seen); None is the
+    plain mean and std.
     """
-    src_mean = src_lab.mean(axis=0)
-    src_std = src_lab.std(axis=0)
+    if weights is None:
+        src_mean = src_lab.mean(axis=0)
+        src_std = src_lab.std(axis=0)
+    else:
+        src_mean = np.average(src_lab, axis=0, weights=weights)
+        src_std = np.sqrt(np.average((src_lab - src_mean) ** 2, axis=0, weights=weights))
     ref_mean = ref_lab.mean(axis=0)
     ref_std = ref_lab.std(axis=0)
 
@@ -387,12 +492,13 @@ def _nudge_to_nearest(lab: np.ndarray, target_lab: np.ndarray, strength: float) 
     return lab + (nearest - lab) * strength
 
 
-def _histogram_match_channel(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
-    """Match the distribution of ``src`` (0..255) to ``ref`` via CDF mapping."""
+def _histogram_match_channel(src: np.ndarray, ref: np.ndarray, weights: np.ndarray | None = None) -> np.ndarray:
+    """Match the distribution of ``src`` (0..255) to ``ref`` via CDF mapping.
+    ``weights``: the source's histogram counts each pixel by its alpha weight."""
     src_int = src.astype(np.int64)
     ref_int = np.clip(np.rint(ref), 0, 255).astype(np.int64)
 
-    src_hist = np.bincount(src_int, minlength=256).astype(np.float64)
+    src_hist = np.bincount(src_int, weights=weights, minlength=256).astype(np.float64)
     ref_hist = np.bincount(ref_int, minlength=256).astype(np.float64)
 
     src_cdf = np.cumsum(src_hist)
@@ -423,6 +529,12 @@ def transfer_to_palette(
 
     Returns a new RGB Pillow image. Deterministic: same args → identical pixels.
     Empty/invalid swatches or ``strength <= 0`` → returns the source unchanged.
+
+    An image with transparency comes back RGBA with its alpha unchanged: the
+    colour channels are graded, and the source's statistics count only what
+    is seen (alpha weights, ``ALPHA_MIN``), never the colour hidden under a
+    transparent pixel. One with nothing seen is returned as it is. An image
+    with no transparency is graded exactly as before.
     """
     try:
         strength = float(strength)
@@ -431,10 +543,25 @@ def transfer_to_palette(
     strength = max(0.0, min(1.0, strength))
 
     target_rgb = _swatches_to_rgb_array(swatches)
-    src_rgb = _to_rgb_array(img)
+    alpha: np.ndarray | None = None
+    weights: np.ndarray | None = None
+    if has_transparency(img):
+        rgba = np.asarray(as_rgba(img), dtype=np.uint8)
+        src_rgb, alpha = rgba[..., :3].copy(), rgba[..., 3].copy()
+        flat_alpha = alpha.reshape(-1).astype(np.float64)
+        weights = np.where(flat_alpha >= ALPHA_MIN, flat_alpha / 255.0, 0.0)
+    else:
+        src_rgb = _to_rgb_array(img)
 
-    if target_rgb.shape[0] == 0 or strength <= 0.0:
-        return Image.fromarray(src_rgb, mode="RGB")
+    def finish(out: Image.Image) -> Image.Image:
+        if alpha is None:
+            return out
+        out = out.convert("RGBA")
+        out.putalpha(Image.fromarray(alpha))
+        return out
+
+    if target_rgb.shape[0] == 0 or strength <= 0.0 or (weights is not None and not weights.any()):
+        return finish(Image.fromarray(src_rgb, mode="RGB"))
 
     flat = src_rgb.reshape(-1, 3).astype(np.float64)
 
@@ -442,16 +569,16 @@ def transfer_to_palette(
         target_full = np.repeat(target_rgb, 256, axis=0)  # broad reference mass per swatch
         matched = np.empty_like(flat)
         for ch in range(3):
-            matched[:, ch] = _histogram_match_channel(flat[:, ch], target_full[:, ch])
+            matched[:, ch] = _histogram_match_channel(flat[:, ch], target_full[:, ch], weights)
         out = flat + (matched - flat) * strength
         out_img = out.reshape(src_rgb.shape)
-        return _array_to_image(out_img)
+        return finish(_array_to_image(out_img))
 
     # Lab-based methods
     src_lab = rgb_to_lab(flat)
     target_lab = rgb_to_lab(target_rgb)
 
-    matched_lab = _reinhard_match(src_lab, target_lab)
+    matched_lab = _reinhard_match(src_lab, target_lab, weights)
 
     if method == "reinhard":
         result_lab = src_lab + (matched_lab - src_lab) * strength
@@ -460,4 +587,4 @@ def transfer_to_palette(
         result_lab = _nudge_to_nearest(result_lab, target_lab, strength * 0.5)
 
     out_rgb = lab_to_rgb(result_lab).reshape(src_rgb.shape)
-    return _array_to_image(out_rgb)
+    return finish(_array_to_image(out_rgb))

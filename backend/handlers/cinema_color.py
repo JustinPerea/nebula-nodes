@@ -130,10 +130,11 @@ async def handle_cinema_color(
                 swatches = extract_palette(src_img)
             if not swatches:
                 raise with_person_line(
-                    ValueError(f"Source image {source_ref} is fully transparent, so it has no palette to match. "
-                               "Choose a source image with visible pixels, or add hex swatches to the palette."),
-                    f"The image in “{field_label('cinema-color', 'source_image')}” is fully transparent, so it has "
-                    f"no colors to match. Choose another image, or add hex swatches to "
+                    ValueError(f"Source image {source_ref} is too transparent to match colors from: no pixel "
+                               "reaches alpha 16 of 255. Choose a source image with visible pixels, or add hex "
+                               "swatches to the palette."),
+                    f"The image in “{field_label('cinema-color', 'source_image')}” is too transparent to match "
+                    f"colors from. Choose another image, or add hex swatches to "
                     f"“{field_label('cinema-color', 'palette')}”.")
 
     # An empty palette would pass the image through unchanged, which reads as
@@ -156,10 +157,11 @@ async def handle_cinema_color(
 
     method = str(params.get("method", "lab-transfer"))
 
+    # The image as it is, alpha and all: the colour channels are graded and a
+    # transparent image keeps its alpha (cinema.color.transfer_to_palette).
     with Image.open(require_allowed_path(abs_path)) as img:
-        result = transfer_to_palette(
-            img.convert("RGB"), swatches, strength=strength, method=method
-        )
+        img.load()
+        result = transfer_to_palette(img, swatches, strength=strength, method=method)
 
     url = _save_output_image(result)
     return {"image": {"type": "Image", "value": url}}

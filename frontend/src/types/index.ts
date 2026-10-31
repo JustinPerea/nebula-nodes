@@ -674,6 +674,10 @@ export interface MoodboardBrief {
   clashMode?: MoodboardClashMode;
   /** Whether the board's notes went to generators (off unless opted in). */
   notesSent?: boolean;
+  /** Set on read when the saved analysis's colours are out of date
+   *  (MoodboardAnalysis.outdated): this brief is built from them, and the
+   *  next run analyzes the board again and sends an updated one. */
+  outdated?: string;
 }
 
 /** What a board does when its words clash with a measured colour. */

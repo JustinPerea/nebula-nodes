@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import httpx
+from cinema.color import NODE_MEDIA_SURFACE, seen_on
 from PIL import Image, ImageOps
 
 from execution.missing_credential import MissingCredentialError
@@ -69,7 +70,10 @@ def _encoded_images(paths: Sequence[Path]) -> list[tuple[str, str]]:
         # to the source file. Normalize every advisory frame to a bounded JPEG
         # in memory; the source artifact remains untouched on disk.
         with Image.open(path) as source:
-            image = ImageOps.exif_transpose(source).convert("RGB")
+            # As the person sees it on the canvas node: a transparent image
+            # over the node's surface, never over the black hidden under its
+            # alpha; an opaque one exactly as before.
+            image = seen_on(ImageOps.exif_transpose(source), NODE_MEDIA_SURFACE)
             image.thumbnail(
                 (MAX_VISION_IMAGE_EDGE, MAX_VISION_IMAGE_EDGE),
                 Image.Resampling.LANCZOS,

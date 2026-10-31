@@ -136,6 +136,13 @@ before it was replaced (the review lists every path that moved):
   never-analyzed ``prebrief_unanalyzed`` is today's analyzer's, 5 to 6; its
   hash is the same. ``test_q21b_changed_only_the_krea_style_references``
   reads that path as 5 (``_ANALYZER_AT_26572670``), so the hash is unchanged.
+  The same PR (GM r1 on #208): the summary's count gets a real plural,
+  "1 reference image" / "N reference images", in place of "reference
+  image(s)". 13 paths moved, each an ``analysis.summary`` (the node bundle's,
+  and the CLI's saved analysis as read, which ``with_steering_count`` now
+  writes in today's plural); nothing else in them. ``_without_weight_zero``
+  already reads every count as "N reference image(s)", so the hash is
+  unchanged.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
@@ -375,7 +382,7 @@ BEFORE_Q21B_WITHOUT_KREA_REFS = "5cc3283db0dfd28e80d29ef1651607f2926df7a7fac5d3f
 _ANALYZER_AT_26572670 = 5
 
 
-_COUNT = re.compile(r"^\d+ reference image\(s\) analyzed as ")
+_COUNT = re.compile(r"^\d+ reference image(?:\(s\)|s)? analyzed as ")
 
 
 def _without_weight_zero(outputs: dict[str, Any]) -> None:
@@ -424,17 +431,19 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
     rest = {label: {key: value for key, value in outputs.items() if key != "kreaStyleReferences"}
             for label, outputs in expected.items()}
     rest = json.loads(json.dumps(rest))
-    for outputs in rest.values():
+    for label, outputs in rest.items():
         check = (outputs.get("cli") or {}).get("colorCheck")
         if isinstance(check, dict):
             check.pop("basis", None)
             ((check.get("checks") or {}).get("words") or {}).pop("version", None)
         _without_weight_zero(outputs)
         _without_outside_links(outputs)
-        # Alpha counts (2026-10-31): a never-analyzed board reports today's
-        # analyzer version, 6; the file at 26572670 had 5.
-        if not outputs.get("analysisIsCurrent") and isinstance(outputs.get("sourceHash"), dict):
-            outputs["sourceHash"]["version"] = min(outputs["sourceHash"]["version"], _ANALYZER_AT_26572670)
+        # Alpha counts (2026-10-31): the never-analyzed board reports today's
+        # analyzer version, 6; the file at 26572670 had 5. Only that board and
+        # only 6 to 5, so any other hash change still fails the pin.
+        source = outputs.get("sourceHash")
+        if label == "prebrief_unanalyzed" and isinstance(source, dict) and source.get("version") == 6:
+            source["version"] = _ANALYZER_AT_26572670
         # PR #198 fix round 13 (GM r21 answer 1): a run note names its board in
         # “…”, where it had straight quotes; nothing else in it changed.
         if isinstance(outputs.get("runNotes"), list):
