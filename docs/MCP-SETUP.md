@@ -33,7 +33,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 | `proposals` | Open proposals, briefly | 5, and `count` |
 | `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) connected to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
 | `nodes` | The node types that run here, by category: `{id: price}` (`"free"`, `[low, high]` USD or `null`), `runsWith` for those that don't run on a key, and notes on modes, providers and Krea | Categories in a fixed order, cut at the budget, `rest: {category: count}`, and "find_nodes(category=…) gives the rest" (over the CLI "`nebula nodes --category <category>` lists the rest with prices"; `nebula context` also prints how many more can't run here and that `nebula nodes --all` lists them) |
-| `spend` | The per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
+| `spend` | The daily total (its limit, what is used and left, the last 24 hours), the per-run limit, the budget kind, its limit and what is used, Krea plan runs. Outside agents share one 24-hour budget, so `usedUsd` is what all of them used; an app with a token also gets its own line (`limitUsd`, `usedUsd`) beside the shared one (`sharedLimitUsd`, `sharedUsedUsd`) | |
 | `next` | `events.cursor` and the journal id for `wait_for_canvas_change`, then one line each: `describe`, `build`, `propose`, `point` and `pins`. Each is the exact call, its arguments named as the tool takes them (`describe_node(definition_id=...)`, `point_at(node_id=..., say=...)`); `build` is a whole `edit_canvas` plan (nodes `{ref, definitionId, params}`, edges `{source, sourceHandle, target, targetHandle}`, `arrange`), and `propose` says `propose_change` takes the same nodes and edges plus `params` and `run`. Over the CLI they are `nebula` commands with their real flags, so a first build needs neither `nebula apply --help` nor `nebula info nebula-moodboard` | |
 
 No private note, image note, board note or pin reply history goes in. The
@@ -2511,6 +2511,25 @@ a hosted Commons service.
 
 The person decides what agents may spend, in **Settings > Preferences**:
 
+- **Daily total** (default $5 a day): what everything that isn't the person
+  may spend together over the last 24 hours: agent chats, agents outside
+  Nebula, scripts and canvas tabs not opened from the person's link. It is the
+  umbrella over the limits below, which stay as finer ones inside it. A run
+  that would pass it isn't refused: Nebula sends it as a proposal to run the
+  same canvas nodes and answers `202` with `status: "waiting"`, `proposalId`,
+  `message` (GM's line: "Waiting for the person’s OK: this run (about $0.40)
+  would pass their $5 daily total for everything that isn’t them ($4.80 used
+  in the last 24 hours). Sent as proposal <id>. Check it with nebula
+  proposals.") and `dailyTotal` (`limitUsd`, `usedUsd`, `leftUsd`, `runUsd`,
+  exact). `nebula run` prints the line and exits 4; MCP `run_nodes` returns
+  it as it is; the proposal's `proposal.created` event carries the same
+  numbers under `waiting`. The person accepts it on the canvas, and Accept
+  runs it as theirs. A run off the canvas (`nebula quick`, a moodboard read,
+  a Cinema shot) can't be a proposal, so it is refused in the same words. The
+  same caller asking again for the same nodes gets the same proposal. "No
+  limit" is the person's explicit choice; unset (or unreadable) is $5. Only
+  the person changes it (`agentSpend.dailyTotalUsd`, `null` for no limit).
+  The person's own runs never count toward it and never wait for it.
 - **Ask before costly runs** (default $1): the canvas asks the person before
   a run that could cost this much, and an agent run at or over it is refused.
   Off means no per-run limit.
@@ -2706,7 +2725,10 @@ its session has used, to the cent; an amount under half a cent that isn't
 nothing reads "<$0.01" (Settings shows spend the same way, and a Run or
 proposal chip shows any amount under a cent as "<$0.01": "$0" only ever
 means free). `budget` is `chat`, `shared` or `app`; outside callers
-also get `outsideSpent`, the shared 24-hour total.
+also get `outsideSpent`, the shared 24-hour total. Every caller gets
+`dailyTotal`: `limitUsd` (null for no limit), `usedUsd` (everything that
+isn't the person, the last 24 hours) and `leftUsd`, exact, with `window:
+"24h"`; `limits.dailyTotalUsd` is the limit too.
 
 ### Personal agents' session tokens
 

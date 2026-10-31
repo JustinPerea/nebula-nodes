@@ -9,6 +9,7 @@ import {
   notReadyLine,
   proposalChanges,
   proposalSummary,
+  waitLineId,
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
@@ -114,6 +115,14 @@ export function ProposalBar() {
     pruneExpired(now);
   }, [now, pruneExpired]);
 
+  // What the bar shows, so a waiting node's card points at its line only
+  // while it is on screen.
+  const shownProposal = live && !live.closing ? live.view.id : null;
+  useEffect(() => {
+    useCanvasProposalsStore.getState().setShown(shownProposal);
+    return () => useCanvasProposalsStore.getState().setShown(null);
+  }, [shownProposal]);
+
   // When the shown proposal changes without the person paging (the one they
   // were reading closed), ignore Accept/Reject for a moment so a click aimed
   // at the old one can't land on the new one.
@@ -213,7 +222,13 @@ export function ProposalBar() {
               </span>
             )}
           </div>
-          <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
+          {/* A run the daily total holds: its reason, GM's line, in the note's
+              spot (the backend writes it as the note). The waiting nodes'
+              cards point here (waitLineId). */}
+          <p ref={noteRef} className="proposal-bar__note"
+            id={current.view.wait ? waitLineId(current.view.id) : undefined}>
+            {current.view.wait ? current.view.wait.barLine : current.view.note}
+          </p>
           <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
           {notReady.length > 0 && (
             // Accept stays as the Run button does for a node without its

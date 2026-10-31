@@ -290,6 +290,8 @@ export interface OutsideSpend {
   connect?: { clients: AgentClientOption[]; available: boolean; reason: string | null };
   /** The person's own agents (outside:personal:<id>), each also inside `outside`. */
   personal?: Array<{ id: string; name: string; spentUsd: number; kreaPlanRuns: number }>;
+  /** Everything that isn't the person, chats included, over the last 24 hours: the daily total's use. */
+  daily?: { spentUsd: number };
 }
 
 /** The exact config for one agent app (backend services/agent_connect.py). It names the token's

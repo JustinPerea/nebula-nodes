@@ -245,6 +245,26 @@ export interface ProposalView {
   reason: string | null;
   idMap: Record<string, string> | null;
   runNodeIds: string[] | null;
+  /** A run the daily total held (backend main._propose_waiting_run): its
+   * lines and exact numbers. Absent on a proposal an agent made. */
+  wait?: ProposalWait;
+}
+
+/** Why a run waits for the person's OK: it would pass the daily total
+ * (backend agent_spend.DailyWait.as_dict, with its waiting nodes). */
+export interface ProposalWait {
+  limitUsd: number;
+  usedUsd: number;
+  leftUsd: number;
+  runUsd: number;
+  also: 'perRun' | 'unpriced' | null;
+  perRunLimitUsd: number | null;
+  /** GM's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
+  barLine: string;
+  /** GM's line for each waiting node's card ("This run would pass the $5 daily total."). */
+  cardLine: string;
+  nodeIds: string[];
+  names: string[];
 }
 
 /**

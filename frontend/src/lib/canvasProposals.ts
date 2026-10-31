@@ -395,6 +395,15 @@ export function withAncestors(targets: string[], edges: Array<{ source: string; 
 /** GM r30 item 7 (PR #200 fix round 20): Accept's and Reject's reasons while
  * the person gate is held (lib/personSession). Both are person-only on the
  * server (main._decidable_proposal: require_person, then the proposal's key). */
+/** The id of the bar's line for a run the daily total holds, which each
+ * waiting node's card names in aria-describedby while the bar shows it. */
+export function waitLineId(proposalId: string): string {
+  return `proposal-wait-line-${proposalId}`;
+}
+
+/** GM - Design (2026-10-31): the status on each node a held run waits on. */
+export const WAITING_FOR_OK = 'Waiting for your OK';
+
 export const PROPOSAL_GATE_COPY = {
   accept: 'You can accept proposals when this tab is connected as you.',
   reject: 'You can reject proposals when this tab is connected as you.',

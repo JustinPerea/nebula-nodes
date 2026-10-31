@@ -16,6 +16,9 @@ export interface AgentSpendLimits {
   /** Runs one chat, or the outside agents in 24 hours, may bill to the Krea plan. Left out
    * (undefined): DEFAULT_PLAN_RUNS. 0: every plan run asks. Null: no limit. */
   kreaPlanRuns?: number | null;
+  /** The daily total everything that isn't the person shares over the last
+   * 24 hours (lib/dailyTotal.ts). Left out (undefined): $5. Null: no limit. */
+  dailyTotalUsd?: number | null;
   /** Keyed by node definition id. */
   models: Record<string, ModelSpendLimit>;
 }
@@ -128,6 +131,11 @@ export function readAgentSpend(value: unknown): AgentSpendLimits {
   // falls back to it, as on the backend (never to no limit).
   if ('outsideDailyUsd' in raw && (raw.outsideDailyUsd === null || readLimit(raw.outsideDailyUsd) !== null)) {
     limits.outsideDailyUsd = readLimit(raw.outsideDailyUsd);
+  }
+  // The daily total: only a saved amount or the person's null; an unreadable
+  // one is the default ($5), as on the backend (never no limit).
+  if ('dailyTotalUsd' in raw && (raw.dailyTotalUsd === null || readLimit(raw.dailyTotalUsd) !== null)) {
+    limits.dailyTotalUsd = readLimit(raw.dailyTotalUsd);
   }
   return limits;
 }
