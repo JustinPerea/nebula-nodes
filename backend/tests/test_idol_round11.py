@@ -380,14 +380,14 @@ def test_a_route_line_names_the_node_in_quotes():
     definition = REGISTRY["flux-3-video"]
     routed = node_route.with_wired_blockers(definition, {"_provider": "krea", "_kreaAuth": "api"}, ["keyframes"])
     line = node_route.route_unavailable_line(definition, routed, {"KREA_API_TOKEN": "set"}, title="“Clip”")
-    assert line is not None and line.startswith("“Clip” can't run on Krea")
+    assert line is not None and line.startswith("“Clip” can’t run on Krea")
 
 
 @pytest.mark.parametrize("params,wired,line", [
     ({"_provider": "krea", "_kreaAuth": "api-token"}, {"keyframes": 1},
-     "“Clip” can't run on Krea with keyframes connected. Disconnect the extra inputs, or switch provider."),
-    ({"_provider": "fal"}, {}, "“Clip” is set to fal.ai, which needs your fal.ai API key. Add it in Settings, "
-                               "or choose another provider. Krea can take it."),
+     "“Clip” can’t run on Krea with keyframes connected. Disconnect the extra inputs."),
+    ({"_provider": "fal"}, {}, "“Clip” is set to fal.ai, which needs your fal.ai API key. Add it in Settings "
+                               "or switch to Krea."),
 ], ids=["route-blocked", "route-key"])
 def test_a_route_tables_person_line_quotes_the_name(params, wired, line):
     """The bar's line for a route-table node comes from route_unavailable_line,

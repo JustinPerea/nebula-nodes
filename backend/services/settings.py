@@ -6,6 +6,8 @@ import errno
 import json
 import os
 import re
+import stat
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -53,12 +55,25 @@ class SettingsUnreadable(ValueError):
 
 
 class SettingsUnwritable(PermissionError):
-    """Nebula can read the settings file but isn't allowed to change it: the
-    file is read-only for this user, or its folder is, where a save writes
-    its temp file and renames it over the file, or the disk is mounted
-    read-only. The settings routes answer it with a 409 and the code
-    ``settings_unwritable`` (main.SETTINGS_UNWRITABLE; GM, PR #203 r28 item
-    4), never a 500."""
+    """Nebula can read the settings file but can't write it either way a
+    save may (save_settings: atomically, or in place where atomic isn't
+    safe). ``cause`` says what stops it, for the 409's line (GM, PR #203 r28
+    item 4; r31 items 1 and 2):
+
+    - "file": the file is read-only for this user (or the disk is);
+    - "folder": its folder takes no new file and the file can't be written
+      in place (it isn't there yet, or it is read-only too);
+    - "not_a_folder": a folder on the way to it is a file, so nothing can be
+      saved there.
+
+    ``where`` is the path the line names: the file, its folder, or the file
+    that is in the way. The settings routes answer it with a 409, never a
+    500."""
+
+    def __init__(self, err: int, message: str, where: str | Path, cause: str = "file") -> None:
+        super().__init__(err, message, str(where))
+        self.cause = cause
+        self.where = Path(where)
 
 
 # The OSErrors that mean "not allowed" rather than "something broke": no
@@ -66,16 +81,42 @@ class SettingsUnwritable(PermissionError):
 _NOT_ALLOWED_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
 
 
-def settings_writable() -> bool:
-    """Whether a save may write the settings file: the file (when it is
-    there) and its folder writable for this user. Asked before a write
-    changes anything (main._saved_settings_or_409), so a desktop key lands
-    in both the Keychain and the backend or in neither; save_settings still
-    refuses a file that turned read-only after this said yes."""
+def settings_write_block() -> SettingsUnwritable | None:
+    """What stops a save from writing the settings file, or None when one
+    of the ways save_settings writes can (review 15 of PR #203,
+    settings-keychain MEDIUM-1 and LOW-1). Asked before a write changes
+    anything (main._saved_settings_or_409); save_settings asks again, so a
+    file that turned read-only in between is still refused.
+
+    - A folder on the way that is a file: "not_a_folder", naming that file.
+    - Folders that aren't there yet are made (a fresh install) when the
+      nearest one that is takes a new folder; else "folder".
+    - A file that is there: writable for this user is enough (in place when
+      its folder takes no temp file); read-only is "file".
+    - No file yet: its folder must take one ("folder")."""
     path = settings_file()
-    if path.exists() and not os.access(path, os.W_OK):
-        return False
-    return os.access(path.parent, os.W_OK | os.X_OK)
+    folder = path.parent
+    nearest = folder
+    while not os.path.lexists(nearest) and nearest != nearest.parent:
+        nearest = nearest.parent
+    if not nearest.is_dir():
+        return SettingsUnwritable(errno.ENOTDIR, "a folder on the way is a file", nearest, "not_a_folder")
+    if nearest != folder:
+        if os.access(nearest, os.W_OK | os.X_OK):
+            return None
+        return SettingsUnwritable(errno.EACCES, "settings folder can't be made", folder, "folder")
+    if path.exists():
+        if os.access(path, os.W_OK):
+            return None
+        return SettingsUnwritable(errno.EACCES, "settings file is read-only", path, "file")
+    if os.access(folder, os.W_OK | os.X_OK):
+        return None
+    return SettingsUnwritable(errno.EACCES, "settings folder is read-only", folder, "folder")
+
+
+def settings_writable() -> bool:
+    """Whether a save may write the settings file (settings_write_block)."""
+    return settings_write_block() is None
 
 
 # The OSErrors that say there is no settings file: not found, and a folder
@@ -277,7 +318,14 @@ def settings_file_shown() -> str:
     absolute. Under the home folder it starts "~", so it wraps less
     ("~/.nebula/settings.json"); anywhere else it stays absolute (GM, PR #203
     r24 item 7). Never raises: a symlink loop still gets its line."""
-    path = Path(os.path.abspath(settings_path()))
+    return shown_path(Path(os.path.abspath(settings_path())))
+
+
+def shown_path(path: Path) -> str:
+    """``path`` (absolute) as the 409 lines show a path: from "~" when it is
+    under the home folder, as written or resolved, else as it is. The folder
+    lines name the real folder this way (GM, PR #203 r31 items 1 and 2:
+    "~/.nebula")."""
     homes = _home_for_shown_paths()
     if homes is None:
         return str(path)
@@ -356,39 +404,202 @@ def save_settings(settings: dict[str, Any]) -> None:
         to_write["apiKeys"] = {}
     text = json.dumps(to_write, indent=2) + "\n"
 
-    # Whole or not at all (PR #203 round 15): the new settings go to a temp
-    # file beside the old one, then replace it in one rename, so a save cut
-    # short never leaves a file Nebula can't read. A file Nebula isn't
-    # allowed to change raises SettingsUnwritable and is left as it was.
+    # Whole or not at all where that is safe (PR #203 round 15): the new
+    # settings go to a temp file beside the old one, then replace it in one
+    # rename, so a save cut short never leaves a file Nebula can't read.
+    # Where a rename would lose what an in-place write kept, or the folder
+    # takes no temp file, the file is written in place as before round 15,
+    # so no save that worked then is refused now (review 15, settings-keychain
+    # MEDIUM-1 and NIT-1). Refused only when neither way can write
+    # (settings_write_block); the file is then left as it was.
+    block = settings_write_block()
+    if block is not None:
+        raise block
     path = settings_file()
-    if path.exists() and not os.access(path, os.W_OK):
-        # rename() needs only the folder: a read-only file would be replaced.
-        raise SettingsUnwritable(errno.EACCES, "settings file is read-only", str(path))
+    if not path.parent.is_dir():
+        # A fresh install: its folder isn't there yet (review 15, LOW-1).
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
-        mode = path.stat().st_mode & 0o7777
+        before = path.stat()
     except FileNotFoundError:
-        mode = 0o600  # a new file holds keys: this user's only
+        before = None
+    if before is not None and not _replace_keeps_the_file(path, before):
+        _write_in_place(path, text)
+        return
     try:
-        fd, temp = tempfile.mkstemp(prefix=".settings-", suffix=".tmp", dir=path.parent)
+        _write_atomically(path, text, before)
+    except _InPlaceInstead:
+        _write_in_place(path, text)
+
+
+class _InPlaceInstead(Exception):
+    """The atomic save can't keep what the file has (its group, its folder
+    takes no temp file, or the rename is refused): write it in place."""
+
+
+# Extended attributes every new file gets on its own, so a replace loses
+# nothing by them: macOS stamps com.apple.provenance on files a process
+# writes, and SELinux labels new files by policy.
+_OWN_XATTRS = frozenset({"com.apple.provenance", "security.selinux"})
+
+
+def _replace_keeps_the_file(path: Path, before: os.stat_result) -> bool:
+    """Whether replacing ``path`` (resolved: never a symlink) with a new
+    file keeps what an in-place write keeps: a regular file with one name
+    (a hard link's other names would keep the old settings), owned by this
+    user (a rename makes the file this user's), with no ACL and no extended
+    attribute of its own (review 15, settings-keychain NIT-1). Unknown is
+    no."""
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        return False
+    if hasattr(os, "geteuid") and before.st_uid != os.geteuid():
+        return False
+    try:
+        return not _has_own_metadata(path)
+    except OSError:
+        return False
+
+
+def _has_own_metadata(path: Path) -> bool:
+    """Whether ``path`` carries an ACL or an extended attribute a new file
+    wouldn't get (_OWN_XATTRS). Linux lists ACLs as xattrs; macOS keeps its
+    ACL apart (acl_get_file)."""
+    if hasattr(os, "listxattr"):
+        return bool(set(os.listxattr(path)) - _OWN_XATTRS)
+    if sys.platform == "darwin":
+        return _darwin_metadata(path)
+    return False
+
+
+def _darwin_metadata(path: Path) -> bool:
+    import ctypes
+    import ctypes.util
+
+    libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+    raw = os.fsencode(path)
+    libc.listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+    libc.listxattr.restype = ctypes.c_ssize_t
+    size = libc.listxattr(raw, None, 0, 0)
+    if size < 0:
+        raise OSError(ctypes.get_errno(), "listxattr failed", str(path))
+    if size:
+        buf = ctypes.create_string_buffer(size)
+        got = libc.listxattr(raw, buf, size, 0)
+        if got < 0:
+            raise OSError(ctypes.get_errno(), "listxattr failed", str(path))
+        names = {name.decode("utf-8", "replace") for name in buf.raw[:got].split(b"\0") if name}
+        if names - _OWN_XATTRS:
+            return True
+    libc.acl_get_file.argtypes = [ctypes.c_char_p, ctypes.c_int]
+    libc.acl_get_file.restype = ctypes.c_void_p
+    acl = libc.acl_get_file(raw, 0x00000100)  # ACL_TYPE_EXTENDED
+    if not acl:
+        if ctypes.get_errno() in (errno.ENOENT, 0):
+            return False
+        raise OSError(ctypes.get_errno(), "acl_get_file failed", str(path))
+    libc.acl_free.argtypes = [ctypes.c_void_p]
+    libc.acl_free(acl)
+    return True
+
+
+def _write_atomically(path: Path, text: str, before: os.stat_result | None) -> None:
+    """The temp file (this user's only from the start), written whole, given
+    the old file's mode and group, then renamed over the file. It is removed
+    on any failure, whatever was raised, so no copy of the keys is left
+    beside the file (review 15, settings-keychain LOW-2); a folder that takes
+    no temp file, or a rename that is refused, falls back to the in-place
+    write (_InPlaceInstead)."""
+    mode = before.st_mode & 0o7777 if before is not None else 0o600  # a new file holds keys
+    try:
+        fd, temp = tempfile.mkstemp(prefix=TEMP_PREFIX, suffix=TEMP_SUFFIX, dir=path.parent)  # 0600
     except OSError as exc:
+        if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
+            raise _InPlaceInstead from exc
         if exc.errno in _NOT_ALLOWED_ERRNOS:
-            raise SettingsUnwritable(exc.errno, "settings folder is read-only", str(path.parent)) from exc
+            raise SettingsUnwritable(exc.errno, "settings folder is read-only", path.parent, "folder") from exc
+        if exc.errno == errno.ENOTDIR:  # the folder turned into a file after the check
+            raise SettingsUnwritable(exc.errno, "a folder on the way is a file", path.parent, "not_a_folder") from exc
         raise
+    done = False
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
+        if before is not None and os.stat(temp).st_gid != before.st_gid:
+            try:
+                os.chown(temp, -1, before.st_gid)
+            except OSError as exc:
+                raise _InPlaceInstead from exc
         os.chmod(temp, mode)
-        os.replace(temp, path)
-    except OSError as exc:
         try:
-            os.unlink(temp)
-        except OSError:
-            pass  # the folder turned read-only too: the temp file is all that's left
+            _replace(temp, path)
+        except OSError as exc:
+            if before is not None and exc.errno in _NOT_ALLOWED_ERRNOS:
+                raise _InPlaceInstead from exc  # an ACL that denies delete, say
+            if exc.errno in _NOT_ALLOWED_ERRNOS:
+                raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
+            raise
+        done = True
+    finally:
+        if not done:
+            try:
+                os.unlink(temp)
+            except OSError:
+                pass  # the folder turned read-only too: swept at the next start
+
+
+def _write_in_place(path: Path, text: str) -> None:
+    """The file written where it is, as every save was before round 15: its
+    name, links, owner, ACL and attributes stay. Not atomic."""
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError as exc:
         if exc.errno in _NOT_ALLOWED_ERRNOS:
-            raise SettingsUnwritable(exc.errno, "settings file can't be changed", str(path)) from exc
+            raise SettingsUnwritable(exc.errno, "settings file can't be changed", path, "file") from exc
         raise
+
+
+# The rename that puts a temp file in place: a seam tests patch by name, so
+# no other os.replace in a request is touched (review 15, sockets-tests NIT-2).
+_replace = os.replace
+
+TEMP_PREFIX = ".settings-"
+TEMP_SUFFIX = ".tmp"
+# A temp file older than this is a save that never finished (killed between
+# the write and the rename); a newer one may be another process's save.
+STALE_TEMP_SECONDS = 60.0
+
+
+def sweep_stale_temp_files(now: float | None = None) -> list[Path]:
+    """Remove temp files a save left beside settings.json when it was cut
+    short (a kill, a power cut): each is a full copy of the settings, keys
+    included (review 15, settings-keychain LOW-2). Run at startup. Only this
+    module's names, only regular files, only ones older than
+    STALE_TEMP_SECONDS. Never raises."""
+    removed: list[Path] = []
+    try:
+        folder = settings_file().parent
+        entries = list(folder.iterdir())
+    except (SettingsUnreadable, OSError):
+        return removed
+    cutoff = (time.time() if now is None else now) - STALE_TEMP_SECONDS
+    for entry in entries:
+        name = entry.name
+        if not (name.startswith(TEMP_PREFIX) and name.endswith(TEMP_SUFFIX)):
+            continue
+        try:
+            info = entry.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_mtime > cutoff:
+                continue
+            entry.unlink()
+            removed.append(entry)
+        except OSError:
+            continue
+    return removed
 
 
 def get_api_key(provider_key_name: str | list[str]) -> str | None:

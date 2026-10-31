@@ -56,7 +56,7 @@ describe('providerSwitchState', () => {
     expect(state.blocked).toBe(true);
     expect(state.chip).toBe('Auto · fal');
     expect(state.alternatives).toEqual([{ routeId: 'replicate', label: 'Replicate', writes: { _provider: 'replicate', _kreaAuth: 'api-token' } }]);
-    expect(state.message).toContain("can't run on fal.ai");
+    expect(state.message).toContain('can’t run on fal.ai');
   });
 
   it("names keys by provider and never a route id or env-var name in the stop line (error copy round 3e)", () => {
@@ -65,7 +65,7 @@ describe('providerSwitchState', () => {
     const chosen = providerSwitchState(flux2, { _provider: 'bfl' }, context({}));
     expect(chosen.blocked).toBe(true);
     expect(chosen.message).toBe(
-      'FLUX.2 is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or choose another provider.');
+      'FLUX.2 is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings.');
     const unknown = providerSwitchState(flux2, { _provider: 'xyz' }, context({ BFL_API_KEY: KEY }));
     expect(unknown.message).toBe('FLUX.2 is set to a provider that isn’t in its list. Choose one in its provider switcher.');
     const auto = providerSwitchState(flux2, {}, context({}));

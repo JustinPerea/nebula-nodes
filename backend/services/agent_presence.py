@@ -36,6 +36,11 @@ from services.text_cut import safe_cut
 PRESENCE_TTL_SECONDS = 120.0
 VIEW_STALE_SECONDS = 30.0
 MAX_SAY_CHARS = 140
+# The Agent log's own line (``log``) is a list entry, not a bubble: it is
+# Nebula's words, never an agent's, and a refused run's merged line can name
+# three nodes and their reasons (GM, PR #203 r30 item 1), so it gets more room
+# than a bubble, still bounded.
+MAX_LOG_CHARS = 600
 MAX_NAME_CHARS = 32
 MAX_VIEW_NODES = 2000
 MAX_SNAPSHOT_NODES = 300
@@ -248,8 +253,19 @@ def _clean_say(raw: Any) -> str:
     return text[:safe_cut(text, MAX_SAY_CHARS)]
 
 
-# The same cleaning for words said alongside the cursor's (main._show_agent's `log`).
+# The same cleaning for words said alongside the cursor's.
 clean_say = _clean_say
+
+
+def clean_log(raw: Any) -> str:
+    """The Agent log's line (main._show_agent's ``log``): cleaned as a bubble
+    is, with MAX_LOG_CHARS of room."""
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        raise PresenceError("log must be text")
+    text = " ".join(raw.split())
+    return text[:safe_cut(text, MAX_LOG_CHARS)]
 
 
 class AgentPresence:
@@ -304,7 +320,7 @@ class AgentPresence:
             "at": int(now * 1000),
             "projectId": project_id,
         }
-        logged = _clean_say(log)
+        logged = clean_log(log)
         if logged:
             event["log"] = logged
         if target is None:

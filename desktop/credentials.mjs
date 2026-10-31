@@ -364,13 +364,15 @@ export function createCredentialService(options) {
   // Each provider's latest write, while it may still be undone (review 13
   // of PR #203, LOW-1; review 14, keychain HIGH-1): its one-time id, the
   // entry as it was before (an encrypted blob, or undefined for none), what
-  // the write left there (undefined for a clear), the page that made it and
-  // its expiry timer. Kept in this process only: the renderer never holds a
+  // the write left there (undefined for a clear), the frame that made it
+  // (registerCredentialHandlers' frameOwner; review 15, NIT-3) and its
+  // expiry timer. Kept in this process only: the renderer never holds a
   // key. `revert(id)` undoes only that write, only while the store still
   // holds what it wrote; `commit(id)`, the page going away or the window
-  // running out drops it. After that nothing can be undone, so revert can
-  // undo only the renderer's own write in flight, which set and clear could
-  // do anyway.
+  // running out drops it. Revert can only put the entry back as it was just
+  // before the frame's own write, so it never makes a state the store didn't
+  // already have (review 15, NIT-4: not "what set and clear could do anyway";
+  // set can't put back a key the page never saw).
   const pending = new Map();
 
   function remember(provider, previous, wrote, owner) {
@@ -390,11 +392,11 @@ export function createCredentialService(options) {
     pending.delete(provider);
   }
 
-  /** The provider whose latest write has this id, from this page, or null. */
+  /** The provider whose latest write has this id, from this owner, or null. */
   function latest(writeId, owner) {
     if (typeof writeId !== 'string' || !writeId) return null;
     for (const [provider, entry] of pending) {
-      if (entry.id === writeId && entry.owner === owner) return provider;
+      if (entry.id === writeId && sameOwner(entry.owner, owner)) return provider;
     }
     return null;
   }
@@ -474,7 +476,7 @@ export function createCredentialService(options) {
      * (compare-and-swap). Anything else refuses and changes nothing.
      *
      * @param {string} writeId
-     * @param {unknown} [owner] the page asking (its webContents)
+     * @param {unknown} [owner] the frame asking (registerCredentialHandlers' frameOwner)
      * @returns {{ ok: true } | { ok: false, error: 'NOT_THE_LATEST_WRITE' | 'STORE_CHANGED' }}
      */
     revert(writeId, owner = null) {
@@ -505,10 +507,11 @@ export function createCredentialService(options) {
       return { ok: true };
     },
 
-    /** A page went away (destroyed, or navigated): its writes can't be undone. */
+    /** A page went away (destroyed, or navigated): its writes can't be
+     * undone. `owner` is the owner itself or the webContents its frame is in. */
     forgetOwner(owner) {
       for (const [provider, entry] of [...pending]) {
-        if (entry.owner === owner) drop(provider);
+        if (entry.owner === owner || (owner && entry.owner?.sender === owner)) drop(provider);
       }
     },
 
@@ -585,6 +588,38 @@ export function createCredentialService(options) {
   };
 }
 
+/** Whether an IPC event comes from its page's main frame (Electron's
+ * `event.senderFrame` against `event.sender.mainFrame`). Fails closed: an
+ * event without both is not. */
+export function isMainFrame(event) {
+  const frame = event?.senderFrame;
+  const main = event?.sender?.mainFrame;
+  if (!frame || !main) return false;
+  if (frame === main) return true;
+  return frameKey(frame) !== null && frameKey(frame) === frameKey(main);
+}
+
+/** A frame's identity across IPC calls: its process and routing ids when
+ * Electron gives them (WebFrameMain), else null (the object is compared). */
+function frameKey(frame) {
+  return Number.isInteger(frame?.processId) && Number.isInteger(frame?.routingId)
+    ? `${frame.processId}:${frame.routingId}` : null;
+}
+
+/** Who owns a write: the frame that made it, and the page it is in (for
+ * forgetOwner). */
+function frameOwner(event) {
+  const frame = event?.senderFrame ?? null;
+  if (!frame) return null;
+  return { key: frameKey(frame) ?? frame, sender: event?.sender ?? null };
+}
+
+/** Two owners are the same frame (frameOwner), or the same value. */
+function sameOwner(a, b) {
+  if (a === b) return true;
+  return Boolean(a && b && typeof a === 'object' && typeof b === 'object' && 'key' in a && 'key' in b && a.key === b.key);
+}
+
 // ---------------------------------------------------------------------------
 // IPC handler registration
 // ---------------------------------------------------------------------------
@@ -593,7 +628,8 @@ export function createCredentialService(options) {
  * Register all credential IPC handlers on `ipcMain`.
  *
  * Every handler validates:
- *   1. The sender (via `validateSender`)
+ *   1. The sender (via `validateSender`), and that it is its page's main
+ *      frame (isMainFrame)
  *   2. The provider name (against `ALLOWED_PROVIDERS`) where applicable
  *
  * No `credentials:get` channel is registered — the renderer never
@@ -608,14 +644,24 @@ export function createCredentialService(options) {
  * @returns {string[]} registered channel names
  */
 export function registerCredentialHandlers(ipcMain, service, validateSender) {
-  // The page that made a write owns it; when it is destroyed or navigates
-  // away, its writes can't be undone any more (review 14, keychain HIGH-1).
+  // The frame that made a write owns it (review 15 of PR #203,
+  // settings-keychain NIT-3: the webContents let a file:// subframe of the
+  // same window undo the page's write); when its page is destroyed or
+  // navigates away, its writes can't be undone any more (review 14, keychain
+  // HIGH-1). A write that lands after its page started navigating is
+  // committed at once (review 15, NIT-2): `navigations` counts each page's
+  // departures, read when the handler starts and again when the write lands.
   const watched = new WeakSet();
+  const navigations = new WeakMap();
+  const departures = (sender) => (sender && typeof sender === 'object' ? navigations.get(sender) ?? 0 : 0);
   function watchedOwner(event) {
     const sender = event?.sender ?? null;
     if (sender && typeof sender === 'object' && typeof sender.on === 'function' && !watched.has(sender)) {
       watched.add(sender);
-      const forget = () => service.forgetOwner?.(sender);
+      const forget = () => {
+        navigations.set(sender, departures(sender) + 1);
+        service.forgetOwner?.(sender);
+      };
       sender.on('destroyed', forget);
       sender.on('render-process-gone', forget);
       sender.on('did-start-navigation', (details, ...rest) => {
@@ -626,14 +672,18 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
         if (!sameDocument && mainFrame) forget();
       });
     }
-    return sender;
+    return frameOwner(event);
   }
+  // Every credential call comes from a trusted page's main frame: a
+  // subframe (even a file:// one the validator lets through) is refused
+  // (review 15, NIT-3).
+  const trusted = (event) => validateSender(event) && isMainFrame(event);
 
   const channels = [];
 
   // -- credentials:set -----------------------------------------------------
   ipcMain.handle('credentials:set', async (event, payload) => {
-    if (!validateSender(event)) {
+    if (!trusted(event)) {
       return { ok: false, error: 'UNTRUSTED_SENDER' };
     }
     const { provider, key } = payload ?? {};
@@ -644,7 +694,13 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
       return { ok: false, error: 'EMPTY_KEY' };
     }
     try {
-      return await service.set(provider, key, watchedOwner(event));
+      const owner = watchedOwner(event);
+      const before = departures(event?.sender);
+      const result = await service.set(provider, key, owner);
+      // The page started navigating while the key was being encrypted: its
+      // document is going, so nothing may undo this write now (NIT-2).
+      if (result?.ok && result.writeId && departures(event?.sender) !== before) service.commit(result.writeId, owner);
+      return result;
     } catch (credentialErr) {
       return {
         ok: false,
@@ -656,7 +712,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
 
   // -- credentials:has -----------------------------------------------------
   ipcMain.handle('credentials:has', (event, provider) => {
-    if (!validateSender(event)) {
+    if (!trusted(event)) {
       return { ok: false, error: 'UNTRUSTED_SENDER' };
     }
     if (!isProviderAllowed(provider)) {
@@ -675,7 +731,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
 
   // -- credentials:clear ---------------------------------------------------
   ipcMain.handle('credentials:clear', (event, provider) => {
-    if (!validateSender(event)) {
+    if (!trusted(event)) {
       return { ok: false, error: 'UNTRUSTED_SENDER' };
     }
     if (!isProviderAllowed(provider)) {
@@ -697,14 +753,14 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
   // made it (review 14 of PR #203, keychain HIGH-1).
   for (const [channel, method] of [['credentials:revert', 'revert'], ['credentials:commit', 'commit']]) {
     ipcMain.handle(channel, (event, writeId) => {
-      if (!validateSender(event)) {
+      if (!trusted(event)) {
         return { ok: false, error: 'UNTRUSTED_SENDER' };
       }
       if (typeof writeId !== 'string' || !writeId) {
         return { ok: false, error: 'NOT_THE_LATEST_WRITE' };
       }
       try {
-        return service[method](writeId, event.sender ?? null);
+        return service[method](writeId, frameOwner(event));
       } catch (credentialErr) {
         return {
           ok: false,
@@ -717,7 +773,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
 
   // -- credentials:migration-status ----------------------------------------
   ipcMain.handle('credentials:migration-status', (event) => {
-    if (!validateSender(event)) {
+    if (!trusted(event)) {
       return { ok: false, error: 'UNTRUSTED_SENDER' };
     }
     try {
@@ -733,7 +789,7 @@ export function registerCredentialHandlers(ipcMain, service, validateSender) {
 
   // -- credentials:retry-migration -----------------------------------------
   ipcMain.handle('credentials:retry-migration', (event) => {
-    if (!validateSender(event)) {
+    if (!trusted(event)) {
       return { ok: false, error: 'UNTRUSTED_SENDER' };
     }
     try {

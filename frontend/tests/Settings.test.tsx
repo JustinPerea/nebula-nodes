@@ -1424,6 +1424,20 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.revert).not.toHaveBeenCalled();
   });
 
+  it('a notice’s Undo Nebula can’t settle names the key, since its row is closed (GM r31 item 5)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({}));
+    setupDesktopBridge();
+    await renderSettings();
+    await addKey('OpenAI', 'fixture-openai');
+    // The save lands first; only the removal loses its answer.
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    failTheSecondCall(LOST());
+    getSettingsMock.mockRejectedValue(LOST());
+    fireEvent.click(undo);
+    expect(await screen.findByText('Nebula didn’t respond, so your OpenAI API key may not be removed. '
+      + 'Remove it again to be sure.')).toBeInTheDocument();
+  });
+
   it('the kept line stays until the two agree, ending in a newer refusal’s fix (GM r29 item 6)', async () => {
     setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'STORE_CHANGED' }) });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });

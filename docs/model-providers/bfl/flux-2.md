@@ -65,7 +65,7 @@ The saved names are fal's (saved graphs carry them). The BFL route translates:
 | Setting | BFL | fal |
 |---|---|---|
 | `output_format` | jpeg, png | jpeg, png |
-| `safety_tolerance` | 1-5 (BFL takes 0-5 on FLUX.2) | 1-5 on Pro, Max and Flex; Flash and Klein have no such field, so it is hidden there (`paramVisibleWhen {safety_tolerance: {model: [pro, max, flex]}}`) and not sent. On Klein a saved value other than 2 stops the run, since BFL would honor it ("it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider."); on Flash it is ignored (BFL has no Flash) |
+| `safety_tolerance` | 1-5 (BFL takes 0-5 on FLUX.2) | 1-5 on Pro, Max and Flex; Flash and Klein have no such field, so it is hidden there (`paramVisibleWhen {safety_tolerance: {model: [pro, max, flex]}}`) and not sent. On Klein a saved value other than 2 stops the run, since BFL would honor it (the card: "FLUX.2 can’t run on fal.ai with “Safety” set to 3 and “Model” set to FLUX.2 [klein] 4B. Set “Safety” back to 2 or switch to Black Forest Labs."); on Flash it is ignored (BFL has no Flash) |
 | `seed` | yes | yes |
 | `num_inference_steps` (Flex) | 1-50 (default 50) | 2-50 (default 28) |
 | `guidance_scale` (Flex) | 1.5-10 (default 5) | 1.5-10 (default 3.5) |

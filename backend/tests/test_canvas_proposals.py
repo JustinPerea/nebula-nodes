@@ -301,9 +301,13 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     response = _propose(api, body).json()
     cost = response["proposal"]["cost"]
     need = "needs OPENAI_API_KEY in Settings > Providers"
-    # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f).
+    # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f);
+    # `reason` is that line without the name, for one node and for several, which
+    # the bar merges by (PR #203 round 15).
     assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need,
-                                 "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings."}]
+                                 "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings.",
+                                 "reason": {"one": "needs your OpenAI API key. Add it in Settings.",
+                                            "many": "need your OpenAI API key. Add it in Settings."}}]
     assert {node["ref"]: node.get("missing") for node in cost["nodes"]} == {"+img": need, n1: None}
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "

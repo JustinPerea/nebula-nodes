@@ -517,39 +517,89 @@ def joined_lines(lines: Iterable[str | None]) -> str | None:
 # that count. The proposal bar, its layer (frontend canvasProposals) and the
 # Agent Log merge nodes by the reason, never by the words. GM's wording:
 # r20 item 3 (quoted names), r21 (Krea's "Sign in"), r28 (merges), r29
-# items 1 and 2 (route-table Auto, the switcher, Replicate's key).
+# items 1 and 2 (route-table Auto, the switcher, Replicate's key), r31 item
+# 3 (route lines: the reason, then one action sentence that names who can
+# take the run).
+#
+# Every predicate ends in one action sentence whose end is a slot, {end}:
+# "." on the card and the bar, the run-again ending in the Agent Log (", then
+# run the node again." or, after an action that already holds a comma
+# clause, ". Then run the node again."). The ending is built there, never
+# appended to whatever the last sentence is (review 15, copy LOW-1).
 NOT_READY_PREDICATES: dict[str, tuple[str, str]] = {
-    "key": ("needs your {phrase}. Add {it} in Settings.",
-            "need your {phrase}. Add {it} in Settings."),
-    "krea_plan": ("needs your Krea plan. Sign in to Krea in Settings.",
-                  "need your Krea plan. Sign in to Krea in Settings."),
-    "unknown_provider": ("is set to a provider that isn’t in its list. Choose one in its provider switcher.",
+    "key": ("needs your {phrase}. Add {it} in Settings{end}",
+            "need your {phrase}. Add {it} in Settings{end}"),
+    "krea_plan": ("needs your Krea plan. Sign in to Krea in Settings{end}",
+                  "need your Krea plan. Sign in to Krea in Settings{end}"),
+    "unknown_provider": ("is set to a provider that isn’t in its list. Choose one in its provider switcher{end}",
                          "are set to a provider that isn’t in their list. "
-                         "Choose one in each node’s provider switcher."),
-    "route_key": ("is set to {provider}, which needs {needed}. Add it in Settings, or choose another provider.{also}",
-                  "are set to {provider}, which needs {needed}. Add it in Settings, or choose another provider.{also}"),
-    "route_block": ("can't run on {provider}{why}. {fix}{also}",
-                    "can't run on {provider}{why}. {fix}{also}"),
-    "not_set_up": ("isn’t set up to run here yet. Check its provider in Settings.",
-                   "aren’t set up to run here yet. Check their provider in Settings."),
+                         "Choose one in each node’s provider switcher{end}"),
+    "route_key": ("is set to {provider}, which needs {needed}. {action}{end}",
+                  "are set to {provider}, which needs {needed}. {action}{end}"),
+    "route_block": ("can’t run on {provider}{why}. {action}{end}",
+                    "can’t run on {provider}{why}. {action}{end}"),
+    "not_set_up": ("isn’t set up to run here yet. Check its provider in Settings{end}",
+                   "aren’t set up to run here yet. Check their provider in Settings{end}"),
 }
+
+CARD_END = "."
+
+
+def again_end(nodes: int, *, after_clause: bool = False) -> str:
+    """The Agent Log's ending for a not-ready line's action sentence (GM, PR
+    #203 r29 item 3, r31 item 3): ", then run the node again." ("the nodes"
+    for several), or its own sentence after an action that already holds a
+    comma clause (", or add your fal.ai API key in Settings and switch to
+    fal.ai. Then run the node again.")."""
+    what = "node" if nodes == 1 else "nodes"
+    return f". Then run the {what} again." if after_clause else f", then run the {what} again."
+
+
+def route_action(fix: str | None, others: list[str], needs_key: list[str], key: str | None) -> tuple[str, bool]:
+    """A route line's one action sentence, without its end (GM, PR #203 r31
+    item 3), and whether it holds a comma clause (again_end):
+
+    - ``fix`` is what the person can change where the node is ("Turn “Raw”
+      off", "Add it in Settings"), or None;
+    - ``others`` are providers with a key set that can take the run: "… or
+      switch to fal.ai" ("fal.ai or Replicate" for two);
+    - ``needs_key`` are providers that could take it once their key is
+      added (``key`` names that key): "…, or add your fal.ai API key in
+      Settings and switch to fal.ai".
+
+    Never a separate "… can take it." sentence: the named switch replaces it."""
+    if others:
+        switch = f"switch to {or_list(others)}"
+        return (f"{fix} or {switch}" if fix else switch[:1].upper() + switch[1:]), False
+    if needs_key:
+        add = f"add your {key} in Settings" if key else "add its key in Settings"
+        clause = f"{add} and switch to {or_list(needs_key)}"
+        return (f"{fix}, or {clause}" if fix else clause[:1].upper() + clause[1:]), bool(fix)
+    return fix or "Check its provider in Settings", False
 
 
 class NotReadyReason:
     """Why a node can't run here, as NOT_READY_PREDICATES says it: ``one``
-    and ``many`` follow the node's quoted name. ``own`` is a route's own
-    whole line (RouteSpec.missingKeyLine: "You can run “Idol” after you add
-    your Hugging Face token in Settings."), said as it is, never merged."""
+    and ``many`` follow the node's quoted name on the card and the bar;
+    ``again`` holds the Agent Log's forms, (one, many), with the run-again
+    ending in the action sentence's end slot. ``own`` is a route's own whole
+    line (RouteSpec.missingKeyLine: "You can run “Idol” after you add your
+    Hugging Face token in Settings."), said as it is, never merged, and with
+    no ending added in the log either (its words already say "You can run")."""
 
-    __slots__ = ("one", "many", "own")
+    __slots__ = ("one", "many", "own", "again", "kind")
 
-    def __init__(self, one: str = "", many: str = "", own: str | None = None) -> None:
-        self.one, self.many, self.own = one, many, own
+    def __init__(self, one: str = "", many: str = "", own: str | None = None,
+                 again: tuple[str, str] | None = None, kind: str | None = None) -> None:
+        self.one, self.many, self.own, self.kind = one, many, own, kind
+        self.again = again if again is not None else (one, many)
 
     @classmethod
-    def of(cls, kind: str, **fields: str) -> "NotReadyReason":
+    def of(cls, kind: str, *, after_clause: bool = False, **fields: str) -> "NotReadyReason":
         one, many = NOT_READY_PREDICATES[kind]
-        return cls(one.format(**fields), many.format(**fields))
+        return cls(one.format(end=CARD_END, **fields), many.format(end=CARD_END, **fields),
+                   again=(one.format(end=again_end(1, after_clause=after_clause), **fields),
+                          many.format(end=again_end(2, after_clause=after_clause), **fields)), kind=kind)
 
     def line(self, subject: str) -> str:
         """The line for one node: its quoted name (or "This node"), the singular."""
@@ -573,25 +623,22 @@ def not_ready_subject(names: list[str]) -> str:
     return and_list(f"“{name}”" if count == 1 else f"{count} “{name}” nodes" for name, count in groups.items())
 
 
-def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]]) -> list[tuple[str, int]]:
+def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool = False) -> list[tuple[str, int]]:
     """Each reason once, in the order first met, with every node that has it
     (GM, PR #203 r28): (the line, how many nodes say it). A route's own line
-    stays a line per node."""
+    stays a line per node. ``again``: the Agent Log's forms, each action
+    sentence ending in the run-again ending (NotReadyReason.again)."""
     groups: dict[object, tuple[NotReadyReason, list[str]]] = {}
     for index, (name, reason) in enumerate(rows):
         key: object = ("own", index) if reason.own is not None else reason.one
         groups.setdefault(key, (reason, []))[1].append(name)
     lines: list[tuple[str, int]] = []
     for reason, names in groups.values():
-        if reason.own is not None or len(names) == 1:
-            lines.append((reason.line(f"“{names[0]}”"), 1))
+        one, many = reason.again if again else (reason.one, reason.many)
+        if reason.own is not None:
+            lines.append((reason.own, 1))
+        elif len(names) == 1:
+            lines.append((f"“{names[0]}” {one}", 1))
         else:
-            lines.append((f"{not_ready_subject(names)} {reason.many}", len(names)))
+            lines.append((f"{not_ready_subject(names)} {many}", len(names)))
     return lines
-
-
-def run_again(line: str, nodes: int) -> str:
-    """A not-ready line as a run's refusal says it (GM, PR #203 r29 item 3):
-    its last sentence ends ", then run the node again." ("the nodes" for
-    several)."""
-    return f"{line.rstrip().rstrip('.')}, then run the {'node' if nodes == 1 else 'nodes'} again."

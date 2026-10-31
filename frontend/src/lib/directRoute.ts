@@ -1036,7 +1036,7 @@ function why(route: RouteSpec, block: DirectBlock): string {
 }
 
 // The card's words for a route stop (error copy round 3f, GM: "A switch reads
-// "{Node} can't run on {Provider} with “{Label}” on." Never "Draft true".
+// "{Node} can’t run on {Provider} with “{Label}” on." Never "Draft true".
 // Listed values use the option's label as the field shows it, never its
 // value."): a setting by its label in quotes, a value by its option's label
 // less any note in parentheses, no parentheses, "seconds" for "s".
@@ -1085,18 +1085,19 @@ export function blockedSetting(definition: RoutedDefinition, block: Partial<Dire
   return `“${spec?.label || param}”`;
 }
 
-/** How a `hidden` stop is fixed without a switch: the setting back to its
- * default, or cleared when it has none (node_route._hidden_fix_person). */
+/** How a `hidden` stop is fixed without a switch, as the action's first
+ * clause: the setting back to its default, or cleared when it has none
+ * (node_route._hidden_fix_person). */
 function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
   const spec = paramDef(definition, param);
   const label = `“${spec?.label || param}”`;
   const fallback = spec?.default;
-  if (fallback === undefined || fallback === null) return `Clear ${label}, or switch provider.`;
-  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}, or switch provider.`;
-  return `Set ${label} back to ${plain(optionLabelOf(spec, fallback))}, or switch provider.`;
+  if (fallback === undefined || fallback === null) return `Clear ${label}`;
+  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}`;
+  return `Set ${label} back to ${plain(optionLabelOf(spec, fallback))}`;
 }
 
-/** Why a route stops, as the clause after "{Node} can't run on {Provider}"
+/** Why a route stops, as the clause after "{Node} can’t run on {Provider}"
  * (node_route._why_person). */
 function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
   const param = block.param ?? '';
@@ -1120,7 +1121,7 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   }
   if (block.reason === 'blocked') return ` with ${personSetting(spec, param, params[param])}`;
   if (block.reason === 'requires') return ` without ${label}`;
-  if (block.reason === 'size') return `, because it can't render this ${label} exactly`;
+  if (block.reason === 'size') return `, because it can’t render this ${label} exactly`;
   if (block.reason === 'retired') return `, because the maker retired this model on ${block.on}`;
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
@@ -1130,7 +1131,9 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   return `, because ${personWords(why(route, block))}`;
 }
 
-/** The next step for a route stop (node_route._fix_person). */
+/** What the person can change where the node is, for a route stop, as the
+ * action's first clause (node_route._fix_person; routeAction names who else
+ * can take the run). */
 function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
   const param = block.param ?? '';
   const spec = param ? paramDef(definition, param) : undefined;
@@ -1139,13 +1142,25 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   const label = `“${spec?.label || param}”`;
   if (spec?.type === 'boolean' && (block.reason === 'unsupported' || block.reason === 'blocked')) {
     const on = ['true', WIRED].includes(matchValue(params[param]));
-    return `Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}, or switch provider.`;
+    return `Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}`;
   }
-  if (block.reason === 'blocked') return `Clear ${label}, or switch provider.`;
-  if (values.length) return `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}, or switch provider.`;
-  if (block.reason === 'ports') return 'Disconnect the extra inputs, or switch provider.';
-  if (block.reason === 'requires') return `Set ${label}, or switch provider.`;
-  return 'Change that setting, or switch provider.';
+  if (block.reason === 'blocked') return `Clear ${label}`;
+  if (values.length) return `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}`;
+  if (block.reason === 'ports') return 'Disconnect the extra inputs';
+  if (block.reason === 'requires') return `Set ${label}`;
+  return 'Change that setting';
+}
+
+/** A route line's one action sentence, with its period (GM, PR #203 r31
+ * item 3; person_line.route_action is the same): `fix`, then who can take
+ * the run, named: "… or switch to fal.ai" for providers with a key set,
+ * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
+ * whose key isn't added. Never a separate "… can take it." sentence. The
+ * card has no run-again ending; the Agent Log's comes from the backend. */
+export function routeAction(fix: string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
+  if (others.length) return `${fix} or switch to ${orList([...others])}.`;
+  if (needsKey.length) return `${fix}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
+  return `${fix}.`;
 }
 
 /** "OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
@@ -1209,19 +1224,17 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   // GM, PR #203 r29 item 2: the key by its name, never "its key" (it read as
-  // the node's): "Replicate can take it. Add your Replicate token in Settings."
+  // the node's); r31 item 3: who can take the run is named in the action.
   const keylessPhrase = keyPhrase(keyless.flatMap((alt) => keyList(routeById(definition, alt)?.keys)));
-  const also = others.length ? ` ${orList(others)} can take it.`
-    : keylessLabels.length && keylessPhrase ? ` ${orList(keylessLabels)} can take it. Add your ${keylessPhrase} in Settings.`
-      : keylessLabels.length ? ` ${orList(keylessLabels)} can take it. Add its key in Settings.` : '';
+  const action = (fix: string) => routeAction(fix, others, keylessLabels, keylessPhrase);
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
     // GM, PR #203 r29 item 2 (node_route NOT_READY_PREDICATES "unknown_provider").
     return `${name} is set to a provider that isn’t in its list. Choose one in its provider switcher.`;
   }
   if (block && spec) {
-    const fix = fixPerson(definition, spec, block, params);
-    return `${name} can't run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`;
+    return `${name} can’t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. `
+      + action(fixPerson(definition, spec, block, params));
   }
   const missing = route.missing ?? [];
   // The route's own words (Idol's token), the backend's too.
@@ -1230,8 +1243,7 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
   if (spec) {
     const phrase = missing.length ? keyPhrase(missing) : null;
     const needed = phrase ? `your ${phrase}` : 'a provider key';
-    return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. `
-      + `Add it in Settings, or choose another provider.${also}`;
+    return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. ${action('Add it in Settings')}`;
   }
   return missingKeyLine(missing);
 }

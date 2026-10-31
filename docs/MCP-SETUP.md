@@ -535,8 +535,12 @@ The server exposes these tools for building and running (see
   `detail`, `code` and `fix`: `settings_unreadable` (a file it can't read or
   parse, or one that isn't a JSON object: "Nebula can’t read <path>. Ask the
   person to fix the file."), `keys_unreadable` (its `apiKeys` isn't an
-  object; writes only) or `settings_unwritable` (the file or its folder is
-  read-only; writes only, and only the person writes). `fix` is the sentence
+  object; writes only), `settings_unwritable` (the file is read-only, or
+  its folder is and the file can't be written in place: the line names the
+  file or the folder) or `settings_not_a_folder` (a folder on the way to the
+  file is a file, named in the line). The last two are for writes only, and
+  only the person writes; a desktop Keychain save (`credentials/update`)
+  never writes the file, so it gets only the read codes. `fix` is the sentence
   that says what to do, worded for the reader: an agent's says to ask the
   person. Every browser tab gets the person's words; only agents get these.
   An empty `NEBULA_SETTINGS_PATH` means the default path.
@@ -716,8 +720,16 @@ the Agents panel's words ("Changed “Hero”"). Moodboard writes are listed the
 (your edit batch's `say`, else the journal's words: "Set aside #1 on board
 Dusk"; "Analyzed board Dusk"), and so is a run of the
 whole canvas ("Running 4 nodes"); neither has one place on the canvas, so
-they move no cursor. The log is in the browser's memory only: the last 50
-entries, gone on reload.
+they move no cursor. A run the pre-call check refuses, from any route and
+whoever asked (MCP, the CLI, an in-app chat turn), is one line there in the
+proposal bar's merged words: "Nebula couldn’t start the run. 2 “GPT Image
+2” nodes need your OpenAI API key. Add it in Settings, then run the nodes
+again." (counted from 4 nodes: "… 4 nodes can’t run here yet."). The cursor
+points at the first node with that node's own line as `say`, and the
+event's `log` is the merged line (up to 600 characters; `say` stays up to
+140). Your reply is unchanged: `error` and `errors` name every node by id.
+The log is in the browser's memory only: the last 50 entries, gone on
+reload.
 
 The REST surface is `POST /api/canvas/cursor` (a `target`, or only `say` to
 narrate where the cursor is; it answers with `placed`), `GET /api/canvas/snapshot`, and
@@ -1891,8 +1903,12 @@ your Anthropic API key. Add it in Settings.", "2 “FLUX.2” nodes need your
 Black Forest Labs or fal.ai API key. Add one in Settings."). A node whose
 provider switcher is set to a route it doesn't list reads "“N” is set to a
 provider that isn’t in its list. Choose one in its provider switcher." A row
-with no `reason` gets a line of its own. Both re-check keys as the person adds them, so a line goes away
-once its key is set. Accept stays enabled, as the canvas's Run button does
+with no `reason` gets a line of its own. `reason` is the person's words,
+for the bar to merge by: read `missing` to decide what to do, and don't
+parse `reason` (its wording follows the person's lines and can change).
+`nebula propose` prints `missing`, not `reason`. The warning and the bar
+both re-check keys as the person adds them, so a line goes away once its key
+is set. Accept stays enabled, as the canvas's Run button does
 for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
 

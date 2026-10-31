@@ -191,8 +191,8 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     assert error.message == node_route.route_unavailable(ROUTES, {"_provider": "replicate"}, keys)["message"]
     assert "REPLICATE_API_TOKEN" in error.message
     assert _clean(error.person) == (
-        "Fixture Image is set to Replicate, which needs your Replicate token. Add it in Settings, or "
-        "choose another provider. Black Forest Labs or fal.ai can take it.")
+        "Fixture Image is set to Replicate, which needs your Replicate token. Add it in Settings or "
+        "switch to Black Forest Labs or fal.ai.")
 
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]
     [error] = _for(validate_graph(auto, [_edge("t", "text", "n1", "prompt")], {}), "n1")
@@ -211,8 +211,9 @@ def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch
     assert "can't run on Black Forest Labs" in error.message
     line = _clean(error.person)
     # Round 3f: GM's words, the setting by its label in quotes.
-    assert line.startswith("Fixture Image can't run on Black Forest Labs with “Safety tolerance” set to 6.")
-    assert line.endswith("fal.ai can take it.")
+    assert line.startswith("Fixture Image can’t run on Black Forest Labs with “Safety tolerance” set to 6.")
+    # GM r31 item 3: who can take it is named in the one action sentence.
+    assert line.endswith("Change that setting or switch to fal.ai.")
 
 
 def test_the_krea_account_check_has_a_line(monkeypatch):

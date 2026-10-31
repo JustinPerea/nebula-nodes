@@ -1776,15 +1776,17 @@ def _person_setting(param: Mapping[str, Any] | None, key: str, value: Any) -> st
 
 
 def _hidden_fix_person(definition: Mapping[str, Any], param: str) -> str:
-    """_hidden_fix_sentence in GM's rules: the label in quotes, the default by its option's label."""
+    """_hidden_fix_sentence in GM's rules, as the action's first clause (no
+    period: person_line.route_action adds who can take the run): the label in
+    quotes, the default by its option's label."""
     spec = param_definition(definition, param)
     label = f"“{_param_label(spec, param)}”"
     default = (spec or {}).get("default")
     if default is None:
-        return f"Clear {label}, or switch provider."
+        return f"Clear {label}"
     if isinstance(default, bool):
-        return f"Turn {label} {'on' if default else 'off'}, or switch provider."
-    return f"Set {label} back to {_plain(_option_label(spec, default))}, or switch provider."
+        return f"Turn {label} {'on' if default else 'off'}"
+    return f"Set {label} back to {_plain(_option_label(spec, default))}"
 
 
 def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
@@ -1812,7 +1814,7 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
     if block.reason == REQUIRES:
         return f" without {label}"
     if block.reason == SIZE:
-        return f", because it can't render this {label} exactly"
+        return f", because it can’t render this {label} exactly"
     if block.reason == RETIRED:
         return f", because the maker retired this model on {block.on}"
     if block.reason == PORTS:
@@ -1826,6 +1828,9 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 
 def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
                 params: Mapping[str, Any] | None = None) -> str:
+    """What the person can change where the node is, as the action's first
+    clause (person_line.route_action names who else can take the run; GM, PR
+    #203 r31 item 3: never "or switch provider")."""
     param = str(block.param or "")
     spec = param_definition(definition, param) if param else None
     if block.reason == HIDDEN:
@@ -1834,16 +1839,16 @@ def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
     label = f"“{_param_label(spec, param)}”"
     if (spec or {}).get("type") == "boolean" and block.reason in (UNSUPPORTED, BLOCKED):
         on = match_value((params or {}).get(param)) in {"true", WIRED}
-        return f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}, or switch provider."
+        return f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}"
     if block.reason == BLOCKED:
-        return f"Clear {label}, or switch provider."
+        return f"Clear {label}"
     if values:
-        return f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}, or switch provider."
+        return f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}"
     if block.reason == PORTS:
-        return "Disconnect the extra inputs, or switch provider."
+        return "Disconnect the extra inputs"
     if block.reason == REQUIRES:
-        return f"Set “{_param_label(spec, param)}”, or switch provider."
-    return "Change that setting, or switch provider."
+        return f"Set “{_param_label(spec, param)}”"
+    return "Change that setting"
 
 
 def route_unavailable_line(
@@ -1896,7 +1901,7 @@ def _route_reason(definition: Mapping[str, Any], params: Mapping[str, Any] | Non
     """The NotReadyReason for a stop route_unavailable_line and
     route_unavailable_reason say alike, or None for Auto with no key set
     (each says that one its own way)."""
-    from execution.person_line import NotReadyReason, key_phrase
+    from execution.person_line import NotReadyReason, key_phrase, route_action
 
     route, alternatives, keyless = found
     spec = route_by_id(definition, route.route_id) if route.route_id else None
@@ -1904,28 +1909,26 @@ def _route_reason(definition: Mapping[str, Any], params: Mapping[str, Any] | Non
     keyless_specs = [route_by_id(definition, alt) or {} for alt in keyless]
     keyless_labels = [provider_label(spec_.get("provider")) for spec_ in keyless_specs]
     # GM, PR #203 r29 item 2: the key by its name, never "its key" (it read
-    # as the node's): "Replicate can take it. Add your Replicate token in
-    # Settings."
+    # as the node's); r31 item 3: who can take the run is named in the
+    # action ("… or switch to fal.ai"; "…, or add your fal.ai API key in
+    # Settings and switch to fal.ai"), with no separate "can take it".
     keyless_phrase = key_phrase([key for spec_ in keyless_specs for key in keys(spec_.get("keys"))])
-    also = (f" {_or_list(others)} can take it." if others
-            else f" {_or_list(keyless_labels)} can take it. Add your {keyless_phrase} in Settings."
-            if keyless_labels and keyless_phrase
-            else f" {_or_list(keyless_labels)} can take it. Add its key in Settings." if keyless_labels
-            else "")
     block = route.block
     if block is not None and block.reason == UNKNOWN_PROVIDER:
         return NotReadyReason.of("unknown_provider")
     if block is not None and spec is not None:
-        return NotReadyReason.of("route_block", provider=provider_label(spec.get("provider")),
-                                 why=_why_person(definition, spec, block, params),
-                                 fix=_fix_person(definition, spec, block, params), also=also)
+        action, after_clause = route_action(_fix_person(definition, spec, block, params), others,
+                                            keyless_labels, keyless_phrase)
+        return NotReadyReason.of("route_block", after_clause=after_clause, provider=provider_label(spec.get("provider")),
+                                 why=_why_person(definition, spec, block, params), action=action)
     own = missing_key_line_for(definition, route)
     if own:
         return NotReadyReason(own=own)
     if spec is not None:
         phrase = key_phrase(route.missing) if route.missing else None
-        return NotReadyReason.of("route_key", provider=provider_label(spec.get("provider")),
-                                 needed=f"your {phrase}" if phrase else "a provider key", also=also)
+        action, after_clause = route_action("Add it in Settings", others, keyless_labels, keyless_phrase)
+        return NotReadyReason.of("route_key", after_clause=after_clause, provider=provider_label(spec.get("provider")),
+                                 needed=f"your {phrase}" if phrase else "a provider key", action=action)
     return None
 
 

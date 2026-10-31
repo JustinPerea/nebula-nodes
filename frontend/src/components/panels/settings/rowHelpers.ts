@@ -95,8 +95,8 @@ export type ServiceAccountCheck =
 /** Reads a Google service-account key without ever echoing the private key. */
 export function readServiceAccount(text: string): ServiceAccountCheck {
   let value: unknown;
-  try { value = JSON.parse(text); } catch { return { ok: false, error: "That isn't valid JSON." }; }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: "That isn't a service account key." };
+  try { value = JSON.parse(text); } catch { return { ok: false, error: 'That isn’t valid JSON.' }; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'That isn’t a service account key.' };
   const key = value as Record<string, unknown>;
   if (key.type !== 'service_account') return { ok: false, error: 'This JSON is not a service account key ("type" should be "service_account").' };
   if (typeof key.private_key !== 'string' || !key.private_key.includes('PRIVATE KEY')) return { ok: false, error: 'The key file has no private key.' };

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
-import { addKeyLine, routeSwitch } from '../../lib/directRoute';
-import { applyFix, applyProviderPick, providerSwitchState, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
+import { routeSwitch } from '../../lib/directRoute';
+import { applyFix, applyProviderPick, providerSwitchState, setupButtonWords, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
 import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
@@ -71,15 +71,6 @@ function openSetup(target: ProviderSetupTarget | undefined) {
   if (target) useUIStore.getState().openProviderSetup(target);
 }
 
-/** What the row's "Add key →" adds, as the one line every key prompt says
- * (directRoute.addKeyLine; GM, PR #203 r28 item 3): "Add your Replicate
- * token in Settings.", by the provider the key belongs to when that's
- * another (Idol's row is Speridlabs, its key Hugging Face's token). */
-function addKeyLabel(row: ProviderRow): string {
-  const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
-  return (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.`;
-}
-
 function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNode {
   if (row.keyState === 'set') return <span className="provider-switcher__key">Key set</span>;
   if (row.keyState === 'signed-in') return <span className="provider-switcher__key">Signed in</span>;
@@ -92,19 +83,26 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
       </span>
     );
   }
-  if (row.keyState === 'missing' || row.keyState === 'sign-in') {
-    const text = row.keyState === 'missing' ? 'Add key →' : 'Sign in';
-    return (
-      <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup"
-        // The line every key prompt says (GM, PR #203 r28 item 3):
-        // "Add your Hugging Face token in Settings."
-        aria-label={row.keyState === 'missing' ? addKeyLabel(row) : 'Sign in to Krea in Settings'}
-        onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
-        {text}
-      </button>
-    );
-  }
+  if (row.keyState === 'missing' || row.keyState === 'sign-in') return <SetupButton row={row} onSetup={onSetup} />;
   return <span className="provider-switcher__key" aria-hidden="true" />;
+}
+
+/** "Add token →" / "Add key →" / "Sign in" (GM, PR #203 r30 item 3): the
+ * accessible name is the visible label (the arrow is decorative), and the
+ * one add-key line ("Add your Replicate token in Settings.") is its
+ * description (setupButtonWords). */
+function SetupButton({ row, onSetup }: { row: ProviderRow; onSetup: (row: ProviderRow) => void }) {
+  const hintId = useId();
+  const { label, description } = setupButtonWords(row);
+  return (
+    <>
+      <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup" aria-describedby={hintId}
+        onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
+        {label}{row.keyState === 'missing' && <span aria-hidden="true"> →</span>}
+      </button>
+      <span id={hintId} className="provider-switcher__hint">{description}</span>
+    </>
+  );
 }
 
 interface ProviderMenuProps {

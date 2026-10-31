@@ -2249,8 +2249,11 @@ Base 04c0131f.
   later write of the provider, or a minute drops the entry. Seven
   channels now; the preload exposes `revert` and `commit`.
 - What's left: the trusted page can undo its own write in flight for up
-  to a minute, which `set` and `clear` let it do anyway. It never reads a
-  key. main.mjs: only its comment changed (the brief asked not to change
+  to a minute, back to the entry as it was just before that write. (Round
+  16, review 15 NIT-4: this used to say `set` and `clear` let it do that
+  anyway, which overstated it: `set` can't put back a key the page never
+  saw. Revert can, but only the one its own write replaced.) It never
+  reads a key. main.mjs: only its comment changed (the brief asked not to change
   the file otherwise).
 - The panel reverts only on a definite 4xx (or an offline refusal). On a
   5xx or a lost answer it reads GET /api/settings: the new value means
@@ -2336,3 +2339,218 @@ backend refusing the write after the file turned read-only).
   "Add your Replicate token in Settings.", which doesn't contain the
   visible words (WCAG 2.5.3). "Add key: Add your Replicate token in
   Settings." or keep?
+
+## Round 16 (CI on 21241038, GM r30 and r31, review 15)
+
+### 0. CI: the proposal row's exact shape
+
+- `test_canvas_proposals.py::test_a_proposal_names_the_run_nodes_that_cannot_run_here`
+  pinned every `cost.notReady` field but round 15's `reason`. It now pins
+  the whole row again, `reason` included, word for word.
+- Grepped tests/ for `notReady` and every field round 15 added to what
+  agents read (`settings_unreadable`, `settings_unwritable`,
+  `keys_unreadable`, `"fix"`, the spend route's note and code, the settings
+  refusals, `credentials/update`, `/api/settings/api-keys`) and ran each
+  match with the presence and Agent log tests: 42 files, 1,740 passed. The
+  list: S/idol16/be-files.txt in the scratchpad (round 16's wider set, 123
+  files, is below).
+- `reason` in what agents read: MCP-SETUP.md now says it is the person's
+  words for the bar to merge by, that agents read `missing` and never
+  parse `reason` (its words follow the person's lines and change, as they
+  did this round), and that `nebula propose` prints `missing`.
+  skills/nebula/SKILL.md already said to read `missing`.
+
+### 1. GM r30
+
+- **One merged line for every refused run in the Agent log.**
+  `_announce_validation_errors` goes through `_say_refused_run`: for an
+  agent's request (MCP, the CLI, an in-app chat turn, any run route) the
+  cursor still points at the first node with that node's own bubble, and
+  the event's `log` is the merged line, so the log lists the run once in
+  the bar's words. A refusal no cursor carried (a browser request, a
+  graph-wide refusal) goes to an in-app chat turn's log once
+  (`publish_action`), never twice. The log line has its own room,
+  `MAX_LOG_CHARS` 600 (`clean_log`), since a bubble's 140 would cut a
+  merged line of three reasons. Agents' replies are unchanged.
+- **The first Keychain refusal** keeps the backend's fix: no change.
+- **The switcher's setup button** shows the provider's noun from the one
+  source Settings uses (`credentialNoun`): "Add token →" for Replicate and
+  Hugging Face, "Add key →" for the rest, the arrow aria-hidden. Its
+  accessible name is the visible label; the add-key line ("Add your
+  Replicate token in Settings.") is its description through
+  aria-describedby (a visually hidden span). Krea's plan row: "Sign in",
+  described "Sign in to Krea in Settings.". No other switcher said "Add
+  key". `setupButtonWords` (lib/providerSwitch.ts) is the one place.
+- A WCAG 2.5.3 test renders every switcher (the fixture and every
+  registry node with routes) in all three variants and checks every
+  button's accessible name holds its visible text, in order, and that a
+  setup button's name starts with its label.
+
+### 2. Review 15
+
+- **Saves that worked still work** (settings-keychain MEDIUM-1, LOW-1,
+  LOW-2, NIT-1). `settings_write_block` decides before anything changes:
+  a file that is there and writable saves (atomically when that's safe,
+  else in place), a read-only file is refused with the file line, no file
+  needs a folder that takes one, a missing folder is made (0700) when the
+  nearest folder takes it, and a file where a folder must be is refused.
+  "Safe" means a regular file with one name, owned by this user, with no
+  ACL and no extended attribute of its own (com.apple.provenance and
+  security.selinux are every new file's, so they don't count; macOS ACLs
+  and attributes are read with acl_get_file and listxattr through ctypes,
+  since Python's os has no listxattr there). A temp file the folder won't
+  take, a group the temp file can't be given, or a rename the filesystem
+  refuses falls back to the in-place write. The temp file is 0600 while
+  it holds the keys, removed on any failure (a finally, so a
+  KeyboardInterrupt too), and temp files older than a minute beside
+  settings.json are swept at startup. The in-place write is not atomic,
+  as before round 15: that is the price of not refusing a save that
+  worked.
+- **The lines (GM r31 items 1 and 2):** the folder case, "Nothing was
+  saved because Nebula isn’t allowed to change ~/.nebula. Check the
+  folder’s permissions, then try again.", code `settings_unwritable`; a
+  file where the folder must be, "Nothing was saved because ~/.nebula is
+  a file, and Nebula needs a folder there. Move or rename that file, then
+  try again.", a new code `settings_not_a_folder` (the panel's code list
+  has it). Each names the real path. The agents' forms and the two `fix`
+  sentences ("Check the permissions of ~/.nebula, then try again.", "Move
+  or rename ~/.nebula, then try again.") are mine, in the pattern GM set
+  for the file line; no agent meets them today (every settings write is
+  the person's).
+- **credentials/update keeps only the read check** (MEDIUM-2): it writes
+  the Keychain and the backend's memory, never the file. PUT and DELETE
+  keep the write check.
+- **The Keychain write id is bound to the frame** (NIT-3): the owner is
+  the frame (its process and routing ids), and every credential call from
+  a subframe is refused (`UNTRUSTED_SENDER`); an event without a main
+  frame to check against is refused too (fails closed). A write that
+  lands after its page started navigating is committed at once (NIT-2:
+  each page's departures are counted when the handler starts and when
+  the write lands). main.mjs is unchanged.
+- **NIT-4:** the README, the notes and the PR body no longer say set and
+  clear "already let it do" what revert does: revert puts back only the
+  entry as it was just before the frame's own write.
+- **Route lines, one shape (GM r31 item 3):** the reason, then one action
+  sentence that names who can take the run, with no separate "can take
+  it": "… Turn “Raw” off or switch to fal.ai." (two: "fal.ai or
+  Replicate"), "…, or add your fal.ai API key in Settings and switch to
+  fal.ai." for a provider whose key isn't added, the fix alone when no
+  provider can. "Add it in Settings or switch to fal.ai." for a route's
+  missing key. The predicates end in an `{end}` slot: "." on the card and
+  the bar, ", then run the node again." in the Agent log, or ". Then run
+  the node again." after the comma clause; `NotReadyReason.again` holds
+  the log's forms and `merged_not_ready(again=True)` uses them. Nothing is
+  appended to a last sentence any more (`run_again` is gone). A route's
+  own line (Idol's token) is said as it is in the log too. The card twin
+  (directRoute.ts `routeAction`) builds the same sentences;
+  route_cases.json's 48 changed card lines were recomputed from the
+  backend and the frontend test reads the same.
+  - Choices to check: with no provider to name, a route's missing key
+    says "Add it in Settings." (the old "or choose another provider" had
+    nothing to name; the switcher still lists every route). Agents keep
+    their own text (node_route.route_unavailable_message and its fix
+    sentences, ids and env names), so "or switch provider" stays there.
+    GM's "because <why>" I read as the existing why clause ("with “Raw”
+    on"), unchanged. Krea's "Sign in to Krea in Settings, or choose
+    another provider." (GM r21, verbatim) is unchanged.
+- **Curly apostrophes:** route_block ("can’t run on", both the backend
+  and the card), the size reason, the Vertex lines ("can’t be read"), the
+  service account paste checks in Settings ("That isn’t a service account
+  key.", "That isn’t valid JSON."). Pins updated together.
+- **The generated reasons table** (LOW-2, sockets-tests LOW-1) now also
+  walks every route_cases.json case (setting stops, hidden stops, too many
+  inputs, sizes, keys only another route has, alternatives that need
+  their key) and a node Settings can't set up: 120 reasons, every kind
+  (key 45, route_block 44, route_key 28, unknown_provider, krea_plan,
+  not_set_up), each with its kind and the Agent log's forms
+  (`logOne`, `logMany`). A test asserts every kind appears. UTF-8 with
+  "\n" on read and write (NIT-3).
+- **Vertex paste error (GM r31 item 4):** "The Vertex AI service account
+  key saved in Settings isn’t a valid key file. Paste the whole key file
+  again."
+- **The Keychain line when Nebula didn't answer, as a notice (GM r31
+  item 5):** "Nebula didn’t respond, so your Replicate token may not be
+  removed. Remove it again to be sure." (`keychainUnknownLine`); beside
+  the row it still says "this key".
+- **The unprivileged-marker scan fails closed** (LOW-2): a conditional
+  mode is checked on both branches, and any mode it can't prove keeps the
+  owner's read and write (a variable, a call) counts as dropping them.
+  The file's own mode with bits or-ed onto it (`p.stat().st_mode |
+  stat.S_IXUSR`) takes nothing away and passes. Round 16's parametrized
+  parent-is-a-file test carries the marker for that reason.
+- **Tests:** the window test uses fake timers (LOW-3); the read-then-lock
+  test runs each write after the one before was restored (NIT-1, and its
+  folder half moved to round 16, where a read-only folder saves in
+  place); the rename failure tests patch `settings._replace`, not
+  `os.replace` for the whole process (NIT-2).
+- **PR body:** the Vertex "credentials" parenthesis is gone, "a line
+  each" is "a line per reason", the backend test bullets sit under
+  Backend, and the new behaviour is described.
+
+### What agents see this round
+
+- The presence event's `log` on a refused run is now the merged line (up
+  to 600 characters); MCP-SETUP.md says so.
+- `cost.notReady` rows' `person` and `reason` read the new route shape;
+  agents are told to read `missing`.
+- A new 409 code, `settings_not_a_folder`, and the folder line under
+  `settings_unwritable` (MCP-SETUP.md); only the person writes settings,
+  so no agent meets them yet. `credentials/update` no longer refuses a
+  read-only settings.json.
+- The switcher's labels aren't agent-visible.
+
+### Checks (round 16)
+
+- tsc -b --noEmit and lint pass. vite build passes; budget 461,672 bytes
+  raw, 141,909 gzip. check-node-contracts (309), generate-model-reference
+  --check, generate-route-tables --check and generate-not-ready-reasons
+  --check are current.
+- Focused vitest (76 files, --maxWorkers=2, run beside the backend set and
+  the mutants): 1,818 passed, 8 failed, Errors 0. Seven were 5-second
+  timeouts in Settings.test.tsx and idolRound10.test.ts, and one a focus
+  check in Settings.test.tsx under the same load. Those two files and
+  idolRound16.test.tsx again alone: 238 passed.
+- Focused backend (123 files, 5,009 tests: every file that imports what
+  changed or pins a changed line). The first run hit its time limit at
+  3,814 under the load; the rest (34 files) ran again on its own: 1,201 passed, 1 skipped. Two
+  failures in the first run, both timing tests that pass alone:
+  test_journal_write_project.py (35 passed) and test_mcp_channel.py's pin
+  check give-up (177 passed). Rounds 15 and 16 with the marker scan,
+  after the last test changes: 105 passed.
+  Desktop: 129 pass.
+- Base check (21241038 with the new tests): round 16's backend tests fail
+  but five that guard what already worked (a symlinked path writes
+  through, a browser refusal logs once, a read-only file and a read-only
+  file in a read-only folder are refused with the file line, a plain file
+  is replaced whole); the frontend's new tests fail (37), except the
+  folder line, which the panel already showed by its code; the desktop's
+  four new frame and navigation tests fail, the "no navigation stays
+  undoable" guard passes.
+- Mutants: section 1 B1 to B7 and F1 to F7, section 2 S1 to S18, R1 to
+  R8, D1 to D5, K1 and K2, all killed. Two survived their first run and
+  got tests: S16 (the temp file given the file's mode before the keys are
+  written; the test now reads the mode when they are flushed) and R8 (no
+  test pinned the Vertex line; one now does for three bad pastes).
+- Live on 8793/5793 (sandboxed backend and Vite, the browser's proxy
+  dead, canaries blocked for 8000, 8005, 8010, 5173, 8790, 8760 and five
+  real hosts, from the browser and the backend; fake keys only, no Space
+  call, no run reached a provider): an MCP and a CLI refused run each
+  logged the merged line once; Replicate's row showed "Add token →" with
+  its line as the description; a FLUX 3 node set to Replicate with only a
+  fal.ai key said on its card "FLUX 3 Image is set to Replicate, which
+  needs your Replicate token. Add it in Settings or switch to fal.ai." and
+  in the Agent log "Nebula couldn’t start the run. “FLUX 3 Image” is set
+  to Replicate, which needs your Replicate token. Add it in Settings or
+  switch to fal.ai, then run the node again." Shots: shots16/1440-r16-1
+  to -4 in the scratchpad.
+
+### Questions for GM (round 16)
+
+- "Pick A, B or C or switch to fal.ai" has two "or"s when a setting's fix
+  lists choices; keep it, or "Pick A, B or C, or switch to fal.ai"?
+- The switcher's row notes still say "Doesn't take" with a straight
+  apostrophe (not one of the lines r31 named).
+- The pill's accessible name puts words between its visible parts
+  ("Provider for X: Auto …"); it holds them in order, so it passes Label
+  in Name, but the visible text isn't one run in it.
+- Krea's "or choose another provider" (r21, verbatim) is unchanged.

@@ -86,7 +86,9 @@ from services.settings import (
     SettingsUnreadable,
     SettingsUnwritable,
     save_settings,
-    settings_writable,
+    settings_write_block,
+    shown_path,
+    sweep_stale_temp_files,
     get_api_key,
     validate_provider_keys,
     clear_provider_validation_cache,
@@ -154,6 +156,7 @@ from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
     agent_presence,
+    clean_log,
     clean_say,
     current_request_headers,
     identify as identify_agent,
@@ -3296,6 +3299,15 @@ async def _person_startup() -> None:
 
 
 @app.on_event("startup")
+async def _sweep_settings_temp_files() -> None:
+    """A save cut short between its temp file and the rename leaves a full
+    copy of settings.json beside it, keys included: removed at each start
+    (services/settings.sweep_stale_temp_files; review 15 of PR #203,
+    settings-keychain LOW-2)."""
+    sweep_stale_temp_files()
+
+
+@app.on_event("startup")
 async def _parent_watch_startup() -> None:
     """Desktop sidecar: exit if Electron dies without stopping us (services/parent_watch.py)."""
     from services import parent_watch
@@ -3996,7 +4008,7 @@ def _validation_messages(errors: list[ValidationErrorDetail]) -> dict[str, str]:
     return {node_id: "; ".join(messages) for node_id, messages in by_node.items()}
 
 
-async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_id: str) -> None:
+async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_id: str) -> str | None:
     """Every run path's pre-call refusal, told the same way.
 
     Each node it names shows the message on its card (validationError, which
@@ -4004,7 +4016,13 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
     (node_errors: look_at_canvas, view_output), and the journal says which
     nodes failed and for whom (run.failed). So an agent's refused run_nodes
     looks on the canvas like the person's refused click on Run.
-    """
+
+    An agent's refused run (MCP, the CLI, an in-app chat turn, any route)
+    reaches the person's Agent log as one merged line, whoever asked (GM, PR
+    #203 r30 item 1): its cursor's event carries it as the log line
+    (_say_refused_run). Returns the line when no cursor carried it (the
+    browser's own request, or a refusal with no node to point at), so
+    /api/graph/run can still give it to an in-app chat turn."""
     node_errors.record_validation(errors)
     # Journaled before the broadcast's await (round 8 of PR #114).
     for node_id, message in _validation_messages(errors).items():
@@ -4012,6 +4030,28 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
             _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
     canvas_events.forget_run(run_id)
     await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+    return await _say_refused_run(errors)
+
+
+async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
+    """The Agent log's line for a refused run, by the bar's merge rule
+    (_refused_run_log_line): "Nebula couldn’t start the run. 2 “GPT Image 2”
+    nodes need your OpenAI API key. Add it in Settings, then run the nodes
+    again." For an agent's request its cursor points at the first node it
+    names, the bubble keeping that node's own line, and the event's `log` is
+    the merged line, so the log lists the run once in the merged words. None
+    when the cursor carried it; the line otherwise. Agents' own text (`error`,
+    `errors`) keeps every node by id."""
+    node_ids = [node_id for node_id in _validation_messages(errors) if node_id]
+    person = _validation_person_lines(errors)
+    line = _refused_run_log_line(node_ids, person)
+    first = node_ids[0] if node_ids else None
+    if first is None or identify_agent(current_request_headers()) is None:
+        return line
+    # The cursor quotes the node like every other bubble; the log has the run's line.
+    bubble = f"{_quoted(_node_label(first))} can’t run." + (f" {person[first]}" if person.get(first) else "")
+    await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first), log=line)
+    return None
 
 
 # ---------- WebSocket endpoint ----------
@@ -5493,7 +5533,7 @@ async def _show_agent(
         if not say and not log and did is not None and did.get("verb"):
             log = f"{did['verb']} {_quoted(str(did.get('label') or ''))}" if did.get("label") else str(did["verb"])
         # The event carries ``log`` only when it isn't the bubble's own words (PR #195).
-        if log is not None and clean_say(log) == clean_say(say):
+        if log is not None and clean_log(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
         await manager.broadcast_raw(event)
@@ -10039,8 +10079,10 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     if refusal is not None:
         raise HTTPException(status_code=422, detail=refusal)
     # The file holds this backend's other settings: one it can't read gets
-    # the 409 before any key changes, as PUT /api/settings does.
-    _saved_settings_or_409()
+    # the 409 before any key changes, as PUT /api/settings does. Only the
+    # read check: this writes the backend's memory, never the file (review
+    # 15 of PR #203, settings-keychain MEDIUM-2).
+    _saved_settings_or_409(writes_file=False)
     if check:
         return {"status": "ok"}
     before = dict(load_settings().get("apiKeys") or {})
@@ -10068,6 +10110,24 @@ SETTINGS_UNWRITABLE = {
     "agent": "Nothing was saved because Nebula isn’t allowed to change {path}. "
              "Ask the person to check the file’s permissions.",
 }
+# The folder that holds the file takes no new file, and the file can't be
+# written where it is (it isn't there yet, or it is read-only too): the line
+# names the real folder (GM, PR #203 r31 item 1). The agents' form follows
+# SETTINGS_UNWRITABLE's.
+SETTINGS_FOLDER_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
+              "Check the folder’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
+             "Ask the person to check the folder’s permissions.",
+}
+# A folder on the way to the file is a file (GM, PR #203 r31 item 2), named
+# by its real path.
+SETTINGS_NOT_A_FOLDER = {
+    "person": "Nothing was saved because {folder} is a file, and Nebula needs a folder there. "
+              "Move or rename that file, then try again.",
+    "agent": "Nothing was saved because {folder} is a file, and Nebula needs a folder there. "
+             "Ask the person to move or rename that file.",
+}
 # Each settings refusal's fix sentence on its own, by code and reader, naming
 # the file (GM, PR #203 r29 item 6: "… Fix “apiKeys” in ~/…/settings.json,
 # then try again.").
@@ -10078,12 +10138,18 @@ SETTINGS_FIX = {
                         "agent": "Ask the person to fix “apiKeys” in {path}."},
     "settings_unwritable": {"person": "Check the permissions of {path}, then try again.",
                             "agent": "Ask the person to check the permissions of {path}."},
+    "settings_not_a_folder": {"person": "Move or rename {folder}, then try again.",
+                              "agent": "Ask the person to move or rename {folder}."},
 }
+# The folder form of settings_unwritable's fix (SETTINGS_FOLDER_UNWRITABLE).
+SETTINGS_FOLDER_FIX = {"person": "Check the permissions of {folder}, then try again.",
+                       "agent": "Ask the person to check the permissions of {folder}."}
 # The codes beside each settings refusal's `detail` (the frontend's
 # settingsWrites.settingsRefusalLine picks by these, never by the words).
 SETTINGS_UNREADABLE_CODE = "settings_unreadable"
 KEYS_UNREADABLE_CODE = "keys_unreadable"
 SETTINGS_UNWRITABLE_CODE = "settings_unwritable"
+SETTINGS_NOT_A_FOLDER_CODE = "settings_not_a_folder"
 # A read (GET /api/settings, start_here), where nothing was being saved: GM's
 # line without its first clause, by who is reading. Agents can't read or fix
 # that file, so theirs says the person must (GM, PR #203 r27 item 2): MCP
@@ -10120,52 +10186,72 @@ def _unreadable_on_read() -> str:
     return _unreadable(SETTINGS_UNREADABLE_ON_READ[_settings_audience()])
 
 
-def _saved_settings_or_409() -> dict[str, Any]:
+def _saved_settings_or_409(*, writes_file: bool = True) -> dict[str, Any]:
     """The settings file as saved (load_saved_settings), copied for a write
     to change; the 409 SETTINGS_UNREADABLE when it isn't JSON Nebula can
-    read or isn't an object (review 12 of PR #203, LOW-3: never a 500), and
-    the 409 SETTINGS_UNWRITABLE when Nebula can read it but isn't allowed to
-    change it (GM, PR #203 r28 item 4). Every write asks this before it
-    changes anything: PUT and DELETE settings, and the desktop's
-    credentials/update with or without ``check``, so a key lands in both the
-    Keychain and the backend or in neither."""
+    read or isn't an object (review 12 of PR #203, LOW-3: never a 500), and,
+    for a write that saves the file (``writes_file``), the 409 for what
+    stops the save (_unwritable_refusal; GM, PR #203 r28 item 4, r31 items 1
+    and 2). PUT and DELETE settings ask both. The desktop's
+    credentials/update asks only the read check: it writes the Keychain and
+    the backend's memory, never the file, so a read-only settings.json
+    doesn't stop a key save that never touches it (review 15,
+    settings-keychain MEDIUM-2)."""
     try:
         current = load_saved_settings()
     except SettingsUnreadable:
         current = None
     if not isinstance(current, dict):
         raise _settings_refusal(SETTINGS_UNREADABLE, SETTINGS_UNREADABLE_CODE)
-    if not settings_writable():
-        raise _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE)
+    if writes_file:
+        block = settings_write_block()
+        if block is not None:
+            raise _unwritable_refusal(block)
     return copy.deepcopy(current)
 
 
 def _save_settings_or_409(current: dict[str, Any]) -> None:
-    """save_settings, with the 409 SETTINGS_UNWRITABLE for a file that
-    turned read-only after _saved_settings_or_409 read it (its folder too):
-    the file is left as it was."""
+    """save_settings, with the 409 for a file that turned read-only after
+    _saved_settings_or_409 read it (its folder too): the file is left as it
+    was."""
     try:
         save_settings(current)
-    except SettingsUnwritable:
-        raise _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE) from None
+    except SettingsUnwritable as exc:
+        raise _unwritable_refusal(exc) from None
 
 
-def _settings_refusal(line: str | Mapping[str, str], code: str) -> CodedRefusal:
+def _unwritable_refusal(block: SettingsUnwritable) -> CodedRefusal:
+    """The 409 for what stops a save (SettingsUnwritable.cause): the file's
+    permissions, its folder's (named), or a file where a folder must be
+    (named)."""
+    folder = {"folder": shown_path(block.where)}
+    if block.cause == "not_a_folder":
+        return _settings_refusal(SETTINGS_NOT_A_FOLDER, SETTINGS_NOT_A_FOLDER_CODE, **folder)
+    if block.cause == "folder":
+        return _settings_refusal(SETTINGS_FOLDER_UNWRITABLE, SETTINGS_UNWRITABLE_CODE, fix=SETTINGS_FOLDER_FIX, **folder)
+    return _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE)
+
+
+def _settings_refusal(line: str | Mapping[str, str], code: str, *, fix: Mapping[str, str] | None = None,
+                      **names: str) -> CodedRefusal:
     """A settings write's 409: ``line`` naming the file (one line, or a line
     for each reader keyed "person" / "agent"), with ``code`` beside it, so a
     client picks its line by the cause and never by the words, and ``fix``,
-    the line's fix sentence on its own (SETTINGS_FIX), which the desktop's
-    Keychain line ends with when it still stands (GM, PR #203 r29 item 6)."""
+    the line's fix sentence on its own (SETTINGS_FIX, or the one given),
+    which the desktop's Keychain line ends with when it still stands (GM,
+    PR #203 r29 item 6). ``names`` fill the line's other slots ({folder})."""
     audience = _settings_audience()
     if not isinstance(line, str):
         line = line[audience]
-    return CodedRefusal(409, _unreadable(line), {"code": code, "fix": _unreadable(SETTINGS_FIX[code][audience])})
+    fixes = fix if fix is not None else SETTINGS_FIX[code]
+    return CodedRefusal(409, _unreadable(line, **names), {"code": code, "fix": _unreadable(fixes[audience], **names)})
 
 
-def _unreadable(line: str) -> str:
+def _unreadable(line: str, **names: str) -> str:
     """``line`` naming the settings file this backend reads, resolved, with
-    the home folder as "~" (settings_file_shown; GM, PR #203 r24 item 7)."""
-    return line.format(path=settings_file_shown())
+    the home folder as "~" (settings_file_shown; GM, PR #203 r24 item 7),
+    and any other path it names (``names``, shown the same way)."""
+    return line.format(path=settings_file_shown(), **names)
 
 
 # A key with something in it that is empty once trimmed: no key at all, so
@@ -18622,13 +18708,14 @@ def _refused_run_log_line(node_ids: list[str], person: Mapping[str, str | None])
     """The Agent Log's line for a run the pre-call check stopped (GM, PR #203
     r29 item 3): the card's heading, then each reason once, its nodes by
     quoted name and merged by the r28 rule (person_line.merged_not_ready,
-    the bar's table), ending ", then run the node again" ("the nodes" for
-    several): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
+    the bar's table), each action sentence ending ", then run the node
+    again" ("the nodes" for several; ". Then run the node again." after a
+    comma clause): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
     your OpenAI API key. Add it in Settings, then run the nodes again." A
     node stopped for another reason (an input not connected) says its card
     line after its name. From 4 nodes, one count, as the bar's (person_line
     counts_instead). Agents' text keeps ids (`error`, `errors`)."""
-    from execution.person_line import merged_not_ready, run_again
+    from execution.person_line import merged_not_ready
 
     if counts_instead(len(node_ids)):
         return f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
@@ -18641,7 +18728,10 @@ def _refused_run_log_line(node_ids: list[str], person: Mapping[str, str | None])
         else:
             line = person.get(node_id)
             others.append(f"{_quoted(_node_label(node_id))} can’t run." + (f" {line}" if line else ""))
-    told = [run_again(line, count) for line, count in merged_not_ready(reasons)] + others
+    # Each reason's Agent Log form: its action sentence ends in the run-again
+    # ending, built in its end slot (person_line.NOT_READY_PREDICATES; GM, PR
+    # #203 r31 item 3), never appended to the last sentence.
+    told = [line for line, _count in merged_not_ready(reasons, again=True)] + others
     if not told and person.get(""):
         told = [str(person[""])]
     return " ".join([REFUSED_RUN_HEADING, *told])
@@ -18683,21 +18773,19 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     _note_run(run_id)
     if pending_skips:
         await _announce_skips(run_id, pending_skips)
-    await _announce_validation_errors(errors, run_id)
+    # The Agent log and the cursor speak on the person's canvas: the card's
+    # lines, not the keys and ids agents read in `error` and `errors` (error
+    # copy round 3e). The agent's cursor carries the merged line; a line no
+    # cursor carried (a graph-wide refusal alone, such as a cycle, or a caller
+    # with no agent name) goes to an in-app chat turn's log, so it is listed
+    # once either way (GM, PR #203 r30 item 1).
+    unlogged = await _announce_validation_errors(errors, run_id)
+    if unlogged is not None:
+        publish_action(unlogged)
     messages = _validation_messages(errors)
     per_node = {node_id: message for node_id, message in messages.items() if node_id}
     summary = "; ".join(f"{node_id} ({_node_label(node_id)}): {message}" if node_id else message
                         for node_id, message in messages.items())
-    # The Agent Log and the cursor speak on the person's canvas: the card's
-    # lines, not the keys and ids agents read in `error` and `errors` (error
-    # copy round 3e). A graph-wide refusal alone (a cycle) has no node to name.
-    person = _validation_person_lines(errors)
-    publish_action(_refused_run_log_line(list(per_node), person))
-    first = next(iter(per_node), None)
-    if first is not None:
-        # The cursor quotes the node like every other bubble; the log keeps its line.
-        bubble = f"{_quoted(_node_label(first))} can’t run." + (f" {person[first]}" if person.get(first) else "")
-        await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,

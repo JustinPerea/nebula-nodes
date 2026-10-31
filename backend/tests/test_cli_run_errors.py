@@ -84,13 +84,27 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
 
 
 @pytest.fixture
-def agent_log():
-    """The in-app chat turn's Agent Log lines (publish_action's `thinking`
-    events, which the canvas's Agent Log panel shows as they are)."""
+def agent_log(monkeypatch):
+    """What the canvas's Agent log lists, from both of its sources: an
+    in-app chat turn's lines (publish_action's `thinking` events, shown as
+    they are) and each agent cursor event's line, its `log` else its `say`
+    (frontend agentLogStore.agentActionEntry). GM, PR #203 r30 item 1: a
+    refused run is one line there, whoever asked."""
+    import main
     from services.chat_actions import register_action_handler, unregister_action_handler
 
     lines: list[str] = []
     register_action_handler(lambda event: lines.append(event["text"]) if event.get("type") == "thinking" else None)
+    original = main.manager.broadcast_raw
+
+    async def heard(data, **kwargs):
+        if isinstance(data, dict) and data.get("type") == "agentPresence" and data.get("agent"):
+            text = str(data.get("log") or data.get("say") or "").strip()
+            if text:
+                lines.append(text)
+        await original(data, **kwargs)
+
+    monkeypatch.setattr(main.manager, "broadcast_raw", heard)
     yield lines
     unregister_action_handler()
 

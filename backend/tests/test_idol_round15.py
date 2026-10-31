@@ -4,9 +4,11 @@
   409 with the code ``settings_unwritable`` and GM's line, by who asked,
   never a 500: the file read-only, its folder read-only (a save writes a temp
   file there and renames it over the file), or either one turning read-only
-  between the read and the write. Every write: PUT and DELETE settings, and
-  the desktop's credentials/update with and without ``check``. The read
-  failures carry codes too, so the client picks its line by the code.
+  between the read and the write. PUT and DELETE settings; since round 16
+  the desktop's credentials/update keeps only the read check, and a
+  read-only folder with a writable file saves in place (test_idol_round16).
+  The read failures carry codes too, so the client picks its line by the
+  code.
 - Item 1: Vertex's key is the "Vertex AI service account key", from the one
   noun source, and no person line says "Google Cloud credentials".
 """
@@ -76,14 +78,20 @@ def _refused(response) -> tuple[int, str, str | None]:
 
 
 # -- item 4: the file read-only ----------------------------------------------------------------
+# Round 16 (review 15, settings-keychain MEDIUM-2): credentials/update writes
+# the backend's memory, never the file, so it keeps only the read check.
 
 
 @pytest.mark.unprivileged
-def test_a_read_only_file_refuses_every_write_with_the_persons_line_and_a_code(home_file):
+def test_a_read_only_file_refuses_every_write_with_the_persons_line_and_a_code(home_file, monkeypatch):
+    monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     before = home_file.read_bytes()
     home_file.chmod(0o444)
     client = _person()
     for name, response in _writes(client).items():
+        if name in ("check", "update"):
+            assert response.status_code == 200, (name, response.text)
+            continue
         assert _refused(response) == (409, PERSON_LINE, "settings_unwritable"), name
     assert home_file.read_bytes() == before
     # The person's GET still reads it: a file Nebula can read is no read failure.
@@ -92,66 +100,57 @@ def test_a_read_only_file_refuses_every_write_with_the_persons_line_and_a_code(h
 
 
 @pytest.mark.unprivileged
-def test_the_desktop_path_refuses_too_and_keeps_the_running_keys(home_file, monkeypatch):
+def test_the_desktop_path_saves_keys_but_refuses_the_file_write(home_file, monkeypatch):
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {"OPENAI_API_KEY": "sk-desktop-0000"})
+    before = home_file.read_bytes()
     home_file.chmod(0o444)
     client = _person()
-    for body in ({"provider": "OPENAI_API_KEY", "key": "sk-new-1111", "check": True},
-                 {"provider": "OPENAI_API_KEY", "key": "sk-new-1111"}):
-        assert _refused(client.post("/api/credentials/update", json=body)) == (409, PERSON_LINE, "settings_unwritable")
+    assert client.post("/api/credentials/update",
+                       json={"provider": "OPENAI_API_KEY", "key": "sk-new-1111", "check": True}).json() == {"status": "ok"}
+    assert client.post("/api/credentials/update",
+                       json={"provider": "OPENAI_API_KEY", "key": "sk-new-1111"}).json() == {"status": "updated"}
+    assert settings._INJECTED_KEYS == {"OPENAI_API_KEY": "sk-new-1111"}
     assert _refused(client.put("/api/settings", json={"favorites": []})) == (409, PERSON_LINE, "settings_unwritable")
-    assert settings._INJECTED_KEYS == {"OPENAI_API_KEY": "sk-desktop-0000"}
-
-
-# -- item 4: the folder read-only, where the save writes its temp file ----------------------------
-
-
-@pytest.mark.unprivileged
-def test_a_read_only_folder_refuses_the_save_that_writes_a_temp_file_and_renames_it(home_file):
-    before = home_file.read_bytes()
-    home_file.parent.chmod(0o555)
-    client = _person()
-    for name, response in _writes(client).items():
-        assert _refused(response) == (409, PERSON_LINE, "settings_unwritable"), name
-    home_file.parent.chmod(0o755)
     assert home_file.read_bytes() == before
-    assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
 
 
 # -- item 4: read-only between the read and the write ---------------------------------------------
 
 
 @pytest.mark.unprivileged
-@pytest.mark.parametrize("what", ["file", "folder"])
-def test_a_file_or_folder_that_turns_read_only_after_the_read_is_refused_at_the_write(home_file, monkeypatch, what):
+def test_a_file_that_turns_read_only_after_the_read_is_refused_at_the_write(home_file, monkeypatch):
     before = home_file.read_bytes()
     real = main._saved_settings_or_409
 
-    def read_then_lock():
-        current = real()
-        (home_file if what == "file" else home_file.parent).chmod(0o444 if what == "file" else 0o555)
+    def read_then_lock(**kwargs):
+        current = real(**kwargs)
+        home_file.chmod(0o444)
         return current
 
     monkeypatch.setattr(main, "_saved_settings_or_409", read_then_lock)
     client = _person()
-    for response in (client.put("/api/settings", json={"favorites": []}), client.delete("/api/settings/api-keys/FAL_KEY")):
-        assert _refused(response) == (409, PERSON_LINE, "settings_unwritable")
+    # Each write runs after the one before it was restored (review 15,
+    # sockets-tests NIT-1: a tuple of responses ran both first).
+    for write in (lambda: client.put("/api/settings", json={"favorites": []}),
+                  lambda: client.delete("/api/settings/api-keys/FAL_KEY")):
+        assert home_file.stat().st_mode & 0o200, "restored before this write"
+        assert _refused(write()) == (409, PERSON_LINE, "settings_unwritable")
         home_file.chmod(0o644)
-        home_file.parent.chmod(0o755)
     assert home_file.read_bytes() == before
     assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
 
 
-def test_a_rename_refused_by_the_filesystem_is_the_same_409_and_leaves_no_temp_file(home_file, monkeypatch):
-    """A read-only filesystem (EROFS) at the rename: no chmod, so as root too."""
-    before = home_file.read_bytes()
-
+def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, monkeypatch):
+    """A rename the filesystem refuses (EROFS here: no chmod, so as root
+    too) falls back to the in-place write that saved before round 15, and
+    leaves no temp file. The seam is settings._replace, never os.replace for
+    the whole process (review 15, sockets-tests NIT-2)."""
     def refuse(_src, _dst):
         raise OSError(errno.EROFS, "Read-only file system")
 
-    monkeypatch.setattr(settings.os, "replace", refuse)
-    assert _refused(_person().put("/api/settings", json={"favorites": []})) == (409, PERSON_LINE, "settings_unwritable")
-    assert home_file.read_bytes() == before
+    monkeypatch.setattr(settings, "_replace", refuse)
+    assert _person().put("/api/settings", json={"favorites": []}).status_code == 200
+    assert json.loads(home_file.read_text(encoding="utf-8"))["favorites"] == []
     assert sorted(p.name for p in home_file.parent.iterdir()) == ["settings.json"]
 
 
@@ -159,7 +158,7 @@ def test_a_failure_that_is_not_about_permission_is_not_called_one(home_file, mon
     def full(_src, _dst):
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(settings.os, "replace", full)
+    monkeypatch.setattr(settings, "_replace", full)
     with pytest.raises(OSError) as raised:
         settings.save_settings({"favorites": []})
     assert not isinstance(raised.value, settings.SettingsUnwritable)
@@ -444,7 +443,7 @@ def test_every_not_ready_line_starts_with_the_quoted_name_and_the_table_is_curre
     assert len(reasons) > 40
     for reason in reasons:
         assert reason["line"] == f"“{reason['name']}” {reason['one']}", reason
-        assert reason["many"] != reason["one"] or reason["one"].startswith("can't run on"), reason
+        assert reason["many"] != reason["one"] or reason["one"].startswith("can’t run on"), reason
         assert "Add its key" not in reason["one"] and "doesn't have" not in reason["one"], reason
 
 
@@ -468,8 +467,12 @@ def test_merged_not_ready_lines_and_the_run_again_ending():
                                           ("Writer", reason)])
     assert lines == [("2 “GPT Image 2” nodes and “Writer” need your OpenAI API key. Add it in Settings.", 3),
                      ("“Krea 2” needs your Krea plan. Sign in to Krea in Settings.", 1)]
-    assert person_line.run_again(lines[0][0], 3).endswith("Add it in Settings, then run the nodes again.")
-    assert person_line.run_again(lines[1][0], 1).endswith("Sign in to Krea in Settings, then run the node again.")
+    # The Agent Log's forms: the ending in each action sentence's end slot (round 16).
+    logged = person_line.merged_not_ready([("GPT Image 2", reason), ("GPT Image 2", reason), ("Krea 2", plan),
+                                           ("Writer", reason)], again=True)
+    assert logged == [("2 “GPT Image 2” nodes and “Writer” need your OpenAI API key. "
+                       "Add it in Settings, then run the nodes again.", 3),
+                      ("“Krea 2” needs your Krea plan. Sign in to Krea in Settings, then run the node again.", 1)]
     own = person_line.NotReadyReason(own="You can run “Idol” after you add your Hugging Face token in Settings.")
     assert person_line.merged_not_ready([("Idol", own), ("Idol", own)]) == [(own.own, 1), (own.own, 1)]
 

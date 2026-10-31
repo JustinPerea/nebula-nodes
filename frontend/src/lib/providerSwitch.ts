@@ -1,7 +1,7 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
+  addKeyLine, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
   routeTakesValue,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
@@ -9,6 +9,7 @@ import {
 } from './directRoute';
 import { awaitsInput, entryForRoute, estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
+import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
 
 /**
  * What the provider switcher (components/nodes/ProviderSwitcher.tsx) shows
@@ -45,7 +46,7 @@ export interface ProviderRow {
   plan: boolean;
   label: string;
   keyState: KeyState | null;
-  /** Where "Add key →" or "Sign in" opens Settings. */
+  /** Where "Add token →" (the provider's noun) or "Sign in" opens Settings. */
   setup?: ProviderSetupTarget;
   /** "$0.04", "$0.05*" (unconfirmed), or "-" (unpriced, blocked, or billed to the plan). */
   price: string;
@@ -250,7 +251,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
         // A Space route's token (Idol's): the green dot and "Connected" once
-        // set, "Add key →" while missing (GM, PR #203 r4).
+        // set, "Add token →" while missing (GM, PR #203 r4; r30 item 3).
         keyState: keyless ? (keyed ? 'connected' : 'none')
           : keyed ? (spec.handler === 'hf-space' ? 'connected' : 'set') : 'missing',
         setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
@@ -484,4 +485,21 @@ export function providerKeyWarnings(
     }
   }
   return warnings;
+}
+
+/** The words of a switcher row's setup button (GM, PR #203 r30 item 3).
+ * `label` is what it shows, the provider's button noun from the one source
+ * Settings' buttons use (providerCatalog.credentialNoun: "Add token" for
+ * Replicate and Hugging Face, "Add key" for the rest), with a decorative
+ * "→" after it; the button's accessible name is `label`, so it holds what
+ * sighted people read (WCAG 2.5.3). `description` is the one add-key line
+ * (directRoute.addKeyLine, "Add your Replicate token in Settings."), given
+ * through aria-describedby, by the provider the key belongs to (Idol's row
+ * is Speridlabs, its key Hugging Face's token). A Krea plan row signs in. */
+export function setupButtonWords(row: Pick<ProviderRow, 'keyState' | 'setup' | 'label'>): { label: string; description: string } {
+  if (row.keyState === 'sign-in') return { label: 'Sign in', description: 'Sign in to Krea in Settings.' };
+  const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
+  const spec = key ? PROVIDER_KEY_SPECS[key] : undefined;
+  const noun = spec ? credentialNoun(spec) : 'key';
+  return { label: `Add ${noun}`, description: (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.` };
 }

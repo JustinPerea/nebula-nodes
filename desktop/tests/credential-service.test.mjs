@@ -148,9 +148,11 @@ function createMockIpcMain() {
   };
 }
 
-/** A mock IPC event with a trusted sender frame. */
+/** A mock IPC event with a trusted sender frame: its page's main frame
+ * (Electron's `event.sender.mainFrame`), as every credential call must be. */
 function createTrustedEvent(url) {
-  return { senderFrame: { url: url || 'file:///app/dist/index.html' } };
+  const frame = { url: url || 'file:///app/dist/index.html', processId: 1, routingId: 1 };
+  return { senderFrame: frame, sender: { mainFrame: frame } };
 }
 
 /** A mock IPC event with an untrusted sender frame. */
@@ -887,16 +889,19 @@ describe('registerCredentialHandlers', () => {
   // write's one-time id, and gets nothing back but ok.
 
   /** A page (webContents) that can be destroyed or navigate away. */
+  let nextPage = 10;
   function createSender() {
     const listeners = {};
+    nextPage += 1;
     return {
+      mainFrame: { url: 'file:///app/dist/index.html', processId: nextPage, routingId: 1 },
       on(name, listener) { (listeners[name] ||= []).push(listener); },
       emit(name, ...args) { for (const listener of listeners[name] || []) listener(...args); },
       count(name) { return (listeners[name] || []).length; },
     };
   }
   function pageEvent(sender = createSender()) {
-    return { ...createTrustedEvent(), sender };
+    return { senderFrame: sender.mainFrame, sender };
   }
   const call = (ipcMain, channel, event, arg) => ipcMain._get(channel)(event, arg);
   const set = (ipcMain, event, provider, key) => call(ipcMain, 'credentials:set', event, { provider, key });
@@ -1064,7 +1069,10 @@ describe('registerCredentialHandlers', () => {
     assert.deepEqual(['destroyed', 'render-process-gone', 'did-start-navigation'].map((name) => sender.count(name)), [1, 1, 1]);
   });
 
-  test('a write can be undone only inside the window', async () => {
+  test('a write can be undone only inside the window', async (t) => {
+    // Fake timers (review 15 of PR #203, sockets-tests LOW-3): no real-time
+    // budget, so a slow runner can't fail the "inside the window" half.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const dir = mkTemp();
     const credsPath = join(dir, CREDENTIALS_FILE_NAME);
     const service = createCredentialService({ credentialsPath: credsPath, safeStorage: createMockSafeStorage(), revertWindowMs: 20 });
@@ -1073,12 +1081,78 @@ describe('registerCredentialHandlers', () => {
     const event = pageEvent();
     await service.set('OPENAI_API_KEY', 'key-0');
     const late = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-1');
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    t.mock.timers.tick(20);
     assert.deepEqual(await call(ipcMain, 'credentials:revert', event, late.writeId), NOT_LATEST);
     assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
     const soon = await set(ipcMain, event, 'OPENAI_API_KEY', 'key-2');
+    t.mock.timers.tick(19);
     assert.deepEqual(await call(ipcMain, 'credentials:revert', event, soon.writeId), { ok: true });
     assert.deepEqual(await service.decryptAll(), { OPENAI_API_KEY: 'key-1' });
+  });
+
+  test('a write that lands after its page started navigating is committed at once', async () => {
+    // Review 15 of PR #203, settings-keychain NIT-2.
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const slow = { ...createMockSafeStorage(), encryptStringAsync: async (plaintext) => {
+      await gate;
+      return Buffer.from(`enc::${plaintext}`, 'utf8');
+    } };
+    const { ipcMain, service } = makeHarness({ safeStorage: slow });
+    const sender = createSender();
+    const event = pageEvent(sender);
+    const writing = set(ipcMain, event, 'FAL_KEY', 'fal-new');
+    sender.emit('did-start-navigation', { isSameDocument: false, isMainFrame: true });
+    release();
+    const result = await writing;
+    assert.equal(result.ok, true);
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, result.writeId), NOT_LATEST);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-new' });
+  });
+
+  test('a write that lands with no navigation in between stays undoable', async () => {
+    const { ipcMain, service } = makeHarness();
+    const event = pageEvent();
+    const result = await set(ipcMain, event, 'FAL_KEY', 'fal-new');
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', event, result.writeId), { ok: true });
+    assert.deepEqual(await service.decryptAll(), {});
+  });
+
+  test('only the frame that made a write can undo or commit it; a subframe is refused every call', async () => {
+    // Review 15 of PR #203, settings-keychain NIT-3: a file:// subframe of
+    // the same window passes the validator, but isn't the page's main frame.
+    const { ipcMain, service } = makeHarness();
+    const sender = createSender();
+    const page = pageEvent(sender);
+    const sub = { senderFrame: { url: 'file:///app/sub.html', processId: sender.mainFrame.processId, routingId: 2 }, sender };
+    const wrote = await set(ipcMain, page, 'FAL_KEY', 'fal-new');
+    const UNTRUSTED = { ok: false, error: 'UNTRUSTED_SENDER' };
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', sub, wrote.writeId), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:commit', sub, wrote.writeId), UNTRUSTED);
+    assert.deepEqual(await set(ipcMain, sub, 'FAL_KEY', 'fal-sub'), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:clear', sub, 'FAL_KEY'), UNTRUSTED);
+    assert.deepEqual(await call(ipcMain, 'credentials:has', sub, 'FAL_KEY'), UNTRUSTED);
+    assert.deepEqual(await service.decryptAll(), { FAL_KEY: 'fal-new' });
+    // The page's own frame still can.
+    assert.deepEqual(await call(ipcMain, 'credentials:revert', page, wrote.writeId), { ok: true });
+  });
+
+  test('the service binds a write to its frame: another frame of the same page is another owner', async () => {
+    const { service } = makeHarness();
+    const sender = createSender();
+    const main = { key: '11:1', sender };
+    const other = { key: '11:2', sender };
+    const { writeId } = await service.set('FAL_KEY', 'fal-new', main);
+    assert.deepEqual(service.revert(writeId, other), NOT_LATEST);
+    assert.deepEqual(service.revert(writeId, { key: '11:1', sender }), { ok: true });
+  });
+
+  test('an event with no main frame to check against is refused (fails closed)', async () => {
+    const { ipcMain } = makeHarness();
+    const frame = { url: 'file:///app/dist/index.html' };
+    for (const event of [{ senderFrame: frame }, { senderFrame: frame, sender: {} }]) {
+      assert.deepEqual(await set(ipcMain, event, 'FAL_KEY', 'fal-x'), { ok: false, error: 'UNTRUSTED_SENDER' });
+    }
   });
 
   test('the default window is a minute', () => {

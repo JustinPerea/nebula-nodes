@@ -34,7 +34,7 @@ export interface ProviderKeySpec {
 
 /** The noun each link word gives. Google Cloud's link opens its service
  * accounts, where the person makes the account's key, and every Vertex line
- * says "service-account key", so it is a key. */
+ * says "service account key", so it is a key. */
 export const LINK_NOUNS: Readonly<Record<string, string>> = { keys: 'key', tokens: 'token', 'service accounts': 'key' };
 const LINK_WORD = / (keys|tokens|service accounts)$/;
 

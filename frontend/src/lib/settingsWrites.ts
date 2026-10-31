@@ -70,10 +70,13 @@ function confirm(update: Partial<SettingsDraft>) {
 }
 
 /** The codes the backend puts beside a settings write's 409 (main
- * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE):
- * the file can't be read, its keys can't, or Nebula isn't allowed to change
- * it (GM, PR #203 r28 item 4). */
-export const SETTINGS_REFUSAL_CODES: readonly string[] = ['settings_unreadable', 'keys_unreadable', 'settings_unwritable'];
+ * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE,
+ * SETTINGS_NOT_A_FOLDER_CODE): the file can't be read, its keys can't,
+ * Nebula isn't allowed to change it or its folder (GM, PR #203 r28 item 4,
+ * r31 item 1), or a file is where its folder must be (r31 item 2). */
+export const SETTINGS_REFUSAL_CODES: readonly string[] = [
+  'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder',
+];
 
 /** The backend's own line for a settings write it refused over the settings
  * file itself (a 409 with one of SETTINGS_REFUSAL_CODES; GM r22 item 3, r28
@@ -132,11 +135,18 @@ export function keychainKeptLine(kind: KeychainKeptCase, key: string, placement:
 /** GM, PR #203 r29 item 7: Nebula didn't answer (a lost answer, a 5xx), so
  * whether it took the write isn't known, and the backend couldn't say when
  * asked again. Saving or removing the same key again is safe: it writes the
- * same value, mints nothing and rotates nothing. */
-export const KEYCHAIN_UNKNOWN = {
-  save: 'Nebula didn’t respond, so this key may not be saved. Save it again to be sure.',
-  removal: 'Nebula didn’t respond, so this key may not be removed. Remove it again to be sure.',
-} as const;
+ * same value, mints nothing and rotates nothing. Beside the key's row it
+ * says "this key"; shown as a notice, away from the row, it names the key
+ * from the noun source, as keychainKeptLine does (GM r28 item 2, r31 item
+ * 5: "Nebula didn’t respond, so your Replicate token may not be removed.
+ * Remove it again to be sure."). */
+export function keychainUnknownLine(kind: 'save' | 'removal', key: string, placement: 'row' | 'notice'): string {
+  const phrase = placement === 'notice' ? keyPhrase([key]) : null;
+  const it = phrase ? `your ${phrase}` : 'this key';
+  return kind === 'save'
+    ? `Nebula didn’t respond, so ${it} may not be saved. Save it again to be sure.`
+    : `Nebula didn’t respond, so ${it} may not be removed. Remove it again to be sure.`;
+}
 
 /** The keys whose Keychain entry and what Nebula uses still differ after a
  * kept write (keychainKeptLine): the line stays until the two agree again,
@@ -234,11 +244,12 @@ async function backendHolds(key: string, before: string, after: string): Promise
  * first, while it still differs from what Nebula uses (GM r29 item 6), with
  * a newer refusal's fix sentence; else the backend's own settings line;
  * else `fallback`. Records or clears the difference. */
-function desktopFailureLine(key: string, error: unknown, placement: 'row' | 'notice', unknown: string, fallback: string): string {
+function desktopFailureLine(key: string, error: unknown, placement: 'row' | 'notice', unknown: 'save' | 'removal',
+  fallback: string): string {
   if (error instanceof KeychainKept) keychainDiffers.set(key, error.kind);
   if (error instanceof KeychainUnknown) {
     keychainDiffers.delete(key);
-    return unknown;
+    return keychainUnknownLine(unknown, key, placement);
   }
   const differs = keychainDiffers.get(key);
   if (differs) {
@@ -336,7 +347,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
     } catch (error) {
       setPending(key, false);
       const fallback = "The key couldn't be saved. Your text is still here; try again.";
-      fail(key, bridgeInUse() ? desktopFailureLine(key, error, 'row', KEYCHAIN_UNKNOWN.save, fallback)
+      fail(key, bridgeInUse() ? desktopFailureLine(key, error, 'row', 'save', fallback)
         : unreadableSettingsLine(error) ?? fallback, error);
       return false;
     }
@@ -374,7 +385,7 @@ export function removeKey(key: string, from: 'row' | 'notice' = 'row'): Promise<
     } catch (error) {
       setPending(key, false);
       const fallback = "The key couldn't be removed. Try again.";
-      const line = bridgeInUse() ? desktopFailureLine(key, error, from, KEYCHAIN_UNKNOWN.removal, fallback)
+      const line = bridgeInUse() ? desktopFailureLine(key, error, from, 'removal', fallback)
         : unreadableSettingsLine(error) ?? fallback;
       if (from === 'notice') {
         if (!isOfflineRefusal(error)) notify(line);
