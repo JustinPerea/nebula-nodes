@@ -13,6 +13,7 @@ import { BoardCardNode } from './BoardCardNode';
 import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
+import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
 import '../../styles/moodboard-board.css';
 
 /** A card moved on the board: where its top-left now is, in whole board pixels. */
@@ -94,6 +95,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   const selection = useBoardSelection(boardKey);
   const setSelection = useBoardCanvasStore((state) => state.setSelection);
   const savedViewport = useRef(useBoardCanvasStore.getState().viewports[boardKey]).current;
+  // Fitted (#209, GM (a)): a fresh open is (React Flow fits it); a camera kept
+  // from earlier in the visit is only if it was fitted when it was kept.
+  const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true).current;
 
   // Where cards being dragged or nudged are, until the move is sent.
   const [moving, setMoving] = useState<Record<string, { x: number; y: number }>>({});
@@ -198,20 +202,43 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
 
   // One camera spring at a time: a new move stops the one still running.
   const stopSpring = useRef<(() => void) | null>(null);
-  const springTo = useCallback((to: Viewport) => {
+  // A whole-board fit's refit while its column resizes (#209): `follow` knows
+  // whether the camera is still where the last fit left it.
+  const fitRef = useRef<() => void>(() => {});
+  const follow = useRef<BoardFitFollow | null>(null);
+  follow.current ??= createBoardFitFollow({ fitted: startsFitted, refit: () => fitRef.current() });
+  /** Spring the camera to `to`: a whole-board fit when `fitted`, any other move otherwise. */
+  const springTo = useCallback((to: Viewport, fitted = false) => {
+    if (fitted) follow.current!.markFitted();
+    else follow.current!.leave();
+    // A new move takes over from the one still running (a refit while the
+    // window is dragged starts from where the last one had got to).
     stopSpring.current?.();
     stopSpring.current = springViewport(getViewport(), to, (viewport) => { void setViewport(viewport); });
-    // Where the camera lands is kept for the visit, as a pan or scroll is
-    // (onMoveEnd fires only for the person's own moves, not these).
-    useBoardCanvasStore.getState().setViewport(boardKey, to);
+    // Where the camera lands is kept for the visit, as a pan or scroll is.
+    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted);
   }, [getViewport, setViewport, boardKey]);
-  useEffect(() => () => stopSpring.current?.(), []);
+  useEffect(() => () => {
+    stopSpring.current?.();
+    follow.current?.dispose();
+  }, []);
 
   const fit = useCallback(() => {
     const { width, height } = flowStore.getState();
     if (!width || !height || nodesRef.current.length === 0) return;
-    springTo(getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING));
+    springTo(getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING), true);
   }, [flowStore, getNodesBounds, springTo]);
+  fitRef.current = fit;
+
+  // The column React Flow measures (its own ResizeObserver on the board):
+  // a new size refits while the board is fitted (boardFitFollow).
+  useEffect(() => {
+    const at = flowStore.getState();
+    follow.current!.resize(at.width, at.height);
+    return flowStore.subscribe((state, previous) => {
+      if (state.width !== previous.width || state.height !== previous.height) follow.current!.resize(state.width, state.height);
+    });
+  }, [flowStore]);
 
   // An Update's Show (Q113 c): spring the camera to the cards it names, once
   // the view has its size (a Show from List mounts this view first).
@@ -259,8 +286,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     return () => document.removeEventListener('keydown', onKey);
   }, [fit]);
 
+  // A move the person makes (React Flow passes its source event; the
+  // camera's own springs and fit on open have none) ends the fitted state.
+  const onMoveStart = useCallback((event: unknown) => follow.current!.moveStart(event), []);
+  // Kept for the visit with whether it is still fitted (a person's move has
+  // already ended that at its start).
   const rememberViewport = useCallback((_event: unknown, viewport: Viewport) => {
-    useBoardCanvasStore.getState().setViewport(boardKey, viewport);
+    useBoardCanvasStore.getState().setViewport(boardKey, viewport, follow.current!.fitted);
   }, [boardKey]);
 
   const addFiles = (list: FileList | null) => {
@@ -312,6 +344,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onSelectionDragStop={onSelectionDragStop}
+          onMoveStart={onMoveStart}
           onMoveEnd={rememberViewport}
           defaultViewport={savedViewport}
           fitView={!savedViewport}

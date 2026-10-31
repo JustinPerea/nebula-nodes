@@ -58,7 +58,10 @@ interface BoardCanvasState {
   setSelection: (boardKey: string, placementIds: string[]) => void;
   /** The camera per board draft key, for this visit: back to List and to Board keeps it. */
   viewports: Record<string, Viewport>;
-  setViewport: (boardKey: string, viewport: Viewport) => void;
+  /** Whether that camera was where a whole-board fit left it (#209: a board kept
+   *  fitted refits when its column resizes; components/moodboard-studio/boardFitFollow.ts). */
+  fitted: Record<string, boolean>;
+  setViewport: (boardKey: string, viewport: Viewport, fitted?: boolean) => void;
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
@@ -88,8 +91,9 @@ export const useBoardCanvasStore = create<BoardCanvasState>((set, get) => ({
     set((state) => ({ selection: { ...state.selection, [boardKey]: placementIds } }));
   },
   viewports: {},
-  setViewport: (boardKey, viewport) => set((state) => ({ viewports: { ...state.viewports,
-    [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } } })),
+  fitted: {},
+  setViewport: (boardKey, viewport, fitted = false) => set((state) => ({ viewports: { ...state.viewports,
+    [boardKey]: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } }, fitted: { ...state.fitted, [boardKey]: fitted } })),
   studioBoard: null,
   setStudioBoard: (board) => {
     if (!sameBoard(get().studioBoard, board)) set({ studioBoard: board });

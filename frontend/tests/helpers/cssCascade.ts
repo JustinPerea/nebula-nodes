@@ -197,7 +197,15 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
   return rules;
 }
 
-/** Every style rule in the app's stylesheets, once per selector in its list. */
+/**
+ * Every style rule in the app's stylesheets, once per selector in its list.
+ *
+ * Order across files is an approximation: sheets are read in alphabetical
+ * order of their path under src/, not the order the bundle loads them in
+ * (import and chunk order). Within one sheet, order is the sheet's own. A
+ * check whose answer turns on two files' order has to say so (the studio
+ * grid ratchet fails on such a tie: tests/studioGridAreas.test.ts).
+ */
 export function appRules(): SheetRule[] {
   if (cached) return cached;
   const order = { next: 0 };
@@ -205,14 +213,14 @@ export function appRules(): SheetRule[] {
   return cached;
 }
 
-function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
+export function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
   b: { important: boolean; specificity: [number, number, number]; order: number }): boolean {
   if (a.important !== b.important) return a.important;
   for (let i = 0; i < 3; i += 1) if (a.specificity[i] !== b.specificity[i]) return a.specificity[i] > b.specificity[i];
   return a.order >= b.order;
 }
 
-type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string };
+export type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string; file: string };
 
 /** The rules that match `element` (any state), with the winning declaration per state|property. */
 export function cascaded(element: Element, extraCss?: string,
@@ -229,7 +237,7 @@ export function cascaded(element: Element, extraCss?: string,
     if (!hit) continue;
     for (const decl of rule.decls) {
       const key = `${rule.state}|${decl.prop}`;
-      const next = { value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector };
+      const next = { value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file };
       const prev = out.get(key);
       if (!prev || wins(next, prev)) out.set(key, next);
     }
@@ -238,10 +246,27 @@ export function cascaded(element: Element, extraCss?: string,
   if (inline) {
     for (let i = 0; i < inline.length; i += 1) {
       const prop = inline[i];
-      out.set(`|${prop}`, { value: inline.getPropertyValue(prop), important: true, specificity: [1, 0, 0], order: Infinity, selector: 'style=""' });
+      out.set(`|${prop}`, { value: inline.getPropertyValue(prop), important: true, specificity: [1, 0, 0], order: Infinity, selector: 'style=""', file: 'inline' });
     }
   }
   return out;
+}
+
+/** Every declaration of `prop` the app's stylesheets give `element` at rest (no state), in cascade order, winner last. */
+export function declarationsOf(element: Element, prop: string, { viewport }: { viewport?: Viewport } = {}): Winner[] {
+  const out: Winner[] = [];
+  for (const rule of appRules()) {
+    if (rule.state) continue;
+    if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
+    let hit = false;
+    try { hit = element.matches(rule.base); } catch { hit = false; }
+    if (!hit) continue;
+    for (const decl of rule.decls) {
+      if (decl.prop !== prop) continue;
+      out.push({ value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file });
+    }
+  }
+  return out.sort((a, b) => (wins(a, b) ? 1 : -1));
 }
 
 /** Every property the app's stylesheets give `element`, its own and those it inherits ("|color": "var(--sr-ink)"). */
