@@ -95,6 +95,23 @@ def pytest_collection_modifyitems(config, items):
     items[:] = kept
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "unprivileged: needs file permissions to hold; skipped as root, which ignores them",
+    )
+
+
+def pytest_runtest_setup(item):
+    """Root ignores file permissions, so a test that makes a file unreadable or
+    unwritable with chmod proves nothing as root, and Claude Code cloud
+    sessions run as root (CI doesn't). Such tests carry
+    @pytest.mark.unprivileged; tests/test_unprivileged_marker.py keeps every
+    one of them marked."""
+    if item.get_closest_marker("unprivileged") and hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores file permissions; CI runs this as a normal user")
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):
     """Fail the test that leaves services.settings pointing anywhere but the
