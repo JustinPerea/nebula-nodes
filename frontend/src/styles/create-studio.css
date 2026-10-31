@@ -1,9 +1,13 @@
+/* The whole grid, in this one place (fix/moodboard-board-layout,
+   tests/studioGridAreas.test.ts), the offline row included: right under the
+   top header, 0 tall until it opens (GM, PR #198 r2; StudioOfflineRow). */
 body.app-slava-restraint .create-view {
   position: fixed;
   inset: 0;
   z-index: var(--sr-layer-workspace, 50);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "header" "offline" "stage" "composer";
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -11,6 +15,9 @@ body.app-slava-restraint .create-view {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
 }
+body.app-slava-restraint .create-view > .create-view__topbar { grid-area: header; }
+body.app-slava-restraint .create-view > .create-view__stage { grid-area: stage; }
+body.app-slava-restraint .create-view > .create-view__composer-area { grid-area: composer; }
 
 body.app-slava-restraint .create-view__topbar {
   display: flex;

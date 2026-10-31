@@ -25,18 +25,24 @@
     1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
 }
 
-/* The Studio laid out for the Board view: rail | canvas | panel. Complete on
-   its own, so it holds in either skin; `html body` puts it above the Slava
-   skin's two-column grid (body.app-slava-restraint .moodboard-studio-view). */
-html body .moodboard-studio-view.moodboard-studio-view--board {
+/* The Studio laid out for the Board view: the top header, the offline row
+   right under it (GM, PR #198 r2; StudioOfflineRow, 0 tall until it opens),
+   then rail | canvas | panel. Complete on its own, so it holds in either
+   skin, and the only rule that frames, paints and lays out the Board root:
+   the List view's (moodboard-studio.css) is :not(.moodboard-studio-view--board),
+   so nothing has to outrank anything (fix/moodboard-board-layout; a generic template in
+   workspace-header.css once outranked this one and dropped the canvas and
+   the panel into implicit tracks; tests/studioGridAreas.test.ts). */
+.moodboard-studio-view.moodboard-studio-view--board {
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-columns: 250px minmax(0, 1fr) 320px;
   grid-template-areas:
     "toolbar toolbar toolbar"
+    "offline offline offline"
     "rail board panel";
   background: var(--mb-board-bg);
   color: var(--mb-board-ink);

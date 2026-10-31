@@ -43,6 +43,8 @@ interface SheetRule {
   specificity: [number, number, number];
   order: number;
   decls: Array<{ prop: string; value: string; important: boolean }>;
+  /** The @media queries the rule sits in, outermost first (none: it always applies). */
+  media: string[];
 }
 
 function cssFiles(dir: string): string[] {
@@ -55,24 +57,67 @@ function cssFiles(dir: string): string[] {
 
 function specificityOf(selector: selectorParser.Selector): [number, number, number] {
   let a = 0; let b = 0; let c = 0;
-  selector.walk((node) => {
+  // The selector's own nodes, one by one (the fix from PR #204 round 13, brought here by
+  // fix/moodboard-board-layout: a walk() that returned false at an :is(), :not() or :where()
+  // ended the whole walk, so nothing after it counted, and `.a:where(.b) .c` read (0,1,0)).
+  // Combinators sit between the compounds in `nodes`; a pseudo's arguments are read only
+  // where they count.
+  for (const node of selector.nodes) {
     if (node.type === 'id') a += 1;
     else if (node.type === 'class' || node.type === 'attribute') b += 1;
     else if (node.type === 'tag' && node.value !== '*') c += 1;
     else if (node.type === 'pseudo') {
       if (node.value.startsWith('::')) c += 1;
-      else if (node.value === ':where') return false;
+      else if (node.value === ':where') continue;
       else if ([':not', ':is', ':has'].includes(node.value)) {
         const inner = node.nodes.map(specificityOf);
         const max = inner.reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && (next[1] > best[1]
           || (next[1] === best[1] && next[2] > best[2])))) ? next : best, [0, 0, 0] as [number, number, number]);
         a += max[0]; b += max[1]; c += max[2];
-        return false;
       } else b += 1;
     }
-    return undefined;
-  });
+  }
   return [a, b, c];
+}
+
+/** One selector's specificity, as the cascade here counts it (tests/studioGridAreas.test.ts checks it). */
+export function selectorSpecificity(selector: string): [number, number, number] {
+  let out: [number, number, number] = [0, 0, 0];
+  selectorParser((root) => { out = specificityOf(root.first); }).processSync(selector);
+  return out;
+}
+
+/** A viewport for the @media blocks: a rule inside one applies only where its query holds. */
+export interface Viewport { width: number; height: number }
+
+/** Whether a media query list holds at `viewport` on a screen with no preference set (no
+ * reduced motion, no forced colours, a fine pointer that hovers). A feature this doesn't know
+ * reads as not holding. */
+export function mediaMatches(params: string, viewport: Viewport): boolean {
+  return params.split(',').some((part) => {
+    let query = part.trim().toLowerCase();
+    if (query.startsWith('not ')) return false;
+    query = query.replace(/^only\s+/, '');
+    const conditions = query.split(/\s+and\s+/);
+    return conditions.every((condition) => {
+      if (condition === 'screen' || condition === 'all') return true;
+      const feature = /^\(\s*([a-z-]+)\s*(?::\s*([^)]+?))?\s*\)$/.exec(condition);
+      if (!feature) return false;
+      const [, name, raw = ''] = feature;
+      const px = /^(\d+(?:\.\d+)?)px$/.exec(raw.trim());
+      switch (name) {
+        case 'min-width': return Boolean(px) && viewport.width >= Number(px![1]);
+        case 'max-width': return Boolean(px) && viewport.width <= Number(px![1]);
+        case 'min-height': return Boolean(px) && viewport.height >= Number(px![1]);
+        case 'max-height': return Boolean(px) && viewport.height <= Number(px![1]);
+        case 'prefers-reduced-motion': return raw.trim() === 'no-preference';
+        case 'forced-colors': return raw.trim() === 'none';
+        case 'hover': return raw.trim() === 'hover';
+        case 'pointer': return raw.trim() === 'fine';
+        default: return false;
+      }
+    });
+  });
 }
 
 let cached: SheetRule[] | null = null;
@@ -84,6 +129,10 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
   root.walkRules((rule: Rule) => {
     for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
       if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
+    }
+    const media: string[] = [];
+    for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
+      if (parent.type === 'atrule' && (parent as AtRule).name === 'media') media.unshift((parent as AtRule).params);
     }
     const decls = rule.nodes.flatMap((node) => node.type === 'decl'
       ? [{ prop: node.prop.toLowerCase(), value: node.value.replace(/\s+/g, ' ').trim(), important: Boolean(node.important) }]
@@ -142,13 +191,21 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       } catch {
         loose = base;
       }
-      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls });
+      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls, media });
     }
   });
   return rules;
 }
 
-/** Every style rule in the app's stylesheets, once per selector in its list. */
+/**
+ * Every style rule in the app's stylesheets, once per selector in its list.
+ *
+ * Order across files is an approximation: sheets are read in alphabetical
+ * order of their path under src/, not the order the bundle loads them in
+ * (import and chunk order). Within one sheet, order is the sheet's own. A
+ * check whose answer turns on two files' order has to say so (the studio
+ * grid ratchet fails on such a tie: tests/studioGridAreas.test.ts).
+ */
 export function appRules(): SheetRule[] {
   if (cached) return cached;
   const order = { next: 0 };
@@ -156,27 +213,31 @@ export function appRules(): SheetRule[] {
   return cached;
 }
 
-function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
+export function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
   b: { important: boolean; specificity: [number, number, number]; order: number }): boolean {
   if (a.important !== b.important) return a.important;
   for (let i = 0; i < 3; i += 1) if (a.specificity[i] !== b.specificity[i]) return a.specificity[i] > b.specificity[i];
   return a.order >= b.order;
 }
 
-type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string };
+export type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string; file: string };
 
 /** The rules that match `element` (any state), with the winning declaration per state|property. */
-export function cascaded(element: Element, extraCss?: string, { loose = false }: { loose?: boolean } = {}): Map<string, Winner> {
+export function cascaded(element: Element, extraCss?: string,
+  { loose = false, viewport }: { loose?: boolean; viewport?: Viewport } = {}): Map<string, Winner> {
   const out = new Map<string, Winner>();
   // A test's own stylesheet comes after the app's, as a later sheet would.
   const extra = extraCss ? rulesOf(extraCss, 'extra.css', { next: appRules().length + 1 }) : [];
   for (const rule of [...appRules(), ...extra]) {
+    // With a viewport, a rule in an @media block applies only where its query holds; without
+    // one, every rule counts, as before.
+    if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
     let hit = false;
     try { hit = element.matches(loose ? rule.loose : rule.base); } catch { hit = false; }
     if (!hit) continue;
     for (const decl of rule.decls) {
       const key = `${rule.state}|${decl.prop}`;
-      const next = { value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector };
+      const next = { value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file };
       const prev = out.get(key);
       if (!prev || wins(next, prev)) out.set(key, next);
     }
@@ -185,10 +246,27 @@ export function cascaded(element: Element, extraCss?: string, { loose = false }:
   if (inline) {
     for (let i = 0; i < inline.length; i += 1) {
       const prop = inline[i];
-      out.set(`|${prop}`, { value: inline.getPropertyValue(prop), important: true, specificity: [1, 0, 0], order: Infinity, selector: 'style=""' });
+      out.set(`|${prop}`, { value: inline.getPropertyValue(prop), important: true, specificity: [1, 0, 0], order: Infinity, selector: 'style=""', file: 'inline' });
     }
   }
   return out;
+}
+
+/** Every declaration of `prop` the app's stylesheets give `element` at rest (no state), in cascade order, winner last. */
+export function declarationsOf(element: Element, prop: string, { viewport }: { viewport?: Viewport } = {}): Winner[] {
+  const out: Winner[] = [];
+  for (const rule of appRules()) {
+    if (rule.state) continue;
+    if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
+    let hit = false;
+    try { hit = element.matches(rule.base); } catch { hit = false; }
+    if (!hit) continue;
+    for (const decl of rule.decls) {
+      if (decl.prop !== prop) continue;
+      out.push({ value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file });
+    }
+  }
+  return out.sort((a, b) => (wins(a, b) ? 1 : -1));
 }
 
 /** Every property the app's stylesheets give `element`, its own and those it inherits ("|color": "var(--sr-ink)"). */
