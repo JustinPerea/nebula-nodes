@@ -371,8 +371,12 @@ The server exposes these tools for building and running (see
   have used, in the saved project too (its connections, run history,
   pins and any node that names it, such as a video timeline's items). The
   open answers `renumbered` (`{old: new}`, `{}` when nothing changed), and
-  the `canvas.replaced` event says it too (`data.renumbered`, "gave 1 node
-  new ids"). The person can reopen the project they have open themselves
+  the `canvas.replaced` event says it too (`data.renumbered`,
+  `data.renumberedCount`, "gave 1 node new ids"). `nebula watch` prints a
+  reopen of the open project as "Reopened the open project — node ids
+  kept", adding "open proposals still open" only when any were
+  (`data.proposalsOpen`) and "1 node got a Nebula id" or "2 nodes got
+  Nebula ids" when nodes were renumbered. The person can reopen the project they have open themselves
   (Projects, Open, while a duplicate or paste has no Nebula id yet): that is
   the person's own open, so `canvas.replaced` comes in their name with the
   same `renumbered`, and their tab saves before it, so nothing waits to
@@ -381,10 +385,24 @@ The server exposes these tools for building and running (see
   project the person has open, the node is never doubled, and what their
   tab hadn't saved yet still arrives on the node's new id (the handoff
   learns the new ids). A node's run result (output, failure, notes) moves
-  as one piece: the newer run's stands, so your later run of the node keeps
-  its result. A node one of the person's windows made is deleted only when
-  that window says so: a window that never had it, or a save that leaves it
-  out, keeps it and your edits. Every reopen of the
+  as one piece: the newer run's stands. Nebula stamps when a result lands
+  on a node (`resultLandedAt`, epoch ms, kept with the node on the live
+  canvas and in the saved project, so it survives a restart). When Nebula
+  saw both runs land since it started, their order decides; otherwise the
+  tab's run record's finish time is compared with that stamp. Equal times
+  keep Nebula's result. A side with no time (a result saved before the
+  stamp existed, a run record with no start time) loses: the side with a
+  time wins, and when neither has one Nebula's result stands unless it has
+  none. A tab result no run record backs never replaces Nebula's. When the
+  person's newer result does replace the one on a node, the journal says so
+  in their name: `node.result` (`data: {projectId, runId, replaced: true}`;
+  `nebula watch` shows "kept the result of their newer run from run … on
+  …"), with no Agent log line (it is the person's own). A node one of the
+  person's windows made is deleted only when that window says so: a window
+  that never had it, or a save that leaves it out, keeps it and your edits.
+  A delete said by a window that isn't the one that saved the node is
+  ignored, and the save's answer lists the node in `deletesKept`, so the
+  person's tab says it stayed. Every reopen of the
   project already open (yours, the person's, or Nebula's own at boot after
   an upgrade gave a node its id) keeps the open proposals open, with the
   same ids: their nodes keep their ids, so nothing they were made against
@@ -3407,6 +3425,13 @@ Nebula process restores the same folder. The restore:
    showed; null when neither is known), and the copy's record keeps it
    (`recoveredFrom: {id, name}`), so a retry answers the same: the
    person's line names that, never a source read from the copy's name.
+   You read the source too, never from the copy's name: a recovered copy's
+   `project.created` event, its `list_projects` row (`nebula projects`
+   prints "recovered copy of …") and `get_project` carry `sourceName` (the
+   name the copy's record keeps; null when unknown, and null once the source
+   is deleted for good, since you can't read that project; a source in
+   Recently deleted is still named) and `sourceProjectId` (the source's id
+   while it is still in the list, else null).
    Connections the person drew while kept arrive only in that save; one
    Nebula's rules refuse is left out of the copy and said, never the whole
    save refused: the recover answer and the `project.created` event carry
@@ -3710,8 +3735,28 @@ its own `detail`:
 | Open or make a project (`open_project`, `new_project`, `nebula project open` / `new`) | `POST /api/projects/{id}/open`, `POST /api/projects` | "Cannot switch projects while a run is active. Wait for the run to finish or stop it first." |
 | Delete the open project (the Projects screen) | `DELETE /api/projects/{id}` | "Cannot delete the open project while a run is active. Wait for the run to finish or stop it first." |
 
+What holds opening or switching projects is one verdict, the open's own
+guards read with no side effect: `GET /api/projects/open-hold` answers
+`{"hold": null}` or `{"hold": {state, nodeId, nodeName, projectId,
+projectName, count, fields, detail}}`, `GET /api/projects` carries the same
+as `openHold`, and the open's 409 carries it as `hold` beside `detail`.
+`list_projects` adds `openHold` with a `note` ("Opening or switching
+projects is held: <detail>"), and `nebula projects` prints that note.
+`state` is, in the order the guards read them: `active` (a World Labs paid
+start is settling), `ambiguity` (a World Labs start needs the person's
+check), `recovery` (a kept World Labs recovery ID, any project's; Run
+History's Forget ID clears it), `params` (a World Labs node's settings hold
+an ID; `fields` names the fields), `bootstrap` (Nebula couldn't save its
+World Labs safeguards; a restart clears it) or `run` (a run is going).
+`nodeId` and `nodeName` name the held node, `projectId` and `projectName`
+the project it belongs to (by the held record's run, or, for a record
+Nebula seeded from a canvas, the project whose node holds the same World
+Labs ID; null when that can't be known, never guessed from a node id),
+`count` the records for `recovery` and `ambiguity`, and
+`detail` is the refusal's text. Reading it changes nothing.
+
 The person reads "A run is still going. Wait for it to finish or stop it
-first." for a Clear or a loaded graph (PR #198 review 4, N2: an import from
+first." for a Clear, an open or a loaded graph (PR #198 review 4, N2: an import from
 the File menu during a run used to show the agent's text).
 
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes

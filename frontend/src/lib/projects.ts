@@ -107,6 +107,8 @@ export interface SavedCanvas {
 }
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
+  /** Nebula's verdict on replacing the open canvas now (lib/reopenHold). */
+  openHold?: unknown;
   workspaceRevision: string; migratedProjectId?: string | null;
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
@@ -180,6 +182,9 @@ const json = (method: string, body: unknown): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
 export const listProjects = () => request<ProjectList>("Couldn't load your projects.", '/api/projects');
+/** Whether Nebula would refuse to replace the open canvas now, and why
+ * (review 19 item 1: the tab's reopen lock reads Nebula's own verdict). */
+export const getOpenHold = () => request<{ hold?: unknown }>("Couldn't load your projects.", '/api/projects/open-hold');
 export const getProject = (id: string) => request<SavedProject>("Couldn't load the project.", `/api/projects/${encodeURIComponent(id)}`);
 export const createProject = (name: string | undefined, workspaceRevision: string) =>
   request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
@@ -196,7 +201,12 @@ export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevi
     ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
     // Review 18 MEDIUM-1: the tab-local nodes this tab deleted; nothing else is a delete.
     ...(pending?.deleted?.length ? { deletedNodeIds: pending.deleted } : {}),
-  })).then((result) => result.project);
+  })).then((result: ProjectActivation & { deletesKept?: unknown }) => {
+    // A handoff's listed deletes Nebula kept (another window saved the node
+    // last): the tab says so (review 19 item 5).
+    const kept = Array.isArray(result.deletesKept) ? result.deletesKept.filter((id): id is string => typeof id === 'string') : [];
+    return kept.length > 0 ? { ...result.project, deletesKept: kept } : result.project as SavedProject & { deletesKept?: string[] };
+  });
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>

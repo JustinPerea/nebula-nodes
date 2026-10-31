@@ -29,7 +29,9 @@ const MARKERS = [
   // (review 16 kept-ui NIT-2).
   { what: 'the kept unload guard', pattern: /nebula-kept-unload-guard/ },
   { what: 'the unload guard registration', pattern: /addEventListener\((["'`])beforeunload\1/ },
-  { what: 'the kept fallback line', pattern: /before your latest edits were saved\. They(?:’|\\u2019)re kept in this tab\./ },
+  // The last word is the shared tab/window word (lib/tabWord, round 20 of
+  // PR #199): built as a call inside the template literal, or a literal.
+  { what: 'the kept fallback line', pattern: /before your latest edits were saved\. They(?:’|\\u2019)re kept in this (?:tab|window|\$\{[\w$]+\(\)\})\./ },
 ];
 
 const indexHtml = await readFile(path.join(distDir, 'index.html'), 'utf8');

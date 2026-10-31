@@ -377,9 +377,12 @@ RECOVERED_CANVAS_NAME = "Recovered canvas"
 #   plus " copy", then " copy 2", " copy 3" (the lowest free);
 # - a canvas filed when which project it was isn't known: "Recovered canvas",
 #   then "Recovered canvas 2" (GM r5, r10), Nebula's own whole name.
-# The only number Nebula raises in a name is its own "copy N": a name ending
-# in " copy" or " copy N" is a copy Nebula named. Any other number belongs to
-# the name ("Shot 7", "Recovered Shot 7", "Delta 1") and is never read.
+# The only number Nebula raises in a name is its own "copy N": a trailing
+# " copy" or " copy N" is the one pattern Nebula reads, as the Finder does
+# (GM r32 of PR #199, 4), so a name the person typed that way is read the same
+# way ("Budget copy 3" gives "Budget copy 4"). No other number in a name is
+# ever read ("Shot 7", "Recovered Shot 7", "Delta 1" are names, never a copy
+# count). Don't widen it: the frontend's copy (recoveredNames.ts) says the same.
 #
 # Matching agrees on every character with the frontend's copy
 # (recoveredNames.ts): DOTALL here, the "s" flag there, so "." takes U+2028,

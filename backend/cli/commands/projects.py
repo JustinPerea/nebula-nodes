@@ -45,13 +45,25 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
         print(f"Note: the live canvas was saved as its own project, \"{saved.get('name')}\" ({saved['id']}), "
               "once the list had room.")
         print()
+    hold = listing.get("openHold")
+    if isinstance(hold, dict):
+        # The open's own guards, read (GET /api/projects/open-hold).
+        print(f"Note: {project_client.open_hold_note(hold)}")
+        print()
     if not projects:
         print("No saved projects.")
         return
     for project in projects:
         mark = "*" if project.get("id") == active else " "
         updated = str(project.get("updatedAt", ""))[:16].replace("T", " ")
-        print(f"{mark} {project.get('id')}  {project.get('name', '')}  (updated {updated})")
+        source = ""
+        if "sourceName" in project:
+            # A recovered copy: its source as Nebula keeps it, never read from its name.
+            source = (f"  recovered copy of \"{project['sourceName']}\"" if project.get("sourceName")
+                      else "  recovered copy (its source isn't known)")
+            if project.get("sourceProjectId"):
+                source += f" ({project['sourceProjectId']})"
+        print(f"{mark} {project.get('id')}  {project.get('name', '')}  (updated {updated}){source}")
     print("\n* is open on the canvas. `nebula project open <id>` switches to another.")
 
 

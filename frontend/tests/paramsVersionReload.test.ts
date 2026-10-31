@@ -96,7 +96,7 @@ describe('the Projects lines that gave a reason in parentheses', () => {
       new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading: "Couldn't recover the project." }));
     reportParamsOutdated(NEXT);
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet. Nebula didn't respond. Try again before you reload, or they'll be lost."));
+      "Nebula was updated while this tab was open, and your unsaved edits haven’t been saved yet. Nebula didn't respond. Try again before you reload, or they’ll be lost."));
   });
 
   it("a switch this window couldn't follow: the reason is its own sentence", async () => {
@@ -132,7 +132,7 @@ describe('a backend at a newer params version', () => {
     // GM r9 decision 1: never a reload by itself while edits are kept: the
     // line and [Reload Nebula] wait for the person.
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      "Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”."));
+      "Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”."));
     expect(projectRetryOffer(useProjectStore.getState())).toBe('reloadNebula');
     expect(reloadPage).not.toHaveBeenCalled();
     expect(JSON.parse(window.sessionStorage.getItem('nebula:recoveredForUpdate') ?? 'null')).toEqual({ id: 'recovered', name: 'recovered' });
@@ -174,7 +174,7 @@ describe('a backend at a newer params version', () => {
     // own message: a failure that isn't a request's says no reason at all here
     // (GM's general line would say "reload", which drops these edits).
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      "Nebula was updated while this tab was open, and your unsaved edits haven't been saved yet. Try again before you reload, or they'll be lost."));
+      "Nebula was updated while this tab was open, and your unsaved edits haven’t been saved yet. Try again before you reload, or they’ll be lost."));
     expect(reloadPage).not.toHaveBeenCalled();
     const leave = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);

@@ -574,5 +574,69 @@
   "family": "recovered",
   "taken": [],
   "expect": "Recovered AlphaX"
+ },
+ {
+  "source": "X copy 1٧",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy 1٧ copy"
+ },
+ {
+  "source": "X copy 1٧",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy 1٧"
+ },
+ {
+  "source": "X copy 1７",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy 1７ copy"
+ },
+ {
+  "source": "X copy 1７",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy 1７"
+ },
+ {
+  "source": "X copy ٧",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy ٧ copy"
+ },
+ {
+  "source": "X copy ٧",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy ٧"
+ },
+ {
+  "source": "X copy 2٧",
+  "family": "copy",
+  "taken": [],
+  "expect": "X copy 2٧ copy"
+ },
+ {
+  "source": "X copy 2٧",
+  "family": "recovered",
+  "taken": [],
+  "expect": "Recovered X copy 2٧"
+ },
+ {
+  "source": "X copy 1٧",
+  "family": "copy",
+  "taken": [
+   "X copy 1٧ copy"
+  ],
+  "expect": "X copy 1٧ copy 2"
+ },
+ {
+  "source": "X copy 1７",
+  "family": "recovered",
+  "taken": [
+   "Recovered X copy 1７"
+  ],
+  "expect": "Recovered X copy 1７ copy"
  }
 ]

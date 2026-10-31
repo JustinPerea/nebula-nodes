@@ -442,11 +442,16 @@ def test_dlu_medium1_nebula_selection_with_only_the_duplicate_selected(app):
     assert "The person also selected" in selection_prompt_context(client.get("/api/canvas/selection").json())
 
 
-def test_dlu_medium1_and_agents_docs_low2_look_shows_the_count(app):
+def test_dlu_medium1_and_agents_docs_low2_look_shows_the_count(app, monkeypatch):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
     client.post("/api/canvas/selection", headers=PERSON, json={"nodeIds": [DUP, P1]})
+    # One instant for both reads (review 19 agents-docs NIT-3): "secondsAgo"
+    # is worked out per request, so two reads straddling a tenth of a second
+    # printed "28.9s ago" against "29.0s ago".
+    instant = main_module.agent_presence._clock()
+    monkeypatch.setattr(main_module.agent_presence, "_clock", lambda: instant)
     look = client.get("/api/canvas/snapshot", headers=CODEX).json()
     assert look["selection"] == [] and look["tabOnlyCount"] == 2
     assert look["tabOnlyNote"].startswith("The person selected 2 nodes only their tab has")

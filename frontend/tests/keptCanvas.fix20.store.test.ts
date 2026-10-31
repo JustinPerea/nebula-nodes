@@ -49,6 +49,7 @@ vi.mock('../src/lib/paramsOutdated', async (original) => ({
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
+  getOpenHold: vi.fn(async () => ({ hold: null })),
 }));
 
 import { projectRetryOffer, reopenHold, reopenHoldLine, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from '../src/store/projectStore';
@@ -198,7 +199,7 @@ describe('GM r29, 2: the reload line names what was actually recovered', () => {
     useProjectStore.setState({ activeProject: null });
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: GRAPH_PARAMS_VERSION + 1, nodes: [], edges: [], empty: true });
   };
-  const line = (source: string) => `Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “${source}”.`;
+  const line = (source: string) => `Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “${source}”.`;
 
   it('“Recovered Shot 7 copy” made from “Shot 7 copy”: the line says “Shot 7 copy”', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered', 'Recovered Shot 7 copy'), sourceName: 'Shot 7 copy' });
@@ -224,7 +225,7 @@ describe('GM r29, 2: the reload line names what was actually recovered', () => {
     useProjectStore.setState({ projects: [] });
     update();
     await vi.waitFor(() => expect(useProjectStore.getState().error)
-      .toBe('Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in “Recovered Shot 7 copy”.'));
+      .toBe('Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in “Recovered Shot 7 copy”.'));
   });
 });
 
@@ -290,12 +291,12 @@ function duplicateN1(): string {
 }
 const noticeNow = () => useGraphStore.getState().messageNotice?.text ?? useGraphStore.getState().undoNotice?.text ?? null;
 const RUN_LINE = 'You can reopen “Glass campaign” when the run finishes.';
-const WL_LINE = 'You can reopen “Glass campaign” after you check its World Labs run in Marble.';
+const WL_LINE = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I\'ve checked Marble”.';
 
 describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t go yet', () => {
   it('the lines', () => {
-    expect(reopenHoldLine('Glass campaign', 'run')).toBe(RUN_LINE);
-    expect(reopenHoldLine('Glass campaign', 'worldLabs')).toBe(WL_LINE);
+    expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'tabRun' })).toBe(RUN_LINE);
+    expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toBe(WL_LINE);
   });
 
   it('during a run: Open goes back to the canvas with no request, the canvas says when; the line goes with the run, and the next Open reopens', async () => {
@@ -303,7 +304,7 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     useProjectStore.setState({ screen: 'home' });
     const canSwitch = useGraphStore.getState().canSwitchProject;
     useGraphStore.setState({ canSwitchProject: () => false });
-    expect(reopenHold('alpha')).toBe('run');
+    expect(reopenHold('alpha')).toEqual({ state: 'tabRun' });
     await useProjectStore.getState().open('alpha');
     expect(vi.mocked(projects.openProject)).not.toHaveBeenCalled();
     expect(useProjectStore.getState().screen).toBe('workspace');
@@ -322,13 +323,14 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     duplicateN1();
     useProjectStore.setState({ screen: 'home' });
     useGraphStore.setState({ uncertainWorldLabsRunId: 'run-wl' });
-    expect(reopenHold('alpha')).toBe('worldLabs');
+    expect(reopenHold('alpha')).toEqual({ state: 'uncertain' });
     await useProjectStore.getState().open('alpha');
     expect(vi.mocked(projects.openProject)).not.toHaveBeenCalled();
     expect(useProjectStore.getState().screen).toBe('workspace');
-    expect(noticeNow()).toBe(WL_LINE);
+    // By the World Labs notice (GM r32, 2), not the notice by Stop.
+    expect(useProjectStore.getState().heldReopenLine?.line).toBe(WL_LINE);
     useGraphStore.setState({ uncertainWorldLabsRunId: null });
-    expect(noticeNow()).toBeNull();
+    expect(useProjectStore.getState().heldReopenLine).toBeNull();
   });
 
   it('no tab-local node: no hold, whatever runs (the plain shortcut)', () => {
@@ -336,7 +338,8 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     expect(reopenHold('alpha')).toBeNull();
   });
 
-  it('a refusal after the press (Nebula’s 409): back on the canvas, its reason said there, the bar not left on Saving…', async () => {
+  it('a refusal after the press (Nebula’s 409) when Nebula’s verdict names no hold by then: back on the canvas, its reason said there, the bar not left on Saving…', async () => {
+    vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: null });
     duplicateN1();
     // Saved before the press: the bar says what it said then, never “Saving…”.
     await useProjectStore.getState().flush();
@@ -432,7 +435,7 @@ describe('review 18 LOW-1 and GM r30 item 4: the person’s reopen in another ta
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
     const state = useProjectStore.getState();
     expect(state.screen).toBe('home');
-    expect(state.error).toBe('“Glass campaign” was reopened in another tab, but this tab couldn’t follow it.');
+    expect(state.error).toBe('You reopened “Glass campaign” in another tab, but this tab couldn’t follow it.');
     expect(state.errorRetry).toEqual({ action: 'openFollowed', id: 'alpha', name: 'Glass campaign' });
   });
 });

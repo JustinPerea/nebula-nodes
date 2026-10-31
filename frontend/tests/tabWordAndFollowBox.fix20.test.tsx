@@ -27,6 +27,16 @@ const src = (file: string) => readFileSync(resolve(__dirname, '../src', file), '
 describe('GM r29 fix 2: the shared tab/window word', () => {
   afterEach(() => { delete (window as { nebulaDesktop?: unknown }).nebulaDesktop; vi.resetModules(); });
 
+  it('GM r31, 3: the other-tab follow failure is active, in the browser’s word and the desktop app’s', async () => {
+    vi.resetModules();
+    const browser = await import('../src/store/projectStore');
+    expect(browser.personFollowFailedLine('Delta')).toBe('You reopened “Delta” in another tab, but this tab couldn’t follow it.');
+    (window as { nebulaDesktop?: unknown }).nebulaDesktop = { apiBaseUrl: 'http://127.0.0.1:1' };
+    vi.resetModules();
+    const desktop = await import('../src/store/projectStore');
+    expect(desktop.personFollowFailedLine('Delta')).toBe('You reopened “Delta” in another window, but this window couldn’t follow it.');
+  });
+
   it('“tab” in the browser, “window” in the desktop app', () => {
     expect(tabWord(false)).toBe('tab');
     expect(tabWord(true)).toBe('window');

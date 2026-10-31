@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
@@ -26,6 +26,7 @@ import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
+import { ReopenHoldCallout } from './components/ReopenHoldCallout';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { DEFERRED_PRELOADS } from './lib/deferredChunks';
 import { preloadAll, whenIdle } from './lib/lazyWithPreload';
@@ -47,7 +48,7 @@ import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
-import { projectErrorDetails, projectRetryOffer, reopenHold, reopenHoldLine, useProjectStore } from './store/projectStore';
+import { projectErrorDetails, projectRetryOffer, reopenHoldNow as readReopenHold, subscribeReopenHold, useProjectStore, watchOpenHold } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
 import './App.css';
 import './styles/layouts.css';
@@ -288,9 +289,11 @@ export default function App() {
   const homeSettings = useHomeSettingsDock(isHome);
   // Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen in place
   // that can't go yet (a run, a World Labs hold) says when it can, under its card.
-  const activeForHold = projects.activeProject;
-  const holdKind = useGraphStore(() => (activeForHold ? reopenHold(activeForHold.id) : null));
-  const reopenHoldNow = activeForHold && holdKind ? { id: activeForHold.id, line: reopenHoldLine(activeForHold.name, holdKind) } : null;
+  // The card's lock line goes the moment the hold ends (GM r31, 2).
+  const reopenHoldNow = useSyncExternalStore(subscribeReopenHold, readReopenHold);
+  // While Projects shows, Nebula's verdict on that reopen is kept current
+  // (review 19 item 1): the lock is Nebula's own, read before the press.
+  useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
   let mainView;
   if (isHome) {
@@ -345,7 +348,11 @@ export default function App() {
     <ReactFlowProvider>
       <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
-      <ProviderRecoveryStatus />
+      {/* The World Labs notice, and under it the held-reopen line it clears (GM r32, 2). */}
+      <div className="world-labs-stack">
+        <ProviderRecoveryStatus />
+        {isCanvas && <ReopenHoldCallout place="worldLabsNotice" />}
+      </div>
       <ProjectCoordinator />
       <ProjectSwitchToast />
       {!isHome && <GraphFileActions />}

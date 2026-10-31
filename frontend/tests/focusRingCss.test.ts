@@ -237,6 +237,11 @@ const NO_OUTLINE: Record<string, string> = {
   // shows a ring, from the keyboard either (GM - Design r6, bug 4).
   'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus': 'programmatic focus target, not a control (GM r6)',
   'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus-visible': 'programmatic focus target, not a control (GM r6)',
+  // The canvas root takes focus after Projects > Open returns to the canvas
+  // (PR #199 review 19, item 6), so focus doesn't fall to <body>. It is not in
+  // the Tab order and not a control; a ring around the whole canvas would
+  // read as a selection. Its nodes and controls keep their own rings.
+  "App.css::.react-flow[tabindex='-1']:focus": 'programmatic focus target (the canvas root), not a control',
 };
 
 function focusSelectors(rule: Rule): string[] {

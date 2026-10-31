@@ -990,38 +990,226 @@ def _paid_start_refusal(action: str) -> HTTPException:
     return _coded(_graph_paid_refusal(_graph_settling_specific(action), "active"), "paid_start")
 
 
-def _reject_graph_replacement_during_paid_start(action: str) -> None:
+# The states that hold a replacement of the whole canvas (an open, a create,
+# a clear, a graph load, a bundle restore), in the order the guards read them:
+# World Labs' five (_paid_replacement_state), then a registered run
+# (_project_replacement_guard). GET /api/projects/open-hold answers the one
+# holding now (_graph_replacement_hold), so the person's tab locks Open from
+# the backend's own verdict, never a re-derivation. The tab's parity test and
+# the backend's read the same list: backend/tests/data/replacement_hold_states.json.
+REPLACEMENT_HOLD_STATES = ("active", "ambiguity", "recovery", "params", "bootstrap", "run")
+
+
+def _paid_replacement_state() -> tuple[str, dict[str, Any]] | None:
+    """The World Labs state holding a replacement of the canvas, read with no
+    side effect (no fence, no journal write, no bootstrap retry): ("active",
+    {}) while a paid start settles; ("ambiguity", {"records"}) for unresolved
+    start ambiguities; ("recovery", {"records"}) for kept recovery records
+    (any project's); ("params", {"nodeId"}) for a World Labs node on the live
+    canvas whose settings hold an ID; ("bootstrap", {}) while Nebula couldn't
+    journal a recovery it read at boot (the raising path retries that first).
+    None when none holds. One read of the ambiguity list (review 13, nit 7):
+    the rule is literally b2b1529e's."""
     if provider_start_guard.has_active():
+        return "active", {}
+    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(list(cli_graph.nodes.values()))
+    ambiguities = provider_start_guard.list()
+    if ambiguities:
+        return "ambiguity", {"records": ambiguities}
+    records = provider_recovery_store.list()
+    if records:
+        return "recovery", {"records": records}
+    if canonical_checkpoints:
+        return "params", {"nodeId": canonical_checkpoints[0][0]}
+    if _graph_recovery_bootstrap_error is not None:
+        return "bootstrap", {}
+    return None
+
+
+def _graph_unresolved_specific(action: str) -> str:
+    return (f"Cannot {action} while unresolved World Labs paid state exists. "
+            "Check Marble and resolve the exact recovery/ambiguity record first.")
+
+
+def _reject_graph_replacement_during_paid_start(action: str) -> None:
+    held = _paid_replacement_state()
+    if held is None:
+        return
+    state, facts = held
+    if state == "active":
         raise _paid_start_refusal(action)
-    nodes = list(cli_graph.nodes.values())
-    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    if state == "bootstrap":
+        # Nebula couldn't journal a recovery it read from the canvas at boot
+        # (see WORLD_LABS_BOOTSTRAP_PERSON): retried here, on the raising
+        # path only, never on a read of the hold.
+        if _retry_graph_recovery_bootstrap(action):
+            return
+        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
     node: str | None = None
     fields: list[str] = []
-    # One read of the ambiguity list (review 13, nit 7): the rule is
-    # literally b2b1529e's, never an ambiguity seen by one read and not the next.
-    ambiguities = provider_start_guard.list()
-    records = provider_recovery_store.list() if not ambiguities else []
-    if ambiguities:
-        state = "ambiguity"
-    elif records:
-        state = "recovery"
-        node = _node_label(str(records[0].get("nodeId") or ""))
-    elif canonical_checkpoints:
-        state = "params"
-        held = cli_graph.nodes.get(canonical_checkpoints[0][0]) or {}
-        node = _node_label(canonical_checkpoints[0][0])
-        fields = _recovery_field_labels([held])
-    elif _graph_recovery_bootstrap_error is not None and not _retry_graph_recovery_bootstrap(action):
-        # Nebula couldn't journal a recovery it read from the canvas at boot
-        # (see WORLD_LABS_BOOTSTRAP_PERSON), and retrying that just now failed.
-        raise _graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap")
+    if state == "recovery":
+        node = _node_label(str(facts["records"][0].get("nodeId") or ""))
+    elif state == "params":
+        node = _node_label(facts["nodeId"])
+        fields = _recovery_field_labels([cli_graph.nodes.get(facts["nodeId"]) or {}])
+    raise _graph_paid_refusal(_graph_unresolved_specific(action), state, node=node, fields=fields)
+
+
+def _run_detail(action: str) -> str:
+    return f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+
+
+def _hold_run_project(catalog: Mapping[str, Any], run_id: Any) -> Mapping[str, Any] | None:
+    """The project a held World Labs record's run belongs to, by its run id
+    (node ids repeat across projects, so never by the node): the open
+    project when its stored run history has a record with that id, else the
+    one project (or Recently deleted entry) whose run history has it, else
+    the project Nebula registered the run on in this process
+    (execution_runs). None when it can't be known: none has it, or several
+    do (a duplicate copies run history)."""
+    if not isinstance(run_id, str) or not run_id:
+        return None
+    projects = catalog.get("projects") or {}
+
+    def ran(project: Any) -> bool:
+        history = ((project.get("snapshot") or {}).get("runHistory") or []) if isinstance(project, dict) else []
+        return any(isinstance(record, dict) and record.get("id") == run_id for record in history)
+
+    active = projects.get(catalog.get("activeProjectId"))
+    if active is not None and ran(active):
+        return active
+    found = [project for project in [*projects.values(), *(catalog.get("trash") or {}).values()] if ran(project)]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        return None
+    canvas = getattr(execution_runs.get(run_id), "canvas", None)
+    registered = canvas[0] if isinstance(canvas, tuple) and canvas else None
+    return projects.get(registered) if isinstance(registered, str) else None
+
+
+def _hold_id_project(catalog: Mapping[str, Any], record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The project a recovery record belongs to by its World Labs ID, for a
+    record no run history names (Nebula seeds one from the canvas, with a
+    run id of its own, before every canvas change): the project whose node
+    with the record's node id holds that same ID in its settings, the live
+    canvas first for the open project. Never by the node id alone. None
+    when none or several hold it."""
+    wanted = {value for value in (record.get("resumeOperationId"), record.get("existingWorldId")) if value}
+    node_id = record.get("nodeId")
+    if not wanted or not isinstance(node_id, str):
+        return None
+
+    def holds(definition_id: Any, params: Any) -> bool:
+        if not isinstance(definition_id, str) or not isinstance(params, dict):
+            return False
+        return bool(wanted & {value for value in recovery_identifiers(definition_id, params) if value})
+
+    projects = catalog.get("projects") or {}
+    active = projects.get(catalog.get("activeProjectId"))
+    live = cli_graph.nodes.get(node_id)
+    if active is not None and live is not None and cli_graph.owner == active.get("id") \
+            and holds(live.get("definitionId"), live.get("params")):
+        return active
+    found = []
+    for project in [*projects.values(), *(catalog.get("trash") or {}).values()]:
+        for node in ((project.get("snapshot") or {}).get("nodes") or []) if isinstance(project, dict) else []:
+            data = node.get("data") if isinstance(node, dict) and isinstance(node.get("data"), dict) else {}
+            if node.get("id") == node_id and holds(data.get("definitionId"), data.get("params")):
+                found.append(project)
+                break
+    return found[0] if len(found) == 1 else None
+
+
+def _hold_node_name(project: Mapping[str, Any], node_id: str, open_id: Any) -> str | None:
+    """A held node's name, as _node_label names it: on the live canvas when
+    ``project`` is the open one and holds it, else from the project's stored
+    snapshot, else None."""
+    if project.get("id") == open_id and node_id in cli_graph.nodes:
+        return _node_label(node_id)
+    for node in (project.get("snapshot") or {}).get("nodes") or []:
+        if isinstance(node, dict) and node.get("id") == node_id:
+            data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            definition_id = str(data.get("definitionId") or "")
+            definition = node_registry.get_all().get(definition_id, {})
+            return node_route.node_name(definition, data.get("label"), definition_id or node_id)
+    return None
+
+
+def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
+                            action: str = "switch projects") -> dict[str, Any] | None:
+    """The guards' verdict, read with no side effect: what holds opening or
+    switching projects now (REPLACEMENT_HOLD_STATES, the guards' order), or
+    None. {state, nodeId, nodeName, projectId, projectName, count, fields,
+    detail}: the held node (the first ambiguity, the first recovery record,
+    the first World Labs node whose settings hold an ID; null for active,
+    bootstrap and run) and its project (by the record's run id; the open one
+    for params; null when it can't be known, never guessed from a node id);
+    ``count`` the records for recovery and ambiguity, else 1; ``fields`` the
+    ID fields' labels for params; ``detail`` the agents' text the refusal
+    would carry for ``action``. ``catalog``: the one the caller holds, else
+    the last committed."""
+    held = _paid_replacement_state()
+    if held is None:
+        if not execution_runs.has_active():
+            return None
+        held = ("run", {})
+    state, facts = held
+    if catalog is None:
+        try:
+            catalog = project_store.read_unlocked()
+        except Exception:  # noqa: BLE001 - a read of the hold never fails over the catalog
+            catalog = {}
+    open_id = catalog.get("activeProjectId")
+    node_id: str | None = None
+    project: Mapping[str, Any] | None = None
+    count = 1
+    fields: list[str] = []
+    if state in {"ambiguity", "recovery"}:
+        records = facts["records"]
+        count = len(records)
+        node_id = str(records[0].get("nodeId") or "") or None
+        project = _hold_run_project(catalog, records[0].get("runId"))
+        if project is None and state == "recovery":
+            project = _hold_id_project(catalog, records[0])
+    elif state == "params":
+        node_id = facts["nodeId"]
+        project = (catalog.get("projects") or {}).get(open_id)
+        fields = _recovery_field_labels([cli_graph.nodes.get(node_id) or {}])
+    if state == "active":
+        detail = _graph_settling_specific(action)
+    elif state == "bootstrap":
+        detail = _graph_bootstrap_specific(action)
+    elif state == "run":
+        detail = _run_detail(action)
     else:
-        return
-    raise _graph_paid_refusal(
-        f"Cannot {action} while unresolved World Labs paid state exists. "
-        "Check Marble and resolve the exact recovery/ambiguity record first.",
-        state, node=node, fields=fields,
-    )
+        detail = _graph_unresolved_specific(action)
+    name = _hold_node_name(project, node_id, open_id) if project is not None and node_id else None
+    if state == "params" and name is None and node_id:
+        name = _node_label(node_id)  # the live canvas is the open project's
+    return {"state": state, "nodeId": node_id, "nodeName": name,
+            "projectId": project.get("id") if project is not None else None,
+            "projectName": project.get("name") if project is not None else None,
+            "count": count, "fields": fields, "detail": detail}
+
+
+def _hold_or_none(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The verdict for the listing's ``openHold`` and an open's 409 ``hold``,
+    or null when the World Labs journals can't be read just now: the
+    Projects screen still lists and the refusal still answers (GET
+    /api/projects/open-hold says the error)."""
+    try:
+        return _graph_replacement_hold(catalog)
+    except Exception as exc:  # noqa: BLE001 - a listing never fails over the hold's read
+        print(f"[projects] couldn't read the open hold for the listing: {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+
+def _with_hold(exc: HTTPException, hold: Mapping[str, Any] | None) -> CodedRefusal:
+    """``exc`` (status, detail, headers and any code kept) with ``hold``: the
+    verdict at refusal time (_graph_replacement_hold)."""
+    return CodedRefusal(exc.status_code, exc.detail, {**getattr(exc, "fields", {}), "hold": hold},
+                        headers=getattr(exc, "headers", None))
 
 
 def _graph_bootstrap_specific(action: str) -> str:
@@ -6778,6 +6966,22 @@ def _note_run(run_id: str) -> None:
         pass
 
 
+# When a node's run result landed (epoch ms, the clock the tab's run records
+# use; PR #199 round 21, review 19 LOW-3): Nebula's stamp, kept beside the run
+# result (not part of the unit _run_result moves: a tab never sets it), on the
+# live node and in the node's stored ``data``. It moves with the node when it
+# is renumbered. A handoff's "newer run" (_tab_result_is_newer) reads it when
+# Nebula didn't see both runs land in this process (a restart).
+RESULT_LANDED_KEY = "resultLandedAt"
+
+
+def _landing_stamp(value: Any) -> float | None:
+    """A landing stamp, or None for anything that isn't one."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        return None
+    return float(value)
+
+
 def _note_result_landed(event: Any, run_id: str | None) -> None:
     """A run's result landed on a node (its output, failure or skip), in the
     project the run was admitted in: the order a handoff judges "the newer
@@ -6789,7 +6993,17 @@ def _note_result_landed(event: Any, run_id: str | None) -> None:
     project = _run_project()
     if project is ...:
         project = _workspace_context()["activeProjectId"]
-    node_result_runs.landed(project if isinstance(project, str) else None, node_id, run_id)
+    at = _time_module.time() * 1000
+    node_result_runs.landed(project if isinstance(project, str) else None, node_id, run_id, at=at)
+    # The stamp kept with the result (PR #199 round 21, review 19 LOW-3): a
+    # handoff after a restart still knows when Nebula's result landed. On the
+    # live node (state.json), and from there in the project's stored copy
+    # (the export carries it; every save keeps it from the live graph).
+    live = cli_graph.nodes.get(node_id)
+    if live is not None and project == _workspace_context()["activeProjectId"]:
+        live[RESULT_LANDED_KEY] = at
+        if not isinstance(event, ExecutedEvent):
+            cli_graph._maybe_persist()  # an output's own sync persists it
 
 
 def _note_run_nodes(run_id: str, nodes: list[GraphNode]) -> None:
@@ -12838,6 +13052,7 @@ async def _broadcast_graph_sync(
             # The nodes that got Nebula's ids (an open; an import gives every
             # node a new id, and says so already): any id read before is stale.
             data["renumbered"] = dict(list(renumbered.items())[:50])
+            data["renumberedCount"] = len(renumbered)
             summary += f"; gave {counted(len(renumbered), 'node')} new ids"
         proposals_kept = proposals_kept and safe_reason == "project-open"
         closed: list[Proposal] = []
@@ -12845,7 +13060,9 @@ async def _broadcast_graph_sync(
             # Before the event, so its count is what stayed open.
             closed = _proposals_after_reopen()
             data["proposalsKept"] = True
-            if kept := len(canvas_proposals.open_list()):
+            # How many stayed open (`nebula watch` says so only when any did).
+            data["proposalsOpen"] = kept = len(canvas_proposals.open_list())
+            if kept:
                 summary += f"; {counted(kept, 'open proposal')} stayed open"
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
@@ -17375,6 +17592,9 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     failed = node_errors.card(str(n.get("id") or ""))
     if failed:
         data.update(failed)
+    if _landing_stamp(n.get(RESULT_LANDED_KEY)) is not None:
+        # When its run result landed (PR #199 round 21): the stored copy keeps it.
+        data[RESULT_LANDED_KEY] = n[RESULT_LANDED_KEY]
     # An agent's placeholder (Q125 item 3): its owner, for the dashed outline.
     flag = pending_nodes.clean(n.get(pending_nodes.PENDING_KEY))
     if flag is not None:
@@ -20050,7 +20270,7 @@ def _project_replacement_guard(action: str = "switch projects", *, person: str |
     _reject_graph_replacement_during_paid_start(action)
     _refuse_agent_while_kept(action)
     if execution_runs.has_active():
-        specific = f"Cannot {action} while a run is active. Wait for the run to finish or stop it first."
+        specific = _run_detail(action)
         if person is None:
             raise HTTPException(status_code=409, detail=specific)
         raise refusal_copy.refusal(409, specific, person, route="canvas")
@@ -20177,7 +20397,7 @@ async def list_projects() -> dict[str, Any]:
         _note_canvas_settled(settled)
         _note_held_filed(held_filed)
         listing = {
-            "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
+            "projects": sorted((_listed_project(project, catalog) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
             # The canvas reloads instead of loading a project when it differs
@@ -20187,6 +20407,9 @@ async def list_projects() -> dict[str, Any]:
             # that name it (the waiting lines).
             "projectLimit": project_store_module.MAX_PROJECTS,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
+            # What holds opening or switching projects now, or null (the
+            # open route's guards, read: GET /api/projects/open-hold).
+            "openHold": _hold_or_none(catalog),
         }
         if waiting := _canvas_not_filed_view(catalog=catalog):
             # The live canvas isn't a project and couldn't be filed: the list
@@ -20248,6 +20471,16 @@ async def dismiss_canvas_held_unreadable(body: dict[str, Any]) -> dict[str, Any]
     return {"dismissed": project_store.dismiss_held_unreadable(at)}
 
 
+@app.get("/api/projects/open-hold")
+async def get_open_hold() -> dict[str, Any]:
+    """What holds opening or switching projects now (the open route's own
+    guards, read with no side effect: no fence, no journal write, no retry),
+    for the person's tab (it locks Open before the press) and agents:
+    {"hold": {state, nodeId, nodeName, projectId, projectName, count,
+    fields, detail} | null} (_graph_replacement_hold)."""
+    return {"hold": _graph_replacement_hold()}
+
+
 @app.get("/api/projects/{project_id}")
 async def get_saved_project(project_id: str, view: str | None = None) -> dict[str, Any]:
     """The project the canvas loads. ``view=agent``: the same project as
@@ -20266,8 +20499,11 @@ async def get_saved_project(project_id: str, view: str | None = None) -> dict[st
         if view == "agent":
             from services.project_view import agent_project
 
-            return agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
+            read = agent_project(project, node_registry.get_all(), open_id=catalog["activeProjectId"],
                                  secrets=_agent_key_secrets())
+            if (source := _recovered_source(project, catalog)) is not None:
+                read.update(source)  # a recovered copy's source, as list_projects reads it
+            return read
         return public_project(project)
 
 
@@ -20442,8 +20678,10 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         result = {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
                   "renumbered": copy.deepcopy(renumbered), "droppedWires": copy.deepcopy(project["_recoveryDroppedWires"]),
                   "sourceName": _recovered_source_name(project)}
+        recovered = _recovered_source(project, catalog)
     _journal_project_change("project.created", result["project"],
-                            dropped_wires=result["droppedWires"])  # before any await (round 8 of PR #114)
+                            dropped_wires=result["droppedWires"],
+                            recovered=recovered)  # before any await (round 8 of PR #114)
     await _broadcast_projects_changed("created", recovery_id)
     return result
 
@@ -20456,6 +20694,33 @@ def _recovered_source_name(project: Mapping[str, Any]) -> str | None:
     found = project.get("recoveredFrom")
     name = found.get("name") if isinstance(found, Mapping) else None
     return name if isinstance(name, str) and name else None
+
+
+def _recovered_source(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A recovered copy's source as agents read it (PR #199 round 21, review
+    19 agents-docs LOW-2), never from the copy's name: ``sourceName`` the
+    source's name as the copy's record keeps it (``recoveredFrom``; null
+    when unknown, and null while the source is neither in the list nor in
+    Recently deleted: agents can't read a project gone for good, so they
+    aren't told its name), ``sourceProjectId`` its id while it is still in
+    the list, else null. None for a project that isn't a recovered copy."""
+    found = project.get("recoveredFrom")
+    source_id = found.get("id") if isinstance(found, Mapping) else project.get("_recoverySourceId")
+    if not isinstance(source_id, str) or not source_id:
+        return None
+    listed = source_id in (catalog.get("projects") or {})
+    readable = listed or source_id in (catalog.get("trash") or {})
+    return {"sourceName": _recovered_source_name(project) if readable else None,
+            "sourceProjectId": source_id if listed else None}
+
+
+def _listed_project(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """A row of GET /api/projects: the project's metadata, and for a
+    recovered copy its source (_recovered_source)."""
+    row = project_metadata(project)
+    if (source := _recovered_source(project, catalog)) is not None:
+        row.update(source)
+    return row
 
 
 def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
@@ -20523,7 +20788,8 @@ def _renumbered_base(project: Mapping[str, Any], mapping: Mapping[str, str]) -> 
             continue
         data = node.get("data") if isinstance(node.get("data"), dict) else {}
         base[node["id"]] = {**_handoff_node_values(node, data.get("label")),
-                            "result": _run_result(data), "resultSeq": node_result_runs.seq}
+                            "result": _run_result(data), "resultSeq": node_result_runs.seq,
+                            RESULT_LANDED_KEY: _landing_stamp(data.get(RESULT_LANDED_KEY))}
     return base
 
 
@@ -20555,7 +20821,8 @@ def _with_run_result(node: Mapping[str, Any], result: Mapping[str, Any]) -> dict
 def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any] | None:
     """The tab's run record that gave ``node_id`` its result: the newest (by
     startedAt) in its run history that ran it (its outputs, its skip, or its
-    target). {id, finishedAt (epoch ms: startedAt plus durationSec)}."""
+    target). {id, startedAt, finishedAt (epoch ms: startedAt plus
+    durationSec; None when the record has no start time)}."""
     best: dict[str, Any] | None = None
     for record in snapshot.get("runHistory") or []:
         if not isinstance(record, dict) or not isinstance(record.get("id"), str) or not record["id"]:
@@ -20564,27 +20831,55 @@ def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any]
         skipped = record.get("skippedNodes") if isinstance(record.get("skippedNodes"), dict) else {}
         if node_id not in results and node_id not in skipped and record.get("targetNodeId") != node_id:
             continue
-        started = record.get("startedAt") if isinstance(record.get("startedAt"), (int, float)) else 0
-        took = record.get("durationSec") if isinstance(record.get("durationSec"), (int, float)) else 0
+        timed = _landing_stamp(record.get("startedAt"))
+        started = timed or 0
+        took = record.get("durationSec") if isinstance(record.get("durationSec"), (int, float)) \
+            and not isinstance(record.get("durationSec"), bool) and math.isfinite(record["durationSec"]) else 0
         if best is None or started >= best["startedAt"]:
-            best = {"id": record["id"], "startedAt": started, "finishedAt": started + took * 1000}
+            best = {"id": record["id"], "startedAt": started,
+                    "finishedAt": started + max(took, 0) * 1000 if timed is not None else None}
     return best
 
 
-def _tab_result_is_newer(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None) -> bool:
+def _has_run_result(result: Mapping[str, Any]) -> bool:
+    """Whether a run result unit (_run_result) holds a result at all: an
+    output, a failure or a skip."""
+    return bool(result.get("outputs")) or bool(result.get("skipReason")) or any(
+        value for key, value in result.items() if key.startswith("error"))
+
+
+def _tab_result_is_newer(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None, *,
+                         stamp: float | None = None, stored_has_result: bool = True) -> bool:
     """Whether the tab's result for ``node_id`` came from a newer run than
-    the one Nebula last saw land on it (node_result_runs): the run order
-    when Nebula saw the tab's run land too, else the tab's record's finish
-    time against the landing's. No run record behind the tab's result: the
-    other side stands. Nothing seen landing: the tab's record stands."""
+    Nebula's result on it (PR #199 round 21, review 19 LOW-3).
+
+    - No run record behind the tab's result: Nebula's stands.
+    - Nebula saw the tab's run land in this process (node_result_runs) and
+      its own: the run order decides.
+    - Otherwise the tab record's finish time against when Nebula's result
+      landed: ``stamp`` (the landing stamp kept with the stored result,
+      RESULT_LANDED_KEY, which survives a restart) or a landing seen in this
+      process, the later of the two. Equal times: Nebula's stands.
+    - A side with no time (a result saved before the stamp existed, a tab
+      record with no start time): the side with one wins. Neither has one:
+      Nebula's stands, unless it holds no result (``stored_has_result``),
+      then the tab's."""
     if tab_run is None:
         return False
     landed = node_result_runs.entries(project_id, node_id)
-    if not landed:
-        return True
     if any(entry["runId"] == tab_run["id"] for entry in landed):
         return landed[-1]["runId"] == tab_run["id"]
-    return tab_run["finishedAt"] >= landed[-1]["at"]
+    times = [at for at in (_landing_stamp(stamp), _landing_stamp(landed[-1]["at"]) if landed else None)
+             if at is not None]
+    ours = max(times) if times else None
+    theirs = _landing_stamp(tab_run.get("finishedAt"))
+    if theirs is None and ours is None:
+        return not stored_has_result
+    if ours is None:
+        return True
+    if theirs is None:
+        return False
+    return theirs > ours
 
 
 def _handoff_node_values(node: Mapping[str, Any], label: Any) -> dict[str, Any]:
@@ -20708,7 +21003,8 @@ _PROJECT_SUMMARIES = {
 
 def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_name: str | None = None,
                             was_open: bool | None = None,
-                            dropped_wires: Sequence[Mapping[str, Any]] = ()) -> None:
+                            dropped_wires: Sequence[Mapping[str, Any]] = (),
+                            recovered: Mapping[str, Any] | None = None) -> None:
     """Journal a project made, renamed, deleted or restored (``project.*``),
     in the name of whoever asked, so wait_for_canvas_change and `nebula
     watch` see the person's changes and other agents'. Next to
@@ -20723,6 +21019,10 @@ def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_n
         data["wasOpen"] = was_open
     if kind == "project.created" and isinstance(project.get("createdBy"), dict):
         data["createdBy"] = project["createdBy"].get("name")
+    if kind == "project.created" and recovered is not None:
+        # A recovered copy (the recover route): its source, as list_projects
+        # reads it (_recovered_source), never read from the copy's name.
+        data.update({"sourceName": recovered.get("sourceName"), "sourceProjectId": recovered.get("sourceProjectId")})
     summary = _PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or "")
     if dropped_wires:
         # A kept tab's connections the server's rules refused (the recover
@@ -20858,7 +21158,18 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
         _project_revision(body or {}, catalog)
-        _project_replacement_guard()
+        try:
+            # The run refusal has the person's line too (CLEAR_DURING_RUN_PERSON:
+            # its words hold for an open), agents keep the specific text.
+            _project_replacement_guard(person=CLEAR_DURING_RUN_PERSON)
+        except CanvasKeptRefusal:
+            raise
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                raise
+            # The verdict at refusal time (PR #199 round 21): the tab shows
+            # the state's line from it, never from the words.
+            raise _with_hold(exc, _hold_or_none(catalog)) from exc
         project = _project_id_or_404(project_id, catalog)
         # The canvas this open replaces is kept: its own project, or filed
         # (H1), or held aside while it can't be filed (the list is at a limit).
@@ -21002,9 +21313,13 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             removed: list[dict[str, Any]] = []
             live = catalog["activeProjectId"] == project_id and _apply_handoff_live(
                 project, landed.merged, deleted=landed.deleted, removed=removed, results=landed.results)
+            _journal_handoff_results(project, landed.result_runs)
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
                     "handoff": True, **({"_liveChanged": True} if live else {}),
-                    **({"_removed": removed} if removed else {})}
+                    **({"_removed": removed} if removed else {}),
+                    # Deletes it ignored and kept (review 19 reopen LOW-4): the
+                    # tab shows a line for them.
+                    **({"deletesKept": landed.kept_deletes} if landed.kept_deletes else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
@@ -21016,6 +21331,7 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             _keep_person_viewport(staged, project["snapshot"])
             _live_pending_flags(staged["nodes"], cli_graph.nodes)
+            _live_result_stamps(staged["nodes"], cli_graph.nodes)
             project["snapshot"] = staged
             # Which window saved each tab-local node (review 18 handoff-reopen
             # MEDIUM-1). This save's own rule is unchanged: the last window's
@@ -21054,6 +21370,46 @@ def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[
             data.pop(pending_nodes.PENDING_KEY, None)
         else:
             data[pending_nodes.PENDING_KEY] = flag
+
+
+def _live_result_stamps(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
+    """A save keeps each node's landing stamp (RESULT_LANDED_KEY) as the live
+    graph has it, as it keeps the placeholder flag: only a result landing
+    sets one, so a tab that lost it, or holds an old one, never changes it."""
+    for node in nodes:
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict):
+            continue
+        stamp = _landing_stamp((live.get(node.get("id")) or {}).get(RESULT_LANDED_KEY))
+        if stamp is None:
+            data.pop(RESULT_LANDED_KEY, None)
+        else:
+            data[RESULT_LANDED_KEY] = stamp
+
+
+def _stored_landing_stamp(project: Mapping[str, Any], node_id: str, kept: Mapping[str, Any]) -> float | None:
+    """When Nebula's result on ``node_id`` landed, as kept with it: the
+    stored copy's stamp, or the live node's when the live canvas is this
+    project (an agent's run after the open lands there first), the later."""
+    times = [_landing_stamp((kept.get("data") or {}).get(RESULT_LANDED_KEY))]
+    live = cli_graph.nodes.get(node_id)
+    if (live is not None and cli_graph.owner == project.get("id")
+            and live.get("definitionId") == (kept.get("data") or {}).get("definitionId")):
+        times.append(_landing_stamp(live.get(RESULT_LANDED_KEY)))
+    found = [at for at in times if at is not None]
+    return max(found) if found else None
+
+
+def _tab_run_landed_at(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None) -> float | None:
+    """The stamp a result taken from the tab gets: when Nebula saw its run's
+    result land on the node in this process, else the tab record's finish
+    time, else none."""
+    if tab_run is None:
+        return None
+    for entry in reversed(node_result_runs.entries(project_id, node_id)):
+        if entry["runId"] == tab_run["id"] and _landing_stamp(entry.get("at")) is not None:
+            return float(entry["at"])
+    return _landing_stamp(tab_run.get("finishedAt"))
 
 
 def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
@@ -21203,6 +21559,11 @@ class _HandoffLanded(NamedTuple):
     merged: dict[str, tuple[list[str], bool, bool]]
     deleted: list[str]
     results: list[str] = []
+    # The run each taken result came from (the tab's record id, or None).
+    result_runs: dict[str, str | None] = {}
+    # The listed deletes this save ignored and kept (their new ids): the
+    # window sending it isn't the one that saved the node last.
+    kept_deletes: list[str] = []
 
 
 def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict | None = None,
@@ -21283,15 +21644,19 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
         raise _handoff_refused(HANDOFF_WHY["unreadable"])
     renamed: set[str] = set()
     deleted: set[str] = set()
+    kept_deletes: set[str] = set()
     if renumbered:
         if isinstance(raw, dict):
             held = {node.get("id") for node in raw.get("nodes") or [] if isinstance(node, dict)}
             renamed = {new for old, new in renumbered.items() if old in held or new in held}
             if persons_tab and deleted_ids:
                 asked = {renumbered.get(node_id, node_id) for node_id in deleted_ids}
-                deleted = {new for old, new in renumbered.items()
-                           if new in asked and old not in held and new not in held
-                           and _tab_local_writer(project, new) == tab}
+                said = {new for old, new in renumbered.items() if new in asked and old not in held and new not in held}
+                deleted = {new for new in said if _tab_local_writer(project, new) == tab}
+                # Said by a window that isn't the one that saved the node
+                # last: ignored, and the answer says so (deletesKept), so a
+                # refused delete is never silent.
+                kept_deletes = said - deleted
             _apply_node_renumbering(raw, renumbered)
         pending_params = _renumbered_keys(pending_params, renumbered)
         pending_labels = _renumbered_keys(pending_labels, renumbered)
@@ -21299,6 +21664,8 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     staged, candidate = _stage_project_snapshot(raw, historical=historical, ingress=ingress)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
     _keep_person_viewport(staged, stored)
+    # A landing stamp is Nebula's (RESULT_LANDED_KEY): never the tab's copy of one.
+    _live_result_stamps(staged["nodes"], {})
     backend_nodes = set(project.get("_backendNodeIds") or [])
     # Placeholders are the backend's: a node only the tab held never is one.
     _live_pending_flags([node for node in staged["nodes"] if node["id"] not in backend_nodes], {})
@@ -21339,28 +21706,49 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
             # Its moves never reached Nebula either.
             merged[node_id]["position"] = copy.deepcopy(tab_node["position"])
     results: list[str] = []
+    result_runs: dict[str, str | None] = {}
     for node_id in sorted(set(staged_nodes) & backend_nodes & set(stored_nodes) if persons_tab else ()):
         tab_node, kept_node = staged_nodes[node_id], merged.get(node_id) or stored_nodes[node_id]
         if (tab_node.get("data") or {}).get("definitionId") != (kept_node.get("data") or {}).get("definitionId"):
             continue
         theirs = _run_result(tab_node.get("data") or {})
+        kept_result = _run_result(kept_node.get("data") or {})
+        stamp = _stored_landing_stamp(project, node_id, kept_node)
         if node_id in landed_values:
-            landed_values[node_id] = {**landed_values[node_id], "result": theirs, "resultSeq": node_result_runs.seq}
-        if theirs == _run_result(kept_node.get("data") or {}):
+            landed_values[node_id] = {**landed_values[node_id], "result": theirs, "resultSeq": node_result_runs.seq,
+                                      RESULT_LANDED_KEY: stamp}
+        if theirs == kept_result:
             continue
         was = base.get(node_id) if node_id in renamed and isinstance(base.get(node_id), dict) else None
         tab_run = _tab_result_run(staged, node_id)
+        stored_has_result = _has_run_result(kept_result)
         if was is not None and "result" in was:
             if theirs == was["result"]:
                 continue  # the tab's result is the one the open loaded: Nebula's side moved
             since = was.get("resultSeq") if isinstance(was.get("resultSeq"), int) else 0
-            if (any(entry["seq"] > since for entry in node_result_runs.entries(project["id"], node_id))
-                    and not _tab_result_is_newer(project["id"], node_id, tab_run)):
+            # A result landed on the node since the open: one Nebula saw in
+            # this process, or a landing stamp the open didn't load (it
+            # survives a restart, the in-memory landings don't).
+            landed_since = (any(entry["seq"] > since for entry in node_result_runs.entries(project["id"], node_id))
+                            or stamp != _landing_stamp(was.get(RESULT_LANDED_KEY)))
+            if landed_since and not _tab_result_is_newer(project["id"], node_id, tab_run, stamp=stamp,
+                                                         stored_has_result=stored_has_result):
                 continue
-        elif not _tab_result_is_newer(project["id"], node_id, tab_run):
+        elif not _tab_result_is_newer(project["id"], node_id, tab_run, stamp=stamp,
+                                      stored_has_result=stored_has_result):
             continue
         merged[node_id] = _with_run_result(kept_node, theirs)
+        # The tab's result is stamped with when its run's result landed: as
+        # Nebula saw it in this process, else the tab record's finish time.
+        taken_at = _tab_run_landed_at(project["id"], node_id, tab_run)
+        if taken_at is None:
+            merged[node_id]["data"].pop(RESULT_LANDED_KEY, None)
+        else:
+            merged[node_id]["data"][RESULT_LANDED_KEY] = taken_at
+        if node_id in landed_values:
+            landed_values[node_id][RESULT_LANDED_KEY] = taken_at
         results.append(node_id)
+        result_runs[node_id] = tab_run["id"] if tab_run else None
     nodes = [merged.get(node["id"]) or stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node
              for node in staged["nodes"]]
     listed = {node["id"] for node in nodes}
@@ -21387,7 +21775,31 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
         base.pop(node_id, None)
     return _HandoffLanded(
         {node_id: (unsent_params.get(node_id, []), node_id in unsent_labels, node_id in moved) for node_id in merged},
-        sorted(deleted), results)
+        sorted(deleted), results, result_runs, sorted(kept_deletes))
+
+
+def _journal_handoff_results(project: Mapping[str, Any], result_runs: Mapping[str, str | None]) -> None:
+    """A handoff's newer tab result replaced a node's result (PR #199 round
+    21, review 19 agents-docs NIT-2): journaled as the person's
+    (``node.result``: the node, the project, and the run the result came
+    from), so agents reading the journal know their result was replaced. No
+    Agent log line: the Agent log is agents' actions, this one is the
+    person's own (GM r32). Never fails the save."""
+    stored = {node.get("id"): node for node in (project.get("snapshot") or {}).get("nodes") or []
+              if isinstance(node, dict)}
+    for node_id, run_id in result_runs.items():
+        try:
+            data = (stored.get(node_id) or {}).get("data") or {}
+            definition_id = str(data.get("definitionId") or "")
+            name = node_route.node_name(node_registry.get_all().get(definition_id, {}), data.get("label"),
+                                        definition_id or node_id)
+            ran = f" from run {run_id}" if run_id else ""
+            _journal("node.result", node_id=node_id,
+                     data={"projectId": project.get("id"), "runId": run_id, "replaced": True},
+                     summary=f"kept the result of their newer run{ran} on {name} ({node_id})",
+                     project_id=project.get("id"))
+        except Exception:  # noqa: BLE001 - the save landed; the journal line is extra
+            pass
 
 
 def _renumbered_keys(listed: Any, renumbered: Mapping[str, str]) -> Any:
@@ -21438,6 +21850,11 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
         if live is None or live.get("definitionId") != data.get("definitionId"):
             continue
         outputs = data.get("outputs") if isinstance(data.get("outputs"), dict) else {}
+        stamp = _landing_stamp(data.get(RESULT_LANDED_KEY))
+        if stamp is None:
+            live.pop(RESULT_LANDED_KEY, None)
+        else:
+            live[RESULT_LANDED_KEY] = stamp
         if live.get("outputs") != outputs:
             live["outputs"] = copy.deepcopy(outputs)
             cli_graph._maybe_persist()

@@ -56,6 +56,10 @@ EVENT_KINDS = frozenset({
     "node.params",
     "node.moved",
     "node.renamed",
+    # The person's handoff kept the result of their newer run on a node,
+    # replacing the one Nebula held (main._journal_handoff_results): data
+    # {projectId, runId, replaced}.
+    "node.result",
     "edge.added",
     "edge.removed",
     "selection.changed",

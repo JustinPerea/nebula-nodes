@@ -109,7 +109,7 @@ describe('review 16 kept-ui LOW-3: the reload line names the source project', ()
     useProjectStore.setState({ activeProject: null });
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
+      'Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
   });
 
   it('the listed name of the source wins when the copy’s name doesn’t say it', async () => {
@@ -118,7 +118,7 @@ describe('review 16 kept-ui LOW-3: the reload line names the source project', ()
     useProjectStore.setState({ activeProject: null });
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
+      'Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
   });
 
   it('a source no longer listed and not in the answer: the line names the copy, never a source read from its name (GM r29, 2)', async () => {
@@ -127,7 +127,7 @@ describe('review 16 kept-ui LOW-3: the reload line names the source project', ()
     useProjectStore.setState({ activeProject: null, projects: [] });
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
-      'Couldn’t save your changes because Nebula was updated. Reload Nebula and they’ll open in “Recovered alpha”.'));
+      'Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in “Recovered alpha”.'));
   });
 });
 

@@ -139,10 +139,27 @@ handoff takes only what differs from the node as the open loaded it, so
 your later edit to another setting, its name or its place stands; if they
 changed the same setting, theirs wins. A node's run result (its output,
 failure, notes) is the product of a run, not a setting: of the result on
-their tab and the one on Nebula's node, the newer run's stands, so your
-later run of the node keeps its result. A node one of their windows made
-is deleted only when that window says so; another window that never had
-it, or a save that leaves it out, keeps it and your edits. When the person
+their tab and the one on Nebula's node, the newer run's stands. Nebula
+stamps when a result lands (`resultLandedAt`, kept with the node, so it
+survives a restart): when Nebula saw both runs land since it started, their
+order decides, else the tab's run record's finish time against that stamp.
+Equal times keep Nebula's result. A side with no time loses: the side with
+a time wins, and with neither, Nebula's result stands unless it has none.
+When the person's newer result replaces one on a node, `nebula watch` shows
+it in their name (`node.result`, with the run), and no Agent log line. A
+node one of their windows made is deleted only when that window says so;
+another window that never had it, or a save that leaves it out, keeps it
+and your edits (a delete from a window that never saved it is ignored and
+listed in the save's `deletesKept`).
+**Opening or switching projects can be held.** `nebula projects` (and
+`list_projects`' `openHold`, `GET /api/projects/open-hold`) says so: "Opening
+or switching projects is held: <detail>", with `state` (`active`,
+`ambiguity`, `recovery`, `params`, `bootstrap` or `run`), the held node and
+its project. Reading it changes nothing; wait, or ask the person to clear it
+(Run History's Forget ID for `recovery`, the World Labs notice for
+`ambiguity`). A recovered copy's row says its source: `sourceName` (null when
+unknown or deleted for good) and `sourceProjectId` (while it is still in the
+list), also in its `project.created` event; never read it from the copy's name. When the person
 reopens the project they show from Projects, their other windows on it
 follow quietly and hand off what they hadn't saved, as after your reopen.
 Until that open, `nebula selection`,

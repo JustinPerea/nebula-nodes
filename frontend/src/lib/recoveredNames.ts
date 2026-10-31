@@ -24,7 +24,13 @@
 const RECOVERED_CANVAS = 'Recovered canvas';
 /** Nebula's own " copy" / " copy N" at the end of a name (N from 2). The
  * "s" flag, as DOTALL on the backend: "." takes U+2028, U+2029 and every
- * other character a name can hold. Digits are ASCII only. */
+ * other character a name can hold. Digits are ASCII only.
+ *
+ * The one exception to "Nebula never reads a number in a name" (GM r32 on
+ * PR #199, as the Finder does): a trailing " copy" or " copy N" is read, so
+ * "Budget copy 3", typed by the person, duplicates to "Budget copy 4". No
+ * other number in a name is ever read ("Shot 7" is never a copy count). Don't
+ * widen this pattern; the backend's _COPY carries the same rule. */
 const NEBULA_COPY = /^(.+?) copy(?: ([2-9]|[1-9][0-9]+))?$/su;
 const LEGACY_RECOVERED = /^(.+?) \(recovered(?: [0-9]+)?\)$/su;
 /** The longest project name, in code points (Python's len on the backend,

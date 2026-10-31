@@ -98,6 +98,8 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // single line already had (copyForAnswer's), merged for several scenes.
   { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
     why: "GM's heading over the line's own reason (GM r32 answer 2)" },
+  { file: 'lib/reopenHold.ts', text: "`Nebula couldn’t save its World Labs safeguards. ${reopen} after you ${desktop ? 'quit Nebula and open it again' : 'restart Nebula'}.`",
+    why: "GM's held-reopen line for the bootstrap state (PR #199, GM r32 1): the second sentence is GM's own lock line, never a reason" },
   // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line. Round 19
   // (GM r28 item 2): the state slot's merged line, with GM's subject-and-comma fix.
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },

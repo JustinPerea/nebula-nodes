@@ -40,10 +40,10 @@ describe('GM r10: in the order they were saved', () => {
     expect(notice.lines).toContain('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”, so nothing in them is lost.');
   });
 
-  it('the toast too; with no time, by number', () => {
+  it('the toast too; with no time, by id, then as listed (never a number read in a name: PR #199 review 19 item 12)', () => {
     expect(canvasSavedToast('Recovered canvas', [{ id: B, name: 'Recovered canvas 2' }, { id: A, name: 'Recovered canvas' }]))
       .toBe('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”.');
-    expect(savedOrder([{ name: 'X 3' }, { name: 'X' }, { name: 'X 2' }]).map((row) => row.name)).toEqual(['X', 'X 2', 'X 3']);
+    expect(savedOrder([{ name: 'X 3' }, { name: 'X' }, { name: 'X 2' }]).map((row) => row.name)).toEqual(['X 3', 'X', 'X 2']);
   });
 
   it('GM r10, 4: "Other canvases…", and from 4 on the count, with the over-limit tail', () => {

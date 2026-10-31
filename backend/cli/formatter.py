@@ -881,7 +881,18 @@ def format_event(event: dict[str, Any]) -> str:
     summary = str(event.get("summary") or kind)
     if kind == "canvas.replaced" and data.get("proposalsKept"):
         # A reopen of the open project (GM r29 of PR #199, 3): its ids stay.
-        summary = "Reopened the open project — node ids kept, open proposals still open; run nebula look"
+        # GM r32 (6): "open proposals still open" only when any were open
+        # (an event from before the count says it as before), and the nodes
+        # that got Nebula ids, counted.
+        parts = ["node ids kept"]
+        if not isinstance(data.get("proposalsOpen"), int) or data["proposalsOpen"] > 0:
+            parts.append("open proposals still open")
+        renamed = data.get("renumberedCount")
+        if not isinstance(renamed, int):
+            renamed = len(data["renumbered"]) if isinstance(data.get("renumbered"), dict) else 0
+        if renamed:
+            parts.append("1 node got a Nebula id" if renamed == 1 else f"{renamed} nodes got Nebula ids")
+        summary = f"Reopened the open project — {', '.join(parts)}; run nebula look"
     elif kind == "canvas.replaced":
         summary = f"Canvas replaced ({data.get('reason') or 'import'}) — node ids restarted; run nebula look"
     elif kind == "canvas.cleared":

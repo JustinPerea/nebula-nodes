@@ -74,16 +74,10 @@ export interface SavedCanvasRow {
   agentCopy?: { agent?: string | null } | null;
 }
 
-/** The number a saved name ends in ("Recovered canvas 2": 2; none: 1), so
- * canvases saved together are named in number order. */
-function nameNumber(name: string): number {
-  const found = / (\d+)$/.exec(name);
-  return found ? Number(found[1]) : 1;
-}
-
-/** GM r10: canvases are named in the order they were saved, which is also
- * number order ("Recovered canvas" before "Recovered canvas 2"), in the
- * notice, the toast and the counted forms. */
+/** GM r10: canvases are named in the order they were saved, in the notice,
+ * the toast and the counted forms: by when Nebula saved each (`filedAt`),
+ * then by its id, then as listed. Never by a number in a name (GM r29 on
+ * PR #199; review 19 item 12): "Shot 7" is the person's own number. */
 export function savedOrder<R extends SavedCanvasRow>(rows: R[]): R[] {
   const at = (row: R) => {
     const parsed = row.filedAt ? Date.parse(row.filedAt) : Number.NaN;
@@ -93,8 +87,8 @@ export function savedOrder<R extends SavedCanvasRow>(rows: R[]): R[] {
     const a = at(left.row);
     const b = at(right.row);
     if (a !== null && b !== null && a !== b) return a - b;
-    const byNumber = nameNumber(left.row.name) - nameNumber(right.row.name);
-    return byNumber !== 0 ? byNumber : left.index - right.index;
+    const ids = left.row.id && right.row.id && left.row.id !== right.row.id ? (left.row.id < right.row.id ? -1 : 1) : 0;
+    return ids !== 0 ? ids : left.index - right.index;
   }).map(({ row }) => row);
 }
 
