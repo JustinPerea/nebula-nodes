@@ -192,3 +192,15 @@ Live (8794/5794, isolated, canary first; the 9-image board), 24/24:
 - Focused vitest, `--maxWorkers=2`, 115 files (round 1's set plus Moodboard Studio's tests and every test that reads boardCanvasStore or BoardCanvas): 1817 tests passed, Errors 0.
 - `vite build` plus the budget check: 444,245 bytes raw entry (limit 512,000).
 - Round 1's live layout check on the final tree: 40/40.
+
+### Round 2 follow-up: the ratchet's speed (CI timeout on c09b8ad4)
+
+CI's Frontend tests part 1 timed out two studioGridAreas tests at 5 s. With breakpoint-derived widths, every cascade still walked every rule in the app through jsdom's `matches`. On this Mac the file took 24–39 s, and Composition timed out locally too.
+
+- **Index.** helpers/cssCascade now records, for each rule, one class its subject must carry (a class written directly in the last compound, not inside a pseudo), or none. `candidateRules(element)` returns the rules keyed by the element's classes plus the unkeyed ones. The index is built once with the parsed sheets, and `cascaded` and `declarationsOf` go through it. A rule with no key is tried on every element, so the index can only skip rules that cannot match.
+- **Once, before the tests.** A `beforeAll` resolves every studio at every checked width and skin. VIEWPORTS already holds one width per distinct set of matching @media queries, so each layout is resolved once. Each studio's `it()` only reads its result.
+- **Timings on this Mac.** Before: 24–39 s for the file (tests 38.3 s on the run measured), with single studio tests of several seconds. After: about 3 s for the file (tests about 2 s, mostly the `beforeAll`), and every test under 1 s (the slowest, the index check, 340–720 ms).
+- **No timeout raised**, and no per-file backstop needed.
+- **A new check** confirms that each rule's key is a class its subject requires, and that the index finds the same rules as a full scan on the Board view's and Commons' DOM. Its mutant (keying a rule by an ancestor's class) is killed.
+- **Mutants re-run after the speedup**, all killed: M1, M2, M3, M7, M9, M10, M11, M12, M13, M13b, M15, M16, M17, M18 and M19.
+- **Found, not changed.** For a selector whose subject is only a state or a pseudo-element, the helper's `base` loses its trailing `*`: `sel.toString().trim()` drops the space before the check that would add it. So `.commons-evaluation :focus-visible` is matched as `.commons-evaluation:focus-visible`. This affects six rules: two in commons-evaluation.css, and four `::-webkit-scrollbar` rules in slava-restraint.css. It predates this PR and doesn't touch the studio ratchet.

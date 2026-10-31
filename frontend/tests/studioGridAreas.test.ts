@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import selectorParser from 'postcss-selector-parser';
 import { readdirSync, statSync } from 'node:fs';
 import {
-  appRules, cascaded, declarationsOf, mediaMatches, selectorSpecificity, wins, type Viewport, type Winner,
+  appRules, candidateRules, cascaded, declarationsOf, mediaMatches, selectorSpecificity, wins, type Viewport, type Winner,
 } from './helpers/cssCascade';
 
 // fix/moodboard-board-layout: PR #198 added the studios' offline row with one
@@ -300,11 +300,27 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/**
+ * Every studio's problems at every checked width and skin, worked out once
+ * before the tests read them. The app's sheets are parsed and indexed once
+ * (helpers/cssCascade candidateRules), and VIEWPORTS holds one width per
+ * distinct set of matching @media queries, so each layout is resolved once.
+ * (CI ran this past 5 s a test when each cascade walked every rule.)
+ */
+const RESULTS = new Map<string, string[]>();
+beforeAll(() => {
+  candidateRules(document.body);
+  for (const studio of STUDIOS) {
+    RESULTS.set(studio.name, VIEWPORTS.flatMap((viewport) => SKINS.flatMap((slava) => layoutProblems(studio, viewport, slava))));
+  }
+  document.body.className = '';
+  document.body.innerHTML = '';
+});
+
 describe('every studio names its offline row and every child in its own template', () => {
   for (const studio of STUDIOS) {
-    it(`${studio.name}: under both skins, at 700-1600 px`, () => {
-      const problems = VIEWPORTS.flatMap((viewport) => SKINS.flatMap((slava) => layoutProblems(studio, viewport, slava)));
-      expect(problems).toEqual([]);
+    it(`${studio.name}: under both skins, at every breakpoint`, () => {
+      expect(RESULTS.get(studio.name)).toEqual([]);
     });
   }
 
@@ -486,6 +502,26 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(selectorSpecificity('body.s .v:not(.v--board) > .c')).toEqual([0, 4, 1]);
     expect(selectorSpecificity('html body .v.v--board')).toEqual([0, 2, 2]);
     expect(selectorSpecificity('#id :is(.a, #b) p::before')).toEqual([2, 0, 2]);
+  });
+
+  it('indexes each rule under a class its subject requires, and finds the same rules as a full scan', () => {
+    const wrong: string[] = [];
+    for (const rule of appRules()) {
+      const required = classesOf(subject(rule.base).replace(/:[\w-]+\((?:[^()]|\([^()]*\))*\)/g, ''));
+      // No key is always safe (the rule is tried on every element); a key must be required.
+      if (rule.key !== null && !required.includes(rule.key)) wrong.push(`${rule.file}: ${rule.selector} -> ${rule.key}`);
+    }
+    expect(wrong).toEqual([]);
+    document.body.className = 'app-slava-restraint';
+    document.body.innerHTML = '';
+    // Two studios' DOM is enough for the spot check (a full scan is the slow path the index replaces).
+    for (const studio of STUDIOS.filter((one) => one.root.includes('--board') || one.name === 'Commons')) build(studio);
+    const matches = (rule: { base: string }, el: Element) => { try { return el.matches(rule.base); } catch { return false; } };
+    for (const el of document.body.querySelectorAll('*')) {
+      const full = appRules().filter((rule) => matches(rule, el));
+      const indexed = candidateRules(el).filter((rule) => matches(rule, el));
+      expect(indexed.length, el.className).toBe(full.length);
+    }
   });
 
   it('applies an @media block only where its query holds', () => {

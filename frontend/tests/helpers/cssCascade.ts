@@ -45,6 +45,9 @@ interface SheetRule {
   decls: Array<{ prop: string; value: string; important: boolean }>;
   /** The @media queries the rule sits in, outermost first (none: it always applies). */
   media: string[];
+  /** A class the element must carry for the rule to match it (one of its subject's own
+   *  classes, outside any pseudo), or null: what the index looks rules up by. */
+  key: string | null;
 }
 
 function cssFiles(dir: string): string[] {
@@ -143,6 +146,7 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       let state = '';
       let base = selector;
       let specificity: [number, number, number] = [0, 0, 0];
+      let key: string | null = null;
       try {
         selectorParser((root) => {
           const sel = root.first;
@@ -164,6 +168,11 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
             }
           });
           state = states.join('');
+          // The subject: the compound after the last combinator. Any class written
+          // there directly (not inside :is(), :not() …) is one the element must carry.
+          let at = sel.nodes.length - 1;
+          while (at >= 0 && sel.nodes[at].type !== 'combinator') at -= 1;
+          for (const node of sel.nodes.slice(at + 1)) if (node.type === 'class') key = node.value;
           base = sel.toString().trim() || '*';
           if (/[\s>+~]$/.test(base)) base = `${base}*`;
         }).processSync(selector);
@@ -191,7 +200,7 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       } catch {
         loose = base;
       }
-      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls, media });
+      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls, media, key });
     }
   });
   return rules;
@@ -213,6 +222,31 @@ export function appRules(): SheetRule[] {
   return cached;
 }
 
+let index: { byClass: Map<string, SheetRule[]>; rest: SheetRule[] } | null = null;
+
+/**
+ * The app's rules that can match `element`: those whose subject requires a
+ * class the element carries, and those that require none. Built once; a
+ * cascade then tests a few dozen selectors, not every rule in the app
+ * (fix/moodboard-board-layout: the studio grid ratchet ran past CI's 5 s per
+ * test when each cascade walked all of them).
+ */
+export function candidateRules(element: Element): SheetRule[] {
+  if (!index) {
+    const byClass = new Map<string, SheetRule[]>();
+    const rest: SheetRule[] = [];
+    for (const rule of appRules()) {
+      if (!rule.key) { rest.push(rule); continue; }
+      const bucket = byClass.get(rule.key);
+      if (bucket) bucket.push(rule); else byClass.set(rule.key, [rule]);
+    }
+    index = { byClass, rest };
+  }
+  const out = [...index.rest];
+  for (const cls of new Set(element.classList)) out.push(...(index.byClass.get(cls) ?? []));
+  return out;
+}
+
 export function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
   b: { important: boolean; specificity: [number, number, number]; order: number }): boolean {
   if (a.important !== b.important) return a.important;
@@ -228,7 +262,7 @@ export function cascaded(element: Element, extraCss?: string,
   const out = new Map<string, Winner>();
   // A test's own stylesheet comes after the app's, as a later sheet would.
   const extra = extraCss ? rulesOf(extraCss, 'extra.css', { next: appRules().length + 1 }) : [];
-  for (const rule of [...appRules(), ...extra]) {
+  for (const rule of [...candidateRules(element), ...extra]) {
     // With a viewport, a rule in an @media block applies only where its query holds; without
     // one, every rule counts, as before.
     if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
@@ -255,7 +289,7 @@ export function cascaded(element: Element, extraCss?: string,
 /** Every declaration of `prop` the app's stylesheets give `element` at rest (no state), in cascade order, winner last. */
 export function declarationsOf(element: Element, prop: string, { viewport }: { viewport?: Viewport } = {}): Winner[] {
   const out: Winner[] = [];
-  for (const rule of appRules()) {
+  for (const rule of candidateRules(element)) {
     if (rule.state) continue;
     if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
     let hit = false;
