@@ -69,7 +69,8 @@
  * right edge with the key column. */
 .provider-switcher__row--auto .provider-switcher__item { align-items: start; }
 
-/* Auto's "can't run: <reason>" is the stop reason: it wraps, never cut. */
+/* Auto's reason ("Auto · fal.ai doesn’t take …") is the stop reason: it
+ * wraps, never cut. */
 .provider-switcher__row--auto .provider-switcher__label { white-space: normal; }
 
 .provider-switcher__item {

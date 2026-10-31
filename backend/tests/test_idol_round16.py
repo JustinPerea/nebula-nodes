@@ -60,7 +60,9 @@ CASES = [
                  "Add it in Settings, then run the nodes again."),
     ([GPT, GPT, TTS], f"{HEADING} 2 “GPT Image 2” nodes and “OpenAI TTS” need your OpenAI API key. "
                       "Add it in Settings, then run the nodes again."),
-    ([GPT, GPT, GPT, TTS], f"{HEADING} 4 nodes can’t run here yet."),
+    # GM r35 item 1: the count inside the reason's sentence from 4.
+    ([GPT, GPT, GPT, TTS], f"{HEADING} 4 nodes need your OpenAI API key. Add it in Settings, then run the "
+                           "nodes again."),
 ]
 CASE_IDS = ["two-names-one-reason", "same-name-group", "counted-from-4"]
 
@@ -432,7 +434,9 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
 
 def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
     """Only Nebula's own temp names since round 17 (review 16, settings
-    LOW-1; tests/test_idol_round17_settings.py has the person's look-alikes)."""
+    LOW-1; tests/test_idol_round17_settings.py has the person's look-alikes).
+    Since round 18 the sweep holds the save's lock, so a fresh temp file is
+    a save cut short too, and goes (review 17, settings MEDIUM-1)."""
     folder = home_file.parent
     old = folder / ".settings-nebula-123-abc12345.tmp"
     old.write_text(json.dumps(SAVED), encoding="utf-8")
@@ -447,8 +451,8 @@ def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
         os.utime(path, (past, past))
     with TestClient(main.app):
         pass
-    assert _left(folder) == [".settings-nebula-123-def45678.tmp", ".settings-nebula-123-dir00000.tmp",
-                             "notes.tmp", "settings.json"]
+    assert _left(folder) == [".settings-nebula-123-dir00000.tmp", "notes.tmp", "settings.json"]
+    assert not fresh.exists()
 
 
 # -- GM r31 item 4: the Vertex paste error -----------------------------------

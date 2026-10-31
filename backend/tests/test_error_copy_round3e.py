@@ -191,7 +191,7 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     assert error.message == node_route.route_unavailable(ROUTES, {"_provider": "replicate"}, keys)["message"]
     assert "REPLICATE_API_TOKEN" in error.message
     assert _clean(error.person) == (
-        "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings or "
+        "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or "
         "switch to Black Forest Labs or fal.ai.")
 
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]

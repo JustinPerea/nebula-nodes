@@ -725,21 +725,21 @@
    "kind": "route_key",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai.",
-   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai.",
-   "line": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai.",
-   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai, then run the node again.",
-   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai, then run the nodes again."
+   "one": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai.",
+   "many": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai.",
+   "line": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai.",
+   "logOne": "is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai. Then run the node again.",
+   "logMany": "are set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_key",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter.",
-   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter.",
-   "line": "“Fixture Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter.",
-   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter, then run the node again.",
-   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter, then run the nodes again."
+   "one": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter.",
+   "many": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter.",
+   "line": "“Fixture Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter.",
+   "logOne": "is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter. Then run the node again.",
+   "logMany": "are set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -795,11 +795,11 @@
    "kind": "route_block",
    "node": "routes-image",
    "name": "Fixture Image",
-   "one": "can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai.",
-   "many": "can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai.",
-   "line": "“Fixture Image” can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai.",
-   "logOne": "can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai, then run the node again.",
-   "logMany": "can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai, then run the nodes again."
+   "one": "can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai.",
+   "many": "can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai.",
+   "line": "“Fixture Image” can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai.",
+   "logOne": "can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai. Then run the node again.",
+   "logMany": "can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1065,11 +1065,11 @@
    "kind": "route_block",
    "node": "routes-hide",
    "name": "Fixture Hide",
-   "one": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai.",
-   "many": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai.",
-   "line": "“Fixture Hide” can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai.",
-   "logOne": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai, then run the node again.",
-   "logMany": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai, then run the nodes again."
+   "one": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai.",
+   "many": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai.",
+   "line": "“Fixture Hide” can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai.",
+   "logOne": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1095,11 +1095,11 @@
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "many": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "line": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "logOne": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate, then run the node again.",
-   "logMany": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate, then run the nodes again."
+   "one": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "many": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "line": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "logOne": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
+   "logMany": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1115,21 +1115,21 @@
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate.",
-   "many": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate.",
-   "logOne": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate, then run the nodes again."
+   "one": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
+   "many": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
+   "logOne": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
-   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate, then run the node again.",
-   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate, then run the nodes again."
+   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",

@@ -286,7 +286,7 @@ def test_protected_agent_dirs_follow_the_commons_root(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_STATE_DIR", str(tmp_path / "state"))
     state = tmp_path / "state"
     assert agent_profiles.protected_agent_dirs() == [
-        state / "commons", state / "krea", state / "app-tokens", state / "agent-tokens"]
+        state / "commons", state / "krea", state / "app-tokens", state / "agent-tokens", state / "settings-copy"]
 
 
 def _toml_overrides(args):

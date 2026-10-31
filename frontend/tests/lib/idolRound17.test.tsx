@@ -120,7 +120,7 @@ describe('the switcher’s notes are curly, with the same words (GM r32 item 2)'
   it('the fixture’s notes word for word', () => {
     const state = providerSwitchState(TABLE, { resolution: '1.5k' }, { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false, pricing: fixture.pricing });
     expect(state.rows.find((row) => row.id === 'fal')?.block).toBe('Doesn’t take “Resolution” set to 1.5k.');
-    expect(state.rows[0].label).toBe('Auto · can’t run: fal.ai doesn’t take “Resolution” set to 1.5k');
+    expect(state.rows[0].label).toBe('Auto · fal.ai doesn’t take “Resolution” set to 1.5k');
   });
 });
 
@@ -173,7 +173,7 @@ describe('every switcher button’s name starts with its visible text as one run
           const run = visibleRun(opener);
           expect(opener, `${definition.id} ${variant}`).toHaveAccessibleName(new RegExp(`^${escape(run)}`));
           // What the trigger doesn't show is its description.
-          expect(opener).toHaveAccessibleDescription(new RegExp(`^Provider for ${escape(definition.displayName)}: `));
+          expect(opener).toHaveAccessibleDescription(new RegExp(`^Provider for “${escape(definition.displayName)}”: `));
           triggers += 1;
           fireEvent.click(opener);
         }
@@ -198,7 +198,7 @@ describe('every switcher button’s name starts with its visible text as one run
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, apiKeys: { BFL_API_KEY: KEY } } });
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="pill" onPick={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Provider Auto · Black Forest Labs' }))
-      .toHaveAccessibleDescription('Provider for Fixture Route Table: Auto · Black Forest Labs');
+      .toHaveAccessibleDescription('Provider for “Fixture Route Table”: Auto · Black Forest Labs');
   });
 });
 

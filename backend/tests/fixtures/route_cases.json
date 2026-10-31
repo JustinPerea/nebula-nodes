@@ -4124,7 +4124,7 @@
         "fixes": [],
         "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. Black Forest Labs or fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings or switch to Black Forest Labs or fal.ai."
+      "unavailableLine": "“Fixture Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to Black Forest Labs or fal.ai."
     },
     {
       "name": "routes: explicit BFL with no BFL key is unset, never fal",
@@ -4161,7 +4161,7 @@
         "fixes": [],
         "message": "Fixture Image is set to Black Forest Labs, which needs BFL_API_KEY. Add it in Settings > Providers or choose another provider. fal.ai, Replicate or OpenRouter can take it."
       },
-      "unavailableLine": "“Fixture Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings or switch to fal.ai, Replicate or OpenRouter."
+      "unavailableLine": "“Fixture Image” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or switch to fal.ai, Replicate or OpenRouter."
     },
     {
       "name": "routes: explicit fal at 1.5k is blocked, not moved",
@@ -4528,7 +4528,7 @@
         "fixes": [],
         "message": "Fixture Image can't run on Krea: it doesn't take resolution 4k. Change that setting, or switch provider. Black Forest Labs or fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Image” can’t run on Krea with “Resolution” set to 4k. Change that setting or switch to Black Forest Labs or fal.ai."
+      "unavailableLine": "“Fixture Image” can’t run on Krea with “Resolution” set to 4k. Change that setting, or switch to Black Forest Labs or fal.ai."
     },
     {
       "name": "routes: an unknown _provider is unset",
@@ -9565,7 +9565,7 @@
         ],
         "message": "Fixture Hide can't run on OpenRouter: it doesn't offer Seed 42. Clear Seed, or switch provider. Black Forest Labs or fal.ai can take it."
       },
-      "unavailableLine": "“Fixture Hide” can’t run on OpenRouter with “Seed” set to 42. Clear “Seed” or switch to Black Forest Labs or fal.ai.",
+      "unavailableLine": "“Fixture Hide” can’t run on OpenRouter with “Seed” set to 42. Clear “Seed”, or switch to Black Forest Labs or fal.ai.",
       "shownRoute": "c",
       "routeParams": [
         {
@@ -10603,7 +10603,7 @@
         ],
         "message": "FLUX 3 Video can't run on Krea: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
       "shownRoute": "krea",
       "routeParams": [
         {
@@ -10864,7 +10864,7 @@
         ],
         "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider. Black Forest Labs or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on or switch to Black Forest Labs or Replicate.",
+      "unavailableLine": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
       "shownRoute": "fal",
       "routeParams": [
         {
@@ -11033,7 +11033,7 @@
         ],
         "message": "FLUX 3 Video can't run on OpenRouter: it doesn't offer Draft (fast preview). Turn Draft (fast preview) off, or switch provider. Black Forest Labs, fal.ai or Replicate can take it."
       },
-      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off or switch to Black Forest Labs, fal.ai or Replicate.",
+      "unavailableLine": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
       "shownRoute": "openrouter",
       "routeParams": [
         {

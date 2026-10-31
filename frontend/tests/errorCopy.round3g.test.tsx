@@ -157,7 +157,7 @@ describe('the provider chip', () => {
       kreaConnection: { status: 'disconnected' } } });
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="chip" onPick={vi.fn()} />);
     // GM, PR #203 r32 item 3: the name is the chip's visible text, the full name its description.
-    const chip = screen.getByRole('button', { name: 'Auto · BFL', description: 'Provider for Fixture Route Table: Auto · Black Forest Labs' });
+    const chip = screen.getByRole('button', { name: 'Auto · BFL', description: 'Provider for “Fixture Route Table”: Auto · Black Forest Labs' });
     expect(chip).toHaveAttribute('title', 'Runs on Auto · Black Forest Labs. Change provider');
     expect(chip).toHaveTextContent('Auto · BFL');
   });
@@ -166,7 +166,7 @@ describe('the provider chip', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: { BFL_API_KEY: KEY },
       kreaConnection: { status: 'disconnected' } } });
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="pill" onPick={vi.fn()} />);
-    const pill = screen.getByRole('button', { name: 'Provider Auto · Black Forest Labs', description: 'Provider for Fixture Route Table: Auto · Black Forest Labs' });
+    const pill = screen.getByRole('button', { name: 'Provider Auto · Black Forest Labs', description: 'Provider for “Fixture Route Table”: Auto · Black Forest Labs' });
     expect(pill).toHaveTextContent('Auto · Black Forest Labs');
   });
 });

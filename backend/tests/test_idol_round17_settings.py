@@ -204,8 +204,10 @@ def test_a_file_left_broken_is_put_back_from_its_copy_at_the_next_start(keyed, m
     with pytest.raises(ValueError):
         _parses(keyed)
     assert settings.backup_path(keyed).exists()
-    assert settings.restore_settings_from_backup() == keyed
-    assert keyed.read_bytes() == before
+    broken = keyed.read_bytes()
+    restored = settings.restore_settings_from_backup()
+    assert restored.path == keyed and restored.unfinished
+    assert keyed.read_bytes() == before and restored.kept.read_bytes() == broken
     assert not settings.backup_path(keyed).exists()
 
 
@@ -333,16 +335,30 @@ def test_two_processes_saving_at_once_take_turns(keyed, tmp_path, kind):
 
 # -- the copy and the restore at start ---------------------------------------------------
 
+def copy_body(path: str, text: str, next_text: str = '{"favorites": []}\n') -> dict:
+    """A copy as _keep_backup writes it (round 18: marked, hashed, with the
+    text being written)."""
+    return {"nebula": "settings-copy", "version": 1, "path": path,
+            "sha256": settings._copy_digest(Path(path), text, next_text), "text": text, "next": next_text}
+
+
+def write_copy(target: Path, body: dict) -> None:
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target.write_text(json.dumps(body), encoding="utf-8")
+    target.chmod(0o600)
+
+
 def _broken_with_copy(path: Path) -> bytes:
+    """A copy for ``path`` and the file cut to half of it: not what the save
+    leaves part way, so why it doesn't parse isn't known."""
     good = path.read_bytes()
-    target = settings.backup_path(path.resolve())
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({"path": str(path.resolve()), "text": good.decode()}), encoding="utf-8")
+    write_copy(settings.backup_path(path.resolve()), copy_body(str(path.resolve()), good.decode()))
     path.write_bytes(good[: len(good) // 2])
     return good
 
 
-def test_a_file_that_doesnt_parse_is_put_back_at_start_journaled_and_logged(keyed, caplog):
+def test_a_file_that_doesnt_parse_is_put_back_at_start_journaled_and_logged(keyed, caplog, monkeypatch):
+    monkeypatch.setenv("NEBULA_STATE_DIR", str(keyed.parent))  # ~/.nebula, as the person's own
     good = _broken_with_copy(keyed)
     start = main.canvas_events.read(after=None)["cursor"]
     with caplog.at_level("WARNING", logger="nebula.settings"):
@@ -352,9 +368,14 @@ def test_a_file_that_doesnt_parse_is_put_back_at_start_journaled_and_logged(keye
     assert not settings.backup_path(keyed).exists()
     [event] = [e for e in main.canvas_events.read(after=start, limit=200)["events"] if e["kind"] == "settings.restored"]
     assert event["actor"]["kind"] == "system"
-    assert event["data"] == {"file": "~/.nebula/settings.json"}
+    [kept] = [p for p in settings.settings_copy_folder().iterdir() if p.name.startswith("settings-replaced-")
+              and p.read_bytes() == good[: len(good) // 2]]
+    shown_kept = settings.shown_path(kept)
+    line = f"Nebula restored your settings from its saved copy. The file it replaced is kept at {shown_kept}."
+    assert event["data"] == {"file": "~/.nebula/settings.json", "keptAt": shown_kept}
+    assert event["summary"] == line
     assert "fal-kept" not in json.dumps(event)
-    assert any("put back the copy" in record.getMessage() for record in caplog.records)
+    assert [record.getMessage() for record in caplog.records if record.name == "nebula.settings"] == [line]
 
 
 def test_until_the_restore_agents_read_the_unreadable_answer(keyed):
@@ -376,10 +397,10 @@ def test_another_files_copy_and_a_gone_file_are_never_restored(keyed, tmp_path):
     _broken_with_copy(keyed)
     target = settings.backup_path(keyed.resolve())
     kept = json.loads(target.read_text(encoding="utf-8"))
-    target.write_text(json.dumps({**kept, "path": str(tmp_path / "elsewhere.json")}), encoding="utf-8")
+    write_copy(target, copy_body(str(tmp_path / "elsewhere.json"), kept["text"], kept["next"]))
     assert settings.restore_settings_from_backup() is None and target.exists()
     keyed.unlink()
-    target.write_text(json.dumps(kept), encoding="utf-8")
+    write_copy(target, kept)
     assert settings.restore_settings_from_backup() is None
     assert not keyed.exists() and not target.exists()
 
@@ -412,7 +433,7 @@ def test_the_copy_is_this_users_only_verified_and_gone_after_the_write(keyed, mo
     monkeypatch.setattr(settings, "_overwrite", look)
     settings.save_settings({"favorites": []})
     [(mode, kept)] = seen
-    assert mode == 0o600 and kept == {"path": str(keyed), "text": before.decode()}
+    assert mode == 0o600 and kept == copy_body(str(keyed), before.decode(), '{\n  "favorites": []\n}\n')
     assert not settings.backup_path(keyed).exists()
     assert _parses(keyed) == {"favorites": []}
 
@@ -435,7 +456,7 @@ def test_a_copy_nebula_isnt_allowed_to_make_refuses_the_save_before_it_writes(ke
             settings.save_settings({"favorites": []})
     finally:
         state.chmod(0o755)
-    assert refused.value.cause == "folder" and refused.value.where == state
+    assert refused.value.cause == "copy_folder" and refused.value.where == state
     assert keyed.read_bytes() == before
 
 
@@ -445,7 +466,7 @@ def test_a_copy_that_doesnt_read_back_refuses_the_save_before_it_writes(keyed, m
     real = settings._write_all
 
     def short_copy(fd, data):
-        real(fd, data[:-1] if bytes(data[:9]) == b'{"path": ' else data)
+        real(fd, data[:-1] if bytes(data[:11]) == b'{"nebula": ' else data)
 
     monkeypatch.setattr(settings, "_write_all", short_copy)
     with pytest.raises(OSError) as raised:
@@ -518,17 +539,92 @@ def test_an_xattr_and_posix_acl_file_stays_atomic_and_keeps_both_on_linux(keyed)
 
 
 def test_metadata_that_cant_be_carried_writes_in_place_and_leaves_no_temp(keyed, monkeypatch):
+    """Through the one seam every system's copy goes through
+    (settings._copy_metadata), so the same branch runs on macOS and Linux
+    (round 18: patching the platform's own calls passed only on macOS)."""
     monkeypatch.setattr(settings, "_has_own_metadata", lambda path: True)
+    tried: list[str] = []
 
-    def refuse(path, temp):
+    def refuse(*args, **kwargs):
+        tried.append(args)
         raise OSError(errno.ENOTSUP, "no")
 
-    monkeypatch.setattr(settings, "_darwin_copy_metadata", refuse)
-    monkeypatch.setattr(settings.os, "setxattr", refuse, raising=False) if not DARWIN else None
+    monkeypatch.setattr(settings, "_copy_metadata", refuse)
+    inode = keyed.stat().st_ino
+    settings.save_settings({"favorites": ["in place"]})
+    assert tried, "the save never tried to carry the metadata"
+    assert keyed.stat().st_ino == inode and _parses(keyed) == {"favorites": ["in place"]}
+    assert _left(keyed.parent) == ["settings.json"]
+
+
+def _user_xattr_or_skip(path: Path) -> None:
+    if not hasattr(os, "setxattr"):
+        pytest.skip("Linux xattrs (os.setxattr)")
+    try:
+        os.setxattr(path, "user.nebula-tag", b"kept")
+    except OSError as exc:
+        pytest.skip(f"this filesystem takes no user xattr ({exc})")
+
+
+def test_linux_an_xattr_that_cant_be_set_on_the_new_file_writes_in_place(keyed, monkeypatch):
+    """Linux's copy fails closed: a user xattr the temp file refuses keeps
+    the file (and the xattr) where it is, written in place."""
+    _user_xattr_or_skip(keyed)
+
+    def refuse(*args, **kwargs):
+        raise OSError(errno.EPERM, "refused")
+
+    monkeypatch.setattr(settings, "_setxattr", refuse)  # the module's seam, never os.setxattr itself
     inode = keyed.stat().st_ino
     settings.save_settings({"favorites": ["in place"]})
     assert keyed.stat().st_ino == inode and _parses(keyed) == {"favorites": ["in place"]}
+    assert os.getxattr(keyed, "user.nebula-tag") == b"kept"
     assert _left(keyed.parent) == ["settings.json"]
+
+
+class _FakeLinuxXattrs:
+    """Linux's xattr calls over a dict, so the Linux copy runs on any system."""
+
+    def __init__(self, refuse: bool) -> None:
+        self.attrs: dict[str, dict[str, bytes]] = {}
+        self.refuse = refuse
+
+    def listxattr(self, path, *args, **kwargs):
+        return list(self.attrs.get(os.fspath(path), {}))
+
+    def getxattr(self, path, name, *args, **kwargs):
+        return self.attrs[os.fspath(path)][name]
+
+    def setxattr(self, path, name, value, *args, **kwargs):
+        if self.refuse:
+            raise OSError(errno.EPERM, "refused")
+        self.attrs.setdefault(os.fspath(path), {})[name] = value
+
+
+@pytest.mark.parametrize("refuse", [True, False], ids=["refused-in-place", "carried-atomic"])
+def test_the_linux_copy_as_linux_runs_it(keyed, monkeypatch, refuse):
+    """The platform "linux" with Linux's xattr calls (faked), through the
+    module's own seams (settings._PLATFORM, _listxattr, _getxattr,
+    _setxattr; review 17, tests MEDIUM-1: never sys.platform or os's own,
+    which every test shares): an xattr the temp file refuses writes in
+    place; one it takes is copied, then the rename. This runs the Linux
+    branch on macOS too."""
+    fake = _FakeLinuxXattrs(refuse)
+    fake.attrs[os.fspath(keyed)] = {"user.nebula-tag": b"kept", "security.selinux": b"own"}
+    monkeypatch.setattr(settings, "_PLATFORM", "linux")
+    for name in ("listxattr", "getxattr", "setxattr"):
+        monkeypatch.setattr(settings, f"_{name}", getattr(fake, name))
+    inode = keyed.stat().st_ino
+    settings.save_settings({"favorites": ["saved"]})
+    assert _parses(keyed) == {"favorites": ["saved"]}
+    assert _left(keyed.parent) == ["settings.json"]
+    if refuse:
+        assert keyed.stat().st_ino == inode
+    else:
+        assert keyed.stat().st_ino != inode
+        copied = [attrs for path, attrs in fake.attrs.items() if path != os.fspath(keyed)]
+        # The person's xattr went onto the temp file; the system's own label didn't.
+        assert copied == [{"user.nebula-tag": b"kept"}]
 
 
 # -- LOW-1: the sweep removes only Nebula's own names ------------------------------------
@@ -582,7 +678,8 @@ def test_a_save_names_its_temp_file_as_the_sweep_knows_it(keyed, monkeypatch):
     monkeypatch.setattr(settings, "_replace", look)
     settings.save_settings({"favorites": []})
     [name] = names
-    assert settings._TEMP_NAME.fullmatch(name) and name.startswith(f".settings-nebula-{os.getpid()}-")
+    # Round 18: one fixed name, the one the deny lists and the sweep name (review 17, settings MEDIUM-1).
+    assert name == ".settings.json.nebula-tmp" == settings.temp_path_for(keyed).name
 
 
 # -- LOW-2: mutants S15 and S16 ---------------------------------------------------------

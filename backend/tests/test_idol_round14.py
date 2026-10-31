@@ -352,7 +352,10 @@ def test_the_out_of_compute_reason_names_the_api_key_connection():
     # GM, PR #203 r29 item 3: the card's heading, same-named nodes merged.
     (3, "Nebula couldn’t start the run. 3 “GPT Image 2” nodes need your OpenAI API key. "
         "Add it in Settings, then run the nodes again."),
-    (4, "Nebula couldn’t start the run. 4 nodes can’t run here yet."),
+    # GM r35 item 1: from 4, the count is inside the reason's own sentence
+    # (the bar's summary line keeps "4 nodes can’t run here yet.").
+    (4, "Nebula couldn’t start the run. 4 nodes need your OpenAI API key. "
+        "Add it in Settings, then run the nodes again."),
 ], ids=["three-named", "four-counted"])
 def test_the_agent_logs_refused_run_line_names_up_to_3_and_counts_from_4(monkeypatch, agent_log, count, line):  # noqa: F811
     monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {}})

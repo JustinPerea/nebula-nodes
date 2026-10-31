@@ -538,13 +538,23 @@ The server exposes these tools for building and running (see
   object; writes only), `settings_unwritable` (the file is read-only, or
   its folder is and the file can't be written in place: the line names the
   file or the folder; a folder that can't be made names the existing folder
-  that refuses it) or `settings_not_a_folder` (a folder on the way to the
-  file is a file, named in the line). A save replaces the file whole
-  (keeping its mode, owner, ACL and extended attributes); only a file with
-  a second name, another owner, or a folder that takes no new file is
-  written in place, with a copy kept in Nebula's own folder until the write
-  is done, and a file left unreadable by a write cut short is put back from
-  that copy at the next start (the `settings.restored` event). The last two are for writes only, and
+  that refuses it; and when Nebula's own folder, `~/.nebula` or the desktop
+  app's state folder, takes no copy for an in-place save: "Nothing was saved
+  because Nebula isn’t allowed to change ~/.nebula, where it keeps a copy
+  while it saves. Ask the person to check the folder’s permissions.") or
+  `settings_not_a_folder` (a folder on the way to the file, or to Nebula's
+  copy folder, is a file, named in the line). A save replaces the file whole
+  (keeping its mode, owner, ACL and extended attributes) through one temp
+  file beside it, `.settings.json.nebula-tmp`; a file with a second name or
+  another owner, a folder that takes no new file, metadata that can't be
+  carried, or a rename the system refuses, is written in place instead, with
+  a copy kept in Nebula's `settings-copy` folder until the write is done, and
+  a file left unreadable by a write cut short is put back from that copy at
+  the next start, the file it replaced kept beside the copy (the
+  `settings.restored` event). Every save holds an exclusive lock where the
+  filesystem supports flock, and PUT and DELETE settings hold it from their
+  read to their save. No agent can read the temp file or the `settings-copy`
+  folder: both are on every agent deny list. The last two codes are for writes only, and
   only the person writes; a desktop Keychain save (`credentials/update`)
   never writes the file, so it gets only the read codes. `fix` is the sentence
   that says what to do, worded for the reader: an agent's says to ask the
@@ -730,14 +740,21 @@ they move no cursor. A run the pre-call check refuses, from any route and
 whoever asked (MCP, the CLI, an in-app chat turn), is one line there in the
 proposal bar's merged words: "Nebula couldn’t start the run. 2 “GPT Image
 2” nodes need your OpenAI API key. Add it in Settings, then run the nodes
-again." (counted from 4 nodes: "… 4 nodes can’t run here yet."). A
+again." (from 4 nodes that share it, the count is in its sentence: "4
+nodes need your OpenAI API key. …"). A
 required input with nothing connected merges the same way: "2 “GPT Image
 2” nodes need a prompt. Connect a prompt to each, then run the nodes
-again." A node stopped for a reason and an input with nothing connected
-says both, the reason first. The cursor points
+again." A node with several inputs with nothing connected says them as
+one need, in its input order: "“FLUX Kontext” needs a prompt and an image.
+Connect both, then run the node again." ("Connect them" from three); nodes
+with the same set merge ("2 “FLUX Kontext” nodes need a prompt and an
+image. Connect both to each, then run the nodes again."), and different
+sets are separate sentences. A node stopped for a reason and an input with
+nothing connected says both, the reason first. The cursor points
 at the first node with that node's own line as `say`, and the event's `log`
-is the merged line, never cut: a named line longer than 600 characters
-takes the count form instead, and one node's line is said whole (`say`
+is the merged line, never cut: only a line longer than 600 characters
+says "Nebula couldn’t start the run. 9 nodes can’t run here yet."
+instead, and one node's line is said whole (`say`
 stays up to 140; a `log` built from what you sent, such as raw field keys,
 is still cut at 600). Your reply is unchanged: `error` and `errors` name
 every node by id.
@@ -805,7 +822,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
-| `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable; attributed to Nebula itself (`actor.kind` `system`) | `file` (the file's path as the person sees it, `~` for the home folder); never a key or a setting |
+| `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read); never a key or a setting |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and connection events it made and the pins it put back (`pin.reattached`), and before any `proposal.reopened` of the same undo, which can follow it | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors, oldest first: every event journaled under it but its own `edit.undone`, its `pin.*` and `proposal.*` ones always, and at most 50 of the rest), `eventsTruncated: true` and `eventsTotal` (how many it had) when that cut some, `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |

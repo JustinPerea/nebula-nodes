@@ -77,7 +77,6 @@ from models.events import (
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError, unchosen_model_errors
 from execution.sync_runner import get_handler_registry
 from execution import provider_calls
-from execution.person_line import counts_instead
 from services.settings import (
     load_settings,
     load_saved_settings,
@@ -89,6 +88,7 @@ from services.settings import (
     settings_write_block,
     shown_path,
     restore_settings_from_backup,
+    settings_transaction,
     sweep_stale_temp_files,
     get_api_key,
     validate_provider_keys,
@@ -3308,16 +3308,31 @@ async def _sweep_settings_temp_files() -> None:
     settings-keychain LOW-2). First, an in-place write cut short that left
     settings.json unparseable is put back from the copy kept for it
     (services/settings.restore_settings_from_backup; review 16, settings
-    MEDIUM-1 d), journaled as settings.restored and logged."""
+    MEDIUM-1 d), journaled as settings.restored and logged, both with
+    settings_restored_line."""
     restored = restore_settings_from_backup()
     if restored is not None:
-        shown = shown_path(restored)
-        logging.getLogger("nebula.settings").warning(
-            "%s didn't parse after a save was cut short; Nebula put back the copy it kept before that save", shown)
-        _journal("settings.restored", data={"file": shown},
-                 summary=f"Nebula put back {shown} from the copy it kept before a save that was cut short",
-                 actor={"kind": "system"})
+        line = settings_restored_line(restored)
+        logging.getLogger("nebula.settings").warning("%s", line)
+        _journal("settings.restored", data={"file": shown_path(restored.path), "keptAt": shown_path(restored.kept)},
+                 summary=line, actor={"kind": "system"})
     sweep_stale_temp_files()
+
+
+# GM, PR #203 r36 item B6b: why the settings were put back, when that is
+# known, and where the file the restore replaced is kept. The copy is only
+# ever left by an in-place save that didn't finish; a file that isn't that
+# save's mix of old and new text was changed since, for a reason Nebula
+# can't know, so the line drops the "because" clause.
+SETTINGS_RESTORED_BECAUSE = ("Nebula restored your settings from its saved copy because the last save didn’t finish. "
+                             "The file it replaced is kept at {kept}.")
+SETTINGS_RESTORED = "Nebula restored your settings from its saved copy. The file it replaced is kept at {kept}."
+
+
+def settings_restored_line(restored: Any) -> str:
+    """The settings.restored line for a Restored (services/settings)."""
+    line = SETTINGS_RESTORED_BECAUSE if restored.unfinished else SETTINGS_RESTORED
+    return line.format(kept=shown_path(restored.kept))
 
 
 @app.on_event("startup")
@@ -4063,7 +4078,12 @@ async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
         return line
     # The cursor quotes the node like every other bubble; the log has the
     # run's line, whole: Nebula's own line is never cut (GM, PR #203 r33 item 2).
-    bubble = f"{_quoted(_node_label(first))} can’t run." + (f" {person[first]}" if person.get(first) else "")
+    # A line that already opens with the quoted name is the bubble alone, so
+    # the name and "can’t run" aren't said twice (review 17 copy-ui LOW-6,
+    # GM r36 B5).
+    named = _quoted(_node_label(first))
+    own = person.get(first) or ""
+    bubble = own if own.startswith(named) else f"{named} can’t run." + (f" {own}" if own else "")
     await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first), log=line, log_whole=True)
     return None
 
@@ -9941,40 +9961,44 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # Do not mutate a loaded/shared object until the complete request is valid.
     # The file as saved, not as read: a save writes back every entry it wasn't
     # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
-    current = _saved_settings_or_409()
-    before = dict(load_settings().get("apiKeys") or {})
-    writes_keys = "apiKeys" in body and accepts_keys and any(
-        node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
-    if writes_keys and not saved_keys_writable(current):
-        # Keys Nebula can't read stay as saved: a key added to them would be
-        # a guess at what they were (review 10 of PR #203, NIT-6). A value
-        # that holds nothing (null, [], "", false, 0) has no key to keep, so
-        # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
-        raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
-    if writes_keys:
-        current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
-        for k, v in body["apiKeys"].items():
-            # A pasted key's spaces, line breaks and invisible marks at its
-            # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
-            v = node_route.key_text(v)
-            if v and not v.startswith("***"):
-                current_keys[k] = v
-        current["apiKeys"] = current_keys
-    for key in (
-        "routing",
-        "outputPath",
-        "executionMode",
-        "batchSizeCap",
-        "favorites",
-        "exportFolder",
-        "zoomTelemetryEnabled",
-        "kreaConnectionMode",
-        agent_spend.SETTING_KEY,
-        agent_spend.CAPS_KEY,
-    ):
-        if key in body:
-            current[key] = body[key]
-    _save_settings_or_409(current)
+    # The read, the change and the save hold the save's lock together, so a
+    # save from another Nebula or request in between is never lost (review 17
+    # of PR #203, settings LOW-3): nothing in it awaits.
+    with settings_transaction():
+        current = _saved_settings_or_409()
+        before = dict(load_settings().get("apiKeys") or {})
+        writes_keys = "apiKeys" in body and accepts_keys and any(
+            node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
+        if writes_keys and not saved_keys_writable(current):
+            # Keys Nebula can't read stay as saved: a key added to them would be
+            # a guess at what they were (review 10 of PR #203, NIT-6). A value
+            # that holds nothing (null, [], "", false, 0) has no key to keep, so
+            # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
+            raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
+        if writes_keys:
+            current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
+            for k, v in body["apiKeys"].items():
+                # A pasted key's spaces, line breaks and invisible marks at its
+                # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
+                v = node_route.key_text(v)
+                if v and not v.startswith("***"):
+                    current_keys[k] = v
+            current["apiKeys"] = current_keys
+        for key in (
+            "routing",
+            "outputPath",
+            "executionMode",
+            "batchSizeCap",
+            "favorites",
+            "exportFolder",
+            "zoomTelemetryEnabled",
+            "kreaConnectionMode",
+            agent_spend.SETTING_KEY,
+            agent_spend.CAPS_KEY,
+        ):
+            if key in body:
+                current[key] = body[key]
+        _save_settings_or_409(current)
     # API keys may have changed — drop cached validation results so the next
     # GET /api/health/providers re-checks providers instead of serving stale
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
@@ -10038,16 +10062,18 @@ async def remove_settings_api_key(provider: str) -> dict:
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
     # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
-    current = _saved_settings_or_409()
-    before = dict(load_settings().get("apiKeys") or {})
-    if not saved_keys_writable(current):
-        # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
-        # A value that holds nothing is replaced with no keys (LOW-3).
-        raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
-    current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
-    current_keys.pop(provider, None)
-    current["apiKeys"] = current_keys
-    _save_settings_or_409(current)
+    # One lock from the read to the save (settings_transaction), as PUT holds it.
+    with settings_transaction():
+        current = _saved_settings_or_409()
+        before = dict(load_settings().get("apiKeys") or {})
+        if not saved_keys_writable(current):
+            # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
+            # A value that holds nothing is replaced with no keys (LOW-3).
+            raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
+        current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
+        current_keys.pop(provider, None)
+        current["apiKeys"] = current_keys
+        _save_settings_or_409(current)
     clear_provider_validation_cache()
     await _broadcast_settings_changed(_changed_keys(before), _writing_tab())
     return {"status": "removed"}
@@ -10137,6 +10163,16 @@ SETTINGS_FOLDER_UNWRITABLE = {
               "Check the folder’s permissions, then try again.",
     "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
              "Ask the person to check the folder’s permissions.",
+}
+# Nebula's own folder takes no copy for an in-place save (GM, PR #203 r36
+# item B6a): the line says why that folder matters to the settings. It names
+# the folder that refuses, as the person sees it (~/.nebula, or the desktop
+# app's state folder).
+SETTINGS_COPY_FOLDER_UNWRITABLE = {
+    "person": "Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
+              "saves. Check the folder’s permissions, then try again.",
+    "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
+             "saves. Ask the person to check the folder’s permissions.",
 }
 # A folder on the way to the file is a file (GM, PR #203 r31 item 2), named
 # by its real path.
@@ -10240,13 +10276,16 @@ def _save_settings_or_409(current: dict[str, Any]) -> None:
 
 def _unwritable_refusal(block: SettingsUnwritable) -> CodedRefusal:
     """The 409 for what stops a save (SettingsUnwritable.cause): the file's
-    permissions, its folder's (named), or a file where a folder must be
-    (named)."""
+    permissions, its folder's (named), Nebula's own folder for the copy
+    (named), or a file where a folder must be (named)."""
     folder = {"folder": shown_path(block.where)}
     if block.cause == "not_a_folder":
         return _settings_refusal(SETTINGS_NOT_A_FOLDER, SETTINGS_NOT_A_FOLDER_CODE, **folder)
     if block.cause == "folder":
         return _settings_refusal(SETTINGS_FOLDER_UNWRITABLE, SETTINGS_UNWRITABLE_CODE, fix=SETTINGS_FOLDER_FIX, **folder)
+    if block.cause == "copy_folder":
+        return _settings_refusal(SETTINGS_COPY_FOLDER_UNWRITABLE, SETTINGS_UNWRITABLE_CODE, fix=SETTINGS_FOLDER_FIX,
+                                 **folder)
     return _settings_refusal(SETTINGS_UNWRITABLE, SETTINGS_UNWRITABLE_CODE)
 
 
@@ -18735,44 +18774,59 @@ def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
       inputs with no wire, merged the same way from one table (GM r33 item
       1, person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a
       prompt. Connect a prompt to each, then run the nodes again.". A node
-      with a reason and another stop keeps both (review 16, L1).
+      with several says them as one need, in its input order (GM r34 item
+      1): "“FLUX Kontext” needs a prompt and an image. Connect both, then
+      run the node again."; nodes with the same set merge, different sets
+      are separate sentences. A node with a reason and another stop keeps
+      both (review 16, L1).
     - Any other stop says its card line after the node's name.
-    - From 4 nodes, one count, as the bar's (person_line counts_instead):
-      "4 nodes can’t run here yet." A named line longer than the log's room
-      (agent_presence.MAX_LOG_CHARS) takes the count form early, so it stays
-      whole and true; one node's line has no shorter form and is said whole
-      (GM r33 item 2). The line is never cut.
+    - Nodes that share a reason or a set of needs count from 4 inside their
+      own sentence, as the bar's list does (GM r35 item 1): "4 nodes need a
+      prompt and an image. Connect both to each, then run the nodes
+      again."; each other reason or set is its own sentence. The bar's
+      summary line above the list keeps r24's "N nodes can’t run here yet.".
+      Only a line longer than the log's room (agent_presence.MAX_LOG_CHARS)
+      says that count instead, so it stays whole and true; one node's line
+      has no shorter form and is said whole (GM r33 item 2). The line is
+      never cut.
 
     Agents' text keeps ids (`error`, `errors`)."""
-    from execution.person_line import input_need, joined_lines, merged_not_ready
+    from execution.person_line import input_needs, joined_lines, merged_not_ready, need_words
 
     by_node: dict[str, list[ValidationErrorDetail]] = {}
     for error in errors:
         by_node.setdefault(error.node_id, []).append(error)
     node_ids = [node_id for node_id in by_node if node_id]
     counted = f"{REFUSED_RUN_HEADING} {len(node_ids)} nodes can’t run here yet."
-    if counts_instead(len(node_ids)):
-        return counted
     reasons: list[tuple[str, Any]] = []
     needs: list[tuple[str, Any]] = []
+    # Nodes with the same set of needs say one need, in the first such
+    # node's input order, so they merge whatever order their inputs are in.
+    need_sets: dict[frozenset[str], Any] = {}
     others: list[str] = []
     for node_id in node_ids:
         label = _node_label(node_id)
         reason = _node_not_ready_reason(node_id)
         if reason is not None:
             reasons.append((label, reason))
-        said: list[str] = []
+        unwired: list[ValidationErrorDetail] = []
         rest: list[str | None] = []
         for error in by_node[node_id]:
             if reason is not None and error._stop == "reason":
                 continue  # the reason says it
             if error._stop == "input":
-                need = input_need(error._need)
-                if need.one not in said:
-                    said.append(need.one)
-                    needs.append((label, need))
+                unwired.append(error)
                 continue
             rest.append(error.person)
+        if unwired:
+            # One need per node, its inputs in the node's input order (GM,
+            # PR #203 r34 item 1), so the same node always reads the same and
+            # nodes with the same set merge.
+            order = _input_order(node_id)
+            unwired.sort(key=lambda error: order.get(error.port_id, len(order)))
+            labels = [error._need for error in unwired]
+            need = need_sets.setdefault(frozenset(need_words(labels)), input_needs(labels))
+            needs.append((label, need))
         if rest:
             line = joined_lines(rest)
             others.append(f"{_quoted(label)} can’t run." + (f" {line}" if line else ""))
@@ -18788,6 +18842,14 @@ def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
     if len(named) > MAX_LOG_CHARS and len(node_ids) > 1:
         return counted
     return named
+
+
+def _input_order(node_id: str) -> dict[str, int]:
+    """A canvas node's input ports by their place on its definition, for
+    saying its needs in the order the card shows them."""
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId") or "")) or {}
+    return {str(port.get("id")): index for index, port in enumerate(definition.get("inputPorts") or [])}
 
 
 def _node_not_ready_reason(node_id: str) -> Any:

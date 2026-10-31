@@ -47,6 +47,11 @@ MAX_EVENT_BYTES = 4096
 MOVE_THRESHOLD_PX = 8.0
 MAX_VALUE_CHARS = 160
 MAX_SUMMARY_CHARS = 200
+# A summary Nebula words itself around a path the person must find, cut
+# nowhere: settings.restored names where the replaced settings file is kept
+# (GM, PR #203 r36 item B6b), and the desktop app's state folder alone runs
+# past 200 characters with the line.
+SUMMARY_CHARS_BY_KIND = {"settings.restored": 1200}
 MAX_LISTED_IDS = 50
 MAX_TRACKED_RUNS = 256
 
@@ -403,7 +408,7 @@ class CanvasEventJournal:
             "actor": dict(actor or ANONYMOUS),
             "projectId": tag,
             "data": _bound_data(data),
-            "summary": " ".join(str(summary or "").split())[:MAX_SUMMARY_CHARS],
+            "summary": " ".join(str(summary or "").split())[:SUMMARY_CHARS_BY_KIND.get(kind, MAX_SUMMARY_CHARS)],
         }
         if node_id is not None:
             event["nodeId"] = str(node_id)[:128]

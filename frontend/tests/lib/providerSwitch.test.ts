@@ -52,7 +52,7 @@ describe('providerSwitchState', () => {
 
   it('stops Auto with the reason and the keyed routes that take it, one click each', () => {
     const state = providerSwitchState(TABLE, { resolution: '1.5k' }, context({ FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY }));
-    expect(state.rows[0].label).toBe("Auto · can’t run: fal.ai doesn’t take “Resolution” set to 1.5k");
+    expect(state.rows[0].label).toBe("Auto · fal.ai doesn’t take “Resolution” set to 1.5k");
     expect(state.blocked).toBe(true);
     expect(state.chip).toBe('Auto · fal');
     expect(state.alternatives).toEqual([{ routeId: 'replicate', label: 'Replicate', writes: { _provider: 'replicate', _kreaAuth: 'api-token' } }]);
@@ -135,7 +135,7 @@ describe('providerSwitchState', () => {
     const twelve = new Map([['start_image', 1], ['keyframes', 10], ['end_image', 1]]);
     const state = providerSwitchState(video, {}, context(keys, { wired: twelve }));
     expect(state.blocked).toBe(true);
-    expect(state.rows[0].label).toBe("Auto · can’t run: too many images for Black Forest Labs");
+    expect(state.rows[0].label).toBe("Auto · Black Forest Labs doesn’t take this many images");
     for (const id of ['bfl', 'fal', 'replicate']) {
       expect(state.rows.find((row) => row.id === id)?.block).toBe('Takes at most 10 images.');
     }
@@ -293,7 +293,7 @@ describe('snapHidden (a person editing a setting that controls a hidden one)', (
     expect(state.fixes).toEqual([{ param: 'safety_tolerance', value: '2', label: 'Set Safety back to 2' }]);
     expect(state.rows.find((row) => row.id === 'fal')?.block).toBe("Doesn’t take “Safety”.");
     const auto = providerSwitchState(flux2, { model: 'klein-9b', safety_tolerance: '5' }, context({ FAL_KEY: KEY }));
-    expect(auto.rows[0].label).toBe("Auto · can’t run: fal.ai doesn’t take “Safety”");
+    expect(auto.rows[0].label).toBe("Auto · fal.ai doesn’t take “Safety”");
     expect(fixLabel(flux2, { param: 'seed', value: null })).toBe('Clear Seed');
     expect(fixLabel(flux2, { param: 'enable_safety_checker', value: true })).toBe('Turn Safety Checker on');
     expect(applyFix({ seed: 4, model: 'pro' }, { param: 'seed', value: null })).toEqual({ model: 'pro' });

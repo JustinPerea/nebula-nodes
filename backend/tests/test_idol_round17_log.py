@@ -73,7 +73,8 @@ INPUT_CASES = [
                   "then run the nodes again."),
     ([GPT, GPT, TTS], f"{HEADING} 2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then run "
                       "the nodes again. “OpenAI TTS” needs text. Connect it, then run the node again."),
-    ([GPT, GPT, GPT, GPT1], f"{HEADING} 4 nodes can’t run here yet."),
+    # GM r35 item 1: the count inside the need's sentence from 4.
+    ([GPT, GPT, GPT, GPT1], f"{HEADING} 4 nodes need a prompt. Connect a prompt to each, then run the nodes again."),
 ]
 
 
@@ -141,7 +142,7 @@ def test_a_reason_stop_with_no_reason_found_says_its_card_line(monkeypatch):
     ("Images (1-4)", "needs images. Connect them, then run the node again.",
      "need images. Connect images to each, then run the nodes again."),
     ("Item 1", "needs an output connected to “Item 1”. Connect one, then run the node again.",
-     "need an output connected to “Item 1”. Connect one to “Item 1” on each, then run the nodes again."),
+     "need an output connected to “Item 1”. Connect an output to “Item 1” on each, then run the nodes again."),
     ("", "needs an input. Connect one, then run the node again.",
      "need an input. Connect an input to each, then run the nodes again."),
 ])

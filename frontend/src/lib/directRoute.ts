@@ -1164,13 +1164,16 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
  * item 3; person_line.route_action is the same): `fix`, then who can take
  * the run, named: "… or switch to fal.ai" for providers with a key set,
  * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
- * whose key isn't added. Two actions take a comma between them when the fix
- * lists options (r32 item 1: "Pick A, B or C, or switch to fal.ai"). Never
- * a separate "… can take it." sentence. The card has no run-again ending;
- * the Agent Log's comes from the backend. */
+ * whose key isn't added. Two actions take a comma between them when either
+ * holds an "or" of its own: the fix lists options (r32 item 1: "Pick A, B or
+ * C, or switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K,
+ * or switch to fal.ai or Replicate."). Never a separate "… can take it."
+ * sentence. The card has no run-again ending; the Agent Log's comes from
+ * the backend. */
 export function routeAction(fix: FixClause | string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
   const { text, options } = typeof fix === 'string' ? { text: fix, options: 1 } : fix;
-  if (others.length) return `${text}${options > 1 ? ',' : ''} or switch to ${orList([...others])}.`;
+  const comma = options > 1 || / or /.test(` ${text} `) || others.length > 1;
+  if (others.length) return `${text}${comma ? ',' : ''} or switch to ${orList([...others])}.`;
   if (needsKey.length) return `${text}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
   return `${text}.`;
 }

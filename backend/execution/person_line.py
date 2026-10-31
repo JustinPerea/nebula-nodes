@@ -436,6 +436,9 @@ _INPUT_WORDS = {
     "edit video": "a video to edit", "continue session": "a session to continue",
 }
 _MASS_NOUNS = {"audio", "text", "context", "lighting", "media", "messages", "guidance"}
+# The mass nouns above that are plural ("needs messages. Connect them"); the
+# rest take "it" (GM r36 B2).
+_PLURAL_MASS_NOUNS = {"messages"}
 _NAMES = {"krea"}
 
 
@@ -577,16 +580,20 @@ def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str],
       added (``key`` names that key): "…, or add your fal.ai API key in
       Settings and switch to fal.ai".
 
-    Two actions take a comma between them when the fix lists options (GM,
-    PR #203 r32 item 1: "Pick A, B or C, or switch to fal.ai"; the comma
-    separates two clauses, not list items). Never a separate "… can take
-    it." sentence: the named switch replaces it."""
+    Two actions take a comma between them when either holds an "or" of its
+    own: the fix lists options (GM, PR #203 r32 item 1: "Pick A, B or C, or
+    switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K, or
+    switch to fal.ai or Replicate."); the comma separates two clauses, not
+    list items. Never a separate "… can take it." sentence: the named
+    switch replaces it."""
     text, listed = (fix.text, fix.options > 1) if isinstance(fix, Fix) else (fix, False)
     if others:
         switch = f"switch to {or_list(others)}"
         if not text:
             return switch[:1].upper() + switch[1:], False
-        return (f"{text}, or {switch}", True) if listed else (f"{text} or {switch}", False)
+        if listed or " or " in f" {text} " or len(others) > 1:
+            return f"{text}, or {switch}", True
+        return f"{text} or {switch}", False
     if needs_key:
         add = f"add your {key} in Settings" if key else "add its key in Settings"
         clause = f"{add} and switch to {or_list(needs_key)}"
@@ -642,28 +649,82 @@ class NotReadyReason:
 # for "images"). An input named by its own label (a numbered or lettered
 # one, a pass-through: connect_line) takes the "port" row, the label in
 # quotes as the card says it.
+#
+# A node with two or more different needs says them as one need (GM, PR #203
+# r34 item 1), in the node's input order, the action naming how many:
+# "“FLUX Kontext” needs a prompt and an image. Connect both, then run the
+# node again."; "…needs a prompt, an image and a mask. Connect them, …".
+# Nodes with the same set merge as one need does: "2 “FLUX Kontext” nodes
+# need a prompt and an image. Connect both to each, then run the nodes
+# again." {inputs} lists each need in its own words (input_words, or "an
+# output connected to “Item 1”" for an input named by its label), {all}
+# is "both" for two and "them" for more.
 INPUT_NEED_PREDICATES: dict[str, tuple[str, str]] = {
     "input": ("needs {input}. Connect {one}{end}",
               "need {input}. Connect {input} to each{end}"),
+    # After a count the action names what to connect, never "one" (GM r33
+    # item 1; review 17 copy-ui MEDIUM-1, GM r36 B1).
     "port": ("needs an output connected to “{port}”. Connect one{end}",
-             "need an output connected to “{port}”. Connect one to “{port}” on each{end}"),
+             "need an output connected to “{port}”. Connect an output to “{port}” on each{end}"),
+    "inputs": ("needs {inputs}. Connect {all}{end}",
+               "need {inputs}. Connect {all} to each{end}"),
 }
 
 
 def _one(words: str) -> str:
+    """The pronoun for one need: "one" after an article, else by the noun's
+    number. A mass noun takes no article but is still "them" when it is
+    plural (_PLURAL_MASS_NOUNS: "messages"; review 17 copy-ui LOW-1, GM r36
+    B2)."""
     if words.startswith(("a ", "an ")):
         return "one"
-    return "it" if words.split()[-1].lower() in _MASS_NOUNS else "them"
+    last = words.split()[-1].lower()
+    return "it" if last in _MASS_NOUNS and last not in _PLURAL_MASS_NOUNS else "them"
+
+
+def _named_by_label(label: object) -> bool:
+    name = port_name(label)
+    return bool(re.search(r"\s(\d+|[A-Z])$", name)) or name.lower() == "through"
+
+
+def _need_words(label: object) -> str:
+    """One need in a list of several: "a prompt", "audio", "an output
+    connected to “Item 1”"."""
+    if _named_by_label(label):
+        return f"an output connected to “{str(label or '').strip()}”"
+    return input_words(label) if port_name(label) else "an input"
 
 
 def input_need(label: object) -> NotReadyReason:
     """A required input with no wire as the Agent Log merges it
     (INPUT_NEED_PREDICATES), from the input's label."""
-    name = port_name(label)
-    if re.search(r"\s(\d+|[A-Z])$", name) or name.lower() == "through":
+    if _named_by_label(label):
         return NotReadyReason.of("port", table=INPUT_NEED_PREDICATES, port=str(label or "").strip())
-    words = input_words(label) if name else "an input"
+    words = _need_words(label)
     return NotReadyReason.of("input", table=INPUT_NEED_PREDICATES, input=words, one=_one(words))
+
+
+def need_words(labels: Iterable[object]) -> list[str]:
+    """Each need's words, once each, in the order given."""
+    words: list[str] = []
+    for label in labels:
+        said = _need_words(label)
+        if said not in words:
+            words.append(said)
+    return words
+
+
+def input_needs(labels: Iterable[object]) -> NotReadyReason:
+    """Every required input one node has with no wire, as one need (GM, PR
+    #203 r34 item 1), in the order given (the node's input order): one
+    input is input_need's line; two or more list them, each once, and
+    "Connect both" or "Connect them"."""
+    labels = list(labels)
+    words = need_words(labels)
+    if len(words) <= 1:
+        return input_need(labels[0] if labels else "")
+    return NotReadyReason.of("inputs", table=INPUT_NEED_PREDICATES, inputs=and_list(words),
+                             all="both" if len(words) == 2 else "them")
 
 
 def not_ready_subject(names: list[str]) -> str:

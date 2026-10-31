@@ -47,16 +47,23 @@ CHMODS = {"chmod", "lchmod", "fchmod"}
 
 
 def _command_mode(call: ast.Call) -> ast.AST | None:
-    """The mode of a chmod run as a command, `subprocess.run(["chmod",
-    "000", p])`: an octal string is read as its number, anything else is
-    unproven (review 16 of PR #203, tests NIT-2). A chmod inside a shell
-    string (`os.system("chmod 0 p")`) isn't read."""
-    for arg in call.args:
+    """The mode of a chmod run as a command: `subprocess.run(["chmod",
+    "000", p])`, with the list passed as the first argument or as `args=`,
+    and the command named by path too (`/bin/chmod`). An octal string is read
+    as its number; anything else, a digit string that isn't octal ("999")
+    included, is unproven (review 16 of PR #203, tests NIT-2; review 17, tests
+    NIT-1). A chmod inside a shell string (`os.system("chmod 0 p")`) isn't
+    read."""
+    lists = [*call.args, *(keyword.value for keyword in call.keywords if keyword.arg == "args")]
+    for arg in lists:
         if isinstance(arg, (ast.List, ast.Tuple)) and arg.elts and isinstance(arg.elts[0], ast.Constant) \
-                and arg.elts[0].value == "chmod":
+                and isinstance(arg.elts[0].value, str) and arg.elts[0].value.rsplit("/", 1)[-1] == "chmod":
             mode = arg.elts[1] if len(arg.elts) > 1 else arg
             if isinstance(mode, ast.Constant) and isinstance(mode.value, str) and mode.value.isdigit():
-                return ast.Constant(int(mode.value, 8))
+                try:
+                    return ast.Constant(int(mode.value, 8))
+                except ValueError:
+                    return arg  # not octal: unproven
             return arg  # unproven: _modes reads it as None
     return None
 
@@ -221,6 +228,11 @@ def test_every_test_that_takes_away_file_access_is_marked():
         ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '000', p])\n", ["test_a (line 2)"]),
         ("import subprocess\ndef test_a(p, m):\n    subprocess.run(['chmod', m, p])\n", ["test_a (line 2)"]),
         ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '644', p])\n", []),
+        # `args=`, a chmod named by its path, and a digit string that isn't octal (review 17, tests NIT-1).
+        ("import subprocess\ndef test_a(p):\n    subprocess.check_call(args=['chmod', '0', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['/bin/chmod', '0', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(['chmod', '999', p])\n", ["test_a (line 2)"]),
+        ("import subprocess\ndef test_a(p):\n    subprocess.run(args=['/bin/chmod', '644', p])\n", []),
         # The word alone in pytestmark isn't the mark.
         ("import os\npytestmark = ['unprivileged']\ndef test_a(p):\n    os.chmod(p, 0)\n", ["test_a (line 3)"]),
     ],

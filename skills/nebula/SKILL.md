@@ -849,13 +849,16 @@ the same way inside `<pin>…</pin>`). `nebula watch`
 keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
 `settings.restored` (from `nebula watch` after a restart) means Nebula put
 settings.json back at start from the copy it keeps while it writes the file
-in place, after a save that was cut short; its `file` names the file, never
-a key.
+in place, after a save that was cut short; its `file` names the file and
+`keptAt` where the file it replaced is kept, never a key. You can't read
+either: tell the person, in the event's own words.
 
 A run Nebula refuses before it starts is one line in the person's Agent log,
 in their words and never cut ("Nebula couldn’t start the run. 2 “GPT Image
 2” nodes need a prompt. Connect a prompt to each, then run the nodes
-again."). Read `errors` for each node's own text.
+again."; a node with several says them once: "“FLUX Kontext” needs a
+prompt and an image. Connect both, then run the node again."). Read
+`errors` for each node's own text.
 
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run

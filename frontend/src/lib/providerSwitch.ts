@@ -153,24 +153,29 @@ function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: Dire
   return `${personWords(String(block.detail ?? block.reason))}.`;
 }
 
-/** The Auto row's reason when the run can't start ("fal.ai doesn't take
- * “Resolution” set to 1.5K"). */
+/** The Auto row's reason when the run can't start, a fragment after
+ * "Auto · " with no colon (GM, PR #203 r34 item 2), subject first so the
+ * provider always leads (r35 item 2): "fal.ai doesn’t take “Resolution” set
+ * to 1.5K", "fal.ai needs …", "fal.ai doesn’t take this many images",
+ * "fal.ai can’t make that size", "fal.ai no longer runs this model"
+ * ("no route can take it" when there is none). */
 function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
   const spec = unavailable.routeId ? routeById(definition, unavailable.routeId) : undefined;
   const label = providerLabel(spec?.provider);
   const block = unavailable.block;
   if (!spec) return 'no route can take it';
-  if (!block) return `no ${label} key`;
+  if (!block) return `${label} ${autoNeedsCredential(spec.keys ?? []).replace(/^Auto · /, '')}`;
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
     return `${label} doesn’t take ${blockedSetting(definition, block, params)}`;
   }
   if (block.reason === 'requires') return `${label} needs ${blockedSetting(definition, block, params)}`;
   if (block.reason === 'ports') {
-    return `too many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))} for ${label}`;
+    return `${label} doesn’t take this many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))}`;
   }
+  if (block.reason === 'retired') return `${label} no longer runs this model`;
   const note = rowBlock(definition, spec, block as DirectBlock, params);
-  return note.charAt(0).toLowerCase() + note.slice(1, -1);
+  return `${label} ${note.charAt(0).toLowerCase()}${note.slice(1, -1)}`;
 }
 
 /** A keyless Space route's row line, GM's PR #203 r12 item 2: "Free on
@@ -187,10 +192,22 @@ function spaceNote(spec: RouteSpec, keyed: boolean): string | null {
  * one shared string (PR #203 r5 item 4): "Auto · needs a key". */
 export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
 
+/** "Auto · needs a key", in the providers' own noun (GM, PR #203 r35 item
+ * 2): "needs a token" when every key that would let it run is a token
+ * (Replicate, Hugging Face), from the one key-noun source Settings uses
+ * (providerCatalog.credentialNoun); "a key" otherwise. */
+export function autoNeedsCredential(missing: readonly string[]): string {
+  const nouns = new Set(missing.map((key) => {
+    const spec = PROVIDER_KEY_SPECS[key];
+    return spec ? credentialNoun(spec) : 'key';
+  }));
+  return nouns.size === 1 ? `Auto · needs a ${[...nouns][0]}` : AUTO_NEEDS_A_KEY;
+}
+
 function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
-  if (!unavailable.routeId && unavailable.missing.length) return AUTO_NEEDS_A_KEY;
-  return `Auto · can’t run: ${autoReason(definition, unavailable, params)}`;
+  if (!unavailable.routeId && unavailable.missing.length) return autoNeedsCredential(unavailable.missing);
+  return `Auto · ${autoReason(definition, unavailable, params)}`;
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,

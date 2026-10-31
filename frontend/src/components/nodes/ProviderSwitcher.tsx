@@ -281,11 +281,11 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
         {variant === 'pill' && <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />}
       </button>
       <span id={hintId} className="provider-switcher__hint">
-        {`Provider for ${displayName}: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
+        {`Provider for “${displayName}”: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
       </span>
       {open && (
         <ProviderPopover anchorRef={triggerRef} id={menuId} onClose={close}>
-          <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for ${displayName}`} onClose={close} />
+          <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for “${displayName}”`} onClose={close} />
         </ProviderPopover>
       )}
     </>

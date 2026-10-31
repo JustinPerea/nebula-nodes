@@ -2794,13 +2794,16 @@ backend refusing the write after the file turned read-only).
   since c91de4bf. credential-service.test.mjs: 132 pass.
 - person_gate.py is byte-identical to c91de4bf. No private question ids
   in the diff.
-- Base check (c91de4bf with the new tests): backend 84 of 90 fail. The 6
-  that pass guard what already worked: the fixture's card lines already
-  quoted, a run error after a refusal (no mark existed), the count form
-  from 4 on MCP, the CLI and chat, and a file that turns read-only before
-  the in-place write gets the file line. Frontend 29 of 32 fail; the 3
-  that pass are "or choose another provider" with no key, the Krea API
-  key as the same route, and the started run's heading. Desktop: the 3
+- Base check (c91de4bf with the new tests), corrected in round 18 (review
+  17, tests NIT-2): backend 85 failed, 5 passed, 1 skipped (Linux only).
+  "The fixture's card lines already quoted" fails on base; the 5 that pass
+  guard what already worked: a run error after a refusal (no mark
+  existed), the count form from 4 on MCP, the CLI and chat, and a file
+  that turns read-only before the in-place write gets the file line. About
+  35 of the 85 failures are only AttributeErrors on names round 17 added.
+  Frontend 30 of 33 fail; the 3 that pass are "or choose another provider"
+  with no key, the Krea API key as the same route, and the started run's
+  heading. Desktop: the 3
   new did-navigate, other-page and watched-events tests fail; "same
   frame, another object or routingId" passes as a guard.
 - Mutants: section 0 and 1 C1 to C19, copy L1 to L16, settings S1 to
@@ -2854,3 +2857,413 @@ backend refusing the write after the file turned read-only).
   which drops the actions. Is that right?
 - A save that can't keep its copy in ~/.nebula (the folder refuses it)
   is refused with the folder line naming ~/.nebula.
+
+## Round 18 (CI on 204ad52f, GM r34 and r35)
+
+### 0. CI: a settings test that passed only on macOS
+
+- test_metadata_that_cant_be_carried_writes_in_place_and_leaves_no_temp
+  failed on the Linux runner (the inode changed). It forced "can't be
+  carried" by patching `_darwin_copy_metadata` and, off macOS,
+  `os.setxattr`. On Linux the file had no xattrs, so setxattr was never
+  called, the copy "worked" and the save stayed atomic.
+- Fix: the copy is one seam on every system, `settings._copy_metadata(path,
+  temp)` (copyfile(3) on macOS, each xattr on Linux, ENOTSUP elsewhere).
+  `_carry_metadata` asks whether the file has its own metadata, then calls
+  the seam and turns a refusal into the in-place write. The test patches
+  the seam and asserts it was called, so the same branch runs on macOS and
+  Linux.
+- Linux fails closed: a real user xattr whose copy the temp file refuses
+  (os.setxattr raising EPERM) keeps the file and its xattr, written in
+  place. That test runs where the filesystem takes user xattrs and skips
+  elsewhere (macOS has no os.setxattr). A second test runs the Linux branch
+  on any system: sys.platform "linux" and Linux's three xattr calls over a
+  dict. A refused copy writes in place; a copy that works carries the
+  person's xattr, never the system's own label (security.selinux), then
+  renames.
+- The other round 17 settings tests: CI ran the whole file on Linux and
+  only this one failed. From the code, the rest patch platform-neutral
+  seams (`_pwrite`, `_replace`, `_chown`, `_lock_waiting`), use real
+  files, or skip off macOS (the chmod +a ACL tests). No Linux container
+  ran here: Docker's daemon isn't running on this Mac, and starting it is
+  a shared-machine change.
+
+### 1. GM r34
+
+- **One node with several needs** (shot 4 of round 17 said the ending
+  twice). Each node's inputs with nothing connected are one need, built
+  from the same table (`INPUT_NEED_PREDICATES["inputs"]`,
+  `person_line.input_needs`), in the node's input order (`_input_order`,
+  the definition's ports), so the same node always reads the same:
+  "“FLUX Kontext” needs a prompt and an image. Connect both, then run the
+  node again."; "“FLUX Fill (Inpaint)” needs a prompt, a base image and a
+  mask. Connect them, then run the node again." Every input kind works in
+  a set, a labelled one too ("a prompt and an output connected to “Item
+  1”").
+- Nodes with the same set merge, whatever order their own inputs are in
+  (keyed by the set; the first such node's order is said): "2 “FLUX
+  Kontext” nodes need a prompt and an image. Connect both to each, then
+  run the nodes again."; "“FLUX Kontext” and “GPT Image 1 Edit” need …".
+  Different sets are separate sentences. One need is the round 17 line,
+  and an input listed twice is said once.
+- From 4 nodes (GM r35 item 1, section 1b): nodes that share a reason or
+  a set of needs count inside its own sentence in the Agent log, as the
+  bar's list already did: "4 nodes need a prompt and an image. Connect
+  both to each, then run the nodes again."; each other reason or set is
+  its own sentence ("4 nodes need … . “GPT Image 2” needs a prompt. …").
+  The log's early "N nodes can’t run here yet." from 4 is gone; it says
+  that only when the named line is longer than the log's room (600), so
+  the line stays whole (9 nodes with nine different sets take "9 nodes
+  can’t run here yet."). The bar's summary line above "Show the list"
+  stays r24's "N nodes can’t run here yet." (unchanged, now pinned beside
+  the list's per-reason count). Unwired inputs never reach the bar: a
+  proposal's notReady rows are readiness reasons (keys, routes, the Krea
+  plan), so its list counts reasons.
+- **The Auto row loses the colon:** "Auto · fal.ai doesn’t take
+  “Resolution” set to 1.5K". provider-switcher.css's comment and
+  PROVIDER-ROUTES.md quote the new form.
+- **Every Auto row is subject-first** (GM r35 item 2): the provider leads.
+  "fal.ai doesn’t take …" (rejects, blockedBy, hidden), "fal.ai needs
+  “…”", "fal.ai can’t make that size", "fal.ai no longer runs this model"
+  (was "retired by the maker on fal.ai"), "fal.ai doesn’t take this many
+  images" (was "too many images for fal.ai"). "Auto · needs a key" takes
+  the providers' noun from providerCatalog.credentialNoun, the source
+  Settings' buttons use (`autoNeedsCredential`): "Auto · needs a token"
+  when every key that would let it run is a token (Replicate, Hugging
+  Face), "a key" for keys or a mix. A route with no key and no other stop
+  says "fal.ai needs a key" the same way; no shipped node reaches that
+  case, nor "no route can take it", which has no provider to lead with.
+
+### 2. Review 17 (section 2) and GM r36
+
+**Settings durability.**
+
+- **The copy and the temp files are out of agents' reach (MEDIUM-1).** The
+  copy an in-place save keeps, the file a restore replaces and the copy's
+  temp file live in `<state>/settings-copy` (0700; `settings_copy_folder`).
+  That folder is in `protected_agent_dirs()`, so the Codex deny paths,
+  `require_allowed_path`, the agent workspace check and Claude's
+  `deny_read_dirs` rules all cover it. The save's temp file beside
+  settings.json has one fixed name, `.settings.json.nebula-tmp`
+  (`temp_path_for`), opened O_EXCL | O_NOFOLLOW, 0600, and listed in
+  `default_secret_paths()` (`secret_temp_paths`, the configured and the
+  resolved path). The start sweep holds the save's lock, so any temp file
+  found then is a cut-short save's: the fixed name, the copy's, and round
+  17's `.settings-nebula-<pid>-…` names go with no age check. Where the
+  lock can't be held (no flock), the 60-second age check still applies. A
+  round 17 copy in the state folder itself moves into the copy folder as
+  `legacy-…` and is never restored (it has no marker or hash).
+  **This is the coordinator's call, and Justin can veto it**: the
+  alternative was to keep no copy at all when the file holds keys.
+- **The restore holds the lock throughout (LOW-1, mutant N22).** Read,
+  judge, keep aside, write and drop all run inside `_save_lock`, so a
+  Nebula starting during another's in-place save waits, and then finds
+  that save finished: it never drops the other's copy or puts an older
+  copy over a newer save. Tested with two processes (the second's wait is
+  seen, never timed).
+- **Only Nebula's own copy, and the replaced file kept (LOW-2).** The copy
+  is `{"nebula": "settings-copy", "version": 1, "path", "sha256", "text",
+  "next"}`: the hash covers the path, the old text and the text being
+  written. It is read with O_NOFOLLOW and must be a regular file with one
+  name, this user's, with no group or other access. A copy that is ours
+  but fails the marker, version, hash or parse is dropped; one that isn't
+  provably ours (a symlink, a second name, another owner, group-readable)
+  or is for another path is left and never restored. Before the restore,
+  the file it replaces is kept as
+  `settings-copy/settings-replaced-<UTC time>.json` (0600, O_EXCL, synced,
+  the folder synced); a restore that can't keep it changes nothing.
+- **The restored line (GM r36 B6b).** `settings.restored` is journaled and
+  logged with "Nebula restored your settings from its saved copy because
+  the last save didn’t finish. The file it replaced is kept at <path>."
+  The copy is only ever left by an in-place save that didn't finish, but
+  the file may have been changed since (its drop failed after a finished
+  save, then the person edited the file). So the reason is given only when
+  the file is what that save leaves part way: every byte the old file's or
+  the new text's at that place, its length from the old file's to the
+  longer one's (`_cut_short`, which is why the copy keeps the new text).
+  Otherwise the line drops the "because" clause: "Nebula restored your
+  settings from its saved copy. The file it replaced is kept at <path>."
+  The event's data is `{file, keptAt}`. The journal cuts summaries at 200
+  characters, and on desktop this line with the state path runs past
+  that, so `settings.restored`'s summary has its own limit (1,200,
+  `SUMMARY_CHARS_BY_KIND`). Through MCP, the CLI (`nebula watch`'s line)
+  and an in-app chat turn, both cases verbatim.
+- **The copy folder can't be changed (GM r36 B6a).** A new cause,
+  `copy_folder`, answers the save with "Nothing was saved because Nebula
+  isn’t allowed to change ~/.nebula, where it keeps a copy while it saves.
+  Check the folder’s permissions, then try again." (the agents' form asks
+  the person; `code` stays `settings_unwritable`, the fix is the folder
+  fix). It names the folder that refuses, as the person sees it, so on
+  desktop it is the desktop app's state folder.
+- **PUT and DELETE hold the lock from the read to the save (LOW-3).**
+  `settings_transaction()` takes the save's lock for the read, the change
+  and the save; `_save_lock` is reentrant for the thread that holds it
+  (`_HELD`), so the save inside takes no second lock. Neither route awaits
+  inside it. Tested with another Nebula holding a transaction while this
+  backend's PUT (or DELETE) starts: the route waits at its read, and both
+  keys survive.
+- **The lock on a folder at the settings path.** Taking the lock before
+  the read exposed a loop main already had: with a folder where
+  settings.json should be, `_lock_target` opens that folder,
+  `_lock_holds` judged it as the parent folder and said no, and `_locked`
+  tried again forever with no deadline (round 14's folder test hung
+  PUT). `_lock_holds` now holds a lock on whatever is at the path (same
+  device and inode), and `_locked` stops at its deadline with EAGAIN when
+  the target keeps changing. The PUT answers the 409 not-a-file line at
+  once. Two tests (each fails on 204ad52f by spinning, caught by a
+  10-second thread guard) and mutants L1 and L2.
+- **NIT-1:** the PR body now says "where the filesystem supports flock",
+  "except when Nebula's own folder takes no copy", and no longer says no
+  failure loses the old settings: a failure leaves the old or the new
+  settings, and where it leaves neither the restore puts the old back.
+- **NIT-2:** every missing level of the copy folder is 0700 (and a loose
+  existing one is made 0700 again); a state path through a file is the
+  409 not_a_folder line naming that file, never a 500.
+- **NIT-3:** N9 (a pwrite of 0 accepted) is killed by a seam test: EIO,
+  the file unchanged, the copy left. N22 is killed by the restore test
+  above. N2 (the grow's sync) and N12 (the copy's sync) are now killed
+  too, by the sync recorder below. N33 stays benign: it makes each level
+  with mode 0755, but the `chmod 0700` right after still runs, so an
+  empty folder is open for microseconds with nothing in it yet.
+- **NIT-4:** every sync meant to survive a power cut goes through `_sync`:
+  F_FULLFSYNC where fcntl has it (macOS; fsync there reaches only the
+  drive's cache), else fsync, and fsync again if the filesystem refuses
+  F_FULLFSYNC. The folder is synced after each rename (the atomic save's
+  and the copy's). A test records every sync through the module's own
+  seams (`_fcntl`, `_FULLFSYNC`, `_fsync`), never os's.
+
+**Copy and UI (GM r36 B1 to B5).**
+
+- B1: the port row's plural names what to connect: "2 “Combine Text” nodes
+  need an output connected to “Text 1”. Connect an output to “Text 1” on
+  each, then run the nodes again." The singular keeps "Connect one".
+- B2: "“Claude” needs messages. Connect them, then run the node again."
+  The pronoun follows the noun's number: `_PLURAL_MASS_NOUNS` ("messages")
+  takes "them"; audio, text, context, lighting, media and guidance keep
+  "it" (media is used as a mass noun here, and GM named only messages).
+- B3: the bar's "Can’t run here" stays. The busy-start toast ("Couldn't
+  start the run.", graphStore) and the Cinema shot panel's "Couldn't
+  generate the shot." (GENERATE_SHOT_HEADING) are main's lines, not
+  Idol's, so they are left for the wording batch. The
+  RUN_NOT_STARTED_HEADING comment no longer claims a busy start: a start
+  refused another way keeps RUN_NODE_HEADING on the card.
+- B4: two actions take a comma when either holds its own "or": the fix
+  lists options, or the switch names two or more providers ("Pick 1K, or
+  switch to fal.ai or Replicate."), backend `route_action` and frontend
+  `routeAction` alike. This reaches every route line with two providers to
+  switch to, not only a single option: "Add it in Settings, or switch to
+  Black Forest Labs or fal.ai.", "Clear “Seed”, or switch to …", "Change
+  that setting, or switch to …". With the comma, the log's ending is its
+  own sentence (". Then run the node again."), as r32 set for the listed
+  fix. route_cases.json and the generated not_ready_reasons.json follow.
+- B5: the cursor bubble is the node's line alone when that line already
+  opens with the quoted name ("“FLUX 3 Image” can’t run on fal.ai with …");
+  a line that doesn't (an input to connect, or several lines joined) keeps
+  "“X” can’t run." before it.
+- Krea's named switch is pinned for a provider whose key is set but which
+  can't take the run (Krea 3, the plan, a fal.ai key, high reasoning with
+  no image: "…, or choose another provider."; F17). "Can’t make that
+  size." is pinned on a fixture route's row (F12). Both already worked;
+  the tests kill the mutants.
+- MCP-SETUP's settings paragraph lists every in-place case (metadata that
+  can't be carried, a refused rename), the fixed temp name, the copy
+  folder and its deny lists, the lock and the transaction, and the copy
+  folder's refusal; its `settings.restored` row has the line and `keptAt`.
+- The switcher's description and menu label quote the node's name:
+  "Provider for “FLUX 3 Image”: …".
+- runway-gen4-turbo (the one definition only in the engine's NODE_DEFS)
+  labels its ports "Image" and "Prompt", so its line says "Connect an
+  image to this node, then run it again."
+
+**Tests and CI.**
+
+- The seam (MEDIUM-1): every stub takes `*args, **kwargs`; the xattr calls
+  and the platform are module seams (`_listxattr`, `_getxattr`,
+  `_setxattr`, `_PLATFORM`), so no test patches `os.setxattr`,
+  `os.listxattr`, `os.getxattr` or `sys.platform` (they were process-wide).
+  The Linux in-place test patches `_setxattr` and reads real user xattrs,
+  so on Linux it runs the real branch, and it skips on macOS. M1 (a
+  refused copy swallowed) is still killed. No Linux container ran here
+  (Docker isn't running on this Mac); from the code, every settings path
+  the tests take on Linux is the one they take here except `_PLATFORM`'s
+  branch, which the simulated test runs here.
+- test_project_save_event_loop is driven by events (LOW-1): the stand-in
+  check records its thread, sets `in_check` and waits for `loop_ran`
+  (10 s hang guard); a loop task sets `loop_ran`. It asserts the check ran
+  off the loop and the wait returned. T4 (the check moved onto the loop)
+  is killed. Main's other real-time budgets go to a separate follow-up
+  PR: test_mcp_channel.py:1067, test_agent_questions.py:484,
+  test_agent_questions_waits.py:211 and test_acp_session.py's 0.75 s
+  check.
+- The marker scan (NIT-1) reads `args=`, matches the command by its base
+  name (`/bin/chmod`), and counts a digit string that isn't octal as
+  unproven instead of crashing.
+- The round 17 base-check counts are corrected (NIT-2, above).
+
+### What agents see this round
+
+- The refused-run log line (the presence event's `log`) says a node's
+  several needs once, and merges nodes with the same set. `error` and
+  `errors` are unchanged. MCP-SETUP.md and skills/nebula/SKILL.md say so.
+- From 4 nodes the log line counts inside each reason's or set's
+  sentence, and says "N nodes can’t run here yet." only past 600
+  characters. MCP-SETUP.md says so.
+- The Auto row is the person's switcher only; agents see no change there.
+- Section 2: the log line's numbered-input plural ("Connect an output to
+  “Text 1” on each"), "messages … Connect them", and the comma before a
+  switch to two providers reach agents in the refused-run log line and in
+  every route line Nebula already gives them; `error` and `errors` are
+  unchanged. An agent's cursor
+  bubble no longer repeats the node's name. `settings.restored` carries
+  `keptAt` and GM's line as its summary; agents can't read the copy
+  folder or the temp file (deny lists). A copy folder Nebula can't change
+  answers a save with B6a's line, `settings_unwritable`. MCP-SETUP.md,
+  `wait_for_canvas_change`'s docstring and SKILL.md say so.
+
+### Checks (round 18)
+
+- tsc -b --noEmit and lint pass. vite build passes; budget 462,527 bytes
+  raw, 142,116 gzip (after section 1b). check-node-contracts (309), generate-model-reference
+  --check, generate-route-tables --check and generate-not-ready-reasons
+  --check are current.
+- Focused vitest (83 files: everything that imports providerSwitch or
+  ProviderSwitcher, the copy ratchets, failureLines, focusRingCss, the CSS
+  sweeps and the presence ratchets): 1,348 passed, Errors 0, no timeouts.
+  After section 1b, with every file that imports canvasProposals (128
+  files): 2,231 passed, Errors 0, no timeouts.
+- Focused backend (63 files that name the log line, person_line, the input
+  needs or read MCP-SETUP.md or SKILL.md): 2,421 passed, 9 skipped. The
+  settings files after the seam change (round 16, round 17 settings,
+  settings_api, settings_path, the marker scan): 180 passed, 2 skipped
+  (the Linux xattr tests, here on macOS). After section 1b, the 39 files
+  that name the refused-run line, its heading, the count or read
+  MCP-SETUP.md: 1,284 passed, 9 skipped. Four older tests that pinned the
+  log's "4 nodes can’t run here yet." now pin the per-reason sentence
+  (rounds 14, 16, 17 and 18).
+- person_gate.py is unchanged.
+- Base check (204ad52f with the new tests): round 18's log tests fail but
+  the three "4 nodes can’t run here yet." cases, which guard the count
+  line; the seam test fails (no seam); the simulated Linux tests pass on
+  base (Linux already failed closed) and stay as guards. idolRound18.test.ts
+  fails 9 of 10; "Auto · needs a key" passes as a guard. After section
+  1b: all 39 round 18 log tests fail on base; idolRound18.test.ts fails 11
+  of 15, and the 4 that pass guard what didn't change ("needs a key" for a
+  key and for a mix, and the bar's summary and list).
+- Mutants, all 19 killed (section 1 rerun after 1b; N8 the log counting
+  from 4 again, N9 no fallback when too long, F3 retired in the old
+  words, F4 too many in the old words, F5 the token noun ignored, F6 a key
+  and a token said "token"): M1 a refused copy ignored, M2 the save bypasses
+  the seam, M3 Linux skips an xattr it can't set, M4 Linux copies the
+  system's own labels, N1 always "Connect them", N2 the plural without "to
+  each", N3 a repeated input said twice, N4 the checks' order, not the
+  input order, N5 the same set in another order not merged, N6 a need per
+  input again, N7 one need as a set of one, F1 the colon back, F2 the
+  rowBlock kinds without the provider.
+- Live on 8793/5793 (sandboxed backend and Vite, the browser's proxy dead,
+  canaries blocked for 8000, 8005, 8010, 5173, 8790, 8760 and six real
+  hosts from the browser, and the backend's own canary; fake keys only;
+  every run refused by the pre-call check):
+  1. One FLUX Kontext node, an MCP run: "Nebula couldn’t start the run.
+     “FLUX Kontext” needs a prompt and an image. Connect both, then run
+     the node again."
+  2. Two FLUX Kontext nodes feeding an Image Compare, an MCP run of the
+     Compare: "Nebula couldn’t start the run. 2 “FLUX Kontext” nodes need
+     a prompt and an image. Connect both to each, then run the nodes
+     again."
+  3. FLUX 3 at 1.5K on Auto with a fal.ai key: "Auto · fal.ai doesn’t take
+     “Resolution” set to 1.5K".
+  Shots in scratchpad/idol/shots18, three distinct md5s, each opened. No
+  page errors; the 7 console errors are the canaries' own blocked loads.
+  The live check ran before section 1b, which changes none of these
+  three lines.
+
+**Section 2 (review 17 and GM r36).**
+
+- tsc and lint pass; vite build passes, budget 462,539 bytes raw, 142,122
+  gzip; check-node-contracts (309), generate-model-reference,
+  generate-route-tables and generate-not-ready-reasons (regenerated for
+  B4) --check are current.
+- Focused vitest (194 files: everything that imports directRoute,
+  providerSwitch, ProviderSwitcher or nodeErrorCopy, the copy and CSS
+  ratchets, the presence ratchets): 3,741 passed, Errors 0.
+- Focused backend (162 files: every file that imports services.settings,
+  agent_profiles, file_access, person_line, canvas_events, the engine's
+  validate_graph or the run route, or reads MCP-SETUP.md or SKILL.md;
+  the ratchets test_unprivileged_marker and test_ci_shard), in 4 isolated
+  shards: 6,779 passed, 13 skipped, 3 failed. One was a pin of the old
+  "Add it in Settings or switch to Black Forest Labs or fal.ai." in
+  test_error_copy_round3e (B4 reaches it; updated, the file passes). Two
+  were main's real-time budgets under a machine load of about 40:
+  test_iterator_execution's 1-second wait for the handler to start, and
+  test_agent_presence_agents' 5-second run_nodes wait. Both pass alone, on
+  head and on 204ad52f, and the three files pass together (70). Both go on
+  the follow-up list of main's real-time budgets.
+- The first focused run hung: round 14's folder-at-the-settings-path test
+  spun in the lock loop (above). Fixed; that file, round 17 settings and
+  round 18 settings pass (126, 2 skipped on macOS).
+- person_gate.py and the spend guard are unchanged; desktop/main.mjs is
+  untouched; no private question ids in the diff.
+- Base check (204ad52f with the new tests): round 18 settings fails 47 of
+  48 (the N9 seam test passes as a guard; both lock tests fail by
+  spinning, caught by their thread guard); round 18 copy fails 13 of 22
+  (the six mass nouns that keep "it" and the three bubble-prefix cases
+  guard what didn't change); the marker scan fails 3 of its 4 new cases
+  (the 0644 case is a guard); idolRound18.test.ts fails 13 of 22 (Krea's
+  named switch, the size note and two single-provider comma cases pin
+  code that was already right).
+- Mutants: all 57 killed, rerun together on the final code (the 19 from
+  sections 0 to 1b, M3 and M4 pointed at the new `_setxattr` seam, and 38
+  for section 2): S1 the copy folder not protected, S2 the temp file not a
+  secret path, S3 the restore without the lock, S4 no keep-aside, S5/S5b/
+  S5c no marker, hash or file checks, S6/S6b PUT or DELETE without the
+  transaction, S7 no F_FULLFSYNC, S8/S8b no folder sync after either
+  rename, S9 (N9) a pwrite of 0 accepted, S10 the sweep without the lock,
+  S11 every file counted as a cut save, S12 the copy line as the folder
+  line, S13 a file at the copy folder a 500, S14 the levels 0755, S15 the
+  restored line always "because", S16 its summary cut at 200, S17 the lock
+  not reentrant, S18 a stale fixed temp file kept, S19 the cut check from
+  the shorter length, C1 the port plural "Connect one", C2 messages "it",
+  C3 the bubble prefix always, C4/C5 no comma before two providers
+  (backend, frontend), C6 (F17) and C7 (F12), C8 the description
+  unquoted, C9 runway's image unlabelled, T1 to T3 the marker scan, T4
+  the snapshot check on the loop, L1 the lock never holding a folder at
+  the path, L2 a changing lock target spinning past the deadline. A
+  mutant whose covering run hangs past 300 s would count as killed; none
+  did.
+- The review's three comparisons, 204ad52f against this round: the gate
+  table is byte-identical (157,905 rows, md5 8ff8a96c…, the review's), the
+  HTTP matrix's sorted rows too (330, md5 858c49c0…, the review's), and the
+  fs cases' sorted rows too (574 cases, 12,710 rows, md5 b7fd63c0…): no
+  difference to list. The table and the matrix ran before the lock fix,
+  which none of their cases reach (no folder at the settings path); the fs
+  cases ran after it. The copy folder changes no row: each row records
+  the answer's status and line and the settings file's own state (hash,
+  mode, inode, links), not the state folder.
+- Live on 8793/5793 (the same sandbox and canaries; fake keys only; every
+  run refused before a provider):
+  4. FLUX 3 Image on fal.ai at 1.5K, wired to a prompt: the cursor bubble
+     is "“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K.
+     Pick 768 x 768, 1K, 2K or 4K, or switch to Black Forest Labs or
+     Replicate." (the name once).
+  5. Two Combine Text nodes, an MCP run: the log's "2 “Combine Text” nodes
+     need an output connected to “Text 1”. Connect an output to “Text 1”
+     on each, then run the nodes again."
+  6. A route with no key and two providers: the card's "…Add it in
+     Settings, or switch to Black Forest Labs or fal.ai." and the log's
+     ". Then run the node again.".
+  Shots 4 to 6 in scratchpad/idol/shots18, six distinct md5s in the
+  folder, each opened; no page errors.
+
+### Questions for GM (round 18)
+
+- GM r35 answered both earlier questions (the per-set count from 4 in the
+  log; subject-first Auto rows).
+- B4 reaches more than "Pick 1K": every route line with two providers to
+  switch to takes the comma ("Add it in Settings, or switch to Black
+  Forest Labs or fal.ai.", "Clear “Seed”, or switch to …"), and with the
+  comma the log ends ". Then run the node again." as its own sentence, as
+  r32 set for a listed fix. Keep both, or only the single-option case?
+- B2: only "messages" takes "them"; "media" keeps "it" (used as a mass
+  noun here). Confirm.
+- B3: the busy-start toast and the Cinema line are main's, not Idol's, so
+  they are left for the wording batch.

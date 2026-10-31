@@ -34,10 +34,12 @@
  * from the route the backend took), never read from the error's text.
  */
 export const RUN_NODE_HEADING = "Couldn't run the node.";
-/** The one heading over a run Nebula refused before it started (the
- * pre-call check, or a start the backend answered with another status): the
- * card's, as the Agent log's (GM, PR #203 r32: "the card, bar and log share
- * one heading"). A run that started and failed keeps RUN_NODE_HEADING. */
+/** The one heading over a run Nebula refused at its pre-call check (node
+ * data `errorNotStarted`): the card's, as the Agent log's (GM, PR #203 r32:
+ * "the card, bar and log share one heading"). A run that started and failed
+ * keeps RUN_NODE_HEADING, and so does a start the backend answered with
+ * another status (busy, say): markNodesErrored leaves `errorNotStarted` unset
+ * there, and its toast keeps its own heading. */
 export const RUN_NOT_STARTED_HEADING = 'Nebula couldn’t start the run.';
 /** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
 export const GENERATE_SHOT_HEADING = "Couldn't generate the shot.";

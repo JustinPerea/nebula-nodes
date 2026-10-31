@@ -380,10 +380,12 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "text"}],
         "envKeyName": "ANTHROPIC_API_KEY",
     },
+    # The one definition here with no registry entry, so its ports carry the
+    # labels the log and the card name them by (review 17 copy-ui NIT-2).
     "runway-gen4-turbo": {
         "inputPorts": [
-            {"id": "image", "required": True},
-            {"id": "prompt", "required": False},
+            {"id": "image", "label": "Image", "required": True},
+            {"id": "prompt", "label": "Prompt", "required": False},
         ],
         "outputPorts": [{"id": "video"}],
         "envKeyName": "RUNWAY_API_KEY",
