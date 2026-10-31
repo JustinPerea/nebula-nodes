@@ -417,7 +417,7 @@ def test_kept_ui_nit3_imported_output_types_read_the_shared_port_rule(monkeypatc
 
 # -- agents-grace NIT-1 and NIT-2: the kept marker ------------------------------------------
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root writes a 0555 folder")
+@pytest.mark.unprivileged
 def test_grace_nit1_a_marker_in_a_folder_nebula_cant_write_pauses_no_boot(tmp_path, monkeypatch):
     """Review 16 agents-grace's probe: three boots held a grace each."""
     folder = tmp_path / "state"
