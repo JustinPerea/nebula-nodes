@@ -18,6 +18,11 @@ def _usd(value: Any) -> str:
 
 def run(client: NebulaClient) -> None:
     view = client.get_spend()
+    if view.get("note"):
+        # The limits can't be read (a settings file Nebula can't read): the
+        # agents' read line, as `nebula context` says it.
+        print(f"Spending limits: {view['note']}")
+        return
     if not view.get("limited"):
         print("Your runs aren't limited (spending limits apply to agents).")
         return

@@ -564,9 +564,10 @@ export function chipLabel(chip: ChipEstimate): string {
 }
 
 /** A chip's tooltip, from the same figures as its label.
- * Closed (GM - Design, r18 of PR #114, r1 to r4 of PR #198): "~$0" and "~$X"
- * read "Estimated cost"; "<$0.01" "Estimated cost under $0.01"; a range
- * "Between $X and $Y."; "Up to $Y" "Up to $Y.".
+ * Closed, a sentence with no heading (GM, PR #203 r16 item 3: "Every cost
+ * tooltip is a sentence shape"): "~$0" "Estimated cost $0.", "~$X"
+ * "Estimated cost $X.", "<$0.01" "Estimated cost under $0.01.", a range
+ * "Between $X and $Y.", "Up to $Y" "Up to $Y.".
  * Open ("+ unpriced"): the priced part's sentence (GM r7 item 3,
  * unpricedCopy PRICED_PART), "The priced part of this run costs up to
  * $0.43."; the Run chips add a sentence per reason (runScope runChipTitle). */
@@ -582,10 +583,10 @@ export function chipTitle(chip: ChipEstimate): string {
     }
   }
   switch (chip.kind) {
-    case 'free': return 'Estimated cost';
-    case 'under': return 'Estimated cost under $0.01';
+    case 'free': return 'Estimated cost $0.';
+    case 'under': return 'Estimated cost under $0.01.';
     case 'over': return OVER_TITLE;
-    case 'exact': return 'Estimated cost';
+    case 'exact': return `Estimated cost ${chip.amount}.`;
     case 'upTo': return `Up to ${chip.amount}.`;
     case 'range': return `Between ${chip.low} and ${chip.high}.`;
   }

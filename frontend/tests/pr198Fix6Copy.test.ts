@@ -68,7 +68,7 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
     const title = runChipTitle({ total: 2, paid: ['Free', 'Writer'], cost: { low: 0, high: 0, lines: [{ name: 'Free', low: 0, high: 0, runs: [1, 1] }],
       unpriced: ['Writer'], plan: [], plus: [], sizeRefs: [],
       reasons: [{ name: 'Writer', reason: { kind: 'noPrice' }, at: { x: 0, y: 0 } }] } } as never);
-    expect(title).toBe('“Writer” has no listed price.');
+    expect(title).toBe('“Free” and “Writer” call paid providers.\n“Writer” has no listed price.');
   });
 
   const pricing: PricingTable = { currencies: {}, nodes: {
@@ -81,7 +81,7 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
   it('the left-out lines group with the name helper, in canvas order', () => {
     const graph = [node('a', 'nano-banana', 'Hero', 0), node('e1', 'gpt-image-2-edit', 'Edit A', 100), node('e2', 'gpt-image-2-edit', 'Edit B', 200)];
     const title = runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { pricing, apiKeys: {} }));
-    expect(title).toBe('The priced part of this run costs between $0.07 and $0.45.\n'
+    expect(title).toBe('“Hero”, “Edit A” and “Edit B” call paid providers. The priced part of this run costs between $0.07 and $0.45.\n'
       + '“Edit A” and “Edit B” may cost more for their input images, which the estimate leaves out.');
   });
 });

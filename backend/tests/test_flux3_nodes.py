@@ -85,6 +85,9 @@ def hosts_for(monkeypatch, provider: str, video: bool) -> FakeHosts:
         out = "https://replicate.delivery/x/out." + ("mp4" if video else "webp")
         return replicate_hosts(monkeypatch, [{"id": "p1", "status": "succeeded", "output": out}], out,
                                MP4 if video else PNG)
+    if provider == "speridlabs":
+        from tests.speridlabs_fakes import idol_hosts
+        return idol_hosts(monkeypatch)
     return {"fal": fal_hosts, "krea": krea_hosts, "openrouter": openrouter_hosts}[provider](monkeypatch, video)
 
 
@@ -280,6 +283,7 @@ def test_a_whole_run_is_priced_on_the_route_it_bills(case):
         assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
     assert ("n1" in result["unavailable"]) is expected["unavailable"]
     assert ("n1" in result["plan"]) is expected["plan"]
+    assert result["reasons"].get("n1") == expected["reason"]
 
 
 @pytest.mark.parametrize("case", SHIPPED_ROUTE_CASES, ids=[c["name"] for c in SHIPPED_ROUTE_CASES])

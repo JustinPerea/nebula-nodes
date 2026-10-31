@@ -439,6 +439,11 @@ def build_parser() -> argparse.ArgumentParser:
     path_p = sub.add_parser("path", help="Print local file path of a node's primary image")
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
 
+    splat_p = sub.add_parser(
+        "splat", help="Print a World output's Gaussian splat as numbers: count, bounding box, axes, size, seed (Idol)")
+    splat_p.add_argument("node_ref", help="Node reference (e.g. n5)")
+    splat_p.add_argument("--port", default=None, help="The World output to read, when the node has several")
+
     # -- Execution --
     wait_help = ("Seconds to wait before returning 'still running' (default 100). "
                  "The run keeps going either way; exit code 2 means it was still running.")
@@ -700,7 +705,7 @@ def main() -> None:
 
     from .commands import (
         apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
-        projects, proposals, providers, selection, spend, trash, upload,
+        projects, proposals, providers, selection, spend, splat, trash, upload,
     )
     from .commands import notes as notes_cmd
     from .commands import questions as questions_cmd
@@ -755,6 +760,7 @@ def main() -> None:
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client, force=args.force),
         "path": lambda: path.run(client, args.node_ref),
+        "splat": lambda: splat.run(client, args.node_ref, args.port),
         "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait),
         "run-all": lambda: execute.run_all(client, wait=args.wait),
         "result": lambda: execute.run_result(client, args.run_id, wait=args.wait),

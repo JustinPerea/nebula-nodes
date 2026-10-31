@@ -380,10 +380,12 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "text"}],
         "envKeyName": "ANTHROPIC_API_KEY",
     },
+    # The one definition here with no registry entry, so its ports carry the
+    # labels the log and the card name them by (review 17 copy-ui NIT-2).
     "runway-gen4-turbo": {
         "inputPorts": [
-            {"id": "image", "required": True},
-            {"id": "prompt", "required": False},
+            {"id": "image", "label": "Image", "required": True},
+            {"id": "prompt", "label": "Prompt", "required": False},
         ],
         "outputPorts": [{"id": "video"}],
         "envKeyName": "RUNWAY_API_KEY",
@@ -920,7 +922,7 @@ def validate_graph(
                         port_id="",
                         message=f"Missing API key: {env_key}",
                         person=missing_key_line([env_key]),
-                    )
+                    ).marked("reason")
                 )
             continue
 
@@ -933,7 +935,7 @@ def validate_graph(
                             port_id=port["id"],
                             message=f"Required input port {port['id']} is not connected",
                             person=port_line(port.get("label") or ""),
-                        )
+                        ).marked("input", str(port.get("label") or ""))
                     )
 
         env_key = node_def.get("envKeyName", [])
@@ -959,8 +961,9 @@ def validate_graph(
             if not is_krea_connected():
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="",
-                    message="Connect your Krea account in Settings before running this recipe",
-                    person="Connect your Krea account in Settings, then run the node again."))
+                    message="Sign in to Krea in Settings before running this recipe",
+                    # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+                    person="Sign in to Krea in Settings, then run the node again.").marked("reason"))
         from services import node_route
         if node_route.has_routes(node_def) and not krea_account:
             # A route-table node runs on its chosen route (or Auto's), never
@@ -971,7 +974,7 @@ def validate_graph(
             if unavailable is not None:
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="", message=unavailable["message"],
-                    person=node_route.route_unavailable_line(node_def, routed, api_keys)))
+                    person=node_route.route_unavailable_line(node_def, routed, api_keys)).marked("reason"))
         elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
@@ -980,7 +983,7 @@ def validate_graph(
                     port_id="",
                     message=f"Missing API key: {key_display}",
                     person=missing_key_line(key_names),
-                )
+                ).marked("reason")
             )
 
         if node.definition_id == "gemini-omni-flash":

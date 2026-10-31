@@ -144,6 +144,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           errorPerson={node.data.errorPerson}
           errorProviderText={node.data.errorProviderText}
           errorProvider={node.data.errorProvider}
+          errorNotStarted={node.data.errorNotStarted}
         />
         {canZoom && (
           <button

@@ -21,14 +21,36 @@ function declaredResponseLength(response: Response): number | null {
   return Number.isSafeInteger(length) ? length : null;
 }
 
+/** A look at the first bytes of a body before the rest is read: a file whose
+ * header is wrong stops after its header, not after the whole download. */
+export interface AssetPrefixCheck {
+  /** How many leading bytes the check wants. A shorter body is checked whole. */
+  bytes: number;
+  /** Throws to stop the read; the stream is cancelled first. `declaredLength`
+   * is the response's Content-Length, when it gave a usable one. */
+  check: (prefix: Uint8Array, context: { declaredLength: number | null }) => void;
+}
+
+function concatChunks(chunks: readonly Uint8Array[], byteLength: number): Uint8Array<ArrayBuffer> {
+  const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /** Read a response without trusting Content-Length. The stream is cancelled as
- * soon as it crosses the caller's byte allowance. */
+ * soon as it crosses the caller's byte allowance, or as soon as `prefixCheck`
+ * refuses its first bytes. */
 export async function readBoundedAssetResponse(
   response: Response,
   maxBytes: number,
-  options: { heading?: string } = {},
+  options: { heading?: string; prefixCheck?: AssetPrefixCheck } = {},
 ): Promise<Uint8Array<ArrayBuffer>> {
   const heading = options.heading ?? '';
+  const prefixCheck = options.prefixCheck;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new AssetByteLimitError('No asset capacity remains.');
   }
@@ -48,12 +70,24 @@ export async function readBoundedAssetResponse(
         `Asset contains ${bytes.byteLength} bytes, above the ${maxBytes}-byte allowance.`,
       );
     }
+    prefixCheck?.check(bytes.subarray(0, prefixCheck.bytes), { declaredLength });
     return bytes;
   }
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
+  let prefixChecked = !prefixCheck;
+  const checkPrefix = async () => {
+    prefixChecked = true;
+    if (!prefixCheck) return;
+    try {
+      prefixCheck.check(concatChunks(chunks, byteLength).subarray(0, prefixCheck.bytes), { declaredLength });
+    } catch (error) {
+      await reader.cancel('Asset failed its header check').catch(() => undefined);
+      throw error;
+    }
+  };
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -68,16 +102,12 @@ export async function readBoundedAssetResponse(
       }
       chunks.push(value);
       byteLength += value.byteLength;
+      if (!prefixChecked && byteLength >= prefixCheck!.bytes) await checkPrefix();
     }
+    if (!prefixChecked) await checkPrefix();
   } finally {
     reader.releaseLock();
   }
 
-  const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return concatChunks(chunks, byteLength);
 }

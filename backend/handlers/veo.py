@@ -156,7 +156,7 @@ async def handle_veo(
     if not vertex_credentials and not api_key:
         raise with_person_line(
             MissingCredentialError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY"),
-            "Add your Google Vertex AI credentials or Gemini API key in Settings, then run the node again.")
+            key_line(["GOOGLE_VERTEX_CREDENTIALS", "GOOGLE_API_KEY"]))
 
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value) if prompt_input and prompt_input.value else ""
@@ -506,7 +506,7 @@ async def _poll_vertex_operation(
             "video": {"type": "Video", "value": str(file_path)},
             "source_uri": {"type": "Video", "value": gcs_uri or str(file_path)},
         }
-    raise with_person_line(RuntimeError(f"Veo (Vertex) timed out after {max_polls} polls"), slow_job_line("Google Vertex AI"))
+    raise with_person_line(RuntimeError(f"Veo (Vertex) timed out after {max_polls} polls"), slow_job_line("Vertex AI"))
 
 
 def _veo_parameters(params: dict[str, Any]) -> dict[str, Any]:
@@ -604,7 +604,7 @@ def fal_veo_route(
     splits Veo 3.1 into text-, image- and first-last-frame endpoints. Lite
     isn't on fal, so it runs as Fast, the nearest price."""
     if inputs.get("video") and inputs["video"].value:
-        raise with_person_line(ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings"), "Extending a clip runs on Google. Add your Vertex AI credentials or Gemini API key in Settings, then run the node again.")
+        raise with_person_line(ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings"), "Extending a clip runs on Google. Add your Vertex AI service account key or Gemini API key in Settings, then run the node again.")
     params = node.params
     fast = canonical_model(params.get("model")) in (FAST_MODEL, LITE_MODEL)
     base = "fal-ai/veo3.1/fast" if fast else "fal-ai/veo3.1"

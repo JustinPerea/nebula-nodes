@@ -122,6 +122,15 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
+/** Said by this client, never the backend: the server promoted this socket
+ *  to the person's tab (its proposalSync on a verified hello). Until then the
+ *  socket hears no `settingsChanged`, so a key change made between the
+ *  connect and the promote reached nothing here; the tab reads its settings
+ *  again on this (store/settingsChangedSocket.ts, PR #203 round 15). */
+export interface PersonPromotedEvent {
+  type: 'personPromoted';
+}
+
 /** A saved moodboard, character or Style changed (backend main.py
  *  _broadcast_stored_asset), so a card or list that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
@@ -150,6 +159,18 @@ export interface ProjectsChangedEvent {
   projectId: string | null;
 }
 
+/** The settings changed (PUT /api/settings, a key's DELETE, the desktop
+ *  credential bridge: backend main.py _broadcast_settings_changed), sent to
+ *  the person's tabs only. No values travel: `keys` names the keys whose
+ *  value changed, if any; the tab reads GET /api/settings again
+ *  (store/settingsChangedSocket.ts). */
+export interface SettingsChangedEvent {
+  type: 'settingsChanged';
+  keys?: string[];
+  /** The writing tab's own id, when it sent one (lib/tabId.ts TAB_ID). */
+  origin?: string;
+}
+
 /** The active project's pins, sent after graphSync and on every pin change. */
 export interface CanvasPinsEvent {
   type: 'canvasPins';
@@ -161,11 +182,27 @@ export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn' | 'e
 
 /** One node's run cost: free or paid, with its list price when Nebula has one. */
 export interface ProposalCost {
-  kind: 'free' | 'paid';
+  /** The node's cost class (backend model_pricing.cost_class through
+   * canvas_proposals.cost_for): `mayCost`, a key-billing route with the
+   * person's key set (Idol with a Hugging Face token), and `plan`, a run on
+   * the person's Krea plan, are never paid; `free` is a local node, a
+   * key-billing route with no key or a sourced $0. */
+  kind: 'free' | 'paid' | 'mayCost' | 'plan';
   provider: string | null;
   label: string;
   price?: { low: number; high: number } | null;
+  /** A key-billing node's name and the account it may bill. */
+  name?: string;
+  account?: string;
 }
+
+/** Why a paid node leaves the total open (backend model_pricing.estimate_run
+ * reasons), in the Run chip's kinds (runScope UnpricedReason): the Accept
+ * chip writes the same reason lines (GM, PR #203 r17 item 4). */
+export type ProposalCostReason =
+  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' | 'plan' }
+  | { kind: 'missingKey'; keys?: string[] }
+  | { kind: 'leftOut'; plus?: string };
 
 /** List-price total for a proposal's run (backend canvas_proposals.summarize_cost). */
 export interface ProposalEstimate {
@@ -196,6 +233,18 @@ export interface ProposalNotReady {
   /** The person's line (round 3f, node_readiness.instance_missing_line): "GPT Image 2 needs your
    *  OpenAI API key. Add it in Settings." Absent from a backend older than 3f. */
   person?: string;
+  /** Why it can't run, for one node and for several (PR #203 round 15:
+   *  node_readiness.instance_missing_reason, person_line.NOT_READY_PREDICATES):
+   *  what follows the quoted name ("needs your OpenAI API key. Add it in
+   *  Settings." / "need …"). The bar merges nodes by it. Absent for a route's
+   *  own line and from an older backend. */
+  reason?: NotReadyReason;
+}
+
+/** A not-ready reason's predicate, for one node and for several. */
+export interface NotReadyReason {
+  one: string;
+  many: string;
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
@@ -228,11 +277,24 @@ export interface ProposalView {
   run: string[];
   cost: {
     paidRuns: number;
+    /** Runs that may bill the person's own account (a mayBillWithKey route
+     * with their key set: Idol with a Hugging Face token), never counted as
+     * paid (GM, PR #203 r11 item 2), and who they are. Absent from a backend
+     * before round 7 of PR #203. */
+    mayCostRuns?: number;
+    mayCost?: Array<{ name: string; account: string }>;
+    /** Runs on the person's Krea plan, never counted as paid (GM, PR #203
+     * r19 item 1: "2 paid · 1 on Krea plan"). Absent from an older backend. */
+    planRuns?: number;
     freeRuns: number;
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** `definitionId`: which node type, so a key-billing node's class is
+     * read again with the keys set now (canvasProposals liveKeyBilling). */
+    nodes: Array<ProposalCost & {
+      ref: string; nodeId: string | null; missing?: string; definitionId?: string; reason?: ProposalCostReason;
+    }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
@@ -345,6 +407,7 @@ export type ExecutionEvent = (
   | AgentNotesEvent
   | StoredAssetChangedEvent
   | ProjectsChangedEvent
+  | SettingsChangedEvent
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent
@@ -355,6 +418,7 @@ export type ExecutionEvent = (
   | QuestionsSyncEvent
   | QuestionsClosedEvent
   | SocketReconnectedEvent
+  | PersonPromotedEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
@@ -452,11 +516,13 @@ class WebSocketClient {
             // only (backend websocket_endpoint), by whatever path the hello
             // came: a new link, the same link again, a reconnect, the desktop
             // app's token. The hold and the banner follow it.
-            if (parsed.type === 'proposalSync' && this.ws === socket) {
+            const promotedNow = parsed.type === 'proposalSync' && this.ws === socket;
+            if (promotedNow) {
               this.promoted = socket;
               notePersonPromoted();
             }
             this.dispatch(parsed);
+            if (promotedNow) this.dispatch({ type: 'personPromoted' });
           } catch (err) {
             console.error('[ws] failed to parse message:', err);
           }

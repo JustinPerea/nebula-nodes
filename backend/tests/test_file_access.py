@@ -36,7 +36,7 @@ def test_protected_aliases_denied(protected, tmp_path, alias):
 def test_configured_secret_and_symlinked_root_denied(tmp_path, monkeypatch):
     import services.settings as settings
     secret = tmp_path / "credentials.json"
-    monkeypatch.setattr(settings, "SETTINGS_PATH", secret)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(secret))
     with pytest.raises(ProtectedPathError):
         require_allowed_path(secret)
     real = tmp_path / "real"
@@ -246,9 +246,12 @@ def test_graph_import_content_is_checked_before_clearing_graph(tmp_path, protect
     path = tmp_path / "ordinary-graph.json"
     path.write_text(json.dumps({"nodes": [{"id": "bad", "definitionId": "image-input", "params": {"filePath": str(protected / "private.png")}}], "edges": []}))
     client = Mock()
+    # `nebula load` names its surface with the client's own headers (a local
+    # read, PR #203 round 12); nothing goes to Nebula before the file is checked.
+    client._identity_headers.return_value = {"X-Nebula-Surface": "cli"}
     with pytest.raises(SystemExit):
         run_load(client, str(path))
-    assert client.mock_calls == []
+    assert [call for call in client.mock_calls if call[0] != "_identity_headers"] == []
     graph = CLIGraph()
     graph.add_node("text-input", {"value": "keep"})
     before = graph.get_state()

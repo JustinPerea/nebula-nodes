@@ -219,10 +219,18 @@ def instance_access(
         return KREA if krea_signed_in else None
     keys = {key: "set" for key in configured_keys}
     route = node_route.select_route(definition, params, keys)
-    return None if route.kind == node_route.UNSET else KEY
+    if route.kind == node_route.UNSET:
+        return None
+    # A keyless route (a maker's free Hugging Face Space) run without its
+    # optional key runs free; with the key set it runs on that key.
+    spec = node_route.route_by_id(definition, route.route_id) or {}
+    if node_route.is_keyless(spec) and route.key is None:
+        return FREE
+    return KEY
 
 
-KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers)"
+# The row by name, as MCP's sign-in hint does (GM, PR #203 r25 item 2).
+KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers > Krea)"
 
 
 def instance_missing(
@@ -234,7 +242,7 @@ def instance_missing(
     the words `missing` uses (find_nodes, describe_node); None when it can run.
 
     For one node on a canvas or in a proposal, where its own choices count:
-    a Krea node bills its saved `_kreaAuth` (the API token unless "mcp"), so
+    a Krea node bills its saved `_kreaAuth` (the API key connection unless "mcp"), so
     a Krea sign-in doesn't make an API-token node ready; a route-table node
     runs its chosen route or Auto's (``wired`` as the router reads it, so a
     wired input can block a route), in node_route's own words; a ``kind:
@@ -270,28 +278,45 @@ def instance_missing_line(
     wired: Any = (), name: str | None = None,
 ) -> str | None:
     """instance_missing in words for the person (error copy round 3f): the
-    node by its name, a key by its provider, never an env-var name or a ref
-    ("GPT Image 2 needs your OpenAI API key. Add it in Settings."). The
-    proposal bar and layer show it; agents keep instance_missing's text.
-    None when the node can run."""
-    from execution.person_line import key_phrase
+    node by its name in curly quotes (GM, PR #203 r20 item 3), a key by its
+    provider, never an env-var name or a ref ("“GPT Image 2” needs your
+    OpenAI API key. Add it in Settings."). The proposal bar and layer show
+    it; agents keep instance_missing's text. None when the node can run."""
+    from services import node_route
+
+    reason = instance_missing_reason(definition, params, configured_keys, krea_signed_in, definitions, wired)
+    if reason is None:
+        return None
+    named = name or node_route.node_name(definition, None, "")
+    return reason.line(f"“{named}”" if named else "This node")
+
+
+def instance_missing_reason(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, configured_keys: Iterable[str],
+    krea_signed_in: bool = False, definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    wired: Any = (),
+) -> Any:
+    """Why the node can't run here, as person_line.NOT_READY_PREDICATES says
+    it for one node and for several (a NotReadyReason), or None when it can
+    run. The bar's lines and the Agent Log merge nodes by it (GM, PR #203
+    r28; review 14, copy LOW-1)."""
+    from execution.person_line import NotReadyReason, key_phrase
     from services import node_route
 
     need = instance_missing(definition, params, configured_keys, krea_signed_in, definitions, wired)
     if need is None:
         return None
-    title = name or node_route.node_name(definition, None, "This node")
-    sign_in = f"{title} needs your Krea account. Connect it in Settings."
     configured = set(configured_keys)
     if node_route.has_routes(definition):
         routed = node_route.with_wired_blockers(definition, params, wired)
         if node_route.uses_krea_plan(definition, routed):
-            return sign_in
-        line = node_route.route_unavailable_line(definition, routed, {key: "set" for key in configured})
-        if line:
-            return line
+            # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+            return NotReadyReason.of("krea_plan")
+        reason = node_route.route_unavailable_reason(definition, routed, {key: "set" for key in configured})
+        if reason is not None:
+            return reason
     if need == KREA_SIGN_IN:
-        return sign_in
+        return NotReadyReason.of("krea_plan")
     needs = keys_needed(definition, params, definitions) or []
     target = next((item for item in needs if _plain_access(item, configured, krea_signed_in) is None), definition)
     via = provider_via(target)
@@ -302,8 +327,8 @@ def instance_missing_line(
     keys = list(dict.fromkeys(keys))
     phrase = key_phrase(keys) if keys else None
     if phrase:
-        return f"{title} needs your {phrase}. Add {'one' if len(keys) > 1 else 'it'} in Settings."
-    return f"{title} isn't set up to run here yet. Check its provider in Settings."
+        return NotReadyReason.of("key", phrase=phrase, it="one" if len(keys) > 1 else "it")
+    return NotReadyReason.of("not_set_up")
 
 
 def missing(

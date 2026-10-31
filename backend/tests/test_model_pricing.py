@@ -269,6 +269,7 @@ def test_route_table_run_estimate_matches_shared_cases(case):
         assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
     assert ("n1" in result["unavailable"]) is expected["unavailable"]
     assert ("n1" in result["plan"]) is expected["plan"]
+    assert result["reasons"].get("n1") == expected["reason"]
     if expected["unavailable"]:
         assert "n1" in result["unpriced"]
         from services import node_route

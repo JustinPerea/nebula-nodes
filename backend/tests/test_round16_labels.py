@@ -55,7 +55,7 @@ def test_on_the_gateway_a_key_routed_node_names_the_gateway_with_via():
     assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["label"] == "paid · Grok Imagine 2.0 via Krea"
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"},
                     wired={"style_images"})["label"] == "paid · Grok Imagine 2.0 via Krea"
-    assert cost_for(grok, {})["label"] == "paid · Grok Imagine 2.0 via Krea"
+    assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["label"] == "paid · Grok Imagine 2.0 via Krea"
 
 
 def test_name_on_route_matches_the_canvas():

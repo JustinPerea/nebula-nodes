@@ -160,16 +160,16 @@ def test_parse_spec_shapes_refs_and_caps():
 
 
 def test_cost_never_has_numbers():
-    assert cost_for({"apiProvider": "utility"}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
-    assert cost_for({"apiProvider": "fal"}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
+    assert cost_for({"apiProvider": "utility"}, {}, None, {}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
+    assert cost_for({"apiProvider": "fal"}, {}, None, {}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
     # A local node whose mode calls a vision model is paid, with no list price.
     import json
     from pathlib import Path
     qc = json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text())["qc-frame-review"]
-    assert cost_for(qc, {"mode": "vision-llm"}) == {
+    assert cost_for(qc, {"mode": "vision-llm"}, None, {}) == {
         "kind": "paid", "provider": "vision", "label": "paid · vision model, no list price"}
-    assert cost_for(qc, {"mode": ""})["kind"] == "paid"
-    assert cost_for(qc, {"mode": "heuristic"}) == cost_for(qc, {}) == {
+    assert cost_for(qc, {"mode": ""}, None, {})["kind"] == "paid"
+    assert cost_for(qc, {"mode": "heuristic"}, None, {}) == cost_for(qc, {}, None, {}) == {
         "kind": "free", "provider": None, "label": "free · runs locally"}
 
 
@@ -301,9 +301,13 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     response = _propose(api, body).json()
     cost = response["proposal"]["cost"]
     need = "needs OPENAI_API_KEY in Settings > Providers"
-    # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f).
+    # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f);
+    # `reason` is that line without the name, for one node and for several, which
+    # the bar merges by (PR #203 round 15).
     assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need,
-                                 "person": "GPT Image 2 needs your OpenAI API key. Add it in Settings."}]
+                                 "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings.",
+                                 "reason": {"one": "needs your OpenAI API key. Add it in Settings.",
+                                            "many": "need your OpenAI API key. Add it in Settings."}}]
     assert {node["ref"]: node.get("missing") for node in cost["nodes"]} == {"+img": need, n1: None}
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "
@@ -1335,13 +1339,13 @@ def test_cli_proposal_json_and_formatting():
         "  adds     +up  Topaz Upscale  [paid · fal]  @(820,140)",
         "  connects n4.image → +up.image",
         "  sets     n4: prompt",
-        "  runs     +up — up to 1 paid run (fal) — no list price",
+        "  runs     +up — up to 1 paid run (fal), no list price",
         "Check the outcome: nebula proposal p_9a1c3e02 --wait",
     ]
     priced = {**view, "cost": {**view["cost"], "estimate": {"low": 0.0047, "high": 0.43, "open": True}}}
-    assert "— $0.0047–0.43+ at list prices" in format_proposal(priced, now_ms=1_000_000)
+    assert "(fal), $0.0047–0.43+ at list prices" in format_proposal(priced, now_ms=1_000_000)
     exact = {**view, "cost": {**view["cost"], "estimate": {"low": 0.067, "high": 0.067, "open": False}}}
-    assert "— $0.067 at list prices" in format_proposal(exact, now_ms=1_000_000)
+    assert "(fal), $0.067 at list prices" in format_proposal(exact, now_ms=1_000_000)
     event = {"seq": 3, "at": 0, "kind": "proposal.created", "actor": {"kind": "agent", "name": "Codex"},
              "data": {"proposalId": "p_9a1c3e02"}, "summary": 'proposed p_9a1c3e02: "Upscale"'}
     assert "nebula proposal p_9a1c3e02 --wait" in format_event(event)
@@ -1404,9 +1408,9 @@ def test_a_cinema_scene_is_paid_by_its_base_model():
     definitions = {"nano-banana": {"id": "nano-banana", "apiProvider": "google"}}
     scene = {"id": "cinema-scene", "apiProvider": "utility"}
     params = {"scene": {"base": {"model": "nano-banana"}, "shots": [{"id": "a"}]}}
-    assert cost_for(scene, params, definitions) == {
+    assert cost_for(scene, params, definitions, {}) == {
         "kind": "paid", "provider": "google", "label": "paid · google, per shot"}
-    assert cost_for(scene, {"scene": "unreadable"}, definitions)["kind"] == "paid"
+    assert cost_for(scene, {"scene": "unreadable"}, definitions, {})["kind"] == "paid"
 
 
 # -- a proposal that can't run here: kept, and the agent withdraws it before proposing something else (Q109) --

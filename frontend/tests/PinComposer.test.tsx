@@ -10,6 +10,9 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe
 vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
+// The app draws its notices in the notice region, which stays usable beside
+// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 function pin(text: string) {
@@ -27,14 +30,14 @@ afterEach(cleanup);
 
 describe('PinComposer', () => {
   it('renders nothing until a note is being composed', () => {
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('caps the text and creates the pin on the composed target', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     api.createPin.mockResolvedValue(pin('warmer'));
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     // Fix round 11 (GM r12 answer 3): only what shows counts, so no native
     // maxLength (it counts escape codes). GM r20 note 1: a change past 280
@@ -62,7 +65,7 @@ describe('PinComposer', () => {
 
   it('sends nothing on empty text (GM r30 item 3: Send note is held, the dialog stays), and Cancel closes it', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
-    const { unmount } = render(<PinComposer />);
+    const { unmount } = render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: '   ' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
@@ -72,7 +75,7 @@ describe('PinComposer', () => {
     unmount();
 
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(useCanvasPinsStore.getState().composer).toBeNull();
     expect(api.createPin).not.toHaveBeenCalled();
@@ -83,7 +86,7 @@ describe('PinComposer', () => {
     // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
     api.createPin.mockRejectedValue(new RequestFailedError("Couldn't save the note.", 403, { reason: 'This action only works from the Nebula canvas.' }));
-    render(<PinComposer />);
+    render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'redo this one' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));

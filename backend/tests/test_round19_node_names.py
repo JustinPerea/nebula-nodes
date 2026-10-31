@@ -32,7 +32,7 @@ def _defs():
 
 def test_every_definition_names_an_unnamed_node_by_its_canvas_title(monkeypatch):
     defs = _defs()
-    assert len(defs) == 308
+    assert len(defs) == 309  # +1 Idol (speridlabs-idol), 2026-10-29
     graph = CLIGraph()
     monkeypatch.setattr(main_module, "cli_graph", graph)
     wrong = []

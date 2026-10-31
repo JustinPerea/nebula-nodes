@@ -10,7 +10,9 @@ const ipcRenderer = electron.ipcRenderer;
 // Security surface:
 //   - No filesystem, process, or generic Node access.
 //   - No raw ipcRenderer exposure.
-//   - credentials has set / has / clear — deliberately NO get method.
+//   - credentials has set / has / clear / revert / commit — deliberately NO
+//     get method. revert and commit take the one-time write id set and
+//     clear answer.
 //   - migration has status / retry.
 //   - paperLinks has one guarded artwork-opening method.
 //   - folders has one method: show the OS folder chooser, return the pick.
@@ -62,14 +64,21 @@ try {
 /**
  * Frozen credential namespace.
  *
- * The renderer can set, check, and clear provider keys, but can never
- * read a plaintext value back. There is no `get` method and no
- * `credentials:get` IPC channel.
+ * The renderer can set, check, and clear provider keys, and undo or
+ * commit its own write in flight, but can never read a plaintext value
+ * back. There is no `get` method and no `credentials:get` IPC channel.
  */
 const credentials = Object.freeze({
   set: (provider, key) => ipcRenderer.invoke('credentials:set', { provider, key }),
   has: (provider) => ipcRenderer.invoke('credentials:has', provider),
   clear: (provider) => ipcRenderer.invoke('credentials:clear', provider),
+  // set and clear answer a one-time `writeId`. `revert(writeId)` undoes that
+  // write only, while it is the provider's latest and the store still holds
+  // what it wrote; `commit(writeId)` says the backend took it, so nothing
+  // can undo it. Main keeps the earlier encrypted entry; nothing comes back
+  // to the renderer (review 14 of PR #203, keychain HIGH-1).
+  revert: (writeId) => ipcRenderer.invoke('credentials:revert', writeId),
+  commit: (writeId) => ipcRenderer.invoke('credentials:commit', writeId),
 });
 
 /**

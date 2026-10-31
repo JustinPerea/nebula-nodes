@@ -64,6 +64,7 @@ const VALID_PROVIDERS = new Set([
   'nous',
   'worldlabs',
   'typesafe',
+  'speridlabs',
   'utility',
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);
@@ -78,9 +79,10 @@ const VALID_PORT_TYPES = new Set([
 const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette', 'moodboard', 'character']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 // A route-table node's routes (definition `routes`, docs/PROVIDER-ROUTES.md).
-const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea']);
-const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'plan', 'handler', 'endpoint', 'endpointWhen',
-  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note']);
+const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea',
+  'hf-space']);
+const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'optionalKeys', 'plan', 'handler', 'endpoint', 'endpointWhen',
+  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note', 'missingKeyLine', 'mayBillWithKey']);
 const ROUTE_RULES = new Set(['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size', 'ports']);
 const BILLING_PARAMS = ['_provider', '_kreaAuth'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
@@ -211,9 +213,42 @@ function validateRoutes(nodes, source) {
       if (!keys) errors.push(`${at}.keys must be a list of key names`);
       if (![undefined, 'optional', 'only'].includes(route.plan)) errors.push(`${at}.plan must be 'optional' or 'only'`);
       if (route.plan && route.provider !== 'krea') errors.push(`${at} only a Krea route can bill the plan`);
-      if (route.plan !== 'only' && !keys?.length) errors.push(`${at} needs keys (only a plan-only route runs without one)`);
-      if (keys?.length && keyProviders[keys[0]] !== route.provider) {
+      // A keyless route (node_route.is_keyless): runs with no key, uses an
+      // optional one when set; its keys stay [] and out of envKeyName.
+      let optional = route.optionalKeys;
+      if (optional !== undefined) {
+        if (!Array.isArray(optional) || !optional.every((key) => typeof key === 'string' && key)) {
+          errors.push(`${at}.optionalKeys must be a list of key names`);
+          optional = [];
+        }
+        if (keys?.length) errors.push(`${at} lists keys and optionalKeys; a keyless route's keys must be []`);
+        for (const key of optional) {
+          if (!Object.hasOwn(keyProviders, key)) errors.push(`${at}.optionalKeys names ${key}, which Settings doesn't store`);
+        }
+        if (route.plan) errors.push(`${at} a keyless route can't bill a plan`);
+      }
+      if (route.plan !== 'only' && !keys?.length && optional === undefined) {
+        errors.push(`${at} needs keys (only a plan-only or keyless route runs without one)`);
+      }
+      // A maker's Hugging Face Space (handler hf-space) names the maker as its
+      // provider; its key is the Hugging Face token (node_route.routes_problems).
+      if (keys?.length && keyProviders[keys[0]] !== route.provider
+        && !(route.handler === 'hf-space' && keys[0] === 'HF_TOKEN')) {
         errors.push(`${at}.provider must be '${keyProviders[keys[0]]}', who bills ${keys[0]}`);
+      }
+      // A keyless route whose run with one of its optional keys can bill the
+      // key owner's account (node_route.routes_problems, RouteSpec.mayBillWithKey).
+      if (route.mayBillWithKey !== undefined) {
+        if (route.mayBillWithKey !== true) errors.push(`${at}.mayBillWithKey must be true when present`);
+        if (!Array.isArray(route.optionalKeys) || !route.optionalKeys.length) {
+          errors.push(`${at}.mayBillWithKey needs optionalKeys: it says a run with one of them may bill`);
+        }
+      }
+      if (route.missingKeyLine !== undefined) {
+        if (typeof route.missingKeyLine !== 'string' || !route.missingKeyLine.trim()) {
+          errors.push(`${at}.missingKeyLine must be a sentence`);
+        }
+        if (!keys?.length) errors.push(`${at}.missingKeyLine needs keys to be missing`);
       }
       if (!ROUTE_HANDLERS.has(route.handler)) errors.push(`${at}.handler must be one of ${[...ROUTE_HANDLERS].join(', ')}`);
       if (![undefined, true].includes(route.maker)) errors.push(`${at}.maker must be true or left out`);
@@ -594,6 +629,11 @@ function validateCredentialExampleCoverage() {
     if (typeof env === 'string' && env) keys.add(env);
     if (Array.isArray(env)) {
       for (const key of env) if (key) keys.add(key);
+    }
+    // A keyless route's optional key (a Hugging Face token) is still a key
+    // Settings stores for a node.
+    for (const route of definition.routes ?? []) {
+      for (const key of route.optionalKeys ?? []) if (key) keys.add(key);
     }
   }
   const settingsKeys = new Set(Object.keys(settingsExample.apiKeys ?? {}));

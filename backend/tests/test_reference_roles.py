@@ -110,7 +110,7 @@ APPROVED_OPTION_LABEL_CHANGES = {
 # Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
 # and Style Train gained the training models Krea added since the baseline.
 _KREA_AUTH_PARAM = {"key": "_kreaAuth", "label": "Krea connection", "type": "enum", "required": False,
-                    "options": [{"value": "api-token", "label": "API token · API balance"},
+                    "options": [{"value": "api-token", "label": "API key · API balance"},
                                 {"value": "mcp", "label": "Krea account · workspace compute"}],
                     "default": "api-token"}
 # Pricing and readiness (2026-10-13): cinema-scene declares the base models its

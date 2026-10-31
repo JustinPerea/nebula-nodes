@@ -2,9 +2,12 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { envKeyNames, hasRoutes, isDefaultTitle, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
+import { classCounts, costChip, costClass } from './costClass';
+import {
+  envKeyNames, hasRoutes, isDefaultTitle, keyBillingAccount, keyPhrase, nameOnRoute, routePriceKey, routeUnavailable,
+  selectRoute, withWiredBlockers,
+} from './directRoute';
 import { namesSeveral, nodeNameList } from './errorCopy';
-import { usesKreaAccount } from './kreaConnection';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import {
   awaitsInput, chipEstimate, chipTitle, entryForRoute, estimateNode, formatChipEstimate, formatUsd,
@@ -12,8 +15,8 @@ import {
 } from './pricing';
 import { cleanPending, pendingIncludedLine, runSkips, skipSummaryOf, type PendingSkipSummary } from './pendingNodes';
 import {
-  AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ROUTE_CANT_RUN,
-  SIZE_UNREADABLE,
+  AWAITING_INPUT, LEFT_OUT, LEFT_OUT_OTHER, MISSING_KEY, MISSING_KEY_UNNAMED, NO_LISTED_PRICE, ON_KREA_PLAN,
+  PAID_AND, PAID_NO_LISTED_PRICE, ROUTE_CANT_RUN, SIZE_UNREADABLE,
 } from './unpricedCopy';
 
 /** Why a paid node in a run adds to the "+ unpriced" chip (GM, PR #198 r7
@@ -26,9 +29,11 @@ import {
  * - `cantRun`: its chosen route can't take the run for another reason;
  * - `awaitingInput`: priced from its input's size, not known yet;
  * - `sizeUnreadable`: priced from its input's size, which can't be read;
- * - `leftOut`: priced, with a cost its price entry's `plus` names. */
+ * - `leftOut`: priced, with a cost its price entry's `plus` names;
+ * - `plan`: runs on the person's Krea plan (also in `plan`), never paid and
+ *   never in the figure: its own line (GM, PR #203 r19 item 1). */
 export type UnpricedReason =
-  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' }
+  | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' | 'plan' }
   | { kind: 'missingKey'; key: string | null }
   | { kind: 'leftOut'; plus: string };
 
@@ -63,14 +68,34 @@ export interface RunCost {
   /** `unpriced`, `plan` and `awaitingInput` by node id, for a reader that
    * needs each node's own (two nodes can share a name): the placeholder
    * dialog's rows (lib/placeholderRunConfirm.ts). */
-  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; unavailable?: Record<string, string> };
+  ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; free?: string[]; unavailable?: Record<string, string> };
+  /** The run's only provider calls are sourced $0 nodes (summary `free`), so
+   * it is exact, not an estimate that rounds to zero (GM, PR #203 r11 item
+   * 4: "$0" against "~$0"; r18 item 1: such a node is free, never paid).
+   * Present only when true. */
+  sourcedZero?: true;
 }
 
 export interface RunScopeSummary {
   /** Nodes the run would execute. */
   total: number;
-  /** Display names of nodes that call an external (paid) provider. */
+  /** Display names of nodes that call an external provider and are paid
+   * (costClass "paid"): never a run on the Krea plan, a may-cost node or a
+   * sourced $0. */
   paid: string[];
+  /** Nodes that run on the person's Krea plan (costClass "plan"), never in
+   * `paid` or the figure (GM, PR #203 r19 item 1: "2 paid · 1 on Krea
+   * plan"). Present only when there are some. */
+  plan?: string[];
+  /** Nodes priced at a sourced $0 (costClass "free"), never in `paid` or
+   * `cost.lines` (GM, PR #203 r18 item 1). Present only when there are some. */
+  free?: string[];
+  /** Nodes on a route that may bill the person's own account because their
+   * key is set (directRoute.keyBilling "mayCost": Idol with a Hugging Face
+   * token), never in `paid` or `cost` (GM, PR #203 r11 item 2: "2 paid · 1
+   * may cost"), with the account. Present only when there are some; the same
+   * route with no key is free and adds nothing (r12). */
+  mayCost?: Array<{ name: string; account: string }>;
   /** Present once the price table has loaded. */
   cost?: RunCost;
   /** Paid nodes behind a gate (downstream of a conditional port, such as Jev
@@ -322,8 +347,11 @@ export function summarizeRunScope(
   const { included, pendingSkipped, pendingIncluded } = scopeOf(nodes, edges, scope);
 
   const paid: string[] = [];
+  const plan: string[] = [];
+  const free: string[] = [];
+  const mayCost: NonNullable<RunScopeSummary['mayCost']> = [];
   const pricing = costContext?.pricing;
-  const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [] };
+  const ids: NonNullable<RunCost['ids']> = { unpriced: [], plan: [], awaitingInput: [], free: [] };
   const cost: RunCost = {
     low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], reasons: [], ids,
   };
@@ -350,6 +378,16 @@ export function summarizeRunScope(
       ? selectRoute(definition, withWiredBlockers(definition, params, ports), costContext.apiKeys).provider : null;
     if (provider) routes[node.id] = provider;
     const name = definition.providerVia ? (node.data?.label || definition.displayName || node.id) : runNodeName(node, provider);
+    // The one cost class (costClass). Free unless the person's key is set,
+    // and then it may bill their own account: never paid, never priced (GM,
+    // PR #203 r11 item 2, r12).
+    const apiKeys = costContext?.apiKeys ?? {};
+    const keyed = withWiredBlockers(definition, params, ports);
+    const billing = costClass(definition, keyed, apiKeys);
+    if (billing === 'mayCost' || billing === 'free') {
+      if (billing === 'mayCost') mayCost.push({ name, account: keyBillingAccount(definition, keyed, apiKeys) ?? '' });
+      continue;
+    }
     if (definition.providerVia?.kind === 'model') {
       const nested = cinemaSceneBase(params, definition);
       if (nested && NODE_DEFINITIONS[nested.model]) {
@@ -366,6 +404,22 @@ export function summarizeRunScope(
       // QC calls a vision model, and Nebula has no list price for it.
       noPrice = !pricing?.nodes[definition.id];
     }
+    // A Krea-only setting that arrives by wire keeps the run on Krea
+    // (directRoute.withWiredBlockers), as the backend router does, and a
+    // wired input can block or unblock a route-table node's plan route.
+    const routed = withWiredBlockers(definition, params, ports);
+    if (!noPrice && costClass(definition, routed, apiKeys) === 'plan') {
+      // On the person's Krea plan: never paid, never in the figure, its own
+      // reason line (GM, PR #203 r19 item 1; review 9, MEDIUM-1).
+      plan.push(name);
+      if (!pricing || !multipliers) continue;
+      cost.plan.push(name);
+      ids.plan.push(node.id);
+      because(name, { kind: 'plan' });
+      continue;
+    }
+    // Paid until its price says it is a sourced $0 (below); with no price
+    // table yet, it stays paid.
     paid.push(name);
     if (behindGates.has(node.id)) gated.push(name);
     if (!pricing || !multipliers) continue;
@@ -373,15 +427,6 @@ export function summarizeRunScope(
       cost.unpriced.push(name);
       because(name, { kind: 'noPrice' });
       ids.unpriced.push(node.id);
-      continue;
-    }
-    // A Krea-only setting that arrives by wire keeps the run on Krea
-    // (directRoute.withWiredBlockers), as the backend router does, and a
-    // wired input can block or unblock a route-table node's plan route.
-    const routed = withWiredBlockers(definition, params, ports);
-    if (usesKreaAccount(definition, routed)) {
-      cost.plan.push(name);
-      ids.plan.push(node.id);
       continue;
     }
     let priceKey: string | null;
@@ -423,6 +468,15 @@ export function summarizeRunScope(
       break;
     }
     const estimate = estimateNode(entry, definition, params, priceKey, ports.keys(), size);
+    if (costClass(definition, routed, apiKeys, estimate) === 'free') {
+      // A sourced $0 is free (GM, PR #203 r18 item 1): never paid, never in
+      // the figure; a run of only these is a sourced "$0".
+      paid.pop();
+      if (behindGates.has(node.id)) gated.pop();
+      free.push(name);
+      ids.free!.push(node.id);
+      continue;
+    }
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);
       ids.unpriced.push(node.id);
@@ -448,7 +502,11 @@ export function summarizeRunScope(
     if (estimate.plus && !cost.plus.includes(estimate.plus)) cost.plus.push(estimate.plus);
     if (estimate.plus) because(name, { kind: 'leftOut', plus: estimate.plus });
   }
+  if (pricing && free.length > 0 && paid.length === 0 && plan.length === 0 && mayCost.length === 0) cost.sourcedZero = true;
   const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
+  if (plan.length) summary.plan = plan;
+  if (free.length) summary.free = free;
+  if (mayCost.length) summary.mayCost = mayCost;
   if (costContext) summary.routes = routes;
   if (gated.length) summary.gated = gated;
   if (pendingSkipped) summary.pendingSkipped = pendingSkipped;
@@ -476,19 +534,125 @@ export function repeatRun(summary: RunScopeSummary, passes: number): RunScopeSum
 /** The Run chip: "~$0.04", "$0.04–0.43", "$0.04 + unpriced" when part of
  * the run has no known price (GM, PR #198 r6), "<$0.01" for a non-zero
  * amount under a cent (r1: "$0" only ever means free), "N paid" when none
- * of it has a list price. Null when nothing is paid. */
-export function runChipLabel({ paid, cost }: RunScopeSummary): string | null {
-  if (paid.length === 0) return null;
-  if (!cost || cost.lines.length === 0) return `${paid.length} paid`;
-  return formatChipEstimate(cost.low, cost.high, costOpen(cost));
+ * of it has a list price. Null when nothing is paid, on the Krea plan or may
+ * cost: a free run shows no chip, a sourced $0 included (GM, PR #203 r20
+ * item 1; its tooltip "This costs nothing to run." stays on the Run
+ * button). A run that may bill the person's own account (summary.mayCost)
+ * and one on the Krea plan are counted apart, by the one chip rule
+ * (costChip: "+" joins money, "·" joins classes; GM r20): "1 may cost",
+ * "2 paid · 1 on Krea plan", "$0.07 + unpriced · 1 on Krea plan". */
+export function runChipLabel({ paid, cost, mayCost, plan }: RunScopeSummary): string | null {
+  const counts = (paidCount: number) => classCounts({ paid: paidCount, plan: plan?.length, mayCost: mayCost?.length });
+  if (paid.length === 0) return costChip(null, counts(0));
+  if (!cost || cost.lines.length === 0) return costChip(null, counts(paid.length));
+  return costChip(formatChipEstimate(cost.low, cost.high, costOpen(cost)), counts(0));
 }
 
-/** One sentence per reason (GM r7 item 3): the nodes sharing it named
+/** "“Hero still” calls a paid provider." / "“A” and “B” call paid
+ * providers.": the first sentence of a mixed cost tooltip (GM, PR #203 r14
+ * item 3), the names by errorCopy nodeNameList (a count from 4). */
+export function paidSentence(names: string[]): string | null {
+  if (names.length === 0) return null;
+  return `${nodeNameList(names)} ${names.length === 1 ? 'calls a paid provider' : 'call paid providers'}.`;
+}
+
+/** The paid part as a sentence, never with "~" inside it (GM, PR #203 r14
+ * item 3, r16 item 3): pricing chipTitle's "Estimated cost $0.13.",
+ * "Estimated cost under $0.01.", "Up to $Y." and "Between $X and $Y.", and
+ * an open estimate's priced part ("The priced part of this run costs up to
+ * $0.43.", or '' for none). It covers the paid nodes only (GM r19 item 1). */
+export function estimateSentence(low: number, high: number, open: boolean): string {
+  return chipTitle(chipEstimate(low, high, open));
+}
+
+/** What a cost tooltip says, from either chip's own parts. */
+export interface CostTitleParts {
+  /** Every paid node's name, with a list price or not (GM, PR #203 r17 item 3). */
+  paid: string[];
+  /** The priced paid part, or null when no paid node has a price (or the
+   * price table hasn't loaded). */
+  estimate: { low: number; high: number; open: boolean } | null;
+  /** Why each unpriced part is unpriced, and each run on the Krea plan, as
+   * the Run chip records them. */
+  reasons: NonNullable<RunCost['reasons']>;
+  mayCost?: RunScopeSummary['mayCost'];
+  /** The run's only provider calls are sourced $0 nodes: "This costs
+   * nothing to run." and nothing else (GM, PR #203 r18 item 1). */
+  sourcedZero?: boolean;
+}
+
+/**
+ * Every cost tooltip: the toolbar's Run chip (runChipTitle) and the
+ * proposal bar's Accept chip (canvasProposals acceptChipTitle), one
+ * formatter (GM, PR #203 r16 item 3; r17 items 3 and 4). Line 1 names the
+ * paid nodes, priced or not, then the priced part as a sentence: "“A”
+ * calls a paid provider. Estimated cost $0.13." No heading. Each reason for
+ * an unpriced part goes on its own line under line 1 ("“B” has no listed
+ * price.": GM, PR #198 r9 bug 2), and the may-cost sentence comes last
+ * ("Idol can use your Hugging Face credits."); with no reasons it is all one
+ * line. Undefined when nothing is paid or may cost.
+ */
+export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: CostTitleParts): string | undefined {
+  const may = mayCostSentence(mayCost);
+  const priced = paid.length > 0 && estimate ? estimateSentence(estimate.low, estimate.high, estimate.open) : '';
+  const groups = reasonGroups(reasons);
+  // GM, PR #203 r20 item 2: line 1 and a reason line naming the same nodes
+  // are one sentence, "“Writer” and “Editor” call paid providers that have
+  // no listed price."; lines naming other nodes stay their own. Line 1 with
+  // a figure says more than the names, so it stays apart.
+  const same = priced ? -1 : groups.findIndex((group) => sameNames(group.names, paid));
+  const merged = same >= 0 ? mergedLead(groups.splice(same, 1)[0]) : null;
+  const lead = merged ?? [paidSentence(paid), priced].filter(Boolean).join(' ');
+  const lines = groups.map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
+  if (!lead && lines.length === 0 && !may) return sourcedZero ? SOURCED_ZERO_TITLE : undefined;
+  if (lines.length === 0) return [lead, may].filter(Boolean).join(' ') || undefined;
+  return [lead, ...lines, may].filter(Boolean).join('\n') || undefined;
+}
+
+/** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
+export const SOURCED_ZERO_TITLE = 'This costs nothing to run.';
+
+/** "Idol can use your Hugging Face credits.": the may-cost sentence, last in
+ * the chip's tooltip (GM, PR #203 r11 item 2), one per account. */
+export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | null {
+  if (!mayCost?.length) return null;
+  const byAccount = new Map<string, string[]>();
+  for (const { name, account } of mayCost) {
+    const names = byAccount.get(account) ?? [];
+    if (!names.includes(name)) names.push(name);
+    byAccount.set(account, names);
+  }
+  return [...byAccount].map(([account, names]) => {
+    const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${who} can use your ${account} credits.`;
+  }).join(' ');
+}
+
+type ReasonGroup = { id: string; line: (names: string, several: boolean) => string; names: string[] };
+
+/** The same nodes, however they are ordered. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length === 0 || a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((name, index) => name === right[index]);
+}
+
+/** Line 1 merged with the reason line naming the same nodes, in that line's
+ * order (the canvas's). */
+function mergedLead({ id, line, names }: ReasonGroup): string {
+  const list = nodeNameList(names);
+  const several = namesSeveral(names);
+  if (id === 'noPrice') return PAID_NO_LISTED_PRICE(list, several);
+  return PAID_AND(list, several, line(list, several).slice(list.length + 1));
+}
+
+/** One group per reason (GM r7 item 3): the nodes sharing it named
  * together (errorCopy nodeNameList), ordered as the nodes appear on the
  * canvas: left to right, the way a graph reads, then top to bottom (a node
  * with no position keeps its place after those that have one). */
-function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
-  const groups = new Map<string, { line: (names: string, several: boolean) => string; names: string[] }>();
+function reasonGroups(reasons: NonNullable<RunCost['reasons']>): ReasonGroup[] {
+  const groups = new Map<string, ReasonGroup>();
   const placed = reasons.map((entry, index) => ({ ...entry, index }));
   placed.sort((a, b) => (a.at && b.at ? a.at.x - b.at.x || a.at.y - b.at.y || a.index - b.index
     : a.at ? -1 : b.at ? 1 : a.index - b.index));
@@ -511,34 +675,31 @@ function reasonSentences(reasons: NonNullable<RunCost['reasons']>): string[] {
       case 'cantRun': id = 'cantRun'; line = ROUTE_CANT_RUN; break;
       case 'awaitingInput': id = 'awaitingInput'; line = AWAITING_INPUT; break;
       case 'sizeUnreadable': id = 'sizeUnreadable'; line = SIZE_UNREADABLE; break;
+      case 'plan': id = 'plan'; line = ON_KREA_PLAN; break;
+      // A kind this build doesn't know (a newer backend's): the generic
+      // line, never a crash (review 9 of PR #203, NIT-2).
+      default: id = 'noPrice'; line = NO_LISTED_PRICE; break;
     }
-    const group = groups.get(id) ?? { line, names: [] };
+    const group = groups.get(id) ?? { id, line, names: [] };
     group.names.push(name);
     groups.set(id, group);
   }
-  return [...groups.values()].map(({ line, names }) => line(nodeNameList(names), namesSeveral(names)));
+  return [...groups.values()];
 }
 
-/** The Run chip's tooltip, from the same parts as its label (pricing.ts
- * chipTitle): every chip form has one, "N paid" has none (the button's own
- * title has the details). An open chip leads with the priced part, then a
- * sentence per reason, no colons (GM, PR #198 r7 item 3): "The priced part
- * of this run costs up to $0.43. “Brief” has no listed price." */
-export function runChipTitle({ paid, cost }: RunScopeSummary): string | undefined {
-  if (paid.length === 0 || !cost || cost.lines.length === 0) return undefined;
-  const open = costOpen(cost);
-  const lead = chipTitle(chipEstimate(cost.low, cost.high, open));
-  // A free priced part has no line of its own (GM r8: "$0 is a price, not
-  // unpriced"): the reasons start the tooltip.
-  // Past the ceiling the lead is no line either (GM r9): no tooltip.
-  if (!open) return lead || undefined;
+/** The Run chip's tooltip, from the same parts as its label (costTitle,
+ * the one cost-tooltip formatter): whenever the chip shows, its paid nodes
+ * first, priced or not (GM, PR #203 r17 item 3), then the priced part, a
+ * sentence per reason, and the may-cost sentence last. */
+export function runChipTitle(summary: RunScopeSummary): string | undefined {
+  const { paid, cost } = summary;
+  const open = cost ? costOpen(cost) : false;
   // A summary with no reasons recorded (one built before them) names its
-  // unpriced nodes as having no listed price, so a free lead never leaves
-  // the chip without a tooltip.
-  const reasons = cost.reasons?.length ? cost.reasons
-    : lead ? [] : cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } }));
-  // GM r9 bug 2: each reason on its own line under the priced part's.
-  return [lead, ...reasonSentences(reasons)].filter(Boolean).join('\n') || undefined;
+  // unpriced nodes as having no listed price.
+  const reasons = !cost ? [] : cost.reasons?.length ? cost.reasons
+    : open ? cost.unpriced.map((name) => ({ name, reason: { kind: 'noPrice' as const } })) : [];
+  const estimate = cost && cost.lines.length > 0 ? { low: cost.low, high: cost.high, open } : null;
+  return costTitle({ paid, estimate, reasons, mayCost: summary.mayCost, sourcedZero: cost?.sourcedZero === true });
 }
 
 const AWAITING = 'Priced when its input is known:';
@@ -565,31 +726,22 @@ function runsLabel([low, high]: [number, number]): string {
   return low === high ? ` × ${high} runs` : ` × up to ${high} runs`;
 }
 
-/** "Runs 2 nodes · 1 calls a paid provider: GPT Image 2.5", then the
- * estimate per node when the price table has loaded. */
-export function describeRunScope({ total, paid, cost, gated, pendingIncluded }: RunScopeSummary): string {
+/**
+ * The Run buttons' title and screen-reader description (GM, PR #203 r19
+ * item 2; review 9, LOW-1): how many nodes run, then the Run chip's own
+ * tooltip (runChipTitle, the one cost formatter: the same names, figure and
+ * reason lines, no per-node breakdown), then the placeholders it runs and
+ * the gate note. "Runs 2 nodes.\n“A” calls a paid provider. Estimated cost
+ * $0.13."; with nothing that costs, "Runs 2 nodes. No paid providers."
+ */
+export function describeRunScope(summary: RunScopeSummary): string {
+  const { total, gated, pendingIncluded } = summary;
   const nodes = `${total} ${total === 1 ? 'node' : 'nodes'}`;
+  const cost = runChipTitle(summary);
   // GM - Design, 2026-10-25: the run counts the placeholders it runs and says so.
-  const included = pendingIncludedLine(pendingIncluded)?.replace(/\.$/, '');
-  if (paid.length === 0) return [`Runs ${nodes} · no paid providers`, included].filter(Boolean).join('. ');
-  const parts = [`Runs ${nodes} · ${paid.length} ${paid.length === 1 ? 'calls a paid provider' : 'call paid providers'}: ${nameList(paid)}`];
-  if (cost && cost.lines.length > 0) {
-    const total = formatUsdRange(cost.low, cost.high);
-    const detail = cost.lines.map((line) => `${line.name} ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
-    parts.push(`Estimated ${total} at list prices (${detail.join('; ')})`);
-  }
-  if (included) parts.push(included);
-  if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
-  const unavailable = Object.keys(cost?.unavailable ?? {});
-  const awaiting = cost?.awaitingInput ?? [];
-  const unpriced = cost?.unpriced.filter((name) => !unavailable.includes(name) && !awaiting.includes(name)) ?? [];
-  if (unpriced.length) parts.push(`No list price for ${nameList(unpriced)}`);
-  if (cost && awaiting.length) parts.push(...awaitingNotes(cost));
-  // Each of these has its own message on the node and in the run error.
-  if (unavailable.length) parts.push(`Can't run on the chosen provider: ${nameList(unavailable)}`);
-  if (cost?.plan.length) parts.push(`Billed to your Krea plan: ${nameList(cost.plan)}`);
-  if (gated?.length) parts.push(gatedNote(gated));
-  return parts.join('. ');
+  const included = pendingIncludedLine(pendingIncluded);
+  return [cost ? `Runs ${nodes}.` : `Runs ${nodes}. No paid providers.`, cost, included,
+    gated?.length ? `${gatedNote(gated)}.` : null].filter(Boolean).join('\n');
 }
 
 /** The estimate counts every node; say so when a gate may skip some. */

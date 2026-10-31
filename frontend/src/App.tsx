@@ -46,6 +46,7 @@ import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
 // Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
 import './store/assetProposalsSocket';
+import './store/settingsChangedSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
 import { projectErrorDetails, projectRetryOffer, useProjectStore } from './store/projectStore';
 import { listCoverChoices } from './lib/projects';
@@ -55,6 +56,7 @@ import './styles/layouts.css';
 import './styles/slava-restraint.css';
 // GM r24 item 2: one disabled look for every button, whatever the reason.
 import './styles/disabled-buttons.css';
+import './styles/agent-name.css';
 
 // Alternate studios carry large, view-specific dependencies (Remotion,
 // timeline editors, brand demos). Keep the canvas startup path lean and load

@@ -27,6 +27,7 @@ CREDENTIAL_PROVIDERS: frozenset[str] = frozenset({
     "FAL_KEY",
     "GOOGLE_API_KEY",
     "GOOGLE_VERTEX_CREDENTIALS",
+    "HF_TOKEN",
     "HIGGSFIELD_API_KEY",
     "IDEOGRAM_API_KEY",
     "KREA_API_TOKEN",

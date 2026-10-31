@@ -1,14 +1,15 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
   allParamDefinitions, AUTO, blockedSetting, effectiveValues, hiddenStops, matchValue, personWords, portLimitName,
-  PROVIDER_PARAM, providerChoice,
+  addKeyLine, isKeylessRoute, isKeySet, KEY_NAMES, PROVIDER_PARAM, providerChoice,
   providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
-  routeTakesValue,
+  routesThatCanTake, routeTakesValue, orList,
   routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
   type RouteFix,
 } from './directRoute';
 import { awaitsInput, entryForRoute, estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
+import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
 
 /**
  * What the provider switcher (components/nodes/ProviderSwitcher.tsx) shows
@@ -32,7 +33,11 @@ export interface SwitchContext {
   wired?: ReadonlyMap<string, number>;
 }
 
-export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in';
+/** 'connected': a Space route's Hugging Face token is set (Idol's, GM PR #203
+ * r4), the green dot and "Connected". A keyless route (RouteSpec.optionalKeys)
+ * has no third state: its cell is empty ('none') without its optional key,
+ * and reads "Connected" with it. */
+export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in' | 'connected' | 'none';
 
 export interface ProviderRow {
   /** 'auto', a route id, or `${route id}:plan` for a Krea route's plan row. */
@@ -41,7 +46,7 @@ export interface ProviderRow {
   plan: boolean;
   label: string;
   keyState: KeyState | null;
-  /** Where "Add key →" or "Sign in" opens Settings. */
+  /** Where "Add token →" (the provider's noun) or "Sign in" opens Settings. */
   setup?: ProviderSetupTarget;
   /** "$0.04", "$0.05*" (unconfirmed), or "-" (unpriced, blocked, or billed to the plan). */
   price: string;
@@ -104,9 +109,12 @@ export function chipText(full: string, short: string, blocked: boolean): string 
   return [...full].length <= (blocked ? CHIP_ROOM_BLOCKED : CHIP_ROOM) ? full : short;
 }
 
+/** The one "key is set" predicate (directRoute isKeySet, keyText: a value
+ * empty once trimmed of spaces and invisible characters is not set), so the
+ * switcher, the router and every cost surface agree (review 8 of PR #203,
+ * LOW-1). */
 function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
-  const value = apiKeys[key];
-  return typeof value === 'string' && value.trim() !== '';
+  return isKeySet(apiKeys, key);
 }
 
 function kreaPlanPicked(params: Params): boolean {
@@ -128,55 +136,94 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
 
 /** A row's block note: what this route doesn't take of the recipe, the
  * setting by its label in quotes (error copy round 3f, GM: "Switcher notes
- * become "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
+ * become "Doesn't take “{Label}”." / "Needs “{Label}”.""), with curly
+ * apostrophes (GM, PR #203 r32 item 2). */
 function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Params): string {
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
-    return `Doesn't take ${blockedSetting(definition, block, params)}.`;
+    return `Doesn’t take ${blockedSetting(definition, block, params)}.`;
   }
   if (block.reason === 'requires') return `Needs ${blockedSetting(definition, block, params)}.`;
-  if (block.reason === 'size') return "Can't make that size.";
+  if (block.reason === 'size') return 'Can’t make that size.';
   if (block.reason === 'retired') return 'Retired by the maker.';
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
     const name = personWords(portLimitName(block.param ?? '', limit));
-    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn't take connected ${name}.`;
+    return limit?.max ? `Takes at most ${limit.max} ${name}.` : `Doesn’t take connected ${name}.`;
   }
   return `${personWords(String(block.detail ?? block.reason))}.`;
 }
 
-/** The Auto row's reason when the run can't start ("fal.ai doesn't take
- * “Resolution” set to 1.5K"). */
+/** The Auto row's reason when the run can't start, a fragment after
+ * "Auto · " with no colon (GM, PR #203 r34 item 2), subject first so the
+ * provider always leads (r35 item 2): "fal.ai doesn’t take “Resolution” set
+ * to 1.5K", "fal.ai needs …", "fal.ai doesn’t take this many images",
+ * "fal.ai can’t make that size", "fal.ai no longer runs this model"
+ * ("no route can take it" when there is none). */
 function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
   const spec = unavailable.routeId ? routeById(definition, unavailable.routeId) : undefined;
   const label = providerLabel(spec?.provider);
   const block = unavailable.block;
-  if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
-  if (!block) return `no ${label} key`;
+  if (!spec) return 'no route can take it';
+  if (!block) return `${label} ${autoNeedsCredential(spec.keys ?? []).replace(/^Auto · /, '')}`;
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
-    return `${label} doesn't take ${blockedSetting(definition, block, params)}`;
+    return `${label} doesn’t take ${blockedSetting(definition, block, params)}`;
   }
   if (block.reason === 'requires') return `${label} needs ${blockedSetting(definition, block, params)}`;
   if (block.reason === 'ports') {
-    return `too many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))} for ${label}`;
+    return `${label} doesn’t take this many ${personWords(portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? '']))}`;
   }
+  if (block.reason === 'retired') return `${label} no longer runs this model`;
   const note = rowBlock(definition, spec, block as DirectBlock, params);
-  return note.charAt(0).toLowerCase() + note.slice(1, -1);
+  return `${label} ${note.charAt(0).toLowerCase()}${note.slice(1, -1)}`;
+}
+
+/** A keyless Space route's row line, GM's PR #203 r12 item 2: "Free on
+ * Hugging Face." without its token, "Uses your Hugging Face allowance." with
+ * it. No allowance numbers (GM r12). */
+function spaceNote(spec: RouteSpec, keyed: boolean): string | null {
+  if (!isKeylessRoute(spec) || spec.handler !== 'hf-space') return null;
+  const key = spec.optionalKeys?.[0];
+  const name = (key && KEY_NAMES[key]?.[0]) || 'Hugging Face';
+  return keyed ? `Uses your ${name} allowance.` : `Free on ${name}.`;
+}
+
+/** The Auto row when the run can't start. No key set for any route is GM's
+ * one shared string (PR #203 r5 item 4): "Auto · needs a key". */
+export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
+
+/** "Auto · needs a key", in the providers' own noun (GM, PR #203 r35 item
+ * 2): "needs a token" when every key that would let it run is a token
+ * (Replicate, Hugging Face), from the one key-noun source Settings uses
+ * (providerCatalog.credentialNoun); "a key" otherwise. */
+export function autoNeedsCredential(missing: readonly string[]): string {
+  const nouns = new Set(missing.map((key) => {
+    const spec = PROVIDER_KEY_SPECS[key];
+    return spec ? credentialNoun(spec) : 'key';
+  }));
+  return nouns.size === 1 ? `Auto · needs a ${[...nouns][0]}` : AUTO_NEEDS_A_KEY;
+}
+
+function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
+  params: Params): string {
+  if (!unavailable.routeId && unavailable.missing.length) return autoNeedsCredential(unavailable.missing);
+  return `Auto · ${autoReason(definition, unavailable, params)}`;
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
   pricing: PricingTable | null | undefined, plan: boolean, params: Params,
   wired: Iterable<string>): { price: string; priceTitle?: string } {
-  if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
+  if (plan) return { price: '-', priceTitle: 'Runs on your Krea plan.' };
   const estimate = estimates[route.id];
   if (!estimate && awaitsInput(entryForRoute(pricing?.nodes[definition.id], route.pricing ?? route.id))) {
-    return { price: 'by size', priceTitle: "Priced from the input's size when it runs" };
+    return { price: 'by size', priceTitle: 'Priced from the input’s size when it runs.' };
   }
-  if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
+  if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings.' };
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {
     price: `${formatUsdRange(estimate.low, estimate.high)}${unconfirmed ? '*' : ''}`,
-    priceTitle: unconfirmed ? "Estimate: the provider's page doesn't state this price exactly" : 'List price per run at these settings',
+    // Sentences (GM, PR #203 r19 item 4).
+    priceTitle: unconfirmed ? 'An estimate, because the provider’s page doesn’t state this price exactly.' : 'List price per run at these settings.',
   };
 }
 
@@ -199,7 +246,12 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
 
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
-    label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })}` : `Auto · runs on ${autoName}`,
+    label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })
+      // GM, PR #203 r12 item 2: a keyless Space route (Idol's) reads "Auto ·
+      // free" without its token and plain "Auto" with it.
+      : autoSpec && isKeylessRoute(autoSpec) && autoSpec.handler === 'hf-space'
+        ? (autoRoute.key ? 'Auto' : 'Auto · free')
+        : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
@@ -207,18 +259,24 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   for (const spec of routesOf(definition)) {
     const block = routeBlock(definition, spec, routed);
     const note = block ? rowBlock(definition, spec, block, routed) : null;
-    const keyed = spec.keys.some((key) => isSet(context.apiKeys, key));
+    const keyless = isKeylessRoute(spec);
+    const setupKey = keyless ? spec.optionalKeys?.[0] : spec.keys[0];
+    const keyed = (keyless ? spec.optionalKeys ?? [] : spec.keys).some((key) => isSet(context.apiKeys, key));
     const label = providerLabel(spec.provider);
     if (spec.plan !== 'only') {
       const both = spec.plan === 'optional';
       rows.push({
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
-        keyState: keyed ? 'set' : 'missing',
-        setup: spec.keys[0] ? { kind: 'api-key', key: spec.keys[0] } : undefined,
+        // A Space route's token (Idol's): the green dot and "Connected" once
+        // set, "Add token →" while missing (GM, PR #203 r4; r30 item 3).
+        keyState: keyless ? (keyed ? 'connected' : 'none')
+          : keyed ? (spec.handler === 'hf-space' ? 'connected' : 'set') : 'missing',
+        setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,
-        ...(spec.note && !note ? { info: spec.note } : {}),
+        ...(!note && spaceNote(spec, keyed) ? { info: spaceNote(spec, keyed)! }
+          : spec.note && !note ? { info: spec.note } : {}),
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
         writes: billingWrites(definition, spec.id, false),
       });
@@ -251,14 +309,24 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     chip: chipText(chipName, named(shortProvider), blocked),
     chipName,
     blocked,
-    message: unavailable?.message
-      ?? (signInNeeded ? `${definition.displayName} bills your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
+    message: unavailable?.message ?? (signInNeeded ? kreaSignInLine(definition, routed, route.routeId ?? null, context) : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({
       routeId, label: providerLabel(routeById(definition, routeId)?.provider),
       writes: billingWrites(definition, routeId, false),
     })),
     fixes: (unavailable?.fixes ?? []).map((fix) => ({ ...fix, label: fixLabel(definition, fix) })),
   };
+}
+
+/** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6,
+ * verbatim: a run on the plan, never "billed"), naming who can take it when
+ * Nebula knows (r32 item 4: "…Sign in to Krea in Settings, or switch to
+ * fal.ai."); "or choose another provider" only when no route can. */
+function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
+  const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
+    .map((routeId) => providerLabel(routeById(definition, routeId)?.provider));
+  const switchTo = others.length ? `switch to ${orList([...new Set(others)])}` : 'choose another provider';
+  return `“${definition.displayName}” runs on your Krea plan. Sign in to Krea in Settings, or ${switchTo}.`;
 }
 
 /** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)
@@ -435,12 +503,30 @@ export function providerKeyWarnings(
     const route = choice === AUTO ? undefined : routeById(definition, choice);
     if (route) {
       const planRow = route.plan === 'only' || (route.plan === 'optional' && params._kreaAuth === 'mcp');
-      if (!planRow && !route.keys.some((key) => isSet(apiKeys, key))) {
+      if (!planRow && !isKeylessRoute(route) && !route.keys.some((key) => isSet(apiKeys, key))) {
         warnings.push(`${name} is set to ${providerLabel(route.provider)}, which you have no key for.`);
       }
-    } else if (choice === AUTO && !routesOf(definition).some((spec) => spec.keys.some((key) => isSet(apiKeys, key)))) {
+    } else if (choice === AUTO && !routesOf(definition).some((spec) => isKeylessRoute(spec)
+      || spec.keys.some((key) => isSet(apiKeys, key)))) {
       warnings.push(`${name} is on Auto, and none of its providers has a key here.`);
     }
   }
   return warnings;
+}
+
+/** The words of a switcher row's setup button (GM, PR #203 r30 item 3).
+ * `label` is what it shows, the provider's button noun from the one source
+ * Settings' buttons use (providerCatalog.credentialNoun: "Add token" for
+ * Replicate and Hugging Face, "Add key" for the rest), with a decorative
+ * "→" after it; the button's accessible name is `label`, so it holds what
+ * sighted people read (WCAG 2.5.3). `description` is the one add-key line
+ * (directRoute.addKeyLine, "Add your Replicate token in Settings."), given
+ * through aria-describedby, by the provider the key belongs to (Idol's row
+ * is Speridlabs, its key Hugging Face's token). A Krea plan row signs in. */
+export function setupButtonWords(row: Pick<ProviderRow, 'keyState' | 'setup' | 'label'>): { label: string; description: string } {
+  if (row.keyState === 'sign-in') return { label: 'Sign in', description: 'Sign in to Krea in Settings.' };
+  const key = row.setup?.kind === 'api-key' ? row.setup.key : undefined;
+  const spec = key ? PROVIDER_KEY_SPECS[key] : undefined;
+  const noun = spec ? credentialNoun(spec) : 'key';
+  return { label: `Add ${noun}`, description: (key && addKeyLine([key])) || `Add your ${row.label} key in Settings.` };
 }

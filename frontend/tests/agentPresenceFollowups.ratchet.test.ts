@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, posix, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
@@ -529,8 +529,16 @@ function isActSpread(expression: ts.Node, scope: Scope, seen: Set<string> = new 
     // Fix round 25 (review 23 NIT-4): the canvasLock export by its own name
     // (no alias), whose body the "lockedAction keeps act's lock" test reads.
     const imported = scope.imports.get(callee);
-    if (callee === 'lockedAction' && imported?.imported === 'lockedAction' && /\/canvasLock$/.test(imported.specifier)
+    if (callee === 'lockedAction' && imported?.imported === 'lockedAction' && isLibModule(imported.specifier, scope.file, 'canvasLock')
       && expression.arguments.length > 0 && isLockValue(expression.arguments[0], scope)) return true;
+    // PR #203 round 6 (the merge of #198): runKeyLock's `withKeyLock(props,
+    // …)` adds the key lock to props that already carry the canvas lock. It
+    // counts when its first argument is a lock spread; the "withKeyLock keeps
+    // act's lock" test reads its body. Both helpers count only from lib/
+    // (round 7, review r6 NIT-3: never from any path ending in their name).
+    if (callee === 'withKeyLock' && imported?.imported === 'withKeyLock' && isLibModule(imported.specifier, scope.file, 'runKeyLock')) {
+      return expression.arguments.length > 0 && isActSpread(expression.arguments[0], scope, seen);
+    }
     if (seen.has(callee)) return false;
     seen.add(callee);
     const helpers = localsAt(expression.expression, scope) ?? [];
@@ -576,6 +584,25 @@ function actHandedDown(id: ts.Identifier, scope: Scope, seen: Set<string>): bool
     && isActSpread(attribute.initializer.expression, scope, seen)));
 }
 
+/** Whether `specifier`, as `file` (a path under src/) imports it, is
+ * src/lib/<name> itself: resolved against the importing file and compared
+ * exactly, so '../evil/lib/runKeyLock' or a bare 'lib/runKeyLock' is
+ * another module (review 7 of PR #203, copy LOW-1). */
+function isLibModule(specifier: string, file: string, name: string): boolean {
+  if (!specifier.startsWith('.')) return false;
+  return posix.normalize(posix.join(posix.dirname(file.split('\\').join('/')), specifier)) === `lib/${name}`;
+}
+
+/** The props of a `withKeyLock(props, reason, id)` call imported from
+ * lib/runKeyLock, or null for any other expression. */
+function keyLockProps(expression: ts.Node, scope: Scope): ts.Expression | null {
+  if (!ts.isCallExpression(expression) || !ts.isIdentifier(expression.expression)) return null;
+  const imported = scope.imports.get(expression.expression.text);
+  if (expression.expression.text !== 'withKeyLock' || imported?.imported !== 'withKeyLock'
+    || !isLibModule(imported.specifier, scope.file, 'runKeyLock')) return null;
+  return expression.arguments[0] ?? null;
+}
+
 /** Which locked states a spread covers: `{...lock.act(…)}` (or a local made
  * of it), an object whose `disabled`/`aria-disabled`/`readOnly` is truthy
  * when locked (`const shared = { disabled: readOnly, onChange }`), and on a
@@ -586,6 +613,10 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
   if (ts.isParenthesizedExpression(expression)) return spreadCoverage(expression.expression, scope, component, seen, readOnlyApplies);
   if (isActSpread(expression, scope)) return LOCKED;
   if (component && isLockValue(expression, scope)) return LOCKED;
+  // withKeyLock(props, …) (lib/runKeyLock) covers what its props cover: an
+  // object whose `disabled` reads the lock (the toolbar's Run, PR #203 round 7).
+  const keyed = keyLockProps(expression, scope);
+  if (keyed) return spreadCoverage(keyed, scope, component, seen, readOnlyApplies);
   if (ts.isObjectLiteralExpression(expression)) {
     return expression.properties.reduce((mask, property) => {
       if (ts.isSpreadAssignment(property)) return mask | spreadCoverage(property.expression, scope, component, seen, readOnlyApplies);
@@ -741,6 +772,8 @@ function componentReads(tag: string, scope: Scope, resolve: Resolve | undefined)
 function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scope): number {
   const fromObject = (expression: ts.Node, seen: Set<string>): number => {
     if (ts.isParenthesizedExpression(expression)) return fromObject(expression.expression, seen);
+    const keyed = keyLockProps(expression, scope);
+    if (keyed) return fromObject(keyed, seen);
     if (ts.isObjectLiteralExpression(expression)) {
       return expression.properties.reduce((mask, property) => {
         if (ts.isSpreadAssignment(property)) return mask | fromObject(property.expression, seen);
@@ -1568,7 +1601,8 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       locked_action: `import { lockedAction } from '../lib/canvasLock';\n${head}export const A = () => <button {...lockedAction(lock)} onClick={run}>R</button>;`,
       locked_action_handed: `import { lockedAction } from '../lib/canvasLock';\n${head}${child}export const A = () => <Child act={lockedAction(lock, {}, { run: true })} />;`,
     };
-    for (const [form, source] of Object.entries(quiet)) expect(unlockedControls(source, 'probe.tsx'), form).toEqual([]);
+    // As a component would import them: from src/components/.
+    for (const [form, source] of Object.entries(quiet)) expect(unlockedControls(source, 'components/probe.tsx'), form).toEqual([]);
     const caught: Record<string, string> = {
       one_use_unlocked: `${head}${child}export const A = () => <><Child act={lock.act()} /><Child act={{}} /></>;`,
       one_use_without: `${head}${child}export const A = () => <><Child act={lock.act()} /><Child /></>;`,
@@ -1612,6 +1646,48 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(body).toMatch(/const props[^=]*= lock\.act\(own, options\);/);
     expect(body).toMatch(/return props;\n\}\n$/);
     expect(body).not.toMatch(/\bdisabled\b|aria-disabled|delete |Object\.assign|\.\.\./);
+  });
+
+  it('withKeyLock keeps act\'s lock without a key line, and with one is key-locked first: focusable, refused in the handler, no canvas-lock marks (PR #203 rounds 6 and 7)', () => {
+    const source = readFileSync(join(SRC, 'lib/runKeyLock.ts'), 'utf8');
+    const body = /export function withKeyLock[\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
+    // No key line: the props come back exactly as the canvas lock gave them.
+    expect(body).toMatch(/\n {2}if \(!reason\) return props;\n/);
+    // A key line comes first (GM r11 item 3): never natively disabled, the
+    // lock's marks dropped so a press pulses nothing the title doesn't name.
+    expect(body).toMatch(/for \(const mark of CANVAS_LOCK_MARKS\) delete rest\[mark\];/);
+    expect(body).toMatch(/\n {2}return \{ \.\.\.\(rest as T\), disabled: false, title: reason, \.\.\.keyLockedProps\(reason, reasonId\) \};\n\}\n$/);
+    expect(source).toMatch(/const CANVAS_LOCK_MARKS = \[FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL\] as const;/);
+    const marks = /export function keyLockedProps[\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
+    // aria-disabled, yes (focusable, refused in the handler); disabled, never.
+    expect(marks).toMatch(/'aria-disabled': true/);
+    expect(marks).not.toMatch(/(?<![-\w])['"]?disabled['"]?\s*:/);
+    const head = "import { withKeyLock } from '../lib/runKeyLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n";
+    expect(unlockedControls(`${head}export const A = () => <button {...withKeyLock(lock.act({}), 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toEqual([]);
+    expect(unlockedControls(`${head}export const A = () => { const p = withKeyLock(lock.act({}), 'k', 'id'); return <button {...p} onClick={run}>R</button>; };`, 'components/probe.tsx')).toEqual([]);
+    expect(unlockedControls(`${head}export const A = () => <button {...withKeyLock({ disabled: false }, 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
+    expect(unlockedControls(`import { withKeyLock } from '../lib/fakeLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...withKeyLock(lock.act({}), 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
+    // Review r6 NIT-3: a module that only ends in the helper's name doesn't count.
+    expect(unlockedControls(`import { withKeyLock } from '../evil/runKeyLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...withKeyLock(lock.act({}), 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
+    expect(unlockedControls(`import { lockedAction } from '../evil/canvasLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...lockedAction(lock, {})} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
+    expect(unlockedControls(`import { lockedAction } from '../lib/canvasLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...lockedAction(lock, {})} onClick={run}>R</button>;`, 'components/probe.tsx')).toEqual([]);
+    // Review 7 of PR #203, copy LOW-1: the import is resolved against the
+    // importing file and compared exactly; a path that only contains
+    // lib/runKeyLock or lib/canvasLock is another module.
+    const evil = (specifier: string, call: string, file = 'components/probe.tsx') => unlockedControls(
+      `import { ${call} } from '${specifier}';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n`
+      + `export const A = () => <button {...${call === 'withKeyLock' ? "withKeyLock(lock.act({}), 'k', 'id')" : 'lockedAction(lock, {})'}} onClick={run}>R</button>;`, file);
+    for (const [specifier, call] of [['../evil/lib/runKeyLock', 'withKeyLock'], ['../evil/lib/canvasLock', 'lockedAction'],
+      ['./lib/runKeyLock', 'withKeyLock'], ['lib/runKeyLock', 'withKeyLock'], ['../../lib/canvasLock', 'lockedAction'],
+      ['../lib/runKeyLock/x', 'withKeyLock']] as const) {
+      expect(evil(specifier, call), specifier).toHaveLength(1);
+    }
+    // The real modules, from anywhere under src/.
+    expect(evil('../../lib/runKeyLock', 'withKeyLock', 'components/canvas/probe.tsx')).toEqual([]);
+    expect(evil('./runKeyLock', 'withKeyLock', 'lib/probe.ts')).toEqual([]);
+    expect(evil('../lib/canvasLock', 'lockedAction')).toEqual([]);
+    // The same path, one level up, is not lib/: from src/ itself it leaves src.
+    expect(evil('../lib/canvasLock', 'lockedAction', 'probe.tsx')).toHaveLength(1);
   });
 
   it('review 23\'s two misses read the lock now', () => {
@@ -1896,7 +1972,6 @@ const SWEEP_LATER = new Set([
   'styles/prompt-dialog.css: prompt-dialog button',
   'styles/run-history.css: run-history button',
   'styles/run-history.css: run-history__action',
-  'styles/run-history.css: run-history__replay',
   'styles/settings.css: settings-label__action',
   'styles/settings.css: settings-switch',
   'styles/settings.css: settings__button',

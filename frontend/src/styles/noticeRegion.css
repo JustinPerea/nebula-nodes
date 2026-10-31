@@ -39,7 +39,13 @@
      nothing overshoots on the way out: x(t) = 1 - (1 + 7t)e^(-7t). */
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
-  position: fixed;
+  /* No layer of its own (GM r7, PR #203): each item takes its own, so the
+     notices stay above every dialog's backdrop (GM r25) while the proposal
+     bar sits under every modal's scrim. A fixed box would make one layer of
+     them all, so it is placed on the page's own box instead, which never
+     scrolls (App.css: html, body and #root are the viewport, overflow
+     hidden). */
+  position: absolute;
   left: var(--page-gutter, 16px);
   /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
      Agent log on the right edge takes its width out of the region
@@ -47,13 +53,27 @@
      covers it; the stack centres in what is left. */
   right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
-  z-index: var(--sr-layer-notice, 20010);
+  z-index: auto;
   display: flex;
   justify-content: center;
   pointer-events: none;
   /* Follows the bar when it grows (its Canvas actions panel opens) on the
      undo notice's spring. */
   transition: bottom 420ms var(--agent-log-spring);
+}
+
+/* Review 11 of PR #203, copy LOW-2: the workspace rail sits on the left edge
+   above every notice (z-index 12), so a notice as wide as the region (a
+   narrow window, or the docked Agent log taking the right) reached under it,
+   and a tall proposal bar slid behind its buttons. While the rail is shown,
+   the region keeps clear of its column on the left, and by the same width on
+   the right, so a notice that fits stays centred where it was. Its layers are
+   unchanged: menus, popovers and the rail's own labels stay above the bar.
+   tests/idolRound12.test.ts reads this rule. */
+:root:has(.workspace-rail) .notice-region {
+  --notice-rail-clearance: calc(var(--workspace-rail-left, 8px) + var(--workspace-rail-width, 54px) + var(--notice-gap));
+  left: max(var(--page-gutter, 16px), var(--notice-rail-clearance));
+  right: max(var(--page-gutter, 16px), var(--notice-rail-clearance), var(--agent-log-clearance, 0px));
 }
 
 /* The reserved band (GM, round 2: "Floating panels stop above a reserved
@@ -70,6 +90,21 @@
   pointer-events: none;
 }
 
+/* GM r9 item 2 (PR #203 round 6): the stack never grows into the top bars
+   (the canvas tabs, the following bar with them, the selection toolbar's
+   line). The region measures its room (lib/bottomBar.ts
+   keepNoticesBelowTopBars) and caps the stack with it; past it, the stack
+   scrolls (data-notice-crowded) rather than reaching them. Its items never
+   shrink to fit.
+
+   No stacking context on the region, the stack or the slots (review r5
+   LOW-3): each item's z-index (the notices' --sr-layer-notice, the proposal
+   bar's --sr-layer-proposal) has to join the page's root stacking context
+   for the notices to sit above every dialog and the bar under them. A
+   transform, filter, backdrop-filter, opacity under 1, isolation, contain,
+   will-change, mix-blend-mode or a z-index other than auto on any of the
+   three would flatten every item to one layer.
+   tests/proposalBarStacking.test.ts fails on any of them. */
 .notice-region__stack {
   display: flex;
   flex-direction: column;
@@ -77,7 +112,13 @@
   gap: var(--notice-gap);
   min-width: 0;
   max-width: 100%;
+  max-height: var(--notice-room, none);
   pointer-events: none;
+}
+
+.notice-region[data-notice-crowded] .notice-region__stack {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* A slot per kind of item, in one order (lib/noticeSlots.ts). It draws no box
@@ -87,11 +128,22 @@
   pointer-events: none;
 }
 
-/* Every item: at least one line tall, and it takes clicks. */
+/* Every item: at least one line tall, and it takes clicks, on the notices'
+   layer, above every dialog's backdrop (GM r25). */
 .notice-region__slot > * {
   box-sizing: border-box;
+  flex-shrink: 0;
   min-height: var(--notice-h);
   pointer-events: auto;
+  z-index: var(--sr-layer-notice, 20010);
+}
+
+/* The proposal bar: under everything the person opened (every panel,
+   Settings, menus, popovers, and every modal, whose scrim dims it like the
+   rest of the canvas) and above the lasting chrome (GM r7 and r10, PR #203:
+   slava-restraint.css --sr-layer-proposal has the rule). */
+.notice-region__slot[data-notice-slot='proposal'] > * {
+  z-index: var(--sr-layer-proposal, 9);
 }
 
 /* The cap for any row whose own CSS sets none (zero specificity, so an

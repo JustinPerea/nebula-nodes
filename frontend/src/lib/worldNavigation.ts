@@ -22,6 +22,20 @@ export interface WorldSceneBounds {
   clipRadius: number;
   /** Authoritative reset position when the source frame defines a capture origin. */
   resetPosition?: [number, number, number];
+  /** Where the reset camera looks, for an object seen from outside (a World
+   * v2 object splat). Without it the camera looks along -Z from its position,
+   * as for an environment. */
+  resetTarget?: [number, number, number];
+  /** Orbit's farthest zoom-out, for an object framed from outside; without
+   * it worldOrbitMaxDistance(radius) holds (an environment's scale). */
+  orbitMaxDistance?: number;
+  /** Orbit's nearest zoom-in, for an object: a share of its radius, so a
+   * 1 mm object can still be zoomed. Without it, 0.01 (an environment). */
+  orbitMinDistance?: number;
+  /** The camera's clip planes for an object, from its radius and orbit
+   * range; without them worldCameraPose derives an environment's. */
+  near?: number;
+  far?: number;
 }
 
 export interface WorldCameraPose {
@@ -40,6 +54,8 @@ export interface IndexedWorldSplatSource {
   getSplat: (index: number) => {
     center: WorldPoint;
     opacity: number;
+    /** The Gaussian's three axis scales (Spark's, exp already applied). */
+    scales?: WorldPoint;
   };
 }
 
@@ -55,6 +71,36 @@ function quantile(sorted: readonly number[], fraction: number): number {
   if (lower === upper) return sorted[lower];
   const blend = position - lower;
   return sorted[lower] * (1 - blend) + sorted[upper] * blend;
+}
+
+/** The sample's indices: up to WORLD_NAVIGATION_SAMPLE_LIMIT, evenly spread. */
+function sampleIndices(splats: IndexedWorldSplatSource): number[] {
+  const reportedCount = splats.getNumSplats();
+  const splatCount = Number.isFinite(reportedCount) ? Math.max(0, Math.floor(reportedCount)) : 0;
+  const sampleCount = Math.min(splatCount, WORLD_NAVIGATION_SAMPLE_LIMIT);
+  return Array.from({ length: sampleCount }, (_, sampleIndex) => (sampleCount <= 1
+    ? 0
+    : Math.round((sampleIndex * (splatCount - 1)) / (sampleCount - 1))));
+}
+
+/** Each sampled Gaussian's largest axis scale in world units (the same
+ * sample and opacity cut as sampleWorldSplatCenters): what an object's
+ * radius falls back on when its centers collapse to a point (PR #203 r2
+ * review, LOW 1). */
+export function sampleWorldSplatExtents(
+  splats: IndexedWorldSplatSource,
+  matrixWorld: Matrix4,
+): number[] {
+  const worldScale = matrixWorld.getMaxScaleOnAxis();
+  const extents: number[] = [];
+  for (const index of sampleIndices(splats)) {
+    const splat = splats.getSplat(index);
+    if (!Number.isFinite(splat.opacity) || splat.opacity <= 0.02 || !finitePoint(splat.center)) continue;
+    const scales = splat.scales;
+    const largest = scales ? Math.max(Math.abs(scales.x), Math.abs(scales.y), Math.abs(scales.z)) : NaN;
+    if (Number.isFinite(largest)) extents.push(largest * worldScale);
+  }
+  return extents;
 }
 
 /** Read a bounded, evenly distributed sample from Spark's indexed PackedSplats. */
@@ -144,7 +190,7 @@ export function worldCameraPose(bounds: WorldSceneBounds): WorldCameraPose {
   const position: [number, number, number] = bounds.resetPosition
     ? [...bounds.resetPosition]
     : [bounds.center[0], WORLD_EYE_HEIGHT_METERS, bounds.center[2]];
-  const target: [number, number, number] = [
+  const target: [number, number, number] = bounds.resetTarget ? [...bounds.resetTarget] : [
     position[0],
     position[1],
     position[2] - lookDistance,
@@ -154,8 +200,8 @@ export function worldCameraPose(bounds: WorldSceneBounds): WorldCameraPose {
   return {
     position,
     target,
-    near: MathUtils.clamp(radius / 20_000, 0.005, 0.05),
-    far: Math.max(clipRadius * 4, radius * 30, 1_000),
+    near: bounds.near ?? MathUtils.clamp(radius / 20_000, 0.005, 0.05),
+    far: bounds.far ?? Math.max(clipRadius * 4, radius * 30, 1_000),
   };
 }
 
@@ -192,4 +238,144 @@ export function syncWorldFlyAngles(
 ): void {
   euler.setFromQuaternion(camera.quaternion, 'YXZ');
   yawPitch.set(euler.y, euler.x);
+}
+
+/** How an object (a World v2 object splat: Idol) opens: a 3/4 view from its
+ * front, YAW_DEGREES off-axis and PITCH_DEGREES above (GM, PR #203 r1), at
+ * the distance where its bounding sphere fits the narrower half of the view
+ * with MARGIN to spare. No auto-rotate. */
+export const OBJECT_VIEW_YAW_DEGREES = 30;
+export const OBJECT_VIEW_PITCH_DEGREES = 15;
+/** Measured live on the Space's backpack example (PR #203 round 2): 1.15
+ * filled 69% of the stage's height, 1.3 brings a typical object to about
+ * 60% (GM). A shape that fills its bounding sphere (a ball) comes out
+ * larger, about 75%. */
+export const OBJECT_VIEW_MARGIN = 1.3;
+/** Orbit may zoom out to this many framing distances. */
+export const OBJECT_ORBIT_MAX_DISTANCE_FACTOR = 4;
+/** Orbit may zoom in to this share of the object's radius. */
+export const OBJECT_ORBIT_MIN_RADIUS_FACTOR = 0.2;
+/** A Gaussian reaches about 3 sigma: an object whose centers collapse to a
+ * point (one Gaussian, or all at one place) is as big as its splats. */
+const OBJECT_GAUSSIAN_EXTENT_SIGMAS = 3;
+/** The smallest radius, as a share of the center's distance from the
+ * origin (at least 1): float32 positions can't place anything finer. */
+const OBJECT_RELATIVE_RADIUS_FLOOR = 1e-6;
+/** The share of sampled centers the object's radius must hold: floaters
+ * past the 98th percentile don't push the camera back. */
+const OBJECT_RADIUS_QUANTILE = 0.98;
+
+export interface ObjectFraming {
+  center: [number, number, number];
+  /** The object's robust 3D radius, Y included (the environment bounds'
+   * `radius` is horizontal only and never under 0.25). */
+  radius: number;
+  distance: number;
+  resetPosition: [number, number, number];
+  resetTarget: [number, number, number];
+  orbitMaxDistance: number;
+  orbitMinDistance: number;
+  near: number;
+  far: number;
+}
+
+/** The object viewer draws every object at this radius (review r3 LOW-3):
+ * the mesh is scaled by objectUnitScale before it is framed, so the camera,
+ * the orbit range and the clip planes are the same numbers at 1 mm and at
+ * 10 km. In the file's own units, a ×20,000 object (radius about 7,000) went
+ * black at its zoom-out limit once the camera was past about 65,000 units,
+ * while the far plane still covered it. */
+export const OBJECT_VIEW_UNIT_RADIUS = 1;
+
+/** The mesh scale that brings an object's bounding sphere (objectBoundingSphere)
+ * to OBJECT_VIEW_UNIT_RADIUS; 1 when there is nothing to measure. */
+export function objectUnitScale(sampledCenters: readonly WorldPoint[], extents: readonly number[] = []): number {
+  const { radius } = objectBoundingSphere(sampledCenters, undefined, extents);
+  const scale = OBJECT_VIEW_UNIT_RADIUS / radius;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/** The object's robust bounding sphere from the sampled centers: the trimmed
+ * box's center (as robustWorldSceneBounds takes it, Y included) and the
+ * 98th-percentile distance from it. */
+export function objectBoundingSphere(
+  sampledCenters: readonly WorldPoint[],
+  fallbackCenter: WorldPoint = { x: 0, y: 0, z: 0 },
+  extents: readonly number[] = [],
+): { center: [number, number, number]; radius: number } {
+  const valid = sampledCenters.filter(finitePoint);
+  const center = robustWorldSceneBounds(valid, fallbackCenter).center;
+  if (valid.length === 0) return { center, radius: 0.5 };
+  const distances = valid
+    .map((point) => Math.hypot(point.x - center[0], point.y - center[1], point.z - center[2]))
+    .sort((a, b) => a - b);
+  const sizes = extents.filter((extent) => Number.isFinite(extent) && extent > 0).sort((a, b) => a - b);
+  const splatRadius = sizes.length ? quantile(sizes, OBJECT_RADIUS_QUANTILE) * OBJECT_GAUSSIAN_EXTENT_SIGMAS : 0;
+  const floor = OBJECT_RELATIVE_RADIUS_FLOOR * Math.max(1, Math.hypot(...center));
+  const radius = Math.max(quantile(distances, OBJECT_RADIUS_QUANTILE), splatRadius);
+  // Nothing to measure (one point with no size): the empty object's radius.
+  return { center, radius: radius > floor ? radius : 0.5 };
+}
+
+/** Where the reset camera stands for an object: `front` (a unit vector in
+ * Three's +Y-up frame, the object's forward axis) turned `yawDegrees` about
+ * +Y and raised `pitchDegrees`, at r / sin(half the narrower field of view)
+ * x `margin` from the center. `fovDegrees` is the camera's vertical field
+ * of view and `aspect` the stage's width over height. */
+export function objectFraming(
+  sampledCenters: readonly WorldPoint[],
+  front: readonly [number, number, number],
+  {
+    fovDegrees,
+    aspect,
+    yawDegrees = OBJECT_VIEW_YAW_DEGREES,
+    pitchDegrees = OBJECT_VIEW_PITCH_DEGREES,
+    margin = OBJECT_VIEW_MARGIN,
+    fallbackCenter,
+    extents,
+  }: {
+    fovDegrees: number;
+    aspect: number;
+    yawDegrees?: number;
+    pitchDegrees?: number;
+    margin?: number;
+    fallbackCenter?: WorldPoint;
+    /** sampleWorldSplatExtents: each sampled Gaussian's largest scale. */
+    extents?: readonly number[];
+  },
+): ObjectFraming {
+  const { center, radius } = objectBoundingSphere(sampledCenters, fallbackCenter, extents);
+  const halfVertical = MathUtils.degToRad(Number.isFinite(fovDegrees) && fovDegrees > 0 ? fovDegrees : 58) / 2;
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const halfHorizontal = Math.atan(Math.tan(halfVertical) * safeAspect);
+  const halfFov = Math.min(halfVertical, halfHorizontal);
+  const distance = (radius / Math.sin(halfFov)) * margin;
+
+  const forward = new Vector3(front[0], 0, front[2]);
+  if (forward.lengthSq() < 1e-9) forward.set(0, 0, 1);
+  forward.normalize();
+  forward.applyAxisAngle(new Vector3(0, 1, 0), MathUtils.degToRad(yawDegrees));
+  const pitch = MathUtils.degToRad(pitchDegrees);
+  const direction = forward.multiplyScalar(Math.cos(pitch)).add(new Vector3(0, Math.sin(pitch), 0));
+  const resetPosition: [number, number, number] = [
+    center[0] + direction.x * distance,
+    center[1] + direction.y * distance,
+    center[2] + direction.z * distance,
+  ];
+  const orbitMaxDistance = distance * OBJECT_ORBIT_MAX_DISTANCE_FACTOR;
+  const orbitMinDistance = radius * OBJECT_ORBIT_MIN_RADIUS_FACTOR;
+  return {
+    center,
+    radius,
+    distance,
+    resetPosition,
+    resetTarget: [...center],
+    orbitMaxDistance,
+    orbitMinDistance,
+    // From the radius, at any scale (PR #203 r2 review, LOW 2 and 3): the
+    // near plane well inside the closest zoom, the far one past the whole
+    // object from the farthest.
+    near: orbitMinDistance * 0.05,
+    far: (orbitMaxDistance + 2 * radius) * 1.05,
+  };
 }

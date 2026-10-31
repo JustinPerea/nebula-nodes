@@ -106,7 +106,7 @@ def test_auto_routing_names_the_provider_the_run_went_to_not_the_nodes_default()
         "Replicate is busy. Wait a moment, then run the node again.")
     assert _card(with_api_status(RuntimeError("Async submit failed (401): no"), 401), "flux-3-video", chosen,
                  keys).person == (
-        "Replicate didn't accept your API token. Check it in Settings, then run the node again.")
+        "Replicate didn't accept your token. Check it in Settings, then run the node again.")
 
 
 def test_a_typed_provider_error_names_its_provider() -> None:
@@ -332,7 +332,7 @@ def test_every_paid_poll_timeout_says_the_job_may_still_be_billed() -> None:
 def test_veo_names_the_api_it_polled() -> None:
     raises = {text: wrapper for text, wrapper in _timeout_raises(BACKEND / "handlers" / "veo.py")}
     names = sorted(ast.literal_eval(w.args[1].args[0]) for w in raises.values())
-    assert names == ["Gemini", "Google Vertex AI"]
+    assert names == ["Gemini", "Vertex AI"]
 
 
 def test_the_runway_and_replicate_polls_name_their_provider() -> None:
@@ -360,7 +360,7 @@ def test_a_free_wait_keeps_the_classifiers_line() -> None:
     ("BytePlus ModelArk returned an unexpected response", "seedream-4-5", {"BYTEPLUS_API_KEY": "x"}, "BytePlus"),
     ("Krea MCP returned no usable structured result", "krea-2-generate", {"_kreaAuth": "mcp"}, "Krea"),
     ("Veo (Vertex) completed but returned no video: ['done']", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"},
-     "Google Vertex AI"),
+     "Vertex AI"),
 ])
 def test_an_empty_or_malformed_answer_says_the_provider_returned_no_result(text, definition_id, keys,
                                                                             provider) -> None:
@@ -456,7 +456,7 @@ async def test_a_route_table_run_with_no_key_for_its_route_says_add_it() -> None
     exc = await _araised(router, _node("flux-3-video", {"_provider": "replicate"}), {"prompt": _port("p")}, {})
     assert str(exc) == ("FLUX 3 Video is set to Replicate, which needs REPLICATE_API_TOKEN. "
                         "Add it in Settings > Providers or choose another provider.")
-    assert person_line(exc) == "Add your Replicate API token in Settings, then run the node again."
+    assert person_line(exc) == "Add your Replicate token in Settings, then run the node again."
 
 
 def _settings_label(key: str) -> str:
@@ -505,12 +505,12 @@ async def test_krea_2_style_search_fields_the_account_cant_use() -> None:
 
     exc = await _araised(_account_style_search, _node("krea-style-search", {"user": "me", "liked": True,
                                                                              "filter": "user"}))
-    assert str(exc) == ("User, Liked only, Filter needs a Krea API token; the Krea account lists the styles "
+    assert str(exc) == ("User, Liked only, Filter needs a Krea API key; the Krea account lists the styles "
                         "available to you. Nothing was sent")
-    assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API token” connection. "
+    assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API key” connection. "
                                 "The “Krea account” connection lists every style you can use. Nothing was sent to Krea.")
     exc = await _araised(_account_style_search, _node("krea-style-search", {"user": "me"}))
-    assert person_line(exc) == ("To use “User”, switch to the “API token” connection. The “Krea account” connection "
+    assert person_line(exc) == ("To use “User”, switch to the “API key” connection. The “Krea account” connection "
                                 "lists every style you can use. Nothing was sent to Krea.")
 
 
@@ -520,9 +520,9 @@ async def test_krea_3_training_settings_the_account_cant_use() -> None:
 
     node = _node("krea-style-train", {"max_train_steps": 100, "training_type": "Default"})
     exc = await _araised(_account_style_train, node, "mine", "flux_dev", ["https://e.com/a.png"], None)
-    assert str(exc) == ("Max steps, Type: Default needs a Krea API token; the Krea account trains with Krea's "
+    assert str(exc) == ("Max steps, Type: Default needs a Krea API key; the Krea account trains with Krea's "
                         "defaults. Nothing was sent")
-    assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API token” connection. "
+    assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API key” connection. "
                                 "The “Krea account” connection trains with Krea's default settings. "
                                 "Nothing was sent to Krea.")
 
@@ -534,9 +534,9 @@ async def test_krea_4_the_api_token_only_renames_styles() -> None:
     node = _node("krea-library-manage", {"_kreaAuth": "api-token", "action": "delete-style", "item_id": "abc",
                                          "confirm_delete": "abc"})
     exc = await _araised(handle_krea_library_manage, node, {}, {"KREA_API_TOKEN": "fixture"})
-    assert str(exc) == ("Only renaming a style works with a Krea API token; use the Krea account for moodboards "
+    assert str(exc) == ("Only renaming a style works with a Krea API key; use the Krea account for moodboards "
                         "and deletes. Nothing was sent")
-    assert person_line(exc) == ("The “API token” connection can only rename styles. To make moodboards or delete "
+    assert person_line(exc) == ("The “API key” connection can only rename styles. To make moodboards or delete "
                                 "styles, switch to the “Krea account” connection. Nothing was sent to Krea.")
 
 
@@ -545,9 +545,9 @@ async def test_krea_5_job_history_on_the_account() -> None:
     from handlers.krea_workspace import handle_krea_job_history
 
     exc = await _araised(handle_krea_job_history, _node("krea-job-history", {"_kreaAuth": "mcp"}), {}, {})
-    assert str(exc) == ("Listing job history needs a Krea API token; the Krea account can fetch one job by ID. "
+    assert str(exc) == ("Listing job history needs a Krea API key; the Krea account can fetch one job by ID. "
                         "Nothing was sent")
-    assert person_line(exc) == ("Job history needs the “API token” connection. The “Krea account” connection can "
+    assert person_line(exc) == ("Job history needs the “API key” connection. The “Krea account” connection can "
                                 "look up one job by its ID. Nothing was sent to Krea.")
 
 
@@ -601,8 +601,8 @@ async def test_krea_9_a_connection_that_isnt_set(call) -> None:
         from handlers.krea_gateway import handle_krea_gateway
 
         exc = await _araised(handle_krea_gateway, _node("krea-video-bytedance-seedance-2", {"_kreaAuth": "nope"}), {}, {})
-    assert str(exc) == "Unknown Krea connection; choose API token or Krea account"
-    assert person_line(exc) == "This node's Krea connection isn't set. Choose “API token” or “Krea account”."
+    assert str(exc) == "Unknown Krea connection; choose API key or Krea account"
+    assert person_line(exc) == "This node’s Krea connection isn’t set. Choose “API key” or “Krea account”."
 
 
 APP_ID = "0123abcd-0123-4567-89ab-0123456789ab"
@@ -838,7 +838,7 @@ def test_insufficient_balance_reads_as_credits_for_any_provider() -> None:
 @pytest.mark.parametrize("text, definition_id, keys, provider", [
     ("Krea completed without media URLs", "krea-2-generate", {"KREA_API_TOKEN": "x"}, "Krea"),
     ("MiniMax returned Success but no file_id: {}", "minimax-t2v", {"MINIMAX_API_KEY": "x"}, "MiniMax"),
-    ("Veo (Vertex) returned a video with no data", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"}, "Google Vertex AI"),
+    ("Veo (Vertex) returned a video with no data", "veo-3", {"GOOGLE_VERTEX_CREDENTIALS": "x"}, "Vertex AI"),
     ("World Labs returned an empty asset: a.spz", "meshy-text-to-3d", {"MESHY_API_KEY": "x"}, "World Labs"),
     ("World Labs world completed without any SPZ assets", "meshy-text-to-3d", {"MESHY_API_KEY": "x"},
      "World Labs"),

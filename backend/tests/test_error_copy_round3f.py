@@ -326,9 +326,9 @@ def test_every_card_line_follows_gms_rules() -> None:
 def test_every_shared_sentence_a_line_ends_with_is_a_sentence() -> None:
     from execution.maker_routes_minimax_meshy import KREA_ONLY_HINT, MESHY_KREA_HINT
     from execution.person_line import it_was
-    from handlers.krea import NOTHING_SENT_TO_KREA, UNSET_CONNECTION_LINE
+    from handlers.krea import NOTHING_SENT_TO_KREA, unset_connection_line
 
-    for line in (KREA_ONLY_HINT, MESHY_KREA_HINT, NOTHING_SENT_TO_KREA, UNSET_CONNECTION_LINE,
+    for line in (KREA_ONLY_HINT, MESHY_KREA_HINT, NOTHING_SENT_TO_KREA, unset_connection_line(),
                  it_was(3.5), it_was(True), it_was(None), it_was("x" * 80)):
         assert not rule_breaks(line), line
 
@@ -345,7 +345,7 @@ def test_the_shared_helpers_lines_follow_gms_rules() -> None:
     produced += [lines.slow_job_line(provider) for provider in ("fal.ai", "Black Forest Labs", "Krea", "Runway")]
     produced += [lines.status_line(kind, "Runway") for kind in lines.STATUS_LINES]
     produced += [lines.status_line("key", "Replicate", "API token"),
-                 lines.status_line("key", "Google Vertex AI", "credentials")]
+                 lines.status_line("key", "Vertex AI", "service account key")]
     for line in produced:
         assert not rule_breaks(line), line
 
@@ -551,7 +551,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     definition = definition_for("krea-image-bytedance-seedream-4")
     block = node_route.DirectBlock(node_route.BLOCKED, param="style_images")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", block) == (
-        "These settings need your Krea API token. Add it in Settings, then run the node again.")
+        "These settings need your Krea API key. Add it in Settings, then run the node again.")
     definition = definition_for("seedream-4-5")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", None) == (
         "These settings need your fal.ai API key. Add it in Settings, then run the node again.")
@@ -559,7 +559,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     several = {"id": "x", "envKeyName": ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "KREA_API_TOKEN"],
                "directKeyName": "BFL_API_KEY"}
     assert _blocked_key_line(several, "BFL_API_KEY", None) == (
-        "These settings need your fal.ai API key, Replicate API token or Krea API token. Add one in Settings, "
+        "These settings need your fal.ai API key, Replicate token or Krea API key. Add one in Settings, "
         "then run the node again.")
 
 
@@ -761,7 +761,8 @@ def test_a_proposals_missing_node_has_a_line_in_words(monkeypatch) -> None:
     [row] = rows
     # Agents keep find_nodes' words.
     assert "OPENAI_API_KEY" in row["missing"]
-    assert row["person"] == "GPT Image 2 needs your OpenAI API key. Add it in Settings."
+    # The name in curly quotes (GM, PR #203 r20 item 3).
+    assert row["person"] == "“GPT Image 2” needs your OpenAI API key. Add it in Settings."
     assert not re.search(r"[A-Z]{2,}_[A-Z_]+|\(|\)|>", row["person"])
 
 

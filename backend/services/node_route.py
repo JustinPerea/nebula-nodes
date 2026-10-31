@@ -49,6 +49,11 @@ KEY_PROVIDERS: dict[str, str] = {
     "BYTEPLUS_API_KEY": "bytedance",
     # Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
     "BFL_API_KEY": "bfl",
+    # A Hugging Face access token, for a maker's Space route (handler
+    # hf-space: Idol's needs it; a keyless one lists it in ``optionalKeys``).
+    # It gives the run the person's own ZeroGPU quota, which Hugging Face may
+    # bill PRO accounts for past it (https://huggingface.co/docs/hub/spaces-zerogpu).
+    "HF_TOKEN": "huggingface",
 }
 
 # How errors and readiness name a provider. frontend/src/lib/directRoute.ts
@@ -60,6 +65,7 @@ PROVIDER_LABELS: dict[str, str] = {
     "recraft": "Recraft", "ideogram": "Ideogram", "openrouter": "OpenRouter", "bfl": "Black Forest Labs",
     "higgsfield": "Higgsfield", "meshy": "Meshy", "quiver": "QuiverAI", "krea": "Krea",
     "worldlabs": "World Labs", "nous": "Nous", "typesafe": "TypeSafe", "utility": "Local tools",
+    "speridlabs": "Speridlabs", "huggingface": "Hugging Face",
 }
 
 # A direct route that also needs a param set, else the run takes the fallback.
@@ -153,6 +159,10 @@ class RouteSpec(TypedDict, total=False):
       ``keys[0]``, except a plan-only route).
     - ``maker``: the model maker's own API; at most one, and it is routes[0].
     - ``keys``: any of them runs it, tried in order.
+    - ``optionalKeys``: a route that runs with no key at all (a maker's free
+      Hugging Face Space). The keys listed here are used when set (the
+      person's own quota) but never needed, and stay out of ``envKeyName``,
+      so the node reads as free, not as missing a key. ``keys`` is then [].
     - ``plan``: a Krea route that can bill the signed-in plan ("optional":
       when ``_kreaAuth`` is "mcp"; "only": always).
     - ``handler``: the client that runs it (execution/route_clients.py).
@@ -177,6 +187,12 @@ class RouteSpec(TypedDict, total=False):
       rule H in docs/PROVIDER-ROUTES.md).
     - ``pricing``: its key under model_pricing.json ``routes`` (default id).
     - ``note``: readiness copy for this route.
+    - ``mayBillWithKey``: a keyless route whose run, with one of its
+      ``optionalKeys`` set, can bill the key owner's account past a free
+      allowance (Idol: a Hugging Face PRO, Team or Enterprise account's
+      prepaid credits past its daily ZeroGPU time). Its price stays the
+      sourced one (Nebula bills nothing); an agent can't start such a run
+      itself and must propose it (agent_spend.may_bill_nodes).
 
     Nodes without ``routes`` get computed specs from :func:`routes_of`,
     whose ``rules`` also carry ``requires`` (DIRECT_REQUIRES) and
@@ -185,6 +201,7 @@ class RouteSpec(TypedDict, total=False):
     provider: str
     maker: bool
     keys: list[str]
+    optionalKeys: list[str]
     plan: str
     handler: str
     endpoint: str
@@ -196,6 +213,8 @@ class RouteSpec(TypedDict, total=False):
     paramVisibleWhen: dict[str, Any]
     pricing: str
     note: str
+    missingKeyLine: str
+    mayBillWithKey: bool
 
 
 def keys(value: Any) -> list[str]:
@@ -358,9 +377,33 @@ def uses_krea_plan(definition: Mapping[str, Any], params: Mapping[str, Any] | No
     return (params or {}).get("_kreaAuth", "api-token") == "mcp"
 
 
+# What a pasted key can carry at its ends that is no part of it: whitespace,
+# a byte-order mark, zero-width spaces and joiners. The same characters, by
+# code point, as frontend directRoute KEY_EDGE (Python's str.strip and JS's
+# String.trim differ: JS strips a BOM, Python doesn't; neither strips a
+# zero-width space). Review 7 of PR #203, NIT-4.
+KEY_EDGE = ("\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
+            "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff")
+
+
+def key_text(value: Any) -> str:
+    """A key as Nebula reads it: the text without KEY_EDGE characters at
+    either end, "" when nothing is left (or it isn't text). Whether a key
+    is set is whether this is non-empty, for every surface: the agent spend
+    gate (may_bill, key_billing), the run's handler (an Idol token,
+    handlers/speridlabs_idol.clean_token), describe_node's ``set`` and
+    Settings (frontend directRoute keyText, its twin; both read
+    tests/fixtures/key_text_cases.json)."""
+    return value.strip(KEY_EDGE) if isinstance(value, str) else ""
+
+
+def key_set(api_keys: Mapping[str, Any], key: str) -> bool:
+    """Whether ``key`` is set in ``api_keys`` (key_text non-empty)."""
+    return bool(key_text(api_keys.get(key)))
+
+
 def _is_set(api_keys: Mapping[str, Any], key: str) -> bool:
-    value = api_keys.get(key)
-    return isinstance(value, str) and bool(value.strip())
+    return key_set(api_keys, key)
 
 
 def _today() -> str:
@@ -763,6 +806,90 @@ def _set_keys(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> list[str
     return [key for key in keys(route.get("keys")) if _is_set(api_keys, key)]
 
 
+def is_keyless(route: Mapping[str, Any]) -> bool:
+    """A route that runs without any key (``optionalKeys`` declared)."""
+    return isinstance(route.get("optionalKeys"), list)
+
+
+def _can_run_keyed(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> bool:
+    """The route's key condition holds: one of its keys is set, or it needs none."""
+    return is_keyless(route) or bool(_set_keys(route, api_keys))
+
+
+def route_key(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
+    """The key a run on this route uses: the first of its keys that is set,
+    else the first of its optional keys that is set, else None (a keyless
+    route run anonymously)."""
+    for key in [*keys(route.get("keys")), *keys(route.get("optionalKeys"))]:
+        if _is_set(api_keys, key):
+            return key
+    return None
+
+
+# key_billing's two classes, as the cost entries and the canvas name them.
+MAY_COST = "mayCost"
+FREE_WITHOUT_KEY = "free"
+
+
+def may_bill(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+             api_keys: Mapping[str, Any]) -> bool:
+    """Whether a run of this node with these params and keys can bill the key
+    owner's own provider account: key_billing's "mayCost", the one cost class
+    every surface reads (GM, PR #203 r15 item 2; review 8, LOW-3). Its list
+    price is unchanged."""
+    return key_billing(definition, params, api_keys) == MAY_COST
+
+
+def key_billing(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                api_keys: Mapping[str, Any]) -> str | None:
+    """How a run on a ``mayBillWithKey`` route is counted (GM, PR #203 r11
+    and r12): "mayCost" with one of its optional keys set (may_bill), "free"
+    without one. None for any other route or node: it is counted as before
+    (paid when it calls a provider). Never "paid": such a route has no list
+    price beyond its sourced $0. frontend directRoute.keyBilling is the twin."""
+    if not definition or not has_routes(definition):
+        return None
+    route = select_route(definition, params, api_keys)
+    spec = route_by_id(definition, route.route_id) if route.route_id else None
+    if not spec or spec.get("mayBillWithKey") is not True:
+        return None
+    return MAY_COST if route.key and route.key in keys(spec.get("optionalKeys")) else FREE_WITHOUT_KEY
+
+
+def key_billing_account(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                        api_keys: Mapping[str, Any]) -> str | None:
+    """The account a key-billing run (key_billing not None) runs on and may
+    bill, as every surface names it ("Hugging Face"): a Space route's host,
+    else its provider's PROVIDER_LABELS name. None for any other node.
+    frontend directRoute.keyBillingAccount is the twin, from the same table
+    (tests/fixtures/key_billing_cases.json pins both)."""
+    host = key_billing_host(definition, params, api_keys)
+    return None if host is None else PROVIDER_LABELS.get(host, host or "provider")
+
+
+def key_billing_host(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                     api_keys: Mapping[str, Any]) -> str | None:
+    """Where a key-billing run runs, as a provider id: "huggingface" for a
+    Space route, else its route's provider. The CLI tags a free run with it,
+    in the paid part's id style ("1 paid run (openai) and 1 free
+    (huggingface)"; GM, PR #203 r24 item 1), and key_billing_account names
+    it. None for any other node."""
+    if key_billing(definition, params, api_keys) is None:
+        return None
+    route = select_route(definition or {}, params, api_keys)
+    spec = route_by_id(definition or {}, route.route_id) if route.route_id else None
+    if spec and spec.get("handler") == "hf-space":
+        return "huggingface"
+    return str(route.provider or "")
+
+
+def key_billing_label(cost_class: str, account: str) -> str:
+    """A key-billing node's cost label, by the ghost-card convention ("free ·
+    runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
+    PR #203 r15 item 1). frontend directRoute.keyBillingLabel is the twin."""
+    return f"{'may cost' if cost_class == MAY_COST else 'free'} · {account}"
+
+
 def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(key for route in routes_of(definition) for key in keys(route.get("keys"))))
 
@@ -770,7 +897,7 @@ def _union_keys(definition: Mapping[str, Any]) -> tuple[str, ...]:
 def _keyed(route: Mapping[str, Any], api_keys: Mapping[str, Any]) -> Route:
     """A route that can take the run, with the first of its keys that is set."""
     kind = DIRECT if route.get("maker") else FALLBACK
-    return Route(kind, route.get("provider"), _set_keys(route, api_keys)[0], route.get("id"))
+    return Route(kind, route.get("provider"), route_key(route, api_keys), route.get("id"))
 
 
 def _select_from_routes(
@@ -790,13 +917,13 @@ def _select_from_routes(
         route = route_by_id(definition, choice)
         if route is None:
             return Route(UNSET, first, None, None, DirectBlock(UNKNOWN_PROVIDER, PROVIDER_PARAM, None, choice))
-        if not _set_keys(route, api_keys):
+        if not _can_run_keyed(route, api_keys):
             return Route(UNSET, route.get("provider"), None, route.get("id"), None, tuple(keys(route.get("keys"))))
         block = route_block(definition, route, params)
         if block is not None:
             return Route(UNSET, route.get("provider"), None, route.get("id"), block)
         return _keyed(route, api_keys)
-    route = next((r for r in routes if r.get("plan") != "only" and _set_keys(r, api_keys)), None)
+    route = next((r for r in routes if r.get("plan") != "only" and _can_run_keyed(r, api_keys)), None)
     if route is None:
         return Route(UNSET, first, None, None, None, _union_keys(definition))
     block = route_block(definition, route, params)
@@ -1518,6 +1645,18 @@ def _hidden_fix_sentence(definition: Mapping[str, Any], param: str) -> str:
     return f"Set {label} back to {_option_label(spec, default)}, or switch provider."
 
 
+def missing_key_line_for(definition: Mapping[str, Any], route: Route) -> str | None:
+    """The route's own line for a run stopped only by a missing key
+    (RouteSpec.missingKeyLine: Idol without a Hugging Face token), or None.
+    Auto with no key set names no route: then every route must have one."""
+    if not route.missing or route.block is not None:
+        return None
+    spec = route_by_id(definition, route.route_id) if route.route_id else None
+    candidates = [spec] if spec is not None else [r for r in routes_of(definition) if r.get("plan") != "only"]
+    lines = [str(r.get("missingKeyLine") or "") for r in candidates]
+    return lines[0] if lines and all(lines) else None
+
+
 def route_unavailable_message(
     definition: Mapping[str, Any], route: Route, alternatives: Iterable[str] = (),
     keyless: Iterable[str] = (),
@@ -1546,6 +1685,10 @@ def route_unavailable_message(
                else "Change that setting, or switch provider.")
         return f"{name} can't run on {provider_label(spec.get('provider'))}: {_why(spec, block)}. {fix}{also}"
     needed = _or_list(route.missing) if route.missing else "a provider key"
+    own = missing_key_line_for(definition, route)
+    if own:
+        # The route's own words (Idol's token): agents and the card read the same.
+        return own
     if spec is not None:
         return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
                 f"Add it in Settings > Providers or choose another provider.{also}")
@@ -1564,11 +1707,11 @@ def _unavailable_route(
     if route.kind != UNSET:
         return None
     alternatives = [str(r.get("id")) for r in routes_of(definition)
-                    if r.get("id") != route.route_id and r.get("plan") != "only" and _set_keys(r, api_keys)
+                    if r.get("id") != route.route_id and r.get("plan") != "only" and _can_run_keyed(r, api_keys)
                     and route_block(definition, r, values) is None]
     hidden = route.block is not None and route.block.reason == HIDDEN
     keyless = ([str(route.block.on)] if hidden and not alternatives and route.block.on
-               and not _set_keys(route_by_id(definition, route.block.on) or {}, api_keys) else [])
+               and not _can_run_keyed(route_by_id(definition, route.block.on) or {}, api_keys) else [])
     return route, alternatives, keyless
 
 
@@ -1633,15 +1776,17 @@ def _person_setting(param: Mapping[str, Any] | None, key: str, value: Any) -> st
 
 
 def _hidden_fix_person(definition: Mapping[str, Any], param: str) -> str:
-    """_hidden_fix_sentence in GM's rules: the label in quotes, the default by its option's label."""
+    """_hidden_fix_sentence in GM's rules, as the action's first clause (no
+    period: person_line.route_action adds who can take the run): the label in
+    quotes, the default by its option's label."""
     spec = param_definition(definition, param)
     label = f"“{_param_label(spec, param)}”"
     default = (spec or {}).get("default")
     if default is None:
-        return f"Clear {label}, or switch provider."
+        return f"Clear {label}"
     if isinstance(default, bool):
-        return f"Turn {label} {'on' if default else 'off'}, or switch provider."
-    return f"Set {label} back to {_plain(_option_label(spec, default))}, or switch provider."
+        return f"Turn {label} {'on' if default else 'off'}"
+    return f"Set {label} back to {_plain(_option_label(spec, default))}"
 
 
 def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
@@ -1669,7 +1814,7 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
     if block.reason == REQUIRES:
         return f" without {label}"
     if block.reason == SIZE:
-        return f", because it can't render this {label} exactly"
+        return f", because it can’t render this {label} exactly"
     if block.reason == RETIRED:
         return f", because the maker retired this model on {block.on}"
     if block.reason == PORTS:
@@ -1682,61 +1827,121 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 
 
 def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
-                params: Mapping[str, Any] | None = None) -> str:
+                params: Mapping[str, Any] | None = None) -> Any:
+    """What the person can change where the node is, as the action's first
+    clause (person_line.route_action names who else can take the run; GM, PR
+    #203 r31 item 3: never "or switch provider"), a person_line.Fix that says
+    how many options it lists (r32 item 1: "Pick A, B or C, or switch to …")."""
+    from execution.person_line import Fix
+
     param = str(block.param or "")
     spec = param_definition(definition, param) if param else None
     if block.reason == HIDDEN:
-        return _hidden_fix_person(definition, param)
+        return Fix(_hidden_fix_person(definition, param))
     values = _accepted_values(route, block)
     label = f"“{_param_label(spec, param)}”"
     if (spec or {}).get("type") == "boolean" and block.reason in (UNSUPPORTED, BLOCKED):
         on = match_value((params or {}).get(param)) in {"true", WIRED}
-        return f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}, or switch provider."
+        return Fix(f"Turn {label} {'off' if on or block.reason == BLOCKED else 'on'}")
     if block.reason == BLOCKED:
-        return f"Clear {label}, or switch provider."
+        return Fix(f"Clear {label}")
     if values:
-        return f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}, or switch provider."
+        return Fix(f"Pick {_or_list([_plain(_option_label(spec, value)) for value in values])}", len(values))
     if block.reason == PORTS:
-        return "Disconnect the extra inputs, or switch provider."
+        return Fix("Disconnect the extra inputs")
     if block.reason == REQUIRES:
-        return f"Set “{_param_label(spec, param)}”, or switch provider."
-    return "Change that setting, or switch provider."
+        return Fix(f"Set “{_param_label(spec, param)}”")
+    return Fix("Change that setting")
 
 
 def route_unavailable_line(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+    *, title: str | None = None,
 ) -> str | None:
     """route_unavailable's message as the canvas card says it (error copy
     round 3e, GM: no keys, ids or env-var names in what the person reads; a
     key by its provider, a setting by its label; round 3f: GM's rules for
     every card line). The message itself stays the agents' text. None when
-    the run can start."""
-    from execution.person_line import key_phrase, missing_key_line
+    the run can start. ``title`` names the node as the line's reader sees it
+    (the proposal bar's “Name”, node_readiness.instance_missing_line); the
+    card names it by its type, in quotes (card_subject), and on Auto with no key set keeps its run
+    line, ", then run the node again" (GM, PR #203 r29 item 1)."""
+    from execution.person_line import missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
     if found is None:
         return None
+    reason = _route_reason(definition, params, found)
+    if reason is None:
+        return missing_key_line(found[0].missing) if title is None else None
+    return reason.line(title or card_subject(definition))
+
+
+def card_subject(definition: Mapping[str, Any]) -> str:
+    """How a card's route line names its node: the type's name in quotes, as
+    the bar and the Agent log quote every name (GM, PR #203 r32: "“FLUX 3
+    Image” is set to Replicate…"), or "This node" when it has none. A run's
+    node carries no label, so the card names it by its type."""
+    name = str(definition.get("displayName") or "").strip()
+    return f"“{name}”" if name else "This node"
+
+
+def route_unavailable_reason(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+) -> Any:
+    """Why a route-table run can't start, for a list that names the node
+    (person_line.NotReadyReason: the proposal bar, the Agent Log), or None
+    when it can start. On Auto with no key set: "needs your Black Forest
+    Labs or fal.ai API key. Add one in Settings." (GM, PR #203 r29 item 1;
+    review 14, copy MEDIUM-1: the line named no node)."""
+    from execution.person_line import NotReadyReason, key_phrase
+
+    found = _unavailable_route(definition, params, api_keys)
+    if found is None:
+        return None
+    reason = _route_reason(definition, params, found)
+    if reason is not None:
+        return reason
+    route = found[0]
+    phrase = key_phrase(route.missing) if route.missing else None
+    if not phrase:
+        return NotReadyReason.of("not_set_up")
+    return NotReadyReason.of("key", phrase=phrase, it="one" if len(route.missing) > 1 else "it")
+
+
+def _route_reason(definition: Mapping[str, Any], params: Mapping[str, Any] | None, found: Any) -> Any:
+    """The NotReadyReason for a stop route_unavailable_line and
+    route_unavailable_reason say alike, or None for Auto with no key set
+    (each says that one its own way)."""
+    from execution.person_line import NotReadyReason, key_phrase, route_action
+
     route, alternatives, keyless = found
-    name = str(definition.get("displayName") or "This node")
     spec = route_by_id(definition, route.route_id) if route.route_id else None
     others = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in alternatives]
-    keyless_labels = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in keyless]
-    also = (f" {_or_list(others)} can take it." if others
-            else f" {_or_list(keyless_labels)} can take it. Add its key in Settings." if keyless_labels
-            else "")
+    keyless_specs = [route_by_id(definition, alt) or {} for alt in keyless]
+    keyless_labels = [provider_label(spec_.get("provider")) for spec_ in keyless_specs]
+    # GM, PR #203 r29 item 2: the key by its name, never "its key" (it read
+    # as the node's); r31 item 3: who can take the run is named in the
+    # action ("… or switch to fal.ai"; "…, or add your fal.ai API key in
+    # Settings and switch to fal.ai"), with no separate "can take it".
+    keyless_phrase = key_phrase([key for spec_ in keyless_specs for key in keys(spec_.get("keys"))])
     block = route.block
     if block is not None and block.reason == UNKNOWN_PROVIDER:
-        return f"{name} is set to a provider it doesn't have. Choose one in the node's provider switcher."
+        return NotReadyReason.of("unknown_provider")
     if block is not None and spec is not None:
-        why = _why_person(definition, spec, block, params)
-        fix = _fix_person(definition, spec, block, params)
-        return f"{name} can't run on {provider_label(spec.get('provider'))}{why}. {fix}{also}"
-    phrase = key_phrase(route.missing) if route.missing else None
+        action, after_clause = route_action(_fix_person(definition, spec, block, params), others,
+                                            keyless_labels, keyless_phrase)
+        return NotReadyReason.of("route_block", after_clause=after_clause, provider=provider_label(spec.get("provider")),
+                                 why=_why_person(definition, spec, block, params), action=action)
+    own = missing_key_line_for(definition, route)
+    if own:
+        return NotReadyReason(own=own)
     if spec is not None:
-        needed = f"your {phrase}" if phrase else "a provider key"
-        return (f"{name} is set to {provider_label(spec.get('provider'))}, which needs {needed}. "
-                f"Add it in Settings, or choose another provider.{also}")
-    return missing_key_line(route.missing)
+        phrase = key_phrase(route.missing) if route.missing else None
+        action, after_clause = route_action("Add it in Settings", others, keyless_labels, keyless_phrase)
+        return NotReadyReason.of("route_key", after_clause=after_clause, provider=provider_label(spec.get("provider")),
+                                 needed=f"your {phrase}" if phrase else "a provider key", action=action)
+    return None
 
 
 # -- the routes contract --------------------------------------------------------
@@ -1910,9 +2115,10 @@ def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any,
     return problems[:5]
 
 # The clients a route can name (execution/route_clients.py ROUTE_CLIENTS).
-ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea")
-_ROUTE_FIELDS = {"id", "provider", "maker", "keys", "plan", "handler", "endpoint", "endpointWhen", "params",
-                 "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note"}
+ROUTE_HANDLERS = ("bfl", "fal", "replicate-model", "openrouter-images", "openrouter-videos", "krea", "hf-space")
+_ROUTE_FIELDS = {"id", "provider", "maker", "keys", "optionalKeys", "plan", "handler", "endpoint", "endpointWhen",
+                 "params", "rename", "valueMap", "rules", "paramVisibleWhen", "pricing", "note", "missingKeyLine",
+                 "mayBillWithKey"}
 _ROUTE_RULE_KEYS = set(_RULE_KEYS) | {"ports"}
 
 
@@ -1965,10 +2171,37 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
             problems.append(f"{where}.plan must be 'optional' or 'only'")
         if plan and route.get("provider") != "krea":
             problems.append(f"{where} only a Krea route can bill the plan")
-        if plan != "only" and not route_keys:
-            problems.append(f"{where} needs keys (only a plan-only route runs without one)")
-        if route_keys and KEY_PROVIDERS.get(route_keys[0]) != route.get("provider"):
+        optional = route.get("optionalKeys")
+        if optional is not None:
+            if not isinstance(optional, list) or not all(isinstance(k, str) and k for k in optional):
+                problems.append(f"{where}.optionalKeys must be a list of key names")
+                optional = []
+            if route_keys:
+                problems.append(f"{where} lists keys and optionalKeys; a keyless route's keys must be []")
+            for key in optional:
+                if key not in KEY_PROVIDERS:
+                    problems.append(f"{where}.optionalKeys names {key}, which Settings doesn't store")
+            if plan:
+                problems.append(f"{where} a keyless route can't bill a plan")
+        may_bill = route.get("mayBillWithKey")
+        if may_bill is not None:
+            if may_bill is not True:
+                problems.append(f"{where}.mayBillWithKey must be true when present")
+            if not optional:
+                problems.append(f"{where}.mayBillWithKey needs optionalKeys: it says a run with one of them may bill")
+        if plan != "only" and not route_keys and optional is None:
+            problems.append(f"{where} needs keys (only a plan-only or keyless route runs without one)")
+        # A maker's Hugging Face Space (handler hf-space) names the maker as
+        # its provider; its key is the Hugging Face token, which meters it.
+        space_token = route.get("handler") == "hf-space" and route_keys[:1] == ["HF_TOKEN"]
+        if route_keys and KEY_PROVIDERS.get(route_keys[0]) != route.get("provider") and not space_token:
             problems.append(f"{where}.provider must be {KEY_PROVIDERS.get(route_keys[0])!r}, who bills {route_keys[0]}")
+        missing_line = route.get("missingKeyLine")
+        if missing_line is not None:
+            if not isinstance(missing_line, str) or not missing_line.strip():
+                problems.append(f"{where}.missingKeyLine must be a sentence")
+            if not route_keys:
+                problems.append(f"{where}.missingKeyLine needs keys to be missing")
         if route.get("handler") not in ROUTE_HANDLERS:
             problems.append(f"{where}.handler must be one of {', '.join(ROUTE_HANDLERS)}")
         if route.get("maker") not in (None, True):

@@ -46,6 +46,7 @@ from typing import Any, BinaryIO, Callable, Iterator
 from urllib.parse import quote
 
 from nebula_api import NebulaAPI, NebulaAPIError
+from services import agent_words
 
 MIB = 1024 * 1024
 # Load graph's ceiling for a file it opens (the frontend's
@@ -267,11 +268,13 @@ def prepare(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = Non
     return {"name": path.name, "body": body, "filesRestored": files, "warnings": warnings}
 
 
-def _words(via: str) -> dict[str, str]:
-    if via == "cli":
-        return {"size": "`nebula project size`", "trim": "`nebula apply` or `nebula delete`",
-                "back": "`nebula project open {id}`"}
-    return {"size": "project_size", "trim": "edit_canvas or remove_from_canvas", "back": "`open_project('{id}')`"}
+def _words(headers: dict[str, str]) -> dict[str, str]:
+    """The calls a load note names, in the caller's words: the one table
+    (services/agent_words.WORDS) and the one signal, the CLI's
+    X-Nebula-Surface (review 11 of PR #203, NIT-3)."""
+    where = agent_words.surface(headers)
+    return {"size": agent_words.worded("{size}", where), "trim": agent_words.worded("{apply} or {delete}", where),
+            "back": agent_words.worded("{open}", where)}
 
 
 def _size(api: NebulaAPI, project_id: str, headers: dict[str, str]) -> dict[str, Any] | None:
@@ -292,15 +295,16 @@ def _counts(imported: dict[str, Any], files: int) -> str:
     return text
 
 
-def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None, via: str = "mcp") -> dict[str, Any]:
+def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """Open a .nebula, .json or .nebula.zip as the person's Load graph does.
     Returns {loaded, project, openedAsNewProject, previousProject (a new
     project only), nodeCount, edgeCount, idMap, filesRestored, warnings,
-    savingPaused, size, note}."""
+    savingPaused, size, note}. The note names calls in the words of the
+    surface ``headers`` say (`nebula load` sends the CLI's)."""
     headers = _with_agent_marker(headers)
     prepared = prepare(api, source, headers=headers)
     body, name = prepared["body"], prepared["name"]
-    words = _words(via)
+    words = _words(headers)
 
     def call(method: str, path: str, **kwargs: Any) -> Any:
         try:

@@ -74,7 +74,11 @@
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a
    filled style below wins for a button that has both classes (Cinema's
-   Generate shot is a .cinema-shot-panel__action too). */
+   Generate shot is a .cinema-shot-panel__action too).
+   Run History's Rerun, "Retry failed" and "Rerun with latest source"
+   (.run-history__replay) joined in PR #203 round 6 (GM r9 item 1): a key
+   lock gives them aria-disabled, and their own sheet's slava ink kept the
+   enabled white label. */
 :is(
   .selection-toolbar__button,
   .cinema-shot-panel__action,
@@ -98,9 +102,11 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .world-splat-preview__open,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .run-history__replay
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -125,9 +131,11 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .world-splat-preview__open,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .run-history__replay
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
@@ -340,4 +348,12 @@ body.app-slava-restraint .settings-switch:checked:is(:disabled, [aria-disabled='
 :is(.remotion-properties-panel__anchor-button[data-active='true']):is(:disabled, [aria-disabled='true']):hover {
   background: var(--sr-disabled-fill, rgba(255, 255, 255, 0.1)) !important;
   border-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+}
+
+/* A Run locked by a missing key (lib/runKeyLock.ts keyLockedProps; a keyed
+   route without its key, GM PR #203 r6): aria-disabled, so it keeps
+   its focus and its tooltip, in each surface's disabled look above, with one
+   cursor on every surface, the canvas lock's (App.css). */
+[data-key-locked] {
+  cursor: not-allowed !important;
 }

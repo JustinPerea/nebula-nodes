@@ -16306,6 +16306,56 @@
       ],
       "checked": "2026-10-21"
     },
+    "speridlabs-idol": {
+      "routes": {
+        "hf-space": {
+          "currency": "usd",
+          "per": "request",
+          "rows": [
+            {
+              "match": {},
+              "price": 0
+            }
+          ],
+          "notes": "Idol runs on Speridlabs' own Hugging Face Space on ZeroGPU, which Hugging Face offers free to every user, so Nebula and the Space bill nothing. The route is keyless: without HF_TOKEN a run uses Hugging Face's shared GPUs (one live call with no token, 2026-10-30, ran in 27.6 s with every request 200); with HF_TOKEN it uses that account's daily ZeroGPU time, and past it a PRO, Team or Enterprise account is billed from its prepaid Hugging Face credits at $1 per 10 GPU-minutes. That charge is the person's own and Nebula can't see it, so the price stays $0 and the route carries mayBillWithKey instead: with a token an agent proposes the run. Each call asks for 120 s of GPU (app.py spaces.GPU(duration=120)); spaces 0.51.3 multiplies that by the GPU's duration_factor (spaces/zero/configs.json: 1.0 on H200, 1.5 on RTX PRO 6000 Blackwell), so the ask is 120 s or 180 s, unsettled by the live call, and the quota is likely charged only the seconds the run uses (the docs' xlarge note counts an effective task duration). Which pool a call with no token draws on, and whether a fine-grained token with no permissions applies the person's quota, are unconfirmed. The GPU seconds a run really uses are not published or measured.",
+          "sources": [
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "ZeroGPU Spaces are available to use for free to all users."
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "Unauthenticated | 2 minutes | Low; Free account | 5 minutes | Medium; PRO account | 40 minutes (extensible) | Highest; Team organization member | 40 minutes (extensible) | Highest; Enterprise organization member | 60 minutes (extensible) | Highest"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "large (default) | Half NVIDIA RTX Pro 6000 Blackwell | 48GB | 1×"
+            },
+            {
+              "url": "https://huggingface.co/spaces/speridlabs/idol/blob/main/app.py",
+              "quote": "gpu = spaces.GPU(duration=120)"
+            },
+            {
+              "url": "https://files.pythonhosted.org/packages/f5/b3/f6c0dfa766e0fc5ae66466235c13be580e543d8d2d9023f678ba5859adca/spaces-0.51.3-py3-none-any.whl#spaces/zero/configs.json",
+              "quote": "\"model\": \"NVIDIA RTX PRO 6000 Blackwell Server Edition\", … \"duration_factor\": 1.5"
+            },
+            {
+              "url": "https://files.pythonhosted.org/packages/f5/b3/f6c0dfa766e0fc5ae66466235c13be580e543d8d2d9023f678ba5859adca/spaces-0.51.3-py3-none-any.whl#spaces/zero/client.py",
+              "quote": "duration_seconds *= zerogpu_config['duration_factor']"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "xlarge consumes 2× more daily quota than large (e.g. a 45s effective task duration consumes 90s of quota)"
+            },
+            {
+              "url": "https://huggingface.co/docs/hub/spaces-zerogpu",
+              "quote": "PRO, Team, and Enterprise users can continue using ZeroGPU Spaces beyond their included daily quota by consuming pre-paid credits at the rate of $1 per 10 minutes of GPU time."
+            }
+          ],
+          "checked": "2026-10-30"
+        }
+      }
+    },
     "veo-3": {
       "currency": "usd",
       "per": "second",

@@ -53,7 +53,7 @@ export function AgentNoteCard({
     >
       <div className="agent-note-card__who">
         <AuthorDot author={note.author} />
-        <span className="agent-note-card__name">{note.author.name}</span>
+        <span className="agent-note-card__name agent-name" title={note.author.name} aria-label={note.author.name}>{note.author.name}</span>
         {label && <span className="agent-note-card__label">{label}</span>}
         <button
           type="button"

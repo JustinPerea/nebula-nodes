@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { stillNotReady, type ProposalNotReady } from '../lib/canvasProposals';
+import { proposalAcceptLock } from '../lib/proposalAcceptLock';
 import type { ProposalEntry } from '../store/canvasProposalsStore';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
@@ -11,7 +12,7 @@ import { useUIStore } from '../store/uiStore';
  * A node the proposal adds is checked at the values Accept will write; a
  * canvas node at its params with the proposed changes applied.
  */
-export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalNotReady[] {
+export function useProposalNotReady(entry: ProposalEntry | undefined): Array<ProposalNotReady & { routeKeyLine?: true }> {
   const cache = useUIStore((s) => s.settingsCache);
   // Only the canvas nodes the rows name, as text, so a drag elsewhere
   // doesn't re-render the ghosts.
@@ -26,7 +27,7 @@ export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalN
     const { view, values } = entry;
     const nodes = new Map((JSON.parse(named) as Array<[string, string, Record<string, unknown>]>)
       .map(([id, definitionId, params]) => [id, { definitionId, params }]));
-    return stillNotReady(view, cache, (row) => {
+    const nodeFor = (row: ProposalNotReady) => {
       if (row.nodeId === null) {
         const ghost = view.nodes.find((node) => node.ref === row.ref);
         if (!ghost) return null;
@@ -37,6 +38,22 @@ export function useProposalNotReady(entry: ProposalEntry | undefined): ProposalN
       const changes = values?.params[row.nodeId] ?? view.params.find((change) => change.nodeId === row.nodeId)?.changes ?? {};
       const proposed = Object.fromEntries(Object.entries(changes).map(([key, change]) => [key, change.to]));
       return { definition: NODE_DEFINITIONS[node.definitionId], params: { ...node.params, ...proposed } };
-    });
+    };
+    return stillNotReady(view, cache, nodeFor);
   }, [entry, cache, named]);
+}
+
+/**
+ * GM's Accept lock (PR #203 r6 item 1: "You can accept this after you add
+ * your Hugging Face token in Settings."), read from the run Accept would
+ * start with the keys set now (lib/proposalAcceptLock), so it follows the
+ * token both ways, whenever the proposal was made (review r4 LOW-1). The bar
+ * alone reads it: it follows the whole canvas, which the ghosts needn't.
+ */
+export function useProposalAcceptLock(entry: ProposalEntry | undefined): string | null {
+  const cache = useUIStore((s) => s.settingsCache);
+  const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
+  return useMemo(() => (entry ? proposalAcceptLock(entry.view, entry.values, { nodes, edges }, cache) : null),
+    [entry, cache, nodes, edges]);
 }

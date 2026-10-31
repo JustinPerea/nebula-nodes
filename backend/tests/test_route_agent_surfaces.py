@@ -323,3 +323,167 @@ def test_route_docs_describe_pr5_behaviour():
     for doc in (REPO / "docs" / "model-providers" / "krea" / "krea-3.md", REPO / ".agents" / "skills" / "krea" / "SKILL.md"):
         text = doc.read_text()
         assert "Hidden settings" in text and "Model Jam (speed)" in text, doc
+
+
+# -- Idol: keyless again (PR #203 round 7); the keyed rules stay ------------------
+
+
+def _keyless_idol() -> dict:
+    """Idol keyless, built from the registry either way (round 7: the first
+    live call ran without a token, docs/model-providers/speridlabs/idol.md)."""
+    definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"], route["optionalKeys"] = [], ["HF_TOKEN"]
+    route.pop("missingKeyLine", None)
+    definition["envKeyName"], definition["directKeyName"] = [], []
+    return definition
+
+
+def _keyed_idol() -> dict:
+    """Idol as a keyed Space route (PR #203 rounds 4 to 6), for the keyed
+    formatting rules."""
+    definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
+    route = definition["routes"][0]
+    route["keys"] = ["HF_TOKEN"]
+    route.pop("optionalKeys", None)
+    route.pop("mayBillWithKey", None)
+    definition["envKeyName"], definition["directKeyName"] = ["HF_TOKEN"], ["HF_TOKEN"]
+    return definition
+
+
+def test_describe_node_shows_idols_optional_token_billing_and_whether_it_is_set(monkeypatch):
+    for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True)):
+        monkeypatch.setattr(main, "load_settings", lambda keys=keys: {"apiKeys": keys})
+        body = TestClient(main.app).get("/api/agent/nodes/speridlabs-idol").json()
+        [route] = body["routes"]
+        assert route["keys"] == [] and route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
+        assert route["billing"] == main.hf_space_billing_note(is_set)
+        # Round 7: with the token, propose it.
+        assert "(propose_change)" in route["billing"]
+    # Only a Space route carries the billing note.
+    assert all("billing" not in route for route in TestClient(main.app).get(
+        "/api/agent/nodes/flux-3-image-klein").json()["routes"])
+
+
+def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set():
+    # A token of only invisible characters is unset here too, as it is for the
+    # run gate and the handler (node_route.key_set; review 7 of PR #203, NIT-4).
+    for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True), ({"HF_TOKEN": "\ufeff\u200b"}, False),
+                         ({"HF_TOKEN": "\ufeffhf_x\n"}, True)):
+        [route] = main._describe_routes(_keyless_idol(), keys, lambda _route: [])["routes"]
+        assert route["keys"] == [] and route["keySet"] is False
+        assert route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
+
+
+def test_find_nodes_lists_idol_as_ready_and_free_with_or_without_its_token(real_nodes, monkeypatch):
+    # Round 7: keyless, so ready and free with no token.
+    body = real_nodes.get("/api/agent/nodes", params={"query": "idol"}).json()
+    row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
+    assert row["price"] == "free" and row["runsWith"] and not row.get("missing")
+    assert row["billing"] == main.HF_SPACE_BILLING_FREE
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": "hf_x"}})
+    body = TestClient(main.app).get("/api/agent/nodes", params={"query": "idol"}).json()
+    row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
+    assert row["price"] == "free" and row["runsWith"]
+    # "free" comes with who can bill past the allowance (review r3 L4), as
+    # the token is set now (review 7 of PR #203, LOW-1).
+    assert row["billing"] == main.HF_SPACE_BILLING_TOKEN
+    other = TestClient(main.app).get("/api/agent/nodes", params={"query": "text input"}).json()
+    assert all("billing" not in node for node in other["nodes"])
+
+
+def test_start_here_notes_who_can_bill_past_idols_allowance():
+    from tests.test_cli_commands import _start_notes
+
+    for keys in ({"HF_TOKEN": "hf_x"}, {}):
+        for via in ("mcp", "cli"):
+            notes = _start_notes(keys, via=via)
+            [note] = [note for note in notes if note.startswith("speridlabs-idol")]
+            # As the token is set now (review 7 of PR #203, LOW-1): never
+            # "free here" with the token set.
+            assert note.startswith("speridlabs-idol: May cost here" if keys else "speridlabs-idol: Free here")
+            assert "free here" not in note
+            # The CLI's words for the MCP tool names (_cli_words), and only those.
+            assert ("`nebula propose`" if via == "cli" else "(propose_change)") in note
+            assert ("propose_change" not in note) if via == "cli" else ("nebula propose" not in note)
+
+
+def test_nebula_info_prints_idols_billing_line(monkeypatch, capsys):
+    from cli.client import NebulaClient
+    from cli.commands import nodes
+    from cli.formatter import format_billing_line
+
+    monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {"HF_TOKEN": "hf_x"}})
+    client = NebulaClient("http://testserver")
+    client._client = TestClient(main.app)
+    nodes.run_info(client, "speridlabs-idol")
+    lines = capsys.readouterr().out.splitlines()
+    price = next(index for index, line in enumerate(lines) if line.startswith("PRICE:"))
+    # With the token set, and in the CLI's own words (review 7 of PR #203, LOW-1).
+    assert lines[price + 1] == f"BILLING: {main.HF_SPACE_BILLING_TOKEN}".replace("propose_change", "`nebula propose`")
+    assert "propose_change" not in lines[price + 1]
+    nodes.run_info(client, "text-input")
+    assert "BILLING" not in capsys.readouterr().out
+    assert format_billing_line({"routes": [{"billing": "a"}, {"billing": "a"}, {}]}) == "BILLING: a"
+    assert format_billing_line({}) is None
+
+
+def test_nebula_info_names_a_keyed_space_routes_token():
+    text = format_node_detail(_keyed_idol())
+    assert "Key: HF_TOKEN" in text
+    route_line = next(line for line in text.splitlines() if line.strip().startswith("hf-space"))
+    assert "HF_TOKEN" in route_line and "optional" not in route_line
+    assert "or a keyless one" in text
+
+
+def test_nebula_info_names_a_keyless_routes_optional_token():
+    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    switch back."""
+    keyless = format_node_detail(_keyless_idol())
+    assert "Key: none (optional HF_TOKEN)" in keyless
+    assert "none (optional HF_TOKEN)" in next(line for line in keyless.splitlines()
+                                              if line.strip().startswith("hf-space"))
+
+
+def test_nebula_keys_counts_a_keyed_space_routes_token():
+    from cli.formatter import format_keys
+
+    idol = _keyed_idol()
+    set_text = format_keys({"configured": {"HF_TOKEN": True}}, [idol])
+    assert "HF_TOKEN" in set_text and "1 node (Idol)" in set_text and "1 nodes" not in set_text
+    unset_text = format_keys({"configured": {"HF_TOKEN": False}}, [idol])
+    assert "1 node unavailable" in unset_text and "optional" not in unset_text
+    two = format_keys({"configured": {"HF_TOKEN": False}}, [idol, {**idol, "id": "idol-2", "displayName": "Idol 2"}])
+    assert "2 nodes unavailable" in two
+
+
+def test_nebula_keys_counts_a_keyless_routes_optional_token():
+    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    switch back."""
+    from cli.formatter import format_keys
+
+    keyless_text = format_keys({"configured": {"HF_TOKEN": False}}, [_keyless_idol()])
+    assert "optional: 1 node runs without it (Idol)" in keyless_text and "unavailable" not in keyless_text
+
+
+def test_nebula_nodes_prints_idols_billing_line_under_the_table():
+    """Review r4 LOW-1: `nebula nodes` (find_nodes' CLI twin) says who can
+    bill past Idol's allowance, as every other agent surface does; once per
+    note, only for a row that runs free here."""
+    from cli.formatter import format_agent_nodes
+
+    idol_row = {"id": "speridlabs-idol", "name": "Idol", "category": "3d-gen", "runsWith": "key",
+                "price": "free", "billing": main.HF_SPACE_BILLING_FREE}
+    cli_note = main.HF_SPACE_BILLING_FREE.replace("propose_change", "`nebula propose`")
+    text_row = {"id": "text-input", "name": "Text", "category": "utility", "runsWith": "free", "price": "free"}
+    out = format_agent_nodes([idol_row, text_row], ranked=False)
+    billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
+    assert billing == [f"BILLING: speridlabs-idol: {cli_note}"]
+    # Review r5 NIT-1: once per note, naming every row that carries it.
+    twin = {**idol_row, "id": "idol-2", "name": "Idol 2"}
+    out = format_agent_nodes([idol_row, text_row, twin], ranked=False)
+    billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
+    assert billing == [f"BILLING: speridlabs-idol, idol-2: {cli_note}"]
+    # Not ready here: no billing line (its row says what's missing instead).
+    out = format_agent_nodes([{**idol_row, "runsWith": None, "missing": "HF_TOKEN"}, text_row], ranked=False)
+    assert "BILLING:" not in out

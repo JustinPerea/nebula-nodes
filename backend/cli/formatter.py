@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
@@ -70,12 +71,26 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
                 line = f"{head}  {row.get('missing') or 'needs setup'}"
             lines.append(line.rstrip())
         lines.append("")
+    # Who can be billed past a free allowance (a Hugging Face Space route's
+    # `billing`, on a row that runs free here), as every other agent surface
+    # says it (review r4 LOW-1): once per distinct note, naming its nodes.
+    billed: dict[str, list[str]] = {}
+    for row in rows:
+        if row.get("runsWith") and row.get("billing"):
+            billed.setdefault(str(row["billing"]), []).append(str(row.get("id")))
+    for note, ids in billed.items():
+        lines.append(f"BILLING: {', '.join(ids)}: {_cli_words(note)}")
     return "\n".join(lines).rstrip("\n")
 
 
 def _cli_words(text: str) -> str:
-    """An agent route's MCP words in `nebula` words (main._cli_words)."""
-    return text.replace("describe_node", "`nebula info <id>`")
+    """describe_node's and find_nodes' MCP-worded data in `nebula` words: the
+    CLI names its own command, never the MCP tool (review 7 of PR #203,
+    LOW-1), from the one table (services/agent_words.cli_words; review 9,
+    keys MEDIUM-1). Refusals arrive already worded for the CLI."""
+    from services.agent_words import cli_words
+
+    return cli_words(text)
 
 
 def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:
@@ -110,15 +125,23 @@ def format_node_detail(node: dict[str, Any]) -> str:
     key = node.get("envKeyName", "?")
     if isinstance(key, list):
         key = " or ".join(key)
+    routes_list = node.get("routes") if isinstance(node.get("routes"), list) else []
+    optional_keys = list(dict.fromkeys(str(k) for route in routes_list if isinstance(route, dict)
+                                       for k in route.get("optionalKeys") or []))
+    if not key and optional_keys:
+        # A keyless route: runs with no key, uses this one when set.
+        key = f"none (optional {' or '.join(optional_keys)})"
     pattern = node.get("executionPattern", "?")
     lines.append(f"Provider: {provider} | Key: {key} | Exec: {pattern}")
     routes = node.get("routes") if isinstance(node.get("routes"), list) else []
     if routes:
         # A route-table node (services/node_route.py): one line per provider
         # route, in Auto order, and how to pick one.
-        lines.append("ROUTES (_provider; auto takes the first with its key set):")
+        lines.append("ROUTES (_provider; auto takes the first with its key set, or a keyless one):")
         for route in routes:
-            keys = " or ".join(str(k) for k in route.get("keys") or []) or "-"
+            keys = " or ".join(str(k) for k in route.get("keys") or []) or (
+                f"none (optional {' or '.join(str(k) for k in route['optionalKeys'])})"
+                if route.get("optionalKeys") else "-")
             tags = [tag for tag in ("maker" if route.get("maker") else "",
                                     f"Krea plan {route['plan']}" if route.get("plan") else "") if tag]
             lines.append(f"  {str(route.get('id')):<16}{str(route.get('provider')):<14}{keys}"
@@ -254,6 +277,10 @@ def _option_condition(only: dict[str, list[Any]], param_when: dict[str, list[Any
     return "; ".join(conds)
 
 
+def _nodes(count: int) -> str:
+    return f"{count} node" if count == 1 else f"{count} nodes"
+
+
 def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
     """Format which provider keys are set (nebula keys output).
 
@@ -263,6 +290,9 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
     configured_map = settings.get("configured") if isinstance(settings.get("configured"), dict) else {}
 
     key_to_nodes: dict[str, list[str]] = {}
+    # A keyless route's optionalKeys: the node runs without the key and uses
+    # it when set.
+    optional_to_nodes: dict[str, list[str]] = {}
     all_keys: set[str] = {str(name) for name in configured_map}
     for n in nodes:
         env = n.get("envKeyName", "")
@@ -270,21 +300,31 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
         for k in keys_list:
             all_keys.add(k)
             key_to_nodes.setdefault(k, []).append(n.get("displayName", n["id"]))
+        optional = {str(k) for route in n.get("routes") or [] if isinstance(route, dict)
+                    for k in route.get("optionalKeys") or []} - set(keys_list)
+        for k in sorted(optional):
+            all_keys.add(k)
+            optional_to_nodes.setdefault(k, []).append(n.get("displayName", n["id"]))
 
     configured: list[str] = []
     missing: list[str] = []
 
     for key_name in sorted(all_keys):
         node_names = key_to_nodes.get(key_name, [])
+        optional_names = optional_to_nodes.get(key_name, [])
         count = len(node_names)
-        preview = ", ".join(node_names[:3])
-        if len(node_names) > 3:
+        users = node_names + optional_names
+        preview = ", ".join(users[:3])
+        if len(users) > 3:
             preview += ", ..."
-        uses = f"{count} nodes ({preview})" if count else "no node uses it"
+        uses = f"{_nodes(len(users))} ({preview})" if users else "no node uses it"
         if configured_map.get(key_name) is True:
             configured.append(f"  {key_name:<25}{'set':<10}{uses}")
+        elif count or not optional_names:
+            missing.append(f"  {key_name:<25}{'':10}{_nodes(count)} unavailable")
         else:
-            missing.append(f"  {key_name:<25}{'':10}{count} nodes unavailable")
+            missing.append(f"  {key_name:<25}{'':10}optional: {_nodes(len(optional_names))} "
+                           f"{'runs' if len(optional_names) == 1 else 'run'} without it ({preview})")
 
     lines: list[str] = []
     if configured:
@@ -438,6 +478,16 @@ def format_price_line(detail: dict[str, Any]) -> str | None:
     return "PRICE: no list price at default settings"
 
 
+def format_billing_line(detail: dict[str, Any]) -> str | None:
+    """`nebula info`'s BILLING line, from describe_node's answer: who can be
+    billed past a free allowance (a Hugging Face Space route's `billing`),
+    once per distinct note; None when no route has one."""
+    notes = [str(route["billing"]) for route in detail.get("routes") or []
+             if isinstance(route, dict) and route.get("billing")]
+    unique = list(dict.fromkeys(_cli_words(note) for note in notes))
+    return f"BILLING: {' '.join(unique)}" if unique else None
+
+
 def format_start(start: dict[str, Any]) -> str:
     """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
     the canvas, pins, proposals, boards, the nodes that run here with prices,
@@ -537,7 +587,10 @@ def format_start(start: dict[str, Any]) -> str:
     lines.append("")
     per_run = spend.get("perRunUsd")
     per_run_text = f"{_usd(float(per_run))} per run" if isinstance(per_run, (int, float)) else "no per-run limit"
-    if not spend.get("limited", True):
+    if spend.get("note"):
+        # The limits couldn't be read (a settings file Nebula can't read).
+        lines.append(f"SPEND: {spend['note']}")
+    elif not spend.get("limited", True):
         lines.append(f"SPEND: not limited ({per_run_text} for agents)")
     else:
         limit = spend.get("limitUsd")
@@ -869,21 +922,109 @@ def _minutes(seconds: Any) -> str:
 
 
 def _cost_line(cost: dict[str, Any]) -> str:
-    paid = int(cost.get("paidRuns") or 0)
-    free = int(cost.get("freeRuns") or 0)
+    """What the proposed run spends, by cost class (model_pricing.cost_class,
+    canvas_proposals.summarize_cost): paid runs with their providers and the
+    list-price figure, runs that may bill the person's own account, runs on
+    their Krea plan, and free runs. GM, PR #203 r21 item 1: "up to 1 paid
+    run (fal) and 1 on the person's Krea plan, $0.03 at list prices". A plan
+    run is never "free", never "runs locally" and never in the figure; a
+    free run that calls a provider (a sourced $0, Idol without a token) says
+    which, never "runs locally" (review 10, MEDIUM-1)."""
     up_to = "up to " if cost.get("upTo") else ""
-    if paid == 0:
-        return f"{up_to}{free} free run{'s' if free != 1 else ''} (runs locally)"
-    providers = ", ".join(cost.get("providers") or [])
-    line = f"{up_to}{paid} paid run{'s' if paid != 1 else ''}" + (f" ({providers})" if providers else "")
-    if free:
-        line += f" and {free} free"
+    paid = _count(cost.get("paidRuns"))
+    may = _count(cost.get("mayCostRuns"))
+    plan = _count(cost.get("planRuns"))
+    free = _count(cost.get("freeRuns"))
+    entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, dict)]
+    # Each part is tagged one way (GM, PR #203 r22 item 5, r24 items 1 and
+    # 2): by where its runs go, as ids, with a count per id once there's more
+    # than one: "1 paid run (openai) and 1 free (huggingface)", "3 paid runs
+    # (2 anthropic, 1 krea) and 2 free (1 fal, 1 local)". A free run goes
+    # where it runs (a Space's "huggingface", `runsOn`), else to its
+    # provider, else it runs locally.
+    paid_ids = [str(entry["provider"]) for entry in entries
+                if entry.get("kind") not in ("plan", "mayCost", "free") and entry.get("provider")]
+    # Without an entry for each paid run (an older backend's cost): its
+    # providers, as before.
+    paid_tag = _tags(paid_ids, paid) if len(paid_ids) == paid else (
+        f" ({', '.join(cost.get('providers') or [])})" if cost.get("providers") else "")
+    # A free run with no place runs locally, so every free run is counted
+    # once; without an entry for each (an older backend's cost), none is
+    # tagged by place (review 13 of PR #203, copy LOW-2).
+    free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "local")
+                for entry in entries if entry.get("kind") == "free"]
+    # Entries that don't match the count, more or fewer: none is tagged,
+    # not even "(runs locally)", rather than tagging the first few (review
+    # 14, copy NIT-3).
+    free_unsure = bool(free_ids) and len(free_ids) != free
+    if len(free_ids) != free:
+        free_ids = []
+    # "run" goes on the first class only and carries through the rest, and
+    # a class that stands alone keeps it (GM, PR #203 r25 item 1): "1 paid
+    # run (google), 1 on the person's Krea plan and 1 free (fal)", "1 run on
+    # the person's Krea plan and 1 free (local)", "1 free run (fal)".
+    runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
+    alone = sum(1 for count in (paid, may, plan, free) if count) <= 1
+    parts: list[str] = []
+    first = lambda count: runs(count) + " " if not parts else ""  # noqa: E731
+    if paid:
+        parts.append(f"{paid} paid {first(paid)}".rstrip() + paid_tag)
+    if may:
+        names = ", ".join(str(row.get("name")) for row in cost.get("mayCost") or [])
+        parts.append(f"{may} {first(may)}that may bill the person's own account ({names})")
+    if plan:
+        parts.append(f"{plan} {first(plan)}on the person's Krea plan")
+    if free or not parts:
+        if set(free_ids) <= {"local"}:
+            # Every free run is local (or no entry says where): "(runs
+            # locally)" when they are the whole run, else tagged as the
+            # paid part is, "1 paid run (openai) and 1 free (local)" (GM, PR
+            # #203 r27 item 5).
+            where = "" if free_unsure else (" (runs locally)" if alone else (" (local)" if free_ids else ""))
+        else:
+            where = _tags(free_ids, free)
+        parts.append(f"{free} free {first(free)}".rstrip() + where)
+    line = up_to + _and(parts)
+    if not paid:
+        return line
     estimate = cost.get("estimate")
     if not estimate or estimate.get("high") is None:
-        return line + " — no list price"
+        return line + ", no list price"
     low, high = float(estimate.get("low") or 0), float(estimate["high"])
     amount = _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
-    return line + f" — {amount}{'+' if estimate.get('open') else ''} at list prices"
+    return line + f", {amount}{'+' if estimate.get('open') else ''} at list prices"
+
+
+# A local node's cost entry (canvas_proposals.cost_for).
+LOCAL_LABEL = "free · runs locally"
+
+
+def _tags(ids: list[str], total: int) -> str:
+    """Where a part's runs go: "(fal)" when every run goes to one place,
+    "(1 fal, 1 local)" by count when they go to several (ids in order, local
+    last), and "" when none is known. A part with runs it can't place names
+    only the ones it can, by count."""
+    counts = Counter(ids)
+    if not counts:
+        return ""
+    if len(counts) == 1 and len(ids) == total:
+        return f" ({ids[0]})"
+    order = sorted(counts, key=lambda where: (where == "local", where))
+    return " (" + ", ".join(f"{counts[where]} {where}" for where in order) + ")"
+
+
+def _count(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _and(parts: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    if len(parts) <= 1:
+        return "".join(parts)
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
 
 def _usd(amount: float) -> str:

@@ -37,7 +37,7 @@ describe('N3: a high end under the low end', () => {
     expect(formatChipEstimate(low, high, false)).not.toBe('~$0');
     if (Number.isFinite(high)) {
       expect(formatChipEstimate(low, high, false)).toBe('~$0.43');
-      expect(chipTitle(chipEstimate(low, high, false))).toBe('Estimated cost');
+      expect(chipTitle(chipEstimate(low, high, false))).toBe('Estimated cost $0.43.');
     }
     expect(formatUsdRange(low, high)).toBe('$0.43');
   });
@@ -100,8 +100,8 @@ describe('GM r6 item 2: a range from $0', () => {
     [-1, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
     [Number.NaN, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
     // Under a cent at the top stays "<$0.01".
-    [0, 0.004, false, '<$0.01', 'Estimated cost under $0.01'],
-    [0, 0, false, '~$0', 'Estimated cost'],
+    [0, 0.004, false, '<$0.01', 'Estimated cost under $0.01.'],
+    [0, 0, false, '~$0', 'Estimated cost $0.'],
   ])('%s–%s open=%s: "%s"', (low, high, open, label, title) => {
     expect(formatChipEstimate(low, high, open)).toBe(label);
     expect(chipTitle(chipEstimate(low, high, open))).toBe(title);
@@ -160,19 +160,24 @@ describe('the Run chip tooltip names each reason', () => {
     const summary = summarizeRunScope([priced('a', 'nano-banana', {}, 'Hero'), priced('c', 'claude-chat', {}, 'Writer')],
       [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('$0.05 + unpriced');
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Writer” has no listed price.');
+    // Every cost tooltip leads with the paid nodes, priced or not (GM, PR
+    // #203 r17 item 3).
+    expect(runChipTitle(summary)).toBe('“Hero” and “Writer” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“Writer” has no listed price.');
   });
 
   it('groups nodes that share a reason, with a count from 4', () => {
     const two = summarizeRunScope([priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'A'), priced('d', 'claude-chat', {}, 'B')],
       [], { kind: 'graph' }, context);
-    expect(runChipTitle(two)).toBe('The priced part of this run costs about $0.05.\n“A” and “B” have no listed price.');
+    expect(runChipTitle(two)).toBe('“Nano Banana”, “A” and “B” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“A” and “B” have no listed price.');
     const same = summarizeRunScope([priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'Text'), priced('d', 'claude-chat', {}, 'Text'),
       priced('e', 'claude-chat', {}, 'Brief')], [], { kind: 'graph' }, context);
-    expect(runChipTitle(same)).toBe('The priced part of this run costs about $0.05.\n2 “Text” nodes and “Brief” have no listed price.');
+    expect(runChipTitle(same)).toBe('4 nodes call paid providers. The priced part of this run costs about $0.05.'
+      + '\n2 “Text” nodes and “Brief” have no listed price.');
     const four = summarizeRunScope([priced('a', 'nano-banana'), ...['A', 'B', 'C', 'D'].map((name) => priced(name, 'claude-chat', {}, name))],
       [], { kind: 'graph' }, context);
-    expect(runChipTitle(four)).toBe('The priced part of this run costs about $0.05.\n4 nodes have no listed price.');
+    expect(runChipTitle(four)).toBe('5 nodes call paid providers. The priced part of this run costs about $0.05.\n4 nodes have no listed price.');
   });
 
   it('GM r9: past the ceiling the priced part has no line; the reasons start the tooltip, one per line', () => {
@@ -180,15 +185,17 @@ describe('the Run chip tooltip names each reason', () => {
       'nano-banana': { currency: 'usd', per: 'image', rows: [{ match: { imageSize: '1K' }, price: 2e13 }] } } }, apiKeys: {} };
     const open = summarizeRunScope([priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'A'), priced('d', 'claude-chat', {}, 'B')],
       [], { kind: 'graph' }, huge as never);
-    expect(runChipTitle(open)).toBe('“A” and “B” have no listed price.');
+    expect(runChipTitle(open)).toBe('“Nano Banana”, “A” and “B” call paid providers.\n“A” and “B” have no listed price.');
     const closed = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, huge as never);
-    expect(runChipTitle(closed)).toBeUndefined();
+    // The paid lead stays (GM, PR #203 r17 item 3: every cost tooltip).
+    expect(runChipTitle(closed)).toBe('“Nano Banana” calls a paid provider.');
   });
 
   it('a missing key names the provider as the node\'s own line does', () => {
     const flux = priced('f', 'flux-2-pro', { _provider: 'fal' }, 'Flux');
     const summary = summarizeRunScope([priced('a', 'nano-banana'), flux], [], { kind: 'graph' }, context);
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Flux” can’t be priced until its fal.ai API key is added.');
+    expect(runChipTitle(summary)).toBe('“Nano Banana” and “Flux” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“Flux” can’t be priced until its fal.ai API key is added.');
     // The node's own route line (its card, the switcher and the run error) names it the same way.
     expect(routeUnavailable(NODE_DEFINITIONS['flux-2-pro'], { _provider: 'fal' }, {})!.message).toContain('your fal.ai API key');
     // Auto with no key at all: either provider's key.
@@ -202,11 +209,13 @@ describe('the Run chip tooltip names each reason', () => {
     const seedream = { pricing: { currencies: {}, nodes: { ...pricing.nodes, 'seedream-4-5': shipped['seedream-4-5'] } } };
     const graph = [priced('a', 'nano-banana'), priced('s', 'cinema-scene', { scene: { shots: [{ id: 's1', prompt: 'a' }] } }, 'Opening'),
       priced('d', 'seedream-4-5', {}, 'Seedream')];
-    expect(runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: {} }))).toBe('The priced part of this run costs '
-      + 'about $0.05.\n“Opening” and “Seedream” can’t be priced until their BytePlus or fal.ai API key is added.');
+    expect(runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: {} }))).toBe('“Nano Banana”, “Opening” and “Seedream” call '
+      + 'paid providers. The priced part of this run costs about $0.05.\n“Opening” and “Seedream” can’t be priced until their '
+      + 'BytePlus or fal.ai API key is added.');
     // A fal.ai key alone: the run goes to fal.ai, which has no listed price.
     expect(runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: { FAL_KEY: 'set' } })))
-      .toBe('The priced part of this run costs about $0.05.\n“Opening” and “Seedream” have no listed price.');
+      .toBe('“Nano Banana”, “Opening” and “Seedream” call paid providers. The priced part of this run costs about $0.05.'
+        + '\n“Opening” and “Seedream” have no listed price.');
     // A BytePlus key prices both.
     expect(runChipLabel(summarizeRunScope(graph, [], { kind: 'graph' }, { ...seedream, apiKeys: { BYTEPLUS_API_KEY: 'set' } })))
       .not.toMatch(/unpriced/);
@@ -218,7 +227,8 @@ describe('the Run chip tooltip names each reason', () => {
     const wire: Edge[] = [{ id: 'w', source: 'in', sourceHandle: 'image', target: 'up', targetHandle: 'image' }];
     const keys = { FAL_KEY: 'set' };
     const summary = summarizeRunScope([priced('a', 'nano-banana'), upload, seedvr], wire, { kind: 'graph' }, { pricing, apiKeys: keys });
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs about $0.05.\n“Upscale” is priced from its input, which isn’t ready yet.');
+    expect(runChipTitle(summary)).toBe('“Nano Banana” and “Upscale” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“Upscale” is priced from its input, which isn’t ready yet.');
     const unreadable = summarizeRunScope([priced('a', 'nano-banana'), upload, seedvr], wire, { kind: 'graph' },
       { pricing, apiKeys: keys, sizes: { '/out/a.png': null } });
     expect(runChipTitle(unreadable)).toContain('“Upscale”');
@@ -228,7 +238,8 @@ describe('the Run chip tooltip names each reason', () => {
   it('a cost the estimate leaves out', () => {
     const summary = summarizeRunScope([priced('e', 'gpt-image-2-edit', {}, 'Edit')], [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('$0.01–0.20 + unpriced');
-    expect(runChipTitle(summary)).toBe('The priced part of this run costs between $0.01 and $0.20.\n“Edit” may cost more for its input images, which the estimate leaves out.');
+    expect(runChipTitle(summary)).toBe('“Edit” calls a paid provider. The priced part of this run costs between $0.01 and $0.20.'
+      + '\n“Edit” may cost more for its input images, which the estimate leaves out.');
   });
 
   it('orders the lines by where each reason\'s first node is, with no colons', () => {
@@ -240,12 +251,13 @@ describe('the Run chip tooltip names each reason', () => {
     ];
     const title = runChipTitle(summarizeRunScope(graph, [], { kind: 'graph' }, context))!;
     expect(title).toBe([
-      'The priced part of this run costs between $0.01 and $0.20.',
+      '4 nodes call paid providers. The priced part of this run costs between $0.01 and $0.20.',
       '“Writer” and “Writer 2” have no listed price.',
       '“Edit” may cost more for its input images, which the estimate leaves out.',
       '“Flux” can’t be priced until its fal.ai API key is added.',
     ].join('\n'));
     expect(title).not.toContain(':');
+    expect(title).not.toMatch(/^Estimated cost$/m);
     // GM r9 bug 2: one reason per line, under the priced part's.
     for (const sentence of title.split('\n')) expect(sentence).toMatch(/\.$/);
   });
@@ -254,15 +266,17 @@ describe('the Run chip tooltip names each reason', () => {
     const graph = [priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'Writer')];
     const cluster = summarizeRunScope(graph, [], { kind: 'cluster', nodeIds: ['a', 'c'] }, context);
     expect(runChipLabel(cluster)).toBe('$0.05 + unpriced');
-    expect(runChipTitle(cluster)).toBe('The priced part of this run costs about $0.05.\n“Writer” has no listed price.');
+    expect(runChipTitle(cluster)).toBe('“Nano Banana” and “Writer” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“Writer” has no listed price.');
     const one = summarizeRunScope(graph, [{ id: 'x', source: 'a', target: 'c' }], { kind: 'node', nodeId: 'c' }, context);
-    expect(runChipTitle(one)).toBe('The priced part of this run costs about $0.05.\n“Writer” has no listed price.');
+    expect(runChipTitle(one)).toBe('“Nano Banana” and “Writer” call paid providers. The priced part of this run costs about $0.05.'
+      + '\n“Writer” has no listed price.');
   });
 
-  it('a closed chip keeps its plain tooltip', () => {
+  it('a closed chip\'s tooltip is one sentence shape, no bare "Estimated cost" heading (GM, PR #203 r16 item 3)', () => {
     const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('~$0.05');
-    expect(runChipTitle(summary)).toBe('Estimated cost');
+    expect(runChipTitle(summary)).toBe('“Nano Banana” calls a paid provider. Estimated cost $0.05.');
   });
 });
 
@@ -270,7 +284,9 @@ describe('detail lines in the Run button title and the confirm', () => {
   it('write both ends in full', () => {
     const graph = [priced('e', 'gpt-image-2-edit', {}, 'Edit')];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, context);
-    expect(describeRunScope(summary)).toContain('Estimated $0.01–$0.20 at list prices (Edit $0.01–$0.20)');
+    // The Run button's text is the chip's (GM, PR #203 r19 item 2); the confirm keeps each node's figure.
+    expect(describeRunScope(summary)).toBe(`Runs 1 node.\n${runChipTitle(summary)}`);
+    expect(runChipTitle(summary)).toContain('costs between $0.01 and $0.20.');
     expect(runCostConfirmMessage(summary)).toContain('• Edit: $0.01–$0.20');
   });
 });

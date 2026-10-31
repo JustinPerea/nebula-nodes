@@ -35,11 +35,11 @@ const CHIPS: [number, number, boolean, string, string][] = [
   [0.0047, 0.43, true, `Up to $0.43${U}`, `${LEAD} up to $0.43.`],
   [0.0047, 12.4, false, 'Up to $12', 'Up to $12.'],
   // Under a cent at the top: as before.
-  [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01'],
+  [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01.'],
   [0.0047, 0.0047, true, `<$0.01${U}`, `${LEAD} under $0.01.`],
   // No sub-cent figures on a chip.
-  [0.01, 0.0149, false, '~$0.01', 'Estimated cost'],
-  [0.04, 0.044, false, '~$0.04', 'Estimated cost'],
+  [0.01, 0.0149, false, '~$0.01', 'Estimated cost $0.01.'],
+  [0.04, 0.044, false, '~$0.04', 'Estimated cost $0.04.'],
   [0.044, 0.046, false, '$0.04–0.05', 'Between $0.04 and $0.05.'],
   [0.0123, 0.0123, true, `$0.01${U}`, `${LEAD} about $0.01.`],
   [0.05, 0.05, true, `$0.05${U}`, `${LEAD} about $0.05.`],
@@ -48,9 +48,9 @@ const CHIPS: [number, number, boolean, string, string][] = [
   [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
   [9.5, 1234.5, true, `$9.50–1,234.50${U}`, `${LEAD} between $9.50 and $1,234.50.`],
   [12, 1234.5, false, '$12–1,235', 'Between $12 and $1,235.'],
-  [9.996, 10.2, false, '~$10', 'Estimated cost'],
+  [9.996, 10.2, false, '~$10', 'Estimated cost $10.'],
   // Free, and from nothing.
-  [0, 0, false, '~$0', 'Estimated cost'],
+  [0, 0, false, '~$0', 'Estimated cost $0.'],
   [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
   [0, 0.044, false, 'Up to $0.04', 'Up to $0.04.'],
   // A high end that isn't a number: the low end, with the rest unknown.

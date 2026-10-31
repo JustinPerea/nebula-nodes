@@ -123,8 +123,8 @@ describe('GM round 15, item 3: the costly-run confirm and the run summary', () =
   it('the run summary (the Run button) names it the same way', () => {
     const { nodes, edges } = canvas(GROK, null, {}, [], false);
     const summary = summarizeRunScope(nodes, edges, { kind: 'graph' }, { pricing: PRICING, apiKeys: { XAI_API_KEY: 'x' }, sizes: {} });
-    expect(describeRunScope(summary)).toContain('calls a paid provider: Grok Imagine 2.0 via xAI');
-    expect(describeRunScope(summary)).toContain('Grok Imagine 2.0 via xAI $0.06');
+    expect(describeRunScope(summary)).toContain('“Grok Imagine 2.0 via xAI” calls a paid provider.');
+    expect(describeRunScope(summary)).toContain('Estimated cost $0.06.');
   });
   it('a named node keeps its name', () => {
     const { nodes, edges } = canvas(GROK, 'Alt still', {}, [], false);

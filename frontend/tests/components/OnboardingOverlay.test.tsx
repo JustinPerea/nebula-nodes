@@ -183,6 +183,7 @@ describe('onboarding modal ownership', () => {
     fireEvent.keyDown(first, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(backgroundKeys).not.toHaveBeenCalled();
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
     expect(workspace).not.toHaveAttribute('inert');
     expect(previouslyInert).toHaveAttribute('inert');
@@ -207,7 +208,7 @@ describe('onboarding modal ownership', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('captures background keyboard events even when the browser has dropped card focus', () => {
+  it('captures background keyboard events even when the browser has dropped card focus', async () => {
     render(<OnboardingOverlay />);
     const first = screen.getByRole('button', { name: 'Take the tour' });
     const backgroundKeys = vi.fn();
@@ -223,6 +224,7 @@ describe('onboarding modal ownership', () => {
     expect(escape.defaultPrevented).toBe(true);
     expect(backgroundKeys).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
     document.removeEventListener('keydown', backgroundKeys);
     expect(fetch).not.toHaveBeenCalled();
@@ -262,19 +264,21 @@ describe('onboarding modal ownership', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
       expect(laterPortal).not.toHaveAttribute('inert');
       expect(laterPortal).toHaveAttribute('aria-hidden', 'false');
+      await act(async () => {}); // ModalPortal returns focus a microtask after the close.
       expect(opener).toHaveFocus();
     } finally { laterPortal.remove(); }
   });
 
-  it('returns an automatically started welcome to Help when there is no focusable opener', () => {
+  it('returns an automatically started welcome to Help when there is no focusable opener', async () => {
     opener.blur();
     expect(document.body).toHaveFocus();
     render(<OnboardingOverlay />);
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
   });
 
-  it('returns to current Help if the original studio opener has unmounted', () => {
+  it('returns to current Help if the original studio opener has unmounted', async () => {
     const studioOpener = document.createElement('button');
     studioOpener.textContent = 'Help in Create';
     workspace.append(studioOpener);
@@ -282,16 +286,18 @@ describe('onboarding modal ownership', () => {
     render(<OnboardingOverlay />);
     studioOpener.remove();
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
     expect(workspace).not.toHaveAttribute('inert');
   });
 
-  it('cleans up inert background and restores focus when an active overlay unmounts', () => {
+  it('cleans up inert background and restores focus when an active overlay unmounts', async () => {
     const { unmount } = render(<OnboardingOverlay />);
     expect(workspace.closest('[inert]')).not.toBeNull();
     unmount();
     expect(workspace).not.toHaveAttribute('inert');
     expect(previouslyInert).toHaveAttribute('inert');
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
     expect(opener).toHaveFocus();
     expect(observers.every((observer) => observer.targets.size === 0)).toBe(true);
   });

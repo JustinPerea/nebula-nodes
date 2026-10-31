@@ -1,4 +1,4 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { act, fireEvent, render, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
@@ -98,7 +98,7 @@ describe('ResultsGallery', () => {
     expect(view.getByRole('status')).toHaveTextContent('1 result');
   });
 
-  it('pins selected media through node replacement, filtering and deletion, then restores comparison focus', () => {
+  it('pins selected media through node replacement, filtering and deletion, then restores comparison focus', async () => {
     const state = { ...props([result(0), result(1), result(2)]), defaultTab: 'canvas' as const };
     const view = render(<ResultsGallery {...state} />);
     const original = JSON.stringify(state.nodes);
@@ -114,7 +114,9 @@ describe('ResultsGallery', () => {
     expect(within(dialog).getByAltText('First result')).toHaveAttribute('src', '/api/outputs/result-0.png');
     expect(within(dialog).getByAltText('Second result')).toHaveAttribute('src', '/api/outputs/result-1.png');
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
-    expect(view.queryByRole('dialog')).toBeNull(); expect(opener).toHaveFocus();
+    expect(view.queryByRole('dialog')).toBeNull();
+    await act(async () => {}); // ModalPortal returns focus a microtask after the close.
+    expect(opener).toHaveFocus();
     expect(JSON.stringify(state.nodes)).toBe(original);
     expect(state.onDelete).not.toHaveBeenCalled(); expect(state.onUseAsInput).not.toHaveBeenCalled();
   });

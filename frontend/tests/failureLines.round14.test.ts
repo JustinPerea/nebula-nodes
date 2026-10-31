@@ -64,8 +64,8 @@ describe('the model picker names the failure (L-5)', () => {
   const cases = [
     ['OpenRouter', 'openrouter-universal', { model: 'openai/gpt-4o-mini' }, 'OpenRouter API key',
       (id: string) => store().configureOpenRouterModel(id, 'anthropic/claude-x')],
-    // GM - Design, round 15, item 1: "Replicate API key".
-    ['Replicate', 'replicate-universal', { model_id: 'owner/old' }, 'Replicate API key',
+    // GM - Design, round 15, item 1, then PR #203 r26 item 5: "Replicate token".
+    ['Replicate', 'replicate-universal', { model_id: 'owner/old' }, 'Replicate token',
       (id: string) => store().fetchReplicateSchemaAndConfigure(id, 'owner', 'new')],
   ] as const;
   const set = (id: string, definitionId: string, params: Record<string, unknown>) => useGraphStore.setState({

@@ -25,9 +25,10 @@ const RUN_COST_CONFIRM_KEY = 'nebula:run:costConfirmUsd';
 /** Ask before a run whose estimate could reach this many dollars. */
 export const RUN_COST_CONFIRM_DEFAULT_USD = 1;
 /** Same saved keys, treating a missing key and an empty one alike. */
-function sameApiKeys(a: Record<string, string>, b: Record<string, string>): boolean {
+/** The key names whose (masked) value differs between two reads of the keys. */
+function changedApiKeys(a: Record<string, string>, b: Record<string, string>): string[] {
   return [...new Set([...Object.keys(a), ...Object.keys(b)])]
-    .every((key) => (a[key] ?? '').trim() === (b[key] ?? '').trim());
+    .filter((key) => (a[key] ?? '').trim() !== (b[key] ?? '').trim());
 }
 
 export const RUN_COST_CONFIRM_CHOICES = [0.5, 1, 5, 20] as const;
@@ -66,14 +67,27 @@ export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; 
   };
 }
 
+// Every storage read and write here is guarded (review r5 LOW-3 of PR #203):
+// a tab with site data blocked throws on any access, and the store loads
+// with the app, so a throw here would stop the app. Each falls back to a
+// safe default and keeps a choice for the session only.
 function loadOnboarded(): boolean {
   if (typeof window === 'undefined') return true; // SSR: treat as done (never auto-open)
-  return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+  try {
+    return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+  } catch {
+    // Unreadable: as done, so a tab that can't remember never reopens the tour on every load.
+    return true;
+  }
 }
 
 function persistOnboarded(done: boolean): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+  try {
+    window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice holds for this session only.
+  }
 }
 
 function loadCreateSessionId(): string | null {
@@ -141,13 +155,21 @@ function persistAgentLogEnabled(enabled: boolean): void {
 // Render culling and zoom LOD default on; optional canvas chrome defaults off.
 function loadCanvasPref(key: string, defaultValue = true): boolean {
   if (typeof window === 'undefined') return defaultValue;
-  const raw = window.localStorage.getItem(key);
-  return raw === null ? defaultValue : raw === '1';
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? defaultValue : raw === '1';
+  } catch {
+    return defaultValue;
+  }
 }
 
 function persistCanvasPref(key: string, enabled: boolean): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(key, enabled ? '1' : '0');
+  try {
+    window.localStorage.setItem(key, enabled ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice holds for this session only.
+  }
 }
 
 /** null means never ask. Anything unreadable falls back to the default. */
@@ -861,11 +883,17 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     })),
 
   setSettingsCache: (apiKeys, kreaConnectionMode) => {
-    // Checks describe credentials, so only a credential change voids them. A
-    // refresh that reads back the same (masked) keys must not discard a check
-    // that saving a key just started.
+    // Checks describe credentials, so only a credential change voids them,
+    // and only that credential's (GM, PR #203 r19 item 7): a read that finds
+    // one key changed (a save here, one made elsewhere, a reconnect's read)
+    // clears that provider's check and keeps the rest. A refresh that reads
+    // back the same (masked) keys keeps a check that saving a key just started.
     const current = get().settingsCache;
-    if (!current.loaded || !sameApiKeys(current.apiKeys, apiKeys)) useProviderReadinessStore.getState().invalidate();
+    if (!current.loaded) useProviderReadinessStore.getState().invalidate();
+    else {
+      const changed = changedApiKeys(current.apiKeys, apiKeys);
+      if (changed.length) useProviderReadinessStore.getState().forget(changed);
+    }
     set((state) => ({ settingsCache: {
       ...state.settingsCache, apiKeys, loaded: true,
       ...(kreaConnectionMode ? { kreaConnectionMode } : {}),

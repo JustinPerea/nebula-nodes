@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { routeSwitch } from '../../lib/directRoute';
-import { applyFix, applyProviderPick, providerSwitchState, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
+import { applyFix, applyProviderPick, providerSwitchState, setupButtonWords, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
 import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
@@ -74,17 +74,35 @@ function openSetup(target: ProviderSetupTarget | undefined) {
 function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNode {
   if (row.keyState === 'set') return <span className="provider-switcher__key">Key set</span>;
   if (row.keyState === 'signed-in') return <span className="provider-switcher__key">Signed in</span>;
-  if (row.keyState === 'missing' || row.keyState === 'sign-in') {
-    const text = row.keyState === 'missing' ? 'Add key →' : 'Sign in';
+  if (row.keyState === 'connected') {
+    // A Space route's Hugging Face token is set (Idol's): the usual green
+    // dot and "Connected" (GM, PR #203 r1 and r4).
     return (
-      <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup"
-        aria-label={row.keyState === 'missing' ? `Add a ${row.label} key in Settings` : 'Sign in to Krea in Settings'}
-        onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
-        {text}
-      </button>
+      <span className="provider-switcher__key provider-switcher__key--connected">
+        <span className="provider-switcher__dot" aria-hidden="true" />Connected
+      </span>
     );
   }
+  if (row.keyState === 'missing' || row.keyState === 'sign-in') return <SetupButton row={row} onSetup={onSetup} />;
   return <span className="provider-switcher__key" aria-hidden="true" />;
+}
+
+/** "Add token →" / "Add key →" / "Sign in" (GM, PR #203 r30 item 3): the
+ * accessible name is the visible label (the arrow is decorative), and the
+ * one add-key line ("Add your Replicate token in Settings.") is its
+ * description (setupButtonWords). */
+function SetupButton({ row, onSetup }: { row: ProviderRow; onSetup: (row: ProviderRow) => void }) {
+  const hintId = useId();
+  const { label, description } = setupButtonWords(row);
+  return (
+    <>
+      <button type="button" role="menuitem" tabIndex={-1} className="provider-switcher__setup" aria-describedby={hintId}
+        onClick={(event) => { event.stopPropagation(); onSetup(row); }}>
+        {label}{row.keyState === 'missing' && <span aria-hidden="true"> →</span>}
+      </button>
+      <span id={hintId} className="provider-switcher__hint">{description}</span>
+    </>
+  );
 }
 
 interface ProviderMenuProps {
@@ -167,12 +185,15 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
             </span>
+            {/* The name is the row's visible text, one run in reading order
+                (GM, PR #203 r32 item 3): a space between its parts, which the
+                grid and the column don't render. */}
             <span className="provider-switcher__name">
               <span className="provider-switcher__label">{row.label}</span>
-              {row.block && <span className="provider-switcher__block">{row.block}</span>}
+              {row.block && <>{' '}<span className="provider-switcher__block">{row.block}</span></>}
             </span>
-            <span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
-            {row.info && <span className="provider-switcher__info">{row.info}</span>}
+            {' '}<span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
+            {row.info && <>{' '}<span className="provider-switcher__info">{row.info}</span></>}
           </button>
           {row.routeId !== null && keyCell(row, setup)}
         </div>
@@ -229,6 +250,7 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const hintId = useId();
   const close = useCallback((returnFocus: boolean) => {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus({ preventScroll: true });
@@ -238,9 +260,13 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
     : `param-pill provider-switcher__pill${state.blocked ? ' provider-switcher__pill--blocked' : ''}`;
   return (
     <>
+      {/* The name is the visible text as one run ("Provider Auto · runs on
+          fal.ai", "Auto · BFL"); what it doesn't show is the description: the
+          node, the full provider name and, blocked, the reason itself, never
+          a "Can't run" prefix (GM, PR #203 r6 item 2; r32 item 3). */}
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        aria-label={`Provider for ${displayName}: ${state.chipName}${state.blocked ? `. Can't run: ${state.message ?? ''}` : ''}`}
+        aria-describedby={hintId}
         title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
@@ -248,15 +274,18 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
           if (event.key === 'ArrowDown' && !open) { event.preventDefault(); setOpen(true); }
         }}>
         {state.blocked && <span className="provider-switcher__warning" aria-hidden="true">&#x26A0;</span>}
-        {variant === 'pill' && <span className="param-pill__label">Provider</span>}
+        {variant === 'pill' && <><span className="param-pill__label">Provider</span>{' '}</>}
         {/* The card chip has room for a short name only where the full one
             can't fit (chipText); Create Studio's pill wraps, so it names it in full. */}
         <span className="provider-switcher__chip-text">{variant === 'pill' ? state.chipName : state.chip}</span>
         {variant === 'pill' && <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />}
       </button>
+      <span id={hintId} className="provider-switcher__hint">
+        {`Provider for “${displayName}”: ${state.chipName}${state.blocked && state.message ? `. ${state.message}` : ''}`}
+      </span>
       {open && (
         <ProviderPopover anchorRef={triggerRef} id={menuId} onClose={close}>
-          <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for ${displayName}`} onClose={close} />
+          <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for “${displayName}”`} onClose={close} />
         </ProviderPopover>
       )}
     </>

@@ -56,7 +56,9 @@
 
 .provider-switcher__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 68px;
+  /* The key cell is 68px, or as wide as its label when that is longer
+     ("● Connected"), so the label never runs over the price. */
+  grid-template-columns: minmax(0, 1fr) minmax(68px, max-content);
   align-items: center;
   border-radius: 6px;
 }
@@ -67,7 +69,8 @@
  * right edge with the key column. */
 .provider-switcher__row--auto .provider-switcher__item { align-items: start; }
 
-/* Auto's "can't run: <reason>" is the stop reason: it wraps, never cut. */
+/* Auto's reason ("Auto · fal.ai doesn’t take …") is the stop reason: it
+ * wraps, never cut. */
 .provider-switcher__row--auto .provider-switcher__label { white-space: normal; }
 
 .provider-switcher__item {
@@ -394,3 +397,35 @@ body.app-slava-restraint .provider-switcher__pill:focus-visible { outline: var(-
 body.app-slava-restraint .param-pills__note { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
 
 body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta); }
+
+/* A Space route's Hugging Face token set (Idol's), or a keyless route's
+   optional key: the Settings row's green dot and "Connected" (settings.css .settings-row__dot--ok). */
+.provider-switcher__key--connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.provider-switcher__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--sr-success, #6ee7b7);
+  box-shadow: 0 0 6px rgba(110, 231, 183, 0.45);
+}
+
+/* A switcher button's description (aria-describedby): read, never shown.
+   The setup button's add-key line (GM, PR #203 r30 item 3); the chip's and
+   the pill's node, provider and reason (r32 item 3). */
+.provider-switcher__hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

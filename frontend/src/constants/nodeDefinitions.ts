@@ -4499,6 +4499,135 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  // Speridlabs' Idol: one image to a 3D Gaussian splat. Its maker runs it on
+  // a free Hugging Face Space (ZeroGPU). Its one route is keyless: the first
+  // live call (2026-10-30) ran with no token in 27.6 s. HF_TOKEN is optional
+  // and gives the run the person's own ZeroGPU allowance; with it set, a run
+  // may bill a PRO, Team or Enterprise account's prepaid credits past that
+  // allowance (mayBillWithKey), so agents propose it instead of running it
+  // (docs/model-providers/speridlabs/idol.md). Speridlabs' own Platform API
+  // isn't open yet (speridlabs.com/platform, 2026-10-29); it becomes
+  // routes[0] when it is. Params are the Space's /run inputs
+  // (https://speridlabs-idol.hf.space/gradio_api/info, read 2026-10-29),
+  // minus Random seed: the run cache would replay a random-seed run.
+  'speridlabs-idol': {
+    id: 'speridlabs-idol',
+    displayName: 'Idol',
+    // GM, PR #203 r12 item 4, word for word.
+    description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. '
+      + 'Add your Hugging Face token to use your own allowance.',
+    category: '3d-gen',
+    apiProvider: 'speridlabs',
+    apiEndpoint: 'speridlabs/idol',
+    envKeyName: [],
+    directKeyName: [],
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'world', label: 'World', dataType: 'World', required: false },
+    ],
+    params: [
+      {
+        key: '_provider',
+        label: 'Provider',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          { label: 'auto', value: 'auto' },
+          { label: 'hf-space', value: 'hf-space' },
+        ],
+        hidden: true,
+      },
+    ],
+    sharedParams: [
+      {
+        key: 'mode',
+        label: 'Input type',
+        type: 'enum',
+        required: false,
+        default: 'synthetic',
+        options: [
+          { label: 'Synthetic', value: 'synthetic' },
+          { label: 'Real photo', value: 'real' },
+        ],
+      },
+      {
+        key: 'gaussians',
+        label: 'Gaussians',
+        type: 'enum',
+        required: false,
+        default: 262144,
+        options: [
+          { label: '65,536', value: 65536 },
+          { label: '131,072', value: 131072 },
+          { label: '262,144', value: 262144 },
+          { label: '524,288', value: 524288 },
+          { label: '1,048,576', value: 1048576 },
+        ],
+      },
+      {
+        key: 'steps',
+        label: 'Steps',
+        type: 'integer',
+        required: false,
+        default: 50,
+        min: 10,
+        max: 100,
+        step: 1,
+      },
+      {
+        key: 'cfg_scale',
+        label: 'Guidance scale',
+        type: 'float',
+        required: false,
+        default: 3,
+        min: 0,
+        max: 10,
+        step: 0.1,
+      },
+      {
+        key: 'rescale_t',
+        label: 'Time shift',
+        type: 'float',
+        required: false,
+        default: 3,
+        min: 1,
+        max: 6,
+        step: 0.1,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        default: 42,
+        min: 0,
+        max: 2147483647,
+      },
+    ],
+    routes: [
+      {
+        id: 'hf-space',
+        provider: 'speridlabs',
+        maker: true,
+        keys: [],
+        optionalKeys: ['HF_TOKEN'],
+        mayBillWithKey: true,
+        handler: 'hf-space',
+        endpoint: 'speridlabs/idol',
+        valueMap: {
+          mode: { synthetic: 'Synthetic', real: 'Real photo' },
+          gaussians: {
+            65536: '65,536', 131072: '131,072', 262144: '262,144', 524288: '524,288', 1048576: '1,048,576',
+          },
+        },
+      },
+    ],
+  },
+
   'meshy-text-to-3d': {
     id: 'meshy-text-to-3d',
     displayName: 'Meshy 6 Text-to-3D',
@@ -8411,7 +8540,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -8649,7 +8778,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -8745,7 +8874,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -9030,7 +9159,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -9261,7 +9390,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -9275,7 +9404,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Job ID',
         type: 'string',
         required: false,
-        placeholder: 'Blank lists recent jobs (API token)',
+        placeholder: 'Blank lists recent jobs (API key)',
       },
       {
         key: 'status',
@@ -9440,7 +9569,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           {
             value: 'api-token',
-            label: 'API token · API balance',
+            label: 'API key · API balance',
           },
           {
             value: 'mcp',
@@ -13993,7 +14122,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'api-token',
         options: [
-          { value: 'api-token', label: 'API token · API balance' },
+          { value: 'api-token', label: 'API key · API balance' },
           { value: 'mcp', label: 'Krea account · workspace compute' },
         ],
       },
@@ -14275,7 +14404,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'api-token',
         options: [
-          { value: 'api-token', label: 'API token · API balance' },
+          { value: 'api-token', label: 'API key · API balance' },
           { value: 'mcp', label: 'Krea account · workspace compute' },
         ],
       },
@@ -14345,7 +14474,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'api-token',
         options: [
-          { value: 'api-token', label: 'API token · API balance' },
+          { value: 'api-token', label: 'API key · API balance' },
           { value: 'mcp', label: 'Krea account · workspace compute' },
         ],
       },
@@ -14436,7 +14565,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'api-token',
         options: [
-          { value: 'api-token', label: 'API token · API balance' },
+          { value: 'api-token', label: 'API key · API balance' },
           { value: 'mcp', label: 'Krea account · workspace compute' },
         ],
       },
@@ -14653,7 +14782,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -14906,7 +15035,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -15159,7 +15288,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -15391,7 +15520,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -15596,7 +15725,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -15764,7 +15893,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -15914,7 +16043,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16031,7 +16160,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16210,7 +16339,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16339,7 +16468,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16530,7 +16659,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16680,7 +16809,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16893,7 +17022,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -16989,7 +17118,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17147,7 +17276,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17243,7 +17372,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17391,7 +17520,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17486,7 +17615,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17593,7 +17722,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17648,7 +17777,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17792,7 +17921,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -17861,7 +17990,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18071,7 +18200,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18133,7 +18262,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18284,7 +18413,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18423,7 +18552,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18560,7 +18689,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18760,7 +18889,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -18907,7 +19036,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19112,7 +19241,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19239,7 +19368,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19424,7 +19553,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19551,7 +19680,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19740,7 +19869,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19808,7 +19937,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -19931,7 +20060,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20059,7 +20188,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20171,7 +20300,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20303,7 +20432,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20456,7 +20585,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20583,7 +20712,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20641,7 +20770,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20776,7 +20905,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20834,7 +20963,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -20969,7 +21098,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21027,7 +21156,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21159,7 +21288,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21310,7 +21439,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21470,7 +21599,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21615,7 +21744,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -21789,7 +21918,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -22081,7 +22210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -22354,7 +22483,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -22537,7 +22666,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -22779,7 +22908,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23004,7 +23133,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23254,7 +23383,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23449,7 +23578,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23580,7 +23709,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23721,7 +23850,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -23896,7 +24025,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24035,7 +24164,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24132,7 +24261,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24209,7 +24338,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24365,7 +24494,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24445,7 +24574,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24600,7 +24729,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24680,7 +24809,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24859,7 +24988,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -24975,7 +25104,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25196,7 +25325,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25417,7 +25546,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25602,7 +25731,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25761,7 +25890,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -25886,7 +26015,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26004,7 +26133,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26194,7 +26323,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26395,7 +26524,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26509,7 +26638,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26656,7 +26785,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26819,7 +26948,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -26931,7 +27060,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27112,7 +27241,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27224,7 +27353,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27403,7 +27532,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27497,7 +27626,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27660,7 +27789,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27801,7 +27930,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -27875,7 +28004,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28025,7 +28154,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28139,7 +28268,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28338,7 +28467,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28445,7 +28574,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28668,7 +28797,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -28832,7 +28961,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29113,7 +29242,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29269,7 +29398,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29534,7 +29663,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29669,7 +29798,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -29910,7 +30039,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30070,7 +30199,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30325,7 +30454,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30492,7 +30621,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30687,7 +30816,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -30904,7 +31033,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31072,7 +31201,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31217,7 +31346,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31342,7 +31471,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31429,7 +31558,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31627,7 +31756,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31742,7 +31871,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -31953,7 +32082,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32044,7 +32173,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32193,7 +32322,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32663,7 +32792,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -32879,7 +33008,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33095,7 +33224,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33334,7 +33463,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33596,7 +33725,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33812,7 +33941,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33912,7 +34041,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -33980,7 +34109,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34144,7 +34273,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34316,7 +34445,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34480,7 +34609,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34596,7 +34725,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34711,7 +34840,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34836,7 +34965,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -34952,7 +35081,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35067,7 +35196,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35178,7 +35307,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35259,7 +35388,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35394,7 +35523,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35532,7 +35661,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35613,7 +35742,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35747,7 +35876,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35830,7 +35959,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35902,7 +36031,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -35943,7 +36072,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36034,7 +36163,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36077,7 +36206,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36170,7 +36299,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36213,7 +36342,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36306,7 +36435,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",
@@ -36349,7 +36478,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "options": [
           {
             "value": "api-token",
-            "label": "API token · API balance"
+            "label": "API key · API balance"
           },
           {
             "value": "mcp",

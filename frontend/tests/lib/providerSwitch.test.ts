@@ -45,18 +45,18 @@ describe('providerSwitchState', () => {
   it('notes the routes that cannot take a setting and prices them "-"', () => {
     const state = providerSwitchState(TABLE, { resolution: '1.5k' }, context({ BFL_API_KEY: KEY }));
     const fal = state.rows.find((row) => row.id === 'fal')!;
-    expect(fal.block).toBe("Doesn't take “Resolution” set to 1.5k.");
+    expect(fal.block).toBe("Doesn’t take “Resolution” set to 1.5k.");
     expect(fal.price).toBe('-');
     expect(state.rows.find((row) => row.id === 'bfl')?.block).toBeNull();
   });
 
   it('stops Auto with the reason and the keyed routes that take it, one click each', () => {
     const state = providerSwitchState(TABLE, { resolution: '1.5k' }, context({ FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY }));
-    expect(state.rows[0].label).toBe("Auto · can't run: fal.ai doesn't take “Resolution” set to 1.5k");
+    expect(state.rows[0].label).toBe("Auto · fal.ai doesn’t take “Resolution” set to 1.5k");
     expect(state.blocked).toBe(true);
     expect(state.chip).toBe('Auto · fal');
     expect(state.alternatives).toEqual([{ routeId: 'replicate', label: 'Replicate', writes: { _provider: 'replicate', _kreaAuth: 'api-token' } }]);
-    expect(state.message).toContain("can't run on fal.ai");
+    expect(state.message).toContain('can’t run on fal.ai');
   });
 
   it("names keys by provider and never a route id or env-var name in the stop line (error copy round 3e)", () => {
@@ -65,9 +65,9 @@ describe('providerSwitchState', () => {
     const chosen = providerSwitchState(flux2, { _provider: 'bfl' }, context({}));
     expect(chosen.blocked).toBe(true);
     expect(chosen.message).toBe(
-      'FLUX.2 is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings, or choose another provider.');
+      '“FLUX.2” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings.');
     const unknown = providerSwitchState(flux2, { _provider: 'xyz' }, context({ BFL_API_KEY: KEY }));
-    expect(unknown.message).toBe("FLUX.2 is set to a provider it doesn't have. Choose one in the node's provider switcher.");
+    expect(unknown.message).toBe('“FLUX.2” is set to a provider that isn’t in its list. Choose one in its provider switcher.');
     const auto = providerSwitchState(flux2, {}, context({}));
     expect(auto.message).toMatch(/^Add your .* in Settings, then run the node again\.$/);
     for (const state of [chosen, unknown, auto]) {
@@ -77,7 +77,7 @@ describe('providerSwitchState', () => {
   });
 
   it('says when no provider has a key, and names the chosen route that lacks one', () => {
-    expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe("Auto · can't run: no provider key set");
+    expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe('Auto · needs a key');
     const chosen = providerSwitchState(TABLE, { _provider: 'replicate' }, context({ BFL_API_KEY: KEY }));
     // Round 3g (GM, rule 9): the full name wherever it fits the chip.
     expect(chosen.chip).toBe('Replicate');
@@ -135,7 +135,7 @@ describe('providerSwitchState', () => {
     const twelve = new Map([['start_image', 1], ['keyframes', 10], ['end_image', 1]]);
     const state = providerSwitchState(video, {}, context(keys, { wired: twelve }));
     expect(state.blocked).toBe(true);
-    expect(state.rows[0].label).toBe("Auto · can't run: too many images for Black Forest Labs");
+    expect(state.rows[0].label).toBe("Auto · Black Forest Labs doesn’t take this many images");
     for (const id of ['bfl', 'fal', 'replicate']) {
       expect(state.rows.find((row) => row.id === id)?.block).toBe('Takes at most 10 images.');
     }
@@ -191,7 +191,7 @@ describe('snapForRoute (a person switching provider)', () => {
     });
     // Before the click the rows name the setting, not its value.
     const before = providerSwitchState(video, { _provider: 'bfl', draft: true }, context({ BFL_API_KEY: KEY }));
-    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn't take “Draft (fast preview)”.");
+    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn’t take “Draft (fast preview)”.");
     // A route that offers the param keeps it, and an unset one is left alone.
     expect(snapForRoute(video, { draft: true }, 'fal')).toEqual({ params: { draft: true }, notes: [] });
     expect(snapForRoute(video, {}, 'krea')).toEqual({ params: {}, notes: [] });
@@ -291,9 +291,9 @@ describe('snapHidden (a person editing a setting that controls a hidden one)', (
     const state = providerSwitchState(flux2, { _provider: 'fal', model: 'klein-9b', safety_tolerance: '5' },
       context({ FAL_KEY: KEY, BFL_API_KEY: KEY }));
     expect(state.fixes).toEqual([{ param: 'safety_tolerance', value: '2', label: 'Set Safety back to 2' }]);
-    expect(state.rows.find((row) => row.id === 'fal')?.block).toBe("Doesn't take “Safety”.");
+    expect(state.rows.find((row) => row.id === 'fal')?.block).toBe("Doesn’t take “Safety”.");
     const auto = providerSwitchState(flux2, { model: 'klein-9b', safety_tolerance: '5' }, context({ FAL_KEY: KEY }));
-    expect(auto.rows[0].label).toBe("Auto · can't run: fal.ai doesn't take “Safety”");
+    expect(auto.rows[0].label).toBe("Auto · fal.ai doesn’t take “Safety”");
     expect(fixLabel(flux2, { param: 'seed', value: null })).toBe('Clear Seed');
     expect(fixLabel(flux2, { param: 'enable_safety_checker', value: true })).toBe('Turn Safety Checker on');
     expect(applyFix({ seed: 4, model: 'pro' }, { param: 'seed', value: null })).toEqual({ model: 'pro' });
@@ -307,7 +307,7 @@ describe('a route priced from the input file', () => {
       apiKeys: { BFL_API_KEY: KEY }, kreaSignedIn: false, pricing: shipped, wired: new Map([['video', 1]]),
     });
     const prices = Object.fromEntries(state.rows.map((row) => [row.id, [row.price, row.priceTitle]]));
-    expect(prices.bfl).toEqual(['by size', "Priced from the input's size when it runs"]);
+    expect(prices.bfl).toEqual(['by size', 'Priced from the input’s size when it runs.']);
     expect(prices.replicate[0]).toBe('by size');
     expect(prices.fal[0]).toBe('-');
     expect(prices.auto[0]).toBe('by size');

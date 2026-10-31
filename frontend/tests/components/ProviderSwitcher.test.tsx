@@ -74,6 +74,12 @@ function row(name: RegExp | string) {
   return screen.getByRole('menuitemradio', { name });
 }
 
+/** A row's setup button ("Add key →", "Add token →", "Sign in"): its name is
+ * the visible label (GM, PR #203 r30 item 3), so it's found within its row. */
+function setupIn(name: RegExp | string, label: string) {
+  return within(row(name).closest('[data-provider-row]') as HTMLElement).getByRole('menuitem', { name: label });
+}
+
 describe('ProviderSwitcher rows', () => {
   it('lists Auto and every route with key state, price and block note', () => {
     withKeys({ BFL_API_KEY: KEY });
@@ -89,12 +95,14 @@ describe('ProviderSwitcher rows', () => {
     const bfl = row(/^Black Forest Labs/).closest('[data-provider-row]') as HTMLElement;
     expect(within(bfl).getByText('Key set')).toBeVisible();
     expect(within(bfl).getByText('$0.03')).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Add a fal.ai key in Settings' })).toHaveTextContent('Add key →');
-    expect(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' })).toHaveTextContent('Sign in');
+    expect(setupIn(/^fal\.ai/, 'Add key')).toHaveTextContent('Add key →');
+    expect(setupIn(/^fal\.ai/, 'Add key')).toHaveAccessibleDescription('Add your fal.ai API key in Settings.');
+    expect(setupIn(/^Krea · plan/, 'Sign in')).toHaveTextContent('Sign in');
+    expect(setupIn(/^Krea · plan/, 'Sign in')).toHaveAccessibleDescription('Sign in to Krea in Settings.');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
     // Round 3f (GM): the setting by its label, in quotes, with the option's label.
-    expect(fal).toHaveTextContent("Doesn't take “Aspect ratio” set to 9:21.");
+    expect(fal).toHaveTextContent("Doesn’t take “Aspect ratio” set to 9:21.");
     expect(fal.querySelector('.provider-switcher__price')).toHaveTextContent('-');
   });
 
@@ -105,15 +113,49 @@ describe('ProviderSwitcher rows', () => {
     expect(row(/^OpenRouter/).querySelector('.provider-switcher__price')).toHaveTextContent('-');
   });
 
-  it('opens Settings at the provider from "Add key →" and at Krea from "Sign in"', () => {
+  it('opens Settings at the provider from "Add token →" and at Krea from "Sign in"', () => {
     withKeys({});
     const open = vi.spyOn(useUIStore.getState(), 'openProviderSetup');
     useUIStore.setState({ openProviderSetup: open });
     render(<Controlled />);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Add a Replicate key in Settings' }));
+    fireEvent.click(setupIn(/^Replicate/, 'Add token'));
     expect(open).toHaveBeenLastCalledWith({ kind: 'api-key', key: 'REPLICATE_API_TOKEN' });
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in to Krea in Settings' }));
+    fireEvent.click(setupIn(/^Krea · plan/, 'Sign in'));
     expect(open).toHaveBeenLastCalledWith({ kind: 'krea-mcp' });
+  });
+});
+
+describe('ProviderSwitcher on Idol\'s keyless Space route (GM PR #203 r1, r4 and r12)', () => {
+  const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
+  const renderIdol = () => render(<ProviderSwitcher definition={IDOL} params={{}} variant="inspector" onPick={vi.fn()} />);
+
+  it('without the token: "Auto · free", "Free on Hugging Face." and no "Add token →" (GM r12 item 2)', () => {
+    withKeys({});
+    renderIdol();
+    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    expect(within(space).queryByRole('menuitem', { name: /^Add/ })).toBeNull();
+    expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
+    expect(row(/^Speridlabs/)).toHaveTextContent('Free on Hugging Face.');
+    expect(row(/^Auto/)).toHaveTextContent(/^Auto · free/);
+  });
+
+  it('names no lock on the card chip without the token: nothing stops the run', () => {
+    withKeys({});
+    render(<ProviderSwitcher definition={IDOL} params={{}} variant="chip" onPick={vi.fn()} />);
+    const chip = screen.getByRole('button', { description: /^Provider for “Idol”:/ });
+    expect(chip).not.toHaveAccessibleName(/can['’]t run|You can run|token/i);
+    expect(chip).not.toHaveAccessibleDescription(/can['’]t run|You can run|token/i);
+  });
+
+  it('with the token: the green dot and "Connected", "Uses your Hugging Face allowance." and plain "Auto"', () => {
+    withKeys({ HF_TOKEN: KEY });
+    renderIdol();
+    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    const cell = space.querySelector('.provider-switcher__key--connected');
+    expect(cell).toHaveTextContent(/^Connected$/);
+    expect(cell?.querySelector('.provider-switcher__dot')).toHaveAttribute('aria-hidden', 'true');
+    expect(row(/^Speridlabs/)).toHaveTextContent('Uses your Hugging Face allowance.');
+    expect(row(/^Auto/)).not.toHaveTextContent(/free/);
   });
 });
 
@@ -146,8 +188,8 @@ describe('ProviderSwitcher picks', () => {
     withKeys({ FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY });
     const onPick = vi.fn();
     render(<Controlled initial={{ resolution: '1.5k' }} onPick={onPick} />);
-    expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: fal.ai doesn't take “Resolution” set to 1.5k");
-    expect(screen.getByRole('status')).toHaveTextContent("Fixture Route Table can't run on fal.ai");
+    expect(row(/^Auto/)).toHaveTextContent("Auto · fal.ai doesn’t take “Resolution” set to 1.5k");
+    expect(screen.getByRole('status')).toHaveTextContent('“Fixture Route Table” can’t run on fal.ai');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Replicate' }));
     expect(onPick).toHaveBeenCalledWith({ resolution: '1.5k', _provider: 'replicate', _kreaAuth: 'api-token' }, []);
   });
@@ -167,14 +209,14 @@ describe('ProviderSwitcher picks', () => {
     const onPick = vi.fn();
     const params = { resolution: '1.5k' };
     const { rerender } = render(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ });
+    const chip = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Auto · Black Forest Labs$/ });
     expect(chip).not.toHaveClass('model-node__provider-chip--blocked');
     // The BFL key goes away: Auto now lands on fal, which lacks 1.5k.
     act(() => withKeys({ FAL_KEY: KEY }));
     rerender(<ProviderSwitcher definition={TABLE} params={params} variant="chip" onPick={onPick} />);
     expect(onPick).not.toHaveBeenCalled();
     expect(params).toEqual({ resolution: '1.5k' });
-    const blocked = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/ });
+    const blocked = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Auto · fal\.ai\. (?!Can't run)\S/ });
     expect(blocked).toHaveClass('model-node__provider-chip--blocked');
     expect(blocked).toHaveTextContent('⚠');
   });
@@ -184,15 +226,15 @@ describe('ProviderSwitcher keyboard', () => {
   it('opens from the chip on the checked row, moves with the arrows and closes on Escape with focus back', () => {
     withKeys({ BFL_API_KEY: KEY });
     render(<Controlled variant="chip" initial={{ _provider: 'fal' }} />);
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: fal/ });
+    const chip = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: fal/ });
     expect(chip).toHaveAttribute('aria-haspopup', 'menu');
     fireEvent.click(chip);
     expect(chip).toHaveAttribute('aria-expanded', 'true');
-    const menu = screen.getByRole('menu', { name: 'Provider for Fixture Route Table' });
+    const menu = screen.getByRole('menu', { name: 'Provider for “Fixture Route Table”' });
     expect(document.activeElement).toBe(row(/^fal\.ai/));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     // The next item in the menu: fal's own "Add key →".
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Add a fal.ai key in Settings' }));
+    expect(document.activeElement).toBe(setupIn(/^fal\.ai/, 'Add key'));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row(/^Replicate/));
     fireEvent.keyDown(menu, { key: 'Home' });
@@ -208,10 +250,10 @@ describe('ProviderSwitcher keyboard', () => {
   it('closes on Tab and Shift+Tab with focus back on the chip, not past the portalled menu', () => {
     withKeys({ BFL_API_KEY: KEY });
     render(<Controlled variant="chip" />);
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table/ });
+    const chip = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”/ });
     for (const shiftKey of [false, true]) {
       fireEvent.click(chip);
-      const menu = screen.getByRole('menu', { name: 'Provider for Fixture Route Table' });
+      const menu = screen.getByRole('menu', { name: 'Provider for “Fixture Route Table”' });
       expect(fireEvent.keyDown(menu, { key: 'Tab', shiftKey })).toBe(false); // default prevented
       expect(screen.queryByRole('menu')).toBeNull();
       expect(document.activeElement).toBe(chip);
@@ -221,7 +263,7 @@ describe('ProviderSwitcher keyboard', () => {
   it('opens on ArrowDown and closes after a pick, returning focus', () => {
     withKeys({ BFL_API_KEY: KEY });
     render(<Controlled variant="pill" />);
-    const pill = screen.getByRole('button', { name: /^Provider for Fixture Route Table/ });
+    const pill = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”/ });
     fireEvent.keyDown(pill, { key: 'ArrowDown' });
     fireEvent.click(row(/^Black Forest Labs/));
     expect(screen.queryByRole('menu')).toBeNull();
@@ -291,7 +333,9 @@ describe('Inspector and pills show only the route options', () => {
     }
     render(<Pills />);
     const pills = document.querySelector('.param-pills')!;
-    expect(pills.firstElementChild).toHaveAccessibleName(/^Provider for Fixture Route Table: Auto · fal\.ai\. Can't run/);
+    // GM, PR #203 r32 item 3: the name is the visible text, the rest its description.
+    expect(pills.firstElementChild).toHaveAccessibleName('Provider Auto · fal.ai');
+    expect(pills.firstElementChild).toHaveAccessibleDescription(/^Provider for “Fixture Route Table”: Auto · fal\.ai\. (?!Can't run)\S/);
     const resolution = screen.getByTitle('Resolution').querySelector('select')!;
     expect(optionValues(resolution)).toEqual(['768sq', '1k', '2k', '4k']);
     expect(screen.getByRole('option', { name: '1.5k (not on fal.ai)' })).toBeDisabled();
@@ -375,11 +419,11 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     selectNode('krea-3', { reasoning_level: 'medium' });
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
-    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't take “Reasoning level”");
-    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take “Reasoning level”.");
+    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · Krea doesn’t take “Reasoning level”");
+    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn’t take “Reasoning level”.");
     const reset = within(menu).getByRole('menuitem', { name: 'Set Reasoning level back to Low' });
     expect(within(menu).getByRole('menuitem', { name: 'Switch to fal.ai' })).toBeVisible();
-    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low, or switch provider.");
+    expect(screen.getByRole('status')).toHaveTextContent('“Krea 3” can’t run on Krea with “Reasoning level” set to Medium. Set “Reasoning level” back to Low or switch to fal.ai.');
     fireEvent.click(reset);
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ reasoning_level: 'low' });
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();
@@ -407,7 +451,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
         data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: {}, state: 'idle', outputs: {} } };
       useGraphStore.setState({ nodes: [node], edges: [] });
       render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-      fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2/ }));
+      fireEvent.click(screen.getByRole('button', { description: /^Provider for “FLUX\.2/ }));
       const popover = document.querySelector<HTMLElement>('.provider-switcher__popover')!;
       expect(popover.classList.contains('provider-switcher__popover--above')).toBe(true);
       expect(parseFloat(popover.style.top) + 200).toBeLessThanOrEqual(536);
@@ -428,7 +472,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
       data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: {}, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [node], edges: [] });
     render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2/ }));
+    fireEvent.click(screen.getByRole('button', { description: /^Provider for “FLUX\.2/ }));
     expect(document.querySelector('.provider-switcher__popover')?.closest('.nokey')).not.toBeNull();
   });
 
@@ -438,7 +482,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
       data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: { model: 'klein-9b', safety_tolerance: '5' }, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [node], edges: [] });
     render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\.ai\. Can't run/ }));
+    fireEvent.click(screen.getByRole('button', { description: /^Provider for “FLUX\.2”: Auto · fal\.ai\. (?!Can't run)\S/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set Safety back to 2' }));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -471,7 +515,7 @@ describe('the card', () => {
   it('shows the provider chip in place of the missing-key badge, and the switch note until dismissed', () => {
     withKeys({ FAL_KEY: KEY });
     renderCard({ _provider: 'replicate' });
-    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table: Replicate\. Can't run/ });
+    const chip = screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Replicate\. (?!Can't run)\S/ });
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));
@@ -483,7 +527,7 @@ describe('the card', () => {
   it('a pick from the chip writes the node and leaves the note on the card', () => {
     withKeys({ FAL_KEY: KEY, BFL_API_KEY: KEY });
     renderCard({ resolution: '1.5k' });
-    fireEvent.click(screen.getByRole('button', { name: /^Provider for Fixture Route Table: Auto · Black Forest Labs$/ }));
+    fireEvent.click(screen.getByRole('button', { description: /^Provider for “Fixture Route Table”: Auto · Black Forest Labs$/ }));
     fireEvent.click(row(/^fal\.ai/));
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ _provider: 'fal', resolution: '2k' });
     expect(useProviderNoteStore.getState().notes.n1).toBe("1.5k isn't on fal.ai: set to 2k");

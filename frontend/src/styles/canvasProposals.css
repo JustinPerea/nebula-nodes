@@ -219,6 +219,9 @@
 .proposal-bar {
   --agent-color: #5b9dff;
   display: flex;
+  /* The actions drop under the text only when the "who" line, which never
+     wraps (GM, PR #203 r11 item 6), and the buttons can't share a row. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   width: min(var(--notice-max-w, 560px), calc(100vw - 32px));
@@ -272,18 +275,28 @@
   100% { box-shadow: 0 16px 42px rgb(0 0 0 / 0.38), 0 0 0 0 transparent; }
 }
 
+/* GM, PR #203 r11 item 6: the agent's name never wraps (styles/agent-name.css),
+   and neither does the pager, so the column is never narrower than its "who"
+   line; every other line in it may break anywhere, so the title and the
+   rest give up the room instead. */
 .proposal-bar__main {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  min-width: min-content;
+  overflow-wrap: anywhere;
 }
 
+/* The "who" line ("Claude Code proposes", the pager) never wraps: it sets
+   the column's narrowest width (min-content, above), so with the bar too
+   narrow for it and the actions side by side, the actions drop to their own
+   row rather than the line breaking ("pro/poses", PR #203 round 7). */
 .proposal-bar__who {
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .proposal-bar__dot {
@@ -304,9 +317,11 @@
 
 .proposal-bar__pager {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
   margin-left: auto;
+  white-space: nowrap;
   color: rgb(255 255 255 / 0.5);
   font-size: 11px;
 }
@@ -367,10 +382,6 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   color: var(--sr-warning);
 }
 
-.proposal-bar__not-ready--more {
-  color: rgb(255 255 255 / 0.5);
-}
-
 .proposal-bar__summary {
   margin: 0;
   color: rgb(255 255 255 / 0.72);
@@ -410,19 +421,56 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   transform: rotate(180deg);
 }
 
-/* Every value Accept will write, in full. Scrolls rather than growing the bar. */
+/* Every value Accept will write, in full. Scrolls rather than growing the
+   bar (DetailsBox; GM, PR #203 r28): a box of its own, its rounded border
+   whole, ending above the button row with room under it. */
 .proposal-bar__details {
+  position: relative;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 8px;
-  max-height: 240px;
-  margin-top: 4px;
+  max-height: min(240px, 34vh);
+  margin: 4px 0 6px;
   padding: 8px 10px;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 8px;
-  background: rgb(0 0 0 / 0.25);
+  background: rgb(14 14 16);
   font-size: 11px;
+}
+
+/* A keyboard scrolls it: the shared ring. */
+.proposal-bar__details:focus {
+  outline: none;
+}
+
+.proposal-bar__details:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #e8e6e1);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* 24 px at the bottom while there's more below (data-more), wherever the
+   cut falls; gone at the end. It sticks to the bottom of the scroll view,
+   over the content and inside the border, never over the scrollbar. Its
+   height is taken back by its negative margin (with the column's gap), so
+   showing or hiding it never changes how far the box scrolls. */
+.proposal-bar__details-fade {
+  position: sticky;
+  bottom: -8px;
+  flex-shrink: 0;
+  height: 24px;
+  margin: -24px -10px -8px;
+  border-radius: 0 0 7px 7px;
+  background: linear-gradient(to bottom, rgb(14 14 16 / 0), rgb(14 14 16));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease-out;
+}
+
+.proposal-bar__details[data-more] .proposal-bar__details-fade {
+  opacity: 1;
 }
 
 .proposal-bar__group-title {
@@ -476,9 +524,18 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   animation: notice-row-in 420ms var(--notice-spring) both;
 }
 
+/* The actions shrink to the bar on a narrow window (760 px; GM, PR #203 r19
+   item 8): never past its edge, never clipped. Narrower still (a browser tab
+   has no minimum width), they wrap: Accept takes its own row under Show and
+   Reject (review 10, copy LOW-1). */
 .proposal-bar__actions {
   display: flex;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
   align-items: center;
   gap: 6px;
 }
@@ -517,6 +574,19 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   background: var(--agent-color);
   color: #fff;
   font-weight: 600;
+}
+
+/* "Accept and run" and its count chip: below the width where the two fit,
+   the chip moves onto its own line under the words, never clipped or cut
+   with "…" (GM, PR #203 r19 item 8). The words never break inside. */
+.proposal-bar__button--primary {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 3px;
+  height: auto;
+  min-height: 30px;
+  padding-block: 4px;
+  white-space: nowrap;
 }
 
 .proposal-bar__button--primary:hover:not(:disabled) {
@@ -728,4 +798,19 @@ body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
 .scene-unsaved-popover .canvas-undo-notice__action:focus-visible {
   outline: var(--sr-focus-outline, 2px solid #fff);
   outline-offset: var(--sr-focus-offset, 2px);
+}
+
+/* The count beside "Accept and run" (GM, PR #203 r11 item 2): it sits on the
+   agent-coloured button, so it takes the button's ink, as the selection
+   toolbar's Run chip does. */
+.proposal-bar__count {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 999px;
+  color: inherit;
+  font-family: var(--sr-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
 }

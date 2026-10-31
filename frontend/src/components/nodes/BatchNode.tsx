@@ -63,7 +63,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       {nodeData.state === 'error' && nodeData.error && <div role="alert">
         <NodeError className="batch-node__warning" raw={nodeData.error} category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly} person={nodeData.errorPerson}
-          providerText={nodeData.errorProviderText} provider={nodeData.errorProvider} />
+          providerText={nodeData.errorProviderText} provider={nodeData.errorProvider} notStarted={nodeData.errorNotStarted} />
       </div>}
       <div className="batch-node__output">
         <span>Items</span>

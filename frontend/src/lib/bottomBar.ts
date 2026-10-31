@@ -1,3 +1,4 @@
+import { subscribeBackendConnection } from './backendConnection';
 /**
  * Where the canvas's bottom bar (Run / Canvas actions / zoom) really starts,
  * for what must keep clear of it: the app's notices sit just above it, and a
@@ -150,4 +151,83 @@ export function clearBottomBarClearance(): void {
   const root = document.documentElement;
   if (root.style.getPropertyValue(BOTTOM_BAR_CLEARANCE_VAR) !== '') markBarSwitch(root);
   root.style.removeProperty(BOTTOM_BAR_CLEARANCE_VAR);
+}
+
+/**
+ * GM r9 item 2 (PR #203 round 6): the notice stack and the top bars (the
+ * canvas tabs with the following bar, the selection toolbar's line) never
+ * overlap. The region stands on its bottom line and grows up, the proposal
+ * bar first in it (lib/noticeSlots.ts), so the stack's room is from that line
+ * up to the top bars' line (floatingTopLimit, the line floating panels stop
+ * below). The region writes it as `--notice-room` (noticeRegion.css caps the
+ * stack's height with it); when the notices outgrow it, the region is marked
+ * `data-notice-crowded` and the stack scrolls instead of reaching the bars.
+ * Measured whenever the stack, a top bar, the window or the bottom bar's
+ * clearance changes. Returns a stop function.
+ */
+export const NOTICE_ROOM_VAR = '--notice-room';
+
+/** The line under the offline banner (App.css .backend-connection, fixed at
+ * 150 px, the selection toolbar's line plus 8, on the 10000 layer), or 0
+ * while it isn't shown. A crowded stack stops below it, so the banner never
+ * draws over the proposal bar's top row (PR #203 round 6 review, NIT-4). */
+export function offlineBannerLine(): number {
+  if (typeof document === 'undefined') return 0;
+  const box = document.querySelector('.backend-connection')?.getBoundingClientRect();
+  return box && box.height > 0 ? box.bottom + BOTTOM_BAR_GAP : 0;
+}
+export const NOTICE_CROWDED_ATTR = 'data-notice-crowded';
+/** The window gutter the stack keeps with no top bar on screen (the region's --page-gutter). */
+const NOTICE_TOP_GUTTER = 16;
+
+export function keepNoticesBelowTopBars(region: HTMLElement): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const stack = region.querySelector<HTMLElement>('.notice-region__stack');
+  if (!stack) return () => {};
+  const watched = new WeakSet<Element>();
+  const resizes = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null;
+  const measure = () => {
+    // The top bars, and each item (the stack's own box stops growing at the
+    // cap, so an item growing past it is seen on the item).
+    for (const part of document.querySelectorAll(`[${TOP_BAR_ATTR}], .notice-region__slot > *`)) {
+      if (watched.has(part)) continue;
+      watched.add(part);
+      resizes?.observe(part);
+    }
+    const bottom = region.getBoundingClientRect().bottom;
+    const room = Math.max(0, Math.floor(bottom - Math.max(floatingTopLimit(NOTICE_TOP_GUTTER), offlineBannerLine())));
+    const value = `${room}px`;
+    if (region.style.getPropertyValue(NOTICE_ROOM_VAR) !== value) region.style.setProperty(NOTICE_ROOM_VAR, value);
+    // Its content's own height, whatever the cap: more than the room is crowded.
+    const crowded = stack.scrollHeight > room + 1;
+    if (crowded !== region.hasAttribute(NOTICE_CROWDED_ATTR)) region.toggleAttribute(NOTICE_CROWDED_ATTR, crowded);
+  };
+  resizes?.observe(stack);
+  // An item coming or going.
+  const items = new MutationObserver(measure);
+  items.observe(stack, { childList: true, subtree: true });
+  // The bottom bar's clearance moves the region's line (it lives on the root's style).
+  const clearance = new MutationObserver(measure);
+  clearance.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  window.addEventListener('resize', measure);
+  region.addEventListener('transitionend', measure);
+  // The offline banner comes and goes with the connection: measure once it
+  // has rendered (or left).
+  let bannerFrame: number | null = null;
+  const stopBanner = subscribeBackendConnection(() => {
+    if (bannerFrame !== null) cancelAnimationFrame(bannerFrame);
+    bannerFrame = requestAnimationFrame(() => { bannerFrame = null; measure(); });
+  });
+  measure();
+  return () => {
+    stopBanner();
+    if (bannerFrame !== null) cancelAnimationFrame(bannerFrame);
+    resizes?.disconnect();
+    items.disconnect();
+    clearance.disconnect();
+    window.removeEventListener('resize', measure);
+    region.removeEventListener('transitionend', measure);
+    region.style.removeProperty(NOTICE_ROOM_VAR);
+    region.removeAttribute(NOTICE_CROWDED_ATTR);
+  };
 }

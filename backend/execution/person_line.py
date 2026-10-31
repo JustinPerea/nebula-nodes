@@ -64,7 +64,19 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
+
+# The shared rule for lists in a person's line: up to 3 things are named,
+# from 4 they are counted (frontend errorCopy.NAMED_AT_MOST and
+# countsInstead, the same number; GM, PR #203 r24; tests/test_idol_round14.py
+# pins the two).
+NAMED_AT_MOST = 3
+
+
+def counts_instead(count: int) -> bool:
+    """Whether a line counts these things rather than naming each."""
+    return count > NAMED_AT_MOST
+
 
 _ATTRIBUTE = "nebula_person_line"
 _PROVIDER_TEXT = "nebula_provider_text"
@@ -223,17 +235,18 @@ KEY_NAMES: dict[str, tuple[str, str]] = {
     "ELEVENLABS_API_KEY": ("ElevenLabs", "API key"),
     "FAL_KEY": ("fal.ai", "API key"),
     "GOOGLE_API_KEY": ("Gemini", "API key"),
-    "GOOGLE_VERTEX_CREDENTIALS": ("Google Vertex AI", "credentials"),
+    "GOOGLE_VERTEX_CREDENTIALS": ("Vertex AI", "service account key"),
+    "HF_TOKEN": ("Hugging Face", "token"),
     "HIGGSFIELD_API_KEY": ("Higgsfield", "API key"),
     "IDEOGRAM_API_KEY": ("Ideogram", "API key"),
-    "KREA_API_TOKEN": ("Krea", "API token"),
+    "KREA_API_TOKEN": ("Krea", "API key"),
     "KREA_USAGE_KEY": ("Krea", "usage key"),
     "MESHY_API_KEY": ("Meshy", "API key"),
     "MINIMAX_API_KEY": ("MiniMax", "API key"),
     "OPENAI_API_KEY": ("OpenAI", "API key"),
     "OPENROUTER_API_KEY": ("OpenRouter", "API key"),
     "QUIVER_API_KEY": ("QuiverAI", "API key"),
-    "REPLICATE_API_TOKEN": ("Replicate", "API token"),
+    "REPLICATE_API_TOKEN": ("Replicate", "token"),
     "RUNWAY_API_KEY": ("Runway", "API key"),
     "TYPESAFE_API_KEY": ("TypeSafe", "API key"),
     "WORLDLABS_API_KEY": ("World Labs", "API key"),
@@ -246,8 +259,8 @@ def _or_list(items: list[str]) -> str:
 
 
 def key_phrase(keys: Iterable[str]) -> str | None:
-    """"OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
-    credentials or Gemini API key"; None when a name isn't a key Settings stores."""
+    """"OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
+    account key or Gemini API key"; None when a name isn't a key Settings stores."""
     names = [KEY_NAMES.get(key) for key in keys]
     if not names or any(name is None for name in names):
         return None
@@ -271,8 +284,8 @@ def key_name(key: str) -> tuple[str, str] | None:
 # GM's lines for a provider's answer (round 3d), one table: the engine applies
 # it (execution/provider_status.py) where the handler wrote no line.
 # GM: "{Provider} didn't accept your API key. ..." The key's own name stands
-# in for "API key" where Settings calls it something else ("API token",
-# "credentials"), as the missing-key line does.
+# in for "API key" where Settings calls it something else ("token",
+# "service account key"), as the missing-key line does.
 STATUS_LINES: dict[str, str] = {
     "key": "{provider} didn't accept your {credential}. Check {it} in Settings, then run the node again.",
     "credits": "Your {provider} account is out of credits. Add credits, then run the node again.",
@@ -423,6 +436,9 @@ _INPUT_WORDS = {
     "edit video": "a video to edit", "continue session": "a session to continue",
 }
 _MASS_NOUNS = {"audio", "text", "context", "lighting", "media", "messages", "guidance"}
+# The mass nouns above that are plural ("needs messages. Connect them"); the
+# rest take "it" (GM r36 B2).
+_PLURAL_MASS_NOUNS = {"messages"}
 _NAMES = {"krea"}
 
 
@@ -493,3 +509,252 @@ def joined_lines(lines: Iterable[str | None]) -> str | None:
         if line.strip() not in kept:  # type: ignore[union-attr]
             kept.append(line.strip())  # type: ignore[union-attr]
     return " ".join(kept)
+
+
+# -- not-ready reasons: a node that can't run here, said for one node or several --
+#
+# Each reason says what follows the node's quoted name, for one node and for
+# several (review 14 of PR #203, copy LOW-1: the plural came from a regex on
+# English). The line is a subject, the quoted name for one node or the
+# shared name list for several (not_ready_subject), then the predicate for
+# that count. The proposal bar, its layer (frontend canvasProposals) and the
+# Agent Log merge nodes by the reason, never by the words. GM's wording:
+# r20 item 3 (quoted names), r21 (Krea's "Sign in"), r28 (merges), r29
+# items 1 and 2 (route-table Auto, the switcher, Replicate's key), r31 item
+# 3 (route lines: the reason, then one action sentence that names who can
+# take the run).
+#
+# Every predicate ends in one action sentence whose end is a slot, {end}:
+# "." on the card and the bar, the run-again ending in the Agent Log (", then
+# run the node again." or, after an action that already holds a comma
+# clause, ". Then run the node again."). The ending is built there, never
+# appended to whatever the last sentence is (review 15, copy LOW-1).
+NOT_READY_PREDICATES: dict[str, tuple[str, str]] = {
+    "key": ("needs your {phrase}. Add {it} in Settings{end}",
+            "need your {phrase}. Add {it} in Settings{end}"),
+    "krea_plan": ("needs your Krea plan. Sign in to Krea in Settings{end}",
+                  "need your Krea plan. Sign in to Krea in Settings{end}"),
+    "unknown_provider": ("is set to a provider that isn’t in its list. Choose one in its provider switcher{end}",
+                         "are set to a provider that isn’t in their list. "
+                         "Choose one in each node’s provider switcher{end}"),
+    "route_key": ("is set to {provider}, which needs {needed}. {action}{end}",
+                  "are set to {provider}, which needs {needed}. {action}{end}"),
+    "route_block": ("can’t run on {provider}{why}. {action}{end}",
+                    "can’t run on {provider}{why}. {action}{end}"),
+    "not_set_up": ("isn’t set up to run here yet. Check its provider in Settings{end}",
+                   "aren’t set up to run here yet. Check their provider in Settings{end}"),
+}
+
+CARD_END = "."
+
+
+def again_end(nodes: int, *, after_clause: bool = False) -> str:
+    """The Agent Log's ending for a not-ready line's action sentence (GM, PR
+    #203 r29 item 3, r31 item 3): ", then run the node again." ("the nodes"
+    for several), or its own sentence after an action that already holds a
+    comma clause (", or add your fal.ai API key in Settings and switch to
+    fal.ai. Then run the node again.")."""
+    what = "node" if nodes == 1 else "nodes"
+    return f". Then run the {what} again." if after_clause else f", then run the {what} again."
+
+
+class Fix(NamedTuple):
+    """What the person can change where the node is, as a route line's first
+    action ("Turn “Raw” off", "Pick 1K, 2K or 4K"), and how many options it
+    offers: a fix that lists two or more holds its own "or", so the switch
+    after it is a second clause (GM, PR #203 r32 item 1)."""
+
+    text: str
+    options: int = 1
+
+
+def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str], key: str | None) -> tuple[str, bool]:
+    """A route line's one action sentence, without its end (GM, PR #203 r31
+    item 3), and whether it holds a comma clause (again_end):
+
+    - ``fix`` is what the person can change where the node is ("Turn “Raw”
+      off", "Add it in Settings"), or None;
+    - ``others`` are providers with a key set that can take the run: "… or
+      switch to fal.ai" ("fal.ai or Replicate" for two);
+    - ``needs_key`` are providers that could take it once their key is
+      added (``key`` names that key): "…, or add your fal.ai API key in
+      Settings and switch to fal.ai".
+
+    Two actions take a comma between them when either holds an "or" of its
+    own: the fix lists options (GM, PR #203 r32 item 1: "Pick A, B or C, or
+    switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K, or
+    switch to fal.ai or Replicate."); the comma separates two clauses, not
+    list items. Never a separate "… can take it." sentence: the named
+    switch replaces it."""
+    text, listed = (fix.text, fix.options > 1) if isinstance(fix, Fix) else (fix, False)
+    if others:
+        switch = f"switch to {or_list(others)}"
+        if not text:
+            return switch[:1].upper() + switch[1:], False
+        if listed or " or " in f" {text} " or len(others) > 1:
+            return f"{text}, or {switch}", True
+        return f"{text} or {switch}", False
+    if needs_key:
+        add = f"add your {key} in Settings" if key else "add its key in Settings"
+        clause = f"{add} and switch to {or_list(needs_key)}"
+        return (f"{text}, or {clause}" if text else clause[:1].upper() + clause[1:]), bool(text)
+    return text or "Check its provider in Settings", False
+
+
+class NotReadyReason:
+    """Why a node can't run here, as NOT_READY_PREDICATES says it: ``one``
+    and ``many`` follow the node's quoted name on the card and the bar;
+    ``again`` holds the Agent Log's forms, (one, many), with the run-again
+    ending in the action sentence's end slot. ``own`` is a route's own whole
+    line (RouteSpec.missingKeyLine: "You can run “Idol” after you add your
+    Hugging Face token in Settings."), said as it is, never merged, and with
+    no ending added in the log either (its words already say "You can run")."""
+
+    __slots__ = ("one", "many", "own", "again", "kind")
+
+    def __init__(self, one: str = "", many: str = "", own: str | None = None,
+                 again: tuple[str, str] | None = None, kind: str | None = None) -> None:
+        self.one, self.many, self.own, self.kind = one, many, own, kind
+        self.again = again if again is not None else (one, many)
+
+    @classmethod
+    def of(cls, kind: str, *, after_clause: bool = False, table: dict[str, tuple[str, str]] | None = None,
+           **fields: str) -> "NotReadyReason":
+        one, many = (NOT_READY_PREDICATES if table is None else table)[kind]
+        return cls(one.format(end=CARD_END, **fields), many.format(end=CARD_END, **fields),
+                   again=(one.format(end=again_end(1, after_clause=after_clause), **fields),
+                          many.format(end=again_end(2, after_clause=after_clause), **fields)), kind=kind)
+
+    def line(self, subject: str) -> str:
+        """The line for one node: its quoted name (or "This node"), the singular."""
+        return self.own if self.own is not None else f"{subject} {self.one}"
+
+    def view(self) -> dict[str, str] | None:
+        """What the proposal's notReady row carries for the merge (frontend
+        canvasProposals.notReadyBarLines): None for a route's own line."""
+        return None if self.own is not None else {"one": self.one, "many": self.many}
+
+
+# -- input needs: a required input with no wire, in the Agent Log's merge --
+#
+# A refused run's other stops merge as its reasons do (GM, PR #203 r33 item
+# 1): every node that needs the same input is one line, by the shared name
+# list (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from
+# 4), the plural naming the input again in the action, never "one" after a
+# count: "2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then
+# run the nodes again."; "“GPT Image 2” needs a prompt. Connect one, then
+# run the node again." Every input kind takes the same pattern from this one
+# table: {input} is the input in words (input_words), {one} what the
+# singular's action connects ("one" for "a prompt", "it" for "audio", "them"
+# for "images"). An input named by its own label (a numbered or lettered
+# one, a pass-through: connect_line) takes the "port" row, the label in
+# quotes as the card says it.
+#
+# A node with two or more different needs says them as one need (GM, PR #203
+# r34 item 1), in the node's input order, the action naming how many:
+# "“FLUX Kontext” needs a prompt and an image. Connect both, then run the
+# node again."; "…needs a prompt, an image and a mask. Connect them, …".
+# Nodes with the same set merge as one need does: "2 “FLUX Kontext” nodes
+# need a prompt and an image. Connect both to each, then run the nodes
+# again." {inputs} lists each need in its own words (input_words, or "an
+# output connected to “Item 1”" for an input named by its label), {all}
+# is "both" for two and "them" for more.
+INPUT_NEED_PREDICATES: dict[str, tuple[str, str]] = {
+    "input": ("needs {input}. Connect {one}{end}",
+              "need {input}. Connect {input} to each{end}"),
+    # After a count the action names what to connect, never "one" (GM r33
+    # item 1; review 17 copy-ui MEDIUM-1, GM r36 B1).
+    "port": ("needs an output connected to “{port}”. Connect one{end}",
+             "need an output connected to “{port}”. Connect an output to “{port}” on each{end}"),
+    "inputs": ("needs {inputs}. Connect {all}{end}",
+               "need {inputs}. Connect {all} to each{end}"),
+}
+
+
+def _one(words: str) -> str:
+    """The pronoun for one need: "one" after an article, else by the noun's
+    number. A mass noun takes no article but is still "them" when it is
+    plural (_PLURAL_MASS_NOUNS: "messages"; review 17 copy-ui LOW-1, GM r36
+    B2)."""
+    if words.startswith(("a ", "an ")):
+        return "one"
+    last = words.split()[-1].lower()
+    return "it" if last in _MASS_NOUNS and last not in _PLURAL_MASS_NOUNS else "them"
+
+
+def _named_by_label(label: object) -> bool:
+    name = port_name(label)
+    return bool(re.search(r"\s(\d+|[A-Z])$", name)) or name.lower() == "through"
+
+
+def _need_words(label: object) -> str:
+    """One need in a list of several: "a prompt", "audio", "an output
+    connected to “Item 1”"."""
+    if _named_by_label(label):
+        return f"an output connected to “{str(label or '').strip()}”"
+    return input_words(label) if port_name(label) else "an input"
+
+
+def input_need(label: object) -> NotReadyReason:
+    """A required input with no wire as the Agent Log merges it
+    (INPUT_NEED_PREDICATES), from the input's label."""
+    if _named_by_label(label):
+        return NotReadyReason.of("port", table=INPUT_NEED_PREDICATES, port=str(label or "").strip())
+    words = _need_words(label)
+    return NotReadyReason.of("input", table=INPUT_NEED_PREDICATES, input=words, one=_one(words))
+
+
+def need_words(labels: Iterable[object]) -> list[str]:
+    """Each need's words, once each, in the order given."""
+    words: list[str] = []
+    for label in labels:
+        said = _need_words(label)
+        if said not in words:
+            words.append(said)
+    return words
+
+
+def input_needs(labels: Iterable[object]) -> NotReadyReason:
+    """Every required input one node has with no wire, as one need (GM, PR
+    #203 r34 item 1), in the order given (the node's input order): one
+    input is input_need's line; two or more list them, each once, and
+    "Connect both" or "Connect them"."""
+    labels = list(labels)
+    words = need_words(labels)
+    if len(words) <= 1:
+        return input_need(labels[0] if labels else "")
+    return NotReadyReason.of("inputs", table=INPUT_NEED_PREDICATES, inputs=and_list(words),
+                             all="both" if len(words) == 2 else "them")
+
+
+def not_ready_subject(names: list[str]) -> str:
+    """The shared name-list rule (frontend errorCopy.nodeNameList): up to 3
+    nodes by name, a same-name group as its own item ("2 “Claude” nodes"),
+    "4 nodes" from 4."""
+    if counts_instead(len(names)):
+        return f"{len(names)} nodes"
+    groups: dict[str, int] = {}
+    for name in names:
+        groups[name] = groups.get(name, 0) + 1
+    return and_list(f"“{name}”" if count == 1 else f"{count} “{name}” nodes" for name, count in groups.items())
+
+
+def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool = False) -> list[tuple[str, int]]:
+    """Each reason once, in the order first met, with every node that has it
+    (GM, PR #203 r28): (the line, how many nodes say it). A route's own line
+    stays a line per node. ``again``: the Agent Log's forms, each action
+    sentence ending in the run-again ending (NotReadyReason.again)."""
+    groups: dict[object, tuple[NotReadyReason, list[str]]] = {}
+    for index, (name, reason) in enumerate(rows):
+        key: object = ("own", index) if reason.own is not None else reason.one
+        groups.setdefault(key, (reason, []))[1].append(name)
+    lines: list[tuple[str, int]] = []
+    for reason, names in groups.values():
+        one, many = reason.again if again else (reason.one, reason.many)
+        if reason.own is not None:
+            lines.append((reason.own, 1))
+        elif len(names) == 1:
+            lines.append((f"“{names[0]}” {one}", 1))
+        else:
+            lines.append((f"{not_ready_subject(names)} {many}", len(names)))
+    return lines

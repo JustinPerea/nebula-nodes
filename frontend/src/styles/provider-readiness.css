@@ -43,3 +43,6 @@ body.app-slava-restraint .provider-readiness--offline .provider-readiness__setup
 body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .create-composer > .provider-readiness { padding: 0 0 8px; justify-content: flex-start; }
 body.app-slava-restraint .create-composer > .provider-readiness .provider-readiness__setup { margin-left: 0; }
+/* "Hugging Face token Optional": the muted secondary word (GM, PR #203 r1). */
+.provider-readiness__note { opacity: 0.62; }
+body.app-slava-restraint .provider-readiness__note { opacity: 1; color: var(--sr-ink-faint); }

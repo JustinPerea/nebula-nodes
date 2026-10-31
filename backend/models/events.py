@@ -4,7 +4,7 @@ import copy
 from contextvars import ContextVar
 from typing import Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 execution_run_id: ContextVar[str | None] = ContextVar(
@@ -143,6 +143,18 @@ class ValidationErrorDetail(BaseModel):
     # only an agent or a damaged saved graph reaches; the card shows GM's
     # general line with `message` behind "Details".
     person: str | None = None
+    # What kind of stop this is, for the Agent log's merged line
+    # (main._refused_run_log_line), set where the check is made, never sent:
+    # "reason" for a stop the node's not-ready reason says (a key, a route,
+    # a Krea plan), "input" for a required input with no wire (``_need`` its
+    # label). None for any other stop: the log says its card line.
+    _stop: str | None = PrivateAttr(default=None)
+    _need: str | None = PrivateAttr(default=None)
+
+    def marked(self, stop: str, need: str | None = None) -> "ValidationErrorDetail":
+        """This check, marked with its kind of stop (``_stop``)."""
+        self._stop, self._need = stop, need
+        return self
 
 
 class ValidationErrorEvent(RunScopedEvent):

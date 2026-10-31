@@ -115,6 +115,7 @@ import { usePricingStore } from './pricingStore';
 import { useInputSizeStore } from './inputSizeStore';
 import { useStoredAssetsStore } from './storedAssetsStore';
 import { nodesThatRun, repeatRun, runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope, type RunScopeSummary } from '../lib/runScope';
+import { runKeyLockLine } from '../lib/runKeyLock';
 import { PRICE_DEPENDS_ON_INPUT, PRICE_NOT_LISTED, mayBeRefused, mergeRunEstimates, movedRowIds, modelNotChosenText, planDecidesRefusal, placeholderRefusalOf, placeholderRunConfirm, runPlaceholders, withRefusalFlags, withRunEstimate, type PlaceholderRunConfirm, type PlaceholderRunOptions, type RunEstimate } from '../lib/placeholderRunConfirm';
 import { placeholderRunDialogModule } from '../lib/placeholderRunDialogModule';
 import { useCreateDraftStore } from './createDraftStore';
@@ -388,6 +389,7 @@ function markNodesErrored(
         errorPerson: hidden ? failureCopy(failure).reason : undefined,
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
+        errorNotStarted: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -423,6 +425,7 @@ function markNodesWithValidationErrors(
         errorPerson: reading.errorPerson,
         errorProviderText: undefined,
         errorProvider: undefined,
+        errorNotStarted: reading.errorNotStarted,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -9697,7 +9700,7 @@ function mergeSyncedNode(incoming: Node<NodeData>, existing: Node<NodeData> | un
         ...(cliNode.data.state === 'error' ? {
           errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
           errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
-          errorProvider: cliNode.data.errorProvider,
+          errorProvider: cliNode.data.errorProvider, errorNotStarted: cliNode.data.errorNotStarted,
         } : {}),
         keyStatus,
         ...(changedOutput ? clearBatchPreview() : {}),
@@ -10256,11 +10259,24 @@ function refuseUnchosenModel(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
   // wires, the Krea plan's sign-in. Before the settings load, the backend
   // refuses on the route it knows instead.
   const { settingsCache } = useUIStore.getState();
+  // GM, PR #203 r6 item 1: a run with a node that can't start without its
+  // key (a keyed route's missing key) sends nothing, on every path
+  // (Cmd+Enter, the palette's Run graph, a replay, a node's Run): a neutral
+  // one-line notice, the canvas's line for the whole graph, else the node's.
+  if (refuseKeyLockedRun(nodes, edges, scope, settingsCache)) return true;
   const context = settingsCache.loaded ? { apiKeys: settingsCache.apiKeys, edges,
     planReady: settingsCache.kreaConnection?.status === 'connected' } : undefined;
   const text = modelNotChosenText(nodesThatRun(nodes, edges, scope), names, context);
   if (!text) return false;
   useGraphStore.getState().notify(text);
+  return true;
+}
+
+function refuseKeyLockedRun(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope,
+  settings: { loaded: boolean; apiKeys: Readonly<Record<string, string | undefined>> }): boolean {
+  const line = runKeyLockLine(nodes, edges, scope, settings);
+  if (!line) return false;
+  useGraphStore.getState().notify(line, 'info');
   return true;
 }
 
@@ -10438,7 +10454,11 @@ function directRunConfirm(
   if (typeof window === 'undefined') return null;
   let summary = canvasRunSummary(nodes, edges, nodeId, passes);
   if (estimate) summary = withRunEstimate(summary, estimate, nodes);
-  return placeholderRunConfirm(nodes, edges, nodeId, summary, options);
+  // A key-billing placeholder is paid by the keys this tab read (GM, PR #203
+  // r15 item 2): Idol with no token needs no confirm of its own.
+  const { settingsCache } = useUIStore.getState();
+  return placeholderRunConfirm(nodes, edges, nodeId, summary,
+    settingsCache.loaded ? { apiKeys: settingsCache.apiKeys, ...options } : options);
 }
 
 /** The direct run of `nodeId` as the canvas prices it: each node on the
@@ -10749,7 +10769,8 @@ async function sendDirectRun<T>(
       const routeUnknown = () => !keysRead && useUIStore.getState().settingsCache === cacheRead;
       if (!stillOurs()) throw error;
       const estimate = refusal.estimate;
-      const nodes = withRefusalFlags(agreed.nodes, refusal);
+      const keys = useUIStore.getState().settingsCache;
+      const nodes = withRefusalFlags(agreed.nodes, refusal, keys.loaded ? keys.apiKeys : undefined);
       const model = directRunConfirm(nodes, agreed.edges, nodeId, passes, estimate,
         { ...wording, shown: agreed.shown, gone: agreed.gone, changed: agreed.changed, routeUnknown: routeUnknown() });
       if (!model) throw error;
@@ -14108,6 +14129,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           errorPerson: event.person ?? undefined,
           errorProviderText: event.providerText || undefined,
           errorProvider: event.provider || undefined,
+          errorNotStarted: undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -14124,6 +14146,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
               errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
+              errorNotStarted: reading.errorNotStarted,
             });
           }
         }

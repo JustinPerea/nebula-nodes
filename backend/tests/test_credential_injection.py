@@ -15,7 +15,6 @@ Covers validation contract assertions:
 
 from __future__ import annotations
 
-import importlib
 import io
 import json
 import logging
@@ -57,40 +56,31 @@ ALLOWED_PROVIDERS = {
 
 @pytest.fixture(autouse=True)
 def _restore_settings_module(monkeypatch):
-    """Reload settings module with a clean env after each test so the
-    module-level _INJECTED_KEYS and SETTINGS_PATH are restored."""
-    # Reload with the session's sandbox path (conftest.py), not with the
-    # variable removed: removed, SETTINGS_PATH falls back to the repo's real
-    # settings.json, and every later test in the run reads the person's keys
-    # and writes their settings (PUT /api/settings).
-    session_path = os.environ.get("NEBULA_SETTINGS_PATH")
-    yield
-    monkeypatch.delenv("NEBULA_INJECTED_KEYS", raising=False)
-    if session_path is None:
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
-    else:
-        monkeypatch.setenv("NEBULA_SETTINGS_PATH", session_path)
+    """Each test's injected keys are put back after it, by monkeypatch, as
+    is NEBULA_SETTINGS_PATH, which services.settings reads at each call.
+    Nothing reloads the module (review 13 of PR #203, LOW-2): a reload made
+    new copies of its classes and dicts that earlier imports didn't see."""
     import services.settings as _s
-    importlib.reload(_s)
+    monkeypatch.setattr(_s, "_INJECTED_KEYS", dict(_s._INJECTED_KEYS))
+    yield
+    _s.clear_provider_validation_cache()
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _reload_settings(monkeypatch, *, injected=None, settings_path=None):
-    """Reload the settings module with the given env vars, returning the
-    freshly-imported module."""
-    if injected is not None:
-        monkeypatch.setenv("NEBULA_INJECTED_KEYS", json.dumps(injected))
-    else:
-        monkeypatch.delenv("NEBULA_INJECTED_KEYS", raising=False)
+def _set_up_settings(monkeypatch, *, injected=None, settings_path=None):
+    """The settings module as the backend starts with these values: the
+    keys NEBULA_INJECTED_KEYS would carry (parsed as at import) and the
+    settings file. With no settings_path, the session's sandbox file
+    (conftest.py) stays: never the repo's real settings.json."""
+    import services.settings as settings_mod
+    raw = json.dumps(injected) if injected is not None else ""
+    monkeypatch.setattr(settings_mod, "_INJECTED_KEYS", settings_mod.parse_injected_keys(raw))
     if settings_path is not None:
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_path))
-    else:
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
-    import services.settings as settings_mod
-    importlib.reload(settings_mod)
+    settings_mod.clear_provider_validation_cache()
     return settings_mod
 
 
@@ -106,46 +96,55 @@ def _write_settings(path: Path, data: dict) -> None:
 class TestInjectionParsing:
     """VAL-INJECT-001: Desktop startup injects decrypted credentials."""
 
+    def test_the_variable_is_read_at_import(self, tmp_path):
+        """A fresh backend process reads NEBULA_INJECTED_KEYS once, at
+        import, in a child process: this file never reloads the module."""
+        import subprocess
+        import sys
+
+        backend = Path(__file__).resolve().parent.parent
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp_path),
+               "NEBULA_SETTINGS_PATH": str(tmp_path / "settings.json"),
+               "NEBULA_INJECTED_KEYS": json.dumps({"FAL_KEY": "fal-" + "child", "OPENAI_API_KEY": ""})}
+        out = subprocess.run(
+            [sys.executable, "-c",
+             "import json, services.settings as s; print(json.dumps(s._INJECTED_KEYS))"],
+            cwd=backend, env=env, capture_output=True, text=True, timeout=60, check=True)
+        assert json.loads(out.stdout) == {"FAL_KEY": "fal-" + "child"}
+
     def test_injected_keys_parsed_at_import_time(self, monkeypatch):
         """NEBULA_INJECTED_KEYS JSON dict is parsed into _INJECTED_KEYS."""
         injected = {
             "OPENAI_API_KEY": "sk-" + "test-key-12345678",
             "FAL_KEY": "fal-" + "test-key-87654321",
         }
-        settings_mod = _reload_settings(monkeypatch, injected=injected)
+        settings_mod = _set_up_settings(monkeypatch, injected=injected)
 
         assert settings_mod._INJECTED_KEYS == injected
         assert settings_mod.is_injected_mode() is True
 
     def test_empty_env_var_yields_empty_dict(self, monkeypatch):
         """Empty JSON dict in NEBULA_INJECTED_KEYS → empty _INJECTED_KEYS."""
-        settings_mod = _reload_settings(monkeypatch, injected={})
+        settings_mod = _set_up_settings(monkeypatch, injected={})
         assert settings_mod._INJECTED_KEYS == {}
         assert settings_mod.is_injected_mode() is False
 
     def test_malformed_json_ignored_safely(self, monkeypatch):
         """Malformed JSON in NEBULA_INJECTED_KEYS → empty dict, no crash."""
-        monkeypatch.setenv("NEBULA_INJECTED_KEYS", "not-valid-json{{{")
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert settings_mod._INJECTED_KEYS == {}
-        assert settings_mod.is_injected_mode() is False
+        assert settings_mod.parse_injected_keys("not-valid-json{{{") == {}
 
     def test_non_dict_json_ignored_safely(self, monkeypatch):
         """A JSON list or scalar instead of a dict → empty _INJECTED_KEYS."""
-        monkeypatch.setenv("NEBULA_INJECTED_KEYS", '["not", "a", "dict"]')
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert settings_mod._INJECTED_KEYS == {}
+        assert settings_mod.parse_injected_keys('["not", "a", "dict"]') == {}
 
     def test_empty_string_values_filtered(self, monkeypatch):
         """Empty-string key values are filtered out of _INJECTED_KEYS."""
         injected = {"OPENAI_API_KEY": "sk-" + "real-key", "FAL_KEY": ""}
-        settings_mod = _reload_settings(monkeypatch, injected=injected)
+        settings_mod = _set_up_settings(monkeypatch, injected=injected)
 
         assert "OPENAI_API_KEY" in settings_mod._INJECTED_KEYS
         assert "FAL_KEY" not in settings_mod._INJECTED_KEYS
@@ -160,7 +159,7 @@ class TestInjectionParsing:
         })
 
         injected = {"FAL_KEY": "fal-" + "injected-key"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -175,10 +174,7 @@ class TestEmptyInjection:
 
     def test_no_env_var_yields_empty_dict(self, monkeypatch):
         """With NEBULA_INJECTED_KEYS absent, _INJECTED_KEYS must be {}."""
-        monkeypatch.delenv("NEBULA_INJECTED_KEYS", raising=False)
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
-        import services.settings as settings_mod
-        importlib.reload(settings_mod)
+        settings_mod = _set_up_settings(monkeypatch, injected=None)
 
         assert settings_mod._INJECTED_KEYS == {}
         assert settings_mod.is_injected_mode() is False
@@ -186,13 +182,9 @@ class TestEmptyInjection:
     def test_empty_string_env_var_yields_empty_dict(self, monkeypatch):
         """With NEBULA_INJECTED_KEYS set to empty string, _INJECTED_KEYS
         must be {}."""
-        monkeypatch.setenv("NEBULA_INJECTED_KEYS", "")
-        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
         import services.settings as settings_mod
-        importlib.reload(settings_mod)
 
-        assert settings_mod._INJECTED_KEYS == {}
-        assert settings_mod.is_injected_mode() is False
+        assert settings_mod.parse_injected_keys("") == {}
 
 
 # ===================================================================
@@ -212,7 +204,7 @@ class TestMergePrecedence:
         })
 
         injected = {"OPENAI_API_KEY": "injected-key-wins"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -234,7 +226,7 @@ class TestMergePrecedence:
         })
 
         injected = {"ANTHROPIC_API_KEY": "injected-anthropic-key"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -257,7 +249,7 @@ class TestMergePrecedence:
         })
 
         injected = {"OPENAI_API_KEY": "injected-key"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -276,7 +268,7 @@ class TestMissingFileFallback:
         returns the injected key."""
         missing = tmp_path / "nonexistent" / "settings.json"
         injected = {"OPENAI_API_KEY": "sk-" + "injected-without-file"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
 
@@ -287,7 +279,7 @@ class TestMissingFileFallback:
         missing — no file read required."""
         missing = tmp_path / "no" / "such" / "settings.json"
         injected = {"FAL_KEY": "fal-" + "injected-no-file"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
 
@@ -300,7 +292,7 @@ class TestMissingFileFallback:
         """get_api_key with a list of names finds the injected key."""
         missing = tmp_path / "missing.json"
         injected = {"FAL_KEY": "fal-" + "injected-list-fallback"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
 
@@ -324,7 +316,7 @@ class TestBrowserModeFallback:
             "apiKeys": {"OPENAI_API_KEY": "sk-" + "from-file-browser-mode"},
         })
 
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=None, settings_path=settings_file
         )
 
@@ -333,7 +325,7 @@ class TestBrowserModeFallback:
 
     def test_browser_mode_no_injected_keys_in_store(self, monkeypatch):
         """In browser mode, _INJECTED_KEYS is empty."""
-        settings_mod = _reload_settings(monkeypatch, injected=None)
+        settings_mod = _set_up_settings(monkeypatch, injected=None)
         assert settings_mod._INJECTED_KEYS == {}
 
     def test_browser_mode_load_settings_preserves_file_apikeys(self, monkeypatch, tmp_path):
@@ -344,7 +336,7 @@ class TestBrowserModeFallback:
             "executionMode": "auto",
         })
 
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=None, settings_path=settings_file
         )
 
@@ -366,7 +358,7 @@ class TestSaveSettingsStripsInjected:
         _write_settings(settings_file, {"apiKeys": {}, "outputPath": "/old"})
 
         injected = {"OPENAI_API_KEY": "sk-" + "should-not-be-persisted"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -388,7 +380,7 @@ class TestSaveSettingsStripsInjected:
             "apiKeys": {"OPENAI_API_KEY": "sk-" + "browser-key"},
         })
 
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=None, settings_path=settings_file
         )
 
@@ -413,7 +405,7 @@ class TestUpdateInjectedKeys:
         _write_settings(settings_file, {"apiKeys": {}})
 
         injected = {"OPENAI_API_KEY": "sk-" + "initial"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -428,7 +420,7 @@ class TestUpdateInjectedKeys:
         _write_settings(settings_file, {"apiKeys": {}})
 
         injected = {"OPENAI_API_KEY": "sk-" + "old"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -443,7 +435,7 @@ class TestUpdateInjectedKeys:
         _write_settings(settings_file, {"apiKeys": {}})
 
         injected = {"OPENAI_API_KEY": "sk-" + "to-be-removed"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -660,8 +652,6 @@ class TestPutSettingsDesktopGuard:
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {"apiKeys": {}, "outputPath": "/old"})
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
-        importlib.reload(settings_mod)
-        importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {
             "OPENAI_API_KEY": "sk-" + "injected-original",
@@ -706,8 +696,6 @@ class TestPutSettingsDesktopGuard:
             "executionMode": "manual",
         })
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
-        importlib.reload(settings_mod)
-        importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "injected"}
         monkeypatch.setattr(
@@ -743,8 +731,6 @@ class TestPutSettingsDesktopGuard:
             "outputPath": "/old",
         })
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
-        importlib.reload(settings_mod)
-        importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "must-not-persist"}
         monkeypatch.setattr(
@@ -777,8 +763,6 @@ class TestBrowserModeEndpoints:
             "executionMode": "manual",
         })
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
-        importlib.reload(settings_mod)
-        importlib.reload(main_mod)
 
         # Ensure no injected keys
         settings_mod._INJECTED_KEYS = {}
@@ -809,8 +793,6 @@ class TestBrowserModeEndpoints:
             "executionMode": "manual",
         })
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
-        importlib.reload(settings_mod)
-        importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {}
         monkeypatch.setattr(
@@ -847,7 +829,7 @@ class TestLogRedaction:
         })
 
         injected = {"FAL_KEY": "fal-" + "secret-never-log-5678"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
@@ -873,7 +855,7 @@ class TestLogRedaction:
         })
 
         injected = {"FAL_KEY": "fal-" + "stdout-secret-1111"}
-        settings_mod = _reload_settings(
+        settings_mod = _set_up_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 

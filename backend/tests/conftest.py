@@ -22,6 +22,7 @@ from __future__ import annotations
 import atexit
 import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Mapping
 import uuid
@@ -114,20 +115,16 @@ def pytest_runtest_setup(item):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):
-    """Fail the test that leaves services.settings pointing anywhere but the
-    sandbox file above, checked after all of its fixtures (and monkeypatch)
-    have been undone. Tests that reload the module (test_settings_path.py,
-    test_credential_injection.py) once restored it by removing the variable,
-    which falls back to the repo's real settings.json: every later test then
-    read the person's keys and wrote their settings."""
+    """Fail the test that leaves NEBULA_SETTINGS_PATH, which services.settings
+    reads at each call (settings_path), pointing anywhere but the sandbox
+    file above, checked after all of its fixtures (and monkeypatch) have been
+    undone. Removed, the path falls back to the repo's real settings.json:
+    every later test would read the person's keys and write their settings."""
     yield
-    import sys
-
-    module = sys.modules.get("services.settings")
-    if module is not None and Path(module.SETTINGS_PATH) != _TEST_SETTINGS_PATH:
+    if os.environ.get("NEBULA_SETTINGS_PATH") != str(_TEST_SETTINGS_PATH):
         raise AssertionError(
-            f"services.settings.SETTINGS_PATH is {module.SETTINGS_PATH} after {item.nodeid}; "
-            f"restore it to {_TEST_SETTINGS_PATH} (reload with NEBULA_SETTINGS_PATH set)"
+            f"NEBULA_SETTINGS_PATH is {os.environ.get('NEBULA_SETTINGS_PATH')!r} after {item.nodeid}; "
+            f"restore it to {_TEST_SETTINGS_PATH} (set it with monkeypatch.setenv)"
         )
 
 
@@ -143,6 +140,27 @@ def empty_model_cache():
     model_cache.clear()
     yield
     model_cache.clear()
+
+
+def _forget_canvas_sockets() -> None:
+    manager = getattr(sys.modules.get("main"), "manager", None)
+    if manager is not None:
+        manager.active_connections.clear()
+        manager.browser_connections.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_canvas_sockets_between_tests():
+    """Each test starts and ends with no canvas or agent socket registered
+    (PR #203 round 13). main.manager lives for the process: a socket one test
+    left registered made `manager.canvas_open()` true for the next, so
+    test_cli_apply's arrange line said a canvas was open only in CI's part 1.
+    The /ws handler now unregisters however a socket ends; this keeps any
+    other leak from reaching another test. Reads main only once a test has
+    imported it."""
+    _forget_canvas_sockets()
+    yield
+    _forget_canvas_sockets()
 
 
 @pytest.fixture(autouse=True)
@@ -232,6 +250,20 @@ CANVAS_PARAMS_VERSION = {"X-Nebula-Params-Version": str(PARAMS_VERSION)}
 PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN, **CANVAS_PARAMS_VERSION}
 FORGED_ORIGIN = {"Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}
 PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
+
+
+def wait_for_promote(socket) -> None:
+    """Wait for a hello's answer before acting on the socket. The server
+    promotes a socket only when its receive loop reads the hello, so a write
+    made straight after send_json can broadcast to a socket that isn't the
+    person's yet (round 14's CI). The proposalSync is the observable promote:
+    it is sent on a verified hello and nowhere else (main.websocket_endpoint)."""
+    for _ in range(80):
+        kind = socket.receive_json().get("type")
+        if kind == "proposalSync":
+            return
+        assert kind != "personRequired", "the hello was refused"
+    raise AssertionError("no proposalSync after the hello")
 
 
 class TabHeaders(Mapping):

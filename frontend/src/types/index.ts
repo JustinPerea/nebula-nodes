@@ -74,6 +74,8 @@ export type APIProvider =
   | 'worldlabs'
   | 'nous'
   | 'typesafe'
+  | 'speridlabs'
+  | 'huggingface'
   | 'utility';
 
 export interface PortDefinition {
@@ -215,7 +217,8 @@ export interface ModelNodeDefinition {
 }
 
 /** Which client runs a route (backend execution/route_clients.py). */
-export type RouteHandler = 'bfl' | 'fal' | 'replicate-model' | 'openrouter-images' | 'openrouter-videos' | 'krea';
+export type RouteHandler = 'bfl' | 'fal' | 'replicate-model' | 'openrouter-images' | 'openrouter-videos' | 'krea'
+  | 'hf-space';
 
 /** One provider route of a route-table node (ModelNodeDefinition.routes;
  *  backend services/node_route.py RouteSpec has the field notes). */
@@ -229,6 +232,23 @@ export interface RouteSpec {
   maker?: true;
   /** Any of these keys runs it, tried in order. */
   keys: string[];
+  /** A keyless route (a maker's free Hugging Face Space): it runs with no
+   *  key, and uses the first of these that is set (the person's own quota).
+   *  `keys` is then [], and these stay out of `envKeyName`. */
+  optionalKeys?: string[];
+  /** A keyed route whose run can't start without its key, in the person's
+   *  words ("You can run X after you add your Hugging Face token in
+   *  Settings."; Idol's in PR #203 rounds 4 to 6). Without the key, Run is disabled with this as its reason,
+   *  the engine and the router refuse agent and CLI runs with it before
+   *  anything is sent. */
+  missingKeyLine?: string;
+  /** A keyless route whose run, with one of its `optionalKeys` set, can bill
+   *  the key owner's own account past a free allowance (Idol: a Hugging Face
+   *  PRO, Team or Enterprise account's prepaid credits). Its price stays the
+   *  sourced one; the chips say "may cost", and an agent must propose such a
+   *  run (lib/directRoute.ts keyBilling, backend node_route.key_billing and
+   *  agent_spend.may_bill_nodes). */
+  mayBillWithKey?: true;
   /** A Krea route that can bill the signed-in plan: 'optional' when
    *  `_kreaAuth` is 'mcp', 'only' always. */
   plan?: 'optional' | 'only';
@@ -810,6 +830,10 @@ export interface NodeData {
    *  the ErrorEvent's `provider`): the card's general line says "Details
    *  shows what {Provider} said." Never read from `error`'s text. */
   errorProvider?: string;
+  /** Nebula refused the run before it started (the pre-call check): the
+   *  card's heading is "Nebula couldn’t start the run." (GM, PR #203 r32),
+   *  the Agent log's. Card-only (node_errors.card), like errorPerson. */
+  errorNotStarted?: boolean;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

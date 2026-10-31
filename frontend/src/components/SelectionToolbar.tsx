@@ -24,6 +24,7 @@ import {
 } from '../lib/canvasSelection';
 import { failureMessage } from '../lib/errorCopy';
 import { useCanvasLock } from '../lib/canvasLock';
+import { runKeyLockLine, withKeyLock } from '../lib/runKeyLock';
 
 
 export function SelectionToolbar() {
@@ -67,6 +68,14 @@ export function SelectionToolbar() {
   // several run as an explicit cluster.
   const pricing = usePricingStore((s) => s.table);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
+  // A node that can't run without its key (a keyed route's missing key), the
+  // selection's or one feeding it: Run is locked with its line as the reason
+  // (GM, PR #203 r4), aria-disabled so it keeps its focus and tooltip, and the
+  // scope line it reads out is that line (r6 item 3).
+  const keyLock = useMemo(() => runKeyLockLine(nodes, edges ?? [],
+    ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids },
+    { loaded: settingsLoaded, apiKeys }), [nodes, edges, ids, settingsLoaded, apiKeys]);
   const sizes = useInputSizeStore((s) => s.sizes);
   const requestSizes = useInputSizeStore((s) => s.request);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
@@ -76,6 +85,11 @@ export function SelectionToolbar() {
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
+  // The missing key first, then the run lock's line (run, following,
+  // offline): withKeyLock, one order for every Run (GM, PR #203 r11 item 3).
+  const runProps = withKeyLock(runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` }),
+    keyLock, runScopeId);
+  const runKeyLocked = runProps['data-key-locked'] !== undefined;
   // "Ask agent" focuses the chat box once the panel has opened. A toolbar
   // that unmounts first (the selection cleared) cancels that focus.
   const focusTimer = useRef<number | null>(null);
@@ -156,8 +170,8 @@ export function SelectionToolbar() {
       <button
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"
-        onClick={runSelection}
-        {...runLocked(isExecuting || runStarting, { title: `Run selected nodes. ${describeRunScope(runScope)}` })}
+        onClick={() => { if (runKeyLocked) return; runSelection(); }}
+        {...runProps}
         aria-label="Run selected nodes"
         aria-describedby={runScopeId}
       >
@@ -167,7 +181,7 @@ export function SelectionToolbar() {
           <span className="selection-toolbar__paid" aria-hidden="true" title={runChipTitle(runScope)}>{runChip}</span>
         )}
       </button>
-      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
+      <span id={runScopeId} className="toolbar__sr-only">{runKeyLocked ? keyLock : describeRunScope(runScope)}</span>
       {/* One node selected: it portals its own actions (Next step, Edit video,
           Settings) here. Keyed by node so a new selection gets a fresh slot. */}
       {ids.length === 1 && (

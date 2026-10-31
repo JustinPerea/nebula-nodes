@@ -155,6 +155,8 @@ def test_a_refused_run_bubble_names_the_node_in_quotes(logged):
     node = graph.add_node("gpt-image-2-5-generate", {})
     body = client.post("/api/graph/run", json={"targetNodeId": node}, headers=AGENT).json()
     assert body["status"] == "failed"
-    [said] = [say for say in _says(sent) if "can't run" in str(say)]
-    assert said.startswith("“GPT Image 2.5” can't run.")
-    assert any(line.startswith("Run stopped before it started. GPT Image 2.5 can't run.") for line in lines)
+    [event] = [event for event in _presence_events(sent) if "can’t run" in str(event.get("say"))]
+    assert event["say"].startswith("“GPT Image 2.5” can’t run.")
+    # The Agent log's line rides on the cursor's event, once (GM, PR #203 r30 item 1).
+    assert event["log"].startswith("Nebula couldn’t start the run. “GPT Image 2.5” needs")
+    assert not any(line.startswith("Nebula couldn’t start the run.") for line in lines)

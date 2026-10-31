@@ -327,6 +327,32 @@ body.app-slava-restraint {
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
+  /* The proposal bar's layer. GM r10 (PR #203 round 6), the rule: anything
+   * the person opened draws above the proposal bar, and lasting chrome they
+   * didn't open draws under it. A new floating surface takes its side from
+   * that, without a new question:
+   * - above: every panel (10 and up: the Inspector, the library, the chat,
+   *   Run History, the Agent log once expanded), the Updates list (46: it
+   *   draws over the bar and keeps its room, GM r13 item 2), Settings (30),
+   *   context menus and popovers
+   *   (40, the provider switcher's 60, Final export's 100), the chat model
+   *   picker (1100), the drag layer (10000) and every modal (60 and up: the
+   *   palette, the 3D viewers, the dialogs), whose scrim dims the bar with
+   *   the canvas (GM r7). Nothing stops above the bar's top edge to make
+   *   room (GM r10: Settings keeps its full height at 1280; it is where the
+   *   token that unlocks Accept goes).
+   * - under: --sr-layer-ambient, the bars that are always there: the bottom
+   *   bar and the canvas tabs, the following bar included while a proposal
+   *   shows and no modal is open (below, after the tabs' own rules), and the
+   *   Agent log while collapsed (its default chip) with its "hidden" notice.
+   *   A surface takes its side from its state, not its name (GM r13 item 3:
+   *   the Agent log expanded is opened, collapsed it is chrome). The
+   *   two bars also never meet: the notice stack stops below the top bars
+   *   (noticeRegion.css, GM r9 item 2).
+   * Notices stay above all of it (--sr-layer-notice, GM r25).
+   * tests/proposalBarStacking.test.ts pins both sides. */
+  --sr-layer-proposal: calc(var(--sr-layer-panel) - 1);
+  --sr-layer-ambient: calc(var(--sr-layer-proposal) - 1);
   /* GM r25 (PR #200 fix round 16): and above every dialog's backdrop (the
    * World viewer's is 20000), so a notice is always usable. Before: */
   /* The app's notices (NoticeRegion): above every panel, the Agent log, the
@@ -719,14 +745,14 @@ body.app-slava-restraint .connection-popup__category-label--button {
     color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .context-menu__item:hover:not(:disabled),
+body.app-slava-restraint .context-menu__item:hover:not(:disabled, [aria-disabled='true']),
 body.app-slava-restraint .connection-popup__item:hover:not(:disabled),
 body.app-slava-restraint .connection-popup__category-label--button:hover {
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .context-menu__item:disabled {
+body.app-slava-restraint .context-menu__item:is(:disabled, [aria-disabled='true']) {
   opacity: var(--sr-disabled-opacity-strong);
 }
 
@@ -2257,7 +2283,8 @@ body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled) {
  * Toolbar — translucent node-radius surface (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .toolbar {
-  z-index: var(--sr-layer-panel);
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  z-index: var(--sr-layer-ambient);
   bottom: var(--sr-space-6);
   background: var(--sr-glass-raised);
   backdrop-filter: var(--sr-blur-panel);
@@ -2537,8 +2564,12 @@ body.app-slava-restraint .panel-launcher:active {
  * small today (time/source/message), so Slava expresses status through a
  * subtle signal strip, source dots, and restrained mono metadata.
  * ───────────────────────────────────────────────────────────────────── */
+/* Its layer follows its state (GM, PR #203 r13 item 3; the rule beside
+ * --sr-layer-proposal): collapsed, the default chip, it is lasting chrome
+ * and sits under the proposal bar; expanded, the person opened it, so it
+ * draws over the bar, and drops back under when collapsed. */
 body.app-slava-restraint .agent-log {
-  z-index: var(--sr-layer-agent-log);
+  z-index: var(--sr-layer-ambient);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);
@@ -2547,6 +2578,10 @@ body.app-slava-restraint .agent-log {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
   box-shadow: var(--sr-shadow-panel-sm);
+}
+
+body.app-slava-restraint .agent-log.agent-log--open {
+  z-index: var(--sr-layer-agent-log);
 }
 
 body.app-slava-restraint .agent-log__drag-row,
@@ -2583,8 +2618,10 @@ body.app-slava-restraint .agent-log__hide:focus-visible {
   color: var(--sr-ink);
 }
 
+/* The "hidden" notice is the log's chrome, not one of the notices above
+ * dialogs: ambient, under the proposal bar (GM, PR #203 r13). */
 body.app-slava-restraint .agent-log-hidden-notice {
-  z-index: var(--sr-layer-agent-log);
+  z-index: var(--sr-layer-ambient);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);
@@ -4168,7 +4205,8 @@ body.app-slava-restraint .model-node__error-details summary {
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .canvas-tabs-wrap {
   top: var(--sr-space-6);
-  z-index: var(--sr-layer-panel);
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  z-index: var(--sr-layer-ambient);
   gap: 6px;
 }
 
@@ -4178,6 +4216,15 @@ body.app-slava-restraint .canvas-tabs-wrap {
    still covered the bar). */
 body.app-slava-restraint .canvas-tabs-wrap[data-following] {
   z-index: 1002;
+}
+
+/* GM r9 item 2 and r10 (PR #203 round 6): with a proposal showing and no
+   modal open, the following bar is lasting chrome like the rest of the
+   tabs, so where it meets the proposal bar, the proposal bar (a decision
+   with a clock) is on top. A modal open (the mask painter) keeps the raise
+   above: the proposal bar is then under that modal's scrim anyway. */
+body:has(.notice-region__slot[data-notice-slot='proposal'] > :not([data-leaving])):not(:has(> .modal-portal)) .canvas-tabs-wrap[data-following] {
+  z-index: var(--sr-layer-ambient);
 }
 
 body.app-slava-restraint .canvas-tabs__wordmark {

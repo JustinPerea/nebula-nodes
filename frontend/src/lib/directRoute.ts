@@ -34,6 +34,9 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   BYTEPLUS_API_KEY: 'bytedance',
   // Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
   BFL_API_KEY: 'bfl',
+  // A Hugging Face access token, for a maker's Space route (handler
+  // hf-space): a keyed one needs it; a keyless one (Idol's) lists it in optionalKeys.
+  HF_TOKEN: 'huggingface',
 };
 
 /** How a card line names each key Settings stores: the provider's own
@@ -46,17 +49,18 @@ export const KEY_NAMES: Readonly<Record<string, readonly [string, string]>> = {
   ELEVENLABS_API_KEY: ['ElevenLabs', 'API key'],
   FAL_KEY: ['fal.ai', 'API key'],
   GOOGLE_API_KEY: ['Gemini', 'API key'],
-  GOOGLE_VERTEX_CREDENTIALS: ['Google Vertex AI', 'credentials'],
+  GOOGLE_VERTEX_CREDENTIALS: ['Vertex AI', 'service account key'],
+  HF_TOKEN: ['Hugging Face', 'token'],
   HIGGSFIELD_API_KEY: ['Higgsfield', 'API key'],
   IDEOGRAM_API_KEY: ['Ideogram', 'API key'],
-  KREA_API_TOKEN: ['Krea', 'API token'],
+  KREA_API_TOKEN: ['Krea', 'API key'],
   KREA_USAGE_KEY: ['Krea', 'usage key'],
   MESHY_API_KEY: ['Meshy', 'API key'],
   MINIMAX_API_KEY: ['MiniMax', 'API key'],
   OPENAI_API_KEY: ['OpenAI', 'API key'],
   OPENROUTER_API_KEY: ['OpenRouter', 'API key'],
   QUIVER_API_KEY: ['QuiverAI', 'API key'],
-  REPLICATE_API_TOKEN: ['Replicate', 'API token'],
+  REPLICATE_API_TOKEN: ['Replicate', 'token'],
   RUNWAY_API_KEY: ['Runway', 'API key'],
   TYPESAFE_API_KEY: ['TypeSafe', 'API key'],
   WORLDLABS_API_KEY: ['World Labs', 'API key'],
@@ -72,6 +76,7 @@ export const PROVIDER_LABELS: Readonly<Record<APIProvider, string>> = {
   recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
   higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
   worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
+  speridlabs: 'Speridlabs', huggingface: 'Hugging Face',
 };
 
 /** The params that decide who bills a run: the provider choice and the Krea
@@ -145,7 +150,7 @@ export interface NodeRoute {
   missing?: string[];
 }
 
-type ApiKeys = Readonly<Record<string, string | undefined>>;
+export type ApiKeys = Readonly<Record<string, string | undefined>>;
 
 function keyList(value: unknown): string[] {
   return (Array.isArray(value) ? value : [value]).filter((key): key is string => typeof key === 'string' && Boolean(key));
@@ -175,9 +180,34 @@ export function fallbackProvider(definition: Pick<ModelNodeDefinition, 'envKeyNa
   return key ? KEY_PROVIDERS[key] : undefined;
 }
 
+/** What a pasted key can carry at its ends that is no part of it:
+ * whitespace, a byte-order mark, zero-width spaces and joiners. The same
+ * code points as backend node_route.KEY_EDGE (JS trim strips a BOM and Python
+ * strip doesn't; neither strips a zero-width space). Review 7 of PR #203, NIT-4. */
+const KEY_EDGE = new Set('\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007'
+  + '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff');
+
+/** A key as Nebula reads it: its text without KEY_EDGE characters at either
+ * end, '' when nothing is left (or it isn't text). A key is set when this
+ * is non-empty, for the agent gate, the run's handler and Settings alike
+ * (backend node_route.key_text is the twin; both read
+ * backend/tests/fixtures/key_text_cases.json). */
+export function keyText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  let start = 0;
+  let end = value.length;
+  while (start < end && KEY_EDGE.has(value[start])) start += 1;
+  while (end > start && KEY_EDGE.has(value[end - 1])) end -= 1;
+  return value.slice(start, end);
+}
+
+/** Whether `key` is set in `apiKeys` (keyText non-empty). */
+export function isKeySet(apiKeys: ApiKeys, key: string): boolean {
+  return keyText(apiKeys[key]) !== '';
+}
+
 function isSet(apiKeys: ApiKeys, key: string): boolean {
-  const value = apiKeys[key];
-  return typeof value === 'string' && Boolean(value.trim());
+  return isKeySet(apiKeys, key);
 }
 
 /** The first direct key that is configured, if any. */
@@ -762,6 +792,23 @@ function setKeys(route: RouteSpec, apiKeys: ApiKeys): string[] {
   return keyList(route.keys).filter((key) => isSet(apiKeys, key));
 }
 
+/** A route that runs without any key (`optionalKeys` declared;
+ * node_route.is_keyless). */
+export function isKeylessRoute(route: RouteSpec): boolean {
+  return Array.isArray(route.optionalKeys);
+}
+
+/** The route's key condition holds (node_route._can_run_keyed). */
+function canRunKeyed(route: RouteSpec, apiKeys: ApiKeys): boolean {
+  return isKeylessRoute(route) || setKeys(route, apiKeys).length > 0;
+}
+
+/** The key a run on this route uses, or null for a keyless route run
+ * anonymously (node_route.route_key). */
+function routeKey(route: RouteSpec, apiKeys: ApiKeys): string | null {
+  return [...keyList(route.keys), ...keyList(route.optionalKeys)].find((key) => isSet(apiKeys, key)) ?? null;
+}
+
 function unionKeys(definition: RoutedDefinition): string[] {
   return [...new Set(routesOf(definition).flatMap((route) => keyList(route.keys)))];
 }
@@ -782,18 +829,18 @@ function selectFromRoutes(definition: RoutedDefinition, params: Record<string, u
     return { kind: 'plan', provider: 'krea', key: null, routeId: plan.id, block: null, missing: [] };
   }
   const keyed = (route: RouteSpec): NodeRoute => ({
-    kind: route.maker ? 'direct' : 'fallback', provider: route.provider, key: setKeys(route, apiKeys)[0],
+    kind: route.maker ? 'direct' : 'fallback', provider: route.provider, key: routeKey(route, apiKeys),
     routeId: route.id, block: null, missing: [],
   });
   if (choice !== AUTO) {
     const route = routeById(definition, choice);
     if (!route) return unset(first, null, { reason: 'unknown-provider', param: PROVIDER_PARAM, on: null, detail: choice });
-    if (!setKeys(route, apiKeys).length) return unset(route.provider, route.id, null, keyList(route.keys));
+    if (!canRunKeyed(route, apiKeys)) return unset(route.provider, route.id, null, keyList(route.keys));
     const block = routeBlock(definition, route, params);
     if (block) return unset(route.provider, route.id, block);
     return keyed(route);
   }
-  const route = routes.find((candidate) => candidate.plan !== 'only' && setKeys(candidate, apiKeys).length > 0);
+  const route = routes.find((candidate) => candidate.plan !== 'only' && canRunKeyed(candidate, apiKeys));
   if (!route) return unset(first, null, null, unionKeys(definition));
   // Auto never moves on: who bills depends on the choice and the keys.
   const block = routeBlock(definition, route, params);
@@ -822,6 +869,51 @@ export function selectRoute(
   const key = fallbackKeyNames(definition).find((candidate) => isSet(apiKeys, candidate));
   if (key) return { kind: 'fallback', provider: providerFor(key), key };
   return { kind: 'unset', provider: definition.apiProvider, key: null };
+}
+
+/**
+ * How a run on a `mayBillWithKey` route is counted (GM, PR #203 r11 item 2
+ * and r12): "mayCost" with one of its optional keys set (it may bill the
+ * person's own account past its free allowance: Idol with a Hugging Face
+ * token), "free" without one. Null for any other route or node, counted as
+ * before. Never "paid": such a route has no list price beyond its sourced
+ * $0. node_route.key_billing is the twin.
+ */
+export function keyBilling(
+  definition: ModelNodeDefinition | undefined,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): 'free' | 'mayCost' | null {
+  if (!definition || !hasRoutes(definition)) return null;
+  const route = selectRoute(definition, params, apiKeys);
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  if (!spec || spec.mayBillWithKey !== true) return null;
+  return route.key && keyList(spec.optionalKeys).includes(route.key) ? 'mayCost' : 'free';
+}
+
+/** The account a key-billing run (keyBilling not null) runs on and may
+ * bill, as every surface names it ("Hugging Face"): a Space route's host,
+ * else its provider's PROVIDER_LABELS name. Null for any other node.
+ * node_route.key_billing_account is the twin, from the same table
+ * (backend/tests/fixtures/key_billing_cases.json pins both; review 8 of PR
+ * #203, LOW-3). */
+export function keyBillingAccount(
+  definition: ModelNodeDefinition | undefined,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): string | null {
+  if (!definition || keyBilling(definition, params, apiKeys) === null) return null;
+  const route = selectRoute(definition, params, apiKeys);
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  if (spec?.handler === 'hf-space') return PROVIDER_LABELS.huggingface;
+  return providerLabel(route.provider);
+}
+
+/** A key-billing node's cost label, by the ghost-card convention ("free ·
+ * runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
+ * PR #203 r15 item 1). node_route.key_billing_label is the twin. */
+export function keyBillingLabel(costClass: 'free' | 'mayCost', account: string): string {
+  return `${costClass === 'mayCost' ? 'may cost' : 'free'} · ${account}`;
 }
 
 /** The key under model_pricing.json `routes` that prices this route
@@ -924,7 +1016,7 @@ export function nodeTitle(definition: (RoutedDefinition & Pick<ModelNodeDefiniti
   return isDefaultTitle(definition, label) ? canvasTitle(definition) : label!;
 }
 
-function orList(items: string[]): string {
+export function orList(items: string[]): string {
   return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }
 
@@ -944,7 +1036,7 @@ function why(route: RouteSpec, block: DirectBlock): string {
 }
 
 // The card's words for a route stop (error copy round 3f, GM: "A switch reads
-// "{Node} can't run on {Provider} with “{Label}” on." Never "Draft true".
+// "{Node} can’t run on {Provider} with “{Label}” on." Never "Draft true".
 // Listed values use the option's label as the field shows it, never its
 // value."): a setting by its label in quotes, a value by its option's label
 // less any note in parentheses, no parentheses, "seconds" for "s".
@@ -993,18 +1085,19 @@ export function blockedSetting(definition: RoutedDefinition, block: Partial<Dire
   return `“${spec?.label || param}”`;
 }
 
-/** How a `hidden` stop is fixed without a switch: the setting back to its
- * default, or cleared when it has none (node_route._hidden_fix_person). */
+/** How a `hidden` stop is fixed without a switch, as the action's first
+ * clause: the setting back to its default, or cleared when it has none
+ * (node_route._hidden_fix_person). */
 function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
   const spec = paramDef(definition, param);
   const label = `“${spec?.label || param}”`;
   const fallback = spec?.default;
-  if (fallback === undefined || fallback === null) return `Clear ${label}, or switch provider.`;
-  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}, or switch provider.`;
-  return `Set ${label} back to ${plain(optionLabelOf(spec, fallback))}, or switch provider.`;
+  if (fallback === undefined || fallback === null) return `Clear ${label}`;
+  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}`;
+  return `Set ${label} back to ${plain(optionLabelOf(spec, fallback))}`;
 }
 
-/** Why a route stops, as the clause after "{Node} can't run on {Provider}"
+/** Why a route stops, as the clause after "{Node} can’t run on {Provider}"
  * (node_route._why_person). */
 function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
   const param = block.param ?? '';
@@ -1028,7 +1121,7 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   }
   if (block.reason === 'blocked') return ` with ${personSetting(spec, param, params[param])}`;
   if (block.reason === 'requires') return ` without ${label}`;
-  if (block.reason === 'size') return `, because it can't render this ${label} exactly`;
+  if (block.reason === 'size') return `, because it can’t render this ${label} exactly`;
   if (block.reason === 'retired') return `, because the maker retired this model on ${block.on}`;
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
@@ -1038,26 +1131,55 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   return `, because ${personWords(why(route, block))}`;
 }
 
-/** The next step for a route stop (node_route._fix_person). */
-function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
+/** What the person can change where the node is, for a route stop, as the
+ * action's first clause (node_route._fix_person; routeAction names who else
+ * can take the run). */
+/** What the person can change where the node is, as a route line's first
+ * action, and how many options it lists (person_line.Fix): a fix that lists
+ * two or more holds its own "or" (GM, PR #203 r32 item 1). */
+export interface FixClause {
+  text: string;
+  options: number;
+}
+
+function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): FixClause {
   const param = block.param ?? '';
   const spec = param ? paramDef(definition, param) : undefined;
-  if (block.reason === 'hidden') return hiddenFixSentence(definition, param);
+  const one = (text: string): FixClause => ({ text, options: 1 });
+  if (block.reason === 'hidden') return one(hiddenFixSentence(definition, param));
   const values = acceptedValues(route, block);
   const label = `“${spec?.label || param}”`;
   if (spec?.type === 'boolean' && (block.reason === 'unsupported' || block.reason === 'blocked')) {
     const on = ['true', WIRED].includes(matchValue(params[param]));
-    return `Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}, or switch provider.`;
+    return one(`Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}`);
   }
-  if (block.reason === 'blocked') return `Clear ${label}, or switch provider.`;
-  if (values.length) return `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}, or switch provider.`;
-  if (block.reason === 'ports') return 'Disconnect the extra inputs, or switch provider.';
-  if (block.reason === 'requires') return `Set ${label}, or switch provider.`;
-  return 'Change that setting, or switch provider.';
+  if (block.reason === 'blocked') return one(`Clear ${label}`);
+  if (values.length) return { text: `Pick ${orList(values.map((value) => plain(optionLabelOf(spec, value))))}`, options: values.length };
+  if (block.reason === 'ports') return one('Disconnect the extra inputs');
+  if (block.reason === 'requires') return one(`Set ${label}`);
+  return one('Change that setting');
 }
 
-/** "OpenAI API key", "ElevenLabs or Runway API key", "Google Vertex AI
- * credentials or Gemini API key"; null when a name isn't a key Settings
+/** A route line's one action sentence, with its period (GM, PR #203 r31
+ * item 3; person_line.route_action is the same): `fix`, then who can take
+ * the run, named: "… or switch to fal.ai" for providers with a key set,
+ * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
+ * whose key isn't added. Two actions take a comma between them when either
+ * holds an "or" of its own: the fix lists options (r32 item 1: "Pick A, B or
+ * C, or switch to fal.ai"), or it names two providers (GM r36 B4: "Pick 1K,
+ * or switch to fal.ai or Replicate."). Never a separate "… can take it."
+ * sentence. The card has no run-again ending; the Agent Log's comes from
+ * the backend. */
+export function routeAction(fix: FixClause | string, others: readonly string[], needsKey: readonly string[], key: string | null): string {
+  const { text, options } = typeof fix === 'string' ? { text: fix, options: 1 } : fix;
+  const comma = options > 1 || / or /.test(` ${text} `) || others.length > 1;
+  if (others.length) return `${text}${comma ? ',' : ''} or switch to ${orList([...others])}.`;
+  if (needsKey.length) return `${text}, or add ${key ? `your ${key}` : 'its key'} in Settings and switch to ${orList([...needsKey])}.`;
+  return `${text}.`;
+}
+
+/** "OpenAI API key", "ElevenLabs or Runway API key", "Vertex AI service
+ * account key or Gemini API key"; null when a name isn't a key Settings
  * stores (person_line.key_phrase). */
 export function keyPhrase(keys: readonly string[]): string | null {
   const names = keys.map((key) => (Object.hasOwn(KEY_NAMES, key) ? KEY_NAMES[key] : null));
@@ -1066,6 +1188,15 @@ export function keyPhrase(keys: readonly string[]): string | null {
   const kinds = new Set(known.map(([, kind]) => kind));
   if (kinds.size === 1) return `${orList(known.map(([provider]) => provider))} ${known[0][1]}`;
   return orList(known.map(([provider, kind]) => `${provider} ${kind}`));
+}
+
+/** "Add your Replicate token in Settings.": the one line that says which
+ * key to add, a sentence with its period (GM, PR #203 r26 item 5 and r28
+ * item 3): the model pickers and every provider switcher row take it from
+ * here. Null when a name isn't a key Settings stores. */
+export function addKeyLine(keys: readonly string[]): string | null {
+  const phrase = keyPhrase(keys);
+  return phrase ? `Add your ${phrase} in Settings.` : null;
 }
 
 /** A missing key as a pre-run line (person_line.missing_key_line). */
@@ -1089,28 +1220,47 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
  * text (node_route.route_unavailable), which names the keys.
  * `keyless` are routes that would take the run but have no key set: a
  * `hidden` stop with no alternative names them. */
+/** The route's own line for a run stopped only by a missing key
+ * (RouteSpec.missingKeyLine: a keyed route without its key), or null.
+ * Auto with no key set names no route: then every route must have one.
+ * node_route.missing_key_line_for is the same. */
+export function routeMissingKeyLine(definition: ModelNodeDefinition, route: NodeRoute): string | null {
+  if (!route.missing?.length || route.block) return null;
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  const candidates = spec ? [spec] : routesOf(definition).filter((candidate) => candidate.plan !== 'only');
+  const lines = candidates.map((candidate) => candidate.missingKeyLine ?? '');
+  return lines.length && lines.every(Boolean) ? lines[0] : null;
+}
+
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
   params: Record<string, unknown> = {}): string {
-  const name = definition.displayName || 'This node';
+  // Quoted, as the bar and the Agent log quote every name (GM, PR #203 r32;
+  // node_route.card_subject).
+  const name = definition.displayName ? `“${definition.displayName}”` : 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
-  const also = others.length ? ` ${orList(others)} can take it.`
-    : keylessLabels.length ? ` ${orList(keylessLabels)} can take it. Add its key in Settings.` : '';
+  // GM, PR #203 r29 item 2: the key by its name, never "its key" (it read as
+  // the node's); r31 item 3: who can take the run is named in the action.
+  const keylessPhrase = keyPhrase(keyless.flatMap((alt) => keyList(routeById(definition, alt)?.keys)));
+  const action = (fix: FixClause | string) => routeAction(fix, others, keylessLabels, keylessPhrase);
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
-    return `${name} is set to a provider it doesn't have. Choose one in the node's provider switcher.`;
+    // GM, PR #203 r29 item 2 (node_route NOT_READY_PREDICATES "unknown_provider").
+    return `${name} is set to a provider that isn’t in its list. Choose one in its provider switcher.`;
   }
   if (block && spec) {
-    const fix = fixPerson(definition, spec, block, params);
-    return `${name} can't run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. ${fix}${also}`;
+    return `${name} can’t run on ${providerLabel(spec.provider)}${whyPerson(definition, spec, block, params)}. `
+      + action(fixPerson(definition, spec, block, params));
   }
   const missing = route.missing ?? [];
+  // The route's own words (Idol's token), the backend's too.
+  const own = routeMissingKeyLine(definition, route);
+  if (own) return own;
   if (spec) {
     const phrase = missing.length ? keyPhrase(missing) : null;
     const needed = phrase ? `your ${phrase}` : 'a provider key';
-    return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. `
-      + `Add it in Settings, or choose another provider.${also}`;
+    return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. ${action('Add it in Settings')}`;
   }
   return missingKeyLine(missing);
 }
@@ -1146,14 +1296,11 @@ export function routeUnavailable(
   const values = params ?? {};
   const route = selectRoute(definition, values, apiKeys);
   if (route.kind !== 'unset') return null;
-  const alternatives = routesOf(definition)
-    .filter((candidate) => candidate.id !== route.routeId && candidate.plan !== 'only'
-      && setKeys(candidate, apiKeys).length > 0 && routeBlock(definition, candidate, values) === null)
-    .map((candidate) => candidate.id);
+  const alternatives = routesThatCanTake(definition, values, apiKeys, route.routeId ?? null);
   const hidden = route.block?.reason === 'hidden';
   const honoredBy = hidden ? route.block?.on : null;
   const honoredSpec = honoredBy ? routeById(definition, honoredBy) : undefined;
-  const keyless = hidden && !alternatives.length && honoredBy && honoredSpec && !setKeys(honoredSpec, apiKeys).length
+  const keyless = hidden && !alternatives.length && honoredBy && honoredSpec && !canRunKeyed(honoredSpec, apiKeys)
     ? [honoredBy] : [];
   return {
     routeId: route.routeId ?? null,
@@ -1163,6 +1310,17 @@ export function routeUnavailable(
     fixes: hidden ? [hiddenFix(definition, route.block?.param ?? '')] : [],
     message: routeUnavailableMessage(definition, route, alternatives, keyless, values),
   };
+}
+
+/** The routes other than `except` with a key set that take these
+ * (routed) params as they are: who a line can name as able to take the run
+ * (the one-click switches; Krea's sign-in line, GM, PR #203 r32 item 4). */
+export function routesThatCanTake(definition: ModelNodeDefinition, params: Record<string, unknown>, apiKeys: ApiKeys,
+  except: string | null): string[] {
+  return routesOf(definition)
+    .filter((candidate) => candidate.id !== except && candidate.plan !== 'only'
+      && canRunKeyed(candidate, apiKeys) && routeBlock(definition, candidate, params) === null)
+    .map((candidate) => candidate.id);
 }
 
 /** `param` as one route offers it (node_route._narrowed): an enum's options

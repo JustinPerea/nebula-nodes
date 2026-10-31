@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import type { Edge, Node } from '@xyflow/react';
+import type { NodeData } from '../types';
 import {
   wsClient,
   type ProposalClosedEvent,
@@ -20,6 +22,9 @@ import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 import { onPersonPromoted, personGateHeld } from '../lib/personSession';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
+import { proposalAcceptLock } from '../lib/proposalAcceptLock';
+import { runKeyLockNodeLine } from '../lib/runKeyLock';
+import { useUIStore } from './uiStore';
 
 /** How long a closed proposal's ghosts fade before they go. Matches canvasProposals.css. */
 /** The answer's code for an Accept refused because the canvas was cleared or
@@ -157,6 +162,25 @@ async function runNodes(nodeIds: string[], approvalId: string | null): Promise<v
   }
 }
 
+/**
+ * The deferred "Run now"'s key lock (GM, PR #203 r8 item 3): over what
+ * runNodes would run (one node with what feeds it, several with their
+ * ancestors), with the keys set now; the node's own line. Null when it can run.
+ */
+export function deferredRunKeyLock(
+  deferred: DeferredRun,
+  graph: { nodes: Node<NodeData>[]; edges: Edge[] },
+  settings: { loaded: boolean; apiKeys: Readonly<Record<string, string | undefined>> },
+): string | null {
+  const live = new Set(graph.nodes.map((node) => node.id));
+  const nodeIds = deferred.nodeIds.filter((nodeId) => live.has(nodeId));
+  if (nodeIds.length === 0) return null;
+  const scope = nodeIds.length === 1
+    ? { kind: 'node' as const, nodeId: nodeIds[0], direct: !deferred.approvalId }
+    : { kind: 'cluster' as const, nodeIds: withAncestors(nodeIds, graph.edges) };
+  return runKeyLockNodeLine(graph.nodes, graph.edges, scope, settings);
+}
+
 export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) => ({
   proposals: {},
   drag: {},
@@ -239,6 +263,17 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // #114): nothing is sent or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
     if (refuseEditWhileOffline()) return;
+    // GM, PR #203 r6 item 1 (review r4 LOW-2): every way to accept refuses
+    // while the run it starts needs a key that isn't set (a keyed
+    // route's missing key), in GM's Accept line, before anything is sent, so
+    // no proposal is applied with a run that can't go.
+    const graph = useGraphStore.getState();
+    const keyLock = proposalAcceptLock(entry.view, entry.values, { nodes: graph.nodes, edges: graph.edges },
+      useUIStore.getState().settingsCache);
+    if (keyLock) {
+      graph.notify(keyLock, 'info');
+      return;
+    }
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
     // Accepting is one undo step: the canvas before the proposal's nodes
     // arrive, taken before the backend's graphSync can bring them.
@@ -321,6 +356,14 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   runDeferred: async () => {
     const deferred = get().deferredRun;
     if (!deferred || useGraphStore.getState().isExecuting || useGraphStore.getState().runStarting) return;
+    // Locked while it needs a key that isn't set (GM, PR #203 r8 item 3): the
+    // notice stays, and its line says why; nothing is sent.
+    const graph = useGraphStore.getState();
+    const keyLock = deferredRunKeyLock(deferred, graph, useUIStore.getState().settingsCache);
+    if (keyLock) {
+      graph.notify(keyLock, 'info');
+      return;
+    }
     const live = new Set(useGraphStore.getState().nodes.map((node) => node.id));
     const nodeIds = deferred.nodeIds.filter((nodeId) => live.has(nodeId));
     // The next held run shows now; its Run waits for this one to finish.

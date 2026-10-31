@@ -49,6 +49,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   // Reads a failed chunk import's message to tell a lost chunk from a
   // render error; it never reaches the screen.
   'lib/lazyWithPreload.ts': { count: 1, why: 'classifies a chunk-load failure, not shown' },
+  'lib/sparkDispose.ts': { count: 1, why: "matches Spark's own worker-terminate rejection to mark it handled, not shown" },
   // isBackendUnavailableError reads a failed status check's message to tell
   // a backend that is down from other failures; the panel shows its own line.
   // `{e.message}` there is an agent-log entry's message (the backend's

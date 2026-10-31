@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useId } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId } from '../../store/storedAssetsStore';
@@ -21,6 +21,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { StructuredOutputs } from '../nodes/StructuredValuePreview';
 import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
+import { runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
@@ -164,6 +165,15 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+  // A node that can't run without its key (a keyed route's missing key), this
+  // one or one feeding it: Run is locked with its line as the reason (GM, PR
+  // #203 r4), aria-disabled so it keeps its focus and tooltip, and it reads
+  // the line out (keyLockedProps).
+  const keyLock = useMemo(() => {
+    if (!renderNodeId) return null;
+    return runKeyLockLine(nodes, edges, { kind: 'node', nodeId: renderNodeId }, settingsCache);
+  }, [renderNodeId, nodes, edges, settingsCache]);
+  const keyLockId = useId();
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
   // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
@@ -1008,7 +1018,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       )}
       {usesKreaMcp && activeNodeData.keyStatus === 'missing' && !switchable && (
         <div className="inspector__notice inspector__notice--warning" role="status">
-          Krea sign-in required. Connect or check Krea in Settings.
+          Krea sign-in required. Sign in to Krea in Settings.
         </div>
       )}
 
@@ -1207,8 +1217,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <button
             type="button"
             className="inspector__action-button"
-            {...lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting })}
-            onClick={() => executeNode(renderNode.id)}
+            // The missing key first, then canvasLock's order (run, following, offline): withKeyLock.
+            {...withKeyLock(lock.act({ title: 'Run this node and its dependencies' }, { run: runLocked || runStarting }), keyLock, keyLockId)}
+            onClick={() => { if (!keyLock) void executeNode(renderNode.id); }}
           >
             <Play
               className="inspector__action-icon"
@@ -1219,6 +1230,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
             />
             <span>Run</span>
           </button>
+          {/* The locked Run's description (toolbar__sr-only: read out, not shown). */}
+          {keyLock && <span id={keyLockId} className="toolbar__sr-only">{keyLock}</span>}
           <button
             type="button"
             className="inspector__action-button"

@@ -1,0 +1,109 @@
+{
+ "_about": "Keys as Nebula reads them (node_route.key_text, frontend directRoute keyText): each raw value and the text left, \"\" when it is not set. Both tests read this file. `storeCases`: what Settings stores for a typed key, or null when it would be refused (main._key_refusal with key_text, frontend settingsWrites storableKey): empty once trimmed, or a Hugging Face token with a character no token has.",
+ "cases": [
+  {
+   "raw": "hf_abc",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "  hf_abc\n",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "\ufeffhf_abc",
+   "text": "hf_abc"
+  },
+  {
+   "raw": "\ufeff",
+   "text": ""
+  },
+  {
+   "raw": "\u200b",
+   "text": ""
+  },
+  {
+   "raw": "\u200b\ufeff \u2060\u200c\u200d",
+   "text": ""
+  },
+  {
+   "raw": "\u00a0\u3000",
+   "text": ""
+  },
+  {
+   "raw": "\t\r\n\u2028\u2029",
+   "text": ""
+  },
+  {
+   "raw": "",
+   "text": ""
+  },
+  {
+   "raw": "hf_a\u200bbc",
+   "text": "hf_a\u200bbc"
+  },
+  {
+   "raw": "hf_\u00e9",
+   "text": "hf_\u00e9"
+  },
+  {
+   "raw": null,
+   "text": ""
+  },
+  {
+   "raw": 5,
+   "text": ""
+  }
+ ],
+ "storeCases": [
+  {
+   "key": "OPENAI_API_KEY",
+   "raw": " sk-a \n",
+   "stored": "sk-a"
+  },
+  {
+   "key": "OPENAI_API_KEY",
+   "raw": "\u200b",
+   "stored": null
+  },
+  {
+   "key": "OPENAI_API_KEY",
+   "raw": "\ufeff \u3000",
+   "stored": null
+  },
+  {
+   "key": "OPENAI_API_KEY",
+   "raw": "",
+   "stored": null
+  },
+  {
+   "key": "OPENAI_API_KEY",
+   "raw": "sk-\u00e9",
+   "stored": "sk-\u00e9"
+  },
+  {
+   "key": "HF_TOKEN",
+   "raw": "hf_abc",
+   "stored": "hf_abc"
+  },
+  {
+   "key": "HF_TOKEN",
+   "raw": "\ufeffhf_abc\n",
+   "stored": "hf_abc"
+  },
+  {
+   "key": "HF_TOKEN",
+   "raw": "hf_ab cd",
+   "stored": null
+  },
+  {
+   "key": "HF_TOKEN",
+   "raw": "hf_\u00e9",
+   "stored": null
+  },
+  {
+   "key": "HF_TOKEN",
+   "raw": "hf_a\u200bbc",
+   "stored": null
+  }
+ ]
+}

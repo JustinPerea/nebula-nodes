@@ -24,13 +24,13 @@ from PIL import Image
 from handlers.krea import (
     KREA_BASE_URL,
     KREA_STATUS_PENDING,
-    UNSET_CONNECTION_LINE,
     _api_key,
     _auth_headers,
     _cancel_krea_job,
     _json_headers,
     _raise_for_krea_response,
     _resolve_local_path,
+    unset_connection_error,
 )
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -311,8 +311,7 @@ async def handle_krea_gateway(
     model = _model(node.definition_id)
     auth_mode = node.params.get("_kreaAuth", "api-token")
     if auth_mode not in {"api-token", "mcp"}:
-        raise with_person_line(ValueError("Unknown Krea connection; choose API token or Krea account"),
-                               UNSET_CONNECTION_LINE)
+        raise unset_connection_error()
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     body = await _request_body(node, inputs, model)
     return await run_gateway(node, model, body, auth_mode, api_key, emit)

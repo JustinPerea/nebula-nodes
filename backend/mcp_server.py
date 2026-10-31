@@ -681,7 +681,10 @@ def wait_for_canvas_change(
     or look_at_canvas `events.journal`): if Nebula restarted in between,
     the result has `reset` instead of reading the new journal from an old
     cursor. Projects made, renamed, deleted or restored are `project.*`
-    events; a held paid start is `provider.hold`.
+    events; a held paid start is `provider.hold`; settings.json put back
+    at start from Nebula's copy, after a save cut short, is
+    `settings.restored` (its `summary` says where the replaced file is
+    kept, for the person: no agent can read it).
     `kinds` filters by group or exact kind, e.g. ["node", "run.failed"];
     ["board"] returns on any moodboard write. `board.fields` is a change to
     a board's own fields (Direction, Avoid, notes, strength...): its
@@ -728,7 +731,18 @@ def _with_identity_note(response: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
+def _cost_classes_doc(fn: Any) -> Any:
+    """Write the cost classes into a tool's description from the one table
+    (model_pricing.CLASS_ENTRIES; review 10 of PR #203, LOW-2), before the
+    tool is registered, so the two can't drift."""
+    from services.model_pricing import class_entries_doc
+
+    fn.__doc__ = (fn.__doc__ or "").replace("<<COST_CLASSES>>", class_entries_doc())
+    return fn
+
+
 @_tool(annotations=_EDIT)
+@_cost_classes_doc
 def propose_change(
     note: str,
     nodes: list[dict] | None = None,
@@ -770,12 +784,18 @@ def propose_change(
     A proposal can't move, arrange or remove nodes or connections; edit_canvas
     and remove_from_canvas do that directly.
 
-    Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
-    "free" (run locally) or "paid · <provider>" (the provider the run would
-    go through with the keys set, as its price is; a Krea copy on its
-    maker's key names both: "paid · Grok Imagine 2.0 via xAI"), and `cost.estimate` sums
-    list prices in USD where Nebula has them (null when none do; `open` when
-    some paid node has none). `cost.notReady` lists the run's nodes that
+    Returns {"proposal": {...}} with `id`, `status`, and `cost`. Each run
+    node in `cost.nodes` has a `kind`, its cost class, and a `label`:
+<<COST_CLASSES>>
+    A provider is the one the run would go through with the keys set, as its
+    price is; a Krea copy on its maker's key names both: "paid · Grok Imagine
+    2.0 via xAI". Idol is `mayCost` with the person's Hugging Face token set
+    and `free` without; that is read with the keys set when you look: a token
+    added or removed after you proposed changes it in get_proposal and
+    list_proposals, on each node and in the run's counts. Read a `kind` or a
+    `reason` kind you don't know as paid with no listed price.
+    `cost.estimate` sums list prices in USD where Nebula has them (null when
+    none do; `open` when some paid node has none). `cost.notReady` lists the run's nodes that
     can't run here as set up (no key, no Krea sign-in), each with `missing`
     in find_nodes' words (`person` beside it is the canvas's line; read
     `missing`), and `warning` says so in a sentence: if the person
@@ -1119,8 +1139,12 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     its input file's size, e.g. SeedVR2 Upscale, or null when Nebula has no
     list price). "free" is at the node's defaults: a
     row with `needsKeyFor` (the Video QC nodes) calls a provider in another
-    mode, with no list price. With ready_only=false, nodes that can't run here
-    are included with `missing` saying what to set up.
+    mode, with no list price. A row that runs free on someone's own allowance
+    has `billing`, saying who can still be billed past it (Idol on a
+    Hugging Face PRO, Team or Enterprise account), as the key is set now: it
+    starts "Free here" without it and "May cost here" with it, and then you
+    propose the run (propose_change) instead of running it. With ready_only=false,
+    nodes that can't run here are included with `missing` saying what to set up.
     """
     # `nebula nodes` (cli/commands/nodes.py) reads the same route: keep them twins.
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
@@ -1149,7 +1173,17 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     here) and, per route, `params` exactly as the card shows them on that
     provider (values cut, ranges narrowed, `onlyWhen`; a setting it doesn't
     offer is absent and named in `hides`), `price`, `priceUnconfirmed`,
-    `note` and `block`. A route never receives a setting it doesn't offer;
+    `note` and `block`. A keyless route (`keys` []) has `optionalKeys`
+    ([{key, set}]): it runs without them, and one that is set is used, so the
+    run is on that person's own account and quota. A maker's Hugging Face
+    Space route (Idol's, keyless with an optional HF_TOKEN) has `billing`:
+    without the token it runs free on Hugging Face's shared GPUs; with it, on
+    the person's own ZeroGPU allowance, and past its daily quota Hugging Face
+    bills a PRO, Team or Enterprise account's prepaid credits at $1 per 10
+    GPU-minutes, though Nebula prices it at $0. The note is worded for the
+    token as set now ("Free here" or "May cost here"). With the token set an
+    agent can't run it (run tools refuse it): propose it with propose_change.
+    A route never receives a setting it doesn't offer;
     a saved non-default value of one stops the run when another route
     would use it. The fix for such a stop comes as `fixes` ([{param, value}],
     null = clear: plain param edits) on a propose_change cost entry; a run
@@ -1236,7 +1270,7 @@ def load_graph_file(path: str, ctx: Context | None = None) -> dict[str, Any]:
     import graph_file_client
 
     try:
-        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx), via="mcp")
+        return graph_file_client.load(_api(), path, headers=_agent_headers(ctx))
     except graph_file_client.GraphFileError as exc:
         raise RuntimeError(str(exc)) from exc
 
@@ -1334,8 +1368,8 @@ def edit_canvas(
     usual (docs/MCP-SETUP.md). Ids and ports in details are
     bare (`Node n4 not found`); a name that matches nothing is in “…”
     (`no Style “Neon dusk”`); a next call is in backticks.
-    Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
-    or the Krea plan) and a multi-provider node's route (`_provider`: a route id
+    Who bills a run is the person's call: Krea billing (`_kreaAuth`: the API
+    key connection or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
     OpenRouter, Nous Portal and Replicate nodes take their ports from their
@@ -1629,7 +1663,12 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
-    usually send the same nodes as propose_change with `run`. A node priced
+    usually send the same nodes as propose_change with `run`. A run that
+    includes a node that can bill the person's own provider account is
+    refused at any limit (Idol with HF_TOKEN set: a Hugging Face PRO, Team or
+    Enterprise account's prepaid credits past its daily allowance), even
+    when the node you run comes after it: propose the run, or run only nodes
+    that don't need it. A node priced
     from its input file's size (SeedVR2 Upscale) is checked at the size of
     the file it gets, measured only in Nebula's output folder (add a file
     of yours with upload_file first); an input another node makes in this
@@ -1711,7 +1750,9 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     """Look at a node's output. Images come back as an image (`size` small
     512 px, medium 1024, large 1568), videos as three frames side by side,
     image lists as up to four tiles. Text comes back as text; audio and 3D
-    as their type and URL. `port` picks an output when a node has several.
+    as their type and URL, and a World v2 Gaussian splat (Idol) also with a
+    `splat` summary: Gaussian count, bounding box, file size, seed,
+    provider and model. `port` picks an output when a node has several.
     A node whose last run failed and made nothing answers with that error
     ({"nodeId", "state": "error", "error"}); one that still has an output
     from before says so beside it."""
@@ -1736,6 +1777,17 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     chosen = {port: outputs[port]} if port and port in outputs else outputs
     whole = {name: {"type": entry.get("type"), "value": _absolute(entry.get("value"))}
              for name, entry in chosen.items() if isinstance(entry, dict)}
+    # A World v2 splat (Idol's .ply) can't be looked at, so it comes back as
+    # numbers the backend reads from the file: Gaussian count, bounding box,
+    # file size, seed, provider and model.
+    for name, entry in chosen.items():
+        if isinstance(entry, dict) and entry.get("type") == "World" and isinstance(entry.get("value"), dict) \
+                and entry["value"].get("schemaVersion") == 2:
+            try:
+                summary = _canvas_call("GET", f"/api/graph/node/{node_id}/splat-summary", ctx, params={"port": name})
+            except NebulaAPIError:
+                continue
+            whole[name]["splat"] = {key: value for key, value in summary.items() if key not in ("nodeId", "port")}
     # A value from before a run that failed says so, as a picture does.
     note = {"note": f"This output is from before its last run, which failed: {unquote(failed)}"} if failed else {}
     return [_json.dumps({"nodeId": node_id, **note, "outputs": whole})]
@@ -2617,10 +2669,11 @@ def _krea_call(method: str, path: str, ctx: Context | None, **kwargs: Any) -> di
     try:
         return _canvas_call(method, path, ctx, timeout=30.0, **kwargs)
     except NebulaAPIError as exc:
-        if exc.status in (400, 503) and "connect" in exc.detail.lower():
+        detail = exc.detail.lower()
+        if exc.status in (400, 503) and ("connect" in detail or "sign in" in detail):
             raise NebulaAPIError(
-                f"{exc.detail.rstrip('.')}. Only the person can connect Krea: ask them to open "
-                "Settings > Connections > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
+                f"{exc.detail.rstrip('.')}. Only the person can sign in to Krea: ask them to open "
+                "Settings > Providers > Krea in Nebula.", status=exc.status, headers=exc.headers) from exc
         raise
 
 
@@ -2631,7 +2684,7 @@ def krea_discovery_tools(ctx: Context | None = None) -> dict[str, Any]:
     Krea's prompting guide, the account's styles and moodboards, node apps.
     Call one with krea_discover. None of them generates, uploads or spends;
     Krea generation goes through Krea graph nodes. If Krea isn't connected,
-    ask the person to connect it in Nebula (Settings > Connections > Krea)."""
+    ask the person to sign in to Krea in Nebula (Settings > Providers > Krea)."""
     allowed = _krea_allowed()
     payload = _krea_call("GET", "/api/krea/tools", ctx)
     tools = [tool for tool in payload.get("tools") or [] if isinstance(tool, dict) and tool.get("name") in allowed]

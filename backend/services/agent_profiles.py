@@ -173,22 +173,27 @@ def paths_overlap(a: Path, b: Path) -> bool:
 
 def protected_agent_dirs() -> list[Path]:
     """Directories no agent may be granted or read directly: the Commons store,
-    the Krea connector's vault and the token-file folders.
+    the Krea connector's vault, the token-file folders and the settings copy
+    folder.
 
     The Commons blobs and database hold quarantined and other brands'
     references; the HTTP gate (scope + quarantine) is the only way agents may
     reach them. ``app-tokens`` and ``agent-tokens`` hold bearer tokens at
     predictable paths (services/app_token_file.py, agent_token_file.py): only
     the MCP server a token file was made for reads it, never a graph or media
-    path or an in-app agent.
+    path or an in-app agent. ``settings-copy`` holds the copy of settings.json
+    an in-place save keeps, the file a restore replaced, and their temp files,
+    keys in plain text (services/settings.settings_copy_folder; review 17 of
+    PR #203, settings MEDIUM-1).
     """
     from commons.paths import commons_root
     from services import agent_token_file, app_token_file
+    from services.settings import settings_copy_folder
 
     # Derive paths only; importing the connector would construct its real vault.
     state_root = Path(os.environ.get("NEBULA_STATE_DIR", Path.home() / ".nebula"))
     return [commons_root(), state_root / "krea",
-            app_token_file.root(state_root), agent_token_file.root(state_root)]
+            app_token_file.root(state_root), agent_token_file.root(state_root), settings_copy_folder()]
 
 
 def agent_read_grants(*, output_root: Path, workdir: Path, protected: list[Path]) -> list[Path]:
@@ -245,11 +250,13 @@ def agent_workspace_env(workdir: Path) -> dict[str, str]:
 
 
 def default_secret_paths() -> list[Path]:
-    """Files holding credentials that no agent may read."""
-    from services.settings import SETTINGS_PATH
+    """Files holding credentials that no agent may read: settings.json, the
+    temp file a save writes beside it (services/settings.secret_temp_paths;
+    review 17 of PR #203, settings MEDIUM-1) and the .env files."""
+    from services.settings import secret_temp_paths, settings_path
 
     project_root = Path(__file__).resolve().parent.parent.parent
-    return [SETTINGS_PATH, project_root / ".env", project_root / "backend" / ".env"]
+    return [settings_path(), *secret_temp_paths(), project_root / ".env", project_root / "backend" / ".env"]
 
 
 def secret_deny_rules(secret_paths: list[Path]) -> list[str]:

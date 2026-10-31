@@ -34,7 +34,7 @@ def settings_client(tmp_path, monkeypatch, person):
         "futureSetting": {"preserve": True},
     }
     path.write_text(json.dumps(initial))
-    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+    monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(path))
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     # Resolve the patched module directly even after other tests reload it.
     monkeypatch.setattr(main, "load_settings", settings.load_settings)
@@ -247,3 +247,15 @@ def test_only_the_person_starts_a_codex_login(monkeypatch, person, headers):
     allowed = client.post("/api/agents/codex/login/chatgpt", json={"deviceAuth": True}, headers=PERSON)
     assert allowed.status_code == 200 and allowed.json() == {"status": "started"}
     start.assert_awaited_once_with(device_auth=True)
+
+
+def test_a_pasted_hugging_face_token_is_saved_trimmed(settings_client):
+    """GM PR #203 r2: a token's leading and trailing spaces and line breaks
+    go without a word (Settings trims the same); other keys keep theirs."""
+    client, path, _initial, _clear = settings_client
+    response = client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "  hf_synthetic0123\r\n"}})
+    assert response.status_code == 200
+    assert json.loads(path.read_text())["apiKeys"]["HF_TOKEN"] == "hf_synthetic0123"
+    # Only spaces is no token: nothing is saved.
+    client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": " \n"}})
+    assert json.loads(path.read_text())["apiKeys"]["HF_TOKEN"] == "hf_synthetic0123"

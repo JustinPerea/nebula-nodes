@@ -99,9 +99,9 @@
   line-height: 1;
   cursor: pointer;
 }
+/* Its disabled colours are the shared ones (styles/disabled-buttons.css). */
 .run-history__replay:disabled {
   cursor: default;
-  opacity: 0.4;
 }
 
 .run-history__replay-blocked {

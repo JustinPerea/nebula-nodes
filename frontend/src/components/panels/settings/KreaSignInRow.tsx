@@ -82,7 +82,7 @@ function KreaDefault({ mode }: { mode: KreaConnectionMode }) {
         <select id="settings-krea-default" className="settings__select" aria-label="Default Krea connection for new nodes"
           value={mode} disabled={pending}
           onChange={(event) => void saveField('kreaConnectionMode', event.target.value === 'mcp' ? 'mcp' : 'api-token')}>
-          <option value="api-token">API token · API balance</option>
+          <option value="api-token">API key · API balance</option>
           <option value="mcp">Krea sign-in · workspace compute</option>
         </select>
         <span className="settings-saved" role="status">{justSaved ? 'Saved' : ''}</span>
@@ -130,7 +130,7 @@ export function KreaSignInRow({ krea, mode }: { krea: KreaController; mode: Krea
       <ProviderRow id={KREA_ROW} setup="krea-mcp" tone={shown.tone} name="Krea · sign-in"
         status={started || !status ? shown.label : undefined} statusTone={signedIn ? 'ok' : shown.tone === 'warn' ? 'warn' : undefined}
         summary={signedIn ? 'workspace compute' : started ? undefined
-          : mode === 'mcp' ? 'New Krea nodes are set to use it' : "Your Krea plan's compute, no API token"}
+          : mode === 'mcp' ? 'New Krea nodes are set to use it' : 'Uses your Krea plan instead of an API key'}
         title="Uses the Krea workspace you pick during sign-in and its compute units. Connecting never changes existing nodes or starts generation."
         action={action}>
         {showBody ? (

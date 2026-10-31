@@ -280,7 +280,7 @@ function renderRoutes(nodeId, node) {
     const notes = [route.maker ? 'maker' : null, route.plan ? `Krea plan: ${route.plan}` : null, route.note ?? null]
       .filter(Boolean).join('; ');
     lines.push(`| \`${escapeCell(route.id)}\` | ${routeProviderLabel(route.provider)} | `
-      + `${formatEnvKey(route.keys)} | ${route.endpoint ? `\`${escapeCell(route.endpoint)}\`` : '—'} | ${escapeCell(notes || '—')} |`);
+      + `${route.optionalKeys ? `none (optional ${formatEnvKey(route.optionalKeys)})` : formatEnvKey(route.keys)} | ${route.endpoint ? `\`${escapeCell(route.endpoint)}\`` : '—'} | ${escapeCell(notes || '—')} |`);
   }
   lines.push('');
   const byKey = new Map();

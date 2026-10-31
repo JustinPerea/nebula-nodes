@@ -34,6 +34,13 @@
  * from the route the backend took), never read from the error's text.
  */
 export const RUN_NODE_HEADING = "Couldn't run the node.";
+/** The one heading over a run Nebula refused at its pre-call check (node
+ * data `errorNotStarted`): the card's, as the Agent log's (GM, PR #203 r32:
+ * "the card, bar and log share one heading"). A run that started and failed
+ * keeps RUN_NODE_HEADING, and so does a start the backend answered with
+ * another status (busy, say): markNodesErrored leaves `errorNotStarted` unset
+ * there, and its toast keeps its own heading. */
+export const RUN_NOT_STARTED_HEADING = 'Nebula couldn’t start the run.';
 /** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
 export const GENERATE_SHOT_HEADING = "Couldn't generate the shot.";
 
@@ -68,6 +75,9 @@ export interface NodeErrorFields {
   surface?: NodeErrorSurface;
   /** A heading other than the surface's own. */
   heading?: string;
+  /** Nebula refused the run before it started (node data `errorNotStarted`):
+   * a card's heading is RUN_NOT_STARTED_HEADING. */
+  notStarted?: boolean;
 }
 
 export interface NodeErrorCopy {
@@ -77,7 +87,8 @@ export interface NodeErrorCopy {
   details: string | null;
 }
 
-export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface = 'node', heading = surface === 'shot' ? GENERATE_SHOT_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
+export function nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface = 'node', notStarted = false,
+  heading = surface === 'shot' ? GENERATE_SHOT_HEADING : notStarted ? RUN_NOT_STARTED_HEADING : RUN_NODE_HEADING }: NodeErrorFields): NodeErrorCopy {
   const text = raw?.trim() ?? '';
   const line = person?.trim();
   if (line) {

@@ -37,7 +37,7 @@ import type { WorldNavigationMode, WorldViewerStatus } from './WorldEnvironmentV
 import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
 import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../../lib/worldCard';
 import '../../styles/world-preview.css';
-import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
+import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { failureMessage } from '../../lib/errorCopy';
 import { ModalPortal } from '../ModalPortal';
 
@@ -64,14 +64,6 @@ function prefersLowBandwidth(): boolean {
   );
 }
 
-const MODAL_FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',');
 
 function ViewerLoadingFallback({ thumbnail }: { thumbnail?: string }) {
   return (
@@ -125,47 +117,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
     setShowModal(true);
   }, []);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      // A modal dialog opened over the preview owns the keys (review 8, L-d).
-      if (keyBlockedByModal(dialogRef.current)) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        close();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = [...dialog.querySelectorAll<HTMLElement>(MODAL_FOCUSABLE_SELECTOR)]
-        .filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus({ preventScroll: true });
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
-        event.preventDefault();
-        last.focus({ preventScroll: true });
-      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
-        event.preventDefault();
-        first.focus({ preventScroll: true });
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-    };
-  }, [close, showModal]);
+  useDialogFocusTrap(showModal, dialogRef, closeRef, close);
 
   useEffect(() => () => downloadControllerRef.current?.abort(), []);
 

@@ -1,7 +1,10 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
+import {
+  directBlock, directKeyNames, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
+  type DirectBlock, type NodeRoute,
+} from './directRoute';
 import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -28,6 +31,8 @@ export interface ModelReadiness {
   tone: 'neutral' | 'success' | 'warning';
   setupTarget?: ProviderSetupTarget;
   connectionLabel?: string;
+  /** Muted words after the connection label ("Optional", GM PR #203 r1). */
+  connectionNote?: string;
 }
 
 export const PROVIDER_HEALTH_TTL_MS = 5 * 60 * 1000;
@@ -39,7 +44,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
   QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
   WORLDLABS_API_KEY: 'World Labs', TYPESAFE_API_KEY: 'TypeSafe', BYTEPLUS_API_KEY: 'BytePlus',
-  BFL_API_KEY: 'Black Forest Labs',
+  BFL_API_KEY: 'Black Forest Labs', HF_TOKEN: 'Hugging Face',
 };
 
 export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, completedAt: number | null, now = Date.now()): entry is ProviderHealthEntry {
@@ -74,12 +79,19 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
   }
 }
 
+/** "an OpenAI", "a fal.ai", "an xAI": a name with its article, for a line
+ * that puts one before a provider (review 10 of PR #203: "Add a Anthropic
+ * …"). A name read letter by letter from an x ("xAI") takes "an". */
+export function withArticle(name: string): string {
+  return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
+}
+
 export function keyReadiness(key: string, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
   const target: ProviderSetupTarget = { kind: 'api-key', key };
   const provider = PROVIDER_KEY_LABELS[key] ?? key;
   if (!cache.loaded) return { label: 'Connection not loaded', detail: 'Saved connection settings have not loaded yet.', tone: 'neutral', setupTarget: target };
   if (!cache.apiKeys[key]?.trim()) return { label: 'Setup required',
-    detail: `Add a ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
+    detail: `Add your ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
   if (health.loading) return { label: 'Checking connection', tone: 'neutral', setupTarget: target,
     detail: `${provider} saved credential is being checked without generating.` };
   const checked = checkedReadiness(provider, target, health);
@@ -98,7 +110,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     if (status === 'connected') return { label: 'Krea signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'Uses the signed-in Krea workspace and its compute units. This model is checked against that account when you explicitly run it.' };
     return { label: status === 'connecting' ? 'Finish Krea sign-in' : status === 'error' ? 'Connection unavailable' : 'Krea sign-in required',
-      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Connect or check Krea in Settings; an API token does not replace this connection.' };
+      tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API key doesn’t replace it.' };
   }
   if (def.apiProvider === 'nous') {
     const target: ProviderSetupTarget = { kind: 'external', provider: 'nous' };
@@ -127,7 +139,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     if (!paramCallsProvider(def, params)) {
       const own = Object.entries(via.byValue ?? {}).map(([value, route]) => `; ${via.param} ${value} calls ${route.provider} with ${route.anyKey.join(' or ')}`).join('');
       return { label: 'No API key required', tone: 'neutral',
-        detail: `This ${via.param} runs locally. Other ${via.param} values call a ${via.provider} model and need ${via.anyKey.join(', ')}${own}.` };
+        detail: `This ${via.param} runs locally. Other ${via.param} values call ${withArticle(via.provider)} model and need ${via.anyKey.join(', ')}${own}.` };
     }
     const value = paramValue(def, params);
     const route = paramRoute(via, value);
@@ -138,8 +150,10 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     const ready = keyReadiness(key, cache, health);
     const how = route.anyKey.length > 1 ? `the first of ${route.anyKey.join(', ')} that is set` : route.anyKey[0];
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
-      detail: `Calls a ${route.provider} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
+      detail: `Calls ${withArticle(route.provider)} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
   }
+  const space = spaceReadiness(def, params, cache, health);
+  if (space) return space;
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',
     detail: 'This node has no API-key requirement. Its inputs and local tools may still need setup.' };
@@ -160,6 +174,62 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
+}
+
+/** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
+ * (PR #203 round 7: the first live call ran with no token), in GM's r12
+ * words: without the token "Hugging Face · Free" and that it can be busy;
+ * with it "Hugging Face token · Saved" (the shared key vocabulary: "Saved"
+ * until a check runs, "Connected" after one passes, "Not connected" after
+ * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
+ * (one with `keys`, as Idol's was in rounds 4 to 6) says what is needed
+ * (GM r5 item 1). The specific line replaces the generic one, never both (GM r3). */
+function spaceReadiness(
+  def: ModelNodeDefinition,
+  params: Record<string, unknown>,
+  cache: CredentialReadiness,
+  health: ProviderHealthState,
+): ModelReadiness | null {
+  if (!def.routes?.length) return null;
+  const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
+  // Auto with no key names no route: a one-route node's is that one.
+  const spec = route.routeId ? routeById(def, route.routeId) : def.routes.length === 1 ? def.routes[0] : undefined;
+  if (!spec || (spec.handler !== 'hf-space' && !isKeylessRoute(spec))) return null;
+  const keyless = isKeylessRoute(spec);
+  const tokenKey = (keyless ? spec.optionalKeys?.[0] : spec.keys[0]) ?? null;
+  const name = tokenKey ? PROVIDER_KEY_LABELS[tokenKey] ?? tokenKey : null;
+  const connectionLabel = name ? `${name} token` : undefined;
+  if (route.key) {
+    const ready = keyReadiness(route.key, cache, health);
+    const target: ProviderSetupTarget = { kind: 'api-key', key: route.key };
+    const checked = checkedReadiness(PROVIDER_KEY_LABELS[route.key] ?? route.key, target, health);
+    const allowance = `${def.displayName} uses your ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.`;
+    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance };
+    if (checked?.tone === 'warning' && checked.label !== 'Check unavailable' && checked.label !== 'Check rate limited') {
+      return { ...checked, label: 'Not connected', connectionLabel };
+    }
+    if (ready.label === 'Checking connection') return { ...ready, connectionLabel };
+    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance };
+  }
+  if (!keyless && tokenKey) {
+    if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
+    // GM r5 item 1: "Hugging Face token · Needed": the connection label
+    // says what is needed, the status only that it is.
+    return {
+      label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
+      detail: `Add your ${name} token in Settings to run ${def.displayName}.`,
+    };
+  }
+  // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
+  // without a token: whose pool an anonymous call uses isn't known.
+  return {
+    label: 'Free', tone: 'neutral',
+    ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const } : {}),
+    ...(name ? { connectionLabel: name } : {}),
+    detail: name
+      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add your ${name} token in Settings to use your own allowance.`
+      : `${def.displayName} runs free on shared GPUs, which can be busy.`,
+  };
 }
 
 /** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */
@@ -187,7 +257,7 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
 }
 
 function connectionLabelFor(key: string): string {
-  if (key === 'KREA_API_TOKEN') return 'Krea API token';
+  if (key === 'KREA_API_TOKEN') return 'Krea API key';
   return `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`;
 }
 
@@ -204,21 +274,20 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
   const fallback = fallbackKeyNames(def)[0];
   const direct = directKeyNames(def)[0];
   if (!direct || !fallback) {
-    return `${label}${kreaToken ? ' API token · API balance' : (Array.isArray(def.envKeyName) && def.envKeyName.length > 1) ? ' route' : ''}.`;
+    return `${label}${kreaToken ? ' API key · API balance' : (Array.isArray(def.envKeyName) && def.envKeyName.length > 1) ? ' route' : ''}.`;
   }
   const directName = keyProviderName(direct);
   const fallbackName = keyProviderName(fallback);
-  const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API token' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
+  const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API key' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
   const fallbackCopy = `${fallbackName} with your ${fallbackKey}${kreaToken ? ' (API balance)' : ''}`;
   if (route.kind === 'direct') {
     return `Runs on ${directName}'s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;
   }
   if (route.kind === 'fallback') {
     const directLabel = PROVIDER_KEY_LABELS[direct] ?? direct;
-    const article = /^[AEIOU]/i.test(directLabel) ? 'an' : 'a';
-    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${article} ${directLabel} key to run on ${directName} directly.` : ''}`;
+    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${withArticle(directLabel)} key to run on ${directName} directly.` : ''}`;
   }
   return directOk
-    ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with a ${fallbackKey}.`
+    ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with ${withArticle(fallbackKey)}.`
     : `Runs on ${fallbackCopy}.`;
 }

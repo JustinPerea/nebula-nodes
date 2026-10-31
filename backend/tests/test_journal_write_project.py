@@ -552,20 +552,42 @@ def _async_client(race: Race):
 
 
 def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, monkeypatch):
+    """Driven by the proposals' clock and by events, never a real-time
+    budget (review 16 of PR #203, tests LOW-2: on a loaded runner more than
+    the old 0.4 s passed before the undo reached p1, which was then already
+    past due and stayed closed). The clock stands still until the undo is
+    inside p2's slow Update write, so p1 reopens whatever the load; then p1
+    and p3 fall due and the undo waits there until p1's timer, armed in the
+    undo, has expired them."""
     import asyncio
+    import time
 
     main = race.main
     _k1, _k2, p1, p2, p3, token = _two_proposals_deleted(race)
-    now = main.canvas_proposals.now()
-    main.canvas_proposals.get(p1).expires_at = now + 0.4
-    main.canvas_proposals.get(p3).expires_at = now + 0.4
+    clock = {"now": main.canvas_proposals.now()}
+    monkeypatch.setattr(main.canvas_proposals, "_clock", lambda: clock["now"])
+    # Due a moment after the clock's now: p1's timer, armed when it reopens,
+    # fires about half a second later in real time.
+    main.canvas_proposals.get(p1).expires_at = clock["now"] + 0.01
+    main.canvas_proposals.get(p3).expires_at = clock["now"] + 0.01
     real = main._reopen_update
+
+    def expired() -> list[dict]:
+        return [e for e in race.events() if e["kind"] == "proposal.expired"]
+
+    async def until(done, what: str) -> None:
+        deadline = time.monotonic() + 15  # a hang guard only
+        while not done():
+            assert time.monotonic() < deadline, what
+            await asyncio.sleep(0.01)
 
     async def slow_reopen_update(ref, proposal_id):
         # p2's Update write is slow (disk I/O under load): p1's timer, armed
         # in the undo, fires while the undo is still inside its link.
         if proposal_id == p2:
-            await asyncio.sleep(1.5)
+            clock["now"] += 1.0
+            await until(lambda: {e["data"]["proposalId"] for e in expired()} >= {p1},
+                        "p1's timer never expired it")
         return await real(ref, proposal_id)
 
     monkeypatch.setattr(main, "_reopen_update", slow_reopen_update)
@@ -573,18 +595,17 @@ def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, mon
     async def go():
         async with _async_client(race) as client:
             undo = await client.post("/api/graph/apply/undo", headers=AGENT, json={"token": token})
-            await asyncio.sleep(1.2)
+            await until(lambda: len(expired()) >= 2, "p1 and p3 never both expired")
             return undo
 
     undo = asyncio.run(go())
     assert undo.status_code == 200, undo.text
     assert undo.json()["reopened"] == [p1, p2]
     undo_id = undo.json()["undoId"]
-    expired = [e for e in race.events() if e["kind"] == "proposal.expired"]
-    assert {e["data"]["proposalId"] for e in expired} == {p1, p3}, [e["data"] for e in expired]
-    assert [e.get("edit") for e in expired] == [None, None], expired
+    assert {e["data"]["proposalId"] for e in expired()} == {p1, p3}, [e["data"] for e in expired()]
+    assert [e.get("edit") for e in expired()] == [None, None], expired()
     link = main.canvas_undo_book.link_of(undo_id)
-    assert not {e["seq"] for e in expired} & set(link.events), (link.events, expired)
+    assert not {e["seq"] for e in expired()} & set(link.events), (link.events, expired())
 
 
 # Item 4: the person's Cmd+Z of an agent's undo, while that undo still awaits a

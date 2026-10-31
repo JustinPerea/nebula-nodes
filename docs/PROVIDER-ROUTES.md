@@ -21,7 +21,7 @@ flowchart TD
 
 ## The nodes
 
-Eight route-table nodes ship (PR 3 and PR 4, 2026-10-15). The node library's provider line names every route in Auto order (`modelDiscovery.ts` `libraryProviderLine`): "BFL · fal · Replicate · OpenRouter · Krea".
+Nine route-table nodes ship (PR 3 and PR 4, 2026-10-15; Idol, 2026-10-29). The node library's provider line names every route in Auto order (`modelDiscovery.ts` `libraryProviderLine`): "BFL · fal · Replicate · OpenRouter · Krea".
 
 | Node | Routes, in Auto order | Notes |
 |---|---|---|
@@ -33,6 +33,7 @@ Eight route-table nodes ship (PR 3 and PR 4, 2026-10-15). The node library's pro
 | `flux-video-upscale` FLUX Video Upscale | `bfl` (maker), `fal`, `replicate`, `krea` (API token or plan) | `creativity` (precise/creative) and `upscale_factor` 1.5-3; optional prompt. Priced by the output's megapixel-seconds or tier, so unpriced until the run. Replaces `krea-enhance-black-forest-labs-flux-video-upscale`. |
 | `flux-2-pro` FLUX.2 | `bfl` (maker), `fal` | `model` picks the endpoint on both routes: FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B on both, fal's FLUX 2 Flash on fal only. The option labels are the providers' own names (BFL's, and fal's for Flash; 2026-10-16), the values unchanged. Param names are fal's (the node ran on fal before); BFL gets `width`/`height` from the preset, integer `safety_tolerance`, `steps`/`guidance` (shown on Flex only; a hidden value left from Flex isn't sent). Each route's `accepts` lists its models, so a `model` outside them (`"MAX"`) stops instead of running Pro. `enable_safety_checker` is fal's own. fal's Flash and Klein prices are `unconfirmed` row by row. Was a fal-only handler; saved graphs make the same fal requests (`test_flux2_nodes.py`), except that Flash no longer sends `safety_tolerance` (`APPROVED_LEGACY_DELTA`, PR 5). |
 | `krea-3` Krea 3 | `krea` (maker, API token or plan; early access for beta workspaces), `fal` | Up to 8 reference images. Krea's options (`thinking_mode`, `resolution`, `aspect_ratio`, `regional_edit`) and fal's (`model`, `reasoning_level`, `image_size`, ...) are each route's own; only `seed` is shared. |
+| `speridlabs-idol` Idol | `hf-space` (maker; `HF_TOKEN` required, with its own `missingKeyLine`) | One image to a Gaussian splat on Speridlabs' Hugging Face Space, returned as World v2 with a PLY splat. $0 (ZeroGPU, on the person's own allowance). The token is required because the Space likely asks for 180 s a run, more than the 2-minute anonymous allowance (GM, PR #203 r4; to be confirmed on the first live run. A switch back to keyless if it's 120 s takes the route keys, new keyless copy ruled first, the tests that pin the keyed state and the regenerated tables: [idol.md](model-providers/speridlabs/idol.md#switching-back-to-keyless)). No `randomize` setting: the run cache would replay a random seed. See [model-providers/speridlabs/idol.md](model-providers/speridlabs/idol.md). |
 
 The three Krea FLUX nodes the catalog generated before are now the `krea` routes of these nodes: `scripts/sync-krea-catalog.py` `FOLDED` (see Adding a route-table node). Saved graphs that still name the old ids load as the new nodes (below).
 
@@ -67,7 +68,7 @@ flowchart LR
 ```
 
 - **Where.** A route-table node (`routeSwitch`, lib/directRoute.ts) shows `components/nodes/ProviderSwitcher.tsx` three ways: the first section of the Inspector, a chip next to the id chip on the card (it replaces the missing-key badge, and turns accent with a warning glyph when the run can't start), and a pill in Create Studio. Older dual-route nodes never show it.
-- **Rows.** `Auto · runs on Black Forest Labs`, or `Auto · can't run: 1.5k isn't on fal.ai` with one-click switches to the keyed routes that take the recipe. Then one row per route: provider, `Key set` or `Add key →` (opens Settings → Providers at that key), the price at the current settings (`*` when the route's price entry says `unconfirmed`, `-` when there's no list price, the route can't take the settings, or it bills the Krea plan) and a note when the route can't take them ("Doesn't take 1.5k"), or else the route's own `note` on its API row. A Krea route that can bill the plan shows two rows, `Krea · API balance` and `Krea · plan` (`Sign in` when signed out); each writes `_provider` and `_kreaAuth`.
+- **Rows.** `Auto · runs on Black Forest Labs`, or `Auto · fal.ai doesn’t take “Resolution” set to 1.5k` with one-click switches to the keyed routes that take the recipe. Then one row per route: provider, `Key set` or `Add key →` (opens Settings → Providers at that key), the price at the current settings (`*` when the route's price entry says `unconfirmed`, `-` when there's no list price, the route can't take the settings, or it bills the Krea plan) and a note when the route can't take them ("Doesn’t take “Resolution” set to 1.5k.", curly, GM PR #203 r32), or else the route's own `note` on its API row. A Krea route that can bill the plan shows two rows, `Krea · API balance` and `Krea · plan` (`Sign in` when signed out); each writes `_provider` and `_kreaAuth`.
 - **Per-provider options.** The Inspector and the pills list only the shown route's options (`routeParamDefinitions` / `route_param_definitions`): an enum cut to the values the route takes (its `valueMap`, `accepts` and `rejects`), a number range narrowed to its `accepts`, and other routes' own params left out. Shown route: the chosen one; under Auto, the route Auto lands on with the current keys; with no key, the maker's (`shownRouteId` / `shown_route_id`). A saved value off the list stays and reads "(not on fal.ai)". `rejectsWhen` combinations stay a run-time block. A setting the route doesn't offer (its `paramVisibleWhen`, see [Hidden settings](#hidden-settings-paramvisiblewhen)) has no row there at all.
 - **A click snaps, nothing else does.** Picking a provider moves each saved value the new route doesn't take to its closest one there (an enum's nearest option by list order, a tie going up: 1.5k → 2k; a number clamped into range; else the default), and the card shows one dismissible line ("1.5k isn't on fal.ai: set to 2k"). Another route's own setting that the new route refuses and has no control for goes back to its default ("Draft (fast preview) isn't on Krea: turned off"), so a click never lands on a stop the person can't fix there. A route change without a click (a key added or removed, a shared graph, an import) keeps every value; the run stops before billing and the switcher offers the routes that take it. The `.nebula` import summary names nodes set to a provider you have no key for.
 - **Saving** accepts any route's params and values, since they stay flat in `node.params`; `route_block` decides at run time.
@@ -107,18 +108,86 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 | `id` | What `_provider` names. Usually the provider; two routes on one provider need different ids. |
 | `provider` | Who bills: a `KEY_PROVIDERS` value (`bfl`, `fal`, `replicate`, `openrouter`, `krea`, ...). |
 | `maker` | `true` on the model maker's own API. At most one. |
-| `keys` | Any one of these keys runs it. |
+| `keys` | Any one of these keys runs it. `[]` on a keyless route. |
+| `optionalKeys` | A keyless route: it runs with no key, and uses the first of these that is set. See [Keyless routes](#keyless-routes). |
 | `plan` | Krea only: `optional` (API token or the Krea plan, by `_kreaAuth`) or `only` (plan only; Auto skips it). |
-| `handler` | Which client runs it (`bfl`, `fal`, `replicate-model`, `openrouter-images`, `openrouter-videos`, `krea`). |
+| `handler` | Which client runs it (`bfl`, `fal`, `replicate-model`, `openrouter-images`, `openrouter-videos`, `krea`, `hf-space`). |
 | `endpoint`, `endpointWhen` | The provider's model or path, and an override when settings match (`{"images": "(set)"}` for an edit endpoint once images are wired). |
 | `params` | Settings only this route takes. |
 | `rename`, `valueMap` | Our spelling to the provider's: a param name, or a value (`1k` to `1K`). A `valueMap` also says which values the route takes. |
 | `paramVisibleWhen` | The route's own and shared settings it doesn't always offer: `false` (never: OpenRouter's FLUX 3 Image Klein has no seed) or `{controller: [values]}` (only then: fal's FLUX.2 offers `safety_tolerance` on `pro`, `max`, `flex`). See [Hidden settings](#hidden-settings-paramvisiblewhen). |
 | `rules` | `accepts`, `rejects`, `rejectsWhen`, `blockedBy`, `size` (the `directRoute` grammar), plus `ports: {"images": {"max": 4}}` for how many inputs a port may carry. An entry with `of` caps several ports together, its key naming the group and `label` how messages say it: FLUX 3 Video's `"frames": {"max": 10, "of": ["start_image", "keyframes", "end_image"]}` on BFL, fal and Replicate (`port_limit_count` / `portLimitCount`). |
 | `pricing` | The key its price is under in `model_pricing.json` (default: its `id`). |
-| `note` | One line for the person, shown under the route's API row in the switcher (Krea 3's "Early access"); a "Doesn't take ..." note replaces it. |
+| `note` | One line for the person, shown under the route's API row in the switcher (Krea 3's "Early access"); a "Doesn’t take …" note replaces it. |
+| `missingKeyLine` | The route's own sentence when its key isn't set, replacing the generic "needs X" line. See [A route's own missing-key line](#a-routes-own-missing-key-line). |
 
 `node_route.routes_problems` and `scripts/check-node-contracts.mjs` both check this shape.
+
+### Keyless routes
+
+A maker's free endpoint can run with no key while a key still changes how it
+runs (a Hugging Face token gives a Space run the person's own ZeroGPU quota
+instead of the anonymous one). Such a route says `keys: []` and
+`optionalKeys: ["HF_TOKEN"]`. No shipped node uses one today: Idol was keyless
+until GM's r4 ruling made its token required, and its switch back is this
+shape (`test_route_agent_surfaces.py` `_keyless_idol` keeps it tested).
+
+- `is_keyless` / `isKeylessRoute`: a route that declares `optionalKeys` (even
+  `[]`). It counts as runnable with no key set (`_can_run_keyed` /
+  `canRunKeyed`), so Auto lands on it, and a route that needs a key names it
+  among its alternatives. Auto takes the first route whose key is set, or a
+  keyless one (`providerNote` in `describe_node`, the ROUTES header in
+  `nebula info`).
+- `Route.key` is the first optional key that is set, or `null`
+  (`route_key` / `routeKey`). The client reads the key from `api_keys` itself.
+- An optional key is not in `envKeyName`: the node reads as free
+  (`node_readiness.instance_access` is `free` without it and `key` with it),
+  the card shows no missing-key mark, and the switcher's key cell is empty
+  without the key (keyState `none`) and shows the green dot and "Connected"
+  with it. Readiness names it with a muted "Optional" (`connectionNote`).
+- On an anonymous run, `called_provider` still names the provider (its first
+  optional key's), so a failure line says "Hugging Face" rather than nothing.
+- Agents see it: `describe_node` gives a keyless route `optionalKeys: [{key,
+  set}]`, `nebula info` prints `none (optional HF_TOKEN)`, `nebula keys`
+  counts the nodes that run without it ("optional: 1 node runs without it"),
+  and a sourced $0 price reads `free` in `find_nodes` and `start_here`.
+- `routes_problems` refuses `optionalKeys` beside non-empty `keys`, a name
+  Settings doesn't store (`KEY_PROVIDERS`), and a keyless route that bills a
+  plan. The key-coverage checks (`settings.example.json`, provider health)
+  count optional keys as used.
+
+### A route's own missing-key line
+
+A keyed route can carry `missingKeyLine`, one sentence for the person when its
+key isn't set (Idol: "You can run Idol after you add your Hugging Face token
+in Settings.", GM PR #203 r4). With it:
+
+- Once Settings have loaded, the canvas locks every Run that would run the
+  node (`lib/runKeyLock.ts`, `directRoute.routeMissingKeyLine`; GM PR #203
+  r6): Run on it or on a node it feeds (selection toolbar, Inspector, context
+  menu) with the line as the reason; the toolbar's Run for the whole canvas
+  with "You can run this canvas after you add your … in Settings."; a
+  proposal's Accept with "You can accept this after you add your … in
+  Settings.". Each is `aria-disabled` (focusable, its tooltip kept, the line
+  as its accessible description, the not-allowed cursor), never natively
+  disabled. Cmd+Enter, the palette's Run graph and every other run path send
+  nothing and show the line as a neutral notice.
+- The engine's preflight and `maker_routes` refuse the run with it before any
+  request (`node_route.missing_key_line_for`, used by
+  `route_unavailable_message` and `route_unavailable_line`), so agent and CLI
+  runs get the same refusal. `/api/quick` (`nebula quick`) checks the route
+  before the spend check and answers 400 "Nothing ran, so nothing was spent."
+  followed by the line.
+- It applies only when the route is missing its key and nothing else blocks
+  it. With Auto and no key set, it applies when every runnable route has
+  one, so a node with another route keeps the usual "add a key or choose
+  another provider" message.
+- `routes_problems` and `check-node-contracts.mjs` require it to be a
+  non-empty string, on a route that has keys.
+
+The `hf-space` handler is exempt from the rule that a route's provider is its
+key's provider: the Space's maker (Speridlabs) bills, but the key is the
+person's Hugging Face token.
 
 ## Hidden settings (paramVisibleWhen)
 
@@ -138,7 +207,7 @@ flowchart TD
 - **Rule H** (`hidden_stops`, `hidden_block` / `hiddenStops`, `hiddenBlock`, run by `route_block` after the route's own rules). A hidden setting with a non-default value stops the route only when another route shows it with these values and that route wouldn't itself stop, one level down, on a setting that hides this one on the first route. So a Draft on fal at Full HD runs at 720p (OpenRouter would stop on the Draft that hides Resolution on fal), a saved Draft on OpenRouter resolves to "BFL would honor it" instead of looping, and two routes that each hide a value the other takes both stop, each with its own reset. Otherwise it is ignored. The route's rules read a hidden listed setting at its default (`_shown_rules_block`), so a value nobody sends can't trip a rule. The block is `reason: "hidden"` with `on` naming the honoring route and `when` the condition that hides it.
 - **Messages and fixes.** "FLUX.2 can't run on fal.ai: it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider. Black Forest Labs can take it." A boolean default reads "Turn Draft (fast preview) off"; no default reads "Clear Seed". When the honoring route has no key: "(add its key in Settings > Providers)". `route_unavailable` carries `fixes` (always present, `[{param, value}]` with `value` null = clear, empty unless the block is hidden), and the TS `RouteUnavailable` and switcher state carry the same. The row's text comes from `fixLabel` ("Set Safety back to 2"), and `applyFix` writes it.
 - **A click clears what the new route hides.** `snapForRoute` / `snap_for_route` skips hidden settings when snapping values, then resets each hidden stop to its default with a note ("Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2", "Seed isn't on OpenRouter: cleared"). `snapHidden` / `snap_hidden` does the same after a person's edit, in the Inspector field or a Create pill (Pro → Klein 9B on fal with Safety 5), and the note goes on the card (`providerNoteStore`) or under the pills. Without a click (a key change, an import) values are kept and the run stops with the fix.
-- **The switcher under a stop.** A hidden stop's row reads "Doesn't take Safety 5 (Permissive)", the Auto row "Auto · can't run: fal.ai doesn't offer Safety 5 (Permissive)". Under the rows, one line holds the fix rows ("Set Safety back to 2", "Clear Seed", `applyFix`, a plain edit with no note) and then the switch rows ("Switch to Black Forest Labs"), in the Inspector, on the card chip and on Create's pill alike.
+- **The switcher under a stop.** A hidden stop's row reads "Doesn’t take “Safety”.", the Auto row "Auto · fal.ai doesn’t take “Safety”". Under the rows, one line holds the fix rows ("Set Safety back to 2", "Clear Seed", `applyFix`, a plain edit with no note) and then the switch rows ("Switch to Black Forest Labs"), in the Inspector, on the card chip and on Create's pill alike.
 - **Checks.** `routes_problems` (`_visible_when_problems`) and `check-node-contracts.mjs` (`validateParamVisibleWhen`) refuse a condition on a param the route doesn't list, a controller that is the param itself or never offered, `(set)`/`(unset)` (visibility never reads ports) and values that aren't the controller's options. `_hideable_problems` and `validateHideable` refuse an `endpointWhen` key the route can hide (a hidden value is never sent, so it can't pick the endpoint or the price row either) and visibility conditions that go in a circle. `price_row_problems` (from `model_pricing.validate_pricing`) and `validateHiddenPrices` refuse a price row, a matching price extra or a `multiplyBy` param that reads a setting the route hides with the values that row matches.
 - **Legacy `directRoute` nodes** are untouched: no `paramVisibleWhen`, no rule H, the first 147 route cases unchanged.
 
@@ -162,6 +231,7 @@ flowchart TD
 | `replicate-model` | `handlers/replicate_model.py` `run_model`: `POST /v1/models/{owner}/{name}/predictions` | `images` (and a video's frames, in order) → `images`, `start_video` → `start_video`; a model whose one input is a source video takes it under its own field (`REPLICATE_SOURCE_VIDEO`: `black-forest-labs/flux-video-upscale` `video` → `input_video`, prompt optional) | Local files go up through `POST /v1/files` first. The output is saved as the node's port type, fetched with the token only from `replicate.delivery`. Cancel: `POST /v1/predictions/{id}/cancel`. |
 | `openrouter-images` | `handlers/openrouter_media.py`: `POST /api/v1/images` | `images` → `input_references` | Params outside the documented request fields go under `provider.options[<owner slug>]` (FLUX: `safety_tolerance`). Saves `data[0].b64_json`. |
 | `openrouter-videos` | `POST /api/v1/videos`, poll `GET /api/v1/videos/{id}`, download `unsigned_urls[0]` | `start_image`/`end_image` → `frame_images` (`first_frame`/`last_frame`) | A source video isn't sent: its request shape isn't documented. Frames go only as public http(s) URLs: OpenRouter documents data URLs for `/images` references but not for `/videos` `frame_images`, so a local output wired to a frame stops before any request and points to another provider. No cancel (OpenRouter has none for video). |
+| `hf-space` | The Space's module in `HF_SPACE_HANDLERS` (`speridlabs/idol`: `handlers/speridlabs_idol.py` `run_idol`): the Gradio queue (`/gradio_api/upload`, `/gradio_api/call/run`, its event stream, `/gradio_api/file=`) | `image` → the first `/run` input (read by Nebula through `load_media`, then uploaded under a neutral name) | Idol's needs `HF_TOKEN`; a keyless Space route would send it when set. Checks the Space's stage on the Hub and its `/gradio_api/info` signature before calling; the token goes only to `huggingface.co` (`Authorization`) and `speridlabs-idol.hf.space` (`X-HF-Authorization`, which Hugging Face's proxy strips), not any `*.hf.space`: anyone can make a Space. Gradio's `/call` has no cancel: a stop ends Nebula's wait only. |
 | `krea` | `handlers/krea_gateway.py` `handle_krea_catalog`: the catalog model the `endpoint` names (a catalog key, or the `/generate/...` path one entry serves) | by name: Krea's request fields are its port ids, except where the catalog entry's `portFields` names another (`krea_inputs`: Krea 3 `images` → `image_urls`, FLUX Video Upscale `video` → `video_url`) | Bills by the `_kreaAuth` the router sets. The plan runs through the same account path as every Krea node. |
 
 - **Nothing is dropped.** A wired input the chosen endpoint can't take stops the run before any request, and so does a recipe the provider can't express (a video and images together). An end image with no start image or keyframes before it stops on every video route (`route_clients.refuse_end_alone`), even where the provider's schema would take it alone, so no provider opens the clip on its closing frame. Each error says what to disconnect or that another provider would take it.

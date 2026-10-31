@@ -34,7 +34,7 @@ Added 2026-10-14. Six copies of Grok Imagine also run on xAI's own API when `XAI
 
 1. A Krea node set to your Krea plan (`_kreaAuth: "mcp"`) stays on the plan.
 2. Else, with an xAI key saved, xAI runs it and bills it.
-3. Else the fal key or Krea API token runs it.
+3. Else the fal key or Krea API key runs it.
 
 What changes on the xAI route:
 

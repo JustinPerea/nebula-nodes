@@ -253,6 +253,7 @@ nebula run-all         # the whole canvas
 nebula result <run-id> --wait 100   # a run still going (exit 2 = still running)
 nebula cancel <run-id>
 nebula path n5         # the local file of a node's image
+nebula splat n7        # a World splat's numbers: Gaussians, bounding box, size, seed, axes
 nebula status
 ```
 
@@ -359,6 +360,11 @@ nebula propose --note "Upscale the wide take" \
   --add +up=seedvr2-upscale --wire n9:image +up:image --rename +up="Wide, upscaled" --run +up --wait
 ```
 
+Its `runs` line counts each cost class on its own: "up to 1 paid run
+(fal) and 1 on the person's Krea plan, $0.03 at list prices". A run on the
+person's Krea plan is never free and never in the figure; "may bill the
+person's own account" is Idol with their token set.
+
 If a node the run needs can't run here, `nebula propose` prints a
 `warning:` line naming it and why (`--json` gives it as `warning`, with
 `--wait` too); Accept would fail at that node. Say so to
@@ -402,8 +408,9 @@ refused while a job is still waiting keep their exact text for you. A node's run
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
 graph's `errorPerson`, when the node's handler wrote one, or a line for the
-provider's answer such as "Meshy is busy. ..." with `errorProviderText`) that
-you shouldn't parse. A failed Cinema shot's `output` works the same: read its
+provider's answer such as "Meshy is busy. ..." with `errorProviderText`, and
+`errorNotStarted` when Nebula refused the run before it started) that you
+shouldn't parse. A failed Cinema shot's `output` works the same: read its
 `error`; its `errorCategory`, `errorFriendly`, `errorPerson`,
 `errorProviderText`, `errorProvider` and `errorRaw` are for the Cinema panel.
 A new Cinema scene needs only `{"scene": {"shots": [{"id": "s1", "prompt": "…"}]}}`:
@@ -455,8 +462,9 @@ open. Each node that lost a connection that way is a line in `warnings`
 longer exists."; `nebula load` and `nebula project open` print them as
 `note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
 Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
-proposal's `cost.notReady` rows add a `person` line beside `missing`: read
-`missing`). A job the
+proposal's `cost.notReady` rows add a `person` line and a `reason`
+(`{one, many}`, the line without the name, which the bar merges by) beside
+`missing`: read `missing`). A job the
 provider ran and then reported failed is never `category: "auth"`, even when
 its text says "unauthorized" (the job's input, not the key): check the job at
 the provider rather than the key. A run the pre-run check refuses (a missing
@@ -839,6 +847,18 @@ keeps its shape, and an answer to it (`— resolved by …`) on its own line
 after the note (over MCP, `pins[].text` holds `\n`; a channel push prints it
 the same way inside `<pin>…</pin>`). `nebula watch`
 keeps each event on one line, so a break in a note shows there as ` ⏎ `. Read all of it before you act.
+`settings.restored` (from `nebula watch` after a restart) means Nebula put
+settings.json back at start from the copy it keeps while it writes the file
+in place, after a save that was cut short; its `file` names the file and
+`keptAt` where the file it replaced is kept, never a key. You can't read
+either: tell the person, in the event's own words.
+
+A run Nebula refuses before it starts is one line in the person's Agent log,
+in their words and never cut ("Nebula couldn’t start the run. 2 “GPT Image
+2” nodes need a prompt. Connect a prompt to each, then run the nodes
+again."; a node with several says them once: "“FLUX Kontext” needs a
+prompt and an image. Connect both, then run the node again."). Read
+`errors` for each node's own text.
 
 A pin you read before a project switch may be gone from the open project:
 `nebula pin resolve` then says that note isn't in the open project. Run
@@ -897,6 +917,7 @@ Connections must match types; `Any` connects to anything.
 | Video | .mp4, .mov files |
 | Audio | .mp3, .wav files |
 | Mesh | .glb, .obj, .fbx files |
+| World | A 3D world or object: a World Labs world, or a Gaussian splat (.ply) from Idol. `view_output`, or `nebula splat <node>` from the CLI, gives its Gaussian count, bounding box, file size, seed and axes. Idol runs free on Hugging Face without a token. With the person's Hugging Face token set it uses their own allowance, and past it Hugging Face bills a PRO, Team or Enterprise account's prepaid credits ($1 per 10 GPU minutes), so with the token set `nebula run` and `nebula quick` refuse any run that includes it, even for a node after it: `nebula propose --run <node>` instead (the refusal prints the exact command, `nebula propose --note "<why>" --run <node>`), or run only nodes that don't need it. A token that is only spaces or invisible characters counts as not set. `nebula info speridlabs-idol` prints it as BILLING, worded for the token as set now ("Free here" or "May cost here"); a proposal's Idol cost ("may cost" or "free") follows the token too |
 | SVG | .svg files or SVG text |
 | Array | Lists of the above |
 | Moodboard | A saved moodboard |

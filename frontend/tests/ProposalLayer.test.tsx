@@ -63,7 +63,7 @@ describe('ProposalLayer', () => {
     expect(ghost.style.transform).toBe('translate(400px, 10px) scale(1)');
     expect(getByText('Nano Banana')).toBeTruthy();
     expect(getByText('paid · google')).toBeTruthy();
-    expect(getByText(/proposed by Codex/)).toBeTruthy();
+    expect(container.querySelector('.proposal-ghost__by')!.textContent).toBe('proposed by Codex');
     // Objects are not shown as param lines.
     expect(container.textContent).toContain('16:9');
     expect(container.textContent).not.toContain('nested');
@@ -143,6 +143,23 @@ describe('ProposalLayer', () => {
     const { container } = render(<ProposalLayer />);
     expect(container.querySelector<HTMLElement>('.proposal-ghost .model-node__badge--warning')!.title)
       .toBe('Nano Banana runs on fal here, which needs FAL_KEY in Settings > Providers');
+  });
+
+  it('an Idol ghost reads "may cost · Hugging Face" with a token and "free · Hugging Face" without, as the keys are now (GM, PR #203 r15 item 1)', () => {
+    const idol = proposal();
+    idol.nodes[0] = { ...idol.nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol', params: {},
+      cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } };
+    useCanvasProposalsStore.getState().open(idol, 'key-a');
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    const { container } = render(<ProposalLayer />);
+    const label = () => container.querySelector('[data-ref="+idol"] .proposal-ghost__cost');
+    expect(label()?.textContent).toBe('free · Hugging Face');
+    expect(label()).toHaveClass('proposal-ghost__cost--free');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '***abcd' }, loaded: true } }));
+    expect(label()?.textContent).toBe('may cost · Hugging Face');
+    expect(label()).toHaveClass('proposal-ghost__cost--mayCost');
+    act(() => useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: '' }, loaded: true } }));
+    expect(label()?.textContent).toBe('free · Hugging Face');
   });
 
   it('fades closing proposals', () => {

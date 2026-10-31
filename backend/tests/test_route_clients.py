@@ -36,7 +36,7 @@ PNG = base64.b64decode(
 MP4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"\x00" * 64
 PNG_URI = "data:image/png;base64," + base64.b64encode(PNG).decode()
 KEYS = {"BFL_API_KEY": "fixture-bfl", "FAL_KEY": "fixture-fal", "REPLICATE_API_TOKEN": "fixture-rep",
-        "OPENROUTER_API_KEY": "fixture-or", "KREA_API_TOKEN": "fixture-krea"}
+        "OPENROUTER_API_KEY": "fixture-or", "KREA_API_TOKEN": "fixture-krea", "HF_TOKEN": "fixture-hf"}
 _REAL_CLIENT = httpx.AsyncClient
 _REAL_SLEEP = asyncio.sleep
 

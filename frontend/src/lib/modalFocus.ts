@@ -62,9 +62,113 @@ export function tabbablesIn(root: Element | null): HTMLElement[] {
     .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
 }
 
-/** The notices' controls Tab reaches. */
+/** The proposal bar's slot: under every modal's scrim (GM r7, PR #203), so
+ * an open dialog's Tab never reaches it. */
+const PROPOSAL_SLOT = '[data-notice-slot="proposal"]';
+
+/** The notices' controls Tab reaches with a dialog open: every notice's, not
+ * the proposal bar's, which sits behind the dialog. */
 export function noticeTabbables(): HTMLElement[] {
-  return tabbablesIn(document.querySelector(NOTICE_REGION));
+  return tabbablesIn(document.querySelector(NOTICE_REGION)).filter((element) => !element.closest(PROPOSAL_SLOT));
+}
+
+/** Whether `node` is in a notice that stays usable over a dialog: in the
+ * notice region, and not in the proposal bar's slot, which sits behind every
+ * dialog (review r5 MEDIUM-1 of PR #203). A dialog's focus and key traps let
+ * these through, as Tab does (noticeTabbables). */
+export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
+  return inNoticeRegion(node) && node instanceof Element && node.closest(PROPOSAL_SLOT) === null;
+}
+
+/**
+ * A modal that hides the rest of the page while it is open (onboarding, the
+ * result comparison): every child of <body> that sits behind it goes inert
+ * and aria-hidden, and so does the proposal bar's slot inside the notice
+ * region (review r5 MEDIUM-1 of PR #203, GM r10 item 2), which the scrim
+ * dims like the canvas; the notices around it stay usable (GM r25). It holds
+ * as the page changes (a body child, the notice region, added later). The
+ * returned function puts back each element's own attributes, as they were
+ * before: the slot is the bar's container, so the bar's own `inert` (a
+ * leaving proposal's, lib/noticeLeave.ts) is never touched.
+ */
+export function hideBehind(own: Element): () => void {
+  // This call's hold on each element it hid. The element's own attributes
+  // are kept once, by the first modal that hides it (`hidden`), and put back
+  // when the last one lets go, whatever order the modals close in (review 7
+  // of PR #203, LOW-2: closing the lower of two first left the page inert).
+  const mine = new Set<Element>();
+  const hide = (element: Element) => {
+    if (mine.has(element)) return;
+    mine.add(element);
+    const held = hiddenBy.get(element);
+    if (held) {
+      held.count += 1;
+      return;
+    }
+    hiddenBy.set(element, { count: 1, inert: element.getAttribute('inert'), hidden: element.getAttribute('aria-hidden') });
+    element.setAttribute('inert', '');
+    element.setAttribute('aria-hidden', 'true');
+  };
+  const isolate = () => {
+    for (const sibling of document.body.children) if (sitsBehind(sibling, own)) hide(sibling);
+    for (const slot of document.querySelectorAll(`${NOTICE_REGION} ${PROPOSAL_SLOT}`)) if (!slot.contains(own)) hide(slot);
+  };
+  isolate();
+  // The region's slots come with it (NoticeRegion renders every slot), so a
+  // body child arriving is the only change to watch.
+  const observer = new MutationObserver(isolate);
+  observer.observe(document.body, { childList: true });
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    observer.disconnect();
+    for (const element of mine) {
+      const was = hiddenBy.get(element);
+      if (!was) continue;
+      was.count -= 1;
+      if (was.count > 0) continue;
+      hiddenBy.delete(element);
+      if (was.inert === null) element.removeAttribute('inert');
+      else element.setAttribute('inert', was.inert);
+      if (was.hidden === null) element.removeAttribute('aria-hidden');
+      else element.setAttribute('aria-hidden', was.hidden);
+    }
+  };
+}
+
+/** Every element a modal hid (hideBehind), with how many open modals hide
+ * it and its own attributes from before the first. */
+const hiddenBy = new Map<Element, { count: number; inert: string | null; hidden: string | null }>();
+
+/** Whether focus is moving back to a closing dialog's opener (ModalPortal).
+ * A dialog's own focus trap that may still be listening ignores this one
+ * focusin: it is the close, not focus leaving the dialog. The opener's own
+ * focus handlers still hear it (review 7 of PR #203, NIT-5). */
+let returning = false;
+export function isReturningFocus(): boolean {
+  return returning;
+}
+
+/** Focus `target` as a dialog's close returns it there (isReturningFocus). */
+export function returnFocusTo(target: HTMLElement): void {
+  returning = true;
+  try {
+    // A visible ring wherever the close came from (GM, PR #203 r15 item 4):
+    // the person sees where they are.
+    target.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
+  } finally {
+    returning = false;
+  }
+}
+
+/** Whether focus can go back to this control on a dialog's close: on the
+ * page, enabled, not inside an inert, hidden or aria-hidden part, and drawn. */
+export function canTakeFocus(element: HTMLElement): boolean {
+  if (!element.isConnected || element.matches(':disabled')
+    || element.closest('[inert], [hidden], [aria-hidden="true"]')) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden';
 }
 
 /** Where focus goes in a dialog that gets it back: its field (a prompt's
@@ -151,12 +255,16 @@ function noticeOf(node: Element): Element | null {
  *   With no dialog open, the screen's own keys still work from a notice (the
  *   Studio's Cmd+Z from its undo toast).
  * - Tab is noticeTab's (the walk through the open dialog and the notices).
+ * - The proposal bar is no notice while a dialog is open (it is behind it).
  * Escape from inside a dialog is the dialog's own.
  */
 export function noticeKeys(event: KeyboardEvent): void {
   if (event.key === 'Tab' || event.isComposing) return;
   const target = event.target;
   if (!(target instanceof Element) || !inNoticeRegion(target)) return;
+  // The proposal bar sits behind an open dialog (review r5 MEDIUM-1 of PR
+  // #203): a key there is the page's, which the dialog's own trap takes.
+  if (!inNoticeAboveDialogs(target) && openModalDialog()) return;
   if (event.key !== 'Escape') {
     if (openModalDialog()) event.stopImmediatePropagation();
     return;
