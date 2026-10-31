@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from services.file_access import ProtectedPathError, require_allowed_path
 from services.node_names import quoted
+from services.wording import counted
 
 from ..client import NebulaClient
 from ..formatter import format_graph, saved_canvas_message, with_saved_canvas
@@ -91,7 +92,7 @@ def run_save(client: NebulaClient, filepath: str) -> None:
         temporary.unlink(missing_ok=True)
     node_count = len(state.get("nodes", []))
     edge_count = len(state.get("edges", []))
-    print(f"Saved graph ({node_count} nodes, {edge_count} connections) to {filepath}")
+    print(f"Saved graph ({counted(node_count, 'node')}, {counted(edge_count, 'connection')}) to {filepath}")
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:

@@ -66,7 +66,7 @@ COORD_LIMIT = 1e7
 PERSON_VALUE_CHARS = 4000
 
 REF_RE = re.compile(r"^\+[A-Za-z0-9_-]{1,24}$")
-NODE_ID_RE = re.compile(r"^n\d{1,9}$")
+NODE_ID_RE = re.compile(r"^n[0-9]{1,9}$")
 _ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run", "rename"})
 
 OPEN = "open"
@@ -1144,7 +1144,7 @@ class ProposalBook:
 
 def _node_sort_key(node_id: str) -> tuple[int, str]:
     digits = node_id[1:]
-    return (int(digits) if digits.isdigit() else 0, node_id)
+    return (int(digits) if digits.isascii() and digits.isdigit() else 0, node_id)
 
 
 def _port_info(port: Mapping[str, Any] | None, handle: str) -> dict[str, str]:

@@ -13,8 +13,9 @@ export const DEFAULT_PROJECT_LIMIT = 500;
  * this tab's edits weren't saved (projectStore RESTORED_LIST_UNSAVED). */
 export const SAVE_AS_A_PROJECT = 'Save as a project';
 
-/** Its saved toast names the project the edits went into, under the
- * "(recovered)" name (GM r14 on PR #199, 1, verbatim). */
+/** Its saved toast names the project the edits went into, under its
+ * recovered name, "Recovered <project>" (GM r14 on PR #199, 1, verbatim;
+ * the name's shape is GM r23, a). */
 export function editsRecoveredToast(name: string): string {
   return `Your latest edits were saved as their own project, ${quoted(name)}.`;
 }
@@ -44,3 +45,23 @@ export const OPEN_RECENTLY_DELETED = 'Open Recently deleted';
  * (review 14 of PR #199, lock-order LOW-3): never a blank notice. The first
  * sentence of GM's RESTORED_LIST_RELOAD, true of every restore. */
 export const RESTORE_COPY_FALLBACK = 'Nebula restored its project list.';
+
+/** GM r23 on PR #199, 3, verbatim: the fallback while this tab keeps edits
+ * that weren't saved. The short line drops the one fact that matters, so
+ * the full sentence stays, and it never suggests reloading (a reload would
+ * lose the edits). It lives here, in the entry chunk, so it never depends
+ * on the chunk whose load failed (scripts/check-kept-guard-chunk.mjs). The
+ * same words as projectStore's RESTORED_LIST_UNSAVED. */
+export const RESTORE_COPY_FALLBACK_KEPT = 'Nebula restored its project list before your latest edits were saved. They’re kept in this tab.';
+
+/** The fallback line for the notice: the full sentence while kept. */
+export function restoreCopyFallback(kept: boolean): string {
+  return kept ? RESTORE_COPY_FALLBACK_KEPT : RESTORE_COPY_FALLBACK;
+}
+
+/** A notice that confirms Save as a project's copy ("Your latest edits were
+ * saved…", the after-update line), then the line for any connection its
+ * rules left out (GM r24: the second sentence, on every ending). */
+export function filedCopyLine(lead: string, copy: { dropped?: string }): string {
+  return copy.dropped ? `${lead} ${copy.dropped}` : lead;
+}

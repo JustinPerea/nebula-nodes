@@ -523,7 +523,7 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     recovered = client.post("/api/projects/recover", json=body)
     assert recovered.status_code == 200, recovered.text
     # Still in the trash, so the copy keeps its real name.
-    assert recovered.json()["project"]["name"] == "Deleted elsewhere (recovered)"
+    assert recovered.json()["project"]["name"] == "Recovered Deleted elsewhere"
     assert recovered.json()["project"]["snapshot"] == snapshot
     assert client.post("/api/projects/recover", json=body).json() == recovered.json()
     # Gone for good: the copy is still made, under a generic name.
@@ -532,7 +532,7 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     body["recoveryId"] = uuid4().hex
     gone = client.post("/api/projects/recover", json=body)
     assert gone.status_code == 200, gone.text
-    assert gone.json()["project"]["name"] == "Deleted project (recovered)"
+    assert gone.json()["project"]["name"] == "Recovered Deleted project"
 
 
 def _trash(client, project_id, revision):

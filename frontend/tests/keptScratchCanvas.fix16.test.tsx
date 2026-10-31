@@ -171,7 +171,7 @@ describe('review 14 of PR #199, lock-order LOW-3: the lazy restore copy', () => 
   it('the restore notice’s readable line while its copy is out: never a blank notice', () => {
     expect(RESTORE_COPY_FALLBACK).toBe('Nebula restored its project list.');
     const home = readFileSync(resolve(__dirname, '../src/components/projects/ProjectHome.tsx'), 'utf8');
-    expect(home).toContain('{RESTORE_COPY_FALLBACK}');
+    expect(home).toContain('{restoreCopyFallback(kept)}');
     expect(home).toContain('copyFailed={copyFailed}');
   });
 });

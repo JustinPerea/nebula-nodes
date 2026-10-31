@@ -13,6 +13,7 @@ import project_client
 
 from ..client import NebulaClient
 from ..formatter import catalog_restore_lines, format_project
+from services.wording import counted
 
 
 def _print_json(data) -> None:
@@ -30,7 +31,8 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     if isinstance(restore, dict) and restore.get("note"):
         # Nebula restored a damaged project list (until the person closes its notice).
         print(f"Note: {restore['note']}")
-        for line in catalog_restore_lines(restore):
+        # The CANVAS NOT SAVED note below says the waiting canvas (GM r23 e).
+        for line in catalog_restore_lines(restore, canvas_block=isinstance(listing.get("canvasNotFiled"), dict)):
             print(line)
         print()
     waiting = listing.get("canvasNotFiled")
@@ -68,6 +70,12 @@ def run_open(client: NebulaClient, project_id: str) -> None:
     # `nebula load` prints its own.
     for warning in result.get("warnings") or []:
         print(f"note: {warning}", file=sys.stderr)
+    renumbered = result.get("renumbered") or {}
+    if renumbered:
+        # Nodes the person's Duplicate or Paste made got Nebula's ids (PR #199 round 17).
+        moved = ", ".join(f"{old} -> {new}" for old, new in list(renumbered.items())[:10])
+        print(f"note: Nebula gave {counted(len(renumbered), 'node')} its own ids at this open ({moved}). "
+              "Read the canvas again (`nebula graph`) and use the ids you see.", file=sys.stderr)
 
 
 def run_new(client: NebulaClient, name: str) -> None:

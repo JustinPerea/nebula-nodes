@@ -246,14 +246,13 @@ def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app
     mapping = body["renumbered"]
     dropped = {wire["id"]: wire for wire in body["droppedWires"]}
     assert set(dropped) == {"w-img", "w-second", "w-loop", "w-dup"}
+    # The shared kinds (round 17: type and limit, where round 16 said contract).
     assert {wire["id"]: wire["kind"] for wire in body["droppedWires"]} == {
-        "w-img": "contract", "w-second": "contract", "w-loop": "loop", "w-dup": "duplicate"}
-    # By the copy's ids, with a person line and the agents' detail.
+        "w-img": "type", "w-second": "limit", "w-loop": "loop", "w-dup": "duplicate"}
+    # By the copy's ids, with the agents' detail (round 17: no person line).
     assert (dropped["w-loop"]["source"], dropped["w-loop"]["target"]) == (mapping[U3], mapping[U2])
-    assert dropped["w-loop"]["line"] == main_module.DROPPED_WIRE_LOOP_LINE
-    assert "can't take" in dropped["w-img"]["line"] and "Incompatible port types" in dropped["w-img"]["detail"]
-    assert "takes one connection" in dropped["w-second"]["line"]
-    assert all(wire["line"] and wire["detail"] for wire in body["droppedWires"])
+    assert "Incompatible port types" in dropped["w-img"]["detail"]
+    assert all("line" not in wire and wire["detail"] for wire in body["droppedWires"])
     kept = {edge["id"] for edge in body["project"]["snapshot"]["edges"]}
     assert kept == {"w-n1-u2", "w-u1-u2", "w-u2-u3"}
     on_disk = ProjectStore(store.root).read()["projects"][body["project"]["id"]]

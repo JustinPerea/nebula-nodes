@@ -356,11 +356,26 @@ The server exposes these tools for building and running (see
   they typed before the switch is saved into the project they left, and
   when you reopened the project they were showing, onto the reopened canvas
   too. If that save fails it is kept as a new project named after the
-  project left, "<project left> (recovered)" (then "(recovered 2)", 3 and
-  so on: a new copy each time, never an earlier one), and a line says so
+  project left, "Recovered <project left>" (then "Recovered <project
+  left> 2", 3 and so on: a new copy each time, never an earlier one), and a line says so
   with an Open copy button. The Projects
   screen also lists again whenever anyone makes, renames, deletes or restores
   a project (the `projectsChanged` socket event).
+  Node ids can change at an open. Nebula's canvas only ever holds its own
+  ids (`n1`, `n2`, …). The person's Duplicate and Paste make nodes with ids
+  only their tab knows until the project is next opened; that open gives
+  each a Nebula id, numbered past every id the project and its run history
+  have used, in the saved project too (its connections, run history,
+  pins and any node that names it, such as a video timeline's items). The
+  open answers `renumbered` (`{old: new}`, `{}` when nothing changed), and
+  the `canvas.replaced` event says it too (`data.renumbered`, "gave 1 node
+  new ids"). Loading a graph file (`nebula load`, POST /api/graph/import)
+  gives every node a new id the same way (`idMap`, and `renumbered` for the
+  ones that changed). An id you read before an open, a load or a project
+  switch may be stale: an edit to a node that isn't on the canvas answers
+  404 "Node n7 not found. Node ids can change when a project is opened
+  again …: read the canvas again for the current ids." Read again
+  (look_at_canvas, `nebula graph`) and use the ids you see.
   Start new work in a new project rather than emptying the canvas: it keeps
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
@@ -733,7 +748,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `project.catalogRestored` | Nebula found the project list damaged and restored it ([A damaged project list](#a-damaged-project-list)); by `system` | `id`, `kind` (`restored` or `rebuilt`), `reason`, `source`, `copyAt`, `folder`, `damagedFile` and `setAside` (file names in that folder), `addedBack` (up to 20 `{id, name}`), `addedBackCount`, `notAddedBackCount`, `revertedCount`, `cameBackCount`, `backInTrashCount`, `keptDeletedCount`, `projectCount` |
-| `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "<project> (recovered)" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null), `held` (true: saved from the copy held aside when a project opened over it, or a clear or load replaced it) |
+| `project.canvasFiled` | The live canvas wasn't a project in the list (after a restore, or a crash between `state.json` and `catalog.json`) and was saved as its own, "Recovered <project>" or "Recovered canvas" ([A damaged project list](#a-damaged-project-list)); by `system` | `projectId`, `name`, `from` (the project it was, or null), `restoreId` (the restore it came from, or null), `held` (true: saved from the copy held aside when a project opened over it, or a clear or load replaced it) |
 | `project.canvasHeldUnreadable` | A canvas held aside (`projects/canvas-held/`) couldn't be read from either copy, or couldn't be saved as a project, and may be lost; its files are kept beside them; by `system`, once | `count` (null: unknown), `kept` (the kept files' names), `at` |
 | `project.canvasNotFiled` | It couldn't be saved as its own project: the list is at a limit. No project is open; making one is refused until there is room, and opening one holds the canvas aside first; by `system`, once per wait (across restarts), and again only if the limit it waits on changes | `reason` (`projects` or `storage`), `from`, `restoreId`, `since` (when the wait began) |
 | `provider.hold` | a paid start was held (a World Labs recovery checkpoint, or a start Nebula couldn't confirm) or cleared, attributed to whoever started the run or cleared it | `hold` (`recovery` or `startAmbiguity`), `change` (`held` or `cleared`), `runId`, `kind`, `durable` |
@@ -3135,18 +3150,20 @@ Nebula process restores the same folder. The restore:
    none: never the copy's open project. The next listing (or open, create
    or delete) then saves a live canvas that is no project in the list as
    its own project, under the project's own name when it is known and free
-   again (nothing in the list or Recently deleted uses it), else "<project>
-   (recovered)" ("(recovered 2)" and on for later copies), otherwise
-   "Recovered canvas" ("Recovered canvas 2" and on) (`recoveredCanvas`).
-   Names never stack: a name already in one of these families ("X
-   (recovered)", "Recovered canvas", "X copy") takes the next free number
-   in it ("X (recovered 2)", "Recovered canvas 2", "X copy 2"). A name
-   made from one in another family names its source, so families sit
-   together: a copy of "X (recovered)" is "X (recovered) copy", then "X
-   (recovered) copy 2"; a recovered "X copy" is "X copy (recovered)". A
-   project's own name counts as free only when no project in the list or
-   in Recently deleted has it: a "Beta" still in Recently deleted makes the
-   canvas "Beta (recovered)".
+   again (nothing in the list or Recently deleted uses it), else
+   "Recovered <project>" ("Recovered <project> 2" and on for later
+   copies), otherwise "Recovered canvas" ("Recovered canvas 2" and on)
+   (`recoveredCanvas`). Names never stack: a name already in one of these
+   families ("Recovered X", "Recovered canvas", "X copy") takes the next
+   free number in it ("Recovered X 2", "Recovered canvas 2", "X copy 2").
+   A name made from one in another family names its source, so families
+   sit together: a copy of "Recovered X" is "Recovered X copy", then
+   "Recovered X copy 2"; a recovered "X copy" is "Recovered X copy". A
+   name from before this rule ("X (recovered)") counts as "Recovered X"'s
+   family. A project's own name counts as free only when no project in the
+   list or in Recently deleted has it: a "Beta" still in Recently deleted
+   makes the canvas "Recovered Beta". Agents always see a project's real
+   name, as the person does.
    When the list is at its project limit (500) or its size limit (the
    whole list is capped at 128 MiB; only a delete for good frees that) it
    can't. Nothing in the canvas is lost (Nebula keeps it, across restarts
@@ -3305,31 +3322,61 @@ Nebula process restores the same folder. The restore:
    of that canvas exists (the project it showed, when that is still in the
    list, else the canvas's own saved copy, such as “Recovered canvas”), and
    goes to Projects only when none exists (for example when the canvas
-   couldn't be saved at the project limit). Save as a project files the
+   couldn't be saved at the project limit). While the tab keeps edits,
+   Nebula answers no selection and no view to every reader
+   (GET /api/canvas/selection, look_at_canvas, start_here, `nebula
+   selection`, `nebula look`, a chat turn's selection context): what the tab
+   published before kept mode is no longer what the person has selected,
+   and a kept tab publishes nothing. A project switch and a project-list
+   restore also forget the published selection until the tab sends it
+   again. Save as a project files the
    tab's canvas as a new project: nodes the person added or duplicated
    while kept get Nebula's own ids then (`n12`, `n13`, …, numbered on past
-   the project's), so you never see the tab's local ids; after the copy
-   opens, read it (look_at_canvas, `nebula look`) and use the ids you see.
+   every id the project and its run history have used), so you never see
+   the tab's local ids; after the copy opens, read it (look_at_canvas,
+   `nebula look`) and use the ids you see. The copy is named “Recovered
+   <project>” (“Recovered <project> 2” and on).
    Connections the person drew while kept arrive only in that save; one
-   Nebula's rules refuse (a missing node or port, a type the input can't
-   take, an input past its connection limit, a duplicate, a loop) is left
-   out of the copy and said, never the whole save refused: the
-   `project.created` event carries `droppedWires` (`{id, source,
-   sourceHandle, target, targetHandle, kind}` by the copy's ids, `kind`
-   `missing`, `duplicate`, `contract` or `loop`) and `droppedWireCount`.
+   Nebula's rules refuse is left out of the copy and said, never the whole
+   save refused: the recover answer and the `project.created` event carry
+   `droppedWires` and `droppedWireCount`. Each entry is `{id, source,
+   sourceHandle, target, targetHandle, sourceWas, targetWas, sourceName,
+   targetName, sourcePort, targetPort, sourceType, targetType, limit, kind,
+   detail}`: the ends by the copy's ids (an end whose node isn't in the
+   copy is null, with the tab's id in `sourceWas` / `targetWas`), the
+   nodes' names and the ports' labels as the canvas shows them (null when
+   absent), the output's and the input's data types, `limit` (how many the
+   input takes, for `kind` `limit`), and `detail`, a sentence for you.
+   `kind` is one of `loop` (it connected the node to itself), `duplicate`
+   (the same connection was there already), `missing` (a node isn't in the
+   copy), `port` (a port isn't there: a stray shot output, or a node whose
+   definition was removed), `type` (the input can't take that type) or
+   `limit` (the input has as many as it takes). The kinds and the rule for
+   which types connect are one file the tab and Nebula share
+   (`backend/data/port_rules.json`, the same bytes as the frontend's
+   `src/lib/portRules.json`). The tab writes the person's own line from
+   these fields; there is no person line in the entry.
    When the tab's socket closes while it still keeps edits (a network blip,
    a reload, or the tab closed), kept mode holds for that tab for about 10
    seconds more, so a tab that reconnects and says it again carries on with
    no gap; after that it ends. Each closed tab holds its own: one tab saying
-   it no longer keeps edits never ends another's. A tab that said it no
-   longer keeps edits before closing holds nothing. Nebula also remembers,
-   in its state folder, how many tabs kept edits, so a Nebula restart can't
-   let your changes through before the tab is back: when Nebula starts, kept
-   mode holds for each of them for about 15 seconds (the 10, plus the tab's
-   3-second reconnect and its hello); a tab that comes back and says it
-   carries on, one that never does ends when its time runs out. Only the
-   person's own tab can start, carry on or end it (its socket says so after
-   its hello with the person token); an agent's socket can't.
+   it no longer keeps edits never ends another's, and a closed tab's time
+   that ran out is never counted while another kept tab stays connected. A
+   tab that said it no longer keeps edits before closing holds nothing.
+   Nebula also remembers, in its state folder, how many tabs kept edits:
+   when Nebula starts again, kept mode holds for each of them for about 15
+   seconds (the 10, plus the tab's 3-second reconnect and its hello); a tab
+   that comes back and says it carries on, one that never does ends when
+   its time runs out, and the record goes then even if nothing asks. That
+   wait only helps a tab that can reconnect as the person: the dev launcher
+   keeps the person token across a restart, so its tab comes back as the
+   person and carries kept mode on; a plain backend launch makes a new
+   person token, so a tab open across that restart can't say it as the
+   person, and your changes go through once the 15 seconds run out. Only
+   the person's own tab can start, carry on or end it (its socket says so
+   after its hello with the person token); an agent's socket can't. A
+   record Nebula can't remove (or a folder where it goes) holds kept mode
+   once at most, and is ignored after that.
    The person's own open, create, clear and load always
    hold it, whatever its size: such a canvas is saved over the save limit and
    opens with saving paused. A person request that reaches the refusal gets
@@ -4339,9 +4386,9 @@ other stops on the outdated-workspace banner with its Reload, whose Try
 again keeps the person's scene edits as a recovered project, even ones the
 autosave had already sent). Once that copy is saved, a neutral notice takes
 the banner's place on Projects: "Your latest edits were saved as their own
-project, “Recovered canvas (recovered)”.", with [Open] (opens that copy)
-and ×. The copy is an ordinary project in `list_projects`, named after
-the project with "(recovered)" after it.
+project, “Recovered Delta”.", with [Open] (opens that copy)
+and ×. The copy is an ordinary project in `list_projects`, named
+"Recovered <project>" ("Recovered <project> 2" and on).
 
 A scene save refused 400 or 413 can't succeed as it is, whichever save it
 was: an ordinary one, the quiet try a stopped save makes when the writer

@@ -76,7 +76,7 @@ export interface CatalogRestore {
   cameBack?: { id: string; name: string; how?: string }[]; cameBackCount?: number;
   backInTrash?: { id: string; name: string }[]; backInTrashCount?: number;
   /** The live canvas filed as its own project (it wasn't one in the restored
-   * list): "<project> (recovered)", numbered, or "Recovered canvas". */
+   * list): "Recovered <project>", numbered, or "Recovered canvas". */
   recoveredCanvas?: SavedCanvas | null;
   /** Other canvases filed as their own projects while the notice showed
    * (GM's answer 1 to review 8: the notice names them, no toast does). */
@@ -221,12 +221,21 @@ export const pinProjectCover = (id: string, url: string | null) =>
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
 /** `sourceName`: the project's name as this tab knew it, for a copy whose
- * project is no longer listed (a restore took it away: GM r15 on PR #199,
- * Q11), so the copy is "<name> (recovered)", not "Deleted project". */
-/** A wire the recover route's rules left out of the copy (PR #199 round 16:
- * a kept tab's wires are checked there by the server's own rules), by the
- * copy's ids, with the person's line for why. */
-export interface DroppedWire { source: string; sourceHandle?: string | null; target: string; targetHandle?: string | null; line?: string }
+ * project is no longer listed (a restore took it away: GM r15 on PR #199),
+ * so the copy is "Recovered <name>", not "Deleted project". */
+/** A connection the recover route's rules left out of the copy (PR #199
+ * round 16: a kept tab's connections are checked there by the server's own
+ * rules), by the copy's ids. Round 17 (GM r23, 2): the server says why in
+ * fields (`kind` from the shared table, lib/portRules.json), and the tab
+ * writes the person's line from them; an end whose node isn't in the copy is
+ * null, with the tab's id in `sourceWas`/`targetWas`. */
+export interface DroppedWire {
+  source: string | null; sourceHandle?: string | null; target: string | null; targetHandle?: string | null;
+  sourceWas?: string | null; targetWas?: string | null;
+  sourceName?: string | null; targetName?: string | null; sourcePort?: string | null; targetPort?: string | null;
+  sourceType?: string | null; targetType?: string | null; limit?: number | null;
+  kind?: string; detail?: string;
+}
 /** The copy, with what the route changed on the way in (PR #199 round 16):
  * `renumbered` maps each tab-local node id to the backend id the copy gave
  * it, and `droppedWires` the wires its rules refused. */
@@ -241,6 +250,7 @@ export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapsho
           .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : undefined;
       const droppedWires = Array.isArray(result.droppedWires)
         ? (result.droppedWires as unknown[]).filter((wire): wire is DroppedWire => Boolean(wire) && typeof wire === 'object'
-          && typeof (wire as DroppedWire).source === 'string' && typeof (wire as DroppedWire).target === 'string') : undefined;
+          && ['string', 'object'].includes(typeof (wire as DroppedWire).source)
+          && ['string', 'object'].includes(typeof (wire as DroppedWire).target)) : undefined;
       return { ...result.project, ...(renumbered ? { renumbered } : {}), ...(droppedWires?.length ? { droppedWires } : {}) };
     });

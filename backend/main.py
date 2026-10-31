@@ -105,6 +105,7 @@ from services.retired_nodes import folded_entry, migrate_graph, migrate_node, mi
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services import project_store as project_store_module
 from services import cli_graph as cli_graph_module
+from services.wording import counted
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, needs_cover, now as project_now,
@@ -116,9 +117,11 @@ from services.port_contracts import (
     ContractNode,
     PortContractIssue,
     cinema_output_ports,
+    input_connection_limit,
     input_takes_one,
     node_ports,
     validate_edge_contracts,
+    DROPPED_CONNECTION_KINDS,
 )
 from services import universal_ports
 from services.media_types import MEDIA_PORT_IDS
@@ -309,12 +312,15 @@ canvas_pins = CanvasPins(lambda: project_store)
 _main_loop: asyncio.AbstractEventLoop | None = None
 
 
-def _catalog_restore_note(record: Mapping[str, Any]) -> str:
+def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = False) -> str:
     """What agents read about a catalog restore (GET /api/projects
     `catalogRestore.note`, start_here, the journal): what happened, from
     where, what came back, what the copy decided, where the damaged file is
     kept. Not the person's notice (frontend catalogRestoreCopy.ts has GM's
-    lines)."""
+    lines). ``canvas_block``: the note goes beside the live `canvasNotFiled`
+    block (the listing, start_here, `nebula context`, `nebula projects`), so
+    it leaves the waiting canvas to that block and doesn't say it twice (GM
+    r23 e on PR #199); the journal's note, alone, still says it."""
     def count(key: str) -> int:
         # What still holds, when the record was checked against the list now.
         value = record.get(f"{key[:-5]}CountNow") if key.endswith("Count") and f"{key[:-5]}CountNow" in record \
@@ -393,7 +399,7 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
         limit = record.get("projectLimit") if isinstance(record.get("projectLimit"), int) \
             else project_store_module.MAX_PROJECTS
         were, they = ("weren't", "They're") if limited != 1 else ("wasn't", "It's")
-        parts.append(f"{who} {were} added back because the project list is at its limit of {limit} projects. "
+        parts.append(f"{who} {were} added back because the project list is at its limit of {counted(limit, 'project')}. "
                      f'{they} still in the damaged file, which was kept (notAddedBack, reason "limit").')
     reverted = count("revertedCount")
     if reverted:
@@ -419,10 +425,13 @@ def _catalog_restore_note(record: Mapping[str, Any]) -> str:
                      f"\"{recovered.get('nameNow') or recovered.get('name') or RECOVERED_CANVAS_NAME}\" "
                      f"({recovered['id']}); nothing on it is lost.")
     elif isinstance(waiting, Mapping) and waiting.get("current") is not False:
-        parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: the "
-                     f"list is at its {waiting.get('reason')} limit (canvasNotFiled). Nothing in it is lost. The "
-                     "person can't see or open that canvas until it is saved; opening a project holds it aside "
-                     "first, making one is refused until the person frees room, and the next listing then files it.")
+        # Beside the canvasNotFiled block, that block says it (with the refusal codes).
+        if not canvas_block:
+            parts.append(f"The live canvas wasn't a project in the restored list and couldn't be filed as its own: "
+                         f"the list is at its {waiting.get('reason')} limit (canvasNotFiled). Nothing in it is lost. "
+                         "The person can't see or open that canvas until it is saved; opening a project holds it "
+                         "aside first, making one is refused until the person frees room, and the next listing then "
+                         "files it.")
     elif record.get("openProjectMissing"):
         parts.append("The project that was open didn't come back, so none is open.")
     stale = record.get("noLongerHold")
@@ -542,7 +551,9 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
     # couldn't read; left out for records from before it (unknown).
     if isinstance(record.get("damagedRecordsUnread"), bool):
         view["damagedRecordsUnread"] = record["damagedRecordsUnread"]
-    return {**view, "note": _catalog_restore_note(record)}
+    # Checked against the list now, the canvas that waits is in the
+    # `canvasNotFiled` block every such surface carries beside it.
+    return {**view, "note": _catalog_restore_note(record, canvas_block=catalog is not None)}
 
 
 # Restores made while main.py is still importing (the boot read of the
@@ -598,6 +609,9 @@ def _tell_catalog_restore(view: dict[str, Any]) -> None:
     data["setAside"] = [path.name for path in kept]
     data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
     _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
+    # The selection named the canvas before the restore (review 15
+    # kept-wires-ui LOW-1): agents read none until the tab publishes again.
+    selection_context.clear()
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -4442,6 +4456,9 @@ KEPT_GRACE_SECONDS = 10.0
 # marker goes.
 KEPT_BOOT_SLACK_SECONDS = 5.0
 KEPT_MARKER_NAME = "kept-tab.json"
+# Beside a marker that couldn't be removed: "<marker>.ignored", the digest of
+# the marker it names, so later boots don't pause agents for it again.
+KEPT_MARKER_IGNORED = ".ignored"
 
 
 class ConnectionManager:
@@ -4458,6 +4475,8 @@ class ConnectionManager:
         # Where the kept tabs are remembered across a restart (None: not).
         self.kept_marker = kept_marker
         self._marker_count: int | None = None
+        # The marker lines already printed (each said once a run).
+        self._marker_said: set[str] = set()
         self._grace_seq = itertools.count()
 
     @property
@@ -4521,45 +4540,102 @@ class ConnectionManager:
     def kept_in_tab(self) -> bool:
         """Whether a person's tab keeps unsaved edits now: a connected one, or
         one whose socket closed (or that a restart remembered) and whose
-        grace hasn't run out."""
-        if any(websocket in self.browser_connections for websocket in self.kept_tabs):
-            return True
+        grace hasn't run out. Graces that ran out go first, and the marker
+        follows (review 15 agents-grace LOW-1: with another kept tab still
+        connected, an expired grace stayed counted, and a restart then held
+        agents for a tab long gone)."""
         self._expire_graces()
-        if self.kept_graces:
-            return True
         self._remember_kept()
-        return False
+        return any(websocket in self.browser_connections for websocket in self.kept_tabs) or bool(self.kept_graces)
 
     def kept_count(self) -> int:
-        """How many tabs hold kept mode: kept and connected, or in a grace."""
-        return len(self.kept_tabs) + len(self.kept_graces)
+        """How many tabs hold kept mode: kept and connected, or in a grace
+        that hasn't run out (an expired one never counts, even before
+        anything has dropped it)."""
+        now = _time_module.monotonic()
+        return len(self.kept_tabs) + sum(1 for until in self.kept_graces.values() if now < until)
 
     def _remember_kept(self) -> None:
         """Write (atomically) or remove the state dir's kept marker, so a
         restart knows how many tabs kept edits. Best effort: a marker that
-        can't be written loses only the restart's grace."""
+        can't be written loses only the restart's grace; its temporary file
+        never stays behind (review 15 agents-grace NIT-1). A marker that
+        can't be removed is said once, then treated as no marker: this run
+        stops trying, and the ignore note beside it (KEPT_MARKER_IGNORED)
+        stops the next boots from pausing agents for it again."""
         path = self.kept_marker
         if path is None:
             return
         count = self.kept_count()
         if count == self._marker_count:
             return
+        if count == 0:
+            try:
+                if path.is_file() or path.is_symlink():
+                    path.unlink(missing_ok=True)
+                elif path.exists():
+                    # Not a file (a directory): it was never a marker (start_boot_grace).
+                    self._say_marker_once(f"[main] the kept marker {path} isn't a file; it is ignored")
+                self._ignore_note().unlink(missing_ok=True)
+            except OSError as exc:
+                self._say_marker_once(f"[main] couldn't remove the kept marker {path}: {exc}; it is ignored "
+                                      "from now on")
+                self._note_marker_ignored(path)
+            self._marker_count = 0
+            return
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            if count == 0:
-                path.unlink(missing_ok=True)
-            else:
-                temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-                temporary.write_text(json.dumps({"keptTabs": count, "at": _time_module.time()}), encoding="utf-8")
-                os.replace(temporary, path)
+            temporary.write_text(json.dumps({"keptTabs": count, "at": _time_module.time()}), encoding="utf-8")
+            os.replace(temporary, path)
             self._marker_count = count
+            self._ignore_note().unlink(missing_ok=True)
         except OSError as exc:
-            print(f"[main] couldn't {'remove' if count == 0 else 'write'} the kept marker {path}: {exc}", flush=True)
+            self._say_marker_once(f"[main] couldn't write the kept marker {path}: {exc}")
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _say_marker_once(self, line: str) -> None:
+        """Print ``line`` unless this run already said it (an error's own
+        text after the first colon isn't part of what is compared)."""
+        key = line.split(": ", 1)[0]
+        if key not in self._marker_said:
+            self._marker_said.add(key)
+            print(line, flush=True)
+
+    def _ignore_note(self) -> Path:
+        assert self.kept_marker is not None
+        return self.kept_marker.with_name(f"{self.kept_marker.name}{KEPT_MARKER_IGNORED}")
+
+    def _note_marker_ignored(self, path: Path) -> None:
+        """Beside a marker that can't be removed: its bytes' digest, so a boot
+        that finds the same marker holds no grace for it. Best effort (a
+        state dir that can't be written at all pauses each boot once)."""
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            self._ignore_note().write_text(digest, encoding="utf-8")
+        except OSError:
+            pass
+
+    def _marker_is_ignored(self, path: Path) -> bool:
+        try:
+            return self._ignore_note().read_text(encoding="utf-8").strip() == \
+                hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return False
 
     def start_boot_grace(self) -> int:
         """At boot: a grace for each kept tab the marker remembers (a restart
-        while a tab kept edits), from now. Returns how many."""
+        while a tab kept edits), from now. Returns how many. Only a regular
+        file is a marker (review 15 agents-grace NIT-1), and one an earlier
+        run couldn't remove after its grace holds none."""
         path = self.kept_marker
         if path is None or not path.exists():
+            return 0
+        if not path.is_file():
+            self._say_marker_once(f"[main] the kept marker {path} isn't a file; it is ignored")
+            return 0
+        if self._marker_is_ignored(path):
+            self._say_marker_once(f"[main] the kept marker {path} couldn't be removed before; it is ignored")
             return 0
         try:
             remembered = json.loads(path.read_text(encoding="utf-8")).get("keptTabs")
@@ -4656,6 +4732,20 @@ class ConnectionManager:
 
 
 manager = ConnectionManager(_STATE_DIR / KEPT_MARKER_NAME if _STATE_PATH is not None else None)
+
+
+def _kept_hides_reads() -> bool:
+    """Whether a person's tab keeps edits now (the live ``manager``, which
+    tests swap): agents then read no selection and no view (PR #199 round
+    17, review 15 kept-wires-ui LOW-1). The server ignores what was
+    published before kept mode, so nothing can go stale: every reader
+    (GET /api/canvas/selection, look_at_canvas, start_here, `nebula`, the
+    chat and ACP prompt context) goes through these two stores."""
+    return manager.kept_in_tab()
+
+
+selection_context.hidden = _kept_hides_reads
+agent_presence.hide_view = _kept_hides_reads
 
 
 @app.on_event("startup")
@@ -4849,7 +4939,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it.
         await websocket.send_text(json.dumps({"type": "graphSync", **export, "bootId": BACKEND_BOOT_ID,
-                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT}))
+                                              "bootStartedAt": BACKEND_BOOT_STARTED_AT,
+                                              # Ids this boot gave tab-local nodes (PR #199 round 17).
+                                              **({"renumbered": dict(_boot_renumbered)} if _boot_renumbered else {})}))
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
         await websocket.send_text(json.dumps(_pins_message()))
         await _settle_proposal_updates()
@@ -8461,7 +8553,7 @@ def _stage_proposal(
         # nothing to the agent, which wrote +img.
         detail = exc.detail
         if isinstance(detail, str) and ref_for:
-            detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
+            detail = re.sub(r"\bn[0-9]+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
         raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     if report is not None:
         for node_id, reason in configured.items():
@@ -8714,7 +8806,7 @@ def _estimate_proposal_run(
 
 def _node_order(node_id: str) -> tuple[int, str]:
     digits = node_id[1:]
-    return (int(digits) if digits.isdigit() else 0, node_id)
+    return (int(digits) if digits.isascii() and digits.isdigit() else 0, node_id)
 
 
 def _proposal_layout_hints() -> tuple[dict[str, dict[str, Any]], dict[str, float] | None]:
@@ -9137,7 +9229,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     ]
     created = _rf_created(list(id_map.values()), edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
+    publish_action(f"Accepted {proposal.agent.name}'s proposal ({counted(len(id_map), 'node')})")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -12578,8 +12670,14 @@ async def _broadcast_graph_sync(
     project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
     cleared: bool = False, run_params: str | None = None,
     dropped_ports: list[dict[str, Any]] | None = None,
+    renumbered: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `renumbered` ({old: new}; a replacement only: an open that gave
+    tab-local node ids Nebula's, PR #199 round 17) rides on the graphSync as
+    ``renumbered``, so a tab showing those nodes adopts the new ids (its
+    selection, open panels), and on the ``canvas.replaced`` event.
 
     `dropped_ports` (a replacement's lenient read: _stray_port_report) goes in
     its ``canvas.replaced`` event as ``droppedPorts``.
@@ -12645,6 +12743,11 @@ async def _broadcast_graph_sync(
             # left out (PR #198 review 5, L3).
             data["droppedPorts"] = [dict(record) for record in dropped_ports[:20]]
             summary += f"; left out {len(dropped_ports)} shot output{'' if len(dropped_ports) == 1 else 's'} no shot owns"
+        if renumbered and safe_reason != "import":
+            # The nodes that got Nebula's ids (an open; an import gives every
+            # node a new id, and says so already): any id read before is stale.
+            data["renumbered"] = dict(list(renumbered.items())[:50])
+            summary += f"; gave {counted(len(renumbered), 'node')} new ids"
         _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
@@ -12676,6 +12779,7 @@ async def _broadcast_graph_sync(
                                  **({"cleared": True} if cleared and not graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+                                 **({"renumbered": dict(renumbered)} if renumbered and graph_replaced else {}),
                                  **({"arranged": arranged} if arranged and not graph_replaced else {}),
                                  **({"runParams": run_params} if run_params and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
@@ -14819,10 +14923,16 @@ def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
     return refusal_copy.refusal(status, specific, person, route="canvas")
 
 
+# What an agent reads after a node id it holds isn't on the canvas (PR #199
+# round 17): ids can move at an open, so the answer says to read again.
+NODE_GONE_READ_AGAIN = ("Node ids can change when a project is opened again (a node made by Duplicate or Paste "
+                        "gets Nebula's id then): read the canvas again for the current ids.")
+
+
 def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
     """404 for a node that isn't on the canvas: GM's line for the person
-    (approved round 3), the id for agents."""
-    return _node_refusal(404, specific or f"Node {node_id} not found", NODE_GONE_PERSON)
+    (approved round 3), the id for agents, and what to do next."""
+    return _node_refusal(404, f"{specific or f'Node {node_id} not found'}. {NODE_GONE_READ_AGAIN}", NODE_GONE_PERSON)
 
 
 def _scene_write_gone(node_id: str) -> CodedRefusal:
@@ -16868,6 +16978,12 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
+    # Every node gets a fresh backend id (the live graph never holds another:
+    # PR #199 round 17); a node's references to another (a Remotion
+    # manifest's timeline items) move with them.
+    renumbered = {ref: node_id for ref, node_id in id_map.items() if ref != node_id}
+    for node in candidate.nodes.values():
+        node["params"] = _moved_node_references(node.get("params") or {}, renumbered)
     _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
     # What the scenes' lenient read left out (PR #198 review 5, L3): said in
     # the warnings, the canvas.replaced event and the Agent log.
@@ -16921,11 +17037,11 @@ async def import_graph(body: dict[str, Any]) -> dict:
         # brought back. Here, with the commit, not after the sync's awaits: a
         # delete landing during the sync would name the old node's removal.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True,
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True, renumbered=renumbered,
                                           **({"dropped_ports": stray_ports} if stray_ports else {}))
     await _say_stray_ports(_stray_log_lines(port_reports))
     publish_action(
-        f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
+        f"Loaded graph ({counted(len(cli_graph.nodes), 'node')}, {counted(len(cli_graph.edges), 'edge')})"
     )
     held = await _note_waiting_canvas_guarded(hold, "replaced")
     return {
@@ -16934,6 +17050,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         "status": "imported",
         "canvasRevision": _canvas_revision(),
         "idMap": id_map,
+        # The ids that changed ({file id: Nebula id}), as an open answers them.
+        "renumbered": renumbered,
         "nodeCount": len(cli_graph.nodes),
         "edgeCount": len(cli_graph.edges),
         "nodes": exported["nodes"],
@@ -17030,7 +17148,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
     created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Created cluster ({len(id_map)} nodes)")
+    publish_action(f"Created cluster ({counted(len(id_map), 'node')})")
 
     return {"idMap": id_map, **created}
 
@@ -17241,23 +17359,59 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
     return rf_nodes, edges_out, warnings
 
 
-# The lines for a kept tab's connection that the recover route leaves out
-# (PR #199 round 16; `droppedWires[].line`): a contract issue's own person
-# line (port_contracts) when it has one, else these. The loop line is the
-# tab's own (frontend lib/keptWires.ts KEPT_WIRE_LOOP).
-DROPPED_WIRE_LOOP_LINE = "It would connect the node back to itself."
-DROPPED_WIRE_DUPLICATE_LINE = "The same connection was there already."
-DROPPED_WIRE_MISSING_LINE = "A node it connected isn’t on the canvas."
-DROPPED_WIRE_CONTRACT_LINE = "Those two ports don’t connect."
+def _port_facts(graph: CLIGraph, node_id: str, handle: str, port_key: str) -> tuple[str | None, str | None]:
+    """A staged node's port as the canvas shows it: (label, data type), or
+    (None, None) when the node or that port isn't there (a node whose
+    definition is gone has no ports)."""
+    node = graph.nodes.get(node_id)
+    if node is None:
+        return None, None
+    definition_id = str(node.get("definitionId") or "")
+    definition = node_registry.get(definition_id)
+    if definition is None:
+        return None, None
+    for port in node_ports(definition_id, node.get("params"), definition, port_key):
+        if isinstance(port, Mapping) and port.get("id") == handle:
+            label = str(port.get("label") or "").strip() or None
+            data_type = port.get("dataType") if isinstance(port.get("dataType"), str) else None
+            return label, data_type
+    return None, None
 
 
-def _dropped_wire(edge_id: str, endpoints: Sequence[str], kind: str, line: str, detail: str) -> dict[str, Any]:
-    """One connection the recover route left out: its id and ends, why
-    (``kind``: missing, duplicate, contract or loop), the person's ``line``
-    and the agents' ``detail``."""
+def _dropped_wire(edge_id: str, endpoints: Sequence[str], kind: str, detail: str, graph: CLIGraph) -> dict[str, Any]:
+    """One connection the recover route left out (PR #199 round 17, GM r23
+    2): the tab writes the person's line from these fields, and ``detail``
+    is the agents' sentence (never a person's line such as "Remove the
+    extra one…": nothing was drawn to remove). ``kind`` is one of the
+    shared kinds (port_contracts.DROPPED_CONNECTION_KINDS: loop, duplicate,
+    missing, port, type, limit). An end whose node isn't in the copy is
+    null, its tab id in ``sourceWas`` / ``targetWas``; names and port
+    labels are null when absent. recover_project_copy moves the ends to the
+    copy's ids after renumbering."""
     source, source_handle, target, target_handle = endpoints
-    return {"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target,
-            "targetHandle": target_handle, "kind": kind, "line": line, "detail": detail}
+    source_port, source_type = _port_facts(graph, source, source_handle, "outputPorts")
+    target_port, target_type = _port_facts(graph, target, target_handle, "inputPorts")
+
+    def name(node_id: str) -> str | None:
+        node = graph.nodes.get(node_id)
+        return _ingress_node_name(str(node.get("definitionId") or ""), node.get("label")) if node else None
+
+    limit = None
+    if kind == "limit" and (node := graph.nodes.get(target)) is not None:
+        definition = node_registry.get(str(node.get("definitionId") or ""))
+        port = next((port for port in node_ports(str(node.get("definitionId") or ""), node.get("params"),
+                                                 definition, "inputPorts")
+                     if isinstance(port, Mapping) and port.get("id") == target_handle), None) if definition else None
+        limit = input_connection_limit(port)
+    return {"id": edge_id,
+            "source": source if source in graph.nodes else None, "sourceHandle": source_handle,
+            "target": target if target in graph.nodes else None, "targetHandle": target_handle,
+            "sourceWas": None if source in graph.nodes else source,
+            "targetWas": None if target in graph.nodes else target,
+            "sourceName": name(source), "targetName": name(target),
+            "sourcePort": source_port, "targetPort": target_port,
+            "sourceType": source_type, "targetType": target_type,
+            "limit": limit, "kind": kind, "detail": detail}
 
 
 def _wire_closes_loop(edges: Iterable[Mapping[str, Any]], source: str, target: str) -> bool:
@@ -17280,39 +17434,117 @@ def _wire_closes_loop(edges: Iterable[Mapping[str, Any]], source: str, target: s
     return False
 
 
-_BACKEND_NODE_ID = re.compile(r"n(\d+)")
+# A Nebula node id (PR #199 round 17, review 15 NIT-1): "n" and ASCII digits
+# only, as the tab's CLI_ID_RE (/^n\d+$/: ASCII in JavaScript) and CLIGraph's
+# SHORT_ID_RE, never Python's Unicode \d ("n٣" is not one).
+_BACKEND_NODE_ID = cli_graph_module.BACKEND_NODE_ID
+# The keys inside a node's data that name another node, and their move
+# (PR #199 round 17, review 15 NIT-2): services/cli_graph.py, which a load of
+# state.json renumbers with too.
+_NODE_REFERENCE_KEYS = cli_graph_module.NODE_REFERENCE_KEYS
+_NODE_REFERENCE_LIST_KEYS = cli_graph_module.NODE_REFERENCE_LIST_KEYS
+_moved_node_references = cli_graph_module.moved_node_references
 # At most this many left-out wires are kept on the copy for a retry's answer.
 _MAX_DROPPED_WIRES = RESTORE_MAX_GRAPH_EDGES
+# The most digits a counter may take from what a project holds: a short id's
+# (CLIGraph SHORT_ID_RE), so a stray long "n…" string can't push every later
+# id past what the routes accept.
+_MAX_ID_DIGITS = 9
+
+
+def _highest_backend_id(*values: Any) -> int:
+    """The highest ``n[0-9]+`` (of at most _MAX_ID_DIGITS digits) among
+    ``values``: every string that is exactly one, and every dict key, at any
+    depth (review 15 LOW-1: a deleted node's run records keep its id, in
+    ``targetNodeId``, the recipe's nodes and the ``resultOutputs`` keys)."""
+    highest = 0
+    stack: list[Any] = list(values)
+    while stack:
+        value = stack.pop()
+        if isinstance(value, str):
+            if len(value) <= _MAX_ID_DIGITS + 1 and (match := _BACKEND_NODE_ID.fullmatch(value)):
+                highest = max(highest, int(match.group(1)))
+        elif isinstance(value, dict):
+            stack.extend(key for key in value if isinstance(key, str))
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+    return highest
+
+
+def _ids_ever_used(snapshot: Mapping[str, Any]) -> int:
+    """The highest backend id a snapshot has ever used: its nodes and edge
+    ends, every reference in its nodes' data, and its run history (whose
+    records keep the ids of nodes deleted since)."""
+    return _highest_backend_id(
+        [node.get("id") for node in snapshot.get("nodes") or [] if isinstance(node, Mapping)],
+        [[edge.get("source"), edge.get("target")] for edge in snapshot.get("edges") or [] if isinstance(edge, Mapping)],
+        [_node_references_in((node.get("data") if isinstance(node, Mapping) else None))
+         for node in snapshot.get("nodes") or []],
+        snapshot.get("runHistory"))
+
+
+def _node_references_in(value: Any) -> list[str]:
+    """The node references (_NODE_REFERENCE_KEYS) in ``value``."""
+    found: list[str] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            for key, entry in item.items():
+                if key in _NODE_REFERENCE_KEYS and isinstance(entry, str):
+                    found.append(entry)
+                elif key in _NODE_REFERENCE_LIST_KEYS and isinstance(entry, list):
+                    found.extend(part for part in entry if isinstance(part, str))
+                else:
+                    stack.append(entry)
+        elif isinstance(item, list):
+            stack.extend(item)
+    return found
 
 
 def _renumber_tab_local_nodes(snapshot: dict[str, Any], counter: int) -> tuple[dict[str, str], int]:
     """Give every node whose id isn't a backend id (``nN``) a fresh one, in
-    place: the nodes a kept tab added or duplicated have tab-local ids
-    (PR #199 round 16, review 14 HIGH-1). The tab pushes a node's typing
-    only for ``nN`` ids, so a copy that kept a local id lost later edits to
-    the first read of the open project. Numbered on from ``counter`` (and
-    every ``nN`` in the snapshot), in node order. Every reference moves
-    with it: the edges' ends, and in the run history every value or key
-    that is exactly an old id (a record's target, its outputs by node, its
-    graph snapshot; a kept tab can't run, so only a project that already
-    held a local id has any). Node params, the Creator draft and the
-    viewport hold no node ids. Returns ({old: new}, the highest number)."""
-    nodes = snapshot.get("nodes") or []
-    for node in nodes:
-        if isinstance(node, dict) and isinstance(node.get("id"), str) and (match := _BACKEND_NODE_ID.fullmatch(node["id"])):
-            counter = max(counter, int(match.group(1)))
+    place (PR #199 round 16, review 14 HIGH-1; round 17, review 15 HIGH-1).
+    Duplicate, Paste and the nodes a kept tab adds make tab-local ids, and
+    the tab pushes a node's typing only for ``nN`` ids, so a node that kept
+    a local id inside Nebula's live graph lost later edits to the first read
+    of the open project. Numbered on past ``counter`` and every id the
+    snapshot has ever used (_ids_ever_used: its run history keeps deleted
+    nodes' ids, review 15 LOW-1), in node order. Every reference moves with
+    it: the edges' ends; in the run history every value or key that is
+    exactly an old id (a record's target, its outputs by node, its graph
+    snapshot); and in every node's data the keys that name a node
+    (_NODE_REFERENCE_KEYS: a Remotion manifest's timeline items, a gate's
+    skip; review 15 NIT-2). The Creator draft and the viewport hold no node
+    ids. Returns ({old: new}, the highest number used or seen)."""
+    counter = max(counter, _ids_ever_used(snapshot))
     mapping: dict[str, str] = {}
-    for node in nodes:
+    for node in snapshot.get("nodes") or []:
         node_id = node.get("id") if isinstance(node, dict) else None
         if isinstance(node_id, str) and not _BACKEND_NODE_ID.fullmatch(node_id):
             counter += 1
-            mapping[node_id] = node["id"] = f"n{counter}"
+            mapping[node_id] = f"n{counter}"
+    _apply_node_renumbering(snapshot, mapping)
+    return mapping, counter
+
+
+def _apply_node_renumbering(snapshot: dict[str, Any], mapping: Mapping[str, str]) -> None:
+    """Move a snapshot's nodes to the ids in ``mapping`` ({old: new}), in
+    place, with every reference to them (_renumber_tab_local_nodes)."""
     if not mapping:
-        return mapping, counter
+        return
+    nodes = snapshot.get("nodes") or []
+    for node in nodes:
+        if isinstance(node, dict) and node.get("id") in mapping:
+            node["id"] = mapping[node["id"]]
     for edge in snapshot.get("edges") or []:
         for key in ("source", "target"):
             if isinstance(edge, dict) and edge.get(key) in mapping:
                 edge[key] = mapping[edge[key]]
+    for node in nodes:
+        if isinstance(node, dict) and isinstance(node.get("data"), dict):
+            node["data"] = _moved_node_references(node["data"], mapping)
 
     def moved(value: Any) -> Any:
         if isinstance(value, str):
@@ -17325,20 +17557,106 @@ def _renumber_tab_local_nodes(snapshot: dict[str, Any], counter: int) -> tuple[d
 
     if isinstance(snapshot.get("runHistory"), list):
         snapshot["runHistory"] = moved(snapshot["runHistory"])
-    return mapping, counter
+
+
+def _rekey_candidate(candidate: CLIGraph, mapping: Mapping[str, str]) -> None:
+    """The staged graph under the new ids _renumber_tab_local_nodes gave
+    its snapshot (in place, the node order kept): each node's id, the
+    edges' ends, and the node references in its params."""
+    if not mapping:
+        return
+    nodes: dict[str, dict[str, Any]] = {}
+    for node_id, node in candidate.nodes.items():
+        new_id = mapping.get(node_id, node_id)
+        node = _moved_node_references(node, mapping)
+        node["id"] = new_id
+        nodes[new_id] = node
+    candidate.nodes = nodes
+    for edge in candidate.edges:
+        for key in ("source", "target"):
+            if edge.get(key) in mapping:
+                edge[key] = mapping[edge[key]]
+
+
+def _renumber_project_records(project: dict[str, Any], mapping: Mapping[str, str]) -> None:
+    """A renumbered project's records keyed by node id follow its nodes:
+    its pins' anchors and its Updates (by _NODE_REFERENCE_KEYS), and the
+    nodes the live graph had (``_backendNodeIds``)."""
+    if not mapping:
+        return
+    for key in ("pins", "agentNotes"):
+        if key in project:
+            project[key] = _moved_node_references(project[key], mapping)
+    if isinstance(project.get("_backendNodeIds"), list):
+        project["_backendNodeIds"] = sorted({mapping.get(node_id, node_id) for node_id in project["_backendNodeIds"]})
+
+
+def _renumber_staged_project(project: dict[str, Any], candidate: CLIGraph) -> dict[str, str]:
+    """Before a stored project becomes Nebula's live graph (an open; PR #199
+    round 17, review 15 HIGH-1): every node with a tab-local id gets a
+    backend id, in the stored project (snapshot, run history, records) and
+    in the staged graph, so the live graph never holds one
+    (_require_backend_node_ids at the commit). Numbered past the project's
+    counter and every id it has ever used, and the counter is stored with
+    it. Returns {old: new} ({} when every id was already Nebula's, and then
+    nothing changes)."""
+    floor = max(candidate._counter, int(project.get("_nodeCounter", 0) or 0))
+    mapping, counter = _renumber_tab_local_nodes(project["snapshot"], floor)
+    if mapping:
+        _rekey_candidate(candidate, mapping)
+        _renumber_project_records(project, mapping)
+        candidate._counter = max(candidate._counter, counter)
+        project["_nodeCounter"] = candidate._counter
+    return mapping
 
 
 def _require_backend_node_ids(snapshot: Mapping[str, Any]) -> None:
-    """The recover route's invariant (PR #199 round 16): a copy it writes
-    holds only backend node ids (``nN``), so every node's typing reaches
-    the server after the copy opens. Checked just before the commit: a
-    change to staging that let a local id through fails the save loudly
-    (500, nothing written) instead of losing the person's later edits."""
+    """The invariant (PR #199 rounds 16 and 17): Nebula's live graph, and a
+    copy the recover route writes, hold only backend node ids (``nN``), so
+    every node's typing reaches the server. Checked just before each commit
+    (recover, and every switch: _commit_project_workspace): a change that
+    let a local id through fails loudly (500, nothing written) instead of
+    losing the person's later edits."""
     stray = [node.get("id") for node in snapshot.get("nodes") or []
              if not (isinstance(node, Mapping) and isinstance(node.get("id"), str)
                      and _BACKEND_NODE_ID.fullmatch(node["id"]))]
     if stray:
-        raise RuntimeError(f"A recovered copy would hold node ids that aren't Nebula's: {stray[:5]}")
+        raise RuntimeError(f"Nebula's graph would hold node ids that aren't Nebula's: {stray[:5]}")
+
+
+# The ids this boot's load of state.json gave nodes that didn't have Nebula's
+# ({old: new}; CLIGraph.renumbered_on_load). Every socket's first graphSync
+# carries them as ``renumbered``, so a tab open across the restart adopts them.
+_boot_renumbered: dict[str, str] = {}
+
+
+@app.on_event("startup")
+async def _renumber_live_canvas_at_boot() -> None:
+    """A state.json from before the live graph refused tab-local ids (PR #199
+    round 17, review 15 HIGH-1): CLIGraph.load gave those nodes Nebula's
+    ids. The canvas's own project gets the same ids (its snapshot, run
+    history and records), so the next read of it still lays the live graph
+    over the same nodes, and state.json is written with them. Best effort:
+    a failure is printed, and the project is renumbered at its next open."""
+    mapping = dict(getattr(cli_graph, "renumbered_on_load", None) or {})
+    if not mapping:
+        return
+    _boot_renumbered.clear()
+    _boot_renumbered.update(mapping)
+    try:
+        cli_graph._maybe_persist()
+        with project_store.transaction() as catalog:
+            owner = cli_graph.owner
+            project_id = catalog.get("activeProjectId") if owner is OWNER_UNKNOWN else owner
+            project = catalog["projects"].get(project_id) if isinstance(project_id, str) else None
+            if project is not None:
+                _apply_node_renumbering(project["snapshot"], mapping)
+                _renumber_project_records(project, mapping)
+                project["_nodeCounter"] = max(int(project.get("_nodeCounter", 0) or 0), cli_graph._counter)
+                project_store.commit(catalog)
+        print(f"[main] gave {counted(len(mapping), 'node')} Nebula ids at boot: {mapping}", flush=True)
+    except Exception as exc:  # noqa: BLE001 - the open renumbers the project again
+        print(f"[main] couldn't move the open project to the ids given at boot: {exc}", flush=True)
 
 
 def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
@@ -17369,8 +17687,12 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     ``dropped_wires`` (the recover route only: a kept tab's wires, PR #199
     round 16): a connection the server's rules refuse (a missing node or
     port, a type the input can't take, an input past its connection limit, a
-    duplicate, a loop) is left out and listed there (_dropped_wire), instead
-    of refusing the whole snapshot with a 400; without it, it refuses.
+    duplicate, a loop) is left out and listed there (_dropped_wire, by the
+    shared kinds), instead of refusing the whole snapshot with a 400;
+    without it, it refuses. With it, every connection gets the live connect
+    route's check, one touching a node whose definition was removed too,
+    and a stray shot connection is listed as well (round 17, review 15
+    NIT-4).
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -17478,7 +17800,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                 node_registry.get(staged_node["definitionId"]), staged_node.get("label"))
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
-        if match := re.fullmatch(r"n(\d+)", node_id):
+        if match := _BACKEND_NODE_ID.fullmatch(node_id):
             candidate._counter = max(candidate._counter, int(match.group(1)))
 
     edge_ids: set[str] = set()
@@ -17496,8 +17818,10 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if source not in candidate.nodes or target not in candidate.nodes:
             if dropped_wires is not None:
                 dropped_edges.add(index)
-                dropped_wires.append(_dropped_wire(edge_id, values, "missing", DROPPED_WIRE_MISSING_LINE,
-                                                   f"edges[{index}] references a missing node"))
+                gone = " and ".join(node_id for node_id in (source, target) if node_id not in candidate.nodes)
+                dropped_wires.append(_dropped_wire(edge_id, values, "missing",
+                                                   f"Connection {edge_id} references a node not in the copy ({gone})",
+                                                   candidate))
                 continue
             raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
         rekeyed = (port_reports.get(source) or {}).get("rekeyed", {}).get(source_handle)
@@ -17509,8 +17833,9 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if signature in signatures:
             if dropped_wires is not None:
                 dropped_edges.add(index)
-                dropped_wires.append(_dropped_wire(edge_id, signature, "duplicate", DROPPED_WIRE_DUPLICATE_LINE,
-                                                   "Duplicate project connection"))
+                dropped_wires.append(_dropped_wire(edge_id, signature, "duplicate",
+                                                   f"Connection {edge_id} repeats {source}:{source_handle} -> "
+                                                   f"{target}:{target_handle}, already in the copy", candidate))
                 continue
             raise HTTPException(status_code=400, detail="Duplicate project connection")
         signatures.add(signature)
@@ -17519,19 +17844,27 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             _note_stray_wire(port_reports, source, source_handle,
                              _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
                                                 candidate.nodes[source].get("label")))
+            if dropped_wires is not None:
+                # Never left out silently (review 15 NIT-4): a port absent.
+                dropped_wires.append(_dropped_wire(edge_id, signature, "port",
+                                                   f"Shot port {source_handle} on {source} has no shot that owns it",
+                                                   candidate))
             continue
-        if source in known and target in known:
-            if dropped_wires is None:
-                _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
-            elif issue := _connect_issue(source, source_handle, target, target_handle, graph=candidate, saved=True):
+        if dropped_wires is not None:
+            # The live connect route's check, for every connection: one that
+            # touches a node whose definition was removed is checked too, and
+            # left out (review 15 NIT-4), as connecting it now is refused.
+            if issue := _connect_issue(source, source_handle, target, target_handle, graph=candidate, saved=True):
                 dropped_edges.add(index)
-                dropped_wires.append(_dropped_wire(edge_id, signature, "contract",
-                                                   issue.person or DROPPED_WIRE_CONTRACT_LINE, issue.message))
+                kind = issue.cause if issue.cause in DROPPED_CONNECTION_KINDS else "port"
+                dropped_wires.append(_dropped_wire(edge_id, signature, kind, issue.message, candidate))
                 continue
+        elif source in known and target in known:
+            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate, saved=True)
         if dropped_wires is not None and _wire_closes_loop(candidate.edges, source, target):
             dropped_edges.add(index)
-            dropped_wires.append(_dropped_wire(edge_id, signature, "loop", DROPPED_WIRE_LOOP_LINE,
-                                               f"Connection {source} -> {target} would make a cycle"))
+            dropped_wires.append(_dropped_wire(edge_id, signature, "loop", f"Connection {edge_id} ({source} -> "
+                                               f"{target}) would connect the node back to itself", candidate))
             continue
         candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
     if dropped_edges:
@@ -17708,11 +18041,11 @@ def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migr
 
 
 def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
-    """What the live canvas is filed as (GM r3 of PR #199): "<project>
-    (recovered)" when which project it was is known and that project's name
-    can be read (in Recently deleted, or in the restore that couldn't bring
-    it back), numbered from "(recovered 2)" like #195's copies; else
-    "Recovered canvas"."""
+    """What the live canvas is filed as (GM r3 of PR #199): "Recovered
+    <project>" (GM r23 a) when which project it was is known and that
+    project's name can be read (in Recently deleted, or in the restore that
+    couldn't bring it back), numbered from "Recovered <project> 2" like
+    #195's copies; else "Recovered canvas"."""
     name = None
     copy = _copy_records(catalog).get(owner) if isinstance(owner, str) else None
     copy_name = copy["name"] if copy else None
@@ -17731,7 +18064,7 @@ def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
         # "Recovered canvas", then "Recovered canvas 2" and on (GM r5).
         return project_store_module.recovered_canvas_name(catalog)
     # GM r14, 4: the lost row's own name when it is free again, else the next
-    # free number in its family (never "Recovered canvas (recovered)").
+    # free number in its family (never "Recovered Recovered canvas").
     return project_store_module.lost_row_name(name, catalog)
 
 
@@ -18733,7 +19066,7 @@ def _live_canvas_is_saved_project(catalog: dict[str, Any]) -> bool:
 def _file_held_canvases(catalog: dict[str, Any], *, copies: bool | None = None, adding: int = 0
                         ) -> list[tuple[dict[str, Any] | None, dict[str, Any]]]:
     """File each held canvas, oldest first, as its own project while there is
-    room ("<project> (recovered)" or "Recovered canvas", numbered), never
+    room ("Recovered <project>" or "Recovered canvas", numbered), never
     opened: the live canvas is another. A held canvas whose project id the
     catalog already has (or deleted for good) was filed by a commit that
     landed before its hold could go, and one that is the live canvas now
@@ -19007,14 +19340,14 @@ def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = 
         # over the limit of 3. Move 2 to Recently deleted to make room." At
         # the limit itself (several canvases waiting), the same pattern.
         if projects is not None and projects > limit:
-            room = (f"The project list has {projects} projects, over the limit of {limit}. "
+            room = (f"The project list has {counted(projects, 'project')}, over the limit of {limit}. "
                     f"Move {deletes} to Recently deleted to make room.")
         else:
-            room = (f"The project list is at its limit of {limit} projects. "
+            room = (f"The project list is at its limit of {counted(limit, 'project')}. "
                     f"Move {deletes} to Recently deleted to make room.")
         head = f"{which} and couldn't be saved as one. {room} The next listing then saves each as its own project."
     elif reason == "projects":
-        room = (f"the project list is at its limit of {limit} projects. Moving a project "
+        room = (f"the project list is at its limit of {counted(limit, 'project')}. Moving a project "
                 "to Recently deleted frees a slot")
     else:
         room = ("the project list is full (its size limit). Only deleting a project for good (removing it from "
@@ -19455,7 +19788,11 @@ CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop i
 
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
-    """Prepare both disk writes before adopting any new live graph in memory."""
+    """Prepare both disk writes before adopting any new live graph in memory.
+    The ratchet (PR #199 round 17, review 15 HIGH-1): the live graph never
+    holds a node id that isn't Nebula's, so this fails loudly (500, nothing
+    written) on one; open_saved_project renumbers before it gets here."""
+    _require_backend_node_ids({"nodes": [{**node, "id": node_id} for node_id, node in candidate.nodes.items()]})
     previous = cli_graph.clone()
     # The canvas becomes the project now open, recorded with it in state.json
     # before the catalog says so (a crash between the two leaves a canvas
@@ -19488,6 +19825,9 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
     cli_graph.owner = candidate.owner
     # The incoming project's nodes' last run errors, kept while it was closed.
     node_errors.use_project(catalog["activeProjectId"])
+    # The selection the person's tab published was the other project's
+    # (review 15 kept-wires-ui LOW-1): agents read none until it publishes again.
+    selection_context.clear()
 
 
 @app.get("/api/projects")
@@ -19778,12 +20118,21 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         # HIGH-1 of PR #199): numbered on past the source's counter, so the
         # copy's later nodes never take one of them. The tab adopts them from
         # `renumbered`; agents only ever see the copy's nN ids.
+        # Past every id the copy, its run history and the source's records
+        # have ever used, even with the source gone (review 15 LOW-1): a
+        # renumbered node never takes a deleted node's id and its run records.
         renumbered, counter = _renumber_tab_local_nodes(
-            snapshot, max(candidate._counter, int(source.get("_nodeCounter", 0) or 0)))
-        # The left-out wires by the copy's ids, as the tab holds them after `renumbered`.
+            snapshot, max(candidate._counter, int(source.get("_nodeCounter", 0) or 0),
+                          _ids_ever_used(source["snapshot"]),
+                          _highest_backend_id(source.get("pins"), source.get("agentNotes"))))
+        # The left-out connections by the copy's ids, as the tab holds them
+        # after `renumbered` (an end not in the copy stays null, its tab id
+        # in sourceWas / targetWas), and their agents' sentences too.
         for wire in dropped_wires:
-            wire["source"], wire["target"] = (renumbered.get(wire["source"], wire["source"]),
-                                              renumbered.get(wire["target"], wire["target"]))
+            for key in ("source", "target"):
+                wire[key] = renumbered.get(wire[key], wire[key])
+            for old_id, new_id in renumbered.items():
+                wire["detail"] = wire["detail"].replace(old_id, new_id)
         try:
             project = make_project(body.get("name") or _recovered_copy_name(source["name"], catalog), snapshot)
         except ValueError as exc:
@@ -19815,9 +20164,10 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
 
 def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
     """A new recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r14 of PR #199, 4): "<project> (recovered)", then "(recovered 2)" and on,
-    the next free number; a copy of "Alpha (recovered)" is "Alpha (recovered
-    2)" (project_store.recovered_name, the shared family rule)."""
+    r14 and r23 a of PR #199): "Recovered <project>", then "Recovered
+    <project> 2" and on, the next free number; a recovered copy of
+    "Recovered Alpha" is "Recovered Alpha 2" (project_store.recovered_name,
+    the shared family rule)."""
     return project_store_module.recovered_name(source_name, catalog)
 
 
@@ -19938,14 +20288,14 @@ def _journal_project_change(kind: str, project: Mapping[str, Any], *, previous_n
     summary = _PROJECT_SUMMARIES[kind].format(name=name, previous=previous_name or "")
     if dropped_wires:
         # A kept tab's connections the server's rules refused (the recover
-        # route): by the copy's ids and why (kind), at most ten within the
-        # event's size; the count says them all. The recover answer has each
-        # one's detail.
+        # route): the recover answer's entries (_dropped_wire), at most ten
+        # within the event's size; the count says them all.
         data["droppedWireCount"] = len(dropped_wires)
-        data["droppedWires"] = [{key: str(wire.get(key))[:64] for key in ("id", "source", "sourceHandle", "target",
-                                                                          "targetHandle", "kind")}
-                                for wire in dropped_wires[:10]]
-        summary += f"; left out {len(dropped_wires)} connection{'' if len(dropped_wires) == 1 else 's'} it couldn't keep"
+        # The recover answer's entries (the same fields), each string cut to
+        # what the journal keeps.
+        data["droppedWires"] = [{key: value[:160] if isinstance(value, str) else value
+                                 for key, value in wire.items()} for wire in dropped_wires[:10]]
+        summary += f"; left out {counted(len(dropped_wires), 'connection')} it couldn't keep"
     _journal(kind, data=data, summary=summary)
 
 
@@ -20091,6 +20441,12 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
                                                                      size_checked=False, dropped_ports=dropped_ports,
                                                                      stray_log=stray_log)
             candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
+            # The live graph never holds a tab-local id (review 15 HIGH-1 of
+            # PR #199): a node Duplicate, Paste or a kept tab made gets a
+            # backend id now, in the stored project too, and the tab adopts
+            # it from `renumbered` (the answer, and the graphSync for a tab
+            # that follows someone else's open).
+            renumbered = _renumber_staged_project(project, candidate)
             project["lastOpenedAt"] = project_now()
             start = _begin_switch(catalog, actor, opening=project_id)
             catalog["activeProjectId"] = project_id
@@ -20109,14 +20465,16 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _note_project_switch(project_id, actor)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
                                 project_switch=_switch_notice(start, project, created=False),
+                                renumbered=renumbered,
                                 **({"dropped_ports": dropped_ports} if dropped_ports else {}))
     await _say_stray_ports(stray_log)
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections, a scene's shot output no shot owns and
     # its connections); the snapshot is saved migrated, so this is said once.
+    # `renumbered`: the nodes that got Nebula's ids at this open ({old: new}).
     return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
-            "warnings": warnings,
+            "warnings": warnings, "renumbered": copy.deepcopy(renumbered),
             "paramsVersion": PARAMS_VERSION}
 
 

@@ -10,7 +10,7 @@
 - GM r15, Q10: a project protected again after a restore already was a
   project, so the agent's replies and the person's log row say "kept".
 - GM r14, 4: one naming rule for the three families ("Recovered canvas N",
-  "X (recovered N)", "X copy N"): never stacked, the next free number, a
+  "Recovered X N", "X copy N"): never stacked, the next free number, a
   lost row's own name reused when it is free.
 - nit 3: a protection for a project the restored list doesn't have goes.
 """
@@ -360,15 +360,15 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    ("Alpha", (), "Alpha (recovered)"),
-    ("Alpha", ("Alpha (recovered)",), "Alpha (recovered 2)"),
-    ("Alpha (recovered)", ("Alpha (recovered)",), "Alpha (recovered 2)"),
-    ("Alpha (recovered 2)", ("Alpha (recovered)", "Alpha (recovered 2)"), "Alpha (recovered 3)"),
+    ("Alpha", (), "Recovered Alpha"),
+    ("Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
+    ("Recovered Alpha 2", ("Recovered Alpha", "Recovered Alpha 2"), "Recovered Alpha 3"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
     ("Recovered canvas 2", ("Recovered canvas", "Recovered canvas 2"), "Recovered canvas 3"),
     # The next free number: a freed one is used again.
-    ("Alpha", ("Alpha (recovered 2)",), "Alpha (recovered)"),
-    ("Alpha", ("Alpha (recovered)", "Alpha (recovered 3)"), "Alpha (recovered 2)"),
+    ("Alpha", ("Recovered Alpha 2",), "Recovered Alpha"),
+    ("Alpha", ("Recovered Alpha", "Recovered Alpha 3"), "Recovered Alpha 2"),
 ])
 def test_r14_4_recovered_names_never_stack(source, names, want):
     assert store_module.recovered_name(source, _named(*names)) == want
@@ -393,14 +393,14 @@ def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash(
 
 
 @pytest.mark.parametrize(("lost", "names", "want"), [
-    # Review 11, nit 2: no "Recovered canvas (recovered)".
+    # Review 11, nit 2: no "Recovered Recovered canvas".
     ("Recovered canvas", (), "Recovered canvas"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
     ("Alpha", (), "Alpha"),
-    ("Alpha", ("Alpha",), "Alpha (recovered)"),
-    ("Alpha (recovered)", ("Alpha (recovered)",), "Alpha (recovered 2)"),
+    ("Alpha", ("Alpha",), "Recovered Alpha"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
     # GM r16, 1: a recovered copy of a copy names its source.
-    ("Alpha copy", ("Alpha copy",), "Alpha copy (recovered)"),
+    ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r14_4_a_lost_rows_own_name_is_reused_when_free(lost, names, want):
     assert store_module.lost_row_name(lost, _named(*names)) == want
@@ -417,15 +417,15 @@ def test_r14_4_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_n
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "e" * 32,
         "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
     assert reply.status_code == 200, reply.text
-    assert reply.json()["project"]["name"] == "Delta (recovered)"
+    assert reply.json()["project"]["name"] == "Recovered Delta"
     again = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "d" * 32,
         "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
-    assert again.json()["project"]["name"] == "Delta (recovered 2)"
+    assert again.json()["project"]["name"] == "Recovered Delta 2"
     nameless = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "c" * 32,
         "paramsVersion": main_module.PARAMS_VERSION})
-    assert nameless.json()["project"]["name"] == "Deleted project (recovered)"
+    assert nameless.json()["project"]["name"] == "Recovered Deleted project"
 
 
 # -- nit 3: a protection for an unlisted project goes -------------------------------------

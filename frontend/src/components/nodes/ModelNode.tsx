@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { currentMediaSource } from '../../lib/canvasNextSteps';
+import { isBackendNodeId } from '../../lib/canvasPins';
 import '../../styles/canvas-next-steps.css';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
@@ -455,21 +456,26 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
-        <span
-          className="model-node__id-chip nodrag"
-          title="Drag into the chat panel to reference this node"
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            const token = /^n\d+$/.test(id) ? `@${id}` : `@${id.slice(0, 8)} (${nodeData.label})`;
-            e.dataTransfer.setData('application/nebula-node-ref', token);
-            e.dataTransfer.setData('text/plain', token);
-            e.dataTransfer.effectAllowed = 'copy';
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {/^n\d+$/.test(id) ? id : id.slice(0, 4)}
-        </span>
+        {/* GM r23 (b) on PR #199: a node with a tab-local id (added while the
+            canvas is kept) has no id an agent can address yet, so the slot
+            stays empty, keeping its space (nodes.css) so the header doesn't
+            shift when the saved id arrives. Nothing to drag into the chat. */}
+        {isBackendNodeId(id) ? (
+          <span
+            className="model-node__id-chip nodrag"
+            title="Drag into the chat panel to reference this node"
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData('application/nebula-node-ref', `@${id}`);
+              e.dataTransfer.setData('text/plain', `@${id}`);
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {id}
+          </span>
+        ) : <span className="model-node__id-chip model-node__id-chip--pending" aria-hidden="true" />}
         {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
         {switchable && (
           <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"

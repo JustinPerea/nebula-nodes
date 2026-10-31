@@ -216,18 +216,18 @@ describe('GM r21 (3) on PR #199: a connection drawn while kept is this tab’s o
     // Text into an image input.
     useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([]);
-    expect(noticeText()).toBe("Couldn't make that connection. The connection into “References” brings something it can’t take.");
+    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes images, not text.');
     // A loop: n2's image into n3, then n3's image back into n2.
     useGraphStore.getState().onConnect({ source: 'n2', sourceHandle: 'image', target: 'n3', targetHandle: 'images' });
     useGraphStore.getState().onConnect({ source: 'n3', sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
     expect(edges()).toEqual([['n2', 'image', 'n3', 'images']]);
-    expect(noticeText()).toBe("Couldn't make that connection. It would connect the node back to itself.");
+    expect(noticeText()).toBe('Couldn’t make that connection. It would connect the node back to itself.');
     // "References" takes up to 10: the 11th is refused.
     for (let index = 10; index < 21; index += 1) {
       useGraphStore.getState().onConnect({ source: `n${index}`, sourceHandle: 'image', target: 'n2', targetHandle: 'images' });
     }
     expect(useGraphStore.getState().edges.filter((edge) => edge.target === 'n2')).toHaveLength(10);
-    expect(noticeText()).toBe("Couldn't make that connection. “References” takes up to 10 connections.");
+    expect(noticeText()).toBe('Couldn’t connect to “References”. It takes up to 10 connections.');
     // Only the drawn ones are kept steps; nothing was sent.
     expect(useGraphStore.getState().keptUndo.length).toBe(before + 11);
     expect(graphWrites.sent).toEqual([]);
@@ -303,12 +303,15 @@ describe('review 14 of PR #199, HIGH-1: a node added while kept is the copy’s 
     keepWithEdits();
     const copy = project('alpha-rec', 'Glass campaign (recovered)');
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...copy, droppedWires: [
-      { source: 'n1', sourceHandle: 'text', target: 'n9', targetHandle: 'prompt', line: '“Prompt” takes one connection.' }] });
+      { source: 'n1', sourceHandle: 'text', target: 'n9', targetHandle: 'prompt', kind: 'limit', limit: 1,
+        sourceName: 'Hero prompt', targetName: 'Seedream 4.5' }] });
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('alpha'), summary('alpha-rec')] }));
     vi.mocked(projects.openProject).mockResolvedValueOnce({ project: copy, workspaceRevision: 'rev-copy',
       paramsVersion: GRAPH_PARAMS_VERSION, canvasRevision: '1' } as never);
     await useProjectStore.getState().saveKeptEdits();
-    expect(notices.at(-1)?.text).toContain('One connection wasn’t saved with it. “Prompt” takes one connection.');
+    // Round 17 (GM r23, 2): the tab's own line, naming the connection.
+    expect(notices.at(-1)?.text).toBe('Your latest edits were saved as their own project, “Glass campaign (recovered)”. '
+      + 'Nebula left out the connection from “Hero prompt” to “Seedream 4.5” because “Seedream 4.5” takes one connection there.');
   });
 });
 

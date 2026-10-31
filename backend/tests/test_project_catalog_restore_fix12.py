@@ -1,9 +1,9 @@
 """PR #199 fix round 12 (GM r16).
 
-- GM r16, 1: a name made from one in another family names its source ("Alpha
-  (recovered) copy", then "copy 2"); a family never repeats.
+- GM r16, 1: a name made from one in another family names its source ("Recovered
+  Alpha copy", then "copy 2"; GM r23 a's shape since round 17); a family never repeats.
 - GM r16, 3: a lost row's own name is reused only when it is free, and free
-  counts Recently deleted: "Beta" still there gives "Beta (recovered)".
+  counts Recently deleted: "Beta" still there gives "Recovered Beta".
 - GM r16, 5: the person-facing lines the backend writes (the agent's
   saved-canvas reply the CLI prints, the copy-waits sentence) use the curly ’.
 - GM r16 (MCP): while the person's tab keeps edits Nebula couldn't save after
@@ -43,10 +43,10 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
 # -- GM r16, 1: a copy names its source; a family never repeats -----------------------------
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    ("Alpha (recovered)", (), "Alpha (recovered) copy"),
-    ("Alpha (recovered)", ("Alpha (recovered) copy",), "Alpha (recovered) copy 2"),
-    ("Alpha (recovered) copy", ("Alpha (recovered) copy",), "Alpha (recovered) copy 2"),
-    ("Alpha (recovered 2)", (), "Alpha (recovered 2) copy"),
+    ("Recovered Alpha", (), "Recovered Alpha copy"),
+    ("Recovered Alpha", ("Recovered Alpha copy",), "Recovered Alpha copy 2"),
+    ("Recovered Alpha copy", ("Recovered Alpha copy",), "Recovered Alpha copy 2"),
+    ("Recovered Alpha 2", (), "Recovered Alpha 2 copy"),
     ("Recovered canvas", (), "Recovered canvas copy"),
     ("Alpha copy", ("Alpha copy",), "Alpha copy 2"),
 ])
@@ -57,27 +57,27 @@ def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, 
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    ("Alpha (recovered)", ("Alpha (recovered)",), "Alpha (recovered 2)"),
-    ("Alpha copy", (), "Alpha copy (recovered)"),
-    ("Alpha copy 2", ("Alpha copy 2 (recovered)",), "Alpha copy 2 (recovered 2)"),
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha 2"),
+    ("Alpha copy", (), "Recovered Alpha copy"),
+    ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 2 2"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas 2"),
 ])
 def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, names, want):
     got = store_module.recovered_name(source, _named(*names))
     assert got == want
-    assert not re.search(r"\(recovered(?: \d+)?\) \(recovered", got)
+    assert not got.startswith("Recovered Recovered")
 
 
 # -- GM r16, 3: free counts Recently deleted --------------------------------------------------
 
 @pytest.mark.parametrize(("lost", "names", "trash", "want"), [
-    ("Beta", (), ("Beta",), "Beta (recovered)"),
-    ("Beta", (), ("Beta", "Beta (recovered)"), "Beta (recovered 2)"),
-    ("Beta", ("Beta (recovered)",), ("Beta",), "Beta (recovered 2)"),
-    # Only the "(recovered)" name is in Recently deleted: "Beta" itself is free.
-    ("Beta", (), ("Beta (recovered)",), "Beta"),
+    ("Beta", (), ("Beta",), "Recovered Beta"),
+    ("Beta", (), ("Beta", "Recovered Beta"), "Recovered Beta 2"),
+    ("Beta", ("Recovered Beta",), ("Beta",), "Recovered Beta 2"),
+    # Only the "Recovered" name is in Recently deleted: "Beta" itself is free.
+    ("Beta", (), ("Recovered Beta",), "Beta"),
     ("Recovered canvas", (), ("Recovered canvas",), "Recovered canvas 2"),
-    ("Alpha copy", (), ("Alpha copy",), "Alpha copy (recovered)"),
+    ("Alpha copy", (), ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r16_3_a_lost_rows_name_is_free_only_when_recently_deleted_doesnt_have_it(lost, names, trash, want):
     assert store_module.lost_row_name(lost, _named(*names, trash=trash)) == want
@@ -88,9 +88,9 @@ def test_r16_3_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_reco
     (_filed_canvas_name): "Beta" is still there, so not free."""
     owner = "b" * 32
     catalog = {"projects": {"a" * 32: {"name": "Alpha"}}, "trash": {owner: {"name": "Beta"}}}
-    assert main_module._filed_canvas_name(catalog, owner) == "Beta (recovered)"
-    catalog["trash"]["c" * 32] = {"name": "Beta (recovered)"}
-    assert main_module._filed_canvas_name(catalog, owner) == "Beta (recovered 2)"
+    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta"
+    catalog["trash"]["c" * 32] = {"name": "Recovered Beta"}
+    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta 2"
 
 
 # -- GM r16, 5: the backend's person-facing lines use ’ ---------------------------------------

@@ -63,14 +63,24 @@ export function useKeptCanvas(): boolean {
 // GM r19 (2): Forget ID has its own verb. GM r20: the routes that replace
 // the canvas (Projects, another project, a new one, Load, Import) name both
 // ways out, since discarding the kept edits unlocks them too.
-export type KeptAction = 'run' | 'note' | 'ask' | 'settings'
+// GM r23 (c): the selection bar's Note and Ask on a node added while kept
+// (a tab-local id no agent can address) say what they wait for in their
+// own words, and both Run buttons (the selection bar's and the bottom
+// bar's) say "run nodes".
+export type KeptAction = 'run' | 'run-nodes' | 'note' | 'note-tab-only' | 'ask' | 'ask-tab-only' | 'settings'
   | 'add-node' | 'add-character' | 'add-moodboard' | 'test-character' | 'next-step' | 'rewrite' | 'load' | 'import' | 'proposal' | 'unlock' | 'forget'
   | 'home' | 'open' | 'create'
   | 'edit-video' | 'generate' | 'scene' | 'other';
 const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   run: 'You can run this after you save it as a project.',
+  // GM r23 (c), verbatim: the selection bar's Run and the bottom bar's Run.
+  'run-nodes': 'You can run nodes after you save it as a project.',
   // GM r17, Q2, verbatim.
   note: 'You can add notes after you save it as a project.',
+  // GM r23 (c), verbatim: Note and Ask on a node added while kept (agents
+  // can't see it until it is saved), shown locked rather than hidden.
+  'note-tab-only': 'You can leave a note after you save it as a project.',
+  'ask-tab-only': 'You can ask an agent after you save it as a project.',
   settings: 'You can change settings after you save it as a project.',
   // The builder's, in GM's form (GM r18, Q1: the pattern stays).
   'add-node': 'You can add nodes after you save it as a project.',

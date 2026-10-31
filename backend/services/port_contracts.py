@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from services.universal_ports import stored_ports
@@ -49,6 +51,12 @@ class PortContractIssue:
     # only an agent or a damaged saved graph reaches (a duplicate id, a wire
     # to a node that isn't there, an unknown node type).
     person: str | None = None
+    # Which of the shared kinds (DROPPED_CONNECTION_KINDS) the issue is, for
+    # a connection Save as a project leaves out (PR #199 round 17): missing
+    # (a node absent), port (a port absent, or a node whose definition is
+    # gone), type, limit, duplicate. "" for an id problem, which recover
+    # refuses before this check.
+    cause: str = ""
 
 
 @dataclass(frozen=True)
@@ -116,14 +124,29 @@ _REPLICATE_PARAMS_HINT = (". The model's other inputs are params of the same nam
                           "set them with params instead of a connection")
 
 
+# The rule the tab shares (PR #199 round 17, review 15 kept-wires-ui LOW-3,
+# GM r23 2): data/port_rules.json, the same bytes as the frontend's
+# src/lib/portRules.json (scripts/generate-port-rules.py writes both; a test
+# on each side pins them equal), so the tab's checks and this route can't
+# differ. The only table: nothing here lists types or pairs again.
+PORT_RULES: dict[str, Any] = json.loads(
+    (Path(__file__).resolve().parent.parent / "data" / "port_rules.json").read_text(encoding="utf-8"))
+_ANY_TYPE: str = PORT_RULES["any"]
+_ALSO_COMPATIBLE = frozenset(frozenset(pair) for pair in PORT_RULES["alsoCompatible"])
+# Why Save as a project left a connection out (droppedWires `kind`).
+DROPPED_CONNECTION_KINDS: tuple[str, ...] = tuple(PORT_RULES["droppedConnectionKinds"])
+
+
 def port_types_compatible(source_type: str, target_type: str) -> bool:
-    """Return whether a declared output may feed a declared input."""
+    """Return whether a declared output may feed a declared input: either is
+    Any, they're the same type, or the pair is listed in alsoCompatible
+    (either way round)."""
 
     return (
-        source_type == "Any"
-        or target_type == "Any"
+        source_type == _ANY_TYPE
+        or target_type == _ANY_TYPE
         or source_type == target_type
-        or {source_type, target_type} == {"Image", "Mask"}
+        or frozenset((source_type, target_type)) in _ALSO_COMPATIBLE
     )
 
 
@@ -212,6 +235,12 @@ def input_takes_one(
     return port is not None and _input_connection_limit(port) == 1
 
 
+def input_connection_limit(port: Mapping[str, Any] | None) -> int | None:
+    """How many connections an input takes (1 for a single input, a
+    several-input port's maxConnections, None for no limit)."""
+    return _input_connection_limit(port)
+
+
 def _input_connection_limit(port: Mapping[str, Any] | None) -> int | None:
     if port is None:
         return None
@@ -294,6 +323,7 @@ def validate_edge_contracts(
                         f"'{edge.source}:{source_handle} -> {edge.target}:{target_handle}'"
                     ),
                     edge_index=index,
+                    cause="duplicate",
                 )
             )
         seen_signatures.add(signature)
@@ -307,6 +337,7 @@ def validate_edge_contracts(
                     port_id=source_handle,
                     message=f"Edge {edge.edge_id} references missing or ambiguous source node {edge.source}",
                     edge_index=index,
+                    cause="missing",
                 )
             )
         if target_node is None or edge.target in ambiguous_node_ids:
@@ -316,6 +347,7 @@ def validate_edge_contracts(
                     port_id=target_handle,
                     message=f"Edge {edge.edge_id} references missing or ambiguous target node {edge.target}",
                     edge_index=index,
+                    cause="missing",
                 )
             )
         if source_node is None or target_node is None or edge_issues:
@@ -349,6 +381,7 @@ def validate_edge_contracts(
                         f"{edge.source}: unknown definition {source_node.definition_id}"
                     ),
                     edge_index=index,
+                    cause="port",
                 )
             )
         elif source_port.definition is None and not source_port.dynamic:
@@ -364,6 +397,7 @@ def validate_edge_contracts(
                         f"{_valid_port_ids({'outputPorts': valid_outputs}, 'outputPorts') or '(none)'}"
                     ),
                     edge_index=index,
+                    cause="port",
                     person=STALE_OUTPUT_LINE,
                 )
             )
@@ -378,6 +412,7 @@ def validate_edge_contracts(
                         f"{edge.target}: unknown definition {target_node.definition_id}"
                     ),
                     edge_index=index,
+                    cause="port",
                 )
             )
         elif target_port.definition is None and not target_port.dynamic:
@@ -395,6 +430,7 @@ def validate_edge_contracts(
                            and stored_ports(target_node.definition_id, target_node.params) is not None else "")
                     ),
                     edge_index=index,
+                    cause="port",
                     person=STALE_INPUT_LINE,
                 )
             )
@@ -421,6 +457,7 @@ def validate_edge_contracts(
                                 (target_node.definition_id, str(target_handle)))) else "")
                         ),
                         edge_index=index,
+                        cause="type",
                         kind="retyped" if (was := RETYPED_PORTS.get(
                             (target_node.definition_id, str(target_handle)))) is not None
                         and port_types_compatible(source_type, was) else "",
@@ -450,6 +487,7 @@ def validate_edge_contracts(
                         port_id=target_handle,
                         message=message,
                         edge_index=index,
+                        cause="limit",
                         person=_too_many_line(target_port.definition, target_handle, limit),
                     )
                 )

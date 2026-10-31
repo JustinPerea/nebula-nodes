@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CatalogRestore, type CoverChoices, type ProjectCover, type SavedCanvas } from '../../lib/projects';
-import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, OPEN_RECENTLY_DELETED, RESTORE_COPY_FALLBACK, SAVE_AS_A_PROJECT } from './restoreCopyCore';
+import { DEFAULT_PROJECT_LIMIT, editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyFallback, SAVE_AS_A_PROJECT } from './restoreCopyCore';
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
@@ -18,6 +18,7 @@ import { editsSavedLine } from './unsavedEditsCopy';
 import type { SavedEditsFile } from '../../lib/graphFileShared';
 import '../../styles/project-home.css';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { useKeptCanvas } from '../../lib/keptCanvas';
 import { NoticeLeave, type LeaveProps } from '../../lib/noticeLeave';
 
 export interface ProjectSummary {
@@ -115,7 +116,7 @@ export interface ProjectHomeProps {
     filed?: SavedCanvas[] } | null;
   /** The project [Save as a project] saved this tab's edits as (GM r12 on
    * PR #199, 1): its toast names it. */
-  editsRecoveredAs?: { id: string; name: string } | null;
+  editsRecoveredAs?: { id: string; name: string; dropped?: string } | null;
   onDismissEditsRecovered?: () => void;
   /** GM r14 on PR #199, 3: the line for a tab sent home after an agent's
    * write closed its project ("Codex cleared the canvas. “X” is kept as its
@@ -465,7 +466,8 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
   /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
   copy: RestoreCopy | null;
   /** Its chunk failed to load (it is tried again at the next focus or
-   * reconnect): the notice says RESTORE_COPY_FALLBACK meanwhile. */
+   * reconnect): the notice says RESTORE_COPY_FALLBACK meanwhile, or, while
+   * this tab keeps edits, GM r23's full sentence (restoreCopyFallback). */
   copyFailed?: boolean;
   restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
   /** GM r9: held canvases that couldn't be read, merged in as one more line. */
@@ -479,13 +481,15 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
   // Only the lines that still hold against the list now (GM r4), so a
   // restore or delete by the person or an agent updates it as it lands.
   const notice = ready && restore && copy ? copy.catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
+  // GM r23 (3) on PR #199: the short fallback only when nothing is kept.
+  const kept = useKeptCanvas();
   return (
     // A polite live region rather than role="status": the page keeps one
     // status per notice it shows (the loading line, the saved-file line),
     // and this empty region stays in the page the whole time.
     <div ref={attached} className={notice || (ready && restore && copyFailed) ? 'project-home__notice project-home__restore' : 'project-home__sr-only'} aria-live="polite" aria-atomic="true">
       {!notice && ready && restore && copyFailed && <>
-        <span className="project-home__restore-text" data-restore-fallback="">{RESTORE_COPY_FALLBACK}</span>
+        <span className="project-home__restore-text" data-restore-fallback="">{restoreCopyFallback(kept)}</span>
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </>}
       {notice && <>
@@ -758,7 +762,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
         onUndo={() => onRestore(last.id, 'undo')} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
       {canvasSaved && copy && <CanvasSavedToast key={canvasSaved.id} copy={copy} project={canvasSaved} onDismiss={onDismissCanvasSaved} />}
-      {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={editsRecoveredToast(editsRecoveredAs.name)}
+      {editsRecoveredAs && !canvasSaved && <SavedToast key={editsRecoveredAs.id} text={filedCopyLine(editsRecoveredToast(editsRecoveredAs.name), editsRecoveredAs)}
         onDismiss={onDismissEditsRecovered} />}
       {agentClosedNote && !canvasSaved && !editsRecoveredAs && <SavedToast key={agentClosedNote.id} text={agentClosedNote.text}
         onDismiss={onDismissAgentClosedNote} />}

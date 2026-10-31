@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import re
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -84,10 +84,28 @@ class SelectionContextStore:
     def __init__(self) -> None:
         self._node_ids: list[str] = []
         self._updated_at = _utc_now()
+        # While this says so, every read answers no selection (PR #199 round
+        # 17, review 15 kept-wires-ui LOW-1): the person's tab keeps edits
+        # Nebula couldn't save, so what it published before is no longer
+        # what the person has selected, and a kept tab publishes nothing.
+        # main sets it to ConnectionManager.kept_in_tab.
+        self.hidden: Callable[[], bool] | None = None
 
     def current(self) -> list[str]:
         """The stored IDs as last published, without resolving them against the graph."""
         return list(self._node_ids)
+
+    def clear(self) -> None:
+        """Forget the published selection (a project switch, a catalog
+        restore: it named the canvas before)."""
+        self._node_ids = []
+        self._updated_at = _utc_now()
+
+    def _is_hidden(self) -> bool:
+        try:
+            return bool(self.hidden and self.hidden())
+        except Exception:  # noqa: BLE001 - a read never fails on the gate; it hides
+            return True
 
     def set(self, node_ids: Iterable[Any]) -> list[str]:
         normalized: list[str] = []
@@ -113,7 +131,14 @@ class SelectionContextStore:
         *,
         requested_ids: Iterable[Any] | None = None,
     ) -> dict[str, Any]:
-        ids = self.set(requested_ids) if requested_ids is not None else list(self._node_ids)
+        if self._is_hidden():
+            # Nothing published while hidden counts either: a chat turn's or
+            # a request's ids are the kept tab's, not the server canvas's.
+            ids: list[str] = []
+        elif requested_ids is not None:
+            ids = self.set(requested_ids)
+        else:
+            ids = list(self._node_ids)
         graph_nodes = getattr(graph, "nodes", {})
         graph_edges = getattr(graph, "edges", [])
         definitions = registry.get_all()

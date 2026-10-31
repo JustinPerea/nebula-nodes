@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { hasUnsavedSceneEdits, keepCanvasLocally, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
+import { adoptRenumberedSelection, hasUnsavedSceneEdits, keepCanvasLocally, nodeCardTitle, releaseKeptCanvas, runsThatNeverStarted, setReplacedCanvasKeeper, useGraphStore } from './graphStore';
 import { isCanvasKept, pulseKeptCanvas, setKeptCanvasSaving, subscribeKeptCanvas } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
@@ -22,6 +22,7 @@ import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import type { CutOffSave } from '../lib/savingCutOff';
 import type { HandoffPending } from './graphStore';
+import { droppedConnectionsLine } from '../lib/keptWires';
 import { followingSwitch as followingNow, setFollowingSwitch } from '../lib/canvasFollow';
 import { onPersonInput } from '../lib/personInput';
 import { isOwnEcho, sameValue, type EditOrigin } from '../lib/canvasUndo';
@@ -36,7 +37,8 @@ import {
 import { WORLD_LABS_NEEDS_CHECK } from '../lib/worldLabsWaiting';
 import type { CatalogRestore, ProjectList, ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 import {
-  agentClosedLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
+  agentClosedLine, DEFAULT_PROJECT_LIMIT, editsRecoveredToast, filedCopyLine, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE,
+  RESTORE_COPY_FALLBACK_KEPT,
 } from '../components/projects/restoreCopyCore';
 import type { CanvasLimitContext } from '../components/projects/catalogRestoreCopy';
 import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
@@ -98,7 +100,7 @@ export type ProjectRetry =
   | { action: 'emptyTrash'; ids: string[] }
   | { action: 'cover'; id: string; url: string | null }
   /** GM r12 on PR #199, 1: the edits a restore stopped, kept in this tab,
-   * saved as their own "(recovered)" project ([Save as a project]). */
+   * saved as their own "Recovered <name>" project ([Save as a project]). */
   | { action: 'saveRecovered' }
   /** GM r9 decision 1: [Reload Nebula] after an update, with the edits kept
    * in their recovered copy; the reload opens it. */
@@ -179,7 +181,7 @@ interface ProjectState {
   dismissCanvasSaved: () => void;
   /** The project [Save as a project] saved this tab's edits as (GM r12 on
    * PR #199, 1): its toast names it. */
-  editsRecoveredAs: { id: string; name: string } | null;
+  editsRecoveredAs: FiledCopy | null;
   dismissEditsRecovered: () => void;
   /** GM r14 on PR #199, 3: the toast on Projects home after an agent's
    * write closed the project this tab showed ("Codex cleared the canvas. “X”
@@ -928,8 +930,8 @@ export function keptExitBlocker(): 'run' | 'following' | 'offline' | null {
 
 /** GM r21 (5): the saved copy of the kept canvas that [Discard edits]
  * opens: the project it was, else the copy the restore filed of the canvas
- * (the live canvas saved as its own project, "Recovered canvas" or "<name>
- * (recovered)"), when the restored list holds it. Null when neither exists
+ * (the live canvas saved as its own project, "Recovered canvas" or "Recovered
+ * <name>"), when the restored list holds it. Null when neither exists
  * (the canvas couldn't be saved at the limit): Projects home. */
 export function keptDiscardTarget(kept: Pick<KeptEdits, 'sourceId'>, list: Pick<ProjectList, 'projects' | 'catalogRestore'>): string | null {
   const listed = (id: string | null | undefined) => typeof id === 'string' && list.projects.some((project) => project.id === id);
@@ -949,26 +951,11 @@ export function keptDiscardTarget(kept: Pick<KeptEdits, 'sourceId'>, list: Pick<
  * with kept mode, and the open cleared the panels. What the person had
  * selected (and the Inspector's node) is selected again by its new id.
  */
-function adoptRenumberedSelection(renumbered: Record<string, string>, selected: string[], inspected: string | null): void {
-  const graph = useGraphStore.getState();
-  const present = new Set(graph.nodes.map((node) => node.id));
-  const adopt = (id: string) => { const next = renumbered[id] ?? id; return present.has(next) ? next : null; };
-  const reselect = new Set(selected.map(adopt).filter((id): id is string => id !== null));
-  if (reselect.size > 0) {
-    useGraphStore.setState({ nodes: graph.nodes.map((node) => (reselect.has(node.id) === Boolean(node.selected)
-      ? node : { ...node, selected: reselect.has(node.id) })) });
-  }
-  const inspect = inspected ? adopt(inspected) : null;
-  if (inspect && useUIStore.getState().selectedNodeId !== inspect) useUIStore.getState().selectNode(inspect);
-}
 
-/** The wires the copy's rules left out, said after the saved toast (each
- * with the server's own line for why). */
-export function droppedWiresLine(wires: readonly api.DroppedWire[]): string {
-  const lead = wires.length === 1 ? 'One connection wasn’t saved with it.' : `${wires.length} connections weren’t saved with it.`;
-  const reasons = [...new Set(wires.map((wire) => wire.line?.trim()).filter((line): line is string => Boolean(line)))];
-  return sentences(lead, ...reasons);
-}
+/** The copy Save as a project filed, as the notices name it, with the line
+ * for any connection its rules left out (GM r24: the second sentence of
+ * whichever notice confirms the save; carried across the update's reload). */
+type FiledCopy = { id: string; name: string; dropped?: string };
 
 /** GM r22 (2): an update seen while kept, handled when kept mode ends. */
 let keptUpdate: { version: number | null } | null = null;
@@ -982,7 +969,7 @@ let discardOpening = false;
 /** The kept canvas is about to go for good (Save filed it, or Discard was
  * chosen) while Nebula was updated: no copy of it is made, the canvas goes,
  * and the update is handled as for any tab (it reloads, or says how). */
-function leaveKeptForUpdate(version: number | null, copy?: { id: string; name: string }): void {
+function leaveKeptForUpdate(version: number | null, copy?: FiledCopy): void {
   keptUpdate = null;
   stopKeepingEdits();
   if (copy) rememberCopyForUpdate(copy);
@@ -1074,7 +1061,7 @@ async function discardKeptEdits(): Promise<void> {
 
 /**
  * [Save as a project] on the kept line (GM r15, Q11): everything typed up
- * to the click goes into its own project under the "(recovered)" name, that
+ * to the click goes into its own project, "Recovered <name>", that
  * project opens in this tab, and the saved toast names it. Typing waits
  * while the save is on its way (it would be lost when the project opens). A
  * failure keeps the canvas and says why on the line; a refusal for good (too
@@ -1100,14 +1087,18 @@ async function saveKeptEdits(): Promise<void> {
   const recoveryId = keptRecovery.recoveryId;
   setKeptCanvasSaving(true);
   useProjectStore.setState({ keptEdits: { ...kept, saving: true, error: null } });
-  let copy: { id: string; name: string };
+  let copy: FiledCopy;
   let renumbered: Record<string, string> = {};
-  let droppedWires: api.DroppedWire[] = [];
+  // The tab's names for its nodes, for the left-out connections' line.
+  const namesBefore = new Map(useGraphStore.getState().nodes.map((node) => [node.id, nodeCardTitle(node)]));
   try {
     const saved = await api.recoverProject(kept.sourceId, snapshot, recoveryId, canvasParamsVersion, kept.sourceName);
-    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : `${kept.sourceName} (recovered)` };
     renumbered = saved?.renumbered ?? {};
-    droppedWires = saved?.droppedWires ?? [];
+    const byCopyId = new Map(Object.entries(renumbered).map(([was, now]) => [now, was]));
+    const dropped = droppedConnectionsLine(saved?.droppedWires ?? [],
+      (id) => namesBefore.get(id) || namesBefore.get(byCopyId.get(id) ?? '') || null);
+    copy = { id: saved?.id ?? recoveryId, name: typeof saved?.name === 'string' ? saved.name : `Recovered ${kept.sourceName}`,
+      ...(dropped ? { dropped } : {}) };
   } catch (error) {
     setKeptCanvasSaving(false);
     // Review 14 (kept-hold MEDIUM-2): the list is at its project limit. The
@@ -1163,8 +1154,7 @@ async function saveKeptEdits(): Promise<void> {
   if (after.screen === 'workspace' && after.activeProject?.id === copy.id) {
     useProjectStore.setState({ dirty: false, saveStatus: 'saved', saveError: null });
     adoptRenumberedSelection(renumbered, selectedBefore, inspectedBefore);
-    showNotice(droppedWires.length > 0 ? sentences(editsRecoveredToast(copy.name), droppedWiresLine(droppedWires))
-      : editsRecoveredToast(copy.name), 'info');
+    showNotice(filedCopyLine(editsRecoveredToast(copy.name), copy), 'info');
     return;
   }
   // Saved, but it didn't open: Projects home says where the edits went.
@@ -1261,18 +1251,19 @@ function reloadDueFor(backendVersion: number | null): 'reload' | 'reloaded' | 'u
     return window.sessionStorage.getItem(PARAMS_RELOAD_KEY) === String(backendVersion ?? 'unknown') ? 'reloaded' : 'reload';
   } catch { return 'unmarked'; }
 }
-function rememberCopyForUpdate(copy: { id: string; name: string }): boolean {
+function rememberCopyForUpdate(copy: FiledCopy): boolean {
   try {
     window.sessionStorage.setItem(RECOVERED_FOR_UPDATE_KEY, JSON.stringify(copy));
     return true;
   } catch { return false; }
 }
-function takeCopyForUpdate(): { id: string; name: string } | null {
+function takeCopyForUpdate(): FiledCopy | null {
   try {
     const raw = window.sessionStorage.getItem(RECOVERED_FOR_UPDATE_KEY);
     window.sessionStorage.removeItem(RECOVERED_FOR_UPDATE_KEY);
-    const copy = raw ? JSON.parse(raw) as { id?: unknown; name?: unknown } : null;
-    return copy && typeof copy.id === 'string' && typeof copy.name === 'string' ? { id: copy.id, name: copy.name } : null;
+    const copy = raw ? JSON.parse(raw) as { id?: unknown; name?: unknown; dropped?: unknown } : null;
+    return copy && typeof copy.id === 'string' && typeof copy.name === 'string'
+      ? { id: copy.id, name: copy.name, ...(typeof copy.dropped === 'string' && copy.dropped ? { dropped: copy.dropped } : {}) } : null;
   } catch { return null; }
 }
 
@@ -1311,21 +1302,21 @@ async function openCopyAfterUpdate(): Promise<void> {
   if (!store.projects.some((project) => project.id === copy.id)) {
     const trashed = store.trash.find((entry) => entry.id === copy.id);
     const name = trashed?.name || copy.name;
-    useProjectStore.setState({ screen: 'home', copyNotice: { line: copyDeletedAfterUpdateLine(name, !trashed),
+    useProjectStore.setState({ screen: 'home', copyNotice: { line: filedCopyLine(copyDeletedAfterUpdateLine(name, !trashed), copy),
       restore: trashed ? { id: copy.id, name } : null } });
     return;
   }
   await store.open(copy.id);
   const opened = useProjectStore.getState();
   if (opened.activeProject?.id === copy.id && opened.screen === 'workspace') {
-    useGraphStore.getState().notify(openedAfterUpdateLine(copy.name), 'info');
+    useGraphStore.getState().notify(filedCopyLine(openedAfterUpdateLine(copy.name), copy), 'info');
   } else if (opened.screen !== 'workspace') {
     // Review 7, L4: the open's failure is the person's to retry from the
     // copy's card; the notice says where the changes are first.
     if (opened.error) {
-      useProjectStore.setState({ error: sentences(openedAfterUpdateLine(copy.name), opened.error) });
+      useProjectStore.setState({ error: sentences(filedCopyLine(openedAfterUpdateLine(copy.name), copy), opened.error) });
     } else {
-      useProjectStore.setState({ copyNotice: { line: openedAfterUpdateLine(copy.name), restore: null } });
+      useProjectStore.setState({ copyNotice: { line: filedCopyLine(openedAfterUpdateLine(copy.name), copy), restore: null } });
     }
   }
 }
@@ -2552,7 +2543,7 @@ export const useProjectStore = create<ProjectState>(holdCommonsExits<ProjectStat
       case 'rename': return get().rename(failed.id, failed.name);
       case 'cover': return get().pinCover(failed.id, failed.url);
       case 'saveRecovered': {
-        // The kept edits go into their own "(recovered)" project (the load's
+        // The kept edits go into their own "Recovered <name>" project (the load's
         // recoverPendingWork), then the projects load; the toast names it.
         lastRecoveredCopy = null;
         if (!get().initialized) await get().initialize();
@@ -2676,10 +2667,12 @@ let restoredSinceSync = false;
 /** GM r11, 5, verbatim: a tab that can't move on by itself after a restore. */
 export const RESTORED_LIST_RELOAD = 'Nebula restored its project list. Reload projects to continue.';
 /** GM r12 on PR #199, 1, verbatim: the same with edits this tab hasn't
- * saved, beside [Save as a project] (it saves them under the "(recovered)"
- * name; its toast names the project). Closing the tab meanwhile gets the
+ * saved, beside [Save as a project] (it saves them as "Recovered
+ * <name>"; its toast names the project). Closing the tab meanwhile gets the
  * unload warning (the edits are only here). */
-export const RESTORED_LIST_UNSAVED = "Nebula restored its project list before your latest edits were saved. They’re kept in this tab.";
+/** One source with the kept fallback the home shows while the restore copy's
+ * chunk can't load (GM r23, 3). */
+export const RESTORED_LIST_UNSAVED = RESTORE_COPY_FALLBACK_KEPT;
 /** The id of the last project an agent's write closed to keep the person's
  * canvas in it, as the last graphSync carried it (undefined: no sync yet),
  * and that project when a new one came since this tab last matched its

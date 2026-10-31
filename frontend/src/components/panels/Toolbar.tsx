@@ -286,7 +286,7 @@ export function Toolbar() {
   // taken off (an undefined attribute isn't rendered).
   const runKeptMark: Record<string, '' | undefined> = runKept
     ? { ...Object.fromEntries(Object.keys(lock.mark).map((key) => [key, undefined])), [KEPT_MARK]: '' } : {};
-  const runKeptTitle = runKept ? keptLockTitle('run') : undefined;
+  const runKeptTitle = runKept ? keptLockTitle('run-nodes') : undefined;
 
   return (
     <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"

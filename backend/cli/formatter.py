@@ -9,6 +9,7 @@ from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
 from services.maker_sizes import rule_note
+from services.wording import counted
 from services import node_categories
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
@@ -280,11 +281,11 @@ def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
         preview = ", ".join(node_names[:3])
         if len(node_names) > 3:
             preview += ", ..."
-        uses = f"{count} nodes ({preview})" if count else "no node uses it"
+        uses = f"{counted(count, 'node')} ({preview})" if count else "no node uses it"
         if configured_map.get(key_name) is True:
             configured.append(f"  {key_name:<25}{'set':<10}{uses}")
         else:
-            missing.append(f"  {key_name:<25}{'':10}{count} nodes unavailable")
+            missing.append(f"  {key_name:<25}{'':10}{counted(count, 'node')} unavailable")
 
     lines: list[str] = []
     if configured:
@@ -447,8 +448,10 @@ _RESTORE_ROWS = (
 )
 
 
-def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
-    """One line per kind of outcome a catalog restore reported, with names."""
+def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False) -> list[str]:
+    """One line per kind of outcome a catalog restore reported, with names.
+    ``canvas_block``: the CANVAS NOT SAVED block follows, so the waiting
+    canvas is left to it (GM r23 e on PR #199: said once)."""
     lines = []
     for key, label in _RESTORE_ROWS:
         listed = [row for row in restore.get(key) or [] if isinstance(row, dict)]
@@ -477,7 +480,7 @@ def catalog_restore_lines(restore: dict[str, Any]) -> list[str]:
         lines.append(f"  Live canvas saved as its own project: {recovered.get('nameNow') or recovered.get('name')} "
                      f"({recovered['id']})")
     waiting = restore.get("canvasNotFiled")
-    if isinstance(waiting, dict) and waiting.get("current") is not False:
+    if isinstance(waiting, dict) and waiting.get("current") is not False and not canvas_block:
         lines.append(f"  Live canvas not saved as a project yet: the list is at its {waiting.get('reason')} limit")
     return lines
 
@@ -493,11 +496,11 @@ def format_start(start: dict[str, Any]) -> str:
 
     lines: list[str] = []
     restore = start.get("catalogRestore") or {}
+    waiting = start.get("canvasNotFiled") or {}
     if restore.get("note"):
         # Nebula restored a damaged project list (services/project_store.py).
         lines.append(f"PROJECT LIST RESTORED: {restore['note']}")
-        lines.extend(catalog_restore_lines(restore))
-    waiting = start.get("canvasNotFiled") or {}
+        lines.extend(catalog_restore_lines(restore, canvas_block=bool(waiting.get("note"))))
     if waiting.get("note"):
         # The live canvas isn't a project and the list had no room to save it.
         state = "room now" if waiting.get("roomNow") else f"{waiting.get('reason')} limit"
@@ -506,7 +509,7 @@ def format_start(start: dict[str, Any]) -> str:
     project = canvas.get("project") or {}
     watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"
     title = f"{project.get('name')} ({project.get('id')})" if project else "no project open"
-    lines.append(f"CANVAS: {title}, {canvas.get('nodeCount', 0)} nodes, {watching}")
+    lines.append(f"CANVAS: {title}, {counted(canvas.get('nodeCount', 0), 'node')}, {watching}")
     selection = canvas.get("selection") or []
     lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
     for agent in canvas.get("agents") or []:
@@ -556,7 +559,7 @@ def format_start(start: dict[str, Any]) -> str:
         analyzed = "analyzed" if row.get("analyzed") else "not analyzed"
         direction = f" — {row['direction']}" if row.get("direction") else ""
         lines.append(f"  {row.get('id')}  {row.get('name')} [{row.get('where')}] "
-                     f"{row.get('images', 0)} images, {analyzed}{direction}")
+                     f"{counted(row.get('images', 0), 'image')}, {analyzed}{direction}")
     if boards.get("more"):
         lines.append(f"  ({boards['more']})")
     if boards.get("read"):

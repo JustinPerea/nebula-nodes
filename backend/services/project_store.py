@@ -372,21 +372,28 @@ RECOVERED_CANVAS_NAME = "Recovered canvas"
 
 # Nebula's three name families (GM r14 of PR #199, 4): a canvas filed when
 # which project it was isn't known ("Recovered canvas", "Recovered canvas 2"),
-# a recovered copy ("Alpha (recovered)", "Alpha (recovered 2)") and a
-# duplicate ("Alpha copy", "Alpha copy 2"). One rule for all three: a name
-# already in the family gets the next free number in it (never "Recovered
-# canvas (recovered)" or "Alpha copy copy"), and a number freed is used again.
-# A name made from one in another family names its source, so families sit
-# together: a copy of "Alpha (recovered)" is "Alpha (recovered) copy", then
-# "Alpha (recovered) copy 2" (GM r16 on PR #199, 1).
+# a recovered copy ("Recovered Alpha", "Recovered Alpha 2"; GM r23 a on PR
+# #199: person-facing names hold no parentheses, and pair with "Recovered
+# canvas") and a duplicate ("Alpha copy", "Alpha copy 2"). One rule for all
+# three: a name already in the family gets the next free number in it (never
+# "Recovered Recovered canvas" or "Alpha copy copy"), and a number freed is
+# used again. A name made from one in another family names its source, so
+# families sit together: a copy of "Recovered Alpha" is "Recovered Alpha
+# copy", then "Recovered Alpha copy 2" (GM r16 on PR #199, 1).
 _NAME_FAMILIES: dict[str, tuple[re.Pattern[str], Callable[[str, int], str]]] = {
-    "canvas": (re.compile(rf"(?P<stem>{re.escape(RECOVERED_CANVAS_NAME)})(?: (?P<n>[2-9]|[1-9]\d+))?"),
+    "canvas": (re.compile(rf"(?P<stem>{re.escape(RECOVERED_CANVAS_NAME)})(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
                lambda stem, n: stem if n == 1 else f"{stem} {n}"),
-    "recovered": (re.compile(r"(?P<stem>.+?) \(recovered(?: (?P<n>[2-9]|[1-9]\d+))?\)"),
-                  lambda stem, n: f"{stem} (recovered)" if n == 1 else f"{stem} (recovered {n})"),
-    "copy": (re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9]\d+))?"),
+    "recovered": (re.compile(r"Recovered (?P<stem>.+?)(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
+                  lambda stem, n: f"Recovered {stem}" if n == 1 else f"Recovered {stem} {n}"),
+    "copy": (re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9][0-9]+))?"),
              lambda stem, n: f"{stem} copy" if n == 1 else f"{stem} copy {n}"),
 }
+
+
+# A recovered copy's name before GM r23 a ("Alpha (recovered)", "Alpha
+# (recovered 2)"): still read as that family, so its next copy is "Recovered
+# Alpha", never "Recovered Alpha (recovered)".
+_LEGACY_RECOVERED = re.compile(r"(?P<stem>.+?) \(recovered(?: (?P<n>[2-9]|[1-9][0-9]+))?\)")
 
 
 def _names_in_use(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> set[str]:
@@ -398,14 +405,31 @@ def _names_in_use(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> set[
     return names | {str(name) for name in taken}
 
 
+def _family_stem(name: str, family: str) -> str | None:
+    """``name``'s stem in ``family`` when it is that family's name, else
+    None. "Recovered canvas" is the canvas family's (never a recovered copy
+    of "canvas"); a name can be in two families ("Recovered Alpha copy": a
+    copy of "Recovered Alpha", or a recovered copy of "Alpha copy"), and is
+    numbered in whichever family the new name is made in."""
+    if family == "recovered" and _family_stem(name, "canvas") is not None:
+        return None
+    match = _NAME_FAMILIES[family][0].fullmatch(name)
+    if match is None and family == "recovered":
+        # A name from before GM r23 a ("Alpha (recovered 2)") is the same family's.
+        match = _LEGACY_RECOVERED.fullmatch(name)
+    return match.group("stem") if match else None
+
+
 def name_family(name: str) -> tuple[str, str] | None:
     """(family, stem) when ``name`` is already in one of the three families,
-    else None. "Recovered canvas 2" is the canvas family's, "Alpha (recovered
-    3)" the recovered family's with stem "Alpha", "Alpha copy" the copy's."""
-    for family, (pattern, _form) in _NAME_FAMILIES.items():
-        match = pattern.fullmatch(name)
-        if match:
-            return family, match.group("stem")
+    else None, the canvas family first, then the one its last word makes
+    ("Recovered Alpha copy" is a copy, "Recovered Alpha 3" a recovered
+    copy). "Recovered canvas 2" is the canvas family's, "Recovered Alpha 3"
+    the recovered family's with stem "Alpha", "Alpha copy" the copy's."""
+    for family in ("canvas", "copy", "recovered"):
+        stem = _family_stem(name, family)
+        if stem is not None:
+            return family, stem
     return None
 
 
@@ -420,24 +444,23 @@ def _next_free(family: str, stem: str, names: set[str]) -> str:
 def family_name(source_name: str, family: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
     """The next free name in ``family`` for something made from
     ``source_name`` (GM r14, 4): from the source's own stem when the source
-    is already in that family (never a suffix twice), else from its name.
-    Free: no project in the list or Recently deleted and nothing in ``taken``
-    has it, so a number freed is used again."""
+    is already in that family (never the family's word twice), else from
+    its name. Free: no project in the list or Recently deleted and nothing
+    in ``taken`` has it, so a number freed is used again."""
     names = _names_in_use(catalog, taken)
-    member = name_family(source_name)
-    stem = member[1] if member is not None and member[0] == family else source_name[:100]
-    return _next_free(family, stem, names)
+    stem = _family_stem(source_name, family)
+    return _next_free(family, stem if stem is not None else source_name[:100], names)
 
 
 def recovered_name(source_name: str, catalog: Mapping[str, Any]) -> str:
     """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r14 of PR #199, 4): "<project> (recovered)", then "(recovered 2)" and on,
-    the next free number. A name already in a recovery family gets the next
-    free number in that family: "Alpha (recovered)" gives "Alpha (recovered
-    2)", and "Recovered canvas" gives "Recovered canvas 2"."""
-    member = name_family(source_name)
-    if member is not None and member[0] in ("canvas", "recovered"):
-        return _next_free(member[0], member[1], _names_in_use(catalog))
+    r14 and r23 a of PR #199): "Recovered <project>", then "Recovered
+    <project> 2" and on, the next free number. A name already in a recovery
+    family gets the next free number in that family: "Recovered Alpha"
+    gives "Recovered Alpha 2", and "Recovered canvas" gives "Recovered
+    canvas 2"."""
+    if (stem := _family_stem(source_name, "canvas")) is not None:
+        return _next_free("canvas", stem, _names_in_use(catalog))
     return family_name(source_name, "recovered", catalog)
 
 
@@ -445,11 +468,11 @@ def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
     """The name a canvas whose project row is gone is filed under (GM r14,
     4; GM r16, 3): that row's own name when it is free, and free means no
     project in the list or in Recently deleted has it ("Beta" still in
-    Recently deleted gives "Beta (recovered)"). Else it is a recovered copy
+    Recently deleted gives "Recovered Beta"). Else it is a recovered copy
     of that name (recovered_name): "Recovered canvas" gives "Recovered
-    canvas 2", "Alpha (recovered)" gives "Alpha (recovered 2)", and a name
-    in another family keeps it and names its source ("Alpha copy" gives
-    "Alpha copy (recovered)", GM r16, 1)."""
+    canvas 2", "Recovered Alpha" gives "Recovered Alpha 2", and a name in
+    another family keeps it and names its source ("Alpha copy" gives
+    "Recovered Alpha copy", GM r16, 1)."""
     if name not in _names_in_use(catalog):
         return name
     return recovered_name(name, catalog)

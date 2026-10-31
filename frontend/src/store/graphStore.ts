@@ -137,7 +137,7 @@ import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinct
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
 import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
-import { checkKeptWire } from '../lib/keptWires';
+import { checkKeptWire, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
 import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
@@ -1553,16 +1553,6 @@ function isDynamicDefinition(definitionId: string): boolean {
 
 function dynamicProviderFor(definitionId: string): DynamicProviderType {
   return DYNAMIC_PROVIDER_BY_DEFINITION[definitionId] ?? 'openrouter';
-}
-
-function targetHandleAllowsMultiple(node: Node<NodeData>, handleId: string | null | undefined): boolean {
-  if (!handleId) return false;
-  const dynamicData = node.data as unknown as DynamicNodeData | undefined;
-  if (dynamicData?.isDynamic && dynamicData.dynamicInputPorts) {
-    return Boolean(dynamicData.dynamicInputPorts.find((p) => p.id === handleId)?.multiple);
-  }
-  const definition = NODE_DEFINITIONS[node.data.definitionId];
-  return Boolean(definition?.inputPorts.find((p) => p.id === handleId)?.multiple);
 }
 
 function toDynamicPort(p: {
@@ -9925,7 +9915,52 @@ wsClient.subscribe((event) => {
  * revision and no edit, so read as a sync it could look like a missed
  * clear. It only adopts the revision: the tab is empty, nothing is held for
  * its canvas, and no line is said. */
+/** Select again by the new ids what was selected by the old ones (and the
+ * Inspector's node), after Nebula gave nodes new ids: Save as a project's
+ * copy (PR #199 round 16), and an open, a restore or a restart that
+ * renumbered the canvas this tab shows (round 17). */
+export function adoptRenumberedSelection(renumbered: Record<string, string>, selected: string[], inspected: string | null): void {
+  const graph = useGraphStore.getState();
+  const present = new Set(graph.nodes.map((node) => node.id));
+  const adopt = (id: string) => { const next = renumbered[id] ?? id; return present.has(next) ? next : null; };
+  const reselect = new Set(selected.map(adopt).filter((id): id is string => id !== null));
+  if (reselect.size > 0) {
+    useGraphStore.setState({ nodes: graph.nodes.map((node) => (reselect.has(node.id) === Boolean(node.selected)
+      ? node : { ...node, selected: reselect.has(node.id) })) });
+  }
+  const inspect = inspected ? adopt(inspected) : null;
+  if (inspect && useUIStore.getState().selectedNodeId !== inspect) useUIStore.getState().selectNode(inspect);
+}
+
+/** A sync whose `renumbered` says Nebula gave this canvas's local nodes its
+ * own ids (review 15 HIGH-1, round 17: cli_graph never holds a non-nN id,
+ * so an open, a restore or a restart renumbers them): the tab's copies under
+ * the old ids give way to Nebula's nodes under the new ones (a tab keeps its
+ * local nodes through a sync, so without this both would show), and the
+ * selection and the Inspector follow. */
 function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
+  const raw = (event as { renumbered?: unknown }).renumbered;
+  const renumbered = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? Object.fromEntries(Object.entries(raw as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== entry[1]))
+    : {};
+  if (Object.keys(renumbered).length === 0 || graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
+    return applyGraphSyncNow(event, options);
+  }
+  const before = useGraphStore.getState();
+  const selected = before.nodes.filter((node) => node.selected).map((node) => node.id);
+  const inspected = useUIStore.getState().selectedNodeId;
+  const gone = new Set(Object.keys(renumbered));
+  if (before.nodes.some((node) => gone.has(node.id))) {
+    useGraphStore.setState((state) => ({ nodes: state.nodes.filter((node) => !gone.has(node.id)),
+      edges: state.edges.filter((edge) => !gone.has(edge.source) && !gone.has(edge.target)) }));
+  }
+  const applied = applyGraphSyncNow(event, options);
+  adoptRenumberedSelection(renumbered, selected, inspected);
+  return applied;
+}
+
+function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolean } = {}): boolean {
   if (graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
     return false;
   }
@@ -14824,7 +14859,8 @@ function keptRecordWire(connection: Connection, run: () => void, added: Node<Nod
   const nodes = added ? [...before.nodes, added] : before.nodes;
   const check = checkKeptWire(connection, nodes, before.edges);
   if (!check.ok) {
-    if (check.line) useGraphStore.setState((state) => noticeLine(state, headedLine("Couldn't make that connection.", check.line)));
+    // The line is whole: "Couldn’t connect to “References”. It takes images, not text." (GM r23, 1).
+    if (check.line) useGraphStore.setState((state) => noticeLine(state, check.line));
     return false;
   }
   if (check.duplicate && !added) return true;

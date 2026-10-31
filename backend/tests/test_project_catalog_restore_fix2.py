@@ -16,7 +16,7 @@ a restored list is right (2026-10-27).
 - L4. Filing the live canvas at a limit never makes the listing fail.
 - L5. A filing attaches to the restore it came from, and is journaled.
 - L7. Damaged files age by when they were kept.
-- Naming: the filed canvas is "<project> (recovered)", numbered.
+- Naming: the filed canvas is "Recovered <project>", numbered.
 """
 from __future__ import annotations
 
@@ -315,7 +315,7 @@ def test_l1_a_recover_retry_after_a_delete_for_good_survives_a_restore(app):
     alpha = _create(client, "Alpha")
     recovery_id = "c" * 32
     snapshot = client.get(f"/api/projects/{alpha}", headers=PERSON).json()["snapshot"]
-    body = {"recoveryId": recovery_id, "sourceProjectId": alpha, "snapshot": snapshot, "name": "Alpha (recovered)"}
+    body = {"recoveryId": recovery_id, "sourceProjectId": alpha, "snapshot": snapshot, "name": "Recovered Alpha"}
     assert client.post("/api/projects/recover", json=body, headers=PERSON).status_code == 200
     client.request("DELETE", f"/api/projects/{recovery_id}", headers=PERSON, json={"workspaceRevision": _rev(client)})
     assert client.delete(f"/api/projects/trash/{recovery_id}", headers=PERSON).status_code == 200
@@ -618,7 +618,7 @@ def test_m2_the_open_project_torn_after_another_torn_record_is_filed_under_its_n
     assert restore["recoveredCanvas"]["name"] == "Scratch"
 
 
-# -- naming: "<project> (recovered)", numbered ---------------------------------------
+# -- naming: "Recovered <project>", numbered ---------------------------------------
 
 
 def test_naming_the_filed_canvas_takes_its_projects_name_and_numbers_a_second_copy(app):
@@ -626,7 +626,7 @@ def test_naming_the_filed_canvas_takes_its_projects_name_and_numbers_a_second_co
     alpha = _create(client, "Alpha")
     _add_text(client, "a1")
     client.get("/api/projects", headers=PERSON)
-    for expected in ("Alpha (recovered)", "Alpha (recovered 2)"):
+    for expected in ("Recovered Alpha", "Recovered Alpha 2"):
         with store.transaction() as catalog:
             entry = catalog["projects"].pop(alpha, None) or catalog["trash"][alpha]
             catalog["trash"][alpha] = {**entry, "deletedAt": store_module.now()}

@@ -24,6 +24,7 @@ from nebula_api import (AGENT_REFUSAL_CODES, NebulaAPI, NebulaAPIError, dropped_
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
+from services.wording import counted
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -424,7 +425,10 @@ def start_here(ctx: Context | None = None) -> str:
     or discard them, which only they can do; nodes they added while kept
     get Nebula's `nN` ids at that save, so read the canvas again then, and
     connections Nebula's rules refuse are left out and listed in the
-    `project.created` event's `droppedWires`):
+    `project.created` event's `droppedWires`, each with its ends by the
+    copy's ids (null for a node not in the copy, its tab id in
+    `sourceWas` / `targetWas`), names, port labels and types, `kind` and
+    `detail`; while kept, the canvas shows no selection and no view):
     - `canvas`: the project, `view.stale` (no browser watching), the
       selection, other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
@@ -1448,8 +1452,8 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     `projectLimit` is the limit), `reverted` those that went back to the copy's version,
     `cameBack` those deleted after the copy that are back, `backInTrash`
     those restored after the copy that are in Recently deleted again,
-    `recoveredCanvas` the live canvas filed as its own project ("<project>
-    (recovered)", or "Recovered canvas", "Recovered canvas 2" and on when
+    `recoveredCanvas` the live canvas filed as its own project ("Recovered
+    <project>", or "Recovered canvas", "Recovered canvas 2" and on when
     which project it was is unknown), `canvasNotFiled` when it couldn't be
     filed because the list is at a limit, `damagedReadWhole` false when the
     damaged file couldn't be read whole (cut, zeroed, or a key or section
@@ -1525,6 +1529,12 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
                          f"`open_project('{previous_id}')` goes back.")
     if result.get("warnings"):
         reply["warnings"] = result["warnings"]
+    if result.get("renumbered"):
+        # Nodes the person's Duplicate or Paste made got Nebula's ids at this
+        # open (PR #199 round 17): any id read before for them is stale.
+        reply["renumbered"] = result["renumbered"]
+        reply["renumberedNote"] = (f"Nebula gave {counted(len(result['renumbered']), 'node')} its own ids at this "
+                                   "open ({old: new}). Read the canvas again and use the ids you see.")
     return reply
 
 
@@ -1536,8 +1546,8 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     canvas: the project that was open is saved as it is. The person's canvas follows, names you,
     and offers them a way back. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project named after the project left, "<project
-    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    that fails, as a new project named after the project left, "Recovered
+    <project left>", then "Recovered <project left> 2" and so on). Refused while a run is going.
     Refused at the project limit with the whole refusal, as HTTP answers it:
     "Project limit reached (413, {"limit": "projects", "projectLimit": N})".
     """
@@ -1552,14 +1562,18 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     names you, and offers them a way back. Opening the project that is already
     open reloads it from what was saved; what they had typed there still lands. Their canvas is read-only until the
     new one loads; what they had typed is saved into the project left (or, if
-    that fails, as a new project named after the project left, "<project
-    left> (recovered)", then "(recovered 2)" and so on). Refused while a run is going.
+    that fails, as a new project named after the project left, "Recovered
+    <project left>", then "Recovered <project left> 2" and so on). Refused while a run is going.
     A canvas waiting to be saved as a project (list_projects `canvasNotFiled`)
     is held aside first, whole, and saved as its own project once there is
     room, so opening works then too.
     `warnings` lists what opening changed: a folded node's connections, or a
     Cinema scene's shot output no shot owns and its connections, left out
     (a renumbered shot keeps its own port and connections).
+    `renumbered` ({old: new}, with `renumberedNote`) lists nodes that got
+    Nebula's ids at this open: the person's Duplicate and Paste make nodes
+    only their tab knows until the next open. Read the canvas again then; an
+    old id answers 404 "… read the canvas again for the current ids."
     """
     from urllib.parse import quote
 

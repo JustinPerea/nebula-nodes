@@ -60,7 +60,7 @@ If Nebula found its project list damaged and restored it, `nebula projects`
 old it is, which projects it added back, which it left out because the list
 was at its project limit (still in the damaged file), which went back to the
 copy's version, came back after a delete, or are in Recently deleted again, whether
-the live canvas was saved as its own project ("<project> (recovered)", or
+the live canvas was saved as its own project ("Recovered <project>", or
 "Recovered canvas", "Recovered canvas 2" and on when which project it was is
 unknown), whether the
 damaged file was read whole (if not, newer changes may be missing unlisted),
@@ -116,10 +116,25 @@ do it (it opens the canvas's saved copy, the project it showed or one like
 “Recovered canvas”, or Projects when there is none). If their tab's
 connection drops, this holds for about 10 seconds more in case the tab comes
 back, for each tab on its own; after a Nebula restart it holds for about 15
-seconds, until the tab is back. Nodes they added while kept get Nebula's ids
-(`nN`) when they save: after the copy opens, read the canvas again and use
-the ids you see. Connections Nebula's rules refuse are left out of the copy
-and listed in the `project.created` event (`droppedWires`).
+seconds, until the tab is back (only a tab that can reconnect as the person,
+as with the dev launcher, carries it on; after a plain backend launch your
+changes go through once the 15 seconds run out). While it holds,
+`nebula selection` and `nebula look` show no selection and no view. Nodes
+they added while kept get Nebula's ids (`nN`) when they save, and the copy is
+named "Recovered <project>": after the copy opens, read the canvas again and
+use the ids you see. Connections Nebula's rules refuse are left out of the copy
+and listed in the `project.created` event (`droppedWires`): each entry has
+the ends by the copy's ids (an end not in the copy is null, its tab id in
+`sourceWas` / `targetWas`), the nodes' names, the ports' labels and types,
+`kind` (`loop`, `duplicate`, `missing`, `port`, `type` or `limit`, with
+`limit` for the last) and `detail`, a sentence for you.
+**Node ids can change at an open.** The person's Duplicate and Paste make
+nodes only their tab knows; the next open of that project gives each a
+Nebula id (the open answers `renumbered`, `{old: new}`, and `nebula watch`
+shows "gave 1 node new ids"). `nebula load` gives every node a new id too
+(`renumbered`). An id you read before may then be stale: an edit to it
+answers 404 "Node n7 not found. … read the canvas again for the current
+ids." Read the canvas again (`nebula graph`) and use the ids you see.
 Nothing in the canvas is lost, also across restarts, but the person can't
 see or open it until it is saved: never tell them it is open. Its
 note says what frees room: for the project limit, moving a project to
@@ -136,8 +151,8 @@ right one (`nebula project open <id>`). The person's canvas follows (from
 their Projects screen too), names you, and offers them a button back.
 Their canvas is read-only until the new one loads ("Opening “<project>”…").
 What they had typed is saved into the project left (also when you reopen the
-project already open); if that fails it is kept as a new project, "<project
-left> (recovered)", then "(recovered 2)" and so on.
+project already open); if that fails it is kept as a new project, "Recovered
+<project left>", then "Recovered <project left> 2" and so on.
 **Never run `nebula clear` to make room**: a new project keeps their work.
 `nebula clear` refuses on a canvas with nodes, and `--force` clears it
 anyway (not while a run is going: it waits for runs, as a project switch does). With their canvas open that is one undo step for them; with none

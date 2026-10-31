@@ -6,7 +6,7 @@ import math
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from uuid import uuid4
 
 from services.cinema_scene_spec import (
@@ -21,6 +21,10 @@ from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrad
 
 
 SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
+# What a Nebula node id is (PR #199 round 17): "n" and ASCII digits, never
+# Python's Unicode \d, as the tab's CLI_ID_RE. The live graph holds only
+# these (main._require_backend_node_ids; load renumbers any other).
+BACKEND_NODE_ID = re.compile(r"n([0-9]+)")
 # How far an explicit id (add_node's node_id) may sit above the counter. The
 # counter moves past a restored id, so an unbounded one (n999999999) would
 # make every later id too long for SHORT_ID_RE, and undo could never put
@@ -28,6 +32,36 @@ SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
 # Clear resets it (undoing them brings the old ids back), so this is a
 # ceiling, not "no higher than the counter".
 MAX_ID_JUMP = 1_000_000
+
+# The keys inside a node's data (its params included) whose value names
+# another canvas node by id (PR #199 round 17, review 15 NIT-2): a Remotion
+# manifest's timeline items (``params.manifest.timeline[].sourceNodeId``),
+# the gate that skipped a node (``skipGateNodeId``), a Paper run's inputs
+# (``nodeId``), and ``targetNodeId``. A renumbering moves each with the node.
+NODE_REFERENCE_KEYS = frozenset({"sourceNodeId", "skipGateNodeId", "gateNodeId", "nodeId", "targetNodeId"})
+# A list of node ids under this key moves the same way (a question set's
+# ``nodeIds``).
+NODE_REFERENCE_LIST_KEYS = frozenset({"nodeIds"})
+
+
+def moved_node_references(value: Any, mapping: Mapping[str, str]) -> Any:
+    """``value`` with every node reference (NODE_REFERENCE_KEYS,
+    NODE_REFERENCE_LIST_KEYS) that is an old id in ``mapping`` moved to
+    its new id, at any depth. Other values are left as they are."""
+    if isinstance(value, dict):
+        moved: dict[Any, Any] = {}
+        for key, item in value.items():
+            if key in NODE_REFERENCE_KEYS and isinstance(item, str):
+                moved[key] = mapping.get(item, item)
+            elif key in NODE_REFERENCE_LIST_KEYS and isinstance(item, list):
+                moved[key] = [mapping.get(entry, entry) if isinstance(entry, str) else entry for entry in item]
+            else:
+                moved[key] = moved_node_references(item, mapping)
+        return moved
+    if isinstance(value, list):
+        return [moved_node_references(item, mapping) for item in value]
+    return value
+
 
 # Which project the live canvas is (state.json's ``projectId``, PR #199
 # review 1, H1). The catalog says which project is open; this says whose
@@ -100,6 +134,8 @@ class CLIGraph:
         # tabs loaded before the restart reload).
         self.upgraded_on_load = 0
         self.params_advanced_on_load = False
+        # The ids load gave nodes that didn't have Nebula's ({old: new}).
+        self.renumbered_on_load: dict[str, str] = {}
         # A Cinema shot's run media (output, variations, its port's output)
         # kept after a write took the shot out, by (node id, shot id), so an
         # Undo that brings the shot back brings its images too (fix round 9
@@ -449,6 +485,25 @@ class CLIGraph:
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
         nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        # A node with an id that isn't Nebula's (PR #199 round 17, review 15
+        # HIGH-1): a state.json saved before the live graph refused them (an
+        # open loaded a duplicated or pasted node's tab-local id). Its typing
+        # never reached the graph, so it gets a backend id here, with its
+        # wires and the references to it; main moves the open project's copy
+        # the same way at boot (renumbered_on_load).
+        renumbered: dict[str, str] = {}
+        for node_id in list(nodes):
+            if not (isinstance(node_id, str) and BACKEND_NODE_ID.fullmatch(node_id)):
+                renumbered[node_id] = next_id(node_id)
+        if renumbered:
+            nodes = {renumbered.get(node_id, node_id): {**moved_node_references(node, renumbered),
+                                                        "id": renumbered.get(node_id, node_id)}
+                     for node_id, node in nodes.items()}
+            for edge in edges:
+                for key in ("source", "target"):
+                    if isinstance(edge, dict) and edge.get(key) in renumbered:
+                        edge[key] = renumbered[edge[key]]
+            print(f"[cli_graph] gave {len(renumbered)} node(s) Nebula ids: {renumbered}", flush=True)
         # A shot that lost its id in the file was given a new one: the port
         # it owned (its image) moves to its new id, with its wires (PR #198
         # review 5, L3). A port no shot owns stays: a removed shot's late
@@ -473,6 +528,7 @@ class CLIGraph:
         self.copy_note = copy_note_of({**found, "of": self.owner}, self.owner) if isinstance(found, dict) else None
         self.removed_shot_media = {}
         self.upgraded_on_load = upgraded
+        self.renumbered_on_load = renumbered
         self.params_advanced_on_load = version < PARAMS_VERSION
 
 

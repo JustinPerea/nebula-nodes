@@ -274,7 +274,7 @@ describe('GM r19 (4): kept first in the lock order', () => {
     render(<Toolbar />);
     const run = screen.getByRole('button', { name: /^Run/ });
     expect(run).toBeDisabled();
-    expect(run).toHaveAttribute('title', keptLockTitle('run'));
+    expect(run).toHaveAttribute('title', keptLockTitle('run-nodes'));
     expect(run).toHaveAttribute(KEPT_MARK);
     expect(run).not.toHaveAttribute('data-offline-disabled');
   });

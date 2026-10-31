@@ -51,7 +51,7 @@ const NOT_READ_WHOLE = "Nebula couldn’t read the whole damaged file, so change
 /** GM r3 (follow-up), one sentence for every case: the open project
  * couldn't be restored, it was restored but older (upgrade day), or which
  * project the canvas was couldn't be proven. `name` is the project it was
- * filed as: "Alpha (recovered)", "Alpha (recovered 2)" and so on (backend
+ * filed as: "Recovered Alpha", "Recovered Alpha 2" and so on (backend
  * project_store.recovered_name), or "Recovered canvas". */
 export function recoveredCanvasSentence(name: string | null | undefined, overSaveLimit = false): string {
   if (overSaveLimit) return canvasSavedOverLimitLine(name || RECOVERED_CANVAS);

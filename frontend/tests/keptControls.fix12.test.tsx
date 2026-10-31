@@ -63,7 +63,7 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     expect(button(/^Run selected nodes$/)).not.toBeDisabled();
     act(() => setCanvasKept(true));
     const locked: [RegExp, string][] = [
-      [/^Ask$/, keptLockTitle('ask')], [/^Run selected nodes$/, keptLockTitle('run')],
+      [/^Ask$/, keptLockTitle('ask')], [/^Run selected nodes$/, keptLockTitle('run-nodes')],
     ];
     for (const [name, title] of locked) {
       const control = button(name);
