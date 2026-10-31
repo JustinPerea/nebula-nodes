@@ -56,10 +56,10 @@ describe('app-wide graph keys yield to an open dialog', () => {
     render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
     const dialog = openModal();
     fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
     dialog.remove();
     fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
-    expect(screen.getByRole('textbox')).toBeTruthy();
+    expect(screen.getByRole('combobox')).toBeTruthy();
   });
 
   it('with no dialog open, ⌘O still opens a file', async () => {

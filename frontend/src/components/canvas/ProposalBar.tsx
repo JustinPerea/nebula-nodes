@@ -11,7 +11,7 @@ import {
   proposalSummary,
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
-import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
+import { isNeutralProposalLine, useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { InNoticeRegion } from '../InNoticeRegion';
 import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
@@ -293,7 +293,9 @@ export function ProposalBar() {
             </div>
           )}
           {errorLeave.shown && (
-            <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
+            isNeutralProposalLine(errorLeave.shown)
+              ? <p className="proposal-bar__error proposal-bar__error--neutral" role="status" {...errorLeave.props}>{errorLeave.shown}</p>
+              : <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
           )}
         </div>
         <div className="proposal-bar__actions">

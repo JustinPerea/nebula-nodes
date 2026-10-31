@@ -9,7 +9,7 @@ vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../src/lib/cinemaUploads';
 import { createCinemaUploadStore, getCinemaUploadIssue, useCinemaUploadStore,
-  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE } from '../../src/store/cinemaUploadStore';
+  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadReasonRole } from '../../src/store/cinemaUploadStore';
 import { useGraphStore } from '../../src/store/graphStore';
 import * as api from '../../src/lib/api';
 const initial = { ...useGraphStore.getState() };
@@ -105,7 +105,7 @@ describe('Cinema reference ownership', () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
     expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: "Couldn't upload bad.png. Invalid image bytes", canRetry: true }); // error-copy round 2 (GM)
-    expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toContain('Retry or remove');
+    expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “bad.png” again or remove it.');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);
     expect(api.generateCinemaShot).not.toHaveBeenCalled();
@@ -118,6 +118,17 @@ describe('Cinema reference ownership', () => {
     retryCinemaReferenceUpload(id); expect(fetchMock).toHaveBeenCalledTimes(1); useGraphStore.getState().releaseGraphImport();
     fetchMock.mockResolvedValueOnce(response('retry.png')); retryCinemaReferenceUpload(id);
     await waitFor(() => expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/retry.png']));
+  });
+  it('GM PR #205 r14 item 4: a stopped upload is neutral until its Try again fails, then a problem again', async () => {
+    const pending = deferred<ReturnType<typeof response>>(); fetchMock.mockReturnValueOnce(pending.promise);
+    attachCinemaReferences(nodeId, 'a', [image()]); const id = uploads()[0].id;
+    expect(useGraphStore.getState().reserveGraphImport()).toBe(true);
+    expect(uploadReasonRole(uploads()[0])).toBe('status');
+    pending.resolve(response('old.png')); await drain(); useGraphStore.getState().releaseGraphImport();
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) });
+    retryCinemaReferenceUpload(id);
+    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: expect.stringContaining('Invalid image bytes') }));
+    expect(uploadReasonRole(uploads()[0])).toBe('alert');
   });
   it('keeps restored interruption metadata through persisted-owner terminal settlement before graph hydration', async () => {
     const { persistRunHistory } = await import('../../src/lib/runHistory');
@@ -156,7 +167,7 @@ describe('Cinema reference ownership', () => {
     expect(storage.setItem.mock.calls[0][0]).toBe(CINEMA_UPLOAD_STORAGE_KEY); expect(storage.setItem.mock.calls[0][1]).not.toContain('canRetry');
     useCinemaUploadStore.setState({ uploads: restored.getState().uploads });
     useGraphStore.getState().loadGraph([cinema()], [], { preserveCinemaUploads: true }); retryCinemaReferenceUpload('reload');
-    expect(fetchMock).not.toHaveBeenCalled(); expect(getCinemaUploadIssue(nodeId, 'a')).toContain('Retry or remove');
+    expect(fetchMock).not.toHaveBeenCalled(); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “draft.png” again or remove it.');
     expect(JSON.stringify(useGraphStore.getState().nodes)).not.toContain('reload'); removeCinemaReferenceUpload('reload');
     expect(getCinemaUploadIssue(nodeId, 'a')).toBeNull();
   });

@@ -2024,6 +2024,16 @@ body.app-slava-restraint .inspector__empty-status {
   text-transform: lowercase;
 }
 
+/* GM PR #205 r11 item 3: the line under "N nodes selected", a sentence in
+ * the UI face that wraps, not the lowercase status mark. */
+body.app-slava-restraint .inspector__empty-line {
+  position: relative;
+  grid-row: 3;
+  margin-top: var(--sr-space-1);
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-ui);
+}
+
 body.app-slava-restraint .inspector__field {
   min-height: var(--sr-control-h-md);
   background: var(--sr-surface-control);

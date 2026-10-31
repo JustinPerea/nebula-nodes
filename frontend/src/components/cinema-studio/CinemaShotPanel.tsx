@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
-import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { getCinemaUploadIssue, otherShotsUploadLine, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { useGraphStore } from '../../store/graphStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../lib/cinemaMotion';
 import { useCinemaMotionStore } from '../../store/cinemaMotionStore';
@@ -13,6 +13,7 @@ import { shortLine } from '../../lib/errorCopy';
 import { NodeError } from '../nodes/NodeError';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
+import { RUN_LOCK_VERBS, lockLine } from '../../lib/runLock';
 
 interface CinemaShotPanelProps {
   cinemaNodeId: string;
@@ -24,6 +25,7 @@ interface CinemaShotPanelProps {
 export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: CinemaShotPanelProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
   const promptId = useId();
+  const reasonId = useId();
   const [variationCount, setVariationCount] = useState(2);
 
   const executeShot = useGraphStore((s) => s.executeShot);
@@ -47,7 +49,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const uploads = useCinemaUploadStore((state) => state.uploads);
   const shotUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === shot.id);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, shot.id);
-  const allReferenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
+  // Read with `uploads` above, so the line follows the store.
+  const otherShotsIssue = uploads.length > 0 ? otherShotsUploadLine(cinemaNodeId, shot.id, scene.shots) : null;
 
   const shotRefs = shot.refImageUrls ?? [];
   const paletteOverridden = shot.overrides?.palette !== undefined;
@@ -101,12 +104,14 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const shotRunning = Boolean(shotRun) || status === 'running';
   const shotBlocked = shotRunning || overlappingGraph || admissionBlocked || Boolean(referenceIssue);
   const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph && !referenceIssue;
-  const sharedInputsMessage = isImportingGraph
-    ? 'Wait for the graph import to finish.'
-    : 'Another run is using shared inputs. Wait for it to finish or stop it.';
+  // GM, PR #205 r1: the lock pattern, "You can generate this shot when …".
+  const sharedInputsMessage = lockLine(RUN_LOCK_VERBS.generateShot, isImportingGraph ? 'import' : 'otherRun');
   // GM bug 3 (fix round 1 of PR #200): Generate shot and Generate N say the
   // same reason, and one line under their row says it too.
   const blockedReason = referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined);
+  // That line shows under the row (one of the two below), so the Generate
+  // buttons point at it instead of repeating it as a tooltip (GM PR #205 r1).
+  const reasonShown = { id: reasonId, text: blockedReason };
   const shotStopping = shotRun?.status === 'cancelling';
   const handleGenerateShot = () => {
     if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
@@ -202,7 +207,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action cinema-shot-panel__action--primary"
             onClick={handleGenerateShot}
             {...lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
-              { verb: OFFLINE_VERBS.generate, neutral: true })}
+              { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown })}
           >
             {shotRunning ? 'Generating…' : 'Generate shot'}
           </button>
@@ -246,15 +251,15 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             className="cinema-shot-panel__action"
             onClick={handleGenerateVariations}
             {...lockedAction(lock, { disabled: shotBlocked, title: blockedReason, offline: 'generate' },
-              { verb: OFFLINE_VERBS.generate, neutral: true })}
+              { verb: OFFLINE_VERBS.generate, neutral: true, shown: reasonShown })}
           >
             Generate {variationCount}
           </button>
         </div>
 
-        {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status">{sharedInputsMessage}</div>}
-        {referenceIssue && <div className="cinema-reference-upload__message" role="status">{referenceIssue}</div>}
-        {!referenceIssue && allReferenceIssue && <div className="cinema-reference-upload__message" role="status">{allReferenceIssue} Generate all will be available when the other shot’s references are resolved.</div>}
+        {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status" id={reasonId}>{sharedInputsMessage}</div>}
+        {referenceIssue && <div className="cinema-reference-upload__message" role="status" id={reasonId}>{referenceIssue}</div>}
+        {!referenceIssue && otherShotsIssue && <div className="cinema-reference-upload__message" role="status">{otherShotsIssue}</div>}
 
         <div className="cinema-shot-panel__motion">
           <button type="button" className="cinema-shot-panel__action"
@@ -264,7 +269,12 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl || readOnly))}
             {...(readOnly && motionHandoff?.status !== 'ready' ? lock.mark : {})}
             title={readOnly && motionHandoff?.status !== 'ready'
-              ? lockedAction(lock, {}, { verb: OFFLINE_VERBS.sendToMotion }).title : undefined}
+              ? lockedAction(lock, {}, { verb: OFFLINE_VERBS.sendToMotion }).title
+              // GM PR #205 r4 item 5: an import holds it with its line.
+              // GM PR #205 r5 item 3: "View video node" says its own verb.
+              : isImportingGraph && motionHandoff?.status !== 'pending'
+                ? lockLine(motionHandoff?.status === 'ready' ? RUN_LOCK_VERBS.viewVideoNode : RUN_LOCK_VERBS.sendToMotion, 'import')
+                : undefined}
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'
@@ -330,18 +340,19 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               {shotUploads.map((upload) => (
                 <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
                   <span className="cinema-reference-upload__name">{upload.name}</span>
-                  <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
-                    {/* GM's WRAP rule: with Retry shown, the reason drops its own "try again". */}
+                  <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
+                    {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
+                        (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
                     {upload.status === 'uploading' ? 'Uploading…'
                       : upload.canRetry ? shortLine(upload.error ?? "Couldn't upload this image.")
                         : upload.error ?? "Couldn't upload this image."}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {upload.status === 'error' && upload.canRetry && (
-                      <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}
-                        {...lock.act({ offline: true })}>Retry</button>
+                      <button type="button" className="cinema-reference-upload__retry" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Try again uploading “${upload.name}”`}
+                        {...lock.act({ offline: true })}>Try again</button>
                     )}
-                    <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
+                    <button type="button" className="cinema-upload__remove" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove “${upload.name}”`}>Remove</button>
                   </div>
                 </div>
               ))}

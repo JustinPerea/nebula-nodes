@@ -553,11 +553,11 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
   it('own run: names up to 3, groups same titles, counts from 4', async () => {
     await ownRun([textNode('n5', 'Brief'), textNode('n6', 'Note'), textNode('n7', 'Text'), textNode('n8', 'Text')]);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete “Brief” and “Note”. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete “Brief” and “Note” when the run finishes.");
     useGraphStore.getState().onNodesChange(['n5', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete “Brief” and 2 “Text” nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete “Brief” and 2 “Text” nodes when the run finishes.");
     useGraphStore.getState().onNodesChange(['n5', 'n6', 'n7', 'n8'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete 4 nodes. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete 4 nodes when the run finishes.");
     expect(notice()).not.toMatch(/n\d/);
   });
 
@@ -595,12 +595,12 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
 });
 
 describe('N1: a wire-only Delete during the tab\'s run says why', () => {
-  it('"Couldn’t delete the connection. Wait for the active run to finish."', async () => {
+  it('"You can delete the connection when the run finishes."', async () => {
     await ownRun([textNode('n5', 'Brief')]);
     useGraphStore.setState({ edges: [{ id: 'e9', source: 'n4', sourceHandle: 'shot_s1', target: 'n5', targetHandle: 'text', selected: true }],
       nodes: useGraphStore.getState().nodes.map((node) => ({ ...node, selected: false })) } as never);
     useGraphStore.getState().deleteSelected();
-    expect(notice()).toBe("Couldn’t delete the connection. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete the connection when the run finishes.");
     expect(useGraphStore.getState().edges).toHaveLength(1);
   });
 });

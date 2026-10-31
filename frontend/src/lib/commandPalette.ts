@@ -1,6 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { CATEGORY_LABELS, matchesSearch, modelSearchText, providerLabel } from './modelDiscovery';
 import { SHORTCUTS_OPEN_EVENT } from './keyboardShortcuts';
+import { RUN_LOCK_VERBS, lockLine, type LockWait } from './runLock';
 
 export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Canvas' | 'Nodes';
 
@@ -17,6 +18,10 @@ export interface PaletteCommand {
   keywords?: string;
   /** When false the command is shown disabled and cannot be run. */
   enabled?: boolean;
+  /** GM PR #205 r2 item 3: why a locked row is locked, shown as the row's
+   * own secondary text (a tooltip never shows on a row reached by the arrow
+   * keys) and named by its aria-describedby. */
+  lockLine?: string;
   /** The palette stays open: the command changes what it shows ("Ask the
    * agent…" opens its agent prompt; review 11). Others close it first. */
   keepsOpen?: boolean;
@@ -42,6 +47,12 @@ export interface PaletteContext {
   canRun: boolean;
   canSave: boolean;
   canLoad: boolean;
+  /** This tab's run is going or starting: Run, Save and Load say so. */
+  running?: boolean;
+  /** What the canvas waits for (lib/runLock's canvasWait): a locked Run,
+   * Save or Load says that wait's line, an import's or Create's preparation
+   * as well as a run's (GM PR #205 r3 item 2). `running` means 'run'. */
+  wait?: LockWait | null;
   /** Existing nodes on the canvas, for search-and-focus. */
   canvasNodes: Array<{ id: string; label: string }>;
   focusNode: (id: string) => void;
@@ -50,19 +61,29 @@ export interface PaletteContext {
 type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets' | 'history';
 
 const PANELS: Array<[PanelKey, string]> = [
-  ['library', 'Node Library'],
-  ['inspector', 'Inspector'],
-  ['settings', 'Settings'],
-  ['chat', 'Chat'],
-  ['assets', 'Assets'],
-  ['history', 'Run History'],
+  ['library', 'node library'],
+  ['inspector', 'inspector'],
+  ['settings', 'settings'],
+  ['chat', 'chat'],
+  ['assets', 'assets'],
+  ['history', 'run history'],
 ];
+
+/** A row a wait locks says its lock line (GM PR #205 r2 item 3, r3 item 2). */
+function runLocked(ctx: PaletteContext, enabled: boolean, verb: string): Pick<PaletteCommand, 'lockLine'> {
+  const wait = ctx.wait ?? (ctx.running ? 'run' : null);
+  return wait && !enabled ? { lockLine: lockLine(verb, wait) } : {};
+}
 
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
   const cmds: PaletteCommand[] = [
-    { id: 'action:run', title: 'Run graph', group: 'Actions', keywords: 'execute play', enabled: ctx.canRun, acts: true, perform: ctx.runGraph },
-    { id: 'action:save', title: 'Save graph', group: 'Actions', keywords: 'export json download', enabled: ctx.canSave, perform: ctx.save },
-    { id: 'action:load', title: 'Load graph', group: 'Actions', keywords: 'open import json', enabled: ctx.canLoad, acts: true, perform: ctx.load },
+    // GM PR #205 r2 item 3: "canvas", the word the rest of the app uses.
+    { id: 'action:run', title: 'Run canvas', group: 'Actions', keywords: 'execute play graph', enabled: ctx.canRun, acts: true, perform: ctx.runGraph,
+      ...runLocked(ctx, ctx.canRun, RUN_LOCK_VERBS.runCanvas) },
+    { id: 'action:save', title: 'Save canvas', group: 'Actions', keywords: 'export json download graph', enabled: ctx.canSave, perform: ctx.save,
+      ...runLocked(ctx, ctx.canSave, RUN_LOCK_VERBS.saveCanvas) },
+    { id: 'action:load', title: 'Load canvas', group: 'Actions', keywords: 'open import json graph', enabled: ctx.canLoad, acts: true, perform: ctx.load,
+      ...runLocked(ctx, ctx.canLoad, RUN_LOCK_VERBS.loadCanvas) },
     { id: 'action:fit', title: 'Fit view', group: 'Actions', keywords: 'zoom center frame fit', perform: ctx.fitView },
     { id: 'agent:ask', title: 'Ask the agent…', subtitle: 'Describe what to build', group: 'Agent', keywords: 'chat ai prompt generate', keepsOpen: true, acts: true, perform: ctx.startAgentQuery },
     { id: 'view:create', title: 'Open Creator Studio', group: 'View', keywords: 'create generate studio prompt', perform: ctx.enterCreateView },

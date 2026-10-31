@@ -19,6 +19,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore, wiresDeletedWith } from '../store/graphStore';
+import { noteCanvasSelectionDrag } from '../lib/canvasSelectionDrag';
+import { RUN_LOCK_VERBS, canvasWaitLine } from '../lib/runLock';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { CANVAS_EDGE_TYPES, CANVAS_NODE_TYPES } from './canvasTypes';
@@ -223,7 +225,12 @@ export function CanvasFocusController() {
     const graph = useGraphStore.getState();
     if (!graph.nodes.some((node) => node.id === request.nodeId)) {
       clearRequest(request.requestId);
-      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+      // The UI store names what the canvas still has selected: its one node,
+      // as the Inspector shows it, or none (review 7 of PR #205, inspector NIT-2).
+      if (ui.selectedNodeId === request.nodeId) {
+        const ringed = graph.nodes.filter((node) => node.selected);
+        ui.selectNode(ringed.length === 1 ? ringed[0].id : null, { keepPin: true });
+      }
       return;
     }
     if (!viewportInitialized || !internalNode?.measured.width || !internalNode.measured.height) return;
@@ -522,6 +529,9 @@ export function Canvas() {
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
     const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
     if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
+    // GM PR #205 r4 item 3: the picker opens during a run too. Adding a node
+    // and connecting two are each allowed while a run goes, so the connected
+    // add is as well (no lock, no line).
 
     showConnectionPopup({
       position: point,
@@ -627,6 +637,11 @@ export function Canvas() {
     hideContextMenu();
   }, [hideContextMenu]);
 
+  // A drag-select: the unpinned Inspector follows it, and closes only if it
+  // ends with none selected (GM PR #205 r16 item 5).
+  const onSelectionStart = useCallback(() => noteCanvasSelectionDrag(true), []);
+  const onSelectionEnd = useCallback(() => noteCanvasSelectionDrag(false), []);
+
   // Right-click on empty canvas offers "Leave a note for agents here…".
   const onPaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
@@ -669,10 +684,15 @@ export function Canvas() {
         return;
       }
 
-      // Ctrl+Enter — Run graph
-      if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
+      // Ctrl+Enter: Run canvas. GM PR #205 r4 item 4: while a wait holds
+      // it (this tab's run or its start, Create's launch, an import), the
+      // press says the palette's line in the key presses' place.
+      if (isCtrlOrCmd && event.key === 'Enter') {
         event.preventDefault();
-        executeGraph();
+        const graph = useGraphStore.getState();
+        const line = canvasWaitLine(RUN_LOCK_VERBS.runCanvas, { ...graph, createLaunchingIds: [] });
+        if (line) graph.sayRunLocked(line);
+        else executeGraph();
         return;
       }
 
@@ -806,6 +826,8 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
+        onSelectionStart={onSelectionStart}
+        onSelectionEnd={onSelectionEnd}
         onPaneContextMenu={onPaneContextMenu}
         fitView={fitFirstNodes}
         defaultViewport={initialCanvasState.viewport ?? undefined}

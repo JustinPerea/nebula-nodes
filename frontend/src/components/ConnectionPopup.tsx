@@ -17,8 +17,10 @@ import { ScrollFade } from './ScrollFade';
 import { floatingBottomLimit } from '../lib/bottomBar';
 import { isBackendOffline, isOfflineRefusal, refuseEditWhileOffline } from '../lib/backendConnection';
 import { useCanvasLock } from '../lib/canvasLock';
+import { addNodeLine } from '../lib/runLock';
 import '../styles/canvas-next-steps.css';
 import { keyBlockedByModal } from '../lib/canvasShortcutScope';
+import { resumeInspectorFocus } from '../lib/inspectorFocusResume';
 
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
@@ -55,6 +57,8 @@ export function ConnectionPopup() {
   const [intent, setIntent] = useState<NextStepIntent>('all');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  /** A wait's line for a press it holds (GM PR #205 r5 item 2), not an error. */
+  const [wait, setWait] = useState('');
   const [anchor, setAnchor] = useState(position);
   const busy = useRef(false);
   const opener = useRef<HTMLElement | null>(null);
@@ -66,13 +70,17 @@ export function ConnectionPopup() {
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // The import's line goes when the import does (the press works again).
+  const importing = useGraphStore((state) => state.isImportingGraph);
+  useEffect(() => { if (!importing) setWait(''); }, [importing]);
+
   // Reset search and collapse everything each time the popup opens — otherwise
   // the user sees a wall of nodes from the last session and has to scroll.
   useEffect(() => {
     if (!visible) return undefined;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const timeoutId = window.setTimeout(() => {
-      setSearch(''); setIntent('all'); setError('');
+      setSearch(''); setIntent('all'); setError(''); setWait('');
       setExpanded({});
       inputRef.current?.focus();
     }, 0);
@@ -193,7 +201,12 @@ export function ConnectionPopup() {
     // Round 16 (L3): adding a step is an edit, so offline the items are
     // disabled and a press only pulses the banner, never an error line.
     if (refuseEditWhileOffline()) return;
-    if (busy.current || useGraphStore.getState().isExecuting || useGraphStore.getState().isImportingGraph) return;
+    // GM PR #205 r4 item 3: a run going doesn't lock the connected add (its
+    // add and its connect are each allowed during a run); an import does,
+    // and the picker says the store's line for it (GM r5 item 2).
+    if (busy.current) return;
+    if (useGraphStore.getState().isImportingGraph) { setError(''); setWait(addNodeLine(node.definition.displayName, 'import')); return; }
+    setWait('');
     const graph = useGraphStore.getState();
     const source = graph.nodes.find((item) => item.id === nodeId);
     if (!source || (nextStep && ((nextStep.sourceDefinitionId && source.data.definitionId !== nextStep.sourceDefinitionId)
@@ -236,6 +249,8 @@ export function ConnectionPopup() {
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
+        // The Inspector takes focus for this new node's settings (only here).
+        resumeInspectorFocus();
         ui.requestCanvasNodeFocus(newId); ui.setLeftDock(null); ui.setInspectorVisible(true);
       }
     } catch (error) {
@@ -298,6 +313,7 @@ export function ConnectionPopup() {
       </div>}
       {pending && <div className="next-step-status" role="status">Adding connected step…</div>}
       {error && <div className="next-step-error" role="alert">{error}</div>}
+      {wait && !error && <div className="next-step-wait" role="status">{wait}</div>}
       <ScrollFade className="connection-popup__list">
         {totalCount === 0 && (
           <div className="connection-popup__empty">No compatible nodes found</div>

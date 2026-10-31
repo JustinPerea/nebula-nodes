@@ -179,7 +179,7 @@ The server exposes these tools for building and running (see
   before running a node priced from its input's size on a file of yours
   (see [Spending limits](#spending-limits)). An in-app chat's turn reads
   only its own workspace, and the read follows no links.
-- `load_graph_file`: opens a graph file (`path`) as the person's Load graph
+- `load_graph_file`: opens a graph file (`path`) as the person's Load canvas
   does (`nebula load <file>`, Q123 a): a plain `.nebula` or `.json`, or a
   `.nebula.zip` bundle (a graph plus its files). A bundle streams to `POST
   /api/outputs/restore?rewriteLinks=true` with your own headers: its files
@@ -189,7 +189,7 @@ The server exposes these tools for building and running (see
   empty, with a warning). Under the 16 MB save limit the file replaces the
   open project's canvas (make a new project first, `new_project`, unless the
   person asked for that). A file over the limit opens as a new project named
-  after the file, as the person's Load graph does (Q120): the import is
+  after the file, as the person's Load canvas does: the import is
   first asked to refuse it (`refuseOverSaveLimit`), the project is made as
   `new_project` makes one, and the file loads there (`newProjectForFile`,
   which loads only into an empty project); the project that was open is left
@@ -200,7 +200,50 @@ The server exposes these tools for building and running (see
   until it is under the limit, and `project_size` shows what's large. The
   path follows `upload_file`'s rules (an in-app chat's turn reads only its
   own workspace, protected files are refused, the read follows no links),
-  files up to 528 MB.
+  files up to 528 MB. A bundle the restore refuses is refused with the
+  backend's own words (`detail`, which `load_graph_file` and `nebula load`
+  say after the file's path, e.g. "graph.json contains too many nodes").
+  The HTTP answer also carries a `code` beside `detail`, which the person's
+  tab uses to pick its line under "Nebula couldn’t load the canvas.":
+  - "This file is too complex to open.": `graph_too_complex` (too many
+    values, or nested too deeply), `bundle_too_many_members` (with
+    `maxMembers`), `bundle_expands_too_far` (with `limitBytes`) and
+    `bundle_unsafe_ratio` (with `maxRatio`);
+  - "Part of this file holds a value Nebula can’t read.":
+    `graph_unreadable_value` (a NaN, an Infinity or a number past a
+    float's range);
+  - "This file has more than N nodes." / "… connections.":
+    `graph_too_many_nodes` (with `maxNodes`) and `graph_too_many_edges`
+    (with `maxEdges`);
+  - "This canvas is N MB. Nebula opens canvases up to M MB.":
+    `graph_too_large` (with `sizeBytes`, graph.json's unpacked size as the
+    bundle declares it, and `limitBytes`);
+  - "This file uses a node this version of Nebula doesn’t have.":
+    `unknown_definition` (a node type it doesn't know) and
+    `graph_unknown_port` (a connection to a port that node doesn't have);
+  - "This file is damaged or isn’t a Nebula canvas.": `graph_invalid`
+    (graph.json isn't a Nebula graph: its shape, a parser error, or any
+    other check of its nodes and connections), `graph_cycle` (its
+    connections loop back on themselves) and the
+    zip's own checks, `bundle_not_zip`, `bundle_encrypted`,
+    `bundle_unsupported_compression`, `bundle_unsafe_path`,
+    `bundle_path_too_long` (with `maxPathBytes` or `maxComponentBytes`),
+    `bundle_link`, `bundle_special_file`, `bundle_size_metadata` and
+    `bundle_missing_graph`;
+  - "This file is from a newer Nebula. Update Nebula, then open it
+    again.": `graph_newer_version` (with `version`);
+  - "Its files couldn’t be copied. Try again.": `bundle_restore_failed`
+    (500);
+  - "One of its files is N MB. Nebula opens files up to M MB.":
+    `bundle_member_too_large` (with `sizeBytes`, that file's unpacked size
+    as the bundle declares it, and `limitBytes`);
+  - "This file is N MB. Nebula opens files up to M MB.":
+    `bundle_upload_too_large` (with `sizeBytes`, the upload's size, and
+    `limitBytes`).
+  N is to the nearest tenth of a MB and M whole MB, as in the canvas size
+  line. A refusal with no `code` (the request's own, an empty body) reads
+  "Nebula couldn’t load the canvas." alone; the person never reads the
+  backend's words. Agents keep the backend's `detail` in every case.
 - `remove_from_canvas`: deletes nodes or single connections, all or nothing.
   On the person's open canvas it is one undo step: one Cmd+Z puts the nodes
   back with their connections (as the person's own delete is, from the
@@ -209,16 +252,45 @@ The server exposes these tools for building and running (see
   on the canvas or its bars, never in a panel that owns its keys such as the
   Inspector or chat, nor behind a modal dialog). A delete (the person's,
   yours or another agent's) takes the nodes and their connections off the
-  canvas the moment it is made; edits to them still waiting to be sent
-  (the person's typing, yours) are dropped once Nebula confirms it, and a
-  sync that still shows them meanwhile leaves them off. If Nebula refuses
-  it, the nodes come back where they were, with their connections, not
-  selected, with the usual line saying why, and the waiting edits go out.
-  A Cmd+Z pressed while a delete is still on its way undoes nothing and
-  says "Nothing was undone. Your last change was still saving."; once the
-  delete has landed, one Cmd+Z brings the nodes back with their
-  connections, on the canvas and in Nebula's graph, and Redo deletes them
-  again. A Cmd+Z the person presses before another step has reached Nebula
+  canvas the moment it is made; edits to them still waiting to be sent (the
+  person's typing, yours) are dropped once Nebula confirms it, and a sync
+  that still shows them meanwhile leaves them off. If Nebula refuses it, the
+  nodes come back where they were, with their connections, not selected,
+  with the usual line saying why, and the waiting edits go out. A Cmd+Z
+  pressed while a delete is still on its way waits for the delete's answer,
+  saying nothing meanwhile, then brings the nodes back with their
+  connections, on the canvas and in Nebula's graph, with the usual "Restored
+  the node." (Redo deletes them again), as a Cmd+Z after the delete has
+  landed does. Nodes any Undo or Redo brings back (the person's step or an
+  agent's, yours included) come back selected, replacing the selection, as a
+  paste does: one selection, so the Inspector's node and its "…" pill move
+  to the node brought back (when several come back, the Inspector says
+  "N nodes selected", pinned or not; when the node it shows leaves the
+  canvas, by an Undo, a delete, yours included, or Load canvas, a pinned
+  Inspector stays pinned and says "No node selected", and an unpinned one
+  closes; opening another project resets the panels, which unpins and
+  closes it). The Inspector follows the person's selection: one node shows
+  it, two or more read "N nodes selected", and an unpinned Inspector closes
+  only when nothing is selected. Either way it
+  brings them back as Nebula last had them: your edit to a node (or a
+  connection you made or took off) that Nebula took while the person's
+  delete was on its way comes back with it, a connection only while the node
+  at its other end is there; the person's own typing, and a rename of theirs
+  not yet answered, stay theirs (your rename after theirs landed is yours).
+  Each edit is its own undo step under the delete, as Nebula had them, never
+  merged across agents or edits: the person's next Cmd+Z after the restore
+  undoes only the newest edit, with "Undid <agent>’s edit.", the next one
+  the edit before it, and none of their older steps reverts them. A delete
+  Nebula refuses keeps the node with each edit its own step the same way. If
+  Nebula refuses the delete, the nodes come back with the delete's own line
+  and the waiting Cmd+Z says nothing more. If the restore is refused or
+  fails, or the delete gets no answer within 15 s, the canvas says "Nebula
+  couldn’t bring back “X”. Try Undo again." (the names as the cards read
+  then; several nodes by the usual list, four or more counted). After the
+  15 s give-up, a late answer to the delete never brings the nodes back by
+  itself: the next Cmd+Z does. The line goes as soon as it stops being true:
+  a newer step above the delete (Cmd+Z would undo that step) or another
+  canvas. A Cmd+Z the person presses before another step has reached Nebula
   waits for Nebula's answer, then undoes it (a clear, an upload once its
   node is on the canvas, an accepted proposal, a model picked on an
   OpenRouter or Replicate node; a step Nebula refused undoes nothing, and
@@ -226,58 +298,60 @@ The server exposes these tools for building and running (see
   line). That Cmd+Z is bound to the step it was pressed for, and a second
   Cmd+Z to the step below it. While its own step is still on its way it
   waits, even if something else lands meanwhile; a later step of the
-  person's still on its way is no newer edit (the Cmd+Z applies beneath
-  it). Your edits to a node that a waiting Cmd+Z holds are kept and show on
-  the canvas once it lands, with their Agent log line and their own undo
-  step (a run's outputs too); if Nebula doesn't answer an undo within 15 s
-  it fails with "Couldn't undo that." and the reason, and the edits it held
-  go out in order. An undo Nebula refuses leaves the canvas as Nebula's
-  graph is. An edit or Cmd+Z still waiting when another project opens or a
-  graph import replaces the canvas is never sent: it would land on the
-  wrong project. A delete's change lands when Nebula's own sync takes its
-  nodes off, which can come before its answer: no undo after that brings
-  those nodes back to the canvas or to Nebula's graph unless it undoes
-  that delete. A delete of several nodes
-  is one step however its nodes' syncs arrive (one per node, with your edit
-  or the person's typing between them): one Cmd+Z brings them all back. A
-  sync that already took a node off makes its delete done, whatever its
-  answer says, and undoing a delete puts back only what it removed (a node
-  you added meanwhile stays). A clear the person issues after a Cmd+Z that
-  is still waiting supersedes it: the Cmd+Z is dropped and the canvas ends
-  cleared; an undo takes off only the nodes its own step added (a node you,
-  another agent or the person added while that step was on its way stays),
-  and always the ones it did add, even after a delete of one and its undo
-  brought it back (adding a node from the library, a drop, the command
-  palette, a Character or Moodboard drop and Creator's inserts are each
-  their own step too); while an undo or redo is still on its way to
+  person's still on its way is no newer edit (the Cmd+Z applies beneath it).
+  Your edits to a node that a waiting Cmd+Z holds are kept and show on the
+  canvas once it lands, with their Agent log line and their own undo step (a
+  run's outputs too), in Nebula's order across every node it held. An edit
+  of yours the person typed into the same node after goes above their typing
+  as a step of its own, so their Cmd+Z never takes your edit off and yours
+  never brings their undone typing back; if Nebula doesn't answer an undo within 15 s it fails
+  with "Couldn't undo that." and the reason, and the edits it held go out in
+  order. An undo Nebula refuses leaves the canvas as Nebula's graph is. An
+  edit or Cmd+Z still waiting when another project opens or a graph import
+  replaces the canvas is never sent: it would land on the wrong project. A
+  delete's change lands when Nebula's own sync takes its nodes off, which
+  can come before its answer: no undo after that brings those nodes back to
+  the canvas or to Nebula's graph unless it undoes that delete. A delete of
+  several nodes is one step however its nodes' syncs arrive (one per node,
+  with your edit or the person's typing between them): one Cmd+Z brings them
+  all back. A sync that already took a node off makes its delete done,
+  whatever its answer says, and undoing a delete puts back only what it
+  removed (a node you added meanwhile stays). A clear the person issues
+  after a Cmd+Z that is still waiting supersedes it: the Cmd+Z is dropped
+  and the canvas ends cleared; an undo takes off only the nodes its own step
+  added (a node you, another agent or the person added while that step was
+  on its way stays), and always the ones it did add, even after a delete of
+  one and its undo brought it back (adding a node from the library, a drop,
+  the command palette, a Character or Moodboard drop and Creator's inserts
+  are each their own step too); while an undo or redo is still on its way to
   Nebula, the person's next edits (typing, a delete, an added node) reach
-  Nebula after it, in the order the person made them, so the graph you
-  read never shows a later edit undone by an earlier Cmd+Z;
-  a Cmd+Z never does nothing without a word: a step that ended up changing
-  nothing is passed over (the press undoes the step below it), and a press
-  whose step was taken back meanwhile (a refused clear) counts in the
-  skipped line below; a Cmd+Z pressed after the clear undoes the clear once it lands,
-  and a step taken while a clear was on its way never brings a cleared
-  node back. If a newer edit has settled on top of its step by then
-  (yours, another agent's, or the person's own later edit), it never undoes
-  that edit instead: it is dropped, and the canvas says "Nothing was undone. Your last
-  change was still saving." ("Nothing was redone. …" when only Cmd+Shift+Z
-  presses were dropped); if some presses went through and some were
-  dropped, the restore's line ends with what was skipped, undos and redos
-  counted apart: "1 undo was skipped while a change was saving.", "2 undos
-  and 1 redo were skipped while a change was saving." (Redo stays). The same line shows if Nebula hasn't answered
-  within 15 s, or another project opens (the person's own switch, or your
-  load into the open project, whose own notice stays beside it). A clear
-  takes off only the nodes that were on the canvas when the person cleared,
-  never one you added after it (even under a reused id such as n1), and an
-  accept the person undid while it was on its way runs nothing (its
-  approval goes back). Its
-  result has `undo` too, which puts the nodes back with their params,
-  outputs, names and connections, the person's pins on them, and the proposals
-  the delete closed when they still fit. `removals` lists, per node it
-  deleted, the pins it detached and the proposals it closed (each record
-  also names its `projectId` and the node's `definitionId`, and `replaces`
-  when it supersedes an earlier delete of the same node).
+  Nebula after it, in the order the person made them, so the graph you read
+  never shows a later edit undone by an earlier Cmd+Z; a Cmd+Z never does
+  nothing without a word: a step that ended up changing nothing is passed
+  over (the press undoes the step below it), and a press whose step was
+  taken back meanwhile (a refused clear) counts in the skipped line below; a
+  Cmd+Z pressed after the clear undoes the clear once it lands, and a step
+  taken while a clear was on its way never brings a cleared node back. If a
+  newer edit has settled on top of its step by then (yours, another agent's,
+  or the person's own later edit), it never undoes that edit instead: it is
+  dropped, and the canvas says "Nothing was undone. Your last change was
+  still saving." ("Nothing was redone. …" when only Cmd+Shift+Z presses were
+  dropped); if some presses went through and some were dropped, the
+  restore's line ends with what was skipped, undos and redos counted apart:
+  "1 undo was skipped while a change was saving.", "2 undos and 1 redo were
+  skipped while a change was saving." (Redo stays). The same line shows if
+  Nebula hasn't answered within 15 s, or another project opens (the person's
+  own switch, or your load into the open project, whose own notice stays
+  beside it). A clear takes off only the nodes that were on the canvas when
+  the person cleared, never one you added after it (even under a reused id
+  such as n1), and an accept the person undid while it was on its way runs
+  nothing (its approval goes back). Its result has `undo` too, which puts
+  the nodes back with their params, outputs, names and connections, the
+  person's pins on them, and the proposals the delete closed when they still
+  fit. `removals` lists, per node it deleted, the pins it detached and the
+  proposals it closed (each record also names its `projectId` and the node's
+  `definitionId`, and `replaces` when it supersedes an earlier delete of the
+  same node).
 - `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
   (or a steps plan's `undo.tokens`, newest first). A part someone changed
   since stays as it is and is listed in `skipped`; so does a node someone
@@ -402,10 +476,50 @@ The server exposes these tools for building and running (see
   The one exception is `load_graph_file`'s import into the empty project it
   made for a file over the limit (`newProjectForFile`). An
   edit that makes it smaller goes through, and the person's own edits and
-  Load graph are never refused for size. A tab's save over the limit gets
+  Load canvas are never refused for size. A tab's save over the limit gets
   the same 413 fields with its `detail` unchanged ("Project snapshot exceeds
   the 16 MiB limit"). CLI: `nebula project size [<id>|current]` (`--json`
   prints this result).
+  The same edits, `load_graph_file`'s `newProjectForFile` import (only its
+  size check is waived) and a proposal (below) are refused when they would
+  leave the canvas past the
+  shape limits the person's Save checks, measured as Save measures them
+  (from the canvas file's root, where a param's value sits 5 levels down,
+  and over the whole canvas, so several writes add up): 400 "This edit would
+  leave the canvas nested more than 64 levels deep from its file's root, and
+  the person's canvas can't save it. Nothing changed. Nest the value less
+  deeply." or 413 "This edit would leave the canvas holding more than
+  1,000,000 values, and the person's canvas can't save it. Nothing changed.
+  Make the edit smaller, or remove what the canvas no longer needs (ask the
+  person first)." The value count includes the project's run history when it
+  could reach the limit. An edit that leaves a canvas already past a limit
+  no worse goes through; a request with no agent marker gets
+  `code: "person_required"` with the same `detail`. The person's own edits
+  are never refused; their Save says "It’s too complex to save." (or "Part
+  of it holds a value Nebula can’t save.") and names the Undo that brings
+  the canvas back within the limits: when undoing the newest step alone
+  does and it is yours, "Undo <agent>’s last change, then try again." (one
+  with no named agent: "Undo the last change, then try again."); when it
+  takes more than one, "Undo the last 2 changes, then try again." (always
+  digits); when no number of Undos does (a change nobody named that made
+  no step, older than every step), the line stops at its first sentence.
+  The Agent log reads "Nebula couldn’t save the canvas. It’s too complex
+  to save: it holds more than 1,000,000 values." (or "part of it is nested
+  more than 64 levels deep.", "a number in it isn’t finite.", "a value in
+  it refers back to itself."). The canvas's import of the CLI graph
+  measures the file Save would write and says "This canvas is too complex
+  to open." under "Nebula couldn’t import the CLI canvas.".
+  A proposal is measured when it is made, as the edit it stages
+  (`propose_change` gets the same 400 or 413), and again on every
+  Accept, since the canvas may have changed since. An Accept that would
+  leave the canvas past a limit is refused 409 with
+  `code: "proposal_too_complex"`, `agent` (the proposing agent's name),
+  `limit: {kind: "depth", max: 64}` or `{kind: "values", max: 1000000}`
+  and a `detail` naming the proposal; nothing changes and the proposal
+  stays open. A `proposal.accept_refused` event says so (with
+  `proposalId`, `agentId`, `code` and `limit`). The person's bar reads
+  "Nebula couldn’t accept this because the canvas would be too complex to
+  save. Reject it, or ask <agent> to change it." with Accept still live.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_edit`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
@@ -697,6 +811,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.created` | an agent proposed a change | `proposalId`, `note`, `adds`, `wires`, `sets`, `runs`, `paidRuns`; for a [proposal outside the canvas](#proposals-outside-the-canvas) `kind`, `targetId`, `targetName`, `change` instead of the graph counts (the decisions after it carry `kind` and `targetId` too) |
 | `proposal.accepted` | the person accepted; the added nodes and connections follow as `node.added` / `edge.added` by the person (for a project cover, `project.cover` by the person) | `proposalId`, `idMap`, `runNodeIds`; outside the canvas `kind`, `targetId`, `targetName`, `applied` (what was set) |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
+| `proposal.accept_refused` | the person's Accept was refused because the canvas would be past Save's shape limits; nothing changed and the proposal is still open | `proposalId`, `agentId`, `code` (`proposal_too_complex`), `limit` (`kind`: `depth` or `values`, `max`) |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
@@ -3342,6 +3457,15 @@ name and connections, and new nodes go away with their connections. Redo (Cmd-Sh
 applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
 
+While a restore holds a node (the person's Undo of a delete, on its way),
+an edit made to it waits and lands when the restore's answer does, in
+Nebula's order with every other held edit, across nodes: each edit stays
+one step (an edit's later part joins the step its first part made, which
+clears the person's Redo, as any agent edit after an Undo does). A rename
+of the person's that Nebula refuses leaves nothing behind: no later Undo
+or Redo writes it back. A restore Nebula applied but answered late is kept,
+not put back.
+
 An open canvas draws exactly the backend's connections between backend nodes: a
 connection an agent took away (an unwire, `disconnect`, an undo, a node re-typed
 to other ports) leaves it at once, with no reload, and its next save doesn't
@@ -4002,25 +4126,41 @@ A call you can make next is code, in backticks with its own quotes
 (`` `get_run('run_ab12')` ``).
 
 The canvas blocks the same things: the shot's × is disabled, titled "Stop
-the run first." or "Wait for “Shot 2” to finish."; the scene's Delete (the
-context menu, the Inspector, and the selection toolbar when only rendering
-scenes are selected) is disabled, titled "Stop the run first." or "Wait for
-“Scene” to finish." ("Stop the runs first." / "Wait for the running shots to
-finish." for several scenes).
+the run first." or "You can remove “Shot 2” when it finishes."; the scene's
+Delete (the context menu, the Inspector, and the selection toolbar when only
+rendering scenes are selected) is disabled, titled "Stop the run first." or
+"You can delete “Scene” when it finishes." ("Stop the runs first." / "You
+can delete them when the running shots finish." for several scenes).
 
 How a delete or an undo reads depends on whose run it is:
 
 - **A run this window started** locks every delete, undo and redo on the
-  canvas until it ends (the toolbar's are disabled, titled "Wait for the
-  active run to finish."). The Delete key, the menu's Delete and Undo/Redo
-  are never silent: a selection of only rendering scenes reads GM's scene
-  line ("Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
-  first."), an undo that would remove a rendering shot reads "Couldn’t undo.
-  It would remove “Shot 2”, which is still running. Stop the run first.",
-  and anything else reads the lock's own reason: "Couldn't delete “Brief”.
-  Wait for the active run to finish.", "Couldn't delete 3 nodes. Wait for
-  the active run to finish.", "Couldn't undo. Wait for the active run to
-  finish." ("Couldn't redo. …"). Nothing is sent.
+  canvas until it ends (the toolbar's are disabled, each titled by its own
+  verb: "You can delete it when the run finishes."). The Delete key, the
+  menu's Delete and Undo/Redo are never silent: a selection of only
+  rendering scenes reads GM's scene line ("Couldn’t delete “Scene”. “Shot 2”
+  is still running. Stop the run first."), an undo that would remove a
+  rendering shot reads "Couldn’t undo. It would remove “Shot 2”, which is
+  still running. Stop the run first.", and anything else reads the lock's
+  own line alone: "You can delete “Brief” when the run finishes.", "You can
+  delete “A”, “B” and “C” when the run finishes.", "You can delete the
+  connection when the run finishes.", "You can undo when the run finishes."
+  ("You can redo …"). Nothing is sent for any of these. The other keys say
+  theirs in the same place: Cmd+D "You can duplicate “Brief” when the run
+  finishes.", Cmd+V "You can paste when the run finishes.", and, as the
+  command palette's rows say them, Cmd+Enter "You can run the canvas when
+  the run finishes.", Cmd+S "You can save the canvas when the run finishes."
+  and Cmd+O "You can load a canvas when the run finishes." (Cmd+S and Cmd+O
+  say an import's wait, "You can save the canvas when the import
+  finishes.", and Create's launch, "You can save the canvas when Nebula
+  finishes preparing the run.", the same way; Cmd+Enter says an import's
+  and runs during Create's launch, as the toolbar's Run and the palette's
+  do). The palette's Run canvas, Save
+  canvas and Load canvas stay listed, greyed, each with its line as its own
+  text. Adding a node is not locked by a run: from the library, the palette,
+  or a connection dropped on empty canvas (its node picker opens as with no
+  run, and the node comes connected), and connecting two nodes isn't either;
+  your own adds and connections aren't refused during a run.
 - **A run another window (or an agent) started** doesn't lock the canvas.
   The Delete key over a selection deletes the rest and keeps the scene and
   its connections: "Deleted 3 nodes. “Scene” wasn't deleted because “Shot 2” is
@@ -4196,7 +4336,7 @@ nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula project rename current "Logo ideas, round 2"   # prints the command that renames it back
 nebula project show <id>            # a saved project unopened: nodes, connections, cover, runs (get_project)
 nebula project size                 # its size against the 16 MB save limit, largest parts first (project_size)
-nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load graph opens it (load_graph_file)
+nebula load "Big campaign.nebula.zip"  # a .nebula, .json or bundle, as Load canvas opens it (load_graph_file)
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, Styles, projects

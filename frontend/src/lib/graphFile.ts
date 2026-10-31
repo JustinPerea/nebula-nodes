@@ -6,7 +6,7 @@ import { shotPortId } from '../constants/ports';
 import { backendAssetUrlSync, canonicalBackendAssetUrls, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import { apiRequest } from './apiRequest';
-import { FailureNotice, failureMessage, oneLine } from './errorCopy';
+import { FailureNotice, failureMessage, oneLine, requestError } from './errorCopy';
 import { showNotice } from './canvasNotice';
 import {
   hasRepresentationViewer,
@@ -24,6 +24,9 @@ import {
   GRAPH_MAX_VALUES,
   GraphStructureLimitError,
   assertGraphComplexityWithinLimits,
+  shapeLine,
+  tooManyEdgesLine,
+  tooManyNodesLine,
   // The string cap's check (#190), shared with the two downloads (graphFileShared).
   isStringLengthLimit,
   normalizeRuntimeMediaParams,
@@ -32,12 +35,15 @@ import {
   serializeGraph,
   type NebulaFile,
   type NebulaNode,
+  type SaveUndoStep,
+  GRAPH_PICKER_LABEL,
+  GRAPH_BUNDLE_PICKER_LABEL,
 } from './graphFileShared';
 
 /** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
-const SAVE_GRAPH = "Couldn't save the graph.";
-const LOAD_GRAPH = "Couldn't load the graph.";
-/** GM - Design, 2026-10-24: "Couldn't save the graph. It's too big to save in
+const SAVE_GRAPH = "Nebula couldn’t save the canvas.";
+const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
+/** GM - Design, 2026-10-24: "Nebula couldn’t save the canvas. It's too big to save in
  * a browser." (under SAVE_GRAPH). */
 const TOO_BIG_FOR_THE_BROWSER = "It's too big to save in a browser.";
 
@@ -71,6 +77,7 @@ export { GRAPH_BUNDLE_MAX_ASSET_BYTES, GRAPH_BUNDLE_MAX_IMPORT_BYTES, GRAPH_BUND
 // The .nebula writer lives in the startup entry (graphFileShared) so a held
 // recovered copy can be downloaded even when this chunk can't load (Q116 a).
 export { serializeGraph };
+export { saveStepToFit } from './saveFixStep';
 export type { NebulaFile };
 // Load graph's limits and its shape walk live there too, so the unsaved
 // edits download can tell whether Load graph will open its file
@@ -96,21 +103,24 @@ export interface GraphBundleAssetSummary {
   totalBytes: number;
 }
 
-/** GM, round 3f: "Graph saved without {n} of its files. They may be missing
- * when the graph is opened somewhere else." (singular: "without 1 of its
- * files. It may be missing…"). */
+/** GM PR #205 r11 item 1, person-led and whole: "Nebula saved the canvas
+ * without {n} of its files. They may be missing when you open the canvas
+ * somewhere else." (singular: "without 1 of its files. It may be missing…"). */
 export function skippedFilesLine(skipped: number): string {
   return skipped === 1
-    ? 'Graph saved without 1 of its files. It may be missing when the graph is opened somewhere else.'
-    : `Graph saved without ${skipped} of its files. They may be missing when the graph is opened somewhere else.`;
+    ? 'Nebula saved the canvas without 1 of its files. It may be missing when you open the canvas somewhere else.'
+    : `Nebula saved the canvas without ${skipped} of its files. They may be missing when you open the canvas somewhere else.`;
 }
 
-/** GM, round 3f: "This graph is {n} MB. Nebula opens graphs up to {m} MB."
- * (the same pattern for the JSON and the finished bundle). */
+/** GM PR #205 r9 item 2: "This canvas is {n} MB. Nebula opens canvases up to
+ * {m} MB." (the same pattern for the JSON and the finished bundle). */
 export function graphSizeLine(bytes: number, limitBytes: number): string {
-  return `This graph is ${(bytes / (1024 * 1024)).toFixed(1)} MB. `
-    + `Nebula opens graphs up to ${Math.floor(limitBytes / (1024 * 1024))} MB.`;
+  return `This canvas is ${(bytes / (1024 * 1024)).toFixed(1)} MB. `
+    + `Nebula opens canvases up to ${Math.floor(limitBytes / (1024 * 1024))} MB.`;
 }
+
+// GM PR #205 r9 item 2: the file pickers' labels live beside the downloads.
+export { GRAPH_PICKER_LABEL, GRAPH_BUNDLE_PICKER_LABEL } from './graphFileShared';
 
 function warnAboutSkippedBundleAssets(summary: GraphBundleAssetSummary): void {
   if (summary.skipped === 0) return;
@@ -129,8 +139,21 @@ export class GraphBundleImportTooLargeError extends FailureNotice {
   }
 }
 
-const GRAPH_FILE_DAMAGED_COPY = "This file is damaged or isn't a Nebula graph.";
+const GRAPH_FILE_DAMAGED_COPY = 'This file is damaged or isn’t a Nebula canvas.';
 const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, then open it again.';
+/** GM PR #205 r12: a bundle whose files Nebula couldn't copy into its output
+ * folder (the restore's 500), under "Nebula couldn’t load the canvas.". */
+const BUNDLE_FILES_NOT_COPIED_COPY = 'Its files couldn’t be copied. Try again.';
+/** GM PR #205 r16 item 3: a node type, a port or a param this version of
+ * Nebula doesn't have (mostly version drift: one line). */
+const GRAPH_FILE_UNKNOWN_NODE_COPY = 'This file uses a node this version of Nebula doesn’t have.';
+const MIB = 1024 * 1024;
+/** GM PR #205 r16 item 3: a bundle's file over the member limit, and a bundle
+ * over the upload limit, in the size lines' MB (graphSizeLine). */
+export const bundleMemberSizeLine = (bytes: number, limitBytes: number) =>
+  `One of its files is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
+export const bundleUploadSizeLine = (bytes: number, limitBytes: number) =>
+  `This file is ${(bytes / MIB).toFixed(1)} MB. Nebula opens files up to ${Math.floor(limitBytes / MIB)} MB.`;
 
 export class GraphFileInvalidError extends FailureNotice {
   readonly detail: string;
@@ -595,6 +618,17 @@ export async function addGraphAssetsToBundle(
   return summary;
 }
 
+/** The Agent log's line for a Save its shape check refused with no step to
+ * offer: Nebula's line, then which limit, in Nebula's words, so an agent can
+ * help (never the walk's own English: review 7 of PR #205, limits LOW). */
+function saveLimitLogLine(error: GraphStructureLimitError): string {
+  const which = error.detail.includes('values') ? `it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`
+    : error.detail.includes('nested') ? `part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`
+      : error.detail.includes('non-finite') ? 'a number in it isn’t finite.'
+        : 'a value in it refers back to itself.';
+  return `Nebula couldn’t save the canvas. ${error.reason.replace(/\.$/, '')}: ${which}`;
+}
+
 /**
  * Save the graph as a `.nebula.zip` bundle: graph.json plus every referenced
  * asset under assets/. Self-contained and portable — the file reloads cleanly
@@ -610,19 +644,26 @@ export async function saveToFile(
   edges: Edge[],
   viewport?: Viewport,
   projectName?: string,
+  undoStep?: SaveUndoStep | (() => SaveUndoStep),
 ): Promise<GraphBundleAssetSummary | null> {
+  // Worked out once, and only if a shape check refuses the Save.
+  let resolvedStep: SaveUndoStep | undefined;
+  const stepNow = (): SaveUndoStep | undefined => {
+    if (resolvedStep === undefined && undoStep !== undefined) resolvedStep = typeof undoStep === 'function' ? undoStep() : undoStep;
+    return resolvedStep;
+  };
   let file: NebulaFile;
   let graphJson: string;
   try {
     if (nodes.length > GRAPH_MAX_NODES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
+      throw new GraphStructureLimitError(tooManyNodesLine(GRAPH_MAX_NODES), `Graph contains more than ${GRAPH_MAX_NODES.toLocaleString()} nodes.`);
     }
     if (edges.length > GRAPH_MAX_EDGES) {
-      throw new GraphStructureLimitError(`Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
+      throw new GraphStructureLimitError(tooManyEdgesLine(GRAPH_MAX_EDGES), `Graph contains more than ${GRAPH_MAX_EDGES.toLocaleString()} edges.`);
     }
     file = serializeGraph(nodes, edges, viewport, projectName);
     file.version = 3;
-    assertGraphComplexityWithinLimits(file);
+    assertGraphComplexityWithinLimits(file, 'save', () => stepNow() ?? { kind: 'person' });
     try {
       graphJson = JSON.stringify(file, null, 2);
     } catch (error) {
@@ -637,7 +678,14 @@ export async function saveToFile(
       throw new GraphStructureLimitError(graphSizeLine(graphBytes, GRAPH_BUNDLE_MAX_IMPORT_BYTES));
     }
   } catch (error) {
-    console.error('[nebula] graph save', error);
+    // The log keeps the engine's exact reason (GM PR #205 r10 item 4).
+    console.error('[nebula] graph save', error instanceof GraphStructureLimitError ? error.detail : error);
+    // With nothing to undo the line offers no step (GM PR #205 r13 item 1),
+    // so the Agent log says which limit it hit, for an agent to help.
+    if (error instanceof GraphStructureLimitError && error.shape && stepNow()?.kind === 'none') {
+      window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
+        message: saveLimitLogLine(error) } }));
+    }
     showNotice(failureMessage(error, SAVE_GRAPH));
     return null;
   }
@@ -669,7 +717,7 @@ export async function saveToFile(
     ? `${projectFileName(projectName)}.zip`
     : `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
   const saved = await saveBlobWithPicker(blob, suggestedName,
-    { description: 'Nebula Node Graph Bundle', accept: { 'application/zip': ['.nebula.zip', '.zip'] } });
+    { description: GRAPH_BUNDLE_PICKER_LABEL, accept: { 'application/zip': ['.nebula.zip', '.zip'] } });
   if (saved === null) return null;
   warnAboutSkippedBundleAssets(assetSummary);
   return assetSummary;
@@ -961,8 +1009,70 @@ export const graphFileLinksForTests = {
 
 /* Round 16 (GM: "lead with what the person pressed"): the bundle restore
  * runs only as part of Load graph, so its refusal uses Load graph's own
- * heading ("Couldn't load the graph."), not "Couldn't restore the asset.",
+ * heading ("Nebula couldn’t load the canvas."), not "Couldn't restore the asset.",
  * which belongs to a Restore control on an asset. */
+
+/** GM PR #205 r11 item 2 and r12: the person's line for a bundle the
+ * backend's restore refused, picked by the answer's `code` (never its words;
+ * backend main._graph_file_refusal): the line the same check gives a plain
+ * file, and for the zip's own checks GM's lines (damaged, too complex, or
+ * the files that couldn't be copied). Null for any other answer, which
+ * keeps the backend's words. A limit the answer carries is used only when
+ * it is a positive whole number; otherwise the line falls back to this
+ * tab's own limit. */
+export function bundleRefusalLine(body: unknown): string | null {
+  if (!isRecord(body)) return null;
+  const count = (key: string): number | null => {
+    const value = body[key];
+    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+  };
+  switch (body.code) {
+    case 'graph_too_complex':
+    case 'bundle_too_many_members':
+    case 'bundle_expands_too_far':
+    case 'bundle_unsafe_ratio':
+      return shapeLine('open', 'complex');
+    case 'graph_invalid':
+    case 'bundle_not_zip':
+    case 'bundle_encrypted':
+    case 'bundle_unsupported_compression':
+    case 'bundle_unsafe_path':
+    case 'bundle_path_too_long':
+    case 'bundle_link':
+    case 'bundle_special_file':
+    case 'bundle_size_metadata':
+    case 'bundle_missing_graph':
+      return GRAPH_FILE_DAMAGED_COPY;
+    // The import's own checks (GM PR #205 r16 item 3), for a plain file and a
+    // bundle's graph.json alike: backend _import_stage_refusal.
+    case 'unknown_definition':
+    case 'graph_unknown_port':
+      return GRAPH_FILE_UNKNOWN_NODE_COPY;
+    case 'graph_cycle':
+      return GRAPH_FILE_DAMAGED_COPY;
+    case 'bundle_member_too_large': {
+      const size = count('sizeBytes');
+      const limit = count('limitBytes');
+      return size !== null && limit !== null ? bundleMemberSizeLine(size, limit) : null;
+    }
+    case 'bundle_upload_too_large': {
+      const size = count('sizeBytes');
+      const limit = count('limitBytes');
+      return size !== null && limit !== null ? bundleUploadSizeLine(size, limit) : null;
+    }
+    case 'graph_newer_version': return GRAPH_FILE_NEWER_COPY;
+    case 'bundle_restore_failed': return BUNDLE_FILES_NOT_COPIED_COPY;
+    case 'graph_unreadable_value': return shapeLine('open', 'value');
+    case 'graph_too_many_nodes': return tooManyNodesLine(count('maxNodes') ?? GRAPH_MAX_NODES, 'open');
+    case 'graph_too_many_edges': return tooManyEdgesLine(count('maxEdges') ?? GRAPH_MAX_EDGES, 'open');
+    case 'graph_too_large': {
+      const size = count('sizeBytes');
+      const limit = count('limitBytes');
+      return size !== null && limit !== null ? graphSizeLine(size, limit) : null;
+    }
+    default: return null;
+  }
+}
 
 /** What Load graph hands the canvas. */
 export interface LoadedGraph {
@@ -992,12 +1102,25 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
       method: 'POST',
       headers: { 'Content-Type': 'application/zip' },
       body: selection.file,
-    });
+    }, { allow: [400, 413, 500] });
+    if (!resp.ok) {
+      // A graph.json refused for its shape gets the line a plain file gets
+      // (bundleRefusalLine); the backend's words stay the error's detail,
+      // for the log. Any other refusal reads as it did.
+      let body: unknown = null;
+      try { body = await resp.clone().json(); } catch { body = null; }
+      const line = bundleRefusalLine(body);
+      if (line !== null) {
+        const detail = isRecord(body) && typeof body.detail === 'string' ? body.detail : line;
+        throw new GraphStructureLimitError(line, detail);
+      }
+      throw await requestError(LOAD_GRAPH, resp);
+    }
 
     const restored = await resp.json() as unknown;
     if (!isRecord(restored)) throw new GraphFileInvalidError('Asset restore returned an invalid response');
     parsed = restored.graph;
-    assertGraphComplexityWithinLimits(parsed);
+    assertGraphComplexityWithinLimits(parsed, 'open');
     assertValidNebulaEnvelope(parsed);
     const mapping = validatedRestoreMapping(restored.urlMapping);
     restoreWarnings = rewriteAssetUrls(parsed.nodes, mapping);
@@ -1006,7 +1129,7 @@ export async function readGraphSelection(selection: GraphFileSelection): Promise
     const buffer = await selection.file.arrayBuffer();
     const text = new TextDecoder('utf-8').decode(buffer);
     parsed = JSON.parse(text) as unknown;
-    assertGraphComplexityWithinLimits(parsed);
+    assertGraphComplexityWithinLimits(parsed, 'open');
     assertValidNebulaEnvelope(parsed);
     // A file from an older Save graph can carry the tab's display links
     // (http://127.0.0.1:<port>/api/outputs/...). Read them as this backend's
@@ -1052,7 +1175,7 @@ export async function loadFromFile(): Promise<LoadedGraph | null> {
       }).showOpenFilePicker({
         types: [
           {
-            description: 'Nebula Node Graph',
+            description: GRAPH_PICKER_LABEL,
             accept: {
               'application/zip': ['.nebula.zip', '.zip'],
               'application/json': ['.nebula', '.json'],
@@ -1081,7 +1204,7 @@ export async function loadFromFile(): Promise<LoadedGraph | null> {
   try {
     return await readGraphSelection(selection);
   } catch (err) {
-    console.error('[nebula] graph load', err instanceof GraphFileInvalidError ? err.detail : err);
+    console.error('[nebula] graph load', err instanceof GraphFileInvalidError || err instanceof GraphStructureLimitError ? err.detail : err);
     // A request's error already names its action ("Couldn't restore the
     // asset. <reason>"); the file's own checks are written lines under
     // LOAD_GRAPH; anything else (JSON that doesn't parse) is a damaged file.

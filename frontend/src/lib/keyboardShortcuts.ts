@@ -9,9 +9,9 @@ export const NODE_RENAME_EVENT = 'nebula:node-rename';
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
-    title: 'Graph',
+    title: 'Canvas',
     items: [
-      { keys: ['Mod', 'Enter'], label: 'Run graph' },
+      { keys: ['Mod', 'Enter'], label: 'Run canvas' },
       { keys: ['Mod', 'Z'], label: 'Undo' },
       { keys: ['Shift', 'Mod', 'Z'], label: 'Redo' },
       { keys: ['Mod', 'A'], label: 'Select all nodes' },
@@ -26,7 +26,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: ['Mod', '='], label: 'Zoom in' },
       { keys: ['Mod', '−'], label: 'Zoom out' },
-      { keys: ['Shift', '1'], label: 'Fit the graph' },
+      { keys: ['Shift', '1'], label: 'Fit view' },
       { keys: ['Shift', '0'], label: 'Zoom to 100%' },
     ],
   },
@@ -34,8 +34,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'App',
     items: [
       { keys: ['Mod', 'K'], label: 'Search commands and nodes' },
-      { keys: ['Mod', 'S'], label: 'Save graph to a file' },
-      { keys: ['Mod', 'O'], label: 'Load graph from a file' },
+      { keys: ['Mod', 'S'], label: 'Save canvas' },
+      { keys: ['Mod', 'O'], label: 'Load canvas' },
       { keys: ['?'], label: 'Show these shortcuts' },
       { keys: ['Esc'], label: 'Close the open drawer or dialog' },
     ],

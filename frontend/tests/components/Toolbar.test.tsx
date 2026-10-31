@@ -21,6 +21,7 @@ interface ToolbarGraph {
   beginUndoStep: () => object;
   cancelUndoStep: (step: object) => void;
   endUndoStep: (step: object) => void;
+  sayRunLocked: (line: string) => void;
 }
 
 interface ToolbarUI {
@@ -38,14 +39,15 @@ const mocks = vi.hoisted(() => ({
   ui: null as UseBoundStore<StoreApi<ToolbarUI>> | null,
   execute: vi.fn(), cancel: vi.fn(), layout: vi.fn(), clear: vi.fn(), load: vi.fn(),
   undoStep: { step: 'before clear' }, beginStep: vi.fn(), cancelStep: vi.fn(), endStep: vi.fn(),
-  reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(),
+  reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(), say: vi.fn(),
   zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
 }));
 
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../../src/lib/canvasNotice';
 vi.mock('@xyflow/react', () => ({
-  useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
+  useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo,
+    getViewport: () => ({ x: 0, y: 0, zoom: 1 }) }),
   useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
   // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
   useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
@@ -58,7 +60,7 @@ vi.mock('../../src/store/graphStore', async () => {
     executeGraph: mocks.execute, cancelExecution: mocks.cancel, autoLayout: mocks.layout,
     clearGraph: mocks.clear, loadGraph: mocks.load,
     beginUndoStep: () => { mocks.beginStep(); return mocks.undoStep; }, cancelUndoStep: mocks.cancelStep,
-    endUndoStep: mocks.endStep,
+    endUndoStep: mocks.endStep, sayRunLocked: mocks.say,
   }));
   return { useGraphStore: mocks.graph };
 });
@@ -74,7 +76,12 @@ vi.mock('../../src/store/pricingStore', async () => {
   const { create } = await import('zustand');
   return { usePricingStore: create(() => ({ table: null, loading: false, load: async () => {} })) };
 });
-vi.mock('../../src/lib/backend', () => ({ apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
+vi.mock('../../src/lib/backend', async (importOriginal) => ({ ...await importOriginal<typeof import('../../src/lib/backend')>(),
+  apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
+import { GRAPH_MAX_VALUES, measureShape, serializeGraph } from '../../src/lib/graphFileShared';
+// A CLI canvas node as fetchCLIGraph gives it (the import measures it as Save's file).
+const IMPORTED = { id: 'imported', type: 'model-node', position: { x: 0, y: 0 },
+  data: { label: 'Imported', definitionId: 'text-input', params: {}, state: 'idle' } };
 vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));
 vi.mock('../../src/lib/canvasFit', () => ({ CANVAS_ZOOM_DURATION: 200, CANVAS_FIT_DURATION: 300, computeCanvasFitPadding: () => 0.2 }));
 
@@ -162,14 +169,14 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Canvas actions' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: 'Save graph' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save canvas' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: 'Zoom' })).getByRole('button', { name: 'Fit view' })).toBeInTheDocument();
     const { trigger, panel } = openActions();
     expect(trigger).toHaveAttribute('aria-controls', panel.id);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
     expect(trigger).toHaveFocus();
     expect(within(panel).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Save graphCtrl / ⌘ S', 'Load graphCtrl / ⌘ O', 'Import CLI graph', 'Clear canvas…', 'Arrange nodes', 'Reset panels',
+      'Save canvasCtrl / ⌘ S', 'Load canvasCtrl / ⌘ O', 'Import CLI canvas', 'Clear canvas…', 'Arrange nodes', 'Reset panels',
     ]);
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
@@ -182,7 +189,7 @@ describe('Canvas toolbar hierarchy', () => {
     const canvasKey = vi.fn();
     render(<div onKeyDown={canvasKey}><Toolbar /></div>);
     const { trigger, panel } = openActions();
-    const save = within(panel).getByRole('button', { name: 'Save graph' });
+    const save = within(panel).getByRole('button', { name: 'Save canvas' });
     save.focus();
     fireEvent.keyDown(save, { key: 'Enter', ctrlKey: true });
     fireEvent.keyDown(save, { key: 'Delete' });
@@ -226,7 +233,7 @@ describe('Canvas toolbar hierarchy', () => {
     try {
       render(<Toolbar />);
       const { trigger, panel } = openActions();
-      fireEvent.keyDown(within(panel).getByRole('button', { name: 'Save graph' }), { key: 's', metaKey: true });
+      fireEvent.keyDown(within(panel).getByRole('button', { name: 'Save canvas' }), { key: 's', metaKey: true });
       expect(onSave).toHaveBeenCalledTimes(1);
       expect(trigger).toHaveFocus();
       expect(screen.queryByRole('region', { name: 'Canvas actions' })).not.toBeInTheDocument();
@@ -241,9 +248,10 @@ describe('Canvas toolbar hierarchy', () => {
   });
 
   it.each([
-    [{ isExecuting: true }, 'Wait for the active run to finish.'],
-    [{ isImportingGraph: true }, 'Wait for the graph import to finish.'],
-    [{ createLaunchingIds: ['preparing'] }, 'Wait for generation preparation to finish.'],
+    [{ isExecuting: true }, 'You can save, load, import or clear the canvas when the run finishes.'],
+    // GM, PR #205 r1: the import and the preparation say what unlocks them too.
+    [{ isImportingGraph: true }, 'You can save, load, import or clear the canvas when the import finishes.'],
+    [{ createLaunchingIds: ['preparing'] }, 'You can save, load, import or clear the canvas when Nebula finishes preparing the run.'],
   ])('keeps replacement and saving blocked while unavailable: %j', (state, reason) => {
     mocks.graph!.setState(state);
     const onSave = vi.fn();
@@ -253,7 +261,7 @@ describe('Canvas toolbar hierarchy', () => {
     try {
       render(<Toolbar />);
       const { panel, trigger } = openActions();
-      for (const name of ['Save graph', 'Load graph', 'Import CLI graph', 'Clear canvas…']) {
+      for (const name of ['Save canvas', 'Load canvas', 'Import CLI canvas', 'Clear canvas…']) {
         const button = within(panel).getByRole('button', { name });
         expect(button).toBeDisabled();
         expect(button).toHaveAccessibleDescription(reason);
@@ -261,6 +269,9 @@ describe('Canvas toolbar hierarchy', () => {
       }
       fireEvent.keyDown(trigger, { key: 's', ctrlKey: true });
       fireEvent.keyDown(trigger, { key: 'o', metaKey: true });
+      // GM PR #205 r4 item 4: each key says the palette's line for its wait.
+      const until = reason.replace('You can save, load, import or clear the canvas ', '');
+      expect(mocks.say.mock.calls).toEqual([[`You can save the canvas ${until}`], [`You can load a canvas ${until}`]]);
       expect(onSave).not.toHaveBeenCalled();
       expect(onLoad).not.toHaveBeenCalled();
       expect(window.confirm).not.toHaveBeenCalled();
@@ -276,9 +287,9 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.graph!.setState({ providerStartAmbiguities: [{ id: 'review' }] });
     render(<Toolbar />);
     const { panel } = openActions();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toBeDisabled();
-    expect(within(panel).getByRole('button', { name: 'Save graph' })).toHaveAccessibleDescription('Check the waiting World Labs run before you save.');
-    expect(within(panel).getByRole('button', { name: 'Load graph' })).toBeEnabled();
+    expect(within(panel).getByRole('button', { name: 'Save canvas' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Save canvas' })).toHaveAccessibleDescription('Check the waiting World Labs run before you save.');
+    expect(within(panel).getByRole('button', { name: 'Load canvas' })).toBeEnabled();
   });
 
   it('keeps Stop explicit during a run and prevents repeat cancellation while stopping', () => {
@@ -302,7 +313,7 @@ describe('Canvas toolbar hierarchy', () => {
     const { panel, trigger } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     expect(trigger).toHaveFocus();
-    expect(window.confirm).toHaveBeenCalledWith('Clear the canvas? 1 node will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.');
+    expect(window.confirm).toHaveBeenCalledWith('Clear the canvas? 1 node will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.');
     expect(mocks.fetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' });
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
@@ -368,18 +379,67 @@ describe('Canvas toolbar hierarchy', () => {
     let finishCLI: (value: { nodes: unknown[]; edges: unknown[] }) => void;
     mocks.cli.mockReturnValue(new Promise((resolve) => { finishCLI = resolve; }));
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     act(() => mocks.graph!.setState({ isExecuting: true }));
     await act(async () => finishCLI!({ nodes: [], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
+  describe('a CLI canvas past Save\'s limits (review 6 of PR #205, GM r13 item 2)', () => {
+    const deep = (levels: number): unknown => (levels === 0 ? 'leaf' : { next: deep(levels - 1) });
+    const cliNode = (value: unknown) => ({ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'Brief', definitionId: 'text-input', params: { value }, state: 'idle' } });
+    const importWith = async (nodes: unknown[]) => {
+      const said: string[] = [];
+      const listener = (event: Event) => said.push((event as CustomEvent<CanvasNoticeDetail>).detail.text);
+      window.addEventListener(CANVAS_NOTICE_EVENT, listener);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mocks.cli.mockResolvedValue({ nodes, edges: [] });
+      render(<Toolbar />);
+      fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
+      await act(async () => undefined);
+      window.removeEventListener(CANVAS_NOTICE_EVENT, listener);
+      return said;
+    };
+    it('a value nested past Save\'s depth: GM\'s line under the import heading, and nothing comes in', async () => {
+      // A param's value sits 5 deep: 59 more is Save's edge, 60 past it.
+      expect(await importWith([cliNode(deep(60))])).toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledWith('[nebula] CLI canvas import', 'Graph is nested more than 64 levels deep.');
+    });
+    it('at Save\'s edge it comes in', async () => {
+      expect(await importWith([cliNode(deep(59))])).toEqual([]);
+      expect(mocks.load).toHaveBeenCalledTimes(1);
+    });
+    // Review 7 of PR #205 (limits MEDIUM-3): counted as Save's file counts it
+    // (its root fields, viewport and every node's outputs key), not just
+    // {nodes, edges}, which counts fewer.
+    const fileCount = (length: number) => measureShape({ ...serializeGraph([cliNode(Array.from({ length }, () => 0)) as never], [],
+      { x: 0, y: 0, zoom: 1 }, 'Untitled Graph'), version: 3 }).count;
+    const atSaveEdge = GRAPH_MAX_VALUES - fileCount(0);
+    it('values: one past Save\'s count is refused, though {nodes, edges} alone counts fewer; at the count it comes in', async () => {
+      expect(fileCount(atSaveEdge + 1)).toBe(GRAPH_MAX_VALUES + 1);
+      expect(measureShape({ nodes: [cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))], edges: [] }).count).toBeLessThanOrEqual(GRAPH_MAX_VALUES);
+      expect(await importWith([cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))]))
+        .toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+    });
+    it('values: at Save\'s count it comes in', async () => {
+      expect(await importWith([cliNode(Array.from({ length: atSaveEdge }, () => 0))])).toEqual([]);
+      expect(mocks.load).toHaveBeenCalledTimes(1);
+    });
+    it('a value Nebula can\'t read: GM\'s value line', async () => {
+      expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas. Part of this canvas holds a value Nebula can’t read.']);
+      expect(mocks.load).not.toHaveBeenCalled();
+    });
+  });
+
   it('fits the imported graph only while the same Canvas target and viewport are current', async () => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     expect(mocks.load).toHaveBeenCalledTimes(1);
     expect(mocks.fit).not.toHaveBeenCalled();
@@ -394,9 +454,9 @@ describe('Canvas toolbar hierarchy', () => {
     { canvasViewportRevision: 1 },
   ])('does not refit after import when navigation or viewport ownership changes: %j', async (state) => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     act(() => mocks.ui!.setState(state));
     await act(async () => vi.advanceTimersByTime(50));
@@ -405,14 +465,14 @@ describe('Canvas toolbar hierarchy', () => {
 
   it('does not revive an import fit after navigating away and back or unmounting', async () => {
     vi.useFakeTimers();
-    mocks.cli.mockResolvedValue({ nodes: [{ id: 'imported' }], edges: [] });
+    mocks.cli.mockResolvedValue({ nodes: [IMPORTED], edges: [] });
     const view = render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     act(() => { mocks.ui!.setState({ viewMode: 'create' }); mocks.ui!.setState({ viewMode: 'canvas' }); });
     await act(async () => vi.advanceTimersByTime(50));
     expect(mocks.fit).not.toHaveBeenCalled();
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     await act(async () => undefined);
     view.unmount();
     await act(async () => vi.advanceTimersByTime(50));
@@ -423,24 +483,31 @@ describe('Canvas toolbar hierarchy', () => {
     let finishCLI: (value: { nodes: unknown[]; edges: unknown[] }) => void;
     mocks.cli.mockReturnValue(new Promise((resolve) => { finishCLI = resolve; }));
     const view = render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
     view.unmount();
-    await act(async () => finishCLI!({ nodes: [{ id: 'imported' }], edges: [] }));
+    await act(async () => finishCLI!({ nodes: [IMPORTED], edges: [] }));
     expect(mocks.load).not.toHaveBeenCalled();
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
-  // Error copy round 3e (GM): "Couldn't import the CLI graph." then the
+  // Error copy round 3e (GM): "Nebula couldn’t import the CLI canvas." then the
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError("Couldn't load the canvas.", 503), "Nebula didn't respond. Try again."],
+    [new RequestFailedError('Nebula couldn’t load the canvas.', 503), "Nebula didn't respond. Try again."],
     [new Error('boom'), "Try again, or reload if it keeps happening."],
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);
-    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI graph' }));
-    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Couldn't import the CLI graph. ${reason}`));
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Nebula couldn’t import the CLI canvas. ${reason}`));
+  });
+
+  it('an empty CLI canvas says so in the canvas words (GM PR #205 r6 item 5)', async () => {
+    mocks.cli.mockResolvedValue({ empty: true, nodes: [], edges: [] });
+    render(<Toolbar />);
+    fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith('The CLI canvas is empty. Build one with the nebula CLI first.'));
   });
 
   it('runs layout only after explicit selection and preserves Reset panels behavior', () => {
@@ -477,11 +544,11 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.execute).not.toHaveBeenCalled();
     const { panel } = openActions();
     const named = (label: RegExp) => within(panel).getByRole('button', { name: label });
-    expect(named(/^Load graph/)).toBeDisabled();
-    expect(named(/^Import CLI graph/)).toBeDisabled();
+    expect(named(/^Load canvas/)).toBeDisabled();
+    expect(named(/^Import CLI canvas/)).toBeDisabled();
     expect(named(/^Clear canvas/)).toBeDisabled();
     expect(named(/^Arrange nodes/)).toBeDisabled();
-    expect(named(/^Save graph/)).toBeEnabled();
+    expect(named(/^Save canvas/)).toBeEnabled();
     expect(named(/^Reset panels/)).toBeEnabled();
     act(() => noteBackendConnection('online'));
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();

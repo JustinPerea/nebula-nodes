@@ -41,6 +41,15 @@ class MockWebSocket extends EventTarget {
 
 globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
+// Module state a store keeps between tests that its harness can't end (the
+// graph store's holds waiting on an echo no fake backend sends): the store
+// adds its reset here when it loads, and it runs after every test.
+{
+  const resets = new Set<() => void>();
+  (globalThis as { __nebulaTestResets?: Set<() => void> }).__nebulaTestResets = resets;
+  afterEach(() => { for (const reset of resets) reset(); });
+}
+
 // In test mode lib/backend.ts sends every request to http://localhost:8000,
 // where a developer's own Nebula may be running. A request a test forgot to
 // mock must never reach it: it would act on (or be refused by) the real app,

@@ -840,6 +840,13 @@ def format_event(event: dict[str, Any]) -> str:
     elif kind == "proposal.rejected" and data.get("proposalId"):
         reason = f': "{_brief(data["reason"], 100)}"' if data.get("reason") else ""
         summary = f"rejected proposal {data['proposalId']}{reason}"
+    elif kind == "proposal.accept_refused" and data.get("proposalId"):
+        limit = data.get("limit") or {}
+        what = ({"depth": f"nested more than {limit.get('max')} levels deep",
+                 "values": f"holding more than {limit.get('max'):,} values" if isinstance(limit.get("max"), int) else ""}
+                .get(limit.get("kind")) or "too complex to save")
+        summary = (f"the person's Accept of proposal {data['proposalId']} was refused: the canvas would be {what}; "
+                   f"it is still open (withdraw it and propose something smaller)")
     elif kind == "proposal.reopened" and data.get("proposalId"):
         summary = (f"{summary} — waiting for the person again "
                    f"(nebula proposal {data['proposalId']} --wait)")

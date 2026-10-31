@@ -1131,8 +1131,10 @@ const CONTROL_ALLOWLIST: Record<string, string> = {
 const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string }> = [
   { file: 'components/CommandPalette.tsx', tag: 'input', at: 'className="command-palette__input"',
     reason: "the palette's search field: Enter runs the chosen command through run(), which refuses an acting command with refuseCanvasEdit (round23Surfaces' CommandPalette)" },
-  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...(act ?? {})} disabled={disabled}',
-    reason: "a palette row: a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` (`act ? act.disabled : …`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...act} aria-disabled={disabled || undefined}',
+    reason: "a palette row (an option of the listbox, PR #205 review 2 lines LOW-1): a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` as aria-disabled (`actDisabled`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+  { file: 'components/CommandPalette.tsx', tag: 'div', at: 'className="command-palette__list" id={listId}',
+    reason: "the palette's listbox (PR #205 review 2 lines LOW-1): a role and a name only, no handler; its rows are the options above, each run through run()" },
 ];
 
 /** Components that take the lock themselves for the gated handler they are
@@ -1828,6 +1830,41 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
   return [...clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
 }
 
+/**
+ * Review 23 MEDIUM-1 and review 24 NIT-2: the selectors in `css` that paint a
+ * locked button with !important, which would override the shared disabled
+ * look for one reason. Any paint (background and its longhands, colour, the
+ * border and outline and their longhands, box-shadow, opacity); any locked
+ * form (:disabled, [disabled], aria-disabled, the lock marks, the held
+ * look); the locked button the subject, or an ancestor of it (a label or an
+ * icon inside it).
+ */
+function importantPaintOnLocked(css: string, file: string, covered: (className: string) => boolean): string[] {
+  const LOCKED = /:disabled|\[disabled\]|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
+  // Review 1 of PR #205 (NIT-2): svg paint, filter and the text fill too;
+  // "! important" with a space; a property in any case.
+  const PAINT = /(?:^|;)\s*(?:background(?:-[\w-]+)?|color|border(?:-[\w-]+)*|outline(?:-[\w-]+)?|box-shadow|opacity|fill|stroke|filter|-webkit-text-fill-color)\s*:[^;]*!\s*important/i;
+  const found: string[] = [];
+  for (const { selector, body } of cssRules(css)) {
+    if (!PAINT.test(body)) continue;
+    for (const one of selectorsOf(selector)) {
+      if (/:not\(\.app-slava-restraint\)/.test(one)) continue;
+      // Each compound on its own: the locked one may be the subject or an ancestor.
+      const compounds = one.replace(/:not\([^)]*\)/g, '').split(/\s*[>+~]\s*|\s+(?![^(]*\))/).filter(Boolean);
+      const buttonish = (compound: string) => /^button\b/.test(compound)
+        || [...compound.matchAll(/\.([\w-]+)/g)].some((m) => covered(m[1]));
+      // The locked compound is the button (or an ancestor of the painted
+      // part), or (review 1 of PR #205, NIT-2) any ancestor is locked and the
+      // subject is a button or a covered class (`fieldset:disabled .x-button`).
+      const subject = compounds[compounds.length - 1] ?? '';
+      const hit = compounds.some((compound) => LOCKED.test(compound) && buttonish(compound))
+        || (compounds.some((compound) => LOCKED.test(compound)) && buttonish(subject));
+      if (hit) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
+    }
+  }
+  return found;
+}
+
 /** The class a selector styles: its last compound's last class. */
 function subjectClass(selector: string): string | null {
   const last = selector.replace(/:not\([^)]*\)/g, '').trim().split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
@@ -2039,24 +2076,48 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
   // (background, colour, border colour, with !important) a disabled, held or
   // lock-marked button: a bare `button` or a class this file covers.
   it('no other sheet overrides the shared look for any reason (offline, following, a hold): no !important paint on a disabled or lock-marked button', () => {
-    const LOCKED = /:disabled|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
-    const PAINT = /(?:^|;)\s*(?:background(?:-color)?|color|border-color)\s*:[^;]*!important/;
     const found: string[] = [];
     for (const path of walk(SRC, /\.css$/)) {
       const file = relative(SRC, path);
       if (file === SHARED) continue;
-      for (const { selector, body } of cssRules(readFileSync(path, 'utf8'))) {
-        if (!PAINT.test(body)) continue;
-        for (const one of selectorsOf(selector)) {
-          const state = one.replace(/:not\([^)]*\)/g, '');
-          if (!LOCKED.test(state) || /:not\(\.app-slava-restraint\)/.test(one)) continue;
-          const subject = state.split(/\s+|>|\+|~/).filter(Boolean).pop() ?? '';
-          const className = subjectClass(state);
-          if (/^button\b/.test(subject) || (className && covered(className))) found.push(`${file}: ${one.replace(/\s+/g, ' ')}`);
-        }
-      }
+      found.push(...importantPaintOnLocked(readFileSync(path, 'utf8'), file, covered));
     }
     expect(found).toEqual([]);
+  });
+
+  // PR #198 review 24 NIT-2: the check above missed the border shorthand,
+  // background-image, opacity, box-shadow, outline-color, [disabled]
+  // selectors and a label inside a locked button. The reviewer's crafted
+  // sheet, each case named: the first eleven are caught, the last two
+  // (an enabled hover, an uncovered class) are not.
+  it('review 24 NIT-2: the !important check catches every paint and every locked form, with no false positives', () => {
+    const cases: [string, boolean][] = [
+      ['.proposal-bar__button:disabled { background: #333 !important; }', true],
+      ['button[data-offline-disabled] { color: red !important; }', true],
+      ['.proposal-bar__button:disabled { border: 1px solid red !important; }', true],
+      ['.proposal-bar__button:disabled { background-image: linear-gradient(red, red) !important; }', true],
+      ['.proposal-bar__button:disabled { opacity: 0.3 !important; }', true],
+      ['.proposal-bar__button[disabled] { background: #333 !important; }', true],
+      ['.proposal-bar__button:disabled span { color: red !important; }', true],
+      ['.proposal-bar__button:disabled { box-shadow: 0 0 0 2px red !important; }', true],
+      ['.proposal-bar__button:disabled { outline-color: red !important; }', true],
+      ['@media (max-width: 900px) { .proposal-bar__button:disabled { background: #444 !important; } }', true],
+      ['.proposal-bar__button:is(:disabled, [aria-disabled=\'true\']) > svg { color: red !important; }', true],
+      ['.proposal-bar__button:not(:disabled):hover { background: #555 !important; }', false],
+      ['.some-uncovered-thing:disabled { color: red !important; }', false],
+      // Review 1 of PR #205 (NIT-2): the forms that slipped through.
+      ['.proposal-bar__button:disabled svg { fill: red !important; }', true],
+      ['.proposal-bar__button:disabled svg { stroke: red !important; }', true],
+      ['.proposal-bar__button:disabled { filter: brightness(2) !important; }', true],
+      ['.proposal-bar__button:disabled { -webkit-text-fill-color: red !important; }', true],
+      ['.proposal-bar__button:disabled { background: red ! important; }', true],
+      ['.proposal-bar__button:disabled { BACKGROUND: red !IMPORTANT; }', true],
+      ['fieldset:disabled .proposal-bar__button { background: red !important; }', true],
+      ['fieldset:disabled button { color: red !important; }', true],
+      ['fieldset:disabled .some-uncovered-thing { color: red !important; }', false],
+      ['.proposal-bar__button:disabled { fill: red; }', false],
+    ];
+    for (const [css, caught] of cases) expect(importantPaintOnLocked(css, 'zz_cases.css', covered).length > 0, css).toBe(caught);
   });
 
   // Fix round 2 of PR #200 (review 2 M-1, GM 2026-10-28 answers 2 and 3):
@@ -2240,7 +2301,9 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
 const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
-  'remotion-properties-panel__anchor-button': { image: false, selected: /\.remotion-properties-panel__anchor-button\[data-active='true'\]/ },
+  // GM, PR #198 r39 item 1: the chosen cell is a chosen state, not a disabled
+  // one: no selected rule of its own here; locked, the cell's disabled look covers it.
+  'remotion-properties-panel__anchor-button': { image: false, selected: null },
   // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
   // Its edge is transparent at rest and stays so disabled.
   'project-home__cover-choice': { image: true, selected: /\.project-home__cover-choice\[aria-pressed='true'\]/, edgeKept: true },

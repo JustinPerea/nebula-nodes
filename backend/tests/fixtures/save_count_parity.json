@@ -1,0 +1,134 @@
+{
+ "_note": "Review 7 of PR #205 (limits MEDIUM-3): the backend's count of a canvas's Save file (main._canvas_save_file_view + _graph_shape_measure) equals the frontend's (serializeGraph + the Save walk), value for value. Both tests read this file; 'count' is pinned in each.",
+ "cases": [
+  {
+   "name": "no outputs, no connections",
+   "nodes": [
+    {
+     "id": "n1",
+     "type": "model-node",
+     "position": {
+      "x": 3,
+      "y": 4
+     },
+     "data": {
+      "label": "Brief",
+      "definitionId": "text-input",
+      "params": {
+       "value": "hi"
+      },
+      "state": "idle"
+     }
+    }
+   ],
+   "edges": []
+  },
+  {
+   "name": "outputs on one node, none on another",
+   "nodes": [
+    {
+     "id": "n1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "Brief",
+      "definitionId": "text-input",
+      "params": {
+       "value": "hi"
+      },
+      "outputs": {
+       "text": {
+        "type": "Text",
+        "value": "hi"
+       }
+      },
+      "state": "complete"
+     }
+    },
+    {
+     "id": "n2",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "Other",
+      "definitionId": "text-input",
+      "params": {
+       "value": [
+        1,
+        2,
+        {
+         "a": null
+        }
+       ]
+      },
+      "outputs": {},
+      "state": "idle"
+     }
+    }
+   ],
+   "edges": []
+  },
+  {
+   "name": "connections with and without data",
+   "nodes": [
+    {
+     "id": "n1",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "A",
+      "definitionId": "text-input",
+      "params": {},
+      "state": "idle"
+     }
+    },
+    {
+     "id": "n2",
+     "type": "model-node",
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "data": {
+      "label": "B",
+      "definitionId": "text-input",
+      "params": {
+       "value": "x"
+      },
+      "state": "idle"
+     }
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n2",
+     "targetHandle": "text",
+     "type": "typed-edge",
+     "data": {
+      "dataType": "Text"
+     }
+    },
+    {
+     "id": "e2",
+     "source": "n1",
+     "sourceHandle": "text",
+     "target": "n2",
+     "targetHandle": "prompt",
+     "type": "typed-edge"
+    }
+   ]
+  }
+ ]
+}

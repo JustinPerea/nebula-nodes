@@ -253,12 +253,12 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       sameAsBackend();
     });
 
-    it('P7: three nodes, Cmd+Z held from the start, typing after each echo; the typing steps undo one by one', async () => {
+    it('P7: three nodes, Cmd+Z held from the start, typing after each echo: the press is dropped; the typing steps, then the three, undo one by one', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3'), textNode('n4')]);
       removeTogether('n1', 'n2', 'n3'); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
+      // GM r39 item 3: held, silently; the nodes left at Delete (round 18).
+      expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n4']);
       ownSync([textNode('n1'), textNode('n2'), textNode('n4')]);
       type('n4', 'A'); await pause();
@@ -266,12 +266,14 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       type('n4', 'AB');
       ownSync([textNode('n4', 'AB')]);
       await answer('n3'); await answer('n2'); await answer('n1');
-      // Round 18 (GM option (c)): the dropped press is never applied late.
+      // Since r18 the delete's step is placed at Delete, so the typing steps that settled above it
+      // are newer: the bound press is dropped with GM's line (review 11, M-1), never applied beneath them.
+      expect(dropped()).toBe(true);
       expect(restores()).toEqual([]);
       sameAsBackend();
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): the typing steps are above the delete's, so they undo first, one by one.
+      // The typing steps are above the delete's, so they undo first, one by one.
       expect(restores()[0]).toEqual(restore(['n4=A']));
       expect(ids()).toEqual(['n4']);
       sameAsBackend();
@@ -281,7 +283,7 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       expect(notice() ?? '').not.toMatch(/Deleted|Restored/);
       sameAsBackend();
       await undo();
-      // Round 18 (GM option (c)): then one Cmd+Z restores the three.
+      // Then one Cmd+Z restores the three.
       expect(restores()[2]).toEqual(restore(['n1=n1', 'n2=n2', 'n3=n3']));
       expect(notice()).toBe('Restored 3 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
@@ -401,50 +403,34 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once, not held.
-      expect(notice()).toBe(DROPPED_UNDO_TEXT);
+      // GM r39 item 3: held on the delete, silently; n1 left at Delete (round 18).
+      expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n2']);
-      // Clear that line so the held press below has to say its own.
-      act(() => { useGraphStore.setState({ undoNotice: null } as never); });
       const step = clearStep();
       await undo();
-      expect(dropped()).toBe(false);
       act(() => { store().cancelUndoStep(step); store().endUndoStep(step); }); await settle();
-      // Round 18 (GM option (c)): the press held for the refused clear says it skipped at once (no later restore to say it beside).
-      expect(notice()).toBe(DROPPED_UNDO_TEXT);
       await answer('n1');
-      // Round 18 (GM option (c)): neither press is applied late.
-      expect(restores()).toEqual([]);
-      expect(notice()).toBe('Deleted the node.');
-      net.holdDeletes = false;
-      await undo();
-      // Round 18 (GM option (c)): once the delete has landed, a new Cmd+Z restores the node.
+      // The press held on the delete restores it; the one held for the refused clear is counted.
       expect(restores()).toEqual([restore(['n1=n1'])]);
-      expect(notice()).toBe('Restored the node.');
+      expect(notice()).toBe('Restored the node. 1 undo was skipped while a change was saving.');
       expect(ids()).toEqual(['n1', 'n2']);
       sameAsBackend();
     });
 
-    it("control (r14 Q10): a refused delete's own line stays where it was; the skipped press is said beside it", async () => {
+    it("control (round 14's case 10): a refused delete's own line stays where it was; the press held on it says nothing beside it (GM r39)", async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       type('n1', 'E1');
       act(() => { store().deleteNode('n2'); }); await settle();
       await undo(); await undo();
-      // Round 18 (GM option (c)): both presses target the delete still on its way: each is dropped at once and changes nothing.
-      expect(notice()).toBe(DROPPED_UNDO_TEXT);
+      // GM r39 item 3: both held, silently.
+      expect(dropped()).toBe(false);
       expect(valueOf('n1')).toBe('E1');
       await answer('n2', 409);
       expect(notice()).toBe("Couldn't delete the node. Nebula failed.");
-      // Round 18 (GM option (c)): no press was held, so nothing is said beside the failure line and nothing is applied late.
+      // GM r39 item 3: the press held on the refused delete goes silently (before r39 it read
+      // "1 undo was skipped while a change was saving." here); the second press undoes the typing.
       expect(message()).toBeNull();
-      expect(restores()).toEqual([]);
-      expect(ids()).toEqual(['n1', 'n2']);
-      net.holdDeletes = false;
-      await undo();
-      // Round 18 (GM option (c)): the failed delete left no step, so a new Cmd+Z undoes the typing; the failure line stays.
-      expect(notice()).toBe("Couldn't delete the node. Nebula failed.");
       expect(restores()).toEqual([restore(['n1=n1'])]);
-      expect(store().undoStack).toHaveLength(0);
       sameAsBackend();
     });
     it('r14 C1: two clears, a Cmd+Z held for the first; the second changed nothing, so the next Cmd+Z puts the first back', async () => {

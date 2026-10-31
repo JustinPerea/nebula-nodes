@@ -12,10 +12,12 @@ interface UploadState {
   status: 'uploading' | 'error';
   error?: string;
   canRetry: boolean;
+  stopped?: boolean;
 }
 const metadata = vi.hoisted(() => ({ uploads: [] as UploadState[] }));
-vi.mock('../../src/store/cinemaUploadStore', () => ({
+vi.mock('../../src/store/cinemaUploadStore', async (importOriginal) => ({
   useCinemaUploadStore: (selector: (state: typeof metadata) => unknown) => selector(metadata),
+  uploadReasonRole: (await importOriginal<typeof import('../../src/store/cinemaUploadStore')>()).uploadReasonRole,
 }));
 vi.mock('../../src/lib/cinemaUploads', () => ({
   attachCinemaReferences: vi.fn(), retryCinemaReferenceUpload: vi.fn(), removeCinemaReferenceUpload: vi.fn(),
@@ -126,9 +128,9 @@ describe('Cinema collapsed shared scene settings', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(2);
     expect(screen.queryByText('shot.png')).toBeNull();
     expect(screen.queryByText('other.png')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Retry interrupted.png' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry failed.png' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove upload pending.png' }));
+    expect(screen.queryByRole('button', { name: 'Try again uploading “interrupted.png”' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “failed.png”' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “pending.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('failed');
     expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     expect(disclosure()).not.toHaveAttribute('open');
@@ -148,6 +150,29 @@ describe('Cinema collapsed shared scene settings', () => {
       // No Retry button here (an upload from before a reload): the line keeps its "try again".
       "Couldn't upload kept.png. Nebula didn't respond. Try again.",
     ]);
+  });
+
+  it('GM PR #205 r13 item 3: an upload a canvas import stopped: its line, then [Try again] and [Remove], each named with the file', () => {
+    metadata.uploads = [{ id: 'stopped', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
+      error: 'The upload stopped because a canvas import started.', stopped: true }];
+    render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
+    // GM PR #205 r14 item 4: nothing broke and nothing was lost, so its reason is
+    // the row's neutral status, never the warning colour's alert.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('The upload stopped because a canvas import started.')).toHaveAttribute('role', 'status');
+    const tryAgain = screen.getByRole('button', { name: 'Try again uploading “ref.png”' });
+    expect(tryAgain).toHaveTextContent(/^Try again$/);
+    expect(screen.getByRole('button', { name: 'Remove “ref.png”' })).toHaveTextContent(/^Remove$/);
+    expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
+    fireEvent.click(tryAgain);
+    expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('stopped');
+  });
+
+  it('GM PR #205 r14 item 4, control: a failed upload the person must fix stays an alert in the warning colour', () => {
+    metadata.uploads = [{ id: 'failed', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
+      error: "Couldn't upload ref.png. The file is too large." }];
+    render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/too large/);
   });
 
   it('retains multi-reference attachment and connected reference ownership inside the disclosure', () => {

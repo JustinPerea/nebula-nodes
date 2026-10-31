@@ -20,7 +20,6 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect
 import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
-import { RUN_LOCK_REASON } from '../src/lib/cinemaScene';
 import { resetCanvasFollowForTests, setFollowingSwitch } from '../src/lib/canvasFollow';
 import { noteBackendConnection, resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { useGraphStore } from '../src/store/graphStore';
@@ -45,11 +44,12 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [], isExecuting: true });
     act(() => setFollowingSwitch({ projectName: 'Second canvas', agent: 'Codex' }));
     render(<SelectionToolbar />);
-    for (const name of [/^Run/i, /^Duplicate/i, /^Arrange/i, /^Delete/i]) {
+    // GM r39 item 2: each by its own verb, "them" for the two selected.
+    for (const [name, verb] of [[/^Run/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Arrange/i, 'arrange'], [/^Delete/i, 'delete']] as const) {
       const button = titled(name);
       expect(button, String(name)).toBeDefined();
       expect(button, String(name)).toBeDisabled();
-      expect(button?.getAttribute('title'), String(name)).toBe(RUN_LOCK_REASON);
+      expect(button?.getAttribute('title'), String(name)).toBe(`You can ${verb} them when the run finishes.`);
     }
     expect(titled(/^Ask/i)?.getAttribute('title')).toBe(WAIT);
   });
@@ -64,8 +64,8 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
   it('the run lock alone keeps its reason', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [], isExecuting: true });
     render(<SelectionToolbar />);
-    expect(titled(/^Arrange/i)?.getAttribute('title')).toBe(RUN_LOCK_REASON);
-    expect(titled(/^Run/i)?.getAttribute('title')).toBe(RUN_LOCK_REASON);
+    expect(titled(/^Arrange/i)?.getAttribute('title')).toBe('You can arrange them when the run finishes.');
+    expect(titled(/^Run/i)?.getAttribute('title')).toBe('You can run them when the run finishes.');
   });
 });
 
@@ -95,7 +95,7 @@ describe('GM (#200 r4 item 2): offline, Rerun says it can rerun when Nebula reco
     useGraphStore.setState({ runHistory: [record], isExecuting: false });
     act(() => noteBackendConnection('offline'));
     render(<RunHistoryPanel />);
-    const rerun = screen.getByRole('button', { name: 'Rerun Full graph' });
+    const rerun = screen.getByRole('button', { name: 'Rerun Full canvas' });
     expect(rerun).toBeDisabled();
     expect(rerun.getAttribute('title')).toBe('You can rerun it when Nebula reconnects.');
   });

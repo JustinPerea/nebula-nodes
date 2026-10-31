@@ -4,6 +4,7 @@ import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUp
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 import { OFFLINE_VERBS } from '../../lib/useBackendOffline';
+import { RUN_LOCK_VERBS, lockLine, runFinishesLine } from '../../lib/runLock';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -58,9 +59,12 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         // M2: this tab's run says its line first (lib/canvasLock's order).
         {...lockedAction(lock, {
           disabled: isImportingGraph || Boolean(referenceIssue),
-          title: referenceIssue ?? 'Generate every shot using the current scene settings',
+          // GM PR #205 r1: an import's lock says what unlocks it too.
+          title: isImportingGraph ? lockLine(RUN_LOCK_VERBS.generateShots, 'import')
+            : referenceIssue ?? 'Generate every shot using the current scene settings',
           offline: 'generate',
-        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting })}
+        }, { verb: OFFLINE_VERBS.generate, neutral: true, run: isExecuting || runStarting,
+          runTitle: runFinishesLine(RUN_LOCK_VERBS.generateShots) })}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

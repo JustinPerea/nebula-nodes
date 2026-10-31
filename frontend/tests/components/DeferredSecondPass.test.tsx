@@ -111,19 +111,19 @@ describe('deferred command palette', () => {
     // Taken from the browser at once, as before (no page shortcut runs underneath).
     expect(press.defaultPrevented).toBe(true);
 
-    expect(await screen.findByRole('button', { name: 'Toggle Run History' }, COLD)).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: '' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Toggle run history' }, COLD)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Search commands and nodes' })).toBeInTheDocument();
 
     // Once in, it owns the hotkey: the next ⌘K closes it.
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    expect(screen.queryByRole('button', { name: 'Toggle Run History' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Toggle run history' })).toBeNull();
   }, COLD_TEST);
 
   it('once preloaded, the first open from the rail draws synchronously, with its items', async () => {
     await DeferredCommandPalette.preload();
     render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
     act(() => { window.dispatchEvent(new CustomEvent('nebula:command-palette-open')); });
-    expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Toggle run history' })).toBeInTheDocument();
   }, COLD_TEST);
 });
 
@@ -136,7 +136,7 @@ describe('the palette hotkey right after it opens', () => {
       window.dispatchEvent(new CustomEvent('nebula:command-palette-open'));
       fireEvent.keyDown(document, { key: 'k', metaKey: true });
     });
-    expect(screen.queryByRole('button', { name: 'Toggle Run History' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Toggle run history' })).toBeNull();
   }, COLD_TEST);
 });
 

@@ -18,19 +18,28 @@ interface UploadState {
 }
 
 const metadata = vi.hoisted(() => ({ uploads: [] as UploadState[] }));
-vi.mock('../../src/store/cinemaUploadStore', () => ({
-  useCinemaUploadStore: Object.assign((selector: (state: typeof metadata) => unknown) => selector(metadata), {
-    getState: () => ({ ...metadata, reconcileTargets: vi.fn(), clear: vi.fn(), interrupt: vi.fn() }),
-  }),
-  getCinemaUploadIssue: (nodeId: string, shotId?: string, includeAllShots = false) => {
-    const uploads = metadata.uploads.filter((upload) => upload.nodeId === nodeId
-      && (includeAllShots || upload.shotId === undefined || upload.shotId === shotId));
-    if (!uploads.length) return null;
-    return uploads.some((upload) => upload.status === 'uploading')
-      ? 'Wait for reference uploads to finish.'
-      : 'Retry or remove failed references before generating.';
-  },
-}));
+vi.mock('../../src/store/cinemaUploadStore', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/store/cinemaUploadStore')>();
+  return {
+    uploadReasonRole: real.uploadReasonRole,
+    // The real line, read from this file's uploads.
+    otherShotsUploadLine: (...args: Parameters<typeof real.otherShotsUploadLine>) => {
+      real.useCinemaUploadStore.setState({ uploads: metadata.uploads as never });
+      return real.otherShotsUploadLine(...args);
+    },
+    useCinemaUploadStore: Object.assign((selector: (state: typeof metadata) => unknown) => selector(metadata), {
+      getState: () => ({ ...metadata, reconcileTargets: vi.fn(), clear: vi.fn(), interrupt: vi.fn() }),
+    }),
+    getCinemaUploadIssue: (nodeId: string, shotId?: string, includeAllShots = false) => {
+      const uploads = metadata.uploads.filter((upload) => upload.nodeId === nodeId
+        && (includeAllShots || upload.shotId === undefined || upload.shotId === shotId));
+      if (!uploads.length) return null;
+      return uploads.some((upload) => upload.status === 'uploading')
+        ? 'Wait for reference uploads to finish.'
+        : 'Retry or remove failed references before generating.';
+    },
+  };
+});
 vi.mock('../../src/lib/cinemaUploads', () => ({
   attachCinemaReferences: vi.fn(),
   retryCinemaReferenceUpload: vi.fn(),
@@ -106,7 +115,7 @@ describe('Cinema reference feedback and explicit generation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate shot' }));
     expect(executeShot).toHaveBeenCalledExactlyOnceWith('scene', 'a');
     expect(executeNode).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('other shot');
+    expect(screen.getByRole('status')).toHaveTextContent(/^You can generate all when the uploads in “Shot 2” finish\.$/);
   });
 
   it('re-reads upload ownership at click time even before the next render', () => {
@@ -131,9 +140,9 @@ describe('Cinema reference feedback and explicit generation', () => {
     expect(screen.queryByText('hidden.png')).toBeNull();
     fireEvent.click(screen.getByText('Scene settings'));
     expect(screen.getByRole('button', { name: 'Attach character references' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'Retry interrupted.png' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry failed.webp' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove upload logo.png' }));
+    expect(screen.queryByRole('button', { name: 'Try again uploading “interrupted.png”' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “failed.webp”' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “logo.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('failed');
     expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     expect(executeNode).not.toHaveBeenCalled();
@@ -146,8 +155,11 @@ describe('Cinema reference feedback and explicit generation', () => {
     const view = render(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);
     expect(screen.getByText('logo.png')).toBeVisible();
     expect(screen.queryByText('sibling.png')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry logo.png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “logo.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
+    // The shot panel's Remove is named with its file too (review 7 of PR #205, inspector NIT-1, M21).
+    fireEvent.click(screen.getByRole('button', { name: 'Remove “logo.png”' }));
+    expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     metadata.uploads = [];
     view.rerender(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Generate shot' })).toBeEnabled();

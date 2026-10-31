@@ -305,7 +305,7 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     expect(sceneDeleteDisabledTitle(state, ['n4', 'n5'])).toBeNull();
     expect(sceneDeleteDisabledTitle(state, ['n5'])).toBeNull();
     renderingScene(false);
-    expect(sceneDeleteDisabledTitle(useGraphStore.getState(), ['n4'])).toBe('Wait for “Opening” to finish.');
+    expect(sceneDeleteDisabledTitle(useGraphStore.getState(), ['n4'])).toBe('You can delete “Opening” when it finishes.');
   });
 
   it('a scene whose graph run has moved on can be deleted', () => {

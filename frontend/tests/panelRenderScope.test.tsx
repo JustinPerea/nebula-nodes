@@ -63,15 +63,15 @@ describe('panels that do not draw the canvas', () => {
   it('the open palette still finds canvas nodes, including one added while it is open', () => {
     render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
     act(() => { window.dispatchEvent(new CustomEvent('nebula:command-palette-open')); });
-    const search = screen.getByRole('textbox', { name: '' });
+    const search = screen.getByRole('combobox', { name: 'Search commands and nodes' });
     fireEvent.change(search, { target: { value: 'Charlie' } });
-    expect(screen.queryByRole('button', { name: /Charlie/ })).toBeNull();
+    expect(screen.queryByRole('option', { name: /Charlie/ })).toBeNull();
     act(() => {
       useGraphStore.setState((state) => ({ nodes: [...state.nodes, textNode('c', 'Charlie', 800)] }));
     });
-    expect(screen.getByRole('button', { name: /Charlie/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Charlie/ })).toBeTruthy();
     fireEvent.change(search, { target: { value: 'Bravo' } });
-    expect(screen.getByRole('button', { name: /Bravo/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Bravo/ })).toBeTruthy();
   });
 
   it('the open node library does not re-render on a graph change', () => {

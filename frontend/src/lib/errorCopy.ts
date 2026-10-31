@@ -545,8 +545,8 @@ export function failureMessage(error: unknown, heading: string): string {
 
 /** The one-line form under the caller's own heading, whatever heading the
  * error carried: for an action whose request names a smaller step (Import
- * CLI graph reads the canvas: "Couldn't import the CLI graph." over the
- * reason, not "Couldn't load the canvas."). Round 3e. */
+ * CLI canvas reads the canvas: "Nebula couldn’t import the CLI canvas." over the
+ * reason, not the read's own "Nebula couldn’t load the canvas."). Round 3e. */
 export function failureUnder(error: unknown, heading: string): string {
   if (isOfflineRefusal(error)) return '';
   return oneLine({ heading, reason: failureCopy(error).reason });

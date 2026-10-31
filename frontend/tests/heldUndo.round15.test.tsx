@@ -190,19 +190,21 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       sameAsBackend();
     });
 
-    it('M5: three nodes, Cmd+Z held from the start, an agent edit after the first echo', async () => {
+    it('M5: three nodes, Cmd+Z held from the start, an agent edit after the first echo: the press is dropped, then Codex, then all three undo', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3'), textNode('n4')]);
       removeTogether('n1', 'n2', 'n3'); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
+      // GM r39 item 3: held, silently.
+      expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n4']);
       ownSync([textNode('n2'), textNode('n3'), textNode('n4')]);
       agentSync([textNode('n2'), textNode('n3'), textNode('n4'), textNode('n5')]);
       ownSync([textNode('n3'), textNode('n4'), textNode('n5')]);
       ownSync([textNode('n4'), textNode('n5')]);
       await answer('n1'); await answer('n2'); await answer('n3');
-      // Round 18 (GM option (c)): the dropped press is never applied late.
+      // Since r18 the delete's step is placed at Delete, so the agent edit that settled above it is newer:
+      // the bound press is dropped with GM's line when the answers land (review 11, M-1).
+      expect(dropped()).toBe(true);
       expect(restores()).toEqual([]);
       expect(ids()).toEqual(['n4', 'n5']);
       net.holdDeletes = false;
@@ -260,18 +262,21 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       sameAsBackend();
     });
 
-    it('held, the person types between the echoes in reverse order: both back, the typing kept', async () => {
+    it('held, the person types between the echoes in reverse order: the press is dropped; the typing, then both nodes, undo in turn', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
+      // GM r39 item 3: held, silently.
+      expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n3']);
       ownSync([textNode('n1'), textNode('n3')]);
       type('n3', 'G');
       ownSync([textNode('n3', 'G')]);
       await answer('n2'); await answer('n1');
-      // Round 18 (GM option (c)): the dropped press is never applied late; the typing stays.
+      // Since r18 the delete's step is placed at Delete, so the typing that settled above it is newer:
+      // the bound press is dropped with GM's line when the answers land (review 11, M-1).
+      expect(dropped()).toBe(true);
+      // The typing stays.
       expect(restores()).toEqual([]);
       expect(valueOf('n3')).toBe('G');
       net.holdDeletes = false;
@@ -324,20 +329,17 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
   });
 
   describe('L-A: an echo that empties the graph', () => {
-    it('E2: delete the last node, type into it, the empty echo, Cmd+Z, the answer: it comes back as typed', async () => {
+    it('E2: delete the last node, type into it, the empty echo, Cmd+Z, the answer: the held press restores it', async () => {
       setGraph([textNode('n1')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       type('n1', 'E');
       ownSync([]);
       expect(ids()).toEqual([]);
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
+      // GM r39 item 3: held, silently.
+      expect(dropped()).toBe(false);
       await answer('n1');
-      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
-      expect(restores()).toEqual([]);
-      net.holdDeletes = false;
-      await undo();
+      // GM r39 item 3: once it answers, the held press restores the node.
       // Round 18 (GM option (c)): the node left the canvas at Delete, so the later typing never reached it.
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(notice()).toBe('Restored the node.');
@@ -375,15 +377,12 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
-      // Round 18 (GM option (c)): the first press is dropped at once (not held), with the dropped line.
-      expect(dropped()).toBe(true);
       const c = clearStep();
       await undo();
       await answer('n1');
       clearAnswers(c); await settle();
       expect(restores()).toEqual([{ nodes: ['n2=n2'], remove: [] }]);
-      // Round 18 (GM option (c)): the first press already said so when it was pressed, so no skipped count here.
-      expect(notice()).toBe('Restored the node.');
+      expect(notice()).toBe('Restored the node. 1 undo was skipped while a change was saving.');
       expect(ids()).toEqual(['n2']);
       sameAsBackend();
     });
@@ -440,14 +439,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
       plainSync([textNode('n2'), textNode('n3')]);
       await answer('n1');
-      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
-      expect(restores()).toEqual([]);
-      net.holdDeletes = false;
-      await undo();
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
@@ -486,15 +479,9 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
-      // Round 18 (GM option (c)): the press during the delete's flight is dropped at once and changes nothing.
-      expect(dropped()).toBe(true);
       ownSync([textNode('n2')]);
       await answer('n1', 500);
       expect(failure()).toBeNull();
-      // Round 18 (GM option (c)): the dropped press is never applied late; a new Cmd+Z restores the node.
-      expect(restores()).toEqual([]);
-      net.holdDeletes = false;
-      await undo();
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n1', 'n2']);

@@ -184,11 +184,11 @@ describe('LOW-1: Run history\'s Rerun, Retry and Recover say their verb offline'
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
     render(<RunHistoryPanel />);
     offline();
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', 'You can rerun it when Nebula reconnects.');
-    expect(screen.getByRole('button', { name: 'Retry failed Full graph run' })).toHaveAttribute('title', 'You can retry it when Nebula reconnects.');
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', 'You can rerun it when Nebula reconnects.');
+    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toHaveAttribute('title', 'You can retry it when Nebula reconnects.');
     act(() => resetBackendConnectionForTests());
     follow();
-    expect(screen.getByRole('button', { name: 'Rerun Full graph' })).toHaveAttribute('title', WAIT);
+    expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', WAIT);
   });
 
   it('Recover uses its own line (RunHistoryPanel picks it for a recovery replay)', () => {

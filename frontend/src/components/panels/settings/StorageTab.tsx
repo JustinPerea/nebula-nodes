@@ -97,6 +97,10 @@ function FolderField({ field, label, saved, placeholder, hint }: {
 
 export function StorageTab({ saved }: { saved: SettingsDraft }) {
   const telemetryPending = useSettingsDraftStore((s) => !!s.pending.zoomTelemetryEnabled);
+  // GM, PR #205 r1 answer 6: the switch shows the person's new position at
+  // once while it saves (held, then locked after 150 ms); a failed save puts
+  // back the saved value.
+  const [telemetryTo, setTelemetryTo] = useState<boolean | null>(null);
   const telemetryError = useSettingsDraftStore((s) => s.errors.zoomTelemetryEnabled);
   const desktop = typeof window !== 'undefined' && !!window.nebulaDesktop?.folders;
 
@@ -120,8 +124,8 @@ export function StorageTab({ saved }: { saved: SettingsDraft }) {
             <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
           </button>
           <SwitchRow title="Demo zoom telemetry" description="Records canvas bounds for demo-video editing, saved under the generated-files folder"
-            checked={saved.zoomTelemetryEnabled} disabled={telemetryPending}
-            onChange={(enabled) => void saveField('zoomTelemetryEnabled', enabled)} />
+            checked={telemetryPending && telemetryTo !== null ? telemetryTo : saved.zoomTelemetryEnabled} saving={telemetryPending}
+            onChange={(enabled) => { setTelemetryTo(enabled); void saveField('zoomTelemetryEnabled', enabled); }} />
         </div>
         {telemetryError && <p className="settings-row__error" role="alert">{telemetryError}</p>}
       </section>

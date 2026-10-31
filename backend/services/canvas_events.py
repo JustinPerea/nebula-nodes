@@ -76,6 +76,9 @@ EVENT_KINDS = frozenset({
     "proposal.created",
     "proposal.accepted",
     "proposal.rejected",
+    # The person's Accept was refused: the canvas would be past the limits
+    # their Save checks. Nothing changed; the proposal is still open.
+    "proposal.accept_refused",
     "proposal.withdrawn",
     "proposal.expired",
     "proposal.invalidated",

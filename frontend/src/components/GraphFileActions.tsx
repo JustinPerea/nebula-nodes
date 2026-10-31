@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { refuseEditWhileFollowing } from '../lib/canvasFollow';
 import { useReactFlow, type Edge, type Node } from '@xyflow/react';
-import { useGraphStore } from '../store/graphStore';
+import { saveUndoWalk, useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 // Save and open load lib/graphFile.ts at the moment of use (preloaded on idle).
 import { graphFileModule } from '../lib/deferredChunks';
-import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
+import { canLoadGraph, canSaveGraph, fileKeyLockLine, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiRequest } from '../lib/apiRequest';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { adoptCanvasRevision } from '../lib/projectContext';
 import type { CutOffSave } from '../lib/savingCutOff';
-import { failureMessage, RequestFailedError } from '../lib/errorCopy';
+import { failureMessage, FailureNotice, RequestFailedError } from '../lib/errorCopy';
 import { showNotice } from '../lib/canvasNotice';
 import { isModalDialogOpen } from '../lib/canvasShortcutScope';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
@@ -23,7 +23,7 @@ import type { NodeData } from '../types';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 
 /** The Toolbar's "Load graph" (GM's heading pattern, error-copy round 2). */
-const LOAD_GRAPH = "Couldn't load the graph.";
+const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
 
 /** Until Projects finishes what it is doing (a rename, a save's answer), so
  * a create for Load graph isn't turned away for being busy. */
@@ -49,13 +49,17 @@ export function GraphFileActions() {
       const ui = useUIStore.getState();
       const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
       const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
-      const { saveToFile } = await graphFileModule.load();
+      const { saveToFile, saveStepToFit } = await graphFileModule.load();
       const projects = useProjectStore.getState();
-      await saveToFile(state.nodes, state.edges, viewport,
-        projects.initialized ? projects.activeProject?.name : undefined);
+      const name = projects.initialized ? projects.activeProject?.name : undefined;
+      // The Undo that brings the canvas back within Save's limits, worked out
+      // only if Save refuses it (GM PR #205 r16 item 1).
+      const walk = saveUndoWalk(state.undoStack);
+      await saveToFile(state.nodes, state.edges, viewport, name,
+        () => saveStepToFit(walk, state.nodes, state.edges, viewport, name));
     } catch (error) {
       console.error('Graph save failed:', error);
-      showNotice(failureMessage(error, "Couldn't save the graph."));
+      showNotice(failureMessage(error, "Nebula couldn’t save the canvas."));
     } finally {
       actionInFlight.current = false;
     }
@@ -136,11 +140,12 @@ export function GraphFileActions() {
         show: leaving !== null });
       // A file over the save limit opens (Q118): the project store says so
       // with GM's Load graph line and pauses saving until it is trimmed.
-      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the graph', asNewProject);
+      useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the canvas', asNewProject);
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
       useUIStore.setState({
-        viewMode: 'canvas', selectedNodeId: null, inspectorPinned: false,
+        // A pinned Inspector stays pinned, with its empty state (GM PR #205 r10 item 3).
+        viewMode: 'canvas', selectedNodeId: null,
         editorTargetNodeId: null, remotionEditorTargetNodeId: null, cinemaEditorNodeId: null,
         characterEditorId: null, moodboardEditorId: null, selectedClipId: null,
         selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,
@@ -166,6 +171,16 @@ export function GraphFileActions() {
     } catch (error) {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
+      // The import's own checks read GM's lines by the answer's code, never
+      // the backend's words (GM PR #205 r16 item 3; review 7 limits LOW-1).
+      if (error instanceof RequestFailedError && error.code) {
+        const { bundleRefusalLine } = await graphFileModule.load();
+        const line = bundleRefusalLine({ code: error.code });
+        if (line) {
+          showNotice(failureMessage(new FailureNotice('', line), LOAD_GRAPH));
+          return;
+        }
+      }
       showNotice(failureMessage(error, LOAD_GRAPH));
     } finally {
       if (importReserved) useGraphStore.getState().releaseGraphImport();
@@ -230,6 +245,9 @@ export function GraphFileActions() {
       event.preventDefault();
       // Never behind an open dialog: opening a file swaps the canvas under it (review 7, M-1).
       if (isModalDialogOpen()) return;
+      const graph = useGraphStore.getState();
+      const line = fileKeyLockLine(key, graph);
+      if (line) { graph.sayRunLocked(line); return; }
       if (key === 's') void save();
       else void load();
     };

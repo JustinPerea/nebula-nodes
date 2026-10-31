@@ -157,7 +157,7 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
   it('own run: "Couldn’t delete “A” and “B”." in canvas order', async () => {
     await ownRun([textNode('n5', 'A'), textNode('n6', 'B')]);
     useGraphStore.getState().onNodesChange(['n6', 'n5'].map((id) => ({ id, type: 'remove' as const })));
-    expect(notice()).toBe("Couldn’t delete “A” and “B”. Wait for the active run to finish.");
+    expect(notice()).toBe("You can delete “A” and “B” when the run finishes.");
   });
 
   it('another window\'s run: the deleted names and the kept scenes, both in canvas order', async () => {

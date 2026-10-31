@@ -19,7 +19,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
+import { canLoadGraph, canSaveGraph, fileKeyLockLine, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage, failureUnder } from '../../lib/errorCopy';
@@ -39,13 +39,16 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
+import { assertGraphComplexityWithinLimits, GraphStructureLimitError, serializeGraph } from '../../lib/graphFileShared';
+import { useProjectStore } from '../../store/projectStore';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
 const CLEAR_CANVAS = "Couldn't clear the canvas.";
 
 
 export function Toolbar() {
-  const { fitView, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, zoomTo, getViewport } = useReactFlow();
   // Fit view includes an open proposal's ghosts.
   const fitCanvasView = useFitCanvasView();
   const zoom = useStore((s) => s.transform[2]);
@@ -94,13 +97,17 @@ export function Toolbar() {
   const importFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsId = useId();
   const blockedId = useId();
-  const loadBlockedReason = isPreparing
-    ? 'Wait for generation preparation to finish.'
-    : isImportingGraph
-      ? 'Wait for the graph import to finish.'
-      : 'Wait for the active run to finish.';
+  // The panel's one line for the group (GM r39 item 2's pattern; each
+  // control's tooltip names its own verb, lib/runLock). GM PR #205 r1: the
+  // preparation and the import say what unlocks them the same way.
+  // Review 1 of PR #205 (NIT-4): each control's true reason; this tab's run
+  // first (its lock line wins on each control, canvasLock), then a Create
+  // launch's preparation, then an import.
+  const filesWait: LockWait = isExecuting ? 'run' : isPreparing ? 'preparing' : isImportingGraph ? 'import' : 'run';
+  const loadBlockedReason = lockLine(FILES_VERB, filesWait);
+  const filesLine = (verb: string) => lockLine(verb, filesWait);
   const saveBlockedReason = !canLoad
-    ? loadBlockedReason
+    ? filesLine(RUN_LOCK_VERBS.saveCanvas)
     : 'Check the waiting World Labs run before you save.';
 
   const closeActions = useCallback((restoreFocus = false) => {
@@ -158,7 +165,11 @@ export function Toolbar() {
       const key = event.key.toLowerCase();
       if (key === 's' || key === 'o') {
         event.preventDefault();
-        const permitted = key === 's' ? canSaveGraph(useGraphStore.getState()) : canLoadGraph(useGraphStore.getState());
+        const graph = useGraphStore.getState();
+        const permitted = key === 's' ? canSaveGraph(graph) : canLoadGraph(graph);
+        // GM PR #205 r4 item 4: a wait's line, as the same keys say it on the canvas.
+        const line = permitted ? null : fileKeyLockLine(key, graph);
+        if (line) graph.sayRunLocked(line);
         if (permitted) {
           closeActions(true);
           if (key === 's') requestGraphSave();
@@ -182,7 +193,7 @@ export function Toolbar() {
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
-        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.`
+        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.`
         : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
     if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;
@@ -244,8 +255,23 @@ export function Toolbar() {
       const data = await fetchCLIGraph();
       if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
-        showNotice('The CLI graph is empty. Build one with the nebula CLI first.', 'info');
+        showNotice('The CLI canvas is empty. Build one with the nebula CLI first.', 'info');
         return;
+      }
+      // Checked as a file being opened is (review 6 of PR #205, lines-limits
+      // MEDIUM-1), so a canvas Save couldn't save never comes in unseen: its
+      // nodes hold their params as deep as Save's file does. GM r13 item 2's
+      // lines: it isn't a file. Measured as the file Save will write
+      // (serializeGraph, with its root fields and viewport), so the count is
+      // Save's own (review 7 of PR #205, limits MEDIUM-3).
+      try {
+        const projects = useProjectStore.getState();
+        const file = serializeGraph(data.nodes as Node<NodeData>[], data.edges as Edge[], getViewport(),
+          projects.initialized ? projects.activeProject?.name : undefined);
+        assertGraphComplexityWithinLimits({ ...file, version: 3 }, 'import');
+      } catch (error) {
+        console.error('[nebula] CLI canvas import', error instanceof GraphStructureLimitError ? error.detail : error);
+        throw error;
       }
       useGraphStore.getState().loadGraph(
         data.nodes as Node<NodeData>[],
@@ -264,9 +290,9 @@ export function Toolbar() {
         void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
     } catch (error) {
-      if (mounted.current) showNotice(failureUnder(error, "Couldn't import the CLI graph."));
+      if (mounted.current) showNotice(failureUnder(error, "Nebula couldn’t import the CLI canvas."));
     }
-  }, [fitView]);
+  }, [fitView, getViewport]);
 
   return (
     <div ref={barRoot} className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls"
@@ -301,7 +327,8 @@ export function Toolbar() {
           {...lock.mark}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           title={following ? waitToOpenTooltip(following.projectName)
-            : isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
+            : runStarting ? runFinishesLine(RUN_LOCK_VERBS.runCanvas)
+            : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runCanvas, 'import') : `Run canvas. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -330,28 +357,28 @@ export function Toolbar() {
             {/* PR #198 review 6, M2: this tab's run locks Load, Import, Clear and
                 Arrange too, and its line wins over following's and offline's
                 (lib/canvasLock), as Save graph and the line above say. */}
-            <div className="toolbar__action-group" role="group" aria-label="Graph files">
-              <h2 className="toolbar__action-heading">Graph</h2>
+            <div className="toolbar__action-group" role="group" aria-label="Canvas files">
+              <h2 className="toolbar__action-heading">Canvas</h2>
               <button type="button" className="toolbar__action" disabled={!canSave}
                 aria-describedby={!canSave ? blockedId : undefined}
-                title={!canSave ? saveBlockedReason : 'Save graph (Ctrl+S or ⌘S)'}
+                title={!canSave ? saveBlockedReason : 'Save canvas (Ctrl+S or ⌘S)'}
                 aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
-                <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
+                <ToolbarIcon name="save" /><span>Save canvas</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.loadCanvas) : 'Load canvas (Ctrl+O or ⌘O)' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.loadCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
-                <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
+                <ToolbarIcon name="load" /><span>Load canvas</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
               </button>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.importCanvas) : 'Import a canvas built by the Nebula CLI' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.importCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleImportCLI())}>
-                <ToolbarIcon name="cli" /><span>Import CLI graph</span>
+                <ToolbarIcon name="cli" /><span>Import CLI canvas</span>
               </button>
               <button type="button" className="toolbar__action toolbar__action--danger"
-                {...lock.act({ disabled: !canLoad, title: !canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: loadBlockedReason })}
+                {...lock.act({ disabled: !canLoad, title: !canLoad ? filesLine(RUN_LOCK_VERBS.clearCanvas) : 'Clear canvas — asks for confirmation' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.clearCanvas) })}
                 aria-describedby={!canLoad ? blockedId : undefined}
                 onClick={() => runSecondaryAction(() => void handleClear())}>
                 <ToolbarIcon name="clear" /><span>Clear canvas…</span>
@@ -360,7 +387,7 @@ export function Toolbar() {
             <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
               <h2 className="toolbar__action-heading">Layout</h2>
               <button type="button" className="toolbar__action"
-                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting })} onClick={() => runSecondaryAction(autoLayout)}>
+                {...lock.act({ disabled: nodeCount === 0, title: 'Arrange nodes by dependency' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.arrangeCanvas) })} onClick={() => runSecondaryAction(autoLayout)}>
                 <ToolbarIcon name="layout" /><span>Arrange nodes</span>
               </button>
               <button type="button" className="toolbar__action toolbar__layout-reset" title="Reset panel positions and sizes"

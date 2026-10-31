@@ -186,6 +186,20 @@ function backend(start: Shot[] = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt:
 }
 const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().updateScene('n1', (current: { shots: Shot[] }) => ({ ...current,
   shots: current.shots.map((shot) => (shot.id === shotId ? { ...shot, prompt } : shot)) }));
+/**
+ * The person's delete of n1 recorded by the backend AND answered in this tab.
+ * The backend marks the node deleted when the request arrives, a few ms before
+ * its answer; a test that undoes or restores in that window races the answer
+ * (CI on PR #205: an Undo pressed then is held for the Delete, and a restore
+ * from another window that lands first keeps the delete's step waiting for an
+ * arrival that can't come, leaking into the next test). So wait for the
+ * delete's step to settle too.
+ */
+async function deleteAnswered(h: { state: { deleted: boolean } }) {
+  await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+  const step = useGraphStore.getState().undoStack.at(-1);
+  await vi.waitFor(() => expect(Boolean(step) && !store.stepInFlightForTests(step)).toBe(true), { timeout: 3000, interval: 5 });
+}
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
@@ -329,7 +343,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     h.failNext(0);
     said = [];
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteAnswered(h);
     expect(clashes16()).toEqual({});
     expect(said.filter((line) => /deleted|can’t be saved/.test(line))).toEqual([]);
     useGraphStore.getState().undo();
@@ -346,7 +360,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     await clashOnS1(h);
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteAnswered(h);
     h.restore(WINDOW);
     await vi.waitFor(() => expect(clashes16().n1?.line).toBe(CLASH16), { timeout: 3000, interval: 5 });
     await sleep(60);
@@ -366,7 +380,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     await vi.waitFor(() => expect(clashes16().n1).toBeTruthy(), { timeout: 3000, interval: 5 });
     h.failNext(0);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteAnswered(h);
     // Codex's value becomes the person's while the scene is away.
     h.state.shots = setPrompt(h.state.shots, 's1', 'same');
     h.restore(WINDOW);
@@ -380,7 +394,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     const restores = withRestore(h);
     await sleep(20);
     useGraphStore.getState().deleteNode('n1');
-    await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });
+    await deleteAnswered(h);
     useGraphStore.getState().undo();
     await vi.waitFor(() => expect(h.state.deleted).toBe(false), { timeout: 3000, interval: 5 });
     await sleep(40);

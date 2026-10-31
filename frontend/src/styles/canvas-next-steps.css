@@ -22,6 +22,8 @@ body.app-slava-restraint .next-step-choice .provider-readiness { margin: 0 12px 
 body.app-slava-restraint .next-step-status,
 body.app-slava-restraint .next-step-error { padding: 8px 12px; font-size: 12px; color: var(--sr-ink-light); }
 body.app-slava-restraint .next-step-error { color: var(--sr-danger, #f59a87); }
+/* A wait's line in the picker (GM PR #205 r5 item 2): the neutral ink, not the error's. */
+body.app-slava-restraint .next-step-wait { padding: 8px 12px; font-size: 12px; color: var(--sr-ink-light); }
 body.app-slava-restraint .next-step-context span,
 body.app-slava-restraint .connection-popup__item-name { min-width: 0; overflow-wrap: anywhere; }
 
