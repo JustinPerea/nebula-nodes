@@ -23,6 +23,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
+from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, ACTIONS_TEXT as _CURSOR_ACTIONS_TEXT
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -579,6 +580,24 @@ def point_at(
     explaining, or to show what you are about to change. What you noticed, a
     report or a suggestion goes in post_note, which the person reads in the
     Updates list, not at your cursor.
+
+    `action`, what you are doing there:
+    - `move`: going there, no gesture;
+    - `look`: reading or checking something;
+    - `think`: working something out at that spot;
+    - `type`: writing a prompt or changing a field;
+    - `click`: pressing something;
+    - `drag`: connecting, with `from_node_id`/`from_port`;
+    - `run`: starting a run;
+    - `propose`: you proposed a change and wait for the person's OK;
+    - `wait`: you asked the person something and wait for the answer;
+    - `error`: something you tried failed.
+    Graph edits through Nebula's API pick their own action. Any other value
+    is refused.
+
+    Each of your sessions (each MCP server process) has its own cursor on the
+    person's canvas: a second one shows as "<name> · 2". Set
+    NEBULA_AGENT_SESSION to choose the id yourself.
     """
     def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any] | None:
         if node:
@@ -587,6 +606,8 @@ def point_at(
             return {"x": px, "y": py}
         return None
 
+    if not isinstance(action, str) or action not in _CURSOR_ACTIONS:
+        raise ValueError(f"point_at: action must be one of {_CURSOR_ACTIONS_TEXT} (you gave {_json.dumps(action, default=str)})")
     if not node_id and (x is None) != (y is None):
         raise ValueError(f"point_at needs node_id, or x and y (both): you gave only {'x' if y is None else 'y'}")
     target = anchor(node_id, port, x, y)

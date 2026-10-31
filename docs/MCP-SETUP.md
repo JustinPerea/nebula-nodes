@@ -503,9 +503,13 @@ And these canvas tools:
   cursor already is and it doesn't move; an agent with no cursor yet gets
   one at the middle of the person's view, or at (0, 0) when no canvas has
   reported a view (the result's `placed` is `cursor`, `view` or `origin`;
-  `nebula point --say "..."` does the same). The cursor is named after
-  `$NEBULA_AGENT_NAME`, or the MCP client's own name. What the agent
-  noticed goes in `post_note` instead (see [Updates](#updates)).
+  `nebula point --say "..."` does the same). `action` says what the agent
+  is doing there: `move`, `look`, `think`, `type`, `click`, `drag`, `run`,
+  `propose`, `wait` or `error` (default `move`; any other value is refused
+  with that list; see [Agent cursors](#agent-cursors-nebula-look-and-nebula-watch)).
+  The cursor is named after `$NEBULA_AGENT_NAME`, or the MCP client's own
+  name. What the agent noticed goes in `post_note` instead (see
+  [Updates](#updates)).
 - `post_note` / `list_notes`: post what the agent noticed, a report or a
   suggestion, and read the list back. The person reads them under
   **Updates** in the top right of every screen (the canvas, Projects, the
@@ -610,8 +614,57 @@ explicitly, with a short line about your own action:
 ```bash
 NEBULA_AGENT_NAME="Claude Code" nebula point n2 --say "Checking this prompt"
 nebula point n2.prompt --from n1.text --say "Connecting the prompt"
+nebula point n4 --action propose --say "Waiting for your OK"
 nebula look          # the canvas as text; --json for the full snapshot
 ```
+
+The action (`point_at`'s `action`, `nebula point --action`, the cursor
+route's `action`) says what you are doing at the cursor. These are the only
+values; any other is refused with this list:
+
+| Action | Means |
+|---|---|
+| `move` | going there, no gesture (the default) |
+| `look` | reading or checking something |
+| `think` | working something out at that spot |
+| `type` | writing a prompt or changing a field |
+| `click` | pressing something |
+| `drag` | connecting, with `from_node_id`/`from_port` (`--from`; the default with it) |
+| `run` | starting a run |
+| `propose` | you proposed a change and wait for the person's OK |
+| `wait` | you asked the person something and wait for the answer |
+| `error` | something you tried failed |
+
+Graph edits through Nebula's API pick their own action on the person's
+canvas: a param or prompt edit shows as `type`, a run as `run`, a proposal as
+`propose`, a run that couldn't start as `error`, a connection as `drag`.
+
+**One cursor per session.** Each session of an agent gets its own cursor on
+the person's canvas, in the agent's colour at a different lightness. The
+first is named as the agent ("Claude"); the others are numbered in the order
+they first appear, and keep their number until Nebula restarts ("Claude ·
+2", "Claude · 3"). One agent shows at most 8 at once. Where the session comes
+from:
+
+| Client | Its session |
+|---|---|
+| In-app Claude or Codex chat | The chat itself (Nebula sets it in the chat's token, never the agent) |
+| An MCP server (Claude Code, Codex, Cursor, a personal agent) | One per server process, so each agent chat that starts its own server gets its own cursor; `NEBULA_AGENT_SESSION` sets it |
+| `nebula` under Claude Code | The Claude Code session (a hash of `CLAUDE_CODE_SESSION_ID`, never the id itself), unless `NEBULA_AGENT_SESSION` is set |
+| `nebula` elsewhere, an app token, a bare `X-Nebula-Agent` request | `NEBULA_AGENT_SESSION` (the `X-Nebula-Agent-Session` header) if set, else one cursor for the agent's name, as before |
+
+A Claude Code subagent sees its parent's `CLAUDE_CODE_SESSION_ID`, so a
+session and all its subagents share one CLI cursor; give each lane its own
+`NEBULA_AGENT_SESSION` to separate them (that also keeps each lane's scene
+reads its own, below). An agent that uses both MCP and the CLI under one name
+shows two cursors unless both use the same `NEBULA_AGENT_SESSION`.
+
+The session is for the cursor only: it never changes who the agent is, its
+colour's hue, what it may do or its spending. Only the person's own canvas
+sees it. What agents read stays per agent: `nebula look`, `nebula agents`,
+`nebula context` and the MCP reads list one cursor per agent, with no
+sessions or numbers, and with the action the agent itself sent (a backend
+edit reads as `click`, `drag` or `move`, as before).
 
 Every one of these actions is also listed in the canvas's **Agent log**
 (bottom right, shown by default with or without the chat; hide it from its

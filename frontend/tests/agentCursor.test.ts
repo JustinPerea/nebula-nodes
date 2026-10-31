@@ -45,7 +45,14 @@ function presenceEvent(overrides: Partial<AgentPresenceEvent> = {}): AgentPresen
   };
 }
 
-describe('agent cursor spring', () => {
+// The shared agent-motion spring: pins, proposal ghosts, the camera and the
+// offline spring-back run on it. The cursor itself flies an arc on its own
+// springs, pinned in agentCursorPlanner.test.ts (GM's agent cursor spec, §3).
+describe('the shared agent-motion spring (pins, ghosts, camera)', () => {
+  it('keeps its values: the cursor redesign adds springs, it never edits this one', () => {
+    expect(AGENT_CURSOR_SPRING).toEqual({ stiffness: 300, damping: 24, mass: 1 });
+  });
+
   it('settles on the target with a small overshoot, not a linear slide', () => {
     let state: SpringState = { x: 0, y: 0, vx: 0, vy: 0 };
     const target = { x: 300, y: 0 };
