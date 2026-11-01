@@ -348,6 +348,20 @@ Each mutant changed one line and ran the focused tests. All 21 were caught.
 - **Gates.** `vitest --maxWorkers=2` over `agentCursorLook`, `agentCursorLayer` and `agentCursorPlanner`: 3 files, 152 passed. `tsc` 0, `eslint` on the two touched files 0, `check:inline-styles` pass.
 - **Live (8780/5780, serve_isolated.py).** The harness minted one verified `claude` runner token in-process, and a verified app was made with `#FF6B9A`. Five sessions of each, all awake: DOM and pill pixels match exactly. Claude `#E8825A` 0.710, `#c6633b` 0.610, `#ffa887` 0.810, `#a4451b` 0.510, `#ffd8c9` 0.911. Pink `#FF6B9A` 0.723, `#db4a7c` 0.622, `#ffa8be` 0.823, `#b8265f` 0.523, `#ffd9e2` 0.920. The blocked log held only the canary lines and "canary ok".
 
+### Round 3c (GM r8: a clamp needs 0.07, no mirror)
+
+- **The rule (GM r8).** Each offset takes the first that works: the value itself, if it is inside the band and at least 0.05 from every L in use; past an edge, the edge, if it is at least 0.07 from every L in use; else the next unused offset. When none works, L steps on by 0.10 inside the band, nearest first. The general gap stays 0.05; only a clamp needs 0.07. `AGENT_CURSOR_SESSION_BAND` now carries `clampGap: 0.07`. Gaps compare with `>=` and a 1e-9 epsilon, so a gap of exactly 0.07 is never flipped by rounding.
+- **The mirror is gone.** The fallback branch also mirrored, as its first guess before stepping on; it now starts from the offset pulled into the band. That start is never kept: 57,354 fallbacks over the sweep all found a clear step. Proof of no other change: the r3b code with only the clamp gap raised to 0.07, mirror kept, against the new code: 0 differences over 100,050 base × session pairs (bases 0 to 1 by 0.0001 and the edges, sessions 1-10).
+- **What moved against d04dc1a7.** 4,000 of 100,070 pairs, 800 bases, all from the 0.07 rule, in four ranges (each a clamp whose gap is 0.05 to under 0.07):
+  - bases 0.4000-0.4199: −0.10 clamped to 0.35, 0.05-0.0699 under the base. Now refused; the five step up. 0.40 is 0.4, 0.5, 0.6, 0.7, 0.8 again (was 0.4, 0.35, 0.5, 0.6, 0.7).
+  - 0.5000-0.5199: −0.20 clamped to 0.35, under 0.07 from · 2. Now · 4 takes +0.20 and · 5 steps on (0.50: 0.5, 0.4, 0.6, 0.7, 0.8; was 0.5, 0.4, 0.6, 0.35, 0.7).
+  - 0.7501-0.7700: +0.20 clamped to 0.92, under 0.07 from · 3's base + 0.10. Now · 5 steps on down (0.77: 0.77, 0.67, 0.87, 0.57, 0.47; was ..., 0.92).
+  - 0.8501-0.8700: +0.10 clamped to 0.92, under 0.07 from the base. Now all step down (0.851: 0.851, 0.751, 0.651, 0.551, 0.451).
+  - Unchanged: 0.85 (0.85, 0.75, 0.92, 0.65, 0.55; gap exactly 0.07), pink #FF6B9A (0.7226, 0.6226, 0.8226, 0.5226, 0.92; gap 0.097), 0.52 (0.52, 0.42, 0.62, 0.35, 0.72; gap exactly 0.07), 0.47 (0.47, 0.37, 0.57, 0.67, 0.77), black (0.35, 0.45, 0.55, 0.65, 0.75), white (0.92, 0.82, 0.72, 0.62, 0.52) and Claude's five.
+- **Tests.** The band constant with `clampGap`; the 0.40 list re-pinned; a boundary test: the clamp taken at exactly 0.07 (0.85 and 0.92 − 0.07 at the top, 0.42 at the floor, 0.75 for +0.20) and refused just under (0.851, 0.419, 0.751); 0.519 beside the 0.52 low-side case. The every-base invariant (0.35-0.92, at least 0.05 apart) still holds. Against d04dc1a7's code 4 tests fail.
+- **Mutants: 14, 10 caught, 4 equivalent.** Caught: the clamp gap at 0.05; `>` with no epsilon (the 0.42 case: 0.42 − 0.35 is exactly 0.07); `>=` with no epsilon (0.92 − 0.07 is 0.8500000000000001, gap 0.06999999999999995); the clamp removed at both edges, at the top, at the floor; the floor or the top clamp using 0.05; the clamp without a room check; the step-on removed. Equivalent, 0 differences over 111,030 pairs: the step-on starting at 0.20 (those are the offsets, already refused), the step-on trying up first, in-band values held to 0.07, and the mirror put back.
+- **Gates.** `tsc -b` 0, `eslint` on the two touched files 0, `check:inline-styles` pass. `vitest --maxWorkers=2` over `agentCursorLook` and `agentCursorLayer` (the two test files that import it): 2 files, 84 passed.
+
 ## Left for Phase 2 and Phase 3
 
 - **Phase 2 (expression):**

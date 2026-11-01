@@ -13,12 +13,12 @@ export const AGENT_CURSOR_NAME_FIRST_SIGHT_MS = 1500;
 /** OKLCH lightness offsets for an agent's sessions 1-5, cycling after five (GM - Design, PR #211 r2). */
 export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const;
 /**
- * A step that would put L past `max` or under `min` is clamped to that edge
- * when the edge is at least `minGap` from every L in use, else mirrored
- * across the base; a result within `minGap` of a session already used takes
- * the next unused offset instead. No fill is ever pure white.
+ * Every session's L sits inside `min`-`max` and at least `minGap` from every
+ * other L in use. A step that would put L past `max` or under `min` is clamped
+ * to that edge only when the edge is at least `clampGap` from every L in use;
+ * otherwise the offset is not used. No fill is ever pure white.
  */
-export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05 } as const;
+export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, clampGap: 0.07 } as const;
 /** A later cursor whose target is this close to an earlier one's lands this far down-right. */
 export const AGENT_CURSOR_STACK = { radiusPx: 16, offsetPx: 10 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
@@ -103,62 +103,56 @@ const inGamut = (rgb: Rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
 /**
  * The OKLCH lightness of an agent's session `ordinal`, from the agent's own L
- * (GM - Design, PR #211 r2 and r7). Sessions take the offsets 0, −0.10,
- * +0.10, −0.20, +0.20 in order. A step past 0.92 or under 0.35 is clamped to
- * that edge if the edge is at least 0.05 from every L in use, else mirrored
- * across the base (r7: clamp first, so the odd sessions stay the lighter
- * ones whenever the band allows). One landing within 0.05 of an earlier
- * session's L takes the next unused offset. The offsets cycle after five, so sessions 1 and 6
- * share a fill (their names differ, and with two or more cursors names show).
- * The band holds session 1 too (r3): a base outside 0.35-0.92 is pulled to
- * the nearer edge before any stepping, so black starts at L 0.35, visible on
- * the dark canvas, and white at 0.92.
+ * (GM - Design, PR #211 r2, r7 and r8). Sessions take the offsets 0, −0.10,
+ * +0.10, −0.20, +0.20 in order, each the first of these that works: the
+ * value itself, if it is inside 0.35-0.92 and at least 0.05 from every L in
+ * use; past an edge, the edge (0.92 or 0.35), if it is at least 0.07 from
+ * every L in use (r8: so a clamped session never sits at the bare minimum
+ * from a neighbour); else the next unused offset. When no unused offset
+ * works, L steps on by 0.10 inside the band, nearest first. The offsets
+ * cycle after five, so sessions 1 and 6 share a fill (their names differ,
+ * and with two or more cursors names show). The band holds session 1 too
+ * (r3): a base outside 0.35-0.92 is pulled to the nearer edge before any
+ * stepping, so black starts at L 0.35, visible on the dark canvas, and white
+ * at 0.92.
  */
 export function sessionLightness(rawBaseL: number, ordinal: number): number {
   const steps = AGENT_CURSOR_SESSION_LIGHTNESS;
-  const { max, min, minGap } = AGENT_CURSOR_SESSION_BAND;
+  const { max, min, minGap, clampGap } = AGENT_CURSOR_SESSION_BAND;
   const baseL = Math.min(max, Math.max(min, rawBaseL));
-  // Mirrored across the base when past an edge: the fallback's first guess.
-  const place = (delta: number) => {
-    const L = baseL + delta;
-    if (L > max) return baseL - Math.abs(delta);
-    if (L < min) return baseL + Math.abs(delta);
-    return L;
-  };
   const index = (ordinal - 1) % steps.length;
   const used: number[] = [];
   const taken = new Set<number>();
+  // Gaps compare with a small epsilon so float rounding never flips a gap of
+  // exactly 0.05 or 0.07 (base 0.85 clamps to 0.92 at exactly 0.07).
+  const roomAt = (candidate: number, gap: number) => used.every((u) => Math.abs(u - candidate) >= gap - 1e-9);
   // Session 1 is the agent's own colour, pulled into the band.
   let L = baseL;
   used.push(L);
   taken.add(0);
   for (let k = 1; k <= index; k += 1) {
     const order = [...steps.keys()].map((j) => (k + j) % steps.length).filter((j) => !taken.has(j));
-    const clear = (candidate: number) => used.every((u) => Math.abs(u - candidate) >= minGap - 1e-9);
-    // The first that works: the value itself; past an edge, the edge (r7),
-    // then the value mirrored across the base. The mirror is GM's rule 3 and
-    // never changes a result: past the top, −d came first and holds base−d
-    // (or found it not clear); past the floor, base+d is what +d, next in
-    // the order, would take anyway (0 diffs over 100,090 base × session
-    // pairs without it, round 3b).
+    // The value itself, or past an edge the edge with 0.07 of room (r8).
     const fit = (delta: number): number | undefined => {
       const value = baseL + delta;
-      if (value > max) return [max, place(delta)].find(clear);
-      if (value < min) return [min, place(delta)].find(clear);
-      return clear(value) ? value : undefined;
+      if (value > max) return roomAt(max, clampGap) ? max : undefined;
+      if (value < min) return roomAt(min, clampGap) ? min : undefined;
+      return roomAt(value, minGap) ? value : undefined;
     };
     let chosen = order.find((j) => fit(steps[j]) !== undefined);
     if (chosen !== undefined) {
       L = fit(steps[chosen])!;
     } else {
-      // Near either end of the band the mirrored offsets fold onto each
-      // other (from L 0.85, +0.10 and +0.20 mirror onto 0.75 and 0.65), so
-      // no unused offset is clear. Then step on by 0.10 inside the band,
-      // nearest first, until one is.
+      // Near either end of the band the edge is taken or too close, so no
+      // unused offset works (from L 0.85, +0.20 finds 0.92 taken by +0.10).
+      // Then step on by 0.10 inside the band, nearest first, until one is
+      // clear. Some step always is (every base 0 to 1 in 0.0001 steps,
+      // round 3c), so the offset pulled into the band is a last resort
+      // that never runs.
       chosen = order[0];
-      L = place(steps[chosen]);
+      L = Math.min(max, Math.max(min, baseL + steps[chosen]));
       for (let m = 3; m <= 10; m += 1) {
-        const next = [baseL - m * 0.1, baseL + m * 0.1].find((c) => c >= min && c <= max && clear(c));
+        const next = [baseL - m * 0.1, baseL + m * 0.1].find((c) => c >= min && c <= max && roomAt(c, minGap));
         if (next !== undefined) {
           L = next;
           break;
