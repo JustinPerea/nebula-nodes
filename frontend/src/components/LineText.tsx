@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
-import { useBackendOffline } from '../lib/useBackendOffline';
+import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
 const ANCHOR_STYLE = { display: 'none' } as const;
@@ -33,8 +33,10 @@ export function LineText({ text, className, children }: { text: string | null | 
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
   const words = text || null;
-  const offline = useBackendOffline();
-  const hide = offline && words !== null && isBecauseLine(words);
+  // The one offline-first rule (hooks/useOfflineFirstBecause): it gives null for a because line
+  // while Nebula is offline. LineText never reads offline on its own (tests/round22Surfaces).
+  const shown = useOfflineFirstBecause(words);
+  const hide = words !== null && shown === null;
   // Review 8 MEDIUM-3 (round 10): one registration while the line is mounted (keyed to its
   // element), its words updated in place below, so a change of words keeps what the observer
   // said and the notice never flashes back. Unmounted (or no words): unregistered.

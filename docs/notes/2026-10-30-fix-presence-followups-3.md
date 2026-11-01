@@ -2237,3 +2237,44 @@ One thing left as it was: offline with the tab connected, OK still sends, create
 - Live (8795/5795, the backend only through the shared guarded launcher, canaries first):
   section 2's run 9 of 10 plus a membership-only rerun 6 of 6; the one miss is the two-hellos
   staging explained in 2a.1. Shots 04 (filmstrip), 10, 11 and 11b; `md5 | uniq -d` empty.
+
+## Round 16 (CI on 4b21f101; GM r26; base 4b21f101)
+
+### LineText takes offline first from the one rule (CI)
+- `tests/round22Surfaces` failed on 4b21f101: round 15's offline-first rule in `LineText` called
+  `useBackendOffline()` itself, and that ratchet allows only listed surfaces to read offline on
+  their own. Its round 15 file list missed this ratchet, which reads `src/` from disk.
+- Fix: `LineText` asks `hooks/useOfflineFirstBecause` (null for a because line while offline), the
+  single offline-first rule that was already on the allowlist, and hides when it says null. So
+  every line takes the one rule, through LineText or directly for the state a screen keeps, and
+  `OFFLINE_ONLY` is unchanged. Rules of hooks: the hook is called on every render, before the
+  check on `words`.
+- `presenceRound15.offlineLines` still pins the behaviour; mutants (never hides, hides every
+  line) are caught through the hook.
+
+### "Searching…" goes with the because line (GM r26)
+- On the demote's filmstrip, "Searching…" stayed in the results for about 200 ms after the page's
+  because line landed: status and collections are refused at once, while the search still waits
+  for its 250 ms debounce. A search can't succeed in that state.
+- CommonsView passes the grid `loading` only while no because line is in the page's lines, so it
+  clears in the same render as the line.
+- Test: `presenceRound16.searching` (section 0's harness, fake time): a demote, 10 ms at a time;
+  the new view shows "Searching…" before the line, and no commit shows the page line with it; a
+  connected tab still shows "Searching…" while its search is out. The first fails on 4b21f101
+  (one commit with both); "Searching…" never shown is caught by the second.
+- Shot 04's filmstrip retaken: "Searching…" in the frames before, gone in the frame the lines land.
+
+### The `key.split is not a function` logs (not this PR)
+- CI's "A deferred part of the app failed while drawing. TypeError: key.split is not a function"
+  (`components/canvas/AgentNodeMarkLayer.tsx` `useBoxes`) comes from `tests/Canvas.fileDrop.test.tsx`,
+  whose `@xyflow/react` mock has `useStore: () => 1`, so `useBoxes` gets a number. Main's CI on
+  1944d052 logs the same (60 lines); neither file changed in this PR. Left for its owner: the mock
+  should run the selector over a fake state.
+
+### Round 16 gates
+- tsc and eslint clean; `check:inline-styles` and `check:slava-css-scope` pass.
+- vitest on two workers: `round22Surfaces`, every test under `frontend/tests` and `src` that
+  reads files from disk (`readFileSync`/`readdirSync`), the round 15 and 16 tests and the Commons
+  tests: 127 files, 1,828 of 1,828, Errors 0.
+- Live (8795/5795, guarded launcher, canaries first; `blocked.log` only canary lines): the row
+  changes once on the demote; the filmstrip retaken.

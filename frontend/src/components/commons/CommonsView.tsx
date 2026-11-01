@@ -7,6 +7,7 @@ import { useUIStore } from '../../store/uiStore';
 import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } from '../../lib/commonsApi';
 import { holdCommonsCalls } from '../../lib/commonsHold';
 import { useDemotedView } from '../../hooks/useTabHeld';
+import { isBecauseLine } from '../../lib/notConnectedLine';
 import type { FailureCopy } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
@@ -681,6 +682,9 @@ function CommonsViewBody({ view }: {
   // Round 14 (GM r23 1): Add locks at once; its line waits for the page's because line, so the
   // row moves once (useLockLineHold, capped).
   const addLine = useLockLineHold(addLock, Boolean(shownError?.length));
+  // Round 16 (GM r26): a search can't succeed while the page says why the tab can't load, so
+  // "Searching…" goes in the same render (the same frame) as that because line.
+  const searching = loading && !shownError?.some(isBecauseLine);
 
   // GM r18: on a tab that isn't connected as you nothing was searched and a drop won't add, so
   // the area stays empty while the banner explains. Round 15 (GM r24 b): a search that failed
@@ -835,7 +839,7 @@ function CommonsViewBody({ view }: {
             <CommonsGrid
               rows={rows}
               selectedId={selectedId}
-              loading={loading}
+              loading={searching}
               emptyHint={emptyHint}
               onOpen={(row) => setSelectedId(row.id)}
               onDropFiles={(files) => void upload(files)}
