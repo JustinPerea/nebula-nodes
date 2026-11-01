@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node, Viewport } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -26,22 +26,33 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(),
     const earlier = flow.onSync;
     flow.onSync = earlier ? (event) => { earlier(event); handler(event); } : handler;
   }) } }));
-vi.mock('@xyflow/react', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@xyflow/react')>(),
-  ReactFlow: (props: CanvasCallbacks & { children: React.ReactNode }) => {
-    flow.props = props;
-    return <div>{props.children}</div>;
-  },
-  Background: () => null,
-  Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: flow.initialized,
-    zoomIn: flow.zoomIn, zoomOut: flow.zoomOut, zoomTo: flow.zoomTo,
-    screenToFlowPosition: (point: unknown) => point }),
-  useInternalNode: (id: string) => flow.internalNodes.get(id),
-  useStore: () => 1,
-  // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-  useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
+// The roster store (brought in with the agent mark layer) reads the roster on
+// mount and on a graph replacement. The read never answers here: no request
+// goes out (tests/setup.ts) and the roster stays empty, with no update after a test.
+vi.mock('../src/lib/agentRoster', async (original) => ({
+  ...await original<typeof import('../src/lib/agentRoster')>(),
+  fetchAgentRoster: () => new Promise(() => {}),
 }));
+vi.mock('@xyflow/react', async (importOriginal) => {
+  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
+  const store = (await import('./helpers/fakeFlowStore')).fakeFlowStore();
+  return {
+    ...await importOriginal<typeof import('@xyflow/react')>(),
+    ReactFlow: (props: CanvasCallbacks & { children: React.ReactNode }) => {
+      flow.props = props;
+      return <div>{props.children}</div>;
+    },
+    Background: () => null,
+    Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: flow.initialized,
+      zoomIn: flow.zoomIn, zoomOut: flow.zoomOut, zoomTo: flow.zoomTo,
+      screenToFlowPosition: (point: unknown) => point }),
+    useInternalNode: (id: string) => flow.internalNodes.get(id),
+    useStore: store.useStore,
+    // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
+    useStoreApi: store.useStoreApi,
+  };
+});
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));
 vi.mock('../src/components/canvas/CanvasViewReporter', () => ({ CanvasViewReporter: () => null }));
@@ -63,6 +74,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
+import { preloadFlowLayers } from './helpers/fakeFlowStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore, type ViewMode } from '../src/store/uiStore';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -77,6 +89,8 @@ function node(id: string): Node<NodeData> {
 const history: RunRecord[] = [{ id: 'saved-run', trigger: 'graph', status: 'complete', startedAt: 1,
   snapshot: { nodes: [], edges: [] } }];
 
+// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
+beforeAll(preloadFlowLayers);
 beforeEach(() => {
   vi.useFakeTimers();
   flow.fitView.mockReset().mockResolvedValue(true);

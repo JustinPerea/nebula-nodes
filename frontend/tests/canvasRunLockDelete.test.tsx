@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -8,8 +8,17 @@ const flow = vi.hoisted(() => ({
   internalNodes: new Map<string, { measured: { width?: number; height?: number } }>(),
   fitProp: true,
 }));
+// The roster store (brought in with the agent mark layer) reads the roster on
+// mount and on a graph replacement. The read never answers here: no request
+// goes out (tests/setup.ts) and the roster stays empty, with no update after a test.
+vi.mock('../src/lib/agentRoster', async (original) => ({
+  ...await original<typeof import('../src/lib/agentRoster')>(),
+  fetchAgentRoster: () => new Promise(() => {}),
+}));
 vi.mock('@xyflow/react', async (importOriginal) => {
   const original = await importOriginal<typeof import('@xyflow/react')>();
+  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
+  const store = (await import('./helpers/fakeFlowStore')).fakeFlowStore();
   return {
     ...original,
     ReactFlow: ({ children, fitView }: { children: React.ReactNode; fitView: boolean }) => {
@@ -26,9 +35,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       getEdges: () => useGraphStore.getState().edges,
     }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
-    useStore: () => 1,
+    useStore: store.useStore,
     // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-    useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }), setState: () => {} }),
+    useStoreApi: store.useStoreApi,
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -48,6 +57,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
+import { preloadFlowLayers } from './helpers/fakeFlowStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
@@ -73,6 +83,8 @@ const scene = { id: 'n4', type: 'cinemaSceneNode', position: { x: 0, y: 0 }, sel
 const brief = { id: 'n5', type: 'model-node', position: { x: 300, y: 0 }, selected: true,
   data: { label: 'Brief', definitionId: 'text-input', params: { text: '' }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
+// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
+beforeAll(preloadFlowLayers);
 describe('M1: the Delete key during the tab\'s own run', () => {
   beforeEach(() => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;

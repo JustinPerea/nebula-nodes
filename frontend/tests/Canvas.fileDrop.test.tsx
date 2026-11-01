@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, createEvent, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -19,21 +19,33 @@ vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(), apiFetch: api.fetch,
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
-vi.mock('@xyflow/react', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@xyflow/react')>(),
-  ReactFlow: (props: DropProps) => {
-    flow.props = props;
-    return <div>{props.children}</div>;
-  },
-  Background: () => null,
-  Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  // The flow-space point is the screen point halved, so a test sees it was used.
-  useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: true,
-    screenToFlowPosition: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }) }),
-  useInternalNode: () => undefined,
-  useStore: () => 1,
-  useStoreApi: () => ({ getState: () => ({ width: 1280, height: 800, minZoom: 0.1, maxZoom: 2 }) }),
+// The roster store (brought in with the agent mark layer) reads the roster on
+// mount and on a graph replacement. The read never answers here: no request
+// goes out (tests/setup.ts) and the roster stays empty, with no update after a test.
+vi.mock('../src/lib/agentRoster', async (original) => ({
+  ...await original<typeof import('../src/lib/agentRoster')>(),
+  fetchAgentRoster: () => new Promise(() => {}),
 }));
+vi.mock('@xyflow/react', async (importOriginal) => {
+  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlowStore } = await import('./helpers/fakeFlowStore');
+  const store = fakeFlowStore();
+  return {
+    ...await importOriginal<typeof import('@xyflow/react')>(),
+    ReactFlow: (props: DropProps) => {
+      flow.props = props;
+      return <div>{props.children}</div>;
+    },
+    Background: () => null,
+    Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    // The flow-space point is the screen point halved, so a test sees it was used.
+    useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: true,
+      screenToFlowPosition: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }) }),
+    useInternalNode: () => undefined,
+    useStore: store.useStore,
+    useStoreApi: store.useStoreApi,
+  };
+});
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));
 vi.mock('../src/components/canvas/CanvasViewReporter', () => ({ CanvasViewReporter: () => null }));
@@ -55,6 +67,7 @@ import { Canvas } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { ConnectionLostError } from '../src/lib/errorCopy';
+import { preloadFlowLayers } from './helpers/fakeFlowStore';
 
 const TYPES = 'Nebula takes images, video, audio, PDFs and text files.';
 const initialUI = useUIStore.getState();
@@ -108,6 +121,8 @@ async function drop(files: File[], at?: { x: number; y: number }) {
   await act(async () => { await vi.runOnlyPendingTimersAsync(); });
 }
 
+// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
+beforeAll(preloadFlowLayers);
 beforeEach(() => {
   vi.useFakeTimers();
   api.fetch.mockReset().mockImplementation(async () => new Response('{}', { status: 200 }));
@@ -176,8 +191,11 @@ describe('Canvas file drop', () => {
       'a.png': { width: 1179, height: 2556 }, 'b.png': { width: 1179, height: 2556 },
       'c.png': { width: 1600, height: 900 }, 'd.png': { width: 1179, height: 2556 },
     };
-    vi.stubGlobal('URL', Object.assign(Object.create(URL), {
-      createObjectURL: (blob: File) => `blob:${blob.name}`, revokeObjectURL: vi.fn() }));
+    // Still a constructor: Vite's module loader builds URLs while this runs.
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = (blob: File) => `blob:${blob.name}`;
+      static revokeObjectURL = vi.fn();
+    });
     class FakeImage {
       naturalWidth = 0; naturalHeight = 0;
       onload: (() => void) | null = null; onerror: (() => void) | null = null;
