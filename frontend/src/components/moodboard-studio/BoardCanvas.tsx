@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import {
   Background, BackgroundVariant, Panel, ReactFlow, ReactFlowProvider, getViewportForBounds, useReactFlow, useStore, useStoreApi,
-  type Node, type NodeChange, type NodeTypes, type Viewport,
+  type Node, type NodeChange, type NodeTypes, type Rect, type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { MoodboardImage } from '../../types';
@@ -14,6 +14,7 @@ import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
+import { BOARD_FALLBACK_INSETS, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
 import '../../styles/moodboard-board.css';
 
 /** A card moved on the board: where its top-left now is, in whole board pixels. */
@@ -45,6 +46,13 @@ const FIT_PADDING = 0.12;
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.25;
+/**
+ * How far the pointer can move between press and release and still be a
+ * click, not a drag: React Flow's own default for the pane, passed to it
+ * explicitly so the board's click and the camera's "no move" (outsideMove)
+ * are the same distance.
+ */
+export const PANE_CLICK_DISTANCE = 1;
 // Props React Flow gets the same object for on every render: a new one (an
 // inline `[]` or `{}`) would make it update its store on each pointer move.
 const NO_EDGES: [] = [];
@@ -234,18 +242,47 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
       seen.current = readCamera();
     }
   }, [setViewport, readCamera]);
+  // The view insets (lib/boardViewInsets, GM #213 round 3): the control
+  // bar's band is outside, so a fit or a Show frames its cards above it. The
+  // last measured insets are kept for when there is no layout to measure
+  // (the view closing).
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const insetsRef = useRef<ViewInsets | null>(null);
+  const viewInsets = useCallback((): ViewInsets => {
+    const measured = measureBoardViewInsets(wrapperRef.current, controlsRef.current);
+    if (measured) insetsRef.current = measured;
+    return insetsRef.current ?? BOARD_FALLBACK_INSETS;
+  }, []);
+  /** The camera that frames `bounds` in a `width` x `height` column, inside the view insets. */
+  const frame = useCallback((bounds: Rect, width: number, height: number): Viewport => {
+    const inside = insideInsets(width, height, viewInsets());
+    const to = getViewportForBounds(bounds, inside.width, inside.height, MIN_ZOOM, 1, FIT_PADDING);
+    return { x: to.x + inside.x, y: to.y + inside.y, zoom: to.zoom };
+  }, [viewInsets]);
+  /** The whole-board fit in a column this size, or null when there are no cards. */
+  const fitFor = useCallback((width: number, height: number): Viewport | null => (
+    nodesRef.current.length === 0 ? null : frame(getNodesBounds(nodesRef.current), width, height)
+  ), [frame, getNodesBounds]);
+  const fitForRef = useRef(fitFor);
+  fitForRef.current = fitFor;
   // A whole-board fit's refit while its column resizes (#209): `follow` knows
-  // whether the camera is still where the last fit left it, by comparing it.
+  // whether the camera is on the fit, by comparing it.
   const fitRef = useRef<(instant: boolean) => boolean>(() => false);
   const follow = useRef<BoardFitFollow | null>(null);
   follow.current ??= createBoardFitFollow({
     fitted: startsFitted,
     camera: readCamera,
+    fitFor: (width, height) => fitForRef.current(width, height),
     refit: (instant) => fitRef.current(instant),
   });
-  /** Spring the camera to `to`: a whole-board fit when `fitted`, any other move otherwise. */
-  const springTo = useCallback((to: Viewport, fitted = false) => {
-    if (fitted) follow.current!.fitTo(to, true);
+  /**
+   * Spring the camera to `to`. A spring that lands on the fit is a fit (GM,
+   * #213 round 3: Fit, a refit, or a zoom or Show that lands there), so a
+   * resize while it runs refits it as it would a Fit.
+   */
+  const springTo = useCallback((to: Viewport) => {
+    const fitted = follow.current!.onFit(to);
+    if (fitted) follow.current!.headingToFit();
     else follow.current!.aside();
     // A new move takes over from the one still running (a refit while the
     // window is dragged starts from where the last one had got to).
@@ -260,7 +297,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     });
     // Where the camera lands is kept for the visit, as a pan or scroll is,
     // fitted when it lands on the fit (zoom in, then back out).
-    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted || follow.current!.onFit(to));
+    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted);
   }, [getViewport, moveCamera, boardKey]);
   useEffect(() => () => {
     stopSpring.current?.();
@@ -270,30 +307,33 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   // The camera, kept for the visit with whether it is still fitted, read
   // from the camera itself (a move's own viewport can be a spring frame
   // React Flow reports 150 ms late). While a spring runs, the store holds
-  // where it lands (springTo).
+  // where it lands (springTo). Once the view has closed, React Flow's store
+  // holds its reset camera (0, 0, 1), so a late move end keeps nothing
+  // (#213 review 1 MEDIUM-1).
+  const closed = useRef(false);
   const keepCamera = useCallback(() => {
     unkept.current = false;
-    if (springTarget.current) return;
+    if (springTarget.current || closed.current) return;
     useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
   }, [boardKey, getViewport]);
   /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
   const fit = useCallback((instant = false) => {
     const { width, height, panZoom } = flowStore.getState();
-    if (!width || !height || nodesRef.current.length === 0) return false;
+    if (!width || !height) return false;
     // React Flow can measure the board before its camera exists; the fit on
     // open waits for it (it can't move a camera that isn't there yet).
     if (instant && !panZoom) return false;
-    const to = getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING);
+    const to = fitFor(width, height);
+    if (!to) return false;
     if (!instant) {
-      springTo(to, true);
+      springTo(to);
       return true;
     }
     // Only on open (the first size), before any spring has run.
-    follow.current!.fitTo(to, false);
     moveCamera(to);
     useBoardCanvasStore.getState().setViewport(boardKey, to, true);
     return true;
-  }, [flowStore, getNodesBounds, springTo, moveCamera, boardKey]);
+  }, [flowStore, fitFor, springTo, moveCamera, boardKey]);
   fitRef.current = fit;
   // Cards that arrive after the board mounts (it opens before they load) get
   // the fit on open once there are some.
@@ -351,13 +391,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   const frameRequest = useBoardCanvasStore((state) => state.frameRequest);
   useEffect(() => {
     if (!frameRequest || frameRequest.boardKey !== boardKey) return;
-    let frame = 0;
+    let request = 0;
     let tries = 0;
     const attempt = () => {
-      frame = 0;
+      request = 0;
       const { width, height } = flowStore.getState();
       if ((!width || !height) && tries++ < 60) {
-        frame = window.requestAnimationFrame(attempt);
+        request = window.requestAnimationFrame(attempt);
         return;
       }
       if (useBoardCanvasStore.getState().frameRequest?.seq === frameRequest.seq) {
@@ -366,11 +406,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
       const wanted = new Set(frameRequest.placementIds);
       const targets = nodesRef.current.filter((node) => wanted.has(node.id));
       if (!width || !height || targets.length === 0) return;
-      springTo(getViewportForBounds(getNodesBounds(targets), width, height, MIN_ZOOM, 1, FIT_PADDING));
+      springTo(frame(getNodesBounds(targets), width, height));
     };
-    frame = window.requestAnimationFrame(attempt);
-    return () => { if (frame) window.cancelAnimationFrame(frame); };
-  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo]);
+    request = window.requestAnimationFrame(attempt);
+    return () => { if (request) window.cancelAnimationFrame(request); };
+  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo, frame]);
 
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = flowStore.getState();
@@ -412,11 +452,30 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   // each onMove frame. Only this view reads the kept camera, when it mounts
   // and when React Flow makes its camera again (cameraMade): a gesture still
   // unkept then, or when the view closes, is kept from `seen`.
-  const outsideMove = useCallback((keep: boolean) => {
-    if (ownMove.current) return;
+  //
+  // A press that hasn't gone past the click distance is a click, not a drag
+  // (#213 review 1 LOW-1, GM: the board's own click distance): d3 puts the
+  // pressed board point back under the pointer on every mousemove, even a
+  // 1 px jitter, and while a refit spring runs that moves the camera back
+  // toward where it was at the press. That isn't the person's move: the
+  // camera goes straight back to where this view had it (before the frame
+  // paints), and a refit carries on to the fit.
+  const press = useRef<{ x: number; y: number; far: boolean } | null>(null);
+  const outsideMove = useCallback((keep: boolean, event?: unknown) => {
+    if (ownMove.current || closed.current) return;
     const now = readCamera();
     const was = seen.current;
     if (was && was.x === now.x && was.y === now.y && was.zoom === now.zoom) return;
+    const held = press.current;
+    if (held && !held.far && was && event instanceof MouseEvent && event.type === 'mousemove') {
+      const dx = event.clientX - held.x;
+      const dy = event.clientY - held.y;
+      if (dx * dx + dy * dy <= PANE_CLICK_DISTANCE * PANE_CLICK_DISTANCE) {
+        moveCamera(was);
+        return;
+      }
+      held.far = true;
+    }
     seen.current = now;
     stopSpring.current?.();
     stopSpring.current = null;
@@ -424,14 +483,41 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     follow.current!.taken();
     if (keep) keepCamera();
     else unkept.current = true;
-  }, [readCamera, keepCamera]);
-  const onCameraMoveStart = useCallback(() => outsideMove(true), [outsideMove]);
-  const onCameraMove = useCallback(() => outsideMove(false), [outsideMove]);
-  // A gesture's camera not kept yet when the view closes (React Flow's move
-  // end comes 150 ms after a scroll pan) is kept now.
-  useEffect(() => () => {
-    if (unkept.current) keepCamera();
+  }, [readCamera, keepCamera, moveCamera]);
+  const onCameraMoveStart = useCallback((event: unknown) => {
+    // d3 starts a drag gesture on the press (a right or middle button, or
+    // the left with Space held); the camera's own moves start none.
+    if (!ownMove.current) {
+      press.current = event instanceof MouseEvent && event.type === 'mousedown'
+        ? { x: event.clientX, y: event.clientY, far: false } : null;
+    }
+    outsideMove(true, event);
+  }, [outsideMove]);
+  const onCameraMove = useCallback((event: unknown) => outsideMove(false, event), [outsideMove]);
+  const onCameraMoveEnd = useCallback(() => {
+    press.current = null;
+    keepCamera();
   }, [keepCamera]);
+  // The view closes (List, another board, another screen). A gesture's
+  // camera not kept yet (React Flow's move end comes 150 ms after a scroll
+  // pan, and a drag's at its release) is kept now, from `seen`: this runs as
+  // a layout cleanup, before React Flow's own (its StoreUpdater, a child)
+  // resets its store to the camera (0, 0, 1) (#213 review 1 MEDIUM-1). The
+  // spring stops here too, so no frame moves a camera React Flow has reset.
+  // From here on nothing is kept (`closed`): React Flow's late move end
+  // would read the reset camera.
+  useLayoutEffect(() => {
+    closed.current = false;
+    return () => {
+      stopSpring.current?.();
+      stopSpring.current = null;
+      if (unkept.current && !springTarget.current && seen.current) {
+        useBoardCanvasStore.getState().setViewport(boardKey, seen.current, follow.current!.onFit(seen.current));
+      }
+      unkept.current = false;
+      closed.current = true;
+    };
+  }, [boardKey]);
 
   const addFiles = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
@@ -484,7 +570,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           onSelectionDragStop={onSelectionDragStop}
           onMoveStart={onCameraMoveStart}
           onMove={onCameraMove}
-          onMoveEnd={keepCamera}
+          onMoveEnd={onCameraMoveEnd}
+          paneClickDistance={PANE_CLICK_DISTANCE}
           defaultViewport={startsFitted ? undefined : savedViewport}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
@@ -496,7 +583,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           ariaLabelConfig={ARIA_LABELS}
         >
           <BoardDots />
-          <Panel position="bottom-left" className="moodboard-board__controls">
+          <Panel ref={controlsRef} position="bottom-left" className="moodboard-board__controls">
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(1 / ZOOM_STEP)}
               aria-label="Zoom out" title="Zoom out">−</button>
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(ZOOM_STEP)}

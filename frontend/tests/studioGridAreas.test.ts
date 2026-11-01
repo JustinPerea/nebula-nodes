@@ -428,6 +428,59 @@ describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () =
       expect(at(761, slava).areas).toEqual(GRID);
     });
 
+    // #213 review 1 LOW-1 and GM round 3: the row sizes and the panel's box.
+    it(`${skin}: the board's row keeps at least --mb-board-min-h (300 px); the panel's row takes what is left, down to 0`, () => {
+      const { root } = at(1440, slava);
+      const own = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });
+      expect(own.get('|--mb-board-min-h')?.value).toBe('300px');
+      const BOARD_ROW = 'minmax(var(--mb-board-min-h), 1fr)';
+      const PANEL_ROW = 'minmax(0, auto)';
+      for (const width of [1440, 1100, 1000, 970, 969, 900, 761]) {
+        const now = at(width, slava);
+        expect(now.template.rows, `${width}`).toBe(`auto auto ${BOARD_ROW} ${PANEL_ROW}`);
+        // The board's row is the board's, and the panel's row is `under`.
+        expect(now.areas[2].split(' '), `${width}`).toContain('board');
+        expect(now.areas[3].split(' '), `${width}`).toContain('under');
+      }
+      for (const width of [760, 700]) {
+        const now = at(width, slava);
+        expect(now.template.rows, `${width}`).toBe(`auto auto auto ${BOARD_ROW} ${PANEL_ROW}`);
+        expect(now.areas[3], `${width}`).toBe('board');
+        expect(now.areas[4], `${width}`).toBe('under');
+      }
+    });
+
+    it(`${skin}: beside the board, the panel's width is its whole box (border-box), so the board column is exactly what is left`, () => {
+      for (const width of [970, 1000, 1100]) {
+        const { panel } = at(width, slava);
+        expect(panel.get('|width')?.value, `${width}`).toBe('var(--mb-board-panel-w)');
+        expect(panel.get('|box-sizing')?.value, `${width}`).toBe('border-box');
+      }
+    });
+
+    it(`${skin}: the panel, a tab stop while it scrolls, shows the token focus ring inside its edge (#213 review 1 NIT-5)`, () => {
+      const { root } = at(969, slava);
+      const panel = root.querySelector('.moodboard-board-panel')!;
+      const ring = appRules().filter((rule) => rule.state.includes('focus-visible') && rule.decls.some((decl) => decl.prop === 'outline')
+        && (() => { try { return panel.matches(rule.base); } catch { return false; } })());
+      expect(ring.map((rule) => rule.selector)).toEqual(['.moodboard-board-panel:focus-visible']);
+      const decls = Object.fromEntries(ring[0].decls.map((decl) => [decl.prop, decl.value]));
+      expect(decls.outline).toBe('var(--sr-focus-outline, 2px solid var(--mb-board-select))');
+      expect(decls['outline-offset']).toBe('calc(-1 * var(--sr-focus-offset, 2px))');
+    });
+
+    it(`${skin}: the folded rail's edges come from the Board's own rule (#213 review 1 NIT-3)`, () => {
+      for (const width of [760, 700]) {
+        const { root } = at(width, slava);
+        const rail = root.querySelector('.moodboard-studio-view__rail')!;
+        const viewport = { width, height: 900 };
+        expect(cascaded(rail, undefined, { viewport }).get('|border-bottom')?.value, `${width}`).toBe('1px solid var(--mb-board-edge-strong)');
+        const winner = declarationsOf(rail, 'border-bottom', { viewport }).at(-1)!;
+        expect(winner.selector, `${width}`).toContain('.moodboard-studio-view--board > .moodboard-studio-view__rail');
+        expect(winner.file, `${width}`).toMatch(/moodboard-board\.css$/);
+      }
+    });
+
     it(`${skin}: the panel under the board has a top edge, not a left one, and scrolls inside itself`, () => {
       for (const width of [969, 700]) {
         const { panel } = at(width, slava);

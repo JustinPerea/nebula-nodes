@@ -1,30 +1,28 @@
 /**
- * Whether the Board view's camera is still where the last whole-board fit
- * left it, and the refit that keeps it there when the board's column changes
- * size (GM, #209 (a): the window narrows or widens, the offline row opens or
- * closes, anything else that moves the grid).
+ * Whether the Board view's camera is on the whole-board fit, and the refit
+ * that keeps it there when the board's column changes size (GM, #209 (a): the
+ * window narrows or widens, the offline row opens or closes, anything else
+ * that moves the grid).
  *
- * - Fitted is a fact about the camera, not about which events arrived: the
- *   board is fitted while the camera is on the last fit's target (within
- *   `sameCamera`'s tolerance), or while a fit spring is still heading there.
- *   React Flow doesn't report every move a person makes the same way (after
- *   one mouse-wheel notch its pan-on-scroll never calls onMoveStart again),
- *   and some moves have no person event at all (the autopan while a card is
- *   dragged to the edge, the pan to a card focused from the keyboard), so
- *   none of them is relied on: whatever moved the camera off the fit, the
- *   board is no longer fitted. A camera moved back onto the fit is fitted.
- * - A whole-board fit (fit on open, the Fit button, Shift+1, a refit) sets
- *   the target. The camera's own moves elsewhere (the zoom buttons, an
- *   Update's Show, which frames only its cards) leave it unfitted unless they
- *   land back on that target: zooming in and back out is fitted again, as a
- *   pan back onto the fit is.
+ * - Fitted is a fact about the camera, not about which events arrived or
+ *   which button got it there (GM, #213 round 3): the board is fitted while
+ *   the camera is on the fit of the layout it has now (its cards, in its
+ *   column, less the view insets), within `sameCamera`'s tolerance, or while
+ *   a spring is heading there. A fit, a refit, a pan or zoom back onto the
+ *   fit, a zoom-button spring or an Update's Show that lands on it: each is a
+ *   fit. React Flow doesn't report every move a person makes the same way
+ *   (after one mouse-wheel notch its pan-on-scroll never calls onMoveStart
+ *   again), and some moves have no person event at all (the autopan while a
+ *   card is dragged to the edge, the pan to a card focused from the
+ *   keyboard), so none of them is relied on.
  * - A board that opens fitted (a fresh open, or a camera kept from earlier in
  *   the visit that was fitted then) is fit at once as soon as it has both a
  *   size that isn't 0 x 0 and cards to fit (`ready`): a board laid out late
  *   (mounted while hidden), or whose cards arrive after it mounts, still
  *   opens fitted to its column. A move the person makes first cancels it.
- * - After that, a column resize refits at most once a frame, with the size
- *   read and the camera compared when the frame runs.
+ * - After that, a column resize refits at most once a frame. The frame asks
+ *   whether the camera was on the fit of the column before the resize (or a
+ *   spring was heading to the fit), and if so springs to the new column's.
  * - A refit changes the camera, never the column, so it can't call itself.
  */
 export interface FitCamera {
@@ -34,27 +32,28 @@ export interface FitCamera {
 }
 
 /**
- * Half a screen pixel, in x and y: less than that isn't a move anyone can see
- * (one mouse-wheel notch pans about 50 px), and it absorbs floating-point
- * rounding on the way through d3. The zoom is compared relative to the fit's
- * zoom: 5e-4 moves the far edge of an 870 px column by under half a pixel.
+ * GM, #213 round 3: "about 0.5 px and 0.001 zoom, so rounding doesn't break
+ * it". Half a screen pixel in x and y is less than anyone can see (one
+ * mouse-wheel notch pans about 50 px) and absorbs floating-point rounding on
+ * the way through d3; the zoom within 0.001 of the fit's (a zoom-button step
+ * is 1.2x, far beyond it).
  */
 export const FIT_TOLERANCE_PX = 0.5;
-export const FIT_TOLERANCE_ZOOM = 5e-4;
+export const FIT_TOLERANCE_ZOOM = 0.001;
 
 export function sameCamera(a: FitCamera, b: FitCamera): boolean {
   return Math.abs(a.x - b.x) <= FIT_TOLERANCE_PX && Math.abs(a.y - b.y) <= FIT_TOLERANCE_PX
-    && Math.abs(a.zoom - b.zoom) <= FIT_TOLERANCE_ZOOM * b.zoom;
+    && Math.abs(a.zoom - b.zoom) <= FIT_TOLERANCE_ZOOM;
 }
 
 export interface BoardFitFollow {
-  /** The camera is on the last fit's target, or a fit spring is heading there. */
+  /** The camera is on the fit of the layout the board has now, or a spring is heading there. */
   readonly fitted: boolean;
-  /** `camera` is on the last fit's target: a move landing there leaves the board fitted. */
+  /** `camera` is on the fit of the layout the board has now: a move landing there leaves the board fitted. */
   onFit(camera: FitCamera): boolean;
-  /** A whole-board fit to `target`: on a spring still heading there, or already there. */
-  fitTo(target: FitCamera, springing: boolean): void;
-  /** The fit spring has landed: no spring is heading anywhere now. */
+  /** A spring heading to the fit has started (Fit, a refit, a zoom or Show that lands on it): fitted until it lands or is stopped. */
+  headingToFit(): void;
+  /** The spring has landed: no spring is heading anywhere now. */
   springEnded(): void;
   /** A camera move this view didn't make: no spring heads anywhere, and no fit on open is still to come. */
   taken(): void;
@@ -63,11 +62,9 @@ export interface BoardFitFollow {
   /** React Flow made its camera again, at its default: fit at once again, as on open. */
   reopen(): void;
   /**
-   * The camera's own move somewhere other than a whole-board fit (the zoom
-   * buttons, an Update's Show): no fit spring heads anywhere now, and a refit
-   * still waiting doesn't run. The last fit's target stays, so landing back
-   * on it by any route counts as fitted again (GM, #209 review 4: zoom in,
-   * then back out).
+   * The camera's own move somewhere other than the fit (the zoom buttons, an
+   * Update's Show of some cards): no spring heads to the fit now, and a refit
+   * still waiting doesn't run.
    */
   aside(): void;
   /** The board column measured at this size. */
@@ -80,34 +77,40 @@ export interface BoardFitFollowOptions {
   fitted: boolean;
   /** Where the camera is now. */
   camera: () => FitCamera;
+  /** The whole-board fit of the cards the board has now in a column this size, or null when there is nothing to fit. */
+  fitFor: (width: number, height: number) => FitCamera | null;
   /** Fit the whole board to the column: at once on open, on the spring after that. False when there was nothing to fit. */
   refit: (instant: boolean) => boolean;
   requestFrame?: (callback: () => void) => number;
   cancelFrame?: (id: number) => void;
 }
 
-export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb) => window.requestAnimationFrame(cb),
+export function createBoardFitFollow({ fitted, camera, fitFor, refit, requestFrame = (cb) => window.requestAnimationFrame(cb),
   cancelFrame = (id) => window.cancelAnimationFrame(id) }: BoardFitFollowOptions): BoardFitFollow {
   let openFit = fitted;
-  let target: FitCamera | null = null;
   let heading = false;
   let size: { width: number; height: number } | null = null;
+  // The column before the resizes a waiting refit frame will answer: the
+  // camera is judged against that column's fit until the frame runs.
+  let before: { width: number; height: number } | null = null;
   let frame = 0;
-  const isFitted = () => target !== null && (heading || sameCamera(camera(), target));
+  const onFitAt = (at: FitCamera, column: { width: number; height: number } | null) => {
+    const fit = column ? fitFor(column.width, column.height) : null;
+    return fit !== null && sameCamera(at, fit);
+  };
+  const isFitted = () => heading || onFitAt(camera(), before ?? size);
   const cancel = () => {
     if (frame) cancelFrame(frame);
     frame = 0;
+    before = null;
   };
   const open = () => {
     if (openFit && size && refit(true)) openFit = false;
   };
   return {
     get fitted() { return isFitted(); },
-    onFit: (at) => target !== null && sameCamera(at, target),
-    fitTo(next, springing) {
-      target = { x: next.x, y: next.y, zoom: next.zoom };
-      heading = springing;
-    },
+    onFit: (at) => onFitAt(at, size),
+    headingToFit() { heading = true; },
     springEnded() { heading = false; },
     taken() {
       heading = false;
@@ -116,7 +119,6 @@ export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb
     ready: open,
     reopen() {
       openFit = true;
-      target = null;
       heading = false;
       cancel();
       open();
@@ -127,17 +129,20 @@ export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb
     },
     resize(width, height) {
       if (!width || !height) return;
-      const same = size !== null && size.width === width && size.height === height;
-      const first = size === null;
+      const previous = size;
+      const same = previous !== null && previous.width === width && previous.height === height;
       size = { width, height };
       if (openFit) {
         open();
         return;
       }
-      if (first || same || frame) return;
+      if (!previous || same || frame) return;
+      before = previous;
       frame = requestFrame(() => {
+        const fittedBefore = isFitted();
         frame = 0;
-        if (isFitted()) refit(false);
+        before = null;
+        if (fittedBefore) refit(false);
       });
     },
     dispose: cancel,

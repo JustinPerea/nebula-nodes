@@ -1,8 +1,9 @@
-import type { ReactNode, Ref } from 'react';
+import { useRef, type ReactNode, type Ref } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ProjectWorkspaceControls } from './projects/ProjectWorkspaceControls';
 import { UpdatesSlot } from './agent-notes/UpdatesSlot';
 import { StudioOfflineRow } from './StudioOfflineRow';
+import { useTextCut } from '../hooks/useTextCut';
 import '../styles/workspace-header.css';
 
 interface WorkspaceHeaderProps {
@@ -31,6 +32,10 @@ interface WorkspaceHeaderProps {
 /** One current workspace identity, with its actual return destination. */
 export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisabled = false, backRef, backBusy = false,
   onHome, homeBusy, className = '', navigation, children, updatesSlot = true, offlineRow = true }: WorkspaceHeaderProps) {
+  // The title is one line, cut with an ellipsis in a narrow window: then its
+  // full text is its tooltip.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const cut = useTextCut(titleRef, title);
   return (
     <>
     <header className={`workspace-header${updatesSlot ? ' workspace-header--updates-slot' : ''} ${className}`} aria-label="Workspace">
@@ -42,7 +47,8 @@ export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisab
           <ArrowLeft size={16} aria-hidden="true" />
           <span className={navigation ? 'workspace-header__navigation-label' : undefined}>{backBusy ? 'Saving…' : backLabel}</span>
         </button>}
-        <h1 className={`workspace-header__title${navigation ? ' workspace-header__navigation-label' : ''}`} data-workspace-heading tabIndex={-1}>{title}</h1>
+        <h1 className={`workspace-header__title${navigation ? ' workspace-header__navigation-label' : ''}`} data-workspace-heading tabIndex={-1}
+          ref={titleRef} title={cut ? title : undefined}>{title}</h1>
         {navigation}
       </div>
       {children && <div className="workspace-header__actions">{children}</div>}

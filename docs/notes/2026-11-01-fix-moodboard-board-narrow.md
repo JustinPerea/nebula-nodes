@@ -45,7 +45,7 @@ The existing resolution check picks up the new 899/900 breakpoint by itself (bot
 
 ### Zoom buttons (GM: landing on the exact fit by any route counts)
 
-- `boardFitFollow.leave()` (dropped the fit target) is now `aside()`: no spring heads to the fit and a waiting refit is cancelled, but the target stays. Fitted is still `sameCamera(camera, target)`, so zoom in and back out (or out and in) is fitted again, as a pan back onto the fit already was.
+- (Superseded in round 3: fitted is now "on the fit of the layout the board has now", not "on the last fit's target".) `boardFitFollow.leave()` (dropped the fit target) is now `aside()`: no spring heads to the fit and a waiting refit is cancelled, but the target stays. Fitted is still `sameCamera(camera, target)`, so zoom in and back out (or out and in) is fitted again, as a pan back onto the fit already was.
 - **The kept flag.** `springTo` stores `fitted || follow.onFit(to)` for where it lands, so a zoom that lands on the fit is kept fitted for List and back.
 - An Update's Show goes through the same path: a Show that happens to frame exactly the whole board counts as fitted. The fitFollow stand-in's `getNodesBounds` now returns one card's bounds for a one-card Show (it used to return the whole board for any set, which only worked while Show dropped the target).
 - **Tests:** zoom in then out refits on a resize and is kept fitted; out then in, List and back, reopens fitted to the new column; in, in, out isn't fitted and keeps the view; the follower unit test for `aside()`.
@@ -58,7 +58,7 @@ BoardCanvas.test: after a card drag and after a selection drag, an arrow-key mov
 
 - **Who reads `viewports`/`fitted`:** only BoardCanvas, with `getState()`: when it mounts (the camera to reopen at) and when React Flow makes its camera again. Nothing reads them mid-gesture, and no `useBoardCanvasStore` selector subscribes to them.
 - **So:** `onMove` frames no longer write. The camera is kept at `onMoveStart` (one wheel notch reports nothing else, ever) and at `onMoveEnd`. A drag pan writes once, at its end; a scroll pan twice (first event, end).
-- **Not lost:** a gesture's camera still unkept is kept when the view closes (a scroll pan's end comes 150 ms later, so List within that window), and put back from `seen` if React Flow makes its camera again before it's kept.
+- **Not lost (corrected in round 3):** round 1 said a gesture's camera still unkept is kept when the view closes. On React Flow's real store that was wrong: the keep ran in a passive cleanup, after React Flow had reset its store, so it wrote (0, 0, 1) (#213 review 1 MEDIUM-1). Round 3 keeps it from `seen` in a layout cleanup, before the reset; see Round 3. It is still put back from `seen` if React Flow makes its camera again before it's kept.
 - **Tests:** write counts for a 12-frame drag pan (0, then 1 at the end) and for a notch plus a stuck-flag pan (1, still 1, 2 at the end). The two older tests that read the store right after `onMove` now end the gesture first, as React Flow does.
 
 ### #209's notes and PR body (NIT-1, NIT-2, NIT-C)
@@ -208,3 +208,87 @@ GM's ruling after round 1: 900 was too low, and the rule should follow from the 
 - Focused vitest, `--maxWorkers=2`, from a non-empty zsh array: 110 files, 1,439 tests passed (every test that reads `src/styles` or `cssCascade`, plus the moodboard, studio, workspace header, agent notes, board fit and board canvas store tests).
 - `npm run build` with the budget check: passed, 444,245 bytes raw / 136,427 gzip (unchanged: the change is CSS only).
 
+
+## Round 3: review 1's findings and GM's ruling on them
+
+Review 1 (two lenses) found one MEDIUM, four LOWs and NITs. GM ruled on the questions (2026-11-01): yes to the short-window floor and to Fit clearing the control bar, keep the panel under at every width up to 760, no objection to the jitter and landing fixes, and "fitted means the camera is on the fit of the current layout, however it got there".
+
+### MEDIUM-1: closing the Board view keeps the person's camera (BoardCanvas)
+
+- **What was wrong.** React Flow's StoreUpdater (a child of the board) resets React Flow's store to the camera (0, 0, 1) in a layout cleanup. The board's own unmount keep ran in a passive cleanup, after that, so a close within 150 ms of a scroll pan (or during a drag) wrote (0, 0, 1). Main already lost the camera the same way through React Flow's late move end (its 150 ms timer outlives the view); round 1 added the immediate path.
+- **The fix.** The keep is a `useLayoutEffect` cleanup in BoardFlow. A parent's layout cleanup runs before its child's, so it runs before the reset; it writes `seen` (this view's own record of the camera), fitted when `seen` is on the fit. The cleanup also stops a running spring, so no frame moves a camera React Flow has reset. A `closed` ref then makes `keepCamera` and `outsideMove` do nothing, so React Flow's late move end keeps nothing. Started from the reviewer's diff; the spring stop and the `outsideMove` guard are added.
+- **Tests on React Flow's real store** (`BoardCanvas.unmount.test.tsx`, real `ReactFlowProvider`, real d3): closed mid scroll pan, the pan is kept right away and still 400 ms later; closed at rest, the fit is kept and the close writes nothing; reopened after a close mid pan, it opens where the person left it. 4 of its 6 tests fail on f247dc94; the "at rest" one also fails there, through main's late move end. The fitFollow stand-in now says at its top that its store never resets and its `setViewport` runs no move-end timer (review NIT-5).
+
+### LOW-1 (fit): a press that jitters within the click distance is a click
+
+- d3 puts the pressed board point back under the pointer on every mousemove, even 1 px of jitter. During a refit spring that moved the camera back toward where it was at the press, and the move stopped the spring.
+- **The board's click distance (GM).** React Flow's `paneClickDistance` default, 1 px, now passed to React Flow explicitly as `PANE_CLICK_DISTANCE` so both use the same number. (d3's own click distance is Infinity here, because React Flow sets it so when `selectionOnDrag` is on, which the board's interaction props turn on.)
+- **How.** `onMoveStart` records a press (d3's `mousedown` source event and its pointer). In `outsideMove`, a camera change from a `mousemove` within 1 px of the press (`dx² + dy² <= 1`, d3's own comparison) is put straight back to `seen` (before the frame paints), and the spring carries on. Once the pointer passes 1 px it is a drag for the rest of the gesture. `onMoveEnd` clears the press.
+- **Tests.** Stand-in: 1 px and an exact-1 px jitter mid-refit keep the spring's camera, and the refit lands on the fit and stays fitted; just over 1 px stops the spring and unfits, and coming back inside 1 px later in the same drag is still the drag; jitter at rest leaves the camera and the fitted flag. Real d3 (`BoardCanvas.unmount.test.tsx`): a middle press with 1 px of jitter moves nothing and leaves the board fitted; a 40 px middle drag pans and is kept.
+
+### GM rule 5: fitted means the camera is on the fit of the layout the board has now (boardFitFollow)
+
+- `boardFitFollow` no longer keeps a target. It takes `fitFor(width, height)`: the whole-board fit of the cards there are now, in a column that size, inside the view insets (null with no cards). Fitted is "a spring is heading to the fit, or `sameCamera(camera, fitFor(column))`".
+- **A resize** asks about the column *before* it: the refit frame judges the camera against the fit of the size it had when the frame was scheduled, then springs to the new column's fit. Several resizes in one frame are still one refit.
+- **A spring that lands on the fit is a fit** (GM 4, review LOW-2): `springTo` asks `follow.onFit(to)`; if the spring is going onto the fit (Fit, a refit, a zoom back out, a Show of every card) it is heading to the fit, so a resize while it runs refits it to the new column.
+- **Covered by the same rule:** a Show of every card after a resize while not fitted lands on the new column's fit and is fitted (review NIT-1); zooming back onto the fit is fitted (the round-1 ruling).
+- **Tolerance (GM):** 0.5 px in x and y, and 0.001 of zoom, absolute (it was 5e-4 relative). Tests at both edges: 0.5 px and 0.0009 zoom off are fitted, 0.51 px and 0.0011 are not, in the follower unit tests and through the board (an autopan that lands there, then a resize).
+- **A consequence to know.** Cards are part of the layout: a card added or moved while fitted leaves the camera off the new fit, so the board is no longer fitted, and a later resize keeps the view. Before, the old target still counted.
+
+### GM 1: a short window and the view insets
+
+- **The board keeps 300 px.** The root holds `--mb-board-min-h: 300px`. The board's row is `minmax(var(--mb-board-min-h), 1fr)` and the panel's row (`under`) is `minmax(0, auto)`, in both templates. The panel keeps its 40vh cap but gives way below it: grid sizing grows the `under` row up to its content (capped at 40vh) only while the board keeps 300, and the board takes the rest. Live: at 700x640 the board is 300 and the panel 127 (it scrolls); at 969x640, 300 and 255; at 700x900 (no squeeze) 305 and 360, as before.
+- **Read as**: "the panel gives up its 40vh cap" means it yields below 40vh to keep the board's 300, not that it grows past 40vh in a tall window (that would shrink the board to 300 at every folded width). If GM meant the other, the change is the panel's `max-height` in the fold rule.
+- **Below 535 px tall at 760 and under** (toolbar 85 + rail up to 150 + 300) the panel's row is 0 and the studio clips; the desktop app's minimum window is 680 tall.
+- **View insets (`lib/boardViewInsets.ts`).** One small module: `ViewInsets`, `measureBoardViewInsets(board, bar)`, `insideInsets(width, height, insets)`, and `BOARD_BAR_BAND_PX` / `BOARD_FALLBACK_INSETS`. The control bar's band (the full width of the board from the bar's top down) is outside: measured from the bar live (53 px in both skins: a 38 px bar 15 px above the edge), 53 when there's no layout to measure. Nothing at the top is inset (the notices come and go).
+- **Fit and Show use it** (`frame()` in BoardCanvas): the cards are framed in the column above the band, so the fitted bottom row ends above the bar. The last measured insets are kept for a moment with no layout (the view closing).
+- **Which side I built:** #213's side, the module and Fit/Show. #210's placement helper ("fully in view" for paste, drop and Add images) isn't merged, so it isn't wired; it can import `measureBoardViewInsets` and `insideInsets` (or read the same band) in place of its own `viewRect()` bar test. Both PRs add a `controlsRef` on the control bar's Panel, so whichever lands second merges those into one.
+- **Tests.** Stand-in: the fit is centred in the column above the band, and in a short column the bottom row ends within the fit's padding above it. Live: at every width and both heights, the lowest card's bottom is above the bar's top (e.g. 700x640: 447 vs 460; 969x640: 319 vs 332).
+
+### GM 2: the panel stays under at every width up to 760
+
+As built: one fold at a time (review NIT-1 and NIT-2 closed as designed). The rail fold stays a window `@media` query, which is the studio's width while the root is `position: fixed; inset: 0`; the CSS comment says so.
+
+### Layout LOW-1: the row sizes and the panel's box
+
+- studioGridAreas pins the rows at every width (`auto auto minmax(var(--mb-board-min-h), 1fr) minmax(0, auto)` above 760, with `auto` for the rail row at and under it), the min-height token, and that the board's row and `under` are the rows those sizes are on.
+- The panel's `box-sizing` is pinned as `border-box` wherever its width is the token. **The reviewer's A1 doesn't hold in the app:** `App.css` starts with `*, *::before, *::after { box-sizing: border-box }`, so deleting the panel's own line changes nothing (the mutant survives, correctly; the test checks the value the panel ends up with).
+
+### NITs
+
+- **NIT-3 (Slava's folded rail edge):** the 760 rule now has its Slava twin (`body.app-slava-restraint .moodboard-studio-view--board > .moodboard-studio-view__rail`), so the folded board rail's edge comes from the Board's rule in both skins; a test checks the winning declaration's selector and sheet.
+- **NIT-4 (panel scroll across 970) and NIT-5 (tab stop):** `hooks/useScrollPanel.ts`. While the panel's content overflows it is a tab stop (tabIndex 0); its scroll position is kept when the person scrolls, and put back when it scrolls again after a size where nothing overflowed (the browser's own drop to 0 isn't kept). It watches the panel's size and its content. The panel's `:focus-visible` ring is the token, drawn 2 px inside its edge because the studio clips at its own. Live (one reference selected, 900 tall): scrolled to 120 at 969; at 970 nothing overflows, scroll 0, no tab stop; back at 969, 120. Tab from Add images reaches the panel. With the board's own fields the panel still overflows beside the board at 970x900, so there it simply keeps its scroll.
+- **NIT-6 (cut title):** `hooks/useTextCut.ts`: the studio title in WorkspaceHeader gets `title` with its text only while it is cut (`scrollWidth > clientWidth`, measured on resize and when the text changes). No studio title is cut at 700 today; live checks show no tooltip at 970, 969, 1000, 1100 and 700.
+- **Test gaps from review 1:** F1 (a zoom-only pinch stops a spring), F3 (a 0.3 px pan stops it), G4 (on the fit by exact equality) and G11 (a camera remade under an unkept pan is kept at once) each have a test now; F9 is the follower's "no cards: nothing is on the fit"; F12 is killed by the real-store "closing at rest writes nothing".
+
+### Mutants (round 3)
+
+44 mutants (`scratchpad/boardnarrow/mutate3.py`, logs `mut3.log`): 41 killed, 3 survived, all three equivalent.
+
+| Mutants | Killed by |
+|---|---|
+| B1 the keep back in a passive effect; B2 no `closed` guard; B3 no keep at close | the real-store close tests |
+| B5 keep at close whether or not a gesture is unkept (review F12) | "closed at rest writes nothing" (real store) |
+| B6 jitter counted as a move; B7 `<` for `<=`; B8 a far press never far; B9 click distance 2; B10 `paneClickDistance` not passed; B16 a press taken from the camera's own moves | the jitter tests (stand-in and real d3) |
+| B12 a spring landing on the fit isn't heading to it; B15 its store flag false | the zoom-out and Show tests with a resize mid-spring (made to judge a mid-spring camera: before, the spring could land first), the zoom-button tests |
+| B13 Fit without the insets; B14 Show without them | the fitted-camera tests, the band test, the Show tests |
+| F1 a resize judged on the new column; F2 zoom tolerance relative; F3 zoom tolerance 5e-4; F4 `<` for `<=`; F5 no cards counts as on the fit (review F9); F6 a same-size resize refits; F7 the open fit skipped on a same size; F8 `aside()` keeps heading | the follower unit tests and the rounding-edge tests |
+| Review's F1, F3, G4, G11 rerun on this code | the new F1, F3, rounding-edge and camera-remade tests |
+| C1-C5 the row sizes; C7 a 250 px floor | the row tests |
+| C8 no Slava twin on the folded rail; C9, C10 the panel's ring removed or outside its edge | the rail-edge and panel-ring tests, the focus ring sweep |
+| H1-H4 the panel's scroll keep and tab stop; H5, H6 the title tooltip | the hook tests (rendered through BoardSidePanel and WorkspaceHeader) |
+
+Survivors, each equivalent:
+- **B4** the close keep reads React Flow's store instead of `seen`: in the parent's layout cleanup the store hasn't been reset yet, and `seen` equals it after any outside move.
+- **B11** the press isn't cleared at move end: the next d3 gesture's `onMoveStart` replaces it, and only d3 gestures report a `mousemove`.
+- **C6** no `box-sizing` on the panel: `App.css`'s universal border-box gives the same box (the reviewer's A1).
+
+### Live (8794/5794, serve_isolated.py, canary first)
+
+92/92 checks (`scratchpad/boardnarrow/live3.mjs`): Board at 970, 969, 1000, 1100 and 700 (900 tall), and 700, 969 and 1100 at 640 tall, under Slava, plus no skin at 970, 969 and 700x640. Each: the layout as ruled, the board at least 300 tall, all cards inside the column and above the control bar's band, Fit moves nothing. Then: a fitted board across 1100 -> 970 -> 969 -> 700 -> 1100 stays fitted; a middle press with 1 px of jitter during a refit lands on the fit, and a 40 px middle drag is a pan kept through a resize; zoom in, then out onto the fit with a resize mid-spring follows the resize; List within 150 ms of a scroll pan and back to Board opens on the pan; the panel scroll, tab stop and ring as above; no request left the two ports, and blocked.log holds only the canary. 11 shots in `scratchpad/boardnarrow/shots3/` (md5: no duplicates), each opened.
+
+### Gates (round 3)
+
+- `tsc -b --noEmit`: clean. `npm run lint` (inline styles, Slava scope, eslint): clean.
+- Focused vitest, `--maxWorkers=2`, from a non-empty zsh array (round 2's set plus the three new test files): 113 files, 1,478 tests passed, 2 timed out under a load average of about 26: `agentPresenceFollowups.ratchet` (its 120 s limit) and `modalStyles.round11` (5 s). Both were in round 2's set and passed then, and both pass rerun alone (2 files, 54 tests).
+- `npm run build` with the budget check: passed, 444,562 bytes raw / 136,500 gzip (+317 raw: the title hook in WorkspaceHeader).
