@@ -27,16 +27,18 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   // Just filled a placeholder: the board's spring brings it in (BoardCanvas
   // writes each frame). Drawn afresh mid-fade, it starts where the spring is;
   // once the fill is over the opacity is the stylesheet's again.
+  // Keyed by the new image's id, not its file (review 4, MEDIUM-1): an older
+  // tile showing the same file is never hidden or faded.
   const fill = useContext(BoardFillContext);
-  const filling = fill.has(data.url);
+  const filling = data.filling === true;
   const cardRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const card = cardRef.current;
-    if (card) card.style.opacity = filling ? String(fill.progress(data.url)) : '';
-  }, [fill, filling, data.url]);
+    if (card) card.style.opacity = filling ? String(fill.progress(data.imageId)) : '';
+  }, [fill, filling, data.imageId]);
   return (
     <div ref={cardRef} className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId}
-      data-fill-url={filling ? data.url : undefined}>
+      data-fill-id={filling ? data.imageId : undefined}>
       {src === null ? (
         <div className="moodboard-card__placeholder">{view.outside && <OutsideImageNote />}</div>
       ) : <img

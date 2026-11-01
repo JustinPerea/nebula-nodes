@@ -71,7 +71,7 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
 
 **Exact placement on any board (review 2 M1).** Round 2 took candidate edges only from the 60 tiles nearest the wish. On a big irregular board the edges around the real gap in view belonged to other tiles, so a paste went outside with the chip although the view had room. Now the search reads rows. Each tile rules out an open rectangle of top-lefts (its box grown by the gap and the new tile's size). The nearest allowed point has its y on the wish's row or a rectangle's top or bottom, clamped into the view. On that row, its x is the wish's own or a side of the merged ruled-out span the wish falls in. Rows are tried nearest first and the search stops once a row is farther than the best spot. Only the rectangles over a row are read, found by binary search on y.
 - It is exact: a brute force over every whole pixel agrees on 40 random boards, in view and anywhere. Both of review 2's repros are tests (231 irregular tiles; a packed board whose only room is one 600 x 600 gap).
-- Speed, measured with `performance.now` on this Mac (scratchpad `timing.txt`): the worst 500-tile board (jittered, no room in view) takes 17 ms for five files and about 3.3 ms for one. A packed grid takes 2.7 ms for five, and open boards take 1.6 to 2.1 ms. The test pins a work counter (rows plus spans read): 265,103 for that worst case, under a bound of 300,000. A board with room near the pointer reads fewer than 50.
+- Speed, measured with `performance.now` on this Mac (scratchpad `timing.txt`): the worst 500-tile board (jittered, no room in view) takes 17 ms for five files and about 3.3 ms for one. A packed grid takes 2.7 ms for five, and open boards take 1.6 to 2.1 ms. Round 3's test pinned a work counter (rows plus spans read) at 265,103 for that worst case. That counter and its 300,000 bound are gone: round 4 counts every block read, and round 5 adds building the grid (see Round 5 for today's bounds). A board with room near the pointer reads fewer than 50.
 - The view's edges need no candidates of their own: when the bound is what stops the point, the wish lies past it, and the clamped wish is that edge. That makes review 2's R9 moot. The far-right fallback is gone (R7): the row search always finds a spot when nothing bounds it.
 
 **One "in view" (review 2 M2, L4; GM r4 answer 2).** The chip judges "in view" with placement's own rect: `BoardCanvas` hands it `viewRect`, a live getter for the pane less the 16 px inset and less everything below the toolbar's top. A tile partly under the toolbar keeps the chip.
@@ -151,6 +151,80 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
   - NIT-5 (the placeholder too faint) is GM r5's new look.
   - Three of review 3's surviving mutants are equivalent: two in the span merge (as review 3 found), and the dropped `isCurrent()` before the commit (`commitOps` checks it itself).
 
+## Round 5 (review 4, GM r6)
+
+**Focus on a tile being replaced (HIGH-1, MEDIUM-2, GM r6 answer 2).** React Flow adds and drops node elements a commit after the board's own effects, so focus on a placeholder or a provisional card fell to the page body when the element went. `BoardCanvas` now hands focus on (`handOff`):
+- Focus on a filled placeholder, or on a provisional card, moves to its image's card as soon as that card is drawn. A saved card is preferred, and a saved card that has focus keeps it.
+- If the focused tile's element goes first, focus waits on the board, never the body, and moves to the card when it is drawn. The wait lasts at most 2 s.
+- The tile's image is read from the board as it is when it goes, so a placeholder that is filled in the same commit that drops its element still counts.
+- Focus anywhere else stays where the person put it. That includes a tile they had left and a click on nothing.
+- GM's rule: no late move. Focus on the placeholder moves to the card however long the upload took, past the 10 s follow too. Focus elsewhere is never pulled.
+- It runs from a layout effect on the board's nodes, a MutationObserver on the board's DOM, `focusin`, and a frame retry after a `focusout` to nowhere.
+- The 10 s follow lands on the card at the spot before the placeholder (NIT-2).
+
+**The chip leaving with focus on it (MEDIUM-3).** When the person's own pan or zoom brings the tiles into view, or the board loses its size, `OutsideChip` hands focus to the board in a layout effect, while the button is still on the page. It also renders one more commit while it holds focus, so focus is never left on a removed element. This covers both paths: in view, and no view.
+
+**Live, round 5** (scratchpad `paste/live5/drive5.mjs`):
+- Setup:
+  - The backend ran on 8797 through `serve_isolated.py`, with the person token on stdin. Its blocked log shows only canary lines and "canary ok".
+  - Vite ran on 5797 with #209's styles applied uncommitted and reverted afterwards.
+  - The browser blocked 8000-8010, 5173, 8840, 5840 and outside hosts, canary first. No request left the lane.
+  - The board is a 221-tile wall, 13 by 17. `activeElement` was sampled every frame, and every `focusout` to nowhere was logged.
+- Before (0979afd3), each repro reached BODY:
+  - Space on the chip during a held upload: placeholder, then `focusout->null`, then BODY.
+  - A provisional card under a held save: `new-…`, then BODY.
+  - An 11 s upload with focus on the placeholder: BODY at 14.9 s.
+  - A pan that clears the chip: CHIP, then BODY.
+- After, all 17 checks pass:
+  - Space on the chip during a held upload: placeholder, `new-…` card, saved card.
+  - A provisional card under a held save: saved card.
+  - An 11 s upload: the card, with no BODY.
+  - Focus moved to Zoom out during a 10 s upload: it stayed there, with one log entry.
+  - A pan that clears the chip: CHIP, then BOARD.
+
+**Fill keyed by image id (MEDIUM-1/4, GM r6 answer 3).** The Studio makes the new image's id before it commits (`createDraftImage(url).id`). The holder is marked `filled: {imageId, url}`, and the card carries `data-fill-id` only while it fills. `BoardFillContext` is now just `{progress(imageId)}`. Each card's node gets `data.filling`, so a fill re-renders only the filling card's node (LOW-5).
+
+The fade waits until the card's image has decoded, and never more than 1.5 s (NIT-3). An older tile showing the same url never blinks. The fade's cancel stops both the decode wait and the spring.
+
+**Placement (LOW-1).**
+- Blocks over 64 cells are filed in row bands. A band is a quarter of the big blocks' median height (or a cell row, if that is taller). So a row reads its band once, instead of every big block on each step.
+- The work counter now also counts building the grid (`built`).
+- Review 4's shapes:
+  - The bimodal board at 2,000 tiles went from 172M reads to 353k (about 9 ms).
+  - The collage reads 3.57M, plus 121k built.
+  - The pile reads 2.42M.
+- Bounds (`cells + built`):
+  - Review 3's four shapes: 450,000 at 500 tiles and 2,600,000 at 2,000.
+  - Review 4's bimodal and collage: 80,000 and 950,000 at 500 tiles, and 600,000 and 4,000,000 at 2,000.
+- A four-sided edge test kills X3, X4 and X8. A 100 by 100 tile, with a 50 by 50 file wished one pixel inside either end, lands at 124 or -74, in x and in y.
+
+**A spot the board took (LOW-2, LOW-3).**
+- The batch's spots that are still free keep their place and are counted first. Only the spots now on a tile move, each to the nearest free spot in the paste-time view, so a moved spot never pushes a sibling.
+- The chip follows the moved spots (LOW-3). A spot that moved out of view joins the chip, or starts one. A spot that moved into view leaves it.
+
+**An add whose person left the board (GM r6): it lands.** Held spots and List rows now live per board in a module store (`boardAdds.ts`), not in the open Studio. So they outlive a board switch and the Studio closing: placement still counts them, and they show again if the person comes back while the upload runs. The open Studio registers its board.
+
+When the upload finishes:
+- **If the add's board is open** (the same visit or a later one), the add lands as that board's own step, with its Undo and the fade.
+- **If not, and the board is saved,** it goes as a checked edit with no base version (`editMoodboard(id, ops)`), so it lands on the board as it is now. If that board's draft is loaded, clean and not saving, the draft is updated too; otherwise the next open's follow reads it.
+- **If not, and the board is unsaved,** the add is queued in its draft, as an edit made there.
+
+Either way it is placed at the spot it held, as if the person had stayed. It is never written to the board open now. Live, a paste with its upload held, then a switch to another board in the app, landed at the held spot (2790, -318) on its own board, and the open board was untouched. A second add, then leaving Moodboard Studio for the canvas, landed too.
+
+The cost: an add that lands while the person is away has no Undo step, because the step belongs to the visit that's gone. The fallback line wasn't needed.
+
+**Toolbar and List (GM carry-over).** "Add images" stays live and the "Uploading" status is gone, in Board and in List. Adds at once go through placement and the backstop. Concurrent paste, drop and Add images each hold their own spots, and a repeat file is caught. In List, each uploading file is a row of its own: `role="status"`, `aria-busy`, "river.png, uploading". The row shows its placeholder thumb with the file's name and the row's "Uploading" state. A Board paste shows as a List row while it uploads. See the shots in scratchpad `paste/shots5/`.
+
+**Mutants.**
+- Focus: F1-F13 and C1-C3.
+- Fill keying: K1-K7.
+- Bands: P1-P3.
+- Moves: S1-S3.
+- Review 4's survivors: X3, X4, X7, X8, X9, X10, X11, X13, X19 and X21.
+- Each of these fails at least one test now. For each one that survived the first pass, a test was added: the successor without a stop on the board, the park expiring, a card drawn by React Flow alone, no MutationObserver, focus moved off the tile, the follow onto the card, the chip with a slow parent, a placeholder filled as it went, two moved spots, a no-url file, a tile within the gap, another add's spot, the paste-time view, and a second fade.
+
+**For #213 (view insets).** Placement reads the view only through `BoardCanvas.viewRect()` (`VIEW_INSET` = 16 px plus the toolbar). That one rect reaches three places: the first placement (`placeTiles` in `addFiles`), the move of a spot the board took (the same `target.view`), and the chip (`viewOf={viewRect}`, and `followMovedSpots`). Whichever of #210 and #213 lands second points `viewRect` at the shared insets.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -163,6 +237,7 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
 - `frontend/src/styles/moodboard-board.css`: the chip, the placeholder tile, the board's focus ring.
 - Round 4: `boardPlaceholder.ts` (new, with a test), `boardNodes.ts` (`BoardFillContext`), `BoardCardNode.tsx`, `lib/viewportSpring.ts` (`springProgress`, with a new test), `BoardUndoToast.tsx`.
 - `frontend/tests/focusRingCss.test.ts`: the placeholder's ring is listed with the card's.
+- Round 5: `boardAdds.ts` (new: adds held per board, the open board), `MoodboardListView.tsx` (uploading rows), `OutsideChip.tsx`, `styles/moodboard-studio.css` (the uploading row).
 
 ## Docs
 

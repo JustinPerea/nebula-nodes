@@ -10,10 +10,20 @@ export type PlaceholderSource =
   | { kind: 'file'; name: string }
   | { kind: 'link'; host: string };
 
+/** The image that has just taken a held spot: its new image's id (what the
+ *  fill is keyed by, so another tile showing the same file is never touched,
+ *  review 4 MEDIUM-1) and its file. */
+export interface PlaceholderFill {
+  imageId: string;
+  url: string;
+}
+
 /** A spot held on the board: where it sits and its size, in board pixels.
- *  Drawn, counted by placement, never moved or saved. `filled` is the image
- *  that has just taken the spot: it fades in over the placeholder on the
- *  board's spring, and the placeholder goes once it has. */
+ *  Drawn, counted by placement, never saved. `filled` is the image that has
+ *  just taken the spot: it fades in over the placeholder on the board's
+ *  spring, and the placeholder goes once it has. `listOnly` is a file added
+ *  from the List view, which holds no spot: only the List draws it, as an
+ *  uploading row. */
 export interface BoardPlaceholder {
   id: string;
   x: number;
@@ -21,7 +31,8 @@ export interface BoardPlaceholder {
   width: number;
   height: number;
   source: PlaceholderSource;
-  filled?: string;
+  filled?: PlaceholderFill;
+  listOnly?: boolean;
 }
 
 /** The most characters (grapheme clusters) a label shows before its ellipsis. */

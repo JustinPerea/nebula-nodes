@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
@@ -27,7 +27,8 @@ import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
 import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
-import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors } from '../../types';
+import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors,
+  MoodboardPlacement } from '../../types';
 import { BriefFields, BriefPanel, type ColorChoice } from './MoodboardBrief';
 import { BoardSwatches, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
@@ -45,7 +46,7 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
 import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
-import { placeTiles, spotFree } from '../../lib/boardPlacement';
+import { insideView, placeTiles, spotFree } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
 import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
@@ -53,6 +54,8 @@ import { BoardSidePanel } from './BoardSidePanel';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
+import { boardImages, changeHeld, clearOpenBoard, heldOn, nextHolderId, openBoardFor, releaseFilled, releaseHeld, setOpenBoard, useBoardAddStore,
+  type OpenBoard } from './boardAdds';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
@@ -178,6 +181,39 @@ function trimmedName<D extends Partial<Record<BoardFieldKey, unknown>>>(fields: 
   return typeof fields.name === 'string' ? { ...fields, name: fields.name.trim() } : fields;
 }
 
+/**
+ * An add whose person left its board while it uploaded (GM on review 4: it's
+ * their paste, so it isn't dropped). It lands on that board, never the one
+ * open now, written through the draft store:
+ * - a saved board: the add goes to the server as an edit of that board (no
+ *   base version, so it lands on the board as it is now, at the spot it
+ *   held). If its draft holds nothing unsent, the draft takes the saved
+ *   board at once; otherwise the next open reads it (follow), as any outside
+ *   edit;
+ * - a board not saved yet: the add waits in its draft, which is saved with it.
+ * There's no undo step: the board's undo history went when the person left it.
+ */
+async function landElsewhere(boardKey: string, ops: MoodboardOp[], aspects: Record<string, number>): Promise<void> {
+  const store = useAssetStudioDraftStore.getState();
+  const key = resolveAssetStudioDraftKey(store, boardKey);
+  const entry = store.entries[key];
+  if (entry?.savedId) {
+    const edited = await editMoodboard(entry.savedId, sendableBatch(ops));
+    const now = useAssetStudioDraftStore.getState().entries[key];
+    if (now?.loaded && !now.dirty && !now.pendingSaveId) {
+      store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), edited.board), thumbnail: edited.board.thumbnail });
+    }
+    return;
+  }
+  if (!entry) return;
+  store.edit(key, (draft) => {
+    const current = draft as MoodboardDraft;
+    const images = applyOps(current.images, ops, { aspects });
+    return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+      pendingOps: queueOps(current.pendingOps, ops) };
+  });
+}
+
 /** A new board's first save: everything but the checked-edit bookkeeping. */
 function createBody(draft: MoodboardDraft) {
   const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim(), images: provisionalForCreate(draft.images) };
@@ -262,31 +298,22 @@ export function MoodboardStudioView() {
   const nextRedoId = useBoardUndoStore((state) => state.history(key, epoch).undone.at(-1)?.id ?? null);
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
-  const [uploading, setUploading] = useState(false);
   // Tiles the last add placed outside the view: the board's edge chip (GM, #210).
   const [outsideTiles, setOutsideTiles] = useState<OutsideTiles | null>(null);
   const outsideSeq = useRef(0);
   const dismissOutside = useCallback(() => setOutsideTiles(null), []);
-  // Placeholder tiles (GM r4 answer 1): each added file's spot, held from the
-  // moment it is placed until its upload fills it (or fails and it goes).
-  const [placeholders, setPlaceholders] = useState<BoardPlaceholder[]>([]);
-  const placeholdersRef = useRef<BoardPlaceholder[]>([]);
-  const placeholderSeq = useRef(0);
-  const changePlaceholders = (change: (current: BoardPlaceholder[]) => BoardPlaceholder[]) => {
-    placeholdersRef.current = change(placeholdersRef.current);
-    setPlaceholders(placeholdersRef.current);
-  };
-  // Each time a board is opened (its key comes, even back to the same one):
-  // an add started on an earlier visit lost its placeholders when the board
-  // went, so it gives up rather than land on a spot nothing holds (review 3, LOW-3).
-  const boardVisit = useRef(0);
-  useEffect(() => { boardVisit.current += 1; placeholdersRef.current = []; setPlaceholders([]); }, [key]);
+  // Placeholder tiles (GM r4 answer 1): each added file's spot (or, added
+  // from the List, its row), held from the moment it is placed until its
+  // upload fills it (or fails and it goes). Kept per board outside the Studio
+  // (boardAdds.ts), so an add outlives leaving the board and still lands on it.
+  const heldAll = useBoardAddStore((state) => state.held);
+  const aliases = useAssetStudioDraftStore((state) => state.aliases);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- aliases change which keys name this board
+  const placeholders = useMemo(() => heldOn(heldAll, key), [heldAll, key, aliases]);
+  // The List shows each file still uploading as its own row (GM): a filled one is its image's row already.
+  const listUploads = useMemo(() => placeholders.filter((holder) => !holder.filled), [placeholders]);
   /** Filled placeholders whose image has faded in (or ran out of time): gone. */
-  const dropFilled = useCallback((ids: string[]) => {
-    const gone = new Set(ids);
-    placeholdersRef.current = placeholdersRef.current.filter((holder) => !(gone.has(holder.id) && holder.filled));
-    setPlaceholders(placeholdersRef.current);
-  }, []);
+  const dropFilled = useCallback((ids: string[]) => { releaseFilled(ids); }, []);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
   // The saved override comes with it, so Studio can say who wrote it.
@@ -374,10 +401,6 @@ export function MoodboardStudioView() {
   useEffect(() => () => { useBoardUndoStore.getState().clear(key); fieldSteps.reset(); }, [key, epoch, fieldSteps]);
   // A drag, a drop or a removal goes at once, not 600 ms later.
   const urgent = useRef(false);
-
-  useEffect(() => {
-    setUploading(false);
-  }, [key, epoch]);
 
   // A load-failure notice ("Moodboard not found…") is hidden while Nebula is
   // offline, and the board is checked again on reconnect (GM, PR #198 r2): a
@@ -697,13 +720,6 @@ export function MoodboardStudioView() {
   };
   const numberOf = (images: MoodboardImage[], id: string) => images.findIndex((image) => image.id === id) + 1;
 
-  const addImageUrls = (urls: string[]) => {
-    if (urls.length === 0 || !isCurrent()) return;
-    const add: MoodboardOp = { op: 'add', images: urls.map(createDraftImage).map(({ id, url }) => ({ id, url })) };
-    const count = (draftNow()?.images ?? draft.images).length;
-    commitOps([add], urls.length === 1 ? `Added #${count + 1}` : `Added ${urls.length} references`);
-  };
-
   const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -712,63 +728,76 @@ export function MoodboardStudioView() {
       .then((data: { url: string }) => data.url);
   }));
 
-  const handleFiles = (files: FileList | File[] | null): Promise<void> => {
-    if (!files || files.length === 0) return Promise.resolve();
-    setUploading(true);
-    return uploadFiles(Array.from(files))
-      .then((urls) => addImageUrls(urls.filter(Boolean)))
-      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
-      .finally(() => { if (isCurrent()) setUploading(false); });
-  };
+  // The open board takes an add as its own step (its undo), whichever add
+  // started it: one on this visit, or one started before the person left and
+  // came back (boardAdds.ts).
+  const landHere = useRef<OpenBoard['commit']>(() => false);
+  useLayoutEffect(() => {
+    landHere.current = (ops, label, aspects, now) => {
+      if (!isCurrent()) return false;
+      commitOps(ops, label, { now, aspects });
+      return true;
+    };
+  });
+  useLayoutEffect(() => {
+    if (!loaded) return undefined;
+    const board: OpenBoard = { key, commit: (ops, label, aspects, now) => landHere.current(ops, label, aspects, now) };
+    setOpenBoard(board);
+    return () => clearOpenBoard(board);
+  }, [loaded, key]);
 
-  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
-    handleFiles(files);
-  };
-
-  /** Files dropped, added or pasted on the Board view, sized from their
-   *  aspect and placed by lib/boardPlacement (one helper for all three, GM's
-   *  #210 rulings): never on top of a tile, in view when there's room, else
-   *  just outside it with the edge chip. Placed in the view the person had
-   *  when they added them (GM r4 answer 1): a placeholder tile holds each
-   *  spot at once, while the upload runs, and the upload fills it where it
-   *  sits, as one step sent at once. A failed upload takes its placeholders
-   *  (and their chip) away. */
-  const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
-    if (files.length === 0 || !isCurrent()) return Promise.resolve();
-    // Still the board, on the same visit, that the add started on.
-    const visit = boardVisit.current;
-    const here = () => isCurrent() && boardVisit.current === visit;
+  /** Files added to the board: pasted, dropped or picked with Add images, in
+   *  Board or List. On the Board they are sized from their aspect and placed
+   *  by lib/boardPlacement (one helper for all three, GM's #210 rulings):
+   *  never on top of a tile, in view when there's room, else just outside it
+   *  with the edge chip, in the view the person had when they added them (GM
+   *  r4 answer 1). A placeholder tile holds each spot at once while the
+   *  upload runs, and the upload fills it where it sits, as one step sent at
+   *  once. From the List (`target` null) each file is an uploading row, and
+   *  the images go at the end of the board, as Add Images always put them.
+   *  A failed upload takes its placeholders (and their chip) away.
+   *
+   *  The add belongs to its board, not to the view (GM on review 4): if the
+   *  person leaves the board while it uploads (another board, or out of the
+   *  Studio), it still lands on that board, placed as if they had stayed,
+   *  and written through the draft store, never to the board open now. */
+  const addFiles = (files: File[], target: BoardTarget | null): Promise<void> => {
+    if (files.length === 0) return Promise.resolve();
+    // The board the add was made on, for good.
+    const boardKey = key;
+    // Still this Studio on that board (the chip and the toast are this view's).
+    const here = () => isCurrent() && openBoardFor(boardKey) !== null;
     // Each new add replaces the last one's chip.
-    setOutsideTiles(null);
-    setUploading(true);
+    if (target) setOutsideTiles(null);
     const uploads = uploadFiles(files);
     // Read once the spots are held; until then a refusal waits here.
     uploads.catch(() => {});
     let held: BoardPlaceholder[] = [];
     let chip: number | null = null;
     const release = () => {
-      const ids = new Set(held.map((holder) => holder.id));
-      if (ids.size) changePlaceholders((current) => current.filter((holder) => !ids.has(holder.id)));
+      releaseHeld(held.map((holder) => holder.id));
       held = [];
     };
+    const rectOf = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
     return Promise.all(files.map((file) => readImageAspect(file)))
       .then(async (aspects) => {
-        if (!here()) return;
         const sizes = aspects.map((aspect) => sizeFor(1, aspect));
-        // The board's tiles and the spots earlier adds still hold.
-        const occupied = [...(draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
-          .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h }))), ...placeholdersRef.current];
-        const { spots, outside } = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
-        held = spots.map((spot, index) => {
-          placeholderSeq.current += 1;
-          return { id: `placeholder-${placeholderSeq.current}`, ...spot, width: sizes[index][0], height: sizes[index][1],
-            source: { kind: 'file' as const, name: files[index].name } };
-        });
+        let outside: number[] = [];
+        if (target) {
+          // The board's tiles and the spots earlier adds still hold.
+          const occupied = [...boardImages(boardKey).flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, boardKey).filter((holder) => !holder.listOnly)];
+          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
+          outside = placed.outside;
+          held = placed.spots.map((spot, index) => ({ id: nextHolderId(), ...spot, width: sizes[index][0], height: sizes[index][1],
+            source: { kind: 'file' as const, name: files[index].name } }));
+        } else {
+          held = files.map((file) => ({ id: nextHolderId(), x: 0, y: 0, width: 0, height: 0, listOnly: true,
+            source: { kind: 'file' as const, name: file.name } }));
+        }
         const holders = held;
-        changePlaceholders((current) => [...current, ...holders]);
-        if (outside.length > 0) {
+        changeHeld(boardKey, (current) => [...current, ...holders]);
+        if (outside.length > 0 && here()) {
           outsideSeq.current += 1;
           chip = outsideSeq.current;
           setOutsideTiles({ id: chip, thumb: null,
@@ -784,54 +813,116 @@ export function MoodboardStudioView() {
           release();
           throw err;
         }
-        if (!here()) { release(); return; }
-        // The board may have changed under a held spot meanwhile (an Undo, an
-        // agent's add, a drag): a spot now on a tile moves to the nearest
-        // free one, in the view the person had (review 3, LOW-2).
         const batch = new Set(holders.map((holder) => holder.id));
-        const taken: Array<{ x: number; y: number; width: number; height: number }> = [
-          ...(draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
-            .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h }))),
-          ...placeholdersRef.current.filter((holder) => !batch.has(holder.id))];
+        // A file the server gave no image for holds nothing from here on.
+        const live = holders.map((_, index) => Boolean(urls[index]));
+        // The board may have changed under a held spot meanwhile (an Undo, an
+        // agent's add, a drag): a spot now on a tile moves to the nearest free
+        // one, in the view the person had (review 3, LOW-2; GM: move). The
+        // batch's spots still free keep theirs and are counted first, so a
+        // moved one never pushes a sibling off a spot the board left alone
+        // (review 4, LOW-2).
         const moved = new Map<string, { x: number; y: number }>();
-        holders.forEach((holder, index) => {
-          if (!urls[index]) return;
-          let rect = { x: holder.x, y: holder.y, width: holder.width, height: holder.height };
-          if (!spotFree(rect, taken)) {
+        if (target) {
+          const taken = [...boardImages(boardKey).flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, boardKey).filter((holder) => !batch.has(holder.id) && !holder.listOnly)];
+          const rect = (holder: BoardPlaceholder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height });
+          const blocked = holders.filter((holder, index) => live[index] && !spotFree(rect(holder), taken));
+          for (const holder of holders) if (live[holders.indexOf(holder)] && !blocked.includes(holder)) taken.push(rect(holder));
+          for (const holder of blocked) {
             const [spot] = placeTiles({ at: { x: holder.x + holder.width / 2, y: holder.y + holder.height / 2 },
               sizes: [[holder.width, holder.height]], occupied: taken, view: target.view }).spots;
-            rect = { ...rect, ...spot };
             moved.set(holder.id, spot);
+            taken.push({ ...rect(holder), ...spot });
           }
-          taken.push(rect);
-        });
-        const spotOf = (holder: BoardPlaceholder) => moved.get(holder.id) ?? { x: holder.x, y: holder.y };
-        const placed = urls.map((url, index) => ({ url, aspect: aspects[index], at: spotOf(holders[index]) }))
-          .filter((item) => item.url);
-        // Each uploaded image takes its spot: its placeholder stays under it
-        // while it fades in (the board drops it then, `dropFilled`); a spot
-        // with no image goes now.
-        const fills = new Map(holders.flatMap((holder, index) => (urls[index] ? [[holder.id, urls[index]] as const] : [])));
-        held = holders.filter((holder) => !fills.has(holder.id));
-        release();
-        if (fills.size) {
-          changePlaceholders((current) => current.map((holder) => (fills.has(holder.id)
-            ? { ...holder, ...spotOf(holder), filled: fills.get(holder.id) } : holder)));
-          // If no board is drawn to run the fade (List meanwhile), they go anyway.
-          window.setTimeout(() => dropFilled([...fills.keys()]), FILL_FALLBACK_MS);
         }
+        const spotOf = (holder: BoardPlaceholder) => moved.get(holder.id) ?? { x: holder.x, y: holder.y };
+        // The new images' ids, made here so the fill can be keyed by them (review 4, MEDIUM-1).
+        const placed = holders.flatMap((holder, index) => (live[index]
+          ? [{ holder, url: urls[index], aspect: aspects[index], imageId: createDraftImage(urls[index]).id, at: spotOf(holder) }] : []));
+        // A spot with no image goes now.
+        held = holders.filter((_, index) => !live[index]);
+        release();
+        held = placed.map((item) => item.holder);
         if (placed.length === 0) return;
-        const thumb = urls[outside[0]];
-        const shown = chip;
-        if (shown !== null && thumb) setOutsideTiles((current) => (current?.id === shown ? { ...current, thumb } : current));
-        const ops: MoodboardOp[] = placed.map((item) => ({
-          op: 'add', images: [{ id: createDraftImage(item.url).id, url: item.url }], at: item.at }));
-        const count = (draftNow()?.images ?? []).length;
-        commitOps(ops, placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`, {
-          now: true, aspects: Object.fromEntries(placed.map((item) => [item.url, item.aspect])) });
+        const ops: MoodboardOp[] = target
+          ? placed.map((item) => ({ op: 'add', images: [{ id: item.imageId, url: item.url }], at: item.at }))
+          : [{ op: 'add', images: placed.map((item) => ({ id: item.imageId, url: item.url })) }];
+        const count = boardImages(boardKey).length;
+        const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
+        // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
+        const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
+        const open = openBoardFor(boardKey);
+        if (open && target) {
+          // Each uploaded image takes its spot: its placeholder stays under it
+          // while it fades in (the board drops it then, `dropFilled`). If no
+          // board is drawn to run the fade (List meanwhile), it goes anyway.
+          const fills = new Map(placed.map((item) => [item.holder.id, item] as const));
+          changeHeld(boardKey, (current) => current.map((holder) => {
+            const item = fills.get(holder.id);
+            return item ? { ...holder, ...item.at, filled: { imageId: item.imageId, url: item.url } } : holder;
+          }));
+          window.setTimeout(() => releaseFilled([...fills.keys()]), FILL_FALLBACK_MS);
+        }
+        // A Board add is sent at once; a List add waits for the List's usual save.
+        if (open?.commit(ops, label, aspectsOf, Boolean(target))) {
+          // Rows (List) and spots that won't fade go now; filled spots wait for their fade.
+          if (!target) release(); else held = [];
+          if (target && here()) followMovedSpots(chip, holders, live, spotOf, target, urls[outside[0]] ?? null);
+          return;
+        }
+        // Not open here any more: it lands on its own board (GM on review 4).
+        release();
+        await landElsewhere(boardKey, ops, aspectsOf);
       })
-      .catch((err: unknown) => { if (isCurrent()) patch({ saveError: failureCopy(err, { heading: "Couldn't upload the image." }) }); })
-      .finally(() => { release(); if (isCurrent()) setUploading(false); });
+      .catch((err: unknown) => {
+        const line = failureCopy(err, { heading: "Couldn't upload the image." });
+        // On the board the add was made on, wherever the person is now.
+        if (here()) patch({ saveError: line });
+        else useAssetStudioDraftStore.getState().patch(boardKey, { saveError: line });
+      })
+      .finally(release);
+  };
+
+  /** The chip after a held spot moved (review 4, LOW-3): it points at where
+   *  the tiles are now. A moved spot no longer wholly in the paste-time view
+   *  joins it (a new chip if there was none); one that came into view leaves
+   *  it. Its thumbnail is the first outside tile's image. */
+  const followMovedSpots = (chip: number | null, holders: BoardPlaceholder[], live: boolean[],
+    spotOf: (holder: BoardPlaceholder) => { x: number; y: number }, target: BoardTarget, firstThumb: string | null) => {
+    const view = target.view;
+    if (!view) return;
+    const rects = holders.flatMap((holder, index) => {
+      if (!live[index]) return [];
+      const rect = { ...spotOf(holder), width: holder.width, height: holder.height };
+      // An aimed tile counts as outside only when wholly out of view (GM r4 answers 3 and 4).
+      const out = target.aim && index === 0
+        ? rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= view.y + view.height || rect.y + rect.height <= view.y
+        : !insideView(rect, view);
+      return out ? [rect] : [];
+    });
+    if (chip !== null) {
+      setOutsideTiles((current) => (current?.id !== chip ? current
+        : rects.length ? { ...current, rects, thumb: current.thumb ?? firstThumb } : null));
+    } else if (rects.length) {
+      outsideSeq.current += 1;
+      setOutsideTiles({ id: outsideSeq.current, rects, thumb: firstThumb });
+    }
+  };
+
+  const handleFiles = (files: FileList | File[] | null): Promise<void> => addFilesOnce(Array.from(files ?? []), null);
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+    void handleFiles(files);
+  };
+
+  /** Files dropped, added or pasted on the Board view (BoardCanvas's `onDropFiles`). */
+  const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
+    // The chip goes at once, as on a paste (each new add replaces it).
+    setOutsideTiles(null);
+    return addFilesOnce(files, target);
   };
 
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
@@ -1043,7 +1134,7 @@ export function MoodboardStudioView() {
   // before it has claimed its own, so two quick presses can't both pass.
   const pasteAdding = useRef(new Set<string>());
   const pasteTurn = useRef<Promise<unknown>>(Promise.resolve());
-  const pasteFiles = (files: File[], target: BoardTarget | undefined) => {
+  const addFilesOnce = (files: File[], target: BoardTarget | null) => {
     const claim = pasteTurn.current.then(async () => {
       const signatures = await Promise.all(files.map(fileSignature));
       const fresh: File[] = [];
@@ -1061,7 +1152,7 @@ export function MoodboardStudioView() {
     return claim.then(async ({ fresh, mine }) => {
       if (fresh.length === 0) return;
       try {
-        await (target ? dropFiles(fresh, target) : handleFiles(fresh));
+        await addFiles(fresh, target);
       } finally {
         for (const signature of mine) pasteAdding.current.delete(signature);
       }
@@ -1079,7 +1170,7 @@ export function MoodboardStudioView() {
       setOutsideTiles(null);
       if (files.length > 0) {
         event.preventDefault();
-        void pasteFiles(files, view === 'board' ? pasteTarget.current?.() : undefined);
+        void addFilesOnce(files, view === 'board' ? pasteTarget.current?.() ?? null : null);
         return;
       }
       event.preventDefault();
@@ -1522,7 +1613,7 @@ export function MoodboardStudioView() {
             <>
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} pasteTarget={pasteTarget} placeholders={placeholders} onPlaceholdersFilled={dropFilled}
+                pasteTarget={pasteTarget} placeholders={placeholders} onPlaceholdersFilled={dropFilled}
                 outside={outsideTiles} onOutsideDone={dismissOutside} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>
@@ -1569,7 +1660,7 @@ export function MoodboardStudioView() {
               {boardFields}
             </section>
 
-            <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploading={uploading}
+            <MoodboardListView images={draft.images} analysis={analysis} cover={cover} uploads={listUploads}
               onFiles={handleFiles} onDrop={handleDrop} onRemove={removeImage} onUpdate={updateImage}
               onSetCover={setCover} onTextDone={imageTextDone} />
 

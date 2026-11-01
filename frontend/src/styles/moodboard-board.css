@@ -224,8 +224,10 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
 }
 
 /* A card filling its placeholder starts unseen; BoardCanvas drives its
-   opacity on the board's spring each frame (GM r5), so no transition here. */
-.moodboard-card[data-fill-url] {
+   opacity on the board's spring each frame (GM r5), so no transition here.
+   Keyed by the new image's id, so an older tile showing the same file is
+   never hidden (review 4, MEDIUM-1). */
+.moodboard-card[data-fill-id] {
   opacity: 0;
 }
 
@@ -305,11 +307,6 @@ html body .moodboard-studio-view.moodboard-studio-view--board {
 .moodboard-board__control:has(.moodboard-board__file:focus-visible) {
   outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
   outline-offset: 1px;
-}
-
-.moodboard-board__control--busy {
-  opacity: 0.45;
-  cursor: default;
 }
 
 .moodboard-board__file {

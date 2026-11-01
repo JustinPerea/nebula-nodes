@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ReactFlowProvider, useStoreApi } from '@xyflow/react';
 import { OutsideChip } from './OutsideChip';
 import { nearestEdge, outsideChipText, seenIn } from './outsideChipText';
@@ -238,6 +238,72 @@ describe('focus and the chip', () => {
     screen.getByRole('button').focus();
     view.unmount();
     expect(focusBoard).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Review 4, MEDIUM-3: the person's own pan or zoom (or the board losing its
+// size) dismisses the chip while it has focus. Focus goes to the board while
+// the button is still on the page: it never drops to the body.
+describe('the chip going while it has focus', () => {
+  function Board({ tiles, keep = false }: { tiles: OutsideTiles; keep?: boolean }) {
+    const [up, setUp] = useState(true);
+    const board = useRef<HTMLDivElement>(null);
+    return (
+      <div ref={board} className="moodboard-board" tabIndex={-1}>
+        {up && <ChipOnBoard tiles={tiles} inset={0} barTop={null} onShow={() => {}} onDone={() => { if (!keep) setUp(false); }}
+          focusBoard={() => board.current?.focus({ preventScroll: true })} />}
+      </div>
+    );
+  }
+  const mountBoard = (keep = false) => render(
+    <ReactFlowProvider initialWidth={1000} initialHeight={700}>
+      <Pan />
+      <Board tiles={one} keep={keep} />
+    </ReactFlowProvider>,
+  );
+  // Every time focus left something for nowhere (the body).
+  let dropped: string[] = [];
+  const onOut = (event: FocusEvent) => { if (event.relatedTarget === null) dropped.push((event.target as HTMLElement).className); };
+  beforeEach(() => { dropped = []; document.addEventListener('focusout', onOut); });
+  afterEach(() => { document.removeEventListener('focusout', onOut); });
+
+  it('panned into view: focus goes to the board, never the body', () => {
+    const view = mountBoard();
+    screen.getByRole('button').focus();
+    pan(-700, -100, 1);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
+    expect(dropped).toEqual([]);
+  });
+
+  it('the board losing its size (no view): focus goes to the board, never the body', () => {
+    const view = mountBoard();
+    screen.getByRole('button').focus();
+    act(() => { storeOf.current!.setState({ width: 0 }); });
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
+    expect(dropped).toEqual([]);
+  });
+
+  it('with a parent slow to drop it, the chip still hands focus to the board itself and goes', () => {
+    const view = mountBoard(true);
+    screen.getByRole('button').focus();
+    pan(-700, -100, 1);
+    expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(dropped).toEqual([]);
+  });
+
+  it('without focus on it, nothing takes focus', () => {
+    const view = mountBoard();
+    const elsewhere = document.createElement('button');
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    pan(-700, -100, 1);
+    expect(screen.queryByRole('button', { name: /outside the view/ })).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+    view.unmount();
   });
 });
 

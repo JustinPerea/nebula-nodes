@@ -89,8 +89,19 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   // Where focus was before the chip took it, for Esc.
   const before = useRef<HTMLElement | null>(null);
   const hasFocus = () => chipRef.current !== null && document.activeElement === chipRef.current;
-  // The person's own pan or zoom brought the tiles into view.
-  useEffect(() => { if (inView) done.current(); }, [inView]);
+  // Whether the chip has focus, kept as state so the render can keep the
+  // button drawn while it does (review 4, MEDIUM-3).
+  const [focused, setFocused] = useState(false);
+  // Gone: the person's own pan or zoom brought the tiles into view, or the
+  // board has no size. With focus on the chip, the board takes focus first,
+  // while the button is still on the page, so focus never drops to the body
+  // (review 4, MEDIUM-3); a layout effect, so it happens before paint.
+  const gone = inView || !view;
+  useLayoutEffect(() => {
+    if (!gone) return;
+    if (hasFocus()) toBoard.current();
+    done.current();
+  }, [gone]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || !isStudioShortcutTarget(event.target, 'undo')) return;
@@ -108,9 +119,12 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   // had focus: the board takes it. Runs before the button leaves the page.
   useLayoutEffect(() => () => { if (hasFocus()) toBoard.current(); }, []);
 
-  if (inView || !view) return null;
+  // Gone with focus: drawn one commit more, the same button (unseen: the
+  // layout effect above moves focus and the board drops the chip before
+  // paint), so it is still on the page when focus leaves it.
+  if (gone && !focused) return null;
   const first = tiles.rects[0];
-  const point = { x: (first.x + first.width / 2) * zoom + tx, y: (first.y + first.height / 2) * zoom + ty };
+  const point = gone ? { x: 0, y: 0 } : { x: (first.x + first.width / 2) * zoom + tx, y: (first.y + first.height / 2) * zoom + ty };
   const edge = nearestEdge(point, width, height);
   const bottomLine = Math.min(height, floor ?? height);
   const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high));
@@ -124,7 +138,8 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
     <>
       <button ref={chipRef} type="button" className={`moodboard-board__outside-chip moodboard-board__outside-chip--${edge}`}
         style={along} aria-label={label}
-        onFocus={(event) => { if (event.relatedTarget instanceof HTMLElement) before.current = event.relatedTarget; }}
+        onFocus={(event) => { setFocused(true); if (event.relatedTarget instanceof HTMLElement) before.current = event.relatedTarget; }}
+        onBlur={() => setFocused(false)}
         onClick={() => { onShow(tiles.rects, hasFocus()); onDone(); }}>
         {(edge === 'left' || edge === 'top') && <span className="moodboard-board__outside-arrow" aria-hidden="true">{ARROWS[edge]}</span>}
         {thumb && <img className="moodboard-board__outside-thumb" src={thumb} alt="" draggable={false} />}

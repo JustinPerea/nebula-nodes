@@ -307,6 +307,37 @@ body.app-slava-restraint .moodboard-tile__image {
   background: rgba(0, 0, 0, 0.22);
 }
 
+/* A file still uploading (GM, #210): its row is its own status, its thumb
+   the board's placeholder look (white 0.06, a 1 px dashed edge at 0.28, the
+   file's name top-left at 12 px), and "Uploading" where the controls go. */
+body.app-slava-restraint .moodboard-tile__upload {
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.28);
+}
+
+body.app-slava-restraint .moodboard-tile--uploading {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+body.app-slava-restraint .moodboard-tile__upload-name {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .moodboard-tile__upload-state {
+  font-size: 12px;
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .moodboard-tile__remove {
   position: absolute;
   top: 6px;

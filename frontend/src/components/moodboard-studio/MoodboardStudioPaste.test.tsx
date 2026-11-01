@@ -22,7 +22,7 @@ const board = vi.hoisted(() => ({
   point: { x: 900, y: 300 } as { x: number; y: number } | null,
   view: { x: -1000, y: -1000, width: 4000, height: 3000 } as { x: number; y: number; width: number; height: number } | null,
   outside: null as null | { id: number; rects: Array<{ x: number; y: number; width: number; height: number }>; thumb: string | null },
-  placeholders: [] as Array<{ id: string; x: number; y: number; width: number; height: number; source?: unknown; filled?: string }>,
+  placeholders: [] as Array<{ id: string; x: number; y: number; width: number; height: number; source?: unknown; filled?: { imageId: string; url: string }; listOnly?: boolean }>,
   filledDone: null as null | ((ids: string[]) => void),
   onDropFiles: null as null | ((files: File[], target: { at: { x: number; y: number };
     view: { x: number; y: number; width: number; height: number } | null; aim: boolean }) => void),
@@ -74,6 +74,7 @@ vi.mock('./BoardCanvas', async () => {
 });
 
 import { MoodboardStudioView } from './MoodboardStudioView';
+import { resetBoardAdds, useBoardAddStore } from './boardAdds';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, uriListLinks, webLinks } from './pasteImages';
 import { placeTiles } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
@@ -155,6 +156,7 @@ beforeEach(() => {
       undo: { ops: [{ op: 'restore', slices: [{ part: 'tag', tag }] }] } };
   });
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
+  resetBoardAdds();
   useBoardUndoStore.setState({ histories: {} });
   useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, studioBoard: null, showRequest: null, frameRequest: null });
   try { window.localStorage.removeItem(MOODBOARD_VIEW_KEY); } catch { /* jsdom */ }
@@ -663,7 +665,8 @@ describe('a placeholder holds the spot while the upload runs (GM r4 answer 1)', 
     await waitFor(() => expect(addOps()).toHaveLength(1));
     expect(addOps()[0].at).toEqual(expected);
     // The spot stays, marked filled with the upload, until the board's spring has shown the image (GM r5).
-    expect(board.placeholders).toEqual([expect.objectContaining({ id: 'placeholder-1', filled: '/api/outputs/chat-uploads/slow.png' })]);
+    expect(board.placeholders).toEqual([expect.objectContaining({ id: 'placeholder-1',
+      filled: { imageId: addOps()[0].images[0].id, url: '/api/outputs/chat-uploads/slow.png' } })]);
     act(() => { board.filledDone!(['placeholder-1']); });
     expect(board.placeholders).toEqual([]);
     expect(board.outside).toBeNull();
@@ -760,6 +763,8 @@ describe('the chip goes', () => {
     await chipUp();
     act(() => { board.onDropFiles!([png('dropped.png')], { at: { x: 2000, y: 1500 }, view: { x: -1000, y: -1000, width: 4000, height: 3000 }, aim: true }); });
     expect(board.outside).toBeNull();
+    // The drop's add lands before the next test (an add outlives its view).
+    await waitFor(() => expect(addOps()).toHaveLength(2));
   });
 
   it('on any view switch, and stays gone back on the Board (GM r4 answer 8)', async () => {
@@ -979,7 +984,8 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
     expect(keepsGap({ ...at, width: w, height: h }, i1)).toBe(true);
     expect(keepsGap({ ...at, width: w, height: h }, i2)).toBe(true);
     // Its placeholder moved with it, so the image fades in where it lands.
-    expect(board.placeholders).toEqual([expect.objectContaining({ ...at, filled: '/api/outputs/chat-uploads/fill.png' })]);
+    expect(board.placeholders).toEqual([expect.objectContaining({ ...at,
+      filled: { imageId: addOps()[0].images[0].id, url: '/api/outputs/chat-uploads/fill.png' } })]);
   });
 
   it('LOW-2: a spot the board left alone fills where it was held', async () => {
@@ -993,28 +999,364 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
     expect(addOps()[0].at).toEqual(held);
   });
 
-  it('LOW-3: a board switch and back mid-upload drops that add: it never lands on a spot nothing holds', async () => {
+  // Review 4 LOW-2: a moved spot never pushes a sibling off a spot the board left alone.
+  it('LOW-2 (review 4): only the spot the board took moves; its sibling keeps the spot it held', async () => {
+    await openStudio('list');
+    act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
+    await waitFor(() => expect(draftUrls()).toHaveLength(1));
+    act(() => { useBoardCanvasStore.getState().setView('board'); });
+    await screen.findByTestId('board-canvas');
+    const uploads = holdUploads();
+    board.point = { x: 240, y: 135 };
+    paste(clipboard({ files: [png('first.png'), png('second.png', 20)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [w, h] = sizeFor(1, 1.5);
+    const i1 = { x: 0, y: 0, width: 480, height: 270 };
+    const i2 = { x: 520, y: 0, width: 480, height: 270 };
+    const [first, second] = board.placeholders.map((holder) => ({ x: holder.x, y: holder.y, width: w, height: h }));
+    expect(keepsGap(first, i1)).toBe(false);
+    expect(keepsGap(second, i1)).toBe(true);
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.board.images.map((img) => img.id)).toContain('i1'));
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    const [movedAt, keptAt] = addOps().map((op) => op.at!);
+    expect(keptAt).toEqual({ x: second.x, y: second.y });
+    const moved = { ...movedAt, width: w, height: h };
+    for (const other of [i1, i2, second]) expect(keepsGap(moved, other)).toBe(true);
+  });
+
+  // Review 4 LOW-3: the chip follows a spot that moved.
+  it('LOW-3 (review 4): a moved spot outside the view takes the chip with it', async () => {
+    await openStudio('list');
+    act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
+    await waitFor(() => expect(draftUrls()).toHaveLength(1));
+    act(() => { useBoardCanvasStore.getState().setView('board'); });
+    await screen.findByTestId('board-canvas');
+    const uploads = holdUploads();
+    // A view too small for any tile: the file goes to #1's freed spot, outside it, with the chip.
+    board.view = { x: 3000, y: 3000, width: 100, height: 100 };
+    board.point = { x: 240, y: 135 };
+    paste(clipboard({ files: [png('away.png')] }));
+    await waitFor(() => expect(board.outside).not.toBeNull());
+    const [w, h] = sizeFor(1, 1.5);
+    const held = board.outside!.rects[0];
+    expect(held).toMatchObject({ width: w, height: h });
+    press('z', { metaKey: true });
+    await waitFor(() => expect(server.board.images.map((img) => img.id)).toContain('i1'));
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const at = addOps()[0].at!;
+    expect(at).not.toEqual({ x: held.x, y: held.y });
+    await waitFor(() => expect(board.outside?.rects).toEqual([{ ...at, width: w, height: h }]));
+    expect(board.outside!.thumb).toBe('/api/outputs/chat-uploads/away.png');
+  });
+});
+
+// Review 4 (X9-X11, X19, X21): how a spot the board took is moved. Tiles
+// reach the board while the files upload (an agent's add, followed into the
+// draft), walling off everything but a few free slots.
+describe('moving a held spot the board took', () => {
+  type Rect = { x: number; y: number; width: number; height: number };
+  const G = 24;
+  const [w, h] = sizeFor(1, 1.5);
+  const slot = (x: number, y: number): Rect => ({ x, y, width: w, height: h });
+  /** Rects covering a wide area except `slots` (each with the gap around it). */
+  const around = (slots: Rect[]) => {
+    const M = { x0: -20000, y0: -20000, x1: 20000, y1: 20000 };
+    const holes = slots.map((r) => ({ x0: r.x - G, y0: r.y - G, x1: r.x + r.width + G, y1: r.y + r.height + G }));
+    const ys = [...new Set([M.y0, M.y1, ...holes.flatMap((hole) => [hole.y0, hole.y1])])].sort((a, b) => a - b);
+    const walls: Rect[] = [];
+    for (let i = 0; i + 1 < ys.length; i += 1) {
+      const [y0, y1] = [ys[i], ys[i + 1]];
+      let x = M.x0;
+      for (const hole of holes.filter((it) => it.y0 <= y0 && y1 <= it.y1).sort((a, b) => a.x0 - b.x0)) {
+        if (hole.x0 > x) walls.push({ x, y: y0, width: hole.x0 - x, height: y1 - y0 });
+        x = Math.max(x, hole.x1);
+      }
+      if (x < M.x1) walls.push({ x, y: y0, width: M.x1 - x, height: y1 - y0 });
+    }
+    return walls;
+  };
+  /** The tiles reach the board: into g1's draft, as a follow writes them. */
+  const arrive = (rects: Rect[]) => act(() => {
+    useAssetStudioDraftStore.setState((state) => {
+      const key = Object.keys(state.entries).find((k) => state.entries[k].savedId === 'g1')!;
+      const entry = state.entries[key];
+      const draft = entry.draft as { images: MoodboardImage[] };
+      const added = rects.map((r, i) => image(`wall${i}`, { placements: [{ ...card(`wall${i}`, r.x, r.y), w: r.width, h: r.height }] }));
+      return { entries: { ...state.entries, [key]: { ...entry, draft: { ...draft, images: [...draft.images, ...added] } } } };
+    });
+  });
+  const holdersNow = () => board.placeholders.map((holder) => slot(holder.x, holder.y));
+  const landed = () => addOps().map((op) => slot(op.at!.x, op.at!.y));
+  /** Two slots, one under the other, below both held spots: the upper one is nearest to each. */
+  const twoSlotsFor = (a: Rect, b: Rect) => {
+    expect(Math.max(a.y, b.y) + h + G).toBeLessThan(1000);
+    return [slot(-900, 1000), slot(-900, 1000 + h + G)];
+  };
+
+  it('X9: two spots of one paste moved together never land on the same slot', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('one.png'), png('two.png', 20)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [a, b] = holdersNow();
+    const slots = twoSlotsFor(a, b);
+    arrive(around(slots));
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    const [one, two] = landed();
+    expect(keepsGap(one, two)).toBe(true);
+    expect([one, two].map(({ x, y }) => `${x},${y}`).sort()).toEqual(slots.map(({ x, y }) => `${x},${y}`).sort());
+  });
+
+  it('X19: a file the server gave no image for holds no slot: the one that uploaded takes the nearest', async () => {
+    // Each upload held by name; `false` answers with no image url.
+    const gates = new Map<string, (withUrl: boolean) => void>();
+    backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      const name = ((init?.body as FormData).get('file') as File).name;
+      const withUrl = await new Promise<boolean>((resolve) => { gates.set(name, resolve); });
+      if (!withUrl) return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return uploadResponse(path, init);
+    });
+    await openStudio('board');
+    paste(clipboard({ files: [png('empty.png'), png('works.png', 20)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [failed, works] = holdersNow();
+    const slots = twoSlotsFor(failed, works);
+    const walls = around(slots);
+    arrive(walls);
+    await waitFor(() => expect(gates.size).toBe(2));
+    await act(async () => { gates.get('empty.png')!(false); gates.get('works.png')!(true); await new Promise((done) => setTimeout(done, 0)); });
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const nearest = placeTiles({ at: { x: works.x + w / 2, y: works.y + h / 2 }, sizes: [[w, h]],
+      occupied: [{ x: 0, y: 0, width: 480, height: 270 }, { x: 520, y: 0, width: 480, height: 270 }, ...walls], view: board.view }).spots[0];
+    expect(addOps()[0].at).toEqual(nearest);
+  });
+
+  it('X21: a tile that came within the gap (not over the spot) moves it too', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('near.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const [held] = holdersNow();
+    const close = { x: held.x + w + 5, y: held.y, width: 300, height: h };
+    arrive([close]);
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const [at] = landed();
+    expect(at).not.toEqual(held);
+    expect(keepsGap(at, close)).toBe(true);
+  });
+
+  it('X11: a moved spot counts another add\'s held spot, so it never lands on it', async () => {
+    const files = holdEach();
+    await openStudio('board');
+    paste(clipboard({ files: [png('first.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    paste(clipboard({ files: [png('second.png', 20)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [a, b] = holdersNow();
+    // Free: the first add's own spot, and one beyond it on the far side from the second.
+    const beyond = b.x !== a.x ? slot(a.x - Math.sign(b.x - a.x) * (w + G), a.y) : slot(a.x, a.y - Math.sign(b.y - a.y) * (h + G));
+    arrive(around([a, beyond]));
+    await waitFor(() => expect(files.held('second.png')).toBe(true));
+    await files.settle('second.png', true);
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const [moved] = landed();
+    expect(moved).toEqual(beyond);
+    expect(keepsGap(moved, a)).toBe(true);
+    await files.settle('first.png', true);
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+  });
+
+  it('X10: a moved spot stays in the view the person pasted in when a slot there is free', async () => {
+    const uploads = holdUploads();
+    // Below the board's own cards, so the slot above the view is clear of them.
+    board.view = { x: 0, y: 1000, width: 2000, height: 2000 };
+    board.point = { x: 900, y: 1500 };
+    await openStudio('board');
+    paste(clipboard({ files: [png('stay.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const [held] = holdersNow();
+    // Nearest free: just above the view. Farther, but in it: lower down.
+    const above = slot(held.x, 1000 - h - 1);
+    const inside = slot(held.x, 3000 - h - 1);
+    expect(Math.abs(above.y - held.y)).toBeLessThan(Math.abs(inside.y - held.y));
+    arrive(around([above, inside]));
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(landed()[0]).toEqual(inside);
+  });
+});
+
+// GM on review 4: an add whose person left the board while it uploaded is
+// their paste. It finishes and lands on that board, placed as if they had
+// stayed, written through the draft store, never to the board open now.
+describe('an add that outlives its board', () => {
+  const entryKey = (match: (key: string) => boolean) => Object.keys(useAssetStudioDraftStore.getState().entries).find(match)!;
+  const imagesOf = (key: string) => ((useAssetStudioDraftStore.getState().entries[key]?.draft as { images?: MoodboardImage[] } | undefined)?.images ?? []);
+
+  it('left for another board mid-upload: it lands on its own board at the spot it held; the open board gets nothing', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const held = { x: board.placeholders[0].x, y: board.placeholders[0].y };
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
+    await screen.findByTestId('board-canvas');
+    expect(board.placeholders).toEqual([]);
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    // An edit of g1 with no base version: it lands on the board as it is now.
+    expect(api.editMoodboard).toHaveBeenCalledTimes(1);
+    expect(api.editMoodboard.mock.calls[0][0]).toBe('g1');
+    expect(api.editMoodboard.mock.calls[0][2]).toBeUndefined();
+    expect(addOps()[0]).toMatchObject({ images: [{ url: '/api/outputs/chat-uploads/river.png' }], at: held });
+    // g1's draft holds it now; the board open now holds nothing new.
+    await waitFor(() => expect(draftUrls()).toContain('/api/outputs/chat-uploads/river.png'));
+    expect(imagesOf(entryKey((key) => key.includes('"new"')))).toEqual([]);
+    expect(useBoardAddStore.getState().held).toEqual({});
+  });
+
+  it('left Moodboard Studio altogether mid-upload: it still lands on its board', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const held = { x: board.placeholders[0].x, y: board.placeholders[0].y };
+    act(() => { useUIStore.getState().exitMoodboardEditor(); });
+    cleanup();
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(api.editMoodboard.mock.calls[0][0]).toBe('g1');
+    expect(addOps()[0]).toMatchObject({ images: [{ url: '/api/outputs/chat-uploads/river.png' }], at: held });
+    await waitFor(() => expect(draftUrls()).toContain('/api/outputs/chat-uploads/river.png'));
+  });
+
+  it('away and back mid-upload: its placeholder shows again, a new paste keeps clear of it, and both land as steps of the board', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('one.png', 16)] }));
     await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const first = { ...board.placeholders[0] };
     act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
     await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
     await screen.findByTestId('board-canvas');
-    // The other board shows none of this board's placeholders.
     expect(board.placeholders).toEqual([]);
     act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
     await screen.findByDisplayValue('Global board');
     await screen.findByTestId('board-canvas');
-    expect(board.placeholders).toEqual([]);
+    expect(board.placeholders).toEqual([expect.objectContaining({ id: first.id, x: first.x, y: first.y })]);
     paste(clipboard({ files: [png('two.png', 24)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const second = board.placeholders[1];
+    const [w, h] = sizeFor(1, 1.5);
+    expect(keepsGap({ ...first, width: w, height: h }, { ...second, width: w, height: h })).toBe(true);
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    expect(addOps().map((op) => op.at)).toEqual(expect.arrayContaining([{ x: first.x, y: first.y }, { x: second.x, y: second.y }]));
+    const key = entryKey((k) => useAssetStudioDraftStore.getState().entries[k].savedId === 'g1');
+    const entry = useAssetStudioDraftStore.getState().entries[key];
+    await waitFor(() => expect(useBoardUndoStore.getState().history(key, entry.epoch).done).toHaveLength(2));
+  });
+
+  it('a board not saved yet, left mid-upload: the add waits in its draft at the spot it held, saved with it', async () => {
+    const uploads = holdUploads();
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByTestId('board-canvas');
+    paste(clipboard({ files: [png('river.png')] }));
     await waitFor(() => expect(board.placeholders).toHaveLength(1));
-    const second = { x: board.placeholders[0].x, y: board.placeholders[0].y };
+    const held = { x: board.placeholders[0].x, y: board.placeholders[0].y };
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    await screen.findByDisplayValue('Global board');
+    await uploads.open();
+    const newKey = entryKey((key) => key.includes('"new"'));
+    await waitFor(() => expect(imagesOf(newKey).map((img) => img.url)).toEqual(['/api/outputs/chat-uploads/river.png']));
+    expect(imagesOf(newKey)[0].placements?.[0]).toMatchObject(held);
+    expect(useAssetStudioDraftStore.getState().entries[newKey].dirty).toBe(true);
+    // Nothing reached g1, the board open now.
+    expect(addOps()).toHaveLength(0);
+    expect(draftUrls()).not.toContain('/api/outputs/chat-uploads/river.png');
+  });
+
+  it('a failure while away is the board\'s own line, shown when the person is back on it', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
+    await uploads.fail();
+    const key = entryKey((k) => useAssetStudioDraftStore.getState().entries[k].savedId === 'g1');
+    await waitFor(() => expect(useAssetStudioDraftStore.getState().entries[key].saveError).toBeTruthy());
+    const other = entryKey((k) => k.includes('"new"'));
+    expect(useAssetStudioDraftStore.getState().entries[other].saveError).toBeNull();
+    expect(useBoardAddStore.getState().held).toEqual({});
+  });
+});
+
+// GM (round 5 carry-over): Add images stays live during uploads, with no
+// toolbar status; concurrent adds go through placement and the backstop.
+describe('adds at once', () => {
+  it('a paste and a drop while it uploads hold spots clear of each other, and both land there', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('a.png', 16)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    act(() => { board.onDropFiles!([png('b.png', 20)], { at: { ...board.point! }, view: board.view, aim: false }); });
+    await waitFor(() => expect(board.placeholders).toHaveLength(2));
+    const [w, h] = sizeFor(1, 1.5);
+    const [a, b] = board.placeholders.map((holder) => ({ x: holder.x, y: holder.y, width: w, height: h }));
+    expect(keepsGap(a, b)).toBe(true);
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    expect(addOps().map((op) => op.at)).toEqual([{ x: a.x, y: a.y }, { x: b.x, y: b.y }]);
+  });
+
+  it('the same file again through Add images while its paste uploads is caught by the backstop', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('a.png', 16)] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    act(() => { board.onDropFiles!([png('a.png', 16)], { at: { ...board.point! }, view: board.view, aim: false }); });
+    await waitFor(() => expect(spokenLines()).toContain(ALREADY_BEING_ADDED));
+    expect(board.placeholders).toHaveLength(1);
     await uploads.open();
     await waitFor(() => expect(addOps()).toHaveLength(1));
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(addOps()).toHaveLength(1);
-    expect(addOps()[0]).toMatchObject({ images: [{ url: '/api/outputs/chat-uploads/two.png' }], at: second });
+    expect(server.uploads).toEqual(['a.png']);
+  });
+
+  it('in the List: Add Images stays live with no "Uploading", and each file is an uploading row of its own', async () => {
+    const uploads = holdUploads();
+    await openStudio('list');
+    paste(clipboard({ files: [png('river-at-dusk.png'), png('two.png', 20)] }));
+    const rows = await screen.findAllByRole('status', { name: /uploading$/ });
+    expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual(['river-at-dusk.png, uploading', 'two.png, uploading']);
+    expect(rows.every((row) => row.getAttribute('aria-busy') === 'true' && row.classList.contains('moodboard-tile--uploading'))).toBe(true);
+    expect(rows[0].querySelector('.moodboard-tile__upload-name')!.textContent).toBe('river-at-dusk.png');
+    const input = screen.getByLabelText('Add Images') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    expect(document.querySelector('.moodboard-dropzone__file-button')!.textContent).toBe('Add Images');
+    expect(document.querySelector('.moodboard-dropzone--busy')).toBeNull();
+    await uploads.open();
+    await waitFor(() => expect(screen.queryAllByRole('status', { name: /uploading$/ })).toHaveLength(0));
+    await waitFor(() => expect(draftUrls()).toHaveLength(4));
+  });
+
+  it('a Board paste shows as an uploading row in the List too', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    act(() => { useBoardCanvasStore.getState().setView('list'); });
+    expect(await screen.findByRole('status', { name: 'river.png, uploading' })).toBeTruthy();
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
   });
 });
 

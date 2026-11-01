@@ -23,22 +23,29 @@ type FlowProps = {
 };
 const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: vi.fn(), fitView: vi.fn(),
   zoom: 1, zoomListeners: new Set<(state: { transform: [number, number, number] }) => void>(),
-  fill: null as null | { has: (url: string) => boolean; progress: (url: string) => number },
+  fill: null as null | { progress: (imageId: string) => number },
+  // Draws the stand-in again on its own, as React Flow does a commit after the board's (the board doesn't render).
+  redraw: () => {},
+  // Node ids the stand-in leaves out of the page, as React Flow does a commit after the board's own effects.
+  hidden: new Set<string>(),
   getNodesBounds: vi.fn<(nodes: unknown[]) => { x: number; y: number; width: number; height: number }>(
     () => ({ x: 0, y: 0, width: 100, height: 100 })) }));
 vi.mock('@xyflow/react', async (importOriginal) => {
-  const { useContext } = await import('react');
+  const { useContext, useState } = await import('react');
   const { BoardFillContext } = await import('./boardNodes');
   return {
   ...await importOriginal<typeof import('@xyflow/react')>(),
   // The nodes as React Flow draws them (focusable wrappers by id), so focus can land on one.
   ReactFlow: (props: FlowProps) => {
     flow.props = props;
+    const [, redraw] = useState(0);
+    flow.redraw = () => redraw((n) => n + 1);
     // What a card drawn now would read: which urls are filling, and how far in.
     flow.fill = useContext(BoardFillContext);
     return (
       <div data-testid="flow">
-        {props.nodes.map((node) => <div key={node.id} className="react-flow__node" data-id={node.id} tabIndex={0} />)}
+        {props.nodes.filter((node) => !flow.hidden.has(node.id))
+          .map((node) => <div key={node.id} className="react-flow__node" data-id={node.id} tabIndex={0} />)}
         {props.children}
       </div>
     );
@@ -72,7 +79,7 @@ const chip = vi.hoisted(() => ({ props: null as null | { tiles: unknown; viewOf:
 vi.mock('./OutsideChip', () => ({
   OutsideChip: (props: NonNullable<typeof chip.props>) => { chip.props = props; return <button type="button">chip</button>; },
 }));
-import { BoardCanvas, type BoardMove, type BoardTarget } from './BoardCanvas';
+import { BoardCanvas, FILL_DECODE_WAIT_MS, type BoardMove, type BoardTarget } from './BoardCanvas';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
@@ -103,6 +110,7 @@ const nodeById = (id: string) => props().nodes.find((node) => node.id === id)!;
 
 beforeEach(() => {
   flow.props = null;
+  flow.hidden.clear();
   moves = [];
   drops = [];
   targets = [];
@@ -338,6 +346,218 @@ describe('the outside-the-view chip on the board', () => {
     expect(document.activeElement?.getAttribute('data-id')).toBe('new-c4');
   });
 
+  // Review 4, HIGH-1 and MEDIUM-2: focus on a tile being replaced moves on to
+  // what replaces it, never to the page body. React Flow draws the card over
+  // the placeholder first, and drops the placeholder's element a commit after
+  // the board's own effects (the stand-in's `hidden`).
+  describe('focus on a tile as it is replaced', () => {
+    const url = '/api/outputs/chat-uploads/river.png';
+    const spot = { id: 'placeholder-1', x: 3000, y: 100, width: 300, height: 200, source: { kind: 'file' as const, name: 'river.png' } };
+    const newCard = image('i4', [card('new-c4', 3000, 100, { w: 300, h: 200 })], { url });
+    const savedCard = image('i4', [card('c4', 3000, 100, { w: 300, h: 200 })], { url });
+    const draw = (view: ReturnType<typeof render> | null, list: MoodboardImage[], held: typeof spot[]) => {
+      const ui = <BoardCanvas boardKey="k1" images={list} onMove={() => {}} onDropFiles={() => {}} placeholders={held} />;
+      if (view) { view.rerender(ui); return view; }
+      return render(ui);
+    };
+    // Every place focus went, so a pass through the body is seen too.
+    let trail: string[] = [];
+    const log = () => { trail.push(document.activeElement === document.body ? 'BODY' : document.activeElement?.getAttribute('data-id') ?? 'other'); };
+    const node = (view: ReturnType<typeof render>, id: string) => view.container.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`);
+    const settle = () => act(async () => { await Promise.resolve(); await new Promise((done) => window.requestAnimationFrame(() => done(null))); });
+
+    it('a focused placeholder hands focus to its card as soon as the card is drawn over it, then on to the saved card', async () => {
+      trail = [];
+      let view = draw(null, images, [spot]);
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      log();
+      // The upload lands: the card is drawn over its placeholder, which stays while the image fades in.
+      view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      log();
+      expect(document.activeElement).toBe(node(view, 'new-c4'));
+      // The fade ends: the placeholder goes.
+      view = draw(view, [...images, newCard], []);
+      await settle();
+      log();
+      // The save answers: the provisional card is swapped for the saved one in one commit.
+      view = draw(view, [...images, savedCard], []);
+      await settle();
+      log();
+      expect(document.activeElement).toBe(node(view, 'c4'));
+      expect(trail).toEqual(['placeholder-1', 'new-c4', 'new-c4', 'c4']);
+    });
+
+    it('when the placeholder\'s element goes before its card is drawn, focus waits on the board (never the body), then takes the card', async () => {
+      let view = draw(null, images, [spot]);
+      const wrapper = view.container.querySelector('.moodboard-board') as HTMLElement;
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      view = draw(view, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      // React Flow drops the placeholder's element a commit after the board's effects ran.
+      flow.hidden.add('placeholder-1');
+      view = draw(view, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(wrapper);
+      view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(node(view, 'new-c4'));
+    });
+
+    it('focus on the placeholder past the 10 s follow ends on the card, however long the upload took (GM)', async () => {
+      const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+      let view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[spot]} outside={tiles} onOutsideDone={() => {}} />);
+      act(() => { chip.props!.onShow(tiles.rects, true); });
+      await settle();
+      expect(document.activeElement?.getAttribute('data-id')).toBe('placeholder-1');
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+      try {
+        view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+        view = draw(view, [...images, newCard], []);
+        await settle();
+        expect(document.activeElement).toBe(node(view, 'new-c4'));
+      } finally { clock.mockRestore(); }
+    });
+
+    it('focus somewhere else stays there: a placeholder or card going never pulls it', async () => {
+      let view = draw(null, images, [spot]);
+      const control = view.getByLabelText('Zoom in');
+      act(() => { control.focus(); });
+      view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      view = draw(view, [...images, savedCard], []);
+      await settle();
+      expect(document.activeElement).toBe(control);
+    });
+
+    it('a focused saved card that is removed leaves focus on the board, not the body', async () => {
+      let view = draw(null, [...images, savedCard], []);
+      act(() => { node(view, 'c4')!.focus(); });
+      view = draw(view, images, []);
+      await settle();
+      expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
+    });
+
+    it('a saved card keeps focus while another tile of the same image is drawn', async () => {
+      let view = draw(null, [...images, savedCard], []);
+      act(() => { node(view, 'c4')!.focus(); });
+      const twice = image('i4', [card('c4', 3000, 100, { w: 300, h: 200 }), card('new-c5', 0, 900)], { url });
+      view = draw(view, [...images, twice], []);
+      await settle();
+      expect(document.activeElement).toBe(node(view, 'c4'));
+    });
+
+    it('a click on nothing (focus to the body, the tile still there) is left alone', async () => {
+      const view = draw(null, images, [spot]);
+      const holder = node(view, 'placeholder-1')!;
+      act(() => { holder.focus(); });
+      act(() => { holder.blur(); });
+      draw(view, images, [spot, { ...spot, id: 'placeholder-2', x: 0, y: 900 }]);
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    // Every element focus landed on, in order (focusin), to see a stop on the board or the placeholder.
+    const landed = (view: ReturnType<typeof render>) => {
+      const seen: string[] = [];
+      const onIn = (event: FocusEvent) => {
+        const target = event.target as HTMLElement;
+        seen.push(target.classList.contains('moodboard-board') ? 'BOARD' : target.getAttribute('data-id') ?? 'other');
+      };
+      view.container.addEventListener('focusin', onIn);
+      return seen;
+    };
+
+    it('a provisional card swapped for its saved card in one commit goes straight to it, with no stop on the board', async () => {
+      let view = draw(null, [...images, newCard], []);
+      act(() => { node(view, 'new-c4')!.focus(); });
+      const seen = landed(view);
+      view = draw(view, [...images, savedCard], []);
+      await settle();
+      expect(document.activeElement).toBe(node(view, 'c4'));
+      expect(seen).toEqual(['c4']);
+    });
+
+    it('focus parked on the board waits only a short while: a card drawn after that leaves it on the board', async () => {
+      let view = draw(null, images, [spot]);
+      const wrapper = view.container.querySelector('.moodboard-board') as HTMLElement;
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      flow.hidden.add('placeholder-1');
+      view = draw(view, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(wrapper);
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5_000);
+      try {
+        view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+        await settle();
+        expect(document.activeElement).toBe(wrapper);
+      } finally { clock.mockRestore(); }
+    });
+
+    it('the card React Flow draws a commit after the board\'s own takes focus at once (the board does not render)', async () => {
+      let view = draw(null, images, [spot]);
+      const wrapper = view.container.querySelector('.moodboard-board') as HTMLElement;
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      flow.hidden.add('placeholder-1');
+      flow.hidden.add('new-c4');
+      view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(wrapper);
+      // Only the stand-in draws: no board render, no focus event; no frame passes either.
+      flow.hidden.delete('new-c4');
+      act(() => { flow.redraw(); });
+      // The observer's callback is a microtask after the stand-in's commit.
+      await act(async () => { await Promise.resolve(); });
+      expect(document.activeElement).toBe(node(view, 'new-c4'));
+    });
+
+    it('with no MutationObserver, focus dropped to nowhere is picked up on the next frames', async () => {
+      const Observer = globalThis.MutationObserver;
+      vi.stubGlobal('MutationObserver', undefined);
+      try {
+        let view = draw(null, images, [spot]);
+        const wrapper = view.container.querySelector('.moodboard-board') as HTMLElement;
+        view = draw(view, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+        act(() => { node(view, 'placeholder-1')!.focus(); });
+        // React Flow drops the focused element on its own, and the browser sends focusout to nowhere.
+        flow.hidden.add('placeholder-1');
+        act(() => { flow.redraw(); });
+        act(() => { wrapper.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })); });
+        await settle();
+        await settle();
+        expect(document.activeElement).toBe(wrapper);
+      } finally { vi.stubGlobal('MutationObserver', Observer); }
+    });
+
+    it('once the person moved focus off the tile, its going later never pulls focus back', async () => {
+      let view = draw(null, images, [spot]);
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      const control = view.getByLabelText('Zoom in');
+      act(() => { control.focus(); });
+      act(() => { control.blur(); });
+      // The placeholder fills and React Flow drops its element in the same commit.
+      flow.hidden.add('placeholder-1');
+      view = draw(view, [...images, newCard], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('the follow lands on the card, not its placeholder, when both are drawn at the spot', async () => {
+      const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+      const filledSpot = { ...spot, filled: { imageId: 'i4', url } } as typeof spot;
+      flow.hidden.add('placeholder-1');
+      const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[spot]} outside={tiles} onOutsideDone={() => {}} />);
+      act(() => { chip.props!.onShow(tiles.rects, true); });
+      await settle();
+      const seen = landed(view);
+      flow.hidden.delete('placeholder-1');
+      view.rerender(<BoardCanvas boardKey="k1" images={[...images, newCard]} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[filledSpot]} outside={tiles} onOutsideDone={() => {}} />);
+      await settle();
+      expect(document.activeElement).toBe(node(view, 'new-c4'));
+      expect(seen).not.toContain('placeholder-1');
+    });
+  });
+
   // Review 3: focus follows the tile only for a while, and never off a control.
   const followSetup = async () => {
     const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
@@ -401,7 +621,7 @@ describe('the outside-the-view chip on the board', () => {
 });
 
 describe('placeholder tiles (GM r4 answer 1)', () => {
-  it('are drawn after the cards at their spot and size, never dragged or selected; the empty note stays away', () => {
+  it('sit at their spot and size, never dragged or selected; the empty note stays away', () => {
     const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
       placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
     const node = props().nodes.find((item) => item.id === 'placeholder-1')!;
@@ -506,20 +726,20 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
       const url = '/api/outputs/chat-uploads/a.png';
       const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
         placeholders={[holder()]} onPlaceholdersFilled={filled} />);
-      // The card as BoardCardNode draws it while filling (data-fill-url; the mock flow draws no cards).
+      // The card as BoardCardNode draws it while filling (data-fill-id; the mock flow draws no cards).
       const cardEl = document.createElement('div');
       cardEl.className = 'moodboard-card';
-      cardEl.dataset.fillUrl = url;
+      cardEl.dataset.fillId = 'i9';
       view.container.querySelector('.moodboard-board')!.appendChild(cardEl);
       view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
-        placeholders={[holder({ filled: url })]} onPlaceholdersFilled={filled} />);
+        placeholders={[holder({ filled: { imageId: 'i9', url } })]} onPlaceholdersFilled={filled} />);
       const seen: number[] = [];
       for (let frame = 0; frame < 400 && frames.length; frame += 1) {
         const cb = frames.shift()!;
         act(() => { cb(frame * 16); });
         seen.push(Number(cardEl.style.opacity));
         // A card drawn afresh this frame would start at the same opacity.
-        if (frames.length) expect(flow.fill!.progress(url)).toBe(Number(cardEl.style.opacity));
+        if (frames.length) expect(flow.fill!.progress('i9')).toBe(Number(cardEl.style.opacity));
       }
       // Steps between 0 and 1 (a spring, not a swap), ending at 1, then the placeholder is let go once.
       expect(seen.some((value) => value > 0.05 && value < 0.95)).toBe(true);
@@ -527,10 +747,149 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
       expect(filled).toHaveBeenCalledTimes(1);
       expect(filled).toHaveBeenCalledWith(['placeholder-1']);
       // Nothing in the CSS times or eases it.
-      expect(rule('.moodboard-card[data-fill-url]')).toMatch(/opacity:\s*0/);
-      expect(rule('.moodboard-card[data-fill-url]')).not.toMatch(/transition|animation/);
+      expect(rule('.moodboard-card[data-fill-id]')).toMatch(/opacity:\s*0/);
+      expect(rule('.moodboard-card[data-fill-id]')).not.toMatch(/transition|animation/);
       expect(rule('.moodboard-card')).not.toMatch(/transition|animation/);
     } finally { raf.mockRestore(); caf.mockRestore(); }
+  });
+
+  // Review 4, MEDIUM-1: the fill is keyed by the new image's id. Pasting a
+  // file the board already shows (the upload dedupes to the same url) fades
+  // in the new tile only; the old one is never marked or hidden.
+  it('marks only the new image\'s card filling, never an older card showing the same file', () => {
+    const url = '/api/outputs/chat-uploads/same.png';
+    const old = image('i-old', [card('c-old', 0, 0)], { url });
+    const fresh = image('i-new', [card('new-c9', 600, 0)], { url });
+    render(<BoardCanvas boardKey="k1" images={[old, fresh]} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[holder({ x: 600, y: 0, filled: { imageId: 'i-new', url } })]} />);
+    const data = (id: string) => props().nodes.find((item) => item.id === id)!.data as { filling: boolean };
+    expect(data('c-old').filling).toBe(false);
+    expect(data('new-c9').filling).toBe(true);
+  });
+
+  it('a fill changes only the filling card\'s node: every other card keeps its node, so React Flow skips it (review 4, LOW-5)', () => {
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
+    const before = new Map(props().nodes.map((item) => [item.id, item]));
+    view.rerender(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[holder({ filled: { imageId: 'i2', url: images[1].url } })]} />);
+    const after = new Map(props().nodes.map((item) => [item.id, item]));
+    expect(after.get('c1')).toBe(before.get('c1'));
+    expect(after.get('c3')).toBe(before.get('c3'));
+    expect(after.get('c2')).not.toBe(before.get('c2'));
+    expect((after.get('c2')!.data as { filling: boolean }).filling).toBe(true);
+    // Another placeholder coming or going changes no card at all.
+    view.rerender(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[holder({ filled: { imageId: 'i2', url: images[1].url } }), holder({ id: 'placeholder-2', x: 900 })]} />);
+    for (const id of ['c1', 'c2', 'c3']) expect(props().nodes.find((item) => item.id === id)).toBe(after.get(id));
+  });
+
+  it('placeholders come first, so the cards are drawn over them (review 4, X16)', () => {
+    render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
+    expect(props().nodes.map((item) => item.id)).toEqual(['placeholder-1', 'c1', 'c2', 'c3']);
+  });
+
+  /** The spring's frames, run by hand. */
+  const frameQueue = () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 0;
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { next += 1; frames.set(next, cb); return next; });
+    const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => { frames.delete(id); });
+    let t = 0;
+    const step = (count: number) => {
+      for (let i = 0; i < count && frames.size; i += 1) {
+        const [id, cb] = frames.entries().next().value!;
+        frames.delete(id);
+        t += 16;
+        act(() => { cb(t); });
+      }
+    };
+    return { frames, step, restore: () => { raf.mockRestore(); caf.mockRestore(); } };
+  };
+  const fillCard = (view: ReturnType<typeof render>, imageId: string, img?: HTMLImageElement) => {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'moodboard-card';
+    cardEl.dataset.fillId = imageId;
+    if (img) cardEl.appendChild(img);
+    view.container.querySelector('.moodboard-board')!.appendChild(cardEl);
+    return cardEl;
+  };
+
+  it('another placeholder changing mid-fade never restarts the fade (review 4, X13)', async () => {
+    const q = frameQueue();
+    try {
+      const url = '/api/outputs/chat-uploads/a.png';
+      const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
+      const cardEl = fillCard(view, 'i9');
+      const filled = holder({ filled: { imageId: 'i9', url } });
+      view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[filled]} />);
+      q.step(8);
+      const mid = Number(cardEl.style.opacity);
+      expect(mid).toBeGreaterThan(0.1);
+      // Every opacity written from here on: a second fade would write its own, from 0.
+      const writes: number[] = [];
+      let opacity = cardEl.style.opacity;
+      Object.defineProperty(cardEl.style, 'opacity', { configurable: true, get: () => opacity,
+        set: (value: string) => { opacity = value; writes.push(Number(value)); } });
+      view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[filled, holder({ id: 'placeholder-2', x: 900 })]} />);
+      await act(async () => { await Promise.resolve(); });
+      q.step(4);
+      expect(writes.length).toBeGreaterThan(0);
+      expect(Math.min(...writes)).toBeGreaterThanOrEqual(mid);
+    } finally { q.restore(); }
+  });
+
+  it('a fade is stopped when the board goes, and its progress is let go with its placeholder (review 4, X14, X15)', () => {
+    const q = frameQueue();
+    try {
+      const url = '/api/outputs/chat-uploads/a.png';
+      const done = vi.fn();
+      const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]}
+        onPlaceholdersFilled={done} />);
+      fillCard(view, 'i9');
+      view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[holder({ filled: { imageId: 'i9', url } })]} onPlaceholdersFilled={done} />);
+      q.step(4);
+      expect(flow.fill!.progress('i9')).toBeGreaterThan(0);
+      // The placeholder goes (the Studio's fallback): its progress goes with it.
+      view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[]} onPlaceholdersFilled={done} />);
+      expect(flow.fill!.progress('i9')).toBe(0);
+      expect(done).not.toHaveBeenCalled();
+      view.unmount();
+      q.step(400);
+      expect(done).not.toHaveBeenCalled();
+    } finally { q.restore(); }
+  });
+
+  it('the fade waits for the card\'s image to decode (review 4, NIT-3), and at most FILL_DECODE_WAIT_MS', async () => {
+    const url = '/api/outputs/chat-uploads/slow.png';
+    let decoded: () => void = () => {};
+    const img = document.createElement('img');
+    img.decode = () => new Promise<void>((resolve) => { decoded = resolve; });
+    const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
+    const cardEl = fillCard(view, 'i9', img);
+    const q = frameQueue();
+    try {
+      view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
+        placeholders={[holder({ filled: { imageId: 'i9', url } })]} />);
+      q.step(10);
+      expect(cardEl.style.opacity).toBe('');
+      await act(async () => { decoded(); await Promise.resolve(); });
+      q.step(10);
+      expect(Number(cardEl.style.opacity)).toBeGreaterThan(0);
+    } finally { q.restore(); }
+    // An image that never decodes still fades in after the cap.
+    vi.useFakeTimers();
+    const stuck = document.createElement('img');
+    stuck.decode = () => new Promise<void>(() => {});
+    const later = render(<BoardCanvas boardKey="k2" images={[]} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
+    const stuckCard = fillCard(later, 'i8', stuck);
+    later.rerender(<BoardCanvas boardKey="k2" images={[]} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[holder({ filled: { imageId: 'i8', url } })]} />);
+    act(() => { vi.advanceTimersByTime(FILL_DECODE_WAIT_MS - 50); });
+    expect(stuckCard.style.opacity).toBe('');
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(Number(stuckCard.style.opacity)).toBeGreaterThan(0);
   });
 
   it('under reduced motion the image swaps straight in', () => {
@@ -544,11 +903,11 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
         placeholders={[holder()]} onPlaceholdersFilled={filled} />);
       const cardEl = document.createElement('div');
       cardEl.className = 'moodboard-card';
-      cardEl.dataset.fillUrl = url;
+      cardEl.dataset.fillId = 'i9';
       view.container.querySelector('.moodboard-board')!.appendChild(cardEl);
       raf.mockClear();
       view.rerender(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
-        placeholders={[holder({ filled: url })]} onPlaceholdersFilled={filled} />);
+        placeholders={[holder({ filled: { imageId: 'i9', url } })]} onPlaceholdersFilled={filled} />);
       expect(cardEl.style.opacity).toBe('1');
       expect(filled).toHaveBeenCalledWith(['placeholder-1']);
       expect(raf).not.toHaveBeenCalled();
@@ -567,9 +926,14 @@ describe('the Add images button', () => {
     expect(drops).toEqual([{ files: [file], at: { x: 620, y: 440 } }]);
   });
 
-  it('is off while files upload', () => {
-    const view = render(<BoardCanvas boardKey="k1" images={images} uploading onMove={() => {}} onDropFiles={() => {}} />);
-    expect((view.getByLabelText('Add images') as HTMLInputElement).disabled).toBe(true);
+  it('stays live while files upload, with no status of its own (GM): each upload is its placeholder', () => {
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
+    const input = view.getByLabelText('Add images') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    expect(input.closest('label')!.textContent).toBe('Add images');
+    expect(input.closest('label')!.className).not.toMatch(/busy/);
+    expect(view.container.textContent).not.toMatch(/Uploading/);
   });
 });
 

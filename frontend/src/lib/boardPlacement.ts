@@ -50,6 +50,8 @@ export interface PlaceRequest {
 export interface PlacementWork {
   /** Rows tried plus every block read while trying them. */
   cells: number;
+  /** Every block filed while building the grids (each cell or band it goes in). */
+  built?: number;
 }
 
 export interface Placed {
@@ -81,7 +83,7 @@ interface Range { lo: number; hi: number }
 /** The top-lefts one tile rules out for the new one, as whole pixels: x0 < x < x1 and y0 < y < y1. */
 interface Block { x0: number; x1: number; y0: number; y1: number }
 
-/** A block spread over more cells than this is kept in one list read by every query. */
+/** A block spread over more cells than this is filed by row band instead (BlockGrid). */
 const BIG_BLOCK_CELLS = 64;
 
 /** One cell's blocks, sorted both ways the run walks: by left edge, and by
@@ -100,21 +102,59 @@ function firstNot(list: readonly Block[], before: (b: Block) => boolean): number
   return low;
 }
 
+/** One pass over `cell`'s blocks in edge order from `x` on row `y`, in `dir`:
+ *  where no block of the cell covers x any more (x only moves on, so a block
+ *  passed by can't cover it later). A block over x starts less than the
+ *  cell's widest block before it (ends less than that after it), so the pass
+ *  starts there. */
+function passCell(cell: Cell, x: number, y: number, dir: 1 | -1, work?: PlacementWork): number {
+  if (dir > 0) {
+    const from = x - cell.widest;
+    for (let i = firstNot(cell.byX0, (b) => b.x0 <= from); i < cell.byX0.length; i += 1) {
+      const b = cell.byX0[i];
+      if (work) work.cells += 1;
+      if (b.x0 >= x) break;
+      if (b.x1 > x && b.y0 < y && y < b.y1) x = b.x1;
+    }
+  } else {
+    const from = x + cell.widest;
+    for (let i = firstNot(cell.byX1, (b) => b.x1 >= from); i < cell.byX1.length; i += 1) {
+      const b = cell.byX1[i];
+      if (work) work.cells += 1;
+      if (b.x1 <= x) break;
+      if (b.x0 < x && b.y0 < y && y < b.y1) x = b.x0;
+    }
+  }
+  return x;
+}
+
+/** Sorts a cell's blocks both ways and finds its widest. */
+function seal(cell: Cell) {
+  cell.byX0.sort((a, b) => a.x0 - b.x0);
+  cell.byX1 = [...cell.byX0].sort((a, b) => b.x1 - a.x1);
+  cell.widest = cell.byX0.reduce((most, b) => Math.max(most, b.x1 - b.x0), 0);
+}
+
 /**
  * The blocks, filed in a grid of cells (review 3, LOW-1): each block in every
  * cell it rules out a point of, so the blocks over a point are all in that
  * point's cell (plus the few too big to file). Cells are a few blocks wide
  * and a quarter of one tall, so a row reads about the blocks on it, and a
  * tall tile or a long band costs nothing on the rows and columns it doesn't
- * touch.
+ * touch. A block too big to file cell by cell goes in its rows' bands
+ * instead (review 4, LOW-1): a band is one row of cells across the whole
+ * board as tall as the big blocks are, so a row reads only the big blocks
+ * near it, in one pass in x order.
  */
 class BlockGrid {
   private readonly cells = new Map<number, Cell>();
-  private readonly big: Block[] = [];
+  private readonly bands = new Map<number, Cell>();
   private readonly ox: number;
   private readonly oy: number;
   private readonly cw: number;
   private readonly ch: number;
+  /** A band's height: a quarter of the big blocks' median height, at least a cell's. */
+  private readonly bh: number;
   private readonly cols: number;
   private readonly work?: PlacementWork;
   /** The rows the search tries: every block's top and bottom edge. */
@@ -131,45 +171,39 @@ class BlockGrid {
     this.oy = live.reduce((least, b) => Math.min(least, b.y0 + 1), 0);
     const right = live.reduce((most, b) => Math.max(most, b.x1 - 1), 0);
     this.cols = this.col(right) + 1;
+    const file = (into: Map<number, Cell>, key: number, b: Block) => {
+      // Building counts too: every block filed, in every cell or band.
+      if (work) work.built = (work.built ?? 0) + 1;
+      const cell = into.get(key);
+      if (cell) cell.byX0.push(b); else into.set(key, { byX0: [b], byX1: [], widest: 0 });
+    };
+    const big: Block[] = [];
     for (const b of live) {
       this.edges.push(b.y0, b.y1);
       const cx0 = this.col(b.x0 + 1);
       const cx1 = this.col(b.x1 - 1);
       const cy0 = this.row(b.y0 + 1);
       const cy1 = this.row(b.y1 - 1);
-      if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > BIG_BLOCK_CELLS) { this.big.push(b); continue; }
-      for (let cy = cy0; cy <= cy1; cy += 1) for (let cx = cx0; cx <= cx1; cx += 1) {
-        const key = cy * this.cols + cx;
-        const cell = this.cells.get(key);
-        if (cell) cell.byX0.push(b); else this.cells.set(key, { byX0: [b], byX1: [], widest: 0 });
-      }
+      if ((cx1 - cx0 + 1) * (cy1 - cy0 + 1) > BIG_BLOCK_CELLS) { big.push(b); continue; }
+      for (let cy = cy0; cy <= cy1; cy += 1) for (let cx = cx0; cx <= cx1; cx += 1) file(this.cells, cy * this.cols + cx, b);
     }
-    for (const cell of this.cells.values()) {
-      cell.byX0.sort((a, b) => a.x0 - b.x0);
-      cell.byX1 = [...cell.byX0].sort((a, b) => b.x1 - a.x1);
-      cell.widest = cell.byX0.reduce((most, b) => Math.max(most, b.x1 - b.x0), 0);
-    }
+    // Bands as tall as the big blocks are (a quarter of their median): a very
+    // tall tile sits in a few bands, not one per small cell row it spans.
+    this.bh = Math.max(this.ch, Math.round(median(big.map((b) => b.y1 - b.y0)) / 4));
+    for (const b of big) for (let by = this.band(b.y0 + 1); by <= this.band(b.y1 - 1); by += 1) file(this.bands, by, b);
+    for (const cell of this.cells.values()) seal(cell);
+    for (const band of this.bands.values()) seal(band);
   }
 
   private col(x: number) { return Math.floor((x - this.ox) / this.cw); }
 
   private row(y: number) { return Math.floor((y - this.oy) / this.ch); }
 
+  private band(y: number) { return Math.floor((y - this.oy) / this.bh); }
+
   private cellAt(x: number, y: number): Cell | undefined {
     const cx = this.col(x);
     return cx >= 0 && cx < this.cols ? this.cells.get(this.row(y) * this.cols + cx) : undefined;
-  }
-
-  /** The big blocks over (x, y) on row y, pushing `x` out in `dir` until none covers it. */
-  private bigOut(x: number, y: number, dir: 1 | -1): number {
-    for (let moved = true; moved;) {
-      moved = false;
-      for (const b of this.big) {
-        if (this.work) this.work.cells += 1;
-        if (b.y0 < y && y < b.y1 && b.x0 < x && x < b.x1) { x = dir > 0 ? b.x1 : b.x0; moved = true; }
-      }
-    }
-    return x;
   }
 
   /**
@@ -179,35 +213,14 @@ class BlockGrid {
    * gives up, returning a point past `stop`, once the end is past it.
    */
   runEnd(x: number, y: number, dir: 1 | -1, stop: (x: number) => boolean): number {
+    const band = this.bands.get(this.band(y));
     for (;;) {
       const before = x;
+      // Every block over x is in x's cell, or in the band of row y.
       const cell = this.cellAt(x, y);
-      if (cell) {
-        // Every block over x is in x's cell. One pass in edge order takes x
-        // to where no block of the cell covers it (x only moves on, so a
-        // block passed by can't cover it later).
-        // A block over x starts less than the cell's widest block before it
-        // (ends less than that after it), so the pass starts there.
-        if (dir > 0) {
-          const from = x - cell.widest;
-          for (let i = firstNot(cell.byX0, (b) => b.x0 <= from); i < cell.byX0.length; i += 1) {
-            const b = cell.byX0[i];
-            if (this.work) this.work.cells += 1;
-            if (b.x0 >= x) break;
-            if (b.x1 > x && b.y0 < y && y < b.y1) x = b.x1;
-          }
-        } else {
-          const from = x + cell.widest;
-          for (let i = firstNot(cell.byX1, (b) => b.x1 >= from); i < cell.byX1.length; i += 1) {
-            const b = cell.byX1[i];
-            if (this.work) this.work.cells += 1;
-            if (b.x1 <= x) break;
-            if (b.x0 < x && b.y0 < y && y < b.y1) x = b.x0;
-          }
-        }
-      }
+      if (cell) x = passCell(cell, x, y, dir, this.work);
       const passed = x;
-      x = this.bigOut(x, y, dir);
+      if (band) x = passCell(band, x, y, dir, this.work);
       // Free (nothing moved it), or past the stop, where its end can't count.
       if (x === before || stop(x)) return x;
       // Still in the cell it was just passed through, and no big block over it: free.

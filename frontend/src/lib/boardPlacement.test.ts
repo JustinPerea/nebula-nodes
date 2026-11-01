@@ -321,6 +321,17 @@ describe('big boards', () => {
     }
   });
 
+  it('a wish one pixel inside a tile\'s ruled-out end lands just past it, on all four sides (review 4, X3/X4/X7/X8)', () => {
+    // A 100 x 100 tile at (0, 0) rules out top-lefts -74 < x < 124 (and the
+    // same in y) for a 50 x 50 file, with the 24 px gap.
+    const tile = [{ x: 0, y: 0, width: 100, height: 100 }];
+    const place = (x: number, y: number) => placeTiles({ at: { x: x + 25, y: y + 25 }, sizes: [[50, 50]], occupied: tile, view: null }).spots[0];
+    expect(place(123, 25)).toEqual({ x: 124, y: 25 });
+    expect(place(-73, 25)).toEqual({ x: -74, y: 25 });
+    expect(place(25, 123)).toEqual({ x: 25, y: 124 });
+    expect(place(25, -73)).toEqual({ x: 25, y: -74 });
+  });
+
   it('a run of spans that only just overlap (by one pixel) is walked to its true end, both ways', () => {
     // Tall tiles, so every row of the view is the same. The new tile (50 wide)
     // is ruled out of 126 < x < 324 by the middle tile; the left one rules out
@@ -334,8 +345,8 @@ describe('big boards', () => {
     expect(right.spots).toEqual([{ x: 126, y: 400 }]);
   });
 
-  // Every block the search reads is counted (review 3, LOW-1), on the board
-  // shapes that cost most: a jittered grid with no room in view, one long
+  // Every block the search reads, and every one it files, is counted (review
+  // 3 and 4, LOW-1), on these four costly shapes: a jittered grid with no room in view, one long
   // band of tall tiles, one very tall tile beside a field, and a grid of
   // distinct heights (every row its own). Five files each.
   const shapes = (n: number) => {
@@ -367,16 +378,56 @@ describe('big boards', () => {
     ];
   };
 
-  it.each([[500, 450_000], [2000, 2_500_000]])('stays fast at %i tiles: every block read counts, on every costly shape', (n, bound) => {
+  it.each([[500, 450_000], [2000, 2_600_000]])('stays fast at %i tiles on these four shapes: every block read and filed counts', (n, bound) => {
     for (const shape of shapes(n)) {
-      const work = { cells: 0 };
+      const work = { cells: 0, built: 0 };
       const { spots, outside } = placeTiles({ at: shape.at, sizes: shape.sizes, occupied: shape.occupied, view: shape.view, work });
       // None of them has room in view: each file reads its whole view, then searches anywhere.
       expect(outside, shape.name).toEqual([0, 1, 2, 3, 4]);
       expect(noOverlaps([...shape.occupied, ...rectsOf(spots, shape.sizes)]), shape.name).toBe(true);
-      expect(work.cells, shape.name).toBeLessThan(bound);
+      expect(work.built, shape.name).toBeGreaterThan(0);
+      expect(work.cells + work.built, shape.name).toBeLessThan(bound);
     }
   });
+
+  // Review 4's shapes (LOW-1): a half-overlap collage (a dense, messy
+  // board), and a bimodal board whose tall half is all too big to file
+  // cell by cell. Round 4 read every big block on every step (172 million
+  // reads for the bimodal board at 2,000 tiles); the row bands read only
+  // the big blocks near a row.
+  const reviewShapes = (n: number) => {
+    const sizes = Array.from({ length: 5 }, (_, i) => [300 - i * 20, 200 + i * 10] as [number, number]);
+    seed = 11;
+    const bimodal: NodeRect[] = [];
+    const tall = Math.floor(n * 0.49);
+    for (let i = 0; i < n - tall; i += 1) bimodal.push({ x: 200000 + (i % 40) * 40, y: Math.floor(i / 40) * 40, width: 20, height: 20 });
+    for (let i = tall - 1; i >= 0; i -= 1) bimodal.push({ x: i * 330, y: Math.round(rnd() * 400), width: 300, height: 8000 });
+    seed = 13;
+    const collage: NodeRect[] = [];
+    const cols = Math.round(Math.sqrt(n * 1.5));
+    for (let i = 0; i < n; i += 1) {
+      collage.push({ x: (i % cols) * 150 + Math.round(rnd() * 20), y: Math.floor(i / cols) * 100 + Math.round(rnd() * 20), width: 300, height: 200 });
+    }
+    const rows = Math.ceil(n / cols);
+    return [
+      { name: 'bimodal', sizes, occupied: bimodal, view: { x: (tall / 2) * 330 - 2000, y: 500, width: 4000, height: 2000 },
+        at: { x: (tall / 2) * 330, y: 1500 } },
+      { name: 'collage', sizes, occupied: collage, view: { x: 0, y: 0, width: cols * 150, height: rows * 100 }, at: { x: cols * 75, y: rows * 50 } },
+    ];
+  };
+
+  it.each([[500, 80_000, 950_000], [2000, 600_000, 4_000_000]])('stays fast at %i tiles on review 4\'s bimodal and collage boards',
+    (n, bimodalBound, collageBound) => {
+      const [bimodal, collage] = reviewShapes(n);
+      for (const [shape, bound] of [[bimodal, bimodalBound], [collage, collageBound]] as const) {
+        const work = { cells: 0, built: 0 };
+        const { spots } = placeTiles({ at: shape.at, sizes: shape.sizes, occupied: shape.occupied, view: shape.view, work });
+        // The boards' own tiles may sit closer than the gap; the new ones never do.
+        const added = rectsOf(spots, shape.sizes);
+        expect(noOverlaps(added) && added.every((a) => shape.occupied.every((b) => apart(a, b))), shape.name).toBe(true);
+        expect(work.cells + work.built, shape.name).toBeLessThan(bound);
+      }
+    });
 
   it('a long band of tall tiles costs little: the search reads near the wish, not the whole band', () => {
     const band = shapes(2000)[1];

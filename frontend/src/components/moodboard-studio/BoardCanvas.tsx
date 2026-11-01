@@ -11,7 +11,7 @@ import { springProgress, springViewport } from '../../lib/viewportSpring';
 import { placeholderLabel, type BoardPlaceholder } from './boardPlaceholder';
 import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasStore';
 import { BoardCardNode } from './BoardCardNode';
-import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, wideFrom, type BoardFill } from './boardNodes';
+import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, isProvisionalCard, wideFrom, type BoardFill } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import type { NodeRect } from '../../lib/nodePlacement';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
@@ -37,8 +37,6 @@ export interface BoardCanvasProps {
    *  they go (lib/boardPlacement): the point they gather around, the view
    *  they should land in, and whether it was aimed (a drop). */
   onDropFiles: (files: File[], target: BoardTarget) => void;
-  /** Files are uploading: the Add images button waits. */
-  uploading?: boolean;
   /** Set by the board to where a paste goes: the last pointer position over
    *  the board, else the middle of the view, and the view at paste time
    *  (Cmd+V, Justin decided 2026-10-31). The Studio's paste reads it. */
@@ -71,13 +69,17 @@ export interface OutsideTiles {
   thumb: string | null;
 }
 
+/** What a placeholder node carries: its label, and once filled, the id of the
+ *  image that took its spot (focus moves on to that image's card). */
+type PlaceholderData = { label: string; fillId?: string };
+
 /** A placeholder tile (GM r5): a calm fill, a dashed edge one screen pixel
  *  wide at any zoom, and its label (the file's name) in the top-left corner.
  *  The edge is an SVG stroke whose width divides by the zoom (the CSS): a
  *  CSS border of 1px / zoom is snapped to whole pixels by Chrome before the
  *  zoom scales it, so it drew 3 px at zoom 3 and 0.75 px at 0.25, and
  *  non-scaling-stroke ignores the board's CSS scale() (live, r4). */
-function BoardPlaceholderNode({ data }: NodeProps<Node<{ label: string }, 'placeholder'>>) {
+function BoardPlaceholderNode({ data }: NodeProps<Node<PlaceholderData, 'placeholder'>>) {
   return (
     <div className="moodboard-board__placeholder">
       <svg className="moodboard-board__placeholder-edge" aria-hidden="true" focusable="false">
@@ -101,6 +103,10 @@ const ZOOM_STEP = 1.25;
 const VIEW_INSET = 16;
 /** How long focus follows a tile the chip showed (its upload may still run). */
 const FOLLOW_FOCUS_MS = 10_000;
+/** The longest a filled image waits for its card to draw and decode before its fade starts anyway. */
+export const FILL_DECODE_WAIT_MS = 1500;
+/** How long focus parked on the board waits for a removed tile's card to be drawn. */
+const HANDOFF_WAIT_MS = 2000;
 // Props React Flow gets the same object for on every render: a new one (an
 // inline `[]` or `{}`) would make it update its store on each pointer move.
 const NO_EDGES: [] = [];
@@ -113,6 +119,36 @@ const ARIA_LABELS = {
   'node.a11yDescription.ariaLiveMessage': ({ direction }: { direction: string; x: number; y: number }) =>
     `Moved the selected references ${direction}.`,
 };
+
+/** Runs `start` once the card `find` returns has decoded its image (or has
+ *  none), or after FILL_DECODE_WAIT_MS at most (review 4, NIT-3). Returns a cancel. */
+function whenDecoded(find: () => HTMLElement | null, start: () => void): () => void {
+  let stopped = false;
+  let frame = 0;
+  const stop = () => {
+    stopped = true;
+    window.clearTimeout(timer);
+    if (frame) window.cancelAnimationFrame(frame);
+  };
+  const go = () => {
+    if (stopped) return;
+    stop();
+    start();
+  };
+  const timer = window.setTimeout(go, FILL_DECODE_WAIT_MS);
+  const look = () => {
+    frame = 0;
+    if (stopped) return;
+    const card = find();
+    // Not drawn yet (React Flow draws it a commit later): look again next frame.
+    if (!card) { frame = window.requestAnimationFrame(look); return; }
+    const image = card.querySelector('img');
+    if (!image || typeof image.decode !== 'function') { go(); return; }
+    image.decode().then(go, go);
+  };
+  look();
+  return stop;
+}
 
 /**
  * The Board view (moodboard canvas plan C1, PR5): the board's references as
@@ -145,7 +181,7 @@ function BoardDots() {
     color="var(--mb-board-dot)" />;
 }
 
-function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pasteTarget: pasteTargetRef,
+function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTargetRef,
   placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
@@ -177,7 +213,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
 
   const build = useMemo(() => createBoardNodeBuilder(), []);
   const selected = useMemo(() => new Set(selection), [selection]);
-  const nodes = useMemo(() => build(images, selected, moving), [build, images, selected, moving]);
+  // The images now filling a held spot, by id: only their cards' nodes change
+  // when a placeholder fills or goes (review 4, LOW-5).
+  const fillIdsKey = placeholders.flatMap((spot) => (spot.filled ? [spot.filled.imageId] : [])).join('\n');
+  const fillIds = useMemo(() => new Set(fillIdsKey ? fillIdsKey.split('\n') : []), [fillIdsKey]);
+  const nodes = useMemo(() => build(images, selected, moving, fillIds), [build, images, selected, moving, fillIds]);
   // Which cards show their file rather than the thumbnail: worked out here once
   // per zoom, for every card (BoardWideContext).
   const widths = useMemo(() => [...new Set(images.flatMap((image) => (image.placements ?? []).map((card) => card.w)))]
@@ -186,43 +226,55 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   // The placeholders, then the cards over them (a filled spot's image fades
-  // in on top of its placeholder). Not selectable, not dragged.
-  const shown = useMemo<Node[]>(() => (placeholders.length === 0 ? nodes : [...placeholders.map((spot) => ({
+  // in on top of its placeholder). Not selectable, not dragged. A List add
+  // holds no spot and isn't drawn here.
+  const held = useMemo(() => placeholders.filter((spot) => !spot.listOnly), [placeholders]);
+  const shown = useMemo<Node[]>(() => (held.length === 0 ? nodes : [...held.map((spot) => ({
     id: spot.id, type: 'placeholder', position: { x: spot.x, y: spot.y }, width: spot.width, height: spot.height,
     measured: { width: spot.width, height: spot.height }, draggable: false, selectable: false, focusable: true,
-    ariaLabel: 'Adding an image', data: { label: placeholderLabel(spot.source) },
-  })), ...nodes]), [nodes, placeholders]);
+    ariaLabel: 'Adding an image', data: { label: placeholderLabel(spot.source), fillId: spot.filled?.imageId } satisfies PlaceholderData,
+  })), ...nodes]), [nodes, held]);
   // Images taking their spot: each fades in over its placeholder on the
   // board's spring (GM r5, corrected: a spring, not a timed fade), written
   // straight to the card's opacity per frame; reduced motion swaps at once.
-  // Then the placeholder goes.
+  // The fade waits until the card's image has decoded (review 4, NIT-3), so
+  // a slow first load never fades in an empty card; the placeholder shows
+  // meanwhile. Then the placeholder goes. Keyed by the new image's id.
   const fillProgress = useRef(new Map<string, number>());
-  const filling = useMemo<BoardFill>(() => {
-    const urls = new Set(placeholders.flatMap((spot) => (spot.filled ? [spot.filled] : [])));
-    return { has: (url) => urls.has(url), progress: (url) => fillProgress.current.get(url) ?? 0 };
-  }, [placeholders]);
+  const fill = useMemo<BoardFill>(() => ({ progress: (imageId) => fillProgress.current.get(imageId) ?? 0 }), []);
   const fades = useRef(new Map<string, () => void>());
   const filledDone = useRef(onPlaceholdersFilled);
   filledDone.current = onPlaceholdersFilled;
   useEffect(() => {
-    const filled = new Set(placeholders.flatMap((spot) => (spot.filled ? [spot.filled] : [])));
-    for (const url of fillProgress.current.keys()) if (!filled.has(url)) fillProgress.current.delete(url);
-    for (const spot of placeholders) {
-      const url = spot.filled;
-      if (!url || fades.current.has(spot.id)) continue;
-      const cards = () => wrapperRef.current?.querySelectorAll<HTMLElement>('.moodboard-card[data-fill-url]') ?? [];
+    for (const id of fillProgress.current.keys()) if (!fillIds.has(id)) fillProgress.current.delete(id);
+    for (const spot of held) {
+      const imageId = spot.filled?.imageId;
+      if (!imageId || fades.current.has(spot.id)) continue;
+      const selector = `.moodboard-card[data-fill-id="${CSS.escape(imageId)}"]`;
       const set = (progress: number) => {
         const clamped = Math.min(1, Math.max(0, progress));
-        fillProgress.current.set(url, clamped);
+        fillProgress.current.set(imageId, clamped);
         const opacity = String(clamped);
-        for (const card of cards()) if (card.dataset.fillUrl === url) card.style.opacity = opacity;
+        for (const card of wrapperRef.current?.querySelectorAll<HTMLElement>(selector) ?? []) card.style.opacity = opacity;
       };
-      fades.current.set(spot.id, springProgress(set, () => {
+      // What stops this fill now: the wait for the image, then its spring.
+      let stop = () => {};
+      let finished = false;
+      const finish = () => {
+        finished = true;
         fades.current.delete(spot.id);
         filledDone.current?.([spot.id]);
-      }));
+      };
+      fades.current.set(spot.id, () => stop());
+      let spring: (() => void) | null = null;
+      const wait = whenDecoded(() => wrapperRef.current?.querySelector<HTMLElement>(selector) ?? null, () => {
+        spring = springProgress(set, finish);
+      });
+      stop = () => { wait(); spring?.(); };
+      // Under reduced motion (or a card already decoded) it may be over already.
+      if (finished) fades.current.delete(spot.id);
     }
-  }, [placeholders]);
+  }, [held, fillIds]);
   useEffect(() => () => {
     for (const cancel of fades.current.values()) cancel();
     fades.current.clear();
@@ -447,7 +499,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
     }
     const active = document.activeElement;
     if (active && active !== document.body && active !== wrapperRef.current) return true;
-    const node = shownRef.current.find((item) => item.position.x === spot.x && item.position.y === spot.y);
+    // The card at the spot before its placeholder (both sit there while it fades in, review 4 NIT-2).
+    const there = shownRef.current.filter((item) => item.position.x === spot.x && item.position.y === spot.y);
+    const node = there.find((item) => item.type === 'card') ?? there[0];
     const element = node ? wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`) : null;
     if (!element) return false;
     element.focus({ preventScroll: true });
@@ -455,6 +509,106 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   }, []);
   useEffect(() => { focusFollowed(); }, [shown, focusFollowed]);
   useEffect(() => () => { follow.current = null; }, []);
+
+  // Focus on a tile that is being replaced moves on to what replaces it
+  // (review 4, HIGH-1 and MEDIUM-2; GM: never the page body, never pulled
+  // from elsewhere): a placeholder its image has filled hands focus to that
+  // image's card as soon as the card is drawn, however long the upload took;
+  // a provisional card hands it to its saved card. React Flow adds and drops
+  // node elements a commit after the board's own effects, so this runs on
+  // every change of the board's DOM (a MutationObserver, before paint), not
+  // only in an effect. If the focused tile's element goes first, focus is
+  // parked on the board (never the body) and moves on when the card comes.
+  // Focus anywhere else is left where the person put it.
+  const focused = useRef<{ element: HTMLElement; imageId: string | null } | null>(null);
+  const parked = useRef<{ imageId: string; until: number } | null>(null);
+  const handOff = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const nodes = shownRef.current;
+    /** What a tile stands for: a filled placeholder's image, or a card's. */
+    const imageOf = (id: string | null) => {
+      const node = id ? nodes.find((item) => item.id === id) : undefined;
+      if (!node) return undefined;
+      return node.type === 'placeholder' ? (node.data as PlaceholderData).fillId ?? null : (node.data as { imageId: string }).imageId;
+    };
+    /** The drawn card for `imageId`, other than `not`: a saved one before a provisional one. */
+    const cardFor = (imageId: string, not: string | null) => {
+      const cards = nodes.filter((item) => item.type === 'card' && item.id !== not && (item.data as { imageId: string }).imageId === imageId);
+      for (const card of [...cards.filter((item) => !isProvisionalCard(item.id)), ...cards]) {
+        const element = wrapper.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(card.id)}"]`);
+        if (element) return element;
+      }
+      return null;
+    };
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== wrapper && wrapper.contains(active) && active.classList.contains('react-flow__node')) {
+      parked.current = null;
+      const id = active.getAttribute('data-id');
+      const node = id ? nodes.find((item) => item.id === id) : undefined;
+      const known = imageOf(id);
+      const imageId = known === undefined ? (focused.current?.element === active ? focused.current.imageId : null) : known;
+      focused.current = { element: active, imageId };
+      // A saved card that is still on the board stays: it is what the person focused.
+      if (!imageId || (node?.type === 'card' && !isProvisionalCard(node.id))) return;
+      const next = cardFor(imageId, id);
+      if (next) next.focus({ preventScroll: true });
+      return;
+    }
+    if (active === null || active === document.body) {
+      const gone = focused.current;
+      focused.current = null;
+      // Only a tile that left the page: a click on nothing leaves it connected, and focus where the person put it.
+      if (!gone || gone.element.isConnected) return;
+      // Its image as the board has it now: a placeholder filled in the commit that dropped its element counts.
+      const goneImage = gone.imageId ?? imageOf(gone.element.getAttribute('data-id')) ?? null;
+      const next = goneImage ? cardFor(goneImage, null) : null;
+      if (next) { next.focus({ preventScroll: true }); return; }
+      wrapper.focus({ preventScroll: true });
+      if (goneImage) parked.current = { imageId: goneImage, until: Date.now() + HANDOFF_WAIT_MS };
+      return;
+    }
+    if (active === wrapper && parked.current) {
+      if (Date.now() > parked.current.until) { parked.current = null; return; }
+      const next = cardFor(parked.current.imageId, null);
+      if (next) { parked.current = null; next.focus({ preventScroll: true }); }
+      return;
+    }
+    // Focus went somewhere else on its own: nothing to follow.
+    focused.current = null;
+    parked.current = null;
+  }, []);
+  useLayoutEffect(() => { handOff(); }, [shown, handOff]);
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return undefined;
+    const observer = typeof MutationObserver === 'function' ? new MutationObserver(() => handOff()) : null;
+    observer?.observe(wrapper, { childList: true, subtree: true });
+    const onFocusIn = () => handOff();
+    // Backstop: a focused element dropped with no successor yet drops focus
+    // to nowhere (relatedTarget null); look again on the next frames.
+    let frames = 0;
+    let frame = 0;
+    const retry = () => {
+      frame = 0;
+      handOff();
+      if (frames++ < 30 && (parked.current || document.activeElement === document.body)) frame = window.requestAnimationFrame(retry);
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (event.relatedTarget !== null) return;
+      frames = 0;
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(retry);
+    };
+    wrapper.addEventListener('focusin', onFocusIn);
+    wrapper.addEventListener('focusout', onFocusOut);
+    return () => {
+      observer?.disconnect();
+      wrapper.removeEventListener('focusin', onFocusIn);
+      wrapper.removeEventListener('focusout', onFocusOut);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [handOff]);
 
   /** The chip's press: the tiles into view on the board's fit spring (a pan
    *  the person asked for; for a tile bigger than the view, a zoom out until
@@ -506,7 +660,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
       onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
       {/* Behind the cards, for the reader's ripple while Analyze runs (PR10b). */}
       <div className="moodboard-board__underlay" aria-hidden="true" data-layer="ripple" />
-      <BoardFillContext.Provider value={filling}>
+      <BoardFillContext.Provider value={fill}>
       <BoardWideContext.Provider value={wide}>
         <ReactFlow
           className="moodboard-board__flow"
@@ -537,10 +691,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
               aria-label="Zoom in" title="Zoom in">+</button>
             <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={fit}
               aria-label="Fit the board" title="Fit the board (Shift+1)">Fit</button>
-            <label className={`moodboard-board__control moodboard-board__control--text${uploading ? ' moodboard-board__control--busy' : ''}`}
-              title="Add images to the middle of the view">
-              <span aria-hidden="true">{uploading ? 'Uploading' : 'Add images'}</span>
-              <input className="moodboard-board__file" type="file" accept="image/*" multiple disabled={uploading}
+            {/* Live while files upload (GM): each upload is its own placeholder, so the toolbar has no status. */}
+            <label className="moodboard-board__control moodboard-board__control--text" title="Add images to the middle of the view">
+              <span aria-hidden="true">Add images</span>
+              <input className="moodboard-board__file" type="file" accept="image/*" multiple
                 aria-label="Add images" onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} />
             </label>
           </Panel>
@@ -551,7 +705,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
         <OutsideChip key={outside.id} tiles={outside} viewOf={viewRect} onShow={showOutside} onDone={onOutsideDone}
           focusBoard={focusBoard} />
       )}
-      {nodes.length === 0 && placeholders.length === 0 && (
+      {nodes.length === 0 && held.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>
           <span className="moodboard-board__empty-hint">Drop images here. They land where you drop them.</span>
