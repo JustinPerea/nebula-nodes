@@ -6,7 +6,7 @@ Cut from main 529665ef (#209 merged). GM's ruling on #209 NIT-1 (b), and GM's an
 
 At 700 px the Board view had a 130 px board between a 250 px rail and a 320 px panel. The List view already folded at 760 px.
 
-- **Under 900 px** (`max-width: 899px`) the side panel moves under the board, in the board's column: areas `"rail board" "rail panel"`, rows `auto auto minmax(0, 1fr) auto`. It's in the grid's flow, not a drawer, so no open/closed state is added and the settings stay visible.
+- **(Round 1; round 2 below replaces the 900 px query with a container query at 970.)** **Under 900 px** (`max-width: 899px`) the side panel moves under the board, in the board's column: areas `"rail board" "rail panel"`, rows `auto auto minmax(0, 1fr) auto`. It's in the grid's flow, not a drawer, so no open/closed state is added and the settings stay visible.
   - The panel keeps its own scroll (`overflow-y: auto`, already there) and is capped at `max-height: 40vh`, so the board keeps the rest of the height. Its left edge becomes a top edge.
   - 900 itself keeps the panel beside the board: GM said "under 900".
 - **At 760 px and under** (`max-width: 760px`, the List view's own query) the template is one column: `"toolbar" "offline" "rail" "board" "panel"`. The rail is capped at 150 px with a bottom edge, the same values as the List view's 760 rule. Those List rules are scoped to the Slava skin; the Board view's are unscoped like the rest of moodboard-board.css, so they hold with the skin class removed too.
@@ -133,3 +133,78 @@ Shots (scratchpad `boardnarrow/shots1/`, 11; md5 `uniq -d` is empty, each opened
 - Focused vitest, `--maxWorkers=2`, from a non-empty zsh array: 125 files (#209's round 2 set, every test that reads src/ or styles/ from disk or uses cssCascade, every Moodboard Studio test, every test naming WorkspaceHeader, the agent-notes tests, boardCanvasStore): 2046 tests passed, no Errors line.
 - `npm run build` with check-build-budget.mjs: passed at 444,245 bytes raw entry (limit 512,000), unchanged.
 - Tests that fail on 529665ef: 17 (the press tests, press then drag, the zoom tests, both write counts, the follower's two `aside()` tests, all six narrow-layout tests and the header title test). The rest pin behaviour that was already right (LOW-2, the DOM order, presses at rest) and kill their mutants.
+
+## Round 2: the panel folds on the board's width, not a window number (GM)
+
+GM's ruling after round 1: 900 was too low, and the rule should follow from the result. The panel moves under the board whenever side by side would leave the board column under 400 px. It's a container query on the studio, not a viewport number, and the rail fold stays at 760.
+
+### The rule
+
+- **The arithmetic.** Side by side, the board column is the studio's width less the rail (250) and the panel (320). It is at least 400 when the width is at least 250 + 400 + 320 = 970. So **the crossing is 970/969**: at 970 the panel is beside a 400 px board, and at 969 it's under the board.
+- **GM's measurements don't match the live layout.** GM measured the side-by-side board at "about 160" at 900 and "about 210" at 1000. Live, the board column is 330 px at 900 and 430 at 1000, which is 250 + column + 320 = window width, under both skins (round 1's run, and this round's at 1000: `250px 430px 320px`). The rule as GM wrote it (board column under 400) gives 970. If GM meant a different measure (the cards' area inside the fit padding, say), the crossing would move; the 400 constant is the one place to change it.
+- **The container.** The Board root is now `container: moodboard-board / inline-size`, and the fold is `@container moodboard-board (width < calc(250px + 400px + 320px))`, with the calc naming each term. Container conditions can't read `var()`, so the root now holds `--mb-board-rail-w: 250px` and `--mb-board-panel-w: 320px`. The template and the panel use those tokens, and a test checks the calc's terms are exactly rail, 400 and panel, read from the root's own tokens.
+- **Why the container is the root and not the board.** A container query styles the container's descendants, never the container itself. Querying the board column to move its sibling isn't possible, and it would loop anyway: moving the panel changes the board's width. The root is the studio, and the condition subtracts the rail and the panel, so it reads exactly as "the board column would be under 400".
+- **Containment is harmless here.** `inline-size` containment makes the root a containing block for fixed-position descendants and clips them to it. The root is already `position: fixed; inset: 0` with `overflow: hidden`, so its box is the window and nothing moves.
+
+### One template at every width above 760
+
+- A container query can't change the root's own `grid-template-*` (the root is the container). So the template now holds both places for the panel: `"rail board panel" "rail under under"`, columns `var(--mb-board-rail-w) minmax(0, 1fr) auto`, rows `auto auto minmax(0, 1fr) auto`.
+  - The fold only moves the panel: `grid-area: under; width: auto`, with the 40vh cap and a top edge in place of the left one.
+  - The third column is `auto` and the panel is `width: var(--mb-board-panel-w)` (border-box). So the column is 320 while the panel is in it and 0 once the panel has moved, and the board takes it.
+  - The `under` row is `auto` and empty, so 0 tall, until the panel moves in.
+  - The toolbar spans the `auto` column with a flexible one, so it doesn't size it (CSS grid leaves items spanning a flexible track out of intrinsic sizing). Live at 969: columns `250px 719px 0px`, rows `85px 0px 455px 360px`.
+- **At 760 and under** the template is one column, `"toolbar" "offline" "rail" "board" "under"`, and the panel is already in `under` from the container query (760 < 970). The rail cap is unchanged.
+
+### helpers/cssCascade reads @container
+
+- Rules record their `@container` preludes (`container`).
+- `containerMatches` handles `width`/`inline-size` ranges (`<`, `<=`, `>`, `>=`), min-/max-width, and px or calc() sums of px. Anything else reads as not holding.
+- With a viewport, a container rule applies only when an ancestor is an `inline-size` or `size` container with that name, at the container's width. That width is taken as the viewport's: the studio roots are `position: fixed; inset: 0`, and the ratchet checks the Board root's position and inset.
+- The ratchet's widths now include both sides of every container breakpoint (969 and 970), and the "both sides of the app's breakpoints" check keys on container conditions too.
+- New unit checks cover the parsing, the name, outside a container, and either side of the threshold.
+
+### Tests (studioGridAreas)
+
+- The threshold is rail + 400 + panel, from the root's own tokens, in that order. The container is `moodboard-board / inline-size` on a `fixed`, `inset: 0` root.
+- Under both skins:
+  - 970, 1000, 1100 and 1440: the panel is in `panel`, 320 wide, and the board column is at least 400 (exactly 400 at 970);
+  - 969, 900 and 761: the panel is in `under` with `width: auto`;
+  - 760 and 700: the folded template, one column, the panel in `under`, and the rail at 150 px with no right edge;
+  - 969 and 700: a top edge, no left edge, 40vh, scrolling; 970, 1000 and 1100: no cap, and a left edge.
+- Board first: in the markup, and on screen in both templates (the panel's area is right of the board or below it).
+- On 8a84207f's CSS, 7 of these fail.
+
+### Mutants (round 2, against studioGridAreas)
+
+15 mutants, all killed:
+
+| Mutant | Killed by |
+|---|---|
+| R1 the board minimum 300 in place of 400 / R2 `<=` in place of `<` | the threshold test, the beside/under test |
+| R3 the fold as a viewport `@media` / R4 the root not a container / R5 the query names another container | the resolution ratchet, the threshold test, the beside/under test |
+| R6 the panel token 360 (the calc still says 320) | the threshold test, the beside/under test |
+| R7 the folded panel keeps its 320 width | the beside/under test |
+| R8 `under` spans only the board column (`"rail under ."`) | the template tests (at 760 the run once came back all skipped under load; it was rerun alone and failed 4) |
+| R9 the 760 template names `panel`, not `under` | the resolution ratchet, the 760 test |
+| R10 the third column fixed at the panel's width | the threshold test (column template) |
+| R11 the calc terms in another order | the threshold test |
+| R12 no 40vh cap | the panel test |
+| H1 cssCascade ignores @container | the beside/under and panel tests |
+| H2 cssCascade ignores the container's name | the @container unit check |
+| H3 `<` read as `<=` | the beside/under and panel tests |
+
+### Live (8794/5794, serve_isolated.py, canary first)
+
+**59/59 passed.** blocked.log holds only canary lines and `canary ok`, and no request left the two ports. Chrome reads the calc() in the container condition (the panel moves at exactly 969).
+- **970:** columns 250/400/320, the panel beside the board. **969:** columns 250/719/0, the panel under the board at its width, the rail beside it. Both hold with the skin class removed too.
+- **1000:** board 430. **1100:** board 530. **700:** the rail folded above, board 700 × 305, the panel under it.
+- At every width the root is the `moodboard-board` inline-size container, the Updates chip overlaps nothing, the title is one line, and List's grid is unchanged.
+- **Crossing:** fitted at 1100, then 970 (beside) refits, then 969 (under) refits, then 700 refits, then back to 1100 refits; Fit moves nothing at each step. A board panned at 1100 keeps its exact camera across 970.
+- **Shots** (scratchpad `boardnarrow/shots2/`, 11, md5 `uniq -d` empty, each opened): `r2-board-{970,969,1000,1100,700}`, `r2-list-{970,969,1000,1100,700}`, `r2-cross-970-to-969`.
+
+### Gates (round 2)
+
+- `tsc -b --noEmit`: clean. `npm run lint`: clean.
+- Focused vitest, `--maxWorkers=2`, from a non-empty zsh array: 110 files, 1,439 tests passed (every test that reads `src/styles` or `cssCascade`, plus the moodboard, studio, workspace header, agent notes, board fit and board canvas store tests).
+- `npm run build` with the budget check: passed, 444,245 bytes raw / 136,427 gzip (unchanged: the change is CSS only).
+

@@ -32,18 +32,27 @@
    the List view's (moodboard-studio.css) is :not(.moodboard-studio-view--board),
    so nothing has to outrank anything (fix/moodboard-board-layout; a generic template in
    workspace-header.css once outranked this one and dropped the canvas and
-   the panel into implicit tracks; tests/studioGridAreas.test.ts). */
+   the panel into implicit tracks; tests/studioGridAreas.test.ts).
+
+   It is also the query container the side panel's fold reads (below): its
+   width is the studio's. The `under` area under the board is empty, so 0
+   tall, until the panel moves into it; the third column is `auto`, so it is
+   the panel's width while the panel is in it and 0 once it has moved. */
 .moodboard-studio-view.moodboard-studio-view--board {
+  --mb-board-rail-w: 250px;
+  --mb-board-panel-w: 320px;
+  container: moodboard-board / inline-size;
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: var(--mb-board-rail-w) minmax(0, 1fr) auto;
   grid-template-areas:
     "toolbar toolbar toolbar"
     "offline offline offline"
-    "rail board panel";
+    "rail board panel"
+    "rail under under";
   background: var(--mb-board-bg);
   color: var(--mb-board-ink);
   font-family: var(--mb-board-font);
@@ -270,6 +279,8 @@
 /* The side panel. */
 .moodboard-board-panel {
   grid-area: panel;
+  box-sizing: border-box;
+  width: var(--mb-board-panel-w);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -281,29 +292,32 @@
   background: var(--mb-board-panel);
 }
 
-/* A narrow window (GM, #209 NIT-1 (b)): the board keeps a usable column.
-   - Under 900 px the side panel moves under the board, an in-flow section the
-     width of the board's column (no drawer: a drawer hides the settings and
-     adds an open/closed state). It scrolls inside itself past 40% of the
-     window height, so the board keeps the rest.
-   - Under 760 px (the List view's breakpoint, moodboard-studio.css) the rail
-     folds above the board the same way the List view's does, and the board
-     takes the full width.
+/* A narrow window (GM, #209 NIT-1 (b), round 2): the board keeps a usable column.
+   - The side panel moves under the board whenever side by side would leave
+     the board's column under 400 px. Side by side the column is the studio's
+     width less the rail and the panel:
+       board = width - rail (250) - panel (320) >= 400
+       <=> width >= 250 + 400 + 320 = 970 px.
+     So at 970 the board is exactly 400 wide beside the panel, and at 969 the
+     panel goes under it. The query is on the studio (the container above),
+     not the window, and the calc() names each term; container queries can't
+     read var(), so the 250 and 320 are --mb-board-rail-w and
+     --mb-board-panel-w written out (tests/studioGridAreas.test.ts checks
+     they agree).
+   - Under the board the panel is an in-flow section the width of the board's
+     column (no drawer: a drawer hides the settings and adds an open/closed
+     state). It scrolls inside itself past 40% of the window height, so the
+     board keeps the rest.
+   - At 760 px and under (the List view's breakpoint, moodboard-studio.css)
+     the rail folds above the board the same way the List view's does, and
+     the board takes the full width.
    The board, then the panel, at every width: the screen order is the DOM's,
    so focus follows it. A fitted board refits into its new column, as on any
    resize (boardFitFollow: React Flow measures the board itself). */
-@media (max-width: 899px) {
-  .moodboard-studio-view.moodboard-studio-view--board {
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
-    grid-template-columns: 250px minmax(0, 1fr);
-    grid-template-areas:
-      "toolbar toolbar"
-      "offline offline"
-      "rail board"
-      "rail panel";
-  }
-
+@container moodboard-board (width < calc(250px + 400px + 320px)) {
   .moodboard-board-panel {
+    grid-area: under;
+    width: auto;
     max-height: 40vh;
     border-top: 1px solid var(--mb-board-edge-strong);
     border-left: 0;
@@ -319,7 +333,7 @@
       "offline"
       "rail"
       "board"
-      "panel";
+      "under";
   }
 
   .moodboard-studio-view--board > .moodboard-studio-view__rail {
