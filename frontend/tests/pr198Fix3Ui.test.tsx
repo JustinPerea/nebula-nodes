@@ -177,8 +177,8 @@ describe('GM r3 (a): Composition\'s offline row sits under the top header, above
     const view = source('components/video-editor/RemotionEditorView.tsx');
     expect(view).toMatch(/<WorkspaceHeader[^>]*\/>\s*\{\/\*[^]*?\*\/\}\s*<div className="remotion-editor-view__toolbar"/);
     expect(view).not.toMatch(/<WorkspaceHeader[^/]*>\s*<RemotionEditorToolbar/);
-    const rule = css('styles/workspace-header.css');
-    expect(rule).toMatch(/\.remotion-editor-view\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
+    const rule = css('styles/remotion-editor.css');
+    expect(rule).toMatch(/\.remotion-editor-view\s*\{[^}]*grid-template-areas:\s*"header header"\s*"offline offline"\s*"toolbar toolbar"/);
     expect(rule).toMatch(/\.remotion-editor-view__toolbar\s*\{[^}]*grid-area:\s*toolbar/);
   });
 });
