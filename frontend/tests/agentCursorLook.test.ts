@@ -110,11 +110,13 @@ describe('sessions of one agent', () => {
     // Mid L: the plain offsets.
     expect([1, 2, 3, 4, 5].map((n) => +sessionLightness(0.6, n).toFixed(6))).toEqual([0.6, 0.5, 0.7, 0.4, 0.8]);
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(6));
-    // Light: +0.10 and +0.20 would pass 0.92 and mirror onto 0.75 and 0.65,
-    // which are taken, so the last two step on by 0.10 inside the band.
-    expect(five(0.85)).toEqual([0.85, 0.75, 0.65, 0.55, 0.45]);
-    // Dark: −0.10 and −0.20 would fall under 0.35 and mirror up.
-    expect(five(0.4)).toEqual([0.4, 0.5, 0.6, 0.7, 0.8]);
+    // Light: +0.10 passes 0.92 and clamps to it (0.07 from 0.85); +0.20
+    // clamps onto that same 0.92 and mirrors onto 0.65, which −0.20 took,
+    // so the last steps on by 0.10 inside the band (GM - Design, PR #211 r7).
+    expect(five(0.85)).toEqual([0.85, 0.75, 0.92, 0.65, 0.55]);
+    // Dark: −0.10 falls under 0.35 and clamps to it (0.05 from 0.40); −0.20
+    // clamps onto that same 0.35 and mirrors up to 0.60.
+    expect(five(0.4)).toEqual([0.4, 0.35, 0.5, 0.6, 0.7]);
     // Pure white is pulled to 0.92 before stepping (GM - Design, PR #211 r3), never #ffffff.
     expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
     for (const L of [0.36, 0.5, 0.6, 0.85, 0.91]) {
@@ -152,7 +154,7 @@ describe('sessions of one agent', () => {
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(6));
     // The three lists GM confirmed: black steps up from the band's floor.
     expect(five(0)).toEqual([0.35, 0.45, 0.55, 0.65, 0.75]);
-    expect(five(0.85)).toEqual([0.85, 0.75, 0.65, 0.55, 0.45]);
+    expect(five(0.85)).toEqual([0.85, 0.75, 0.92, 0.65, 0.55]);
     expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
     // A base past either edge is pulled to it before any stepping.
     expect(sessionLightness(0.95, 1)).toBeCloseTo(0.92, 9);
@@ -166,6 +168,30 @@ describe('sessions of one agent', () => {
     expect(black.toLowerCase()).not.toBe('#000000');
     // Inside the band the agent's colour is kept exactly.
     expect(sessionFill(CLAUDE, { ordinal: 1 })).toBe(CLAUDE);
+  });
+
+  it('clamps a step past the band to its edge before mirroring, on both sides (GM - Design, PR #211 r7)', () => {
+    const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(4));
+    // The pink external colour (#FF6B9A, L 0.7226): +0.20 is 0.9226, past
+    // 0.92 by 0.0026. Mirrored it would land on · 4's 0.5226, so · 5 went
+    // darkest (0.4226). Clamped it sits at 0.92 and stays the lightest.
+    const pink = hexToOklch('#FF6B9A')!.l;
+    expect(pink).toBeCloseTo(0.7226, 4);
+    expect(five(pink)).toEqual([0.7226, 0.6226, 0.8226, 0.5226, 0.92]);
+    const fills = [1, 2, 3, 4, 5].map((ordinal) => sessionFill('#FF6B9A', { ordinal }));
+    expect(fills).toEqual(['#FF6B9A', '#db4a7c', '#ffa8be', '#b8265f', '#ffd9e2']);
+    const Ls = fills.map((f) => hexToOklch(f)!.l);
+    expect(Math.max(...Ls)).toBe(Ls[4]);
+    expect(Math.min(...Ls)).toBe(Ls[3]);
+    // Low side: from 0.52, −0.20 is 0.32 and clamps to 0.35 (0.07 from · 2's 0.42).
+    expect(five(0.52)).toEqual([0.52, 0.42, 0.62, 0.35, 0.72]);
+    // The clamp needs 0.05 of room: from 0.47 the edge is 0.02 from · 2's
+    // 0.37, so −0.20 mirrors to 0.67 and +0.20 steps on to 0.77.
+    expect(five(0.47)).toEqual([0.47, 0.37, 0.57, 0.67, 0.77]);
+    // The real Claude never reaches the edge: its five are the plain offsets.
+    const claude = hexToOklch(CLAUDE)!.l;
+    expect([1, 2, 3, 4, 5].map((n) => sessionLightness(claude, n) - claude).map((d) => +d.toFixed(6))).toEqual([0, -0.1, 0.1, -0.2, 0.2]);
+    expect([1, 2, 3, 4, 5].map((ordinal) => sessionFill(CLAUDE, { ordinal }))).toEqual(['#E8825A', '#c6633b', '#ffa887', '#a4451b', '#ffd8c9']);
   });
 
   it('for every base L from 0 to 1, sessions 1-5 stay in 0.35-0.92 and at least 0.05 apart (review 2)', () => {

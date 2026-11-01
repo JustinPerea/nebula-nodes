@@ -13,8 +13,9 @@ export const AGENT_CURSOR_NAME_FIRST_SIGHT_MS = 1500;
 /** OKLCH lightness offsets for an agent's sessions 1-5, cycling after five (GM - Design, PR #211 r2). */
 export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const;
 /**
- * A step that would put L above `max` is mirrored (−step), one under `min`
- * the other way; a result within `minGap` of a session already used takes
+ * A step that would put L past `max` or under `min` is clamped to that edge
+ * when the edge is at least `minGap` from every L in use, else mirrored
+ * across the base; a result within `minGap` of a session already used takes
  * the next unused offset instead. No fill is ever pure white.
  */
 export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05 } as const;
@@ -102,10 +103,12 @@ const inGamut = (rgb: Rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
 /**
  * The OKLCH lightness of an agent's session `ordinal`, from the agent's own L
- * (GM - Design, PR #211 r2). Sessions take the offsets 0, −0.10, +0.10,
- * −0.20, +0.20 in order. A step past 0.92 is mirrored down, one under 0.35
- * mirrored up, and one landing within 0.05 of an earlier session's L takes
- * the next unused offset. The offsets cycle after five, so sessions 1 and 6
+ * (GM - Design, PR #211 r2 and r7). Sessions take the offsets 0, −0.10,
+ * +0.10, −0.20, +0.20 in order. A step past 0.92 or under 0.35 is clamped to
+ * that edge if the edge is at least 0.05 from every L in use, else mirrored
+ * across the base (r7: clamp first, so the odd sessions stay the lighter
+ * ones whenever the band allows). One landing within 0.05 of an earlier
+ * session's L takes the next unused offset. The offsets cycle after five, so sessions 1 and 6
  * share a fill (their names differ, and with two or more cursors names show).
  * The band holds session 1 too (r3): a base outside 0.35-0.92 is pulled to
  * the nearer edge before any stepping, so black starts at L 0.35, visible on
@@ -115,6 +118,7 @@ export function sessionLightness(rawBaseL: number, ordinal: number): number {
   const steps = AGENT_CURSOR_SESSION_LIGHTNESS;
   const { max, min, minGap } = AGENT_CURSOR_SESSION_BAND;
   const baseL = Math.min(max, Math.max(min, rawBaseL));
+  // Mirrored across the base when past an edge: the fallback's first guess.
   const place = (delta: number) => {
     const L = baseL + delta;
     if (L > max) return baseL - Math.abs(delta);
@@ -131,9 +135,21 @@ export function sessionLightness(rawBaseL: number, ordinal: number): number {
   for (let k = 1; k <= index; k += 1) {
     const order = [...steps.keys()].map((j) => (k + j) % steps.length).filter((j) => !taken.has(j));
     const clear = (candidate: number) => used.every((u) => Math.abs(u - candidate) >= minGap - 1e-9);
-    let chosen = order.find((j) => clear(place(steps[j])));
+    // The first that works: the value itself; past an edge, the edge (r7),
+    // then the value mirrored across the base. The mirror is GM's rule 3 and
+    // never changes a result: past the top, −d came first and holds base−d
+    // (or found it not clear); past the floor, base+d is what +d, next in
+    // the order, would take anyway (0 diffs over 100,090 base × session
+    // pairs without it, round 3b).
+    const fit = (delta: number): number | undefined => {
+      const value = baseL + delta;
+      if (value > max) return [max, place(delta)].find(clear);
+      if (value < min) return [min, place(delta)].find(clear);
+      return clear(value) ? value : undefined;
+    };
+    let chosen = order.find((j) => fit(steps[j]) !== undefined);
     if (chosen !== undefined) {
-      L = place(steps[chosen]);
+      L = fit(steps[chosen])!;
     } else {
       // Near either end of the band the mirrored offsets fold onto each
       // other (from L 0.85, +0.10 and +0.20 mirror onto 0.75 and 0.65), so
