@@ -393,7 +393,11 @@ person's alone.
 A reference whose analysis failed carries `last_error` (the reader's text)
 and `last_error_kind` (`unavailable`, `unreadable`, `other`, or
 `transparent`: no pixel of it is seen, so it was never sent and won't be
-retried) in `nebula commons get <id>`.
+retried) in `nebula commons get <id>`; `nebula commons search` rows carry
+`last_error_kind` too. For `transparent`, the state reads
+`analysis_failed`, but the person sees "Not analyzed" (nothing failed:
+"This image is too transparent to analyze.") and there's no re-analyze, so
+don't tell them it failed or offer to retry it.
 
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the

@@ -486,7 +486,8 @@ def colours_current(moodboard: dict[str, Any], analysis: Any) -> bool:
 # The image entry's stored facts about its file: whether it has a pixel less
 # than opaque (``hasTransparency``), and whether it has a clear one, under
 # cinema.color.ALPHA_MIN (``hasClearPixels``), with the file's
-# ``[mtime_ns, size]`` when they were read (``alphaFileStat``). Nebula
+# ``[mtime_ns, size, ino, ctime_ns]`` when they were read (``alphaFileStat``,
+# ``file_version``). Nebula
 # writes them (at intake, and once for older images by ``stamp_transparency``
 # at startup, off the event loop and outside the board lock); a client can't
 # send them (moodboard_store.IMAGE_KEYS). A use trusts them only while the
@@ -500,6 +501,7 @@ HAS_CLEAR_PIXELS = "hasClearPixels"
 ALPHA_FACTS = (HAS_TRANSPARENCY, HAS_CLEAR_PIXELS)
 ALPHA_STAMP = "alphaFileStat"
 ALPHA_KEYS = (*ALPHA_FACTS, ALPHA_STAMP)
+ALPHA_STAMP_LEN = 4  # len(file_version(...)); an older [mtime_ns, size] stamp is restamped
 
 
 def _measured_images(moodboard: dict[str, Any], analysis: dict[str, Any]) -> list[dict[str, Any]]:
@@ -534,14 +536,27 @@ def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
                for img in _measured_images(moodboard, analysis))
 
 
+def file_version(stat: Any) -> tuple[int, int, int, int]:
+    """What tells one version of a file from another: ``(mtime_ns, size,
+    ino, ctime_ns)``, as services/input_sizes.py keys its cache. mtime and
+    size alone miss a same-size rewrite whose mtime was put back (``cp -p``,
+    ``rsync -a``, tar, unzip, ``os.utime``) or a coarse clock; ``utime``
+    can't set ctime, and a replace by rename gives a new inode (review 4
+    L3). A chmod or a move changes ctime too: one extra decode, harmless."""
+    return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino), int(stat.st_ctime_ns))
+
+
 def _stamp_of(stat: Any) -> list[int]:
-    return [int(stat.st_mtime_ns), int(stat.st_size)]
+    # A stamp of the older two-element form ([mtime_ns, size]) never matches:
+    # that image is read again once, then stamped in this form.
+    return list(file_version(stat))
 
 
 def stored_alpha_facts(image: Any, stat: Any) -> dict[str, bool] | None:
     """The entry's stored facts when they were read from the file as it is
     now (its ``alphaFileStat`` matches ``stat``); None otherwise: missing,
-    read from an older version of the file, or stored before the stamp."""
+    read from an older version of the file, stored before the stamp, or
+    stamped in the older ``[mtime_ns, size]`` form."""
     if not isinstance(image, dict) or any(key not in image for key in ALPHA_FACTS):
         return None
     if image.get(ALPHA_STAMP) != _stamp_of(stat):
@@ -573,7 +588,7 @@ def current_alpha_facts(image: Any) -> dict[str, bool] | None:
 
 def file_alpha_facts(path: Path) -> dict[str, bool] | None:
     """``{hasTransparency, hasClearPixels}`` for an image file, decoded once
-    per file version (cached by path, mtime and size, so a warm call only
+    per file version (cached by path and ``file_version``, so a warm call only
     stats it). None when it can't be read. A full decode: never on the event
     loop, and best done before a board lock is taken (``warm_alpha_facts``)."""
     try:
@@ -585,13 +600,14 @@ def file_alpha_facts(path: Path) -> dict[str, bool] | None:
 
 def _decoded_facts(path: Path, stat: Any) -> dict[str, bool] | None:
     try:
-        return dict(_file_alpha_facts(str(path), stat.st_mtime_ns, stat.st_size))
+        return dict(_file_alpha_facts(str(path), *file_version(stat)))
     except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
         return None  # not cached: an unreadable file is tried again next time
 
 
 @functools.lru_cache(maxsize=1024)
-def _file_alpha_facts(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, bool], ...]:
+def _file_alpha_facts(path: str, mtime_ns: int, size: int, ino: int,
+                      ctime_ns: int) -> tuple[tuple[str, bool], ...]:
     with Image.open(path) as pil:
         if not pil.has_transparency_data:  # cinema.color.has_transparency's own shortcut
             return ((HAS_TRANSPARENCY, False), (HAS_CLEAR_PIXELS, False))
@@ -615,10 +631,15 @@ def image_has_transparency(url: str) -> bool | None:
 
 
 def lacks_alpha_stamp(image: Any) -> bool:
-    """Whether an entry has stored facts but no ``alphaFileStat``: stored
-    before the stamp (round 3 dev builds). The startup pass stamps these on
-    any board, so each is read again once, then trusted while its file holds."""
-    return isinstance(image, dict) and any(key in image for key in ALPHA_FACTS) and ALPHA_STAMP not in image
+    """Whether an entry has stored facts but no ``alphaFileStat`` of the
+    current form: stored before the stamp (round 3 dev builds), or stamped
+    ``[mtime_ns, size]`` before the inode and ctime were added (rounds 4-5,
+    review 4 L3). The startup pass stamps these on any board, so each is
+    read again once, then trusted while its file holds."""
+    if not isinstance(image, dict) or not any(key in image for key in ALPHA_FACTS):
+        return False
+    stamp = image.get(ALPHA_STAMP)
+    return not (isinstance(stamp, list) and len(stamp) == ALPHA_STAMP_LEN)
 
 
 def _to_read(image: Any) -> tuple[Path, Any] | None:
@@ -863,15 +884,16 @@ def source_hash(moodboard: dict[str, Any], version: int = ANALYSIS_VERSION) -> s
 def _measure(path: Path, thresholds: Thresholds) -> dict[str, Any]:
     stat = path.stat()
     return copy.deepcopy(_measure_file(
-        str(path), stat.st_mtime_ns, stat.st_size,
+        str(path), file_version(stat),
         thresholds.accent_min_chroma, thresholds.accent_separation, thresholds.merge_delta_e))
 
 
 @functools.lru_cache(maxsize=256)
-def _measure_file(path: str, mtime_ns: int, size: int, accent_min_chroma: float, accent_separation: float,
+def _measure_file(path: str, version: tuple[int, int, int, int], accent_min_chroma: float, accent_separation: float,
                   merge_delta_e: float) -> dict[str, Any]:
-    """Measure one image file. The key's mtime and size re-measure a changed
-    file; the thresholds keep a dry run's measurement apart from the default."""
+    """Measure one image file. The key's ``file_version`` re-measures a
+    changed file, a same-size rewrite with its mtime put back too (review 4
+    L3); the thresholds keep a dry run's measurement apart from the default."""
     # Alpha is kept: a transparent pixel isn't a colour (Commons' measure
     # and _image_stats count it out). An opaque image reads as RGB, as before.
     with Image.open(path) as pil:

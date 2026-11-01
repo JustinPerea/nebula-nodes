@@ -409,11 +409,15 @@ def _path_is_clear(path: Path) -> bool:
         stat = path.stat()
     except OSError:
         return False
-    return _file_is_clear(str(path), stat.st_mtime_ns, stat.st_size)
+    from services.moodboard_analysis import file_version
+
+    # Keyed like the stored stamp, so a same-size rewrite with its mtime put
+    # back, or a replace by rename, is read again (review 4 L3).
+    return _file_is_clear(str(path), *file_version(stat))
 
 
 @functools.lru_cache(maxsize=512)
-def _file_is_clear(path: str, mtime_ns: int, size: int) -> bool:
+def _file_is_clear(path: str, mtime_ns: int, size: int, ino: int, ctime_ns: int) -> bool:
     try:
         with Image.open(path) as image:
             return is_clear(image)

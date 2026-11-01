@@ -1,5 +1,5 @@
 {
-  "about": "CIEDE2000 on cinema.color's sRGB to Lab (D65), as backend/commons/colour.delta_e00 computes it, and the merge threshold of backend/commons/measure.py. frontend/src/lib/paletteExtract.ts ports both. Written by scripts/generate-colour-delta-e00-fixture.py; backend/tests/test_colour_delta_e00_contract.py and frontend/tests/colourDeltaE00Contract.test.ts fail if either side drifts.",
+  "about": "CIEDE2000 on cinema.color's sRGB to Lab (D65), as backend/commons/colour.delta_e00 computes it, and the merge threshold of backend/commons/measure.py. frontend/src/lib/paletteExtract.ts ports both. deltaE00 is the backend's own value (to 1e-6). labPairs holds all 34 pairs of Sharma, Wu and Dalal (2005), numbered as in their table, with 'published' the value printed there (4 dp), so both sides are checked against the paper and not only against each other; the last two pairs take the negative and positive hue wraps away from zero chroma, with 'independent' from skimage and a from-the-paper implementation. Written by scripts/generate-colour-delta-e00-fixture.py; backend/tests/test_colour_delta_e00_contract.py and frontend/tests/colourDeltaE00Contract.test.ts fail if either side drifts.",
   "mergeDeltaE": 5.0,
   "rgbPairs": [
     {
@@ -636,7 +636,9 @@
         0.0,
         -82.7485
       ],
-      "deltaE00": 2.04246
+      "deltaE00": 2.04246,
+      "sharmaPair": 1,
+      "published": 2.0425
     },
     {
       "a": [
@@ -649,7 +651,9 @@
         0.0,
         -82.7485
       ],
-      "deltaE00": 2.86151
+      "deltaE00": 2.86151,
+      "sharmaPair": 2,
+      "published": 2.8615
     },
     {
       "a": [
@@ -662,7 +666,9 @@
         0.0,
         -82.7485
       ],
-      "deltaE00": 3.441191
+      "deltaE00": 3.441191,
+      "sharmaPair": 3,
+      "published": 3.4412
     },
     {
       "a": [
@@ -675,7 +681,39 @@
         0.0,
         -82.7485
       ],
-      "deltaE00": 0.999999
+      "deltaE00": 0.999999,
+      "sharmaPair": 4,
+      "published": 1.0
+    },
+    {
+      "a": [
+        50.0,
+        -1.1848,
+        -84.8006
+      ],
+      "b": [
+        50.0,
+        0.0,
+        -82.7485
+      ],
+      "deltaE00": 1.000005,
+      "sharmaPair": 5,
+      "published": 1.0
+    },
+    {
+      "a": [
+        50.0,
+        -0.9009,
+        -85.5211
+      ],
+      "b": [
+        50.0,
+        0.0,
+        -82.7485
+      ],
+      "deltaE00": 1.000013,
+      "sharmaPair": 6,
+      "published": 1.0
     },
     {
       "a": [
@@ -688,7 +726,9 @@
         -1.0,
         2.0
       ],
-      "deltaE00": 2.366859
+      "deltaE00": 2.366859,
+      "sharmaPair": 7,
+      "published": 2.3669
     },
     {
       "a": [
@@ -701,7 +741,9 @@
         0.0,
         0.0
       ],
-      "deltaE00": 2.366859
+      "deltaE00": 2.366859,
+      "sharmaPair": 8,
+      "published": 2.3669
     },
     {
       "a": [
@@ -714,7 +756,24 @@
         -2.49,
         0.0009
       ],
-      "deltaE00": 7.179172
+      "deltaE00": 7.179172,
+      "sharmaPair": 9,
+      "published": 7.1792
+    },
+    {
+      "a": [
+        50.0,
+        2.49,
+        -0.001
+      ],
+      "b": [
+        50.0,
+        -2.49,
+        0.001
+      ],
+      "deltaE00": 7.179163,
+      "sharmaPair": 10,
+      "published": 7.1792
     },
     {
       "a": [
@@ -727,7 +786,84 @@
         -2.49,
         0.0011
       ],
-      "deltaE00": 7.219472
+      "deltaE00": 7.219472,
+      "sharmaPair": 11,
+      "published": 7.2195
+    },
+    {
+      "a": [
+        50.0,
+        2.49,
+        -0.001
+      ],
+      "b": [
+        50.0,
+        -2.49,
+        0.0012
+      ],
+      "deltaE00": 7.219474,
+      "sharmaPair": 12,
+      "published": 7.2195
+    },
+    {
+      "a": [
+        50.0,
+        -0.001,
+        2.49
+      ],
+      "b": [
+        50.0,
+        0.0009,
+        -2.49
+      ],
+      "deltaE00": 4.804522,
+      "sharmaPair": 13,
+      "published": 4.8045
+    },
+    {
+      "a": [
+        50.0,
+        -0.001,
+        2.49
+      ],
+      "b": [
+        50.0,
+        0.001,
+        -2.49
+      ],
+      "deltaE00": 4.804525,
+      "sharmaPair": 14,
+      "published": 4.8045
+    },
+    {
+      "a": [
+        50.0,
+        -0.001,
+        2.49
+      ],
+      "b": [
+        50.0,
+        0.0011,
+        -2.49
+      ],
+      "deltaE00": 4.746071,
+      "sharmaPair": 15,
+      "published": 4.7461
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        50.0,
+        0.0,
+        -2.5
+      ],
+      "deltaE00": 4.306482,
+      "sharmaPair": 16,
+      "published": 4.3065
     },
     {
       "a": [
@@ -740,7 +876,9 @@
         25.0,
         -18.0
       ],
-      "deltaE00": 27.149231
+      "deltaE00": 27.149231,
+      "sharmaPair": 17,
+      "published": 27.1492
     },
     {
       "a": [
@@ -753,7 +891,99 @@
         -5.0,
         29.0
       ],
-      "deltaE00": 22.897692
+      "deltaE00": 22.897692,
+      "sharmaPair": 18,
+      "published": 22.8977
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        56.0,
+        -27.0,
+        -3.0
+      ],
+      "deltaE00": 31.903005,
+      "sharmaPair": 19,
+      "published": 31.903
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        58.0,
+        24.0,
+        15.0
+      ],
+      "deltaE00": 19.453521,
+      "sharmaPair": 20,
+      "published": 19.4535
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        50.0,
+        3.1736,
+        0.5854
+      ],
+      "deltaE00": 1.000026,
+      "sharmaPair": 21,
+      "published": 1.0
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        50.0,
+        3.2972,
+        0.0
+      ],
+      "deltaE00": 0.999973,
+      "sharmaPair": 22,
+      "published": 1.0
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        50.0,
+        1.8634,
+        0.5757
+      ],
+      "deltaE00": 1.000049,
+      "sharmaPair": 23,
+      "published": 1.0
+    },
+    {
+      "a": [
+        50.0,
+        2.5,
+        0.0
+      ],
+      "b": [
+        50.0,
+        3.2592,
+        0.335
+      ],
+      "deltaE00": 1.000035,
+      "sharmaPair": 24,
+      "published": 1.0
     },
     {
       "a": [
@@ -766,7 +996,9 @@
         -34.1751,
         39.4387
       ],
-      "deltaE00": 1.26442
+      "deltaE00": 1.26442,
+      "sharmaPair": 25,
+      "published": 1.2644
     },
     {
       "a": [
@@ -779,7 +1011,39 @@
         -29.7946,
         -4.0864
       ],
-      "deltaE00": 1.262959
+      "deltaE00": 1.262959,
+      "sharmaPair": 26,
+      "published": 1.263
+    },
+    {
+      "a": [
+        61.2901,
+        3.7196,
+        -5.3901
+      ],
+      "b": [
+        61.4292,
+        2.248,
+        -4.962
+      ],
+      "deltaE00": 1.873071,
+      "sharmaPair": 27,
+      "published": 1.8731
+    },
+    {
+      "a": [
+        35.0831,
+        -44.1164,
+        3.7933
+      ],
+      "b": [
+        35.0232,
+        -40.0716,
+        1.5901
+      ],
+      "deltaE00": 1.864495,
+      "sharmaPair": 28,
+      "published": 1.8645
     },
     {
       "a": [
@@ -792,7 +1056,24 @@
         14.973,
         -42.5619
       ],
-      "deltaE00": 2.037258
+      "deltaE00": 2.037258,
+      "sharmaPair": 29,
+      "published": 2.0373
+    },
+    {
+      "a": [
+        36.4612,
+        47.858,
+        18.3852
+      ],
+      "b": [
+        36.2715,
+        50.5065,
+        21.2231
+      ],
+      "deltaE00": 1.414578,
+      "sharmaPair": 30,
+      "published": 1.4146
     },
     {
       "a": [
@@ -805,7 +1086,39 @@
         -1.6435,
         0.0447
       ],
-      "deltaE00": 1.444129
+      "deltaE00": 1.444129,
+      "sharmaPair": 31,
+      "published": 1.4441
+    },
+    {
+      "a": [
+        90.9257,
+        -0.5406,
+        -0.9208
+      ],
+      "b": [
+        88.6381,
+        -0.8985,
+        -0.7239
+      ],
+      "deltaE00": 1.538117,
+      "sharmaPair": 32,
+      "published": 1.5381
+    },
+    {
+      "a": [
+        6.7747,
+        -0.2908,
+        -2.4247
+      ],
+      "b": [
+        5.8714,
+        -0.0985,
+        -2.2286
+      ],
+      "deltaE00": 0.637728,
+      "sharmaPair": 33,
+      "published": 0.6377
     },
     {
       "a": [
@@ -818,7 +1131,37 @@
         -0.0636,
         -0.5514
       ],
-      "deltaE00": 0.908233
+      "deltaE00": 0.908233,
+      "sharmaPair": 34,
+      "published": 0.9082
+    },
+    {
+      "a": [
+        50.0,
+        -40.0,
+        -20.0
+      ],
+      "b": [
+        50.0,
+        60.0,
+        10.0
+      ],
+      "deltaE00": 76.685024,
+      "independent": 76.685
+    },
+    {
+      "a": [
+        50.0,
+        60.0,
+        10.0
+      ],
+      "b": [
+        50.0,
+        -40.0,
+        -20.0
+      ],
+      "deltaE00": 76.685024,
+      "independent": 76.685
     }
   ]
 }

@@ -87,7 +87,7 @@ def test_a_file_replaced_in_place_is_read_again(tmp_path, monkeypatch) -> None:
     entry = _raw(tmp_path / "boards", made["id"])["images"][0]
     stat = _file_of(url).stat()
     assert (entry["hasTransparency"], entry["hasClearPixels"]) == (False, False)
-    assert entry["alphaFileStat"] == [stat.st_mtime_ns, stat.st_size]
+    assert entry["alphaFileStat"] == [stat.st_mtime_ns, stat.st_size, stat.st_ino, stat.st_ctime_ns]
     assert "outdated" not in store.get(made["id"])["analysis"]
 
     _replace(_file_of(url), _clear_rgba())  # same path, same size, a later mtime
@@ -162,7 +162,7 @@ def test_facts_stored_before_the_stamp_get_it_at_startup_on_any_board(tmp_path, 
     report = stamp_transparency_once()
     assert [Path(p).stem for p in report["saved"]] == [made["id"]]
     stat = _file_of(url).stat()
-    assert _raw(tmp_path / "boards", made["id"])["images"][0]["alphaFileStat"] == [stat.st_mtime_ns, stat.st_size]
+    assert _raw(tmp_path / "boards", made["id"])["images"][0]["alphaFileStat"] == list(moodboard_analysis.file_version(stat))
     assert stamp_transparency_once()["saved"] == []
 
 
@@ -191,6 +191,167 @@ def test_the_cache_reads_a_file_again_when_its_size_changes() -> None:
     assert file_alpha_facts(path) == {"hasTransparency": False, "hasClearPixels": False}
     _replace(path, Image.new("RGBA", (SIZE[0] * 2, SIZE[1]), (0, 0, 0, 0)), keep_mtime=True)
     assert file_alpha_facts(path) == {"hasTransparency": True, "hasClearPixels": True}
+
+
+# -- Review 4 L3: same size, same mtime, another file ---------------------------------------
+
+def _cache_clear() -> None:
+    """A fresh process: nothing decoded in memory, only the stored stamp."""
+    from services import moodboard_reader as reader
+
+    moodboard_analysis._file_alpha_facts.cache_clear()
+    reader._file_is_clear.cache_clear()
+
+
+def _clear_now(entry: dict) -> tuple:
+    from services import moodboard_reader as reader
+
+    path = _file_of(entry["url"])
+    return current_alpha_facts(entry), reader._image_is_clear(entry, path), reader._path_is_clear(path)
+
+
+CLEAR_NOW = ({"hasTransparency": True, "hasClearPixels": True}, True, True)
+
+
+def test_a_same_size_rewrite_with_its_mtime_put_back_is_read_again() -> None:
+    # cp -p, rsync -a, tar or unzip: same bytes count, mtime restored by utime;
+    # only ctime tells. Both the stored stamp and both caches must miss.
+    entry = {"id": "a", "url": _put(_opaque_rgba())}
+    path = _file_of(entry["url"])
+    assert stamp_transparency([entry]) is True
+    assert _clear_now(entry)[0] == {"hasTransparency": False, "hasClearPixels": False}
+    before = path.stat()
+    _replace(path, _clear_rgba(), keep_mtime=True)
+    after = path.stat()
+    assert (after.st_size, after.st_mtime_ns, after.st_ino) == (before.st_size, before.st_mtime_ns, before.st_ino)
+    assert after.st_ctime_ns != before.st_ctime_ns
+    _cache_clear()
+    assert _clear_now(entry) == CLEAR_NOW  # the stamp misses
+    entry2 = {"id": "b", "url": entry["url"]}
+    stamp_transparency([entry2])
+    assert entry2["alphaFileStat"] == list(moodboard_analysis.file_version(after))
+
+
+def test_a_same_size_same_mtime_replace_by_rename_is_read_again() -> None:
+    # An atomic save: a new file renamed over the old one, same size and mtime.
+    entry = {"id": "a", "url": _put(_opaque_rgba())}
+    path = _file_of(entry["url"])
+    assert stamp_transparency([entry]) is True
+    before = path.stat()
+    fresh = path.with_name(f"{path.stem}.tmp.png")
+    fresh.write_bytes(_png(_clear_rgba()))
+    os.utime(fresh, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.replace(fresh, path)
+    after = path.stat()
+    assert (after.st_size, after.st_mtime_ns) == (before.st_size, before.st_mtime_ns)
+    assert after.st_ino != before.st_ino
+    _cache_clear()
+    assert _clear_now(entry) == CLEAR_NOW
+
+
+def test_both_caches_miss_on_a_same_size_same_mtime_rewrite() -> None:
+    # Warm in-process caches, no stored facts in play: they must not answer
+    # for the old file.
+    from services import moodboard_reader as reader
+
+    path = _file_of(_put(_opaque_rgba()))
+    assert file_alpha_facts(path) == {"hasTransparency": False, "hasClearPixels": False}
+    assert reader._path_is_clear(path) is False
+    _replace(path, _clear_rgba(), keep_mtime=True)
+    assert file_alpha_facts(path) == {"hasTransparency": True, "hasClearPixels": True}
+    assert reader._path_is_clear(path) is True
+    # And a rename over it, with the clear file's size and mtime, back to opaque.
+    before = path.stat()
+    fresh = path.with_name(f"{path.stem}.tmp.png")
+    fresh.write_bytes(_png(_opaque_rgba()))
+    os.utime(fresh, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.replace(fresh, path)
+    assert file_alpha_facts(path) == {"hasTransparency": False, "hasClearPixels": False}
+    assert reader._path_is_clear(path) is False
+
+
+def test_the_colour_measure_cache_misses_on_a_same_size_same_mtime_rewrite() -> None:
+    # The measured colours are cached by the same file_version as the alpha
+    # facts, so a same-size rewrite with its mtime put back is measured again.
+    path = _file_of(_put(_opaque_rgba()))
+    thresholds = moodboard_analysis.Thresholds()
+    before = moodboard_analysis._measure(path, thresholds)
+    size = path.stat().st_size
+    _replace(path, Image.new("RGBA", SIZE, (200, 60, 30, 255)), keep_mtime=True)
+    assert path.stat().st_size == size
+    after = moodboard_analysis._measure(path, thresholds)
+    assert [c["hex"] for c in before["colors"]] == ["#2878c8"]
+    assert [c["hex"] for c in after["colors"]] == ["#c83c1e"]
+
+
+def test_a_stamp_of_the_older_two_element_form_is_read_again_then_restamped(monkeypatch) -> None:
+    entry = {"id": "a", "url": _put(_opaque_rgba())}
+    path = _file_of(entry["url"])
+    stat = path.stat()
+    # As round 4 and 5 builds stored it, and wrong about the file.
+    entry.update({"hasTransparency": True, "hasClearPixels": True,
+                  "alphaFileStat": [stat.st_mtime_ns, stat.st_size]})
+    assert current_alpha_facts(entry) == {"hasTransparency": False, "hasClearPixels": False}
+    assert stamp_transparency([entry]) is True
+    assert entry["alphaFileStat"] == list(moodboard_analysis.file_version(stat))
+
+    def no_decode(*args, **kwargs):
+        raise AssertionError("decoded an image whose stamp matches")
+
+    monkeypatch.setattr(moodboard_analysis, "_file_alpha_facts", no_decode)
+    assert stamp_transparency([entry]) is False
+
+
+
+def test_a_current_board_with_the_older_stamp_is_restamped_at_startup(tmp_path, monkeypatch) -> None:
+    # A version-6 board stamped [mtime_ns, size] by round 4-5 builds: the
+    # startup pass restamps it once, then leaves it.
+    from services.moodboard_store import MoodboardStore, stamp_transparency_once
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
+    store = MoodboardStore()
+    url = _put(_opaque_rgba())
+    made = store.create(name="Older stamp", images=[{"url": url}])
+    store.update(made["id"], analysis=analyze_moodboard(store.get(made["id"])))  # version 6
+    path = next((tmp_path / "boards").rglob(f"{made['id']}.json"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    stat = _file_of(url).stat()
+    raw["images"][0]["alphaFileStat"] = [stat.st_mtime_ns, stat.st_size]
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert [Path(p).stem for p in stamp_transparency_once()["saved"]] == [made["id"]]
+    assert _raw(tmp_path / "boards", made["id"])["images"][0]["alphaFileStat"] == list(
+        moodboard_analysis.file_version(_file_of(url).stat()))
+    assert stamp_transparency_once()["saved"] == []
+
+def test_a_client_echo_of_the_new_stamp_is_accepted_and_ignored(tmp_path, monkeypatch, person) -> None:
+    from fastapi.testclient import TestClient
+
+    import main
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
+
+    async def ignore(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(main.manager, "broadcast_raw", ignore)
+    monkeypatch.setattr(main.manager, "broadcast_browser", ignore)
+    client = TestClient(main.app)
+    made = client.post("/api/moodboards", json={"name": "Echo", "images": [{"url": _put(_clear_rgba())}]})
+    assert made.status_code == 200, made.text
+    board = made.json()
+    stored = _raw(tmp_path / "boards", board["id"])["images"][0]
+    assert len(stored["alphaFileStat"]) == 4
+    # The board as GET gives it, sent back whole: no 422.
+    echo = client.put(f"/api/moodboards/{board['id']}", json={"images": board["images"]})
+    assert echo.status_code == 200, echo.text
+    # A forged four-element stamp claiming opaque: accepted and ignored.
+    forged = [{**board["images"][0], "hasTransparency": False, "hasClearPixels": False,
+               "alphaFileStat": [1, 2, 3, 4]}]
+    put = client.put(f"/api/moodboards/{board['id']}", json={"images": forged})
+    assert put.status_code == 200, put.text
+    after = _raw(tmp_path / "boards", board["id"])["images"][0]
+    keys = ("hasTransparency", "hasClearPixels", "alphaFileStat")
+    assert {k: after[k] for k in keys} == {k: stored[k] for k in keys}
 
 
 @pytest.mark.asyncio

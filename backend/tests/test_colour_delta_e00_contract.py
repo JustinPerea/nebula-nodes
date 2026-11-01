@@ -3,7 +3,9 @@
 Extract from reference merges swatches with a TypeScript port of
 commons.colour.delta_e00 at commons.measure.MERGE_DELTA_E. The fixture holds
 what the backend computes; frontend/tests/colourDeltaE00Contract.test.ts holds
-the port to it. If the backend's colour distance or threshold changes, this
+the port to it. Its Lab pairs also carry Sharma, Wu and Dalal's published
+values (all 34), and two hue-wrap pairs an independent value, which both
+sides are checked against, so a bug they share fails too. If the backend's colour distance or threshold changes, this
 fails until the fixture is written again
 (scripts/generate-colour-delta-e00-fixture.py), and then the frontend test
 fails until the port follows."""
@@ -40,6 +42,41 @@ def test_rgb_pairs_match_the_backend(case):
 @pytest.mark.parametrize("case", FIXTURE["labPairs"], ids=lambda c: f"{c['a']}-{c['b']}")
 def test_lab_pairs_match_the_backend(case):
     assert float(delta_e00(np.array(case["a"]), np.array(case["b"]))) == pytest.approx(case["deltaE00"], abs=1e-6)
+
+
+SHARMA = [c for c in FIXTURE["labPairs"] if "published" in c]
+
+
+def test_the_fixture_holds_every_published_sharma_pair():
+    assert [c["sharmaPair"] for c in SHARMA] == list(range(1, 35))
+
+
+@pytest.mark.parametrize("case", SHARMA, ids=lambda c: f"sharma{c['sharmaPair']}")
+def test_lab_pairs_match_the_published_sharma_table(case):
+    # Sharma, Wu and Dalal (2005) print ΔE00 to 4 dp: the paper, not this code,
+    # is the reference, so a bug the TS port copied from here can't pass.
+    assert float(delta_e00(np.array(case["a"]), np.array(case["b"]))) == pytest.approx(case["published"], abs=1e-4)
+
+
+@pytest.mark.parametrize("case", [c for c in FIXTURE["labPairs"] if "independent" in c], ids=lambda c: f"{c['a']}-{c['b']}")
+def test_the_hue_wrap_pairs_match_an_independent_ciede2000(case):
+    assert float(delta_e00(np.array(case["a"]), np.array(case["b"]))) == pytest.approx(case["independent"], abs=1e-4)
+
+
+def test_the_fixture_takes_both_hue_wraps_away_from_zero_chroma():
+    # Review 4 N1: a pair at zero chroma or exactly 180° doesn't notice a
+    # missing wrap, so keep one each way with real chroma and |Δh'| well past 180.
+    def hue_step(case):
+        lab1, lab2 = np.array(case["a"], float), np.array(case["b"], float)
+        cbar = (np.hypot(*lab1[1:]) + np.hypot(*lab2[1:])) / 2
+        g = 0.5 * (1 - np.sqrt(cbar**7 / (cbar**7 + 25.0**7)))
+        h1, h2 = (np.degrees(np.arctan2(lab[2], (1 + g) * lab[1])) % 360 for lab in (lab1, lab2))
+        chroma = min(np.hypot((1 + g) * lab1[1], lab1[2]), np.hypot((1 + g) * lab2[1], lab2[2]))
+        return h2 - h1, chroma
+
+    steps = [hue_step(c) for c in FIXTURE["labPairs"]]
+    assert any(d < -190 and c > 10 for d, c in steps)
+    assert any(d > 190 and c > 10 for d, c in steps)
 
 
 def test_the_generator_writes_exactly_the_fixture():

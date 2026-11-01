@@ -16,6 +16,16 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
  * on screen moves. It is shown and sized through a data attribute and a CSS
  * variable (no React style prop), so React's renders leave it alone.
  *
+ * The spacer never goes away in one step (#208 review 4, M1; GM r10: "Shrinking
+ * it as the person scrolls up or the content grows is what 'no jump' meant").
+ * Removing it at once would shorten the content again, the browser would clamp
+ * scrollTop by its height, and the brief would jump on the next scroll or
+ * keystroke. Instead, on a scroll that leaves the held place and on every
+ * content change, it shrinks to exactly what the current scrollTop still needs
+ * (`need = scrollTop + clientHeight - (scrollHeight - spacer - gap)`), and it
+ * goes once nothing is needed. So the content scrolls by the person's own
+ * scroll, and content that grows takes the spacer's place.
+ *
  * Runs only while such a line is on screen: with none there is nothing to
  * measure and no layout read.
  */
@@ -30,8 +40,9 @@ export function useHoldBottom(selector: string) {
     lines: new Map<Element, number>(),
     /** The panel's scrollTop as of the last scroll or commit. */
     top: 0,
-    /** While a spacer holds: the scrollTop it keeps, and how it ends. */
-    hold: null as null | { top: number; observer: MutationObserver | null },
+    /** While a spacer holds: the scrollTop it keeps, the panel's flex gap
+     *  (the spacer takes one while shown), and the observer that shrinks it. */
+    hold: null as null | { top: number; gap: number; observer: MutationObserver | null },
     onScroll: null as null | (() => void),
   });
 
@@ -44,6 +55,30 @@ export function useHoldBottom(selector: string) {
       delete spacer.dataset[HOLDING];
       spacer.style.removeProperty(HOLD_HEIGHT_VAR);
     }
+  };
+
+  /** Shrink the spacer to what the panel's current scrollTop still needs, so
+   *  nothing clamps; remove it (and its gap) once nothing is needed. It only
+   *  ever shrinks: content that got shorter clamps as it would with no hold. */
+  const shrink = () => {
+    const s = state.current;
+    const hold = s.hold;
+    const spacer = spacerRef.current;
+    const panel = s.panel;
+    if (!hold || !spacer || !panel) return;
+    const held = parseFloat(spacer.style.getPropertyValue(HOLD_HEIGHT_VAR)) || 0;
+    const top = panel.scrollTop;
+    // How far the content below the spacer falls short of this scrollTop.
+    const need = top + panel.clientHeight - (panel.scrollHeight - held - hold.gap);
+    if (need <= 0) {
+      collapse();
+      return;
+    }
+    // Shown, the spacer brings its gap, so a short need keeps a 0 px spacer
+    // (removing it would clamp by `need`) until the person scrolls past it.
+    const next = Math.min(held, Math.max(0, need - hold.gap));
+    if (next !== held) spacer.style.setProperty(HOLD_HEIGHT_VAR, `${next}px`);
+    hold.top = top;
   };
 
   // Every commit of the panel's owner (no deps on purpose).
@@ -60,9 +95,10 @@ export function useHoldBottom(selector: string) {
       if (panel) {
         const onScroll = () => {
           const hold = s.hold;
-          // The person scrolled: a scroll that leaves the held position (one
-          // that doesn't is the browser's own, never the person's).
-          if (hold && panel.scrollTop !== hold.top) collapse();
+          // A scroll that leaves the held position (the person's, or the
+          // browser's clamp on a resize): shrink the spacer by what the new
+          // scrollTop no longer needs. One that doesn't leave it changes nothing.
+          if (hold && panel.scrollTop !== hold.top) shrink();
           s.top = panel.scrollTop;
           for (const line of s.lines.keys()) s.lines.set(line, lineHeight(line));
         };
@@ -103,10 +139,11 @@ export function useHoldBottom(selector: string) {
       // A layout read above may already have clamped it; put it back where it
       // was (same place, so nothing moves and it isn't the person's scroll).
       if (scroller.scrollTop !== top) scroller.scrollTop = top;
-      const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(collapse);
-      // Content changes from here on (this commit's are already done).
+      const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(shrink);
+      // Content changes from here on (this commit's are already done). The
+      // spacer's own resizing is an attribute change, which isn't observed.
       observer?.observe(scroller, { childList: true, subtree: true, characterData: true });
-      s.hold = { top, observer };
+      s.hold = { top, gap, observer };
     }
   });
 

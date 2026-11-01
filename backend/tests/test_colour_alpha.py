@@ -1130,12 +1130,13 @@ def test_the_reader_never_decodes_an_image_stored_as_having_no_clear_pixel(monke
 
 def test_an_unreadable_reference_is_not_called_too_transparent() -> None:
     from services import moodboard_reader as reader
+    from services import moodboard_analysis
 
     junk = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:10]}.png"
     junk.parent.mkdir(parents=True, exist_ok=True)
     junk.write_bytes(b"not an image")
     stat = junk.stat()
-    assert reader._file_is_clear(str(junk), stat.st_mtime_ns, stat.st_size) is False
+    assert reader._file_is_clear(str(junk), *moodboard_analysis.file_version(stat)) is False
     targets = reader.select_targets(_board(f"/api/outputs/alpha-tests/{junk.name}"))
     assert reader.clear_targets(targets) == set()
 
@@ -1204,9 +1205,9 @@ def test_the_board_routes_decode_new_files_off_the_loop_and_outside_the_lock(tmp
     real = moodboard_analysis._file_alpha_facts
     decodes: list[tuple[str, bool, bool]] = []
 
-    def watched(path, mtime_ns, size):
+    def watched(path, *version):
         misses = real.cache_info().misses
-        out = real(path, mtime_ns, size)
+        out = real(path, *version)
         if real.cache_info().misses > misses:  # a real decode, not a stat
             held = any(lock._is_owned() for lock in moodboard_store._LOCKS.values())
             decodes.append((Path(path).name, _on_loop(), held))
@@ -1237,9 +1238,9 @@ def test_the_startup_pass_decodes_outside_the_lock_and_writes_under_it(tmp_path,
     real_facts, real_write = moodboard_analysis._file_alpha_facts, moodboard_store._write_json
     seen: dict[str, list[bool]] = {"decode": [], "write": []}
 
-    def facts(path, mtime_ns, size):
+    def facts(path, *version):
         misses = real_facts.cache_info().misses
-        out = real_facts(path, mtime_ns, size)
+        out = real_facts(path, *version)
         if real_facts.cache_info().misses > misses:
             seen["decode"].append(moodboard_store._LOCKS.get(old) is not None and moodboard_store._LOCKS[old]._is_owned())
         return out
@@ -1297,7 +1298,7 @@ def test_facts_stored_before_the_stamp_are_read_again_once(monkeypatch) -> None:
     assert stamp_transparency(images) is True
     stat = _file_of(url).stat()
     assert images[0] == {**images[0], "hasTransparency": True, "hasClearPixels": True,
-                         "alphaFileStat": [stat.st_mtime_ns, stat.st_size]}
+                         "alphaFileStat": list(moodboard_analysis.file_version(stat))}
 
     def no_decode(*args, **kwargs):
         raise AssertionError("decoded an image whose stamp matches")

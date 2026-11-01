@@ -1086,7 +1086,8 @@ def stamp_transparency_once() -> dict[str, Any]:
     (moodboard_analysis.ALPHA_VERSION) and that lack them or whose file has
     changed since, so a read can tell whether those colours are out of date
     without decoding an image. On any board, an entry stored with the facts
-    but no stamp (round 3 dev builds) is read again once and stamped. Run at
+    but no stamp (round 3 dev builds), or with the older ``[mtime_ns, size]``
+    stamp (rounds 4-5), is read again once and stamped. Run at
     startup, off the event loop. The files are decoded before the board
     lock is taken; under it the board is read again and only the entries
     still needing it get them. It only writes those keys on image entries

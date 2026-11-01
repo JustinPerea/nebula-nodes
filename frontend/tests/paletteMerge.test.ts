@@ -2,7 +2,16 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { deltaE00, MERGE_DELTA_E, mergeNearColors, paletteFromPixels } from '../src/lib/paletteExtract';
+import {
+  deltaE00,
+  type EdgeEvidence,
+  isNeutralNearBlack,
+  MERGE_DELTA_E,
+  mergeNearColors,
+  NEUTRAL_NEAR_BLACK,
+  paletteFromPixels,
+  rgbToLab,
+} from '../src/lib/paletteExtract';
 
 // GM r3 on #208: "The image has two colors, so it should show two swatches.
 // Merge swatches that are near-identical (a small ΔE) and show fewer than six
@@ -107,30 +116,34 @@ describe('Extract from reference shows each distinct colour once', () => {
   });
 });
 
+// Evidence for mergeNearColors from an edge share alone: no two swatches
+// touch, so no run of blends is a band (foldBands).
+const edgeOnly = (edge: EdgeEvidence['edge']): EdgeEvidence => ({ edge, touching: () => false });
+
 describe('mergeNearColors', () => {
   it('folds a small mix of two bigger swatches into the nearer one, up to 5% of the image, when its pixels are an edge', () => {
     const edge = { rgb: [131, 90, 140], weight: 4 }; // half orange, half blue
     const big = [{ rgb: [232, 89, 60], weight: 50 }, { rgb: [30, 90, 220], weight: 46 }];
-    const onEdge = () => 1;
+    const onEdge = edgeOnly(() => 1);
     expect(mergeNearColors([...big, edge], MERGE_DELTA_E, onEdge).map((c) => c.weight)).toEqual([50, 50]);
     // Over 5% it is a colour of its own.
     expect(mergeNearColors([...big, { ...edge, weight: 6 }], MERGE_DELTA_E, onEdge)).toHaveLength(3);
     // GM r6: with fewer than 70% of its pixels next to both, it has an interior: an accent.
-    expect(mergeNearColors([...big, edge], MERGE_DELTA_E, () => 0.69)).toHaveLength(3);
-    expect(mergeNearColors([...big, edge], MERGE_DELTA_E, () => 0.7)).toHaveLength(2);
+    expect(mergeNearColors([...big, edge], MERGE_DELTA_E, edgeOnly(() => 0.69))).toHaveLength(3);
+    expect(mergeNearColors([...big, edge], MERGE_DELTA_E, edgeOnly(() => 0.7))).toHaveLength(2);
     // With no pixels to look at there is no evidence, so nothing folds.
     expect(mergeNearColors([...big, edge])).toHaveLength(3);
   });
 
   it('asks for edge evidence about every cluster a merged or folded swatch holds', () => {
     const asked: string[] = [];
-    const evidence = (s: number[], a: number[], b: number[]) => {
+    const evidence = edgeOnly((s: number[], a: number[], b: number[]) => {
       asked.push(`${[...s].sort()}|${[...a].sort()}|${[...b].sort()}`);
       // Only an edge when the black side holds both black clusters (0 and 1)
       // and, for the second blend, the first blend folded into it (3).
       const black = a.includes(0) && a.includes(1);
       return s.includes(4) ? (black && a.includes(3) ? 1 : 0) : black ? 1 : 0;
-    };
+    });
     const out = mergeNearColors([
       { rgb: [0, 0, 0], weight: 30, members: [0] },
       { rgb: [1, 1, 1], weight: 30, members: [1] },
@@ -230,9 +243,10 @@ function rng(seed: number): () => number {
 
 const DISC = [240, 120, 20];
 const SEEDS = [7, 11, 2026, 31337, 424242];
-/** GM r7 on #208 (round 5): "noisy blacks are common in photos and renders
- *  (40 of 40)". Forty seeds for the noise on each channel apart. */
-const SEEDS_40 = Array.from({ length: 40 }, (_, i) => 1000 + i * 7919);
+/** Seeds for the noise on each channel apart: the 40 the round 5 test used,
+ *  and the 200 GM's r8 check counts (the 40 are the first of them). */
+const SEEDS_200 = Array.from({ length: 200 }, (_, i) => 1000 + i * 7919);
+const SEEDS_40 = SEEDS_200.slice(0, 40);
 
 /** An orange disc on a noisy grey background, as review 3 built it: each
  *  background pixel ``base`` moved by 0 to 7 levels (toward white when
@@ -260,22 +274,20 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
     }
   });
 
-  it('merges blacks noisy on each channel apart in 39 of 40 seeds (GM, round 5)', () => {
-    // Their k-means blacks sit about ΔE00 2.05 apart, so at 2 none of these
-    // gave two swatches. At 3, one seed in 40 (about 2% of random images)
-    // still has two blacks ΔE00 3.49 apart: #030403 and #050106.
-    const three: number[] = [];
+  it('merges blacks noisy on each channel apart into one black, 40 of 40 and 200 of 200 (GM r8, round 6)', () => {
+    // At ΔE00 3 alone, seed 167299 kept two blacks ΔE00 3.49 apart (#030403,
+    // #050106), as did about 2-8% of random images: the neutral near-black
+    // merge takes them, since noise blacks peak at C* 1.98.
     for (const seed of SEEDS_40) {
       const out = colors(noisyDisc(seed, 0, 1, true));
-      if (out.length !== 2) three.push(seed);
+      expect(out, `seed ${seed}`).toHaveLength(2);
       expect(Math.max(...rgbOf(out[0]))).toBeLessThanOrEqual(7);
-      expect(deltaE00(rgbOf(out[out.length - 1]), DISC)).toBeLessThan(1);
+      expect(deltaE00(rgbOf(out[1]), DISC)).toBeLessThan(1);
     }
-    expect(three).toEqual([167299]);
-    const left = colors(noisyDisc(167299, 0, 1, true));
-    expect(left).toEqual(['#030403', '#050106', '#f07814']);
-    expect(deltaE00(rgbOf(left[0]), rgbOf(left[1]))).toBeGreaterThan(MERGE_DELTA_E);
-  });
+    const left = SEEDS_200.filter((seed) => colors(noisyDisc(seed, 0, 1, true)).length !== 2);
+    expect(left).toEqual([]);
+    // 240 palettes: about 1 s alone, so 30 s for a loaded machine.
+  }, 30_000);
 
   it('gives exactly two for the disc on a noisy white (248-255)', () => {
     for (const seed of SEEDS) {
@@ -300,6 +312,14 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
   it("merges a dark photo's blacks and leaves its greys (cinematic-noir.webp at 96 px)", () => {
     // 7886a137 and b972eb9d gave #020202 #0e0e0e #1a1a1a #070707 #393939 #7f7f7f.
     expect(colors(fixture('cinematic-noir', 96))).toEqual(['#070808', '#1a1a1a', '#393939', '#7f7f7f']);
+  });
+
+  it('keeps the tinted darks and deep violets of three photos as round 5 gave them (GM r9 guards)', () => {
+    // An L*-only floor merged a pair in each: C* 4.2 / 1.9 (cyberpunk-neon),
+    // 5.0 / 3.0 (editorial-flash) and 22.9 / 15.0 (neon-alley).
+    expect(colors(fixture('cyberpunk-neon', 96))).toEqual(['#214955', '#568090', '#0a262b', '#071315', '#222931', '#020909']);
+    expect(colors(fixture('editorial-flash', 77))).toEqual(['#d6d5ce', '#020802', '#0e140c', '#2a2e23', '#797970']);
+    expect(colors(fixture('neon-alley-9x16', 54))).toEqual(['#291043', '#1f0e37', '#361452', '#170c2b', '#0d071f', '#00ffa0']);
   });
 
   it('gives studio-product.webp three: its two lightest whites merge (GM, round 5)', () => {
@@ -360,6 +380,74 @@ function fixture(name: string, w: number): Img {
 function readdirFixture(name: string): string {
   // tests/fixtures/palette/<name>-<w>x<h>.rgba: the preset thumbnail scaled to
   // the Inspector's 96 px (PIL bilinear), straight RGBA.
-  const sizes: Record<string, string> = { 'cinematic-noir': '96x54', 'studio-product': '96x96' };
+  const sizes: Record<string, string> = {
+    'cinematic-noir': '96x54',
+    'studio-product': '96x96',
+    'cyberpunk-neon': '96x54',
+    'editorial-flash': '77x96',
+    'neon-alley-9x16': '54x96',
+  };
   return resolve(__dirname, `fixtures/palette/${name}-${sizes[name]}.rgba`);
 }
+
+// GM r8 and r9 on #208 (round 6): the neutral near-black merge. Two swatches
+// both under L* 6 AND both under C* 3 merge whatever their ΔE00.
+describe('the neutral near-black merge', () => {
+  const merged = (a: number[], b: number[]) => mergeNearColors([{ rgb: a, weight: 3 }, { rgb: b, weight: 1 }]);
+
+  it('is L* under 6 and C* under 3, both strictly', () => {
+    expect(NEUTRAL_NEAR_BLACK).toEqual({ maxL: 6, maxC: 3 });
+    expect(isNeutralNearBlack([5.999, 0, 0])).toBe(true);
+    expect(isNeutralNearBlack([6, 0, 0])).toBe(false);
+    expect(isNeutralNearBlack([3, 2.999, 0])).toBe(true);
+    expect(isNeutralNearBlack([3, 3, 0])).toBe(false);
+    expect(isNeutralNearBlack([3, 0, -3])).toBe(false); // C* from a and b together
+    expect(isNeutralNearBlack([3, 2.1, 2.1])).toBe(true); // C* 2.97
+  });
+
+  it('merges across the L* 6 edge only from below', () => {
+    const partner = [10, 0, 2]; // L* 0.62, C* 2.90
+    // L* 5.80, C* 2.76: ΔE00 8.48 apart, merged by the floor alone.
+    expect(merged(partner, [15, 20, 17])).toHaveLength(1);
+    // L* 6.19, C* 2.83: ΔE00 8.85, past the floor.
+    expect(merged(partner, [15, 21, 19])).toHaveLength(2);
+  });
+
+  it('merges across the C* 3 edge only from below', () => {
+    const partner = [10, 0, 2];
+    expect(merged(partner, [11, 19, 18])).toHaveLength(1); // C* 2.96, L* 5.24, ΔE00 8.85
+    expect(merged(partner, [11, 19, 17])).toHaveLength(2); // C* 3.15, L* 5.22, ΔE00 9.09
+  });
+
+  it('needs both swatches neutral near-blacks, not one', () => {
+    const black = [0, 0, 0];
+    expect(merged(black, [15, 21, 19])).toHaveLength(2); // the other over L* 6
+    expect(merged([15, 21, 19], black)).toHaveLength(2);
+    expect(merged(black, [11, 19, 17])).toHaveLength(2); // the other over C* 3
+    expect(merged([11, 19, 17], black)).toHaveLength(2);
+  });
+
+  it('merges three neutral near-blacks transitively, each pair over ΔE00 3, weights adding', () => {
+    const three = [[0, 0, 0], [0, 7, 2], [5, 0, 6]];
+    expect(deltaE00(three[0], three[1])).toBeGreaterThan(3);
+    expect(deltaE00(three[0], three[2])).toBeGreaterThan(3);
+    expect(deltaE00(three[1], three[2])).toBeGreaterThan(3);
+    const out = mergeNearColors([
+      { rgb: three[0], weight: 5 },
+      { rgb: three[1], weight: 3 },
+      { rgb: three[2], weight: 2 },
+      { rgb: [240, 120, 20], weight: 4 },
+    ]);
+    expect(out.map((c) => c.weight)).toEqual([10, 4]);
+    // Weight-averaged in sRGB: (0*5 + 0*3 + 5*2) / 10, (0*5 + 7*3 + 0*2) / 10, (0*5 + 2*3 + 6*2) / 10.
+    out[0].rgb.forEach((v, i) => expect(v).toBeCloseTo([1, 2.1, 1.8][i], 9));
+    expect(isNeutralNearBlack(rgbToLab(out[0].rgb))).toBe(true);
+  });
+
+  it('keeps a deep navy and a tinted dark apart from black', () => {
+    const black = [0, 0, 0];
+    expect(merged(black, [10, 14, 40])).toHaveLength(2); // navy: L* 4.80 but C* 18.7
+    expect(merged(black, [14, 20, 12])).toHaveLength(2); // tinted dark: L* 5.60, C* 5.04
+    expect(merged(black, [7, 19, 21])).toHaveLength(2); // cyberpunk-neon's #071315: C* 4.2
+  });
+});

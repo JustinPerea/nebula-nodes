@@ -451,11 +451,14 @@ The server exposes these tools for building and running (see
   surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
   transparent to add colors (no pixel at alpha 16 of 255) is never sent and
   is marked failed with `last_error` "too transparent to add colors; not sent
-  to the reader" and kind `transparent`, which the Commons shows in its
-  muted colour, as no error, with the neutral badge "Not analyzed" and no
+  to the reader" and kind `transparent`, which the Commons shows as no
+  error, with the plain neutral badge "Not analyzed" (its own colour,
+  `--sr-ink-light`) and no
   Retry or Re-analyze: "This image is too transparent to analyze." The
   person's re-analyze route answers that state rather than requeuing it,
-  since the file can't change (assets are stored by their sha256).
+  since the file can't change (assets are stored by their sha256), and
+  the person's Re-analyze stale leaves it as it is too (its `queued`
+  counts only what was requeued).
   `commons_search` rows carry `last_error_kind` too. References measured before
   `measure-2` keep their palettes until analyzed again. The Vision node and
   QC send an image with transparency as it shows on a canvas node (#0a0a0a)
@@ -4564,7 +4567,10 @@ nebula moodboard delete <board>
   (`GET /api/moodboards/{id}`; MCP's image views leave them out):
   `hasTransparency` (a pixel less than opaque) and `hasClearPixels` (a
   pixel under alpha 16 of 255), with `alphaFileStat`, the file's
-  `[mtime_ns, size]` when they were read. Each is read once when the image
+  `[mtime_ns, size, ino, ctime_ns]` when they were read (the inode and
+  change time catch a same-size copy whose mtime was put back, and a
+  replace by rename; a stamp of the older `[mtime_ns, size]` form never
+  matches, so that image is read again once and restamped). Each is read once when the image
   is added (off the event loop, before the board is locked), and once at
   startup (in the background) for the images of boards analyzed before
   version 6. A use trusts them only while the file's stat still matches

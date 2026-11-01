@@ -910,3 +910,355 @@ plus round 4's 21 again. Survivors:
     to 3 on seed 7.
   - The shots were retaken after the session move (same values) and
     opened, with no md5 duplicates.
+
+## Round 6 (base a644daa3): the neutral near-black merge
+
+**GM r8 and r9:**
+- At ΔE00 3, 2 to 8% of images with blacks noisy on each channel still
+  kept two blacks. Seed 7's #040304 and #020602 are an example. "2–8% is
+  too often for a visible defect."
+- Raising the threshold costs real tones elsewhere, so near-black is
+  treated on its own.
+- GM asked to describe exactly what we're removing, neutral noise black:
+  "both swatches under L* 6 and both under C* 3."
+
+**The rule.** The rule is `NEUTRAL_NEAR_BLACK = { maxL: 6, maxC: 3 }`,
+beside `MERGE_DELTA_E` in `paletteExtract.ts`. Two swatches that are both
+under L* 6 and both under C* 3 merge whatever their ΔE00, closest-first
+like any merge (their distance reads 0), with their weights added.
+Everything else still merges under ΔE00 3. GM's reasons:
+- Under L* 6, displays can't tell blacks apart.
+- Noise blacks peak at C* 1.98. Over 200 seeds, all 1,000 k-means black
+  clusters had C* from 0.03 to 1.98 (median 1.14), so 3 leaves a margin.
+- Tinted darks (C* 4–5) and deep violets (C* 15–23) are real tones.
+
+**The options GM picked from.** These were measured against round 5 on
+200 seeds of per-channel noise and 29 real images: the 12 presets, the 10
+golden images and the 7 character-smoke images.
+
+| Option | Seeds with one black (of 200) | Real images changed |
+|---|---|---|
+| None (ΔE00 3 alone) | 191 | none |
+| L* 6, no C* limit | 200 | cyberpunk-neon, editorial-flash, neon-alley |
+| L* 6, C* under 6, 8, 10 or 12 | 200 | cyberpunk-neon, editorial-flash |
+| **L* 6, C* under 3 or 4** | **200** | **none** |
+| L* 5, with or without a C* limit (6 to 12) | 200 | cyberpunk-neon |
+| L* 4, with or without a C* limit (6 to 12) | 200 | none |
+
+An L*-only floor merged these pairs:
+- cyberpunk-neon: #071315 (L* 5.10, C* 4.2) with #020909 (L* 2.06,
+  C* 1.9), ΔE00 3.09.
+- editorial-flash: #0e140c (L* 5.60, C* 5.0) with #020802 (L* 1.72,
+  C* 3.0), ΔE00 3.12.
+- neon-alley: #170c2b (L* 5.60, C* 22.9) with #0d071f (L* 3.04, C* 15.0),
+  ΔE00 5.66.
+
+L* 4 alone also passed. GM turned it down because "it passes by luck of
+the samples": it would still merge a dark saturated colour under L* 4
+with a black.
+
+**The checks:**
+- With the rule built, the 29 real images and the two synthetic probes
+  (noisy grey black, grey caption) give exactly round 5's swatches. So
+  studio-product's round 5 change (#ededee and #f9f9f9 into #f2f2f3) is
+  still the only change since round 4.
+- 200 of 200 seeds give one black, and so do 200 of 200 `Math.random`
+  images.
+
+**Tests,** in `paletteMerge.test.ts`:
+- **Noise.** The 40 seeds all give one black, with no leftover; the 200 do
+  too (seed 167299 was the round 5 leftover).
+- **Guards.** cyberpunk-neon, editorial-flash and neon-alley keep their
+  round 5 swatches. They are new 96 px fixtures in
+  `tests/fixtures/palette/`.
+- **Both edges.** `isNeutralNearBlack` at L* 5.999 and 6, and at C* 2.999
+  and 3; C* reads a* and b* together. sRGB pairs just inside and just
+  outside each edge are each over ΔE00 8 apart, so only the rule can merge
+  them.
+- **Both, not one.** A black and a colour just past either edge stay
+  apart, in either order.
+- **Transitive.** Three neutral near-blacks, each pair over ΔE00 3, merge
+  into one with weight 10. The colour is the weight average in sRGB
+  ([1, 2.1, 1.8]), and it's still a neutral near-black.
+- **Real tones stay apart from black.** A deep navy (L* 4.80, C* 18.7), a
+  tinted dark (L* 5.60, C* 5.04) and cyberpunk-neon's #071315 (C* 4.2).
+- **On a644daa3:**
+  - Four tests fail there: the noise test, both edge merges and the
+    transitive merge.
+  - The rest pass there by design, as guards: the helper's edges, both
+    not one, the real tones and the three photos.
+
+**Mutants (15), all killed but one:**
+- maxL 5 and 7; maxC 2, 4 and 6.
+- `<=` for L* and for C*.
+- Either-under instead of both-under.
+- No chroma check, no L* check, chroma from a* alone, and no rule at all.
+- The threshold at 2 and 4.
+- The survivor is the rule's distance as `min(1, ΔE00)` instead of 0. It's
+  equivalent: any value under 3 still merges, and it only reorders which
+  pair merges first.
+
+The probes are `cmp.mjs` (rounds 4, 5 and 6 on the 31 images) and
+`options.mjs` (the table above). They aren't in the repo.
+
+### Review 4 and GM r10 (round 6, same base)
+
+**How Extract reads an image now (`paletteExtract.ts`):**
+- It reads the picked image whole, up to `READ_MAX_DIM` (4096 px on the
+  longest edge; anything larger is drawn down to that first).
+- **An image with transparency** (any alpha under 255) is reduced in JS by
+  `areaGrid`, the backend's `_area_pixels` with positions kept: f x f
+  blocks, alpha-weighted mean colour, weight = the block's alpha over
+  f·f·255, pixels under `ALPHA_MIN` out first. The canvas's own downscale
+  is never used for it. That downscale works on premultiplied 8-bit colour:
+  blocks of faint pixels came back hue-shifted, which was the phantom
+  #0f190f on mark74 (review 4, M3).
+- **An opaque image** clusters on the canvas's 96 px downscale, as it
+  always has, so the 29 real images cluster exactly as before.
+- **Clusters** stay at 96 px (`CLUSTER_MAX_DIM`). The **edge evidence** is
+  read at 256 px (`EVIDENCE_MAX_DIM`, GM r10 item 3): each cell of the
+  area-reduced 256 px grid gets its nearest 96 px centroid.
+  `edgeEvidenceFromLabels` now gives three things:
+  - `edge`: the share of the swatch's pixels next to both colours. It's
+    NaN when the swatch has no pixel at 256.
+  - `touching`: whether two swatches touch, read on the 96 px labels, where
+    every cluster has pixels.
+  - `colour`: the swatch's mean colour at 256.
+
+**One band (GM r10 item 2, review 4 L1).** This is `foldBands`. A run of
+small swatches (each under 5% and lighter than both ends) that lie on the
+line between the same two colours (strictly between, within ΔE00 5) and
+touch one another is one band. The heaviest pair of colours goes first.
+- The band's colour is the weighted mean of its 256 px pixels, or the
+  96 px weighted centre when it has none.
+- The evidence then decides: next to both (0.7) means it folds into the
+  nearer colour, whatever the band's total size; an interior means it stays
+  as one accent.
+- **Two small accents on one line that don't touch stay two.** Two that
+  touch are one band, at their centre. That's GM's rule as written; a test
+  pins it.
+- **The order.**
+  1. Blends that are an edge between two main colours (each at least 5%)
+     fold first. Without this, a seam touching a grey caption banded with
+     it and shifted the caption to #7e7e7e.
+  2. Then runs become bands.
+  3. Then any blend or band that is an edge folds.
+- **A swatch with no pixel at 256** is a product of the 96 px reduction.
+  It waits for its run. If it's still on its own at the end, it folds onto
+  its nearest line whatever its size.
+  - mark74 needs this. Its 2 x 2 blocks mix the scattered charcoal and
+    orange into a 7.8% swatch, heavier than the 4.4% orange, with no
+    pixel at full size.
+- **Why the colour comes from 256 px.** Read at 96 px, the band's centre
+  drifted. The blends at a stripe's sides are smeared toward their
+  neighbours, and blends with no 256 px pixel weigh in. The 20 px frame
+  came out #636363 and the 25 px flag divider red-biased #931b62. Read at
+  256 px, they're #808080 and #781e78.
+
+**The cutoff (GM r10 item 4, review 4 N3): `EDGE_REACH` 2 at 256 px.** A
+band w cells wide has min(w, 5 - w) / w of its cells next to both, so 0.7
+cuts between 2 and 3 cells. The evidence data: the probes' widths at
+256 px, the share each reach would give, and what Extract shows.
+
+| Probe (source) | Cells at 256 | Reach 1 | **Reach 2** | Reach 3 | Extract |
+|---|---|---|---|---|---|
+| 1 px grey seam, 1000 px | 1 | 1.00 | **1.00** | 1.00 | 2 (folds) |
+| 1 px red-blue seam, 1000 px | 1 | 1.00 | **1.00** | 1.00 | 2 (folds) |
+| 2 px antialiased seam, 1000 px | 2 | 0.50 | **1.00** | 1.00 | 2 (folds) |
+| ramp 10 px of 960 | 3 | 0 | **0.67** | 1.00 | 2 (folds) |
+| frame 10 px of 1000 | 3 | 0 | **0.67** | 1.00 | 3 by bilinear and box, 2 by Lanczos |
+| sticker outline 12 px of 1024 | 3-4 | 0 | **0.43** | 1.00 | 3 (kept, #6a6a6a; source #6e6e6e) |
+| divider 10 px of 1000 | 4 | 0 | **0.25** | 0.75 | 3 (kept) |
+| ramp 20 px of 960 | 5 | 0 | **0** | 0.40 | 3 (mid-tone #7a7a7a) |
+| keyline 20 px of 1000 | 5 | 0 | **0** | 0.40 | 3 (kept, #808080) |
+| divider 25 px of 1000 (the 2.4 px stripe) | 7 | 0 | **0** | 0 | 3 (one band) |
+| ramp 60 px of 960 (6 px at 96) | 14 | 0 | **0** | 0 | 3 (mid-tone) |
+
+- Reach 1 would keep a 2 px antialiased seam.
+- Reach 3 would fold a 10 px divider (4 cells at 0.75), which is wider than
+  GM's "a pixel or two".
+- With reach 2, everything 1-2 cells wide folds, 4 or more is kept, and 3
+  sits on the line: it's decided by how its cells are labelled.
+
+**The reviewers' probes (all 39 sources, bilinear, box and Lanczos to
+96 px; `p10.final.out`):**
+- **The 2.4 px stripe** (flag 25 px): round 5 gave 6 with bilinear. Now
+  it's 3 with every filter (#dc1428, #1428c8 and a purple #6d1f81 to
+  #781e78). bwg-25 gives 3 (#808080 to #8e8e8e).
+- **The 20 px keyline:** round 5 gave 2. Now it's 3 with every filter,
+  #808080 to #8c8c8c. The 24 px sticker outline gives 3 (#6b6b6b to
+  #6d6d6d, source #6e6e6e).
+- **1 px and 2 px antialiased seams:** 2 with every filter.
+- **Soft ramps** 20-120 px wide: 3, one mid-tone. Round 5 gave 2 to 6.
+- **Dividers from 35 px up:** 3, as round 5 gave. The Lanczos ringing
+  doubles round 5 gave (#979797 and #777777) are now one band.
+
+**mark74** (182 px, 74% clear): #111413 and #e8593c. Those are the board
+palette's two colours. Round 5 in the browser gave #111413, #d75439 and
+#0f190f.
+
+**The checks against round 5:**
+- **The 29 real images and the 2 synthetic probes:** all 31 give exactly
+  round 5's swatches (`cmp10.mjs`: the full-size image for the evidence,
+  with the 96 px bilinear grid as before). No real image changes.
+- **Noisy blacks:**
+  - 200 of 200 `Math.random` seeds give one black through
+    `paletteFromPixels`, and 200 of 200 through `paletteFromImageData`.
+  - 40 of 40 give one black at 480 px through the area path.
+  - The vitest 200-seed test still passes.
+- **Time on a 4K frame** (3840 x 2160, node, median of 5):
+  - opaque (the canvas's 96 px plus the 256 px evidence): 31 ms;
+  - with transparency (area to 96 and to 256): 57 ms;
+  - the 256 px area pass alone: 25 ms;
+  - round 5, 96 px only: 3 ms.
+  - In the browser, add one full-size draw and `getImageData` (33 MB at
+    4K). The live timing is under "Live" below.
+
+**Tests:**
+- **New file `paletteEvidence.test.ts`:**
+  - **One band:** the 2.4 px stripe and the grey divider each give one
+    band; an all-edge band folds; touching vs non-touching accents; a band
+    folds whatever its total size; pass 1 reads only main-colour lines.
+  - **256 px evidence:** the 20 px keyline, also with transparency.
+  - **Seams and soft edges:** the 1 px seam folds, the 6 px-at-96 mid-tone
+    stays, and the cutoff (1 and 2 px fold, 3 px keeps).
+  - **M3:** mark74 gives 2; `areaGrid` matches the backend's numbers; a
+    block with one seen pixel stays.
+  - **`extractPaletteFromImage`:** an image with transparency is drawn
+    once at its own size; an opaque one is drawn at full size and at 96;
+    the 4096 cap.
+  - **L4:** the survivors that changed output: the clear-background
+    caption, the highlight past the line's end, the row wrap, tolerance
+    4.34 against 5.11, equal-weight ends, the nearest line, and specks of
+    equal weight.
+- **Fixtures** (`tests/fixtures/palette/`): the reviewers' flag, bw-grey,
+  frame, seam and ramp sources at 96 px (PIL bilinear), and mark74 at
+  182 px as Chrome's `getImageData` gives it. The full-size sources are
+  rebuilt in the test.
+- **`paletteMerge.test.ts`:** the evidence stubs are now `{ edge,
+  touching }`, and the 200-seed test gets 30 s (it timed out at 5 s under
+  load in the first gate).
+
+**Mutants (25 on the new code; 24 killed):**
+- **The cutoff and evidence scale:** reach 1 and 3, evidence at 96, no
+  evidence grid.
+- **Bands:** no bands; touching always, never, and on the 256 labels; the
+  band colour by 96 px weights; no pass 1; pass 1 on all lines; bands of 3
+  or more; any weight in a band; the band folding into the far end; the
+  band never folding.
+- **Unseen swatches:** no fold at the end, the size cap kept, the
+  heavier-ends rule kept; no pixels read as 0, and as 1.
+- **The area reduction and the read:** the haze kept, unweighted cells,
+  transparency through the canvas's 96 px downscale, a read cap of 8192.
+- **The survivor:** lightest pair first. It changes only a band's colour,
+  by under 1 ΔE00, on 2 of the 39 probes (flag-45 and bwg-45 bilinear),
+  and no real image. The last pass reconsiders any kept band against every
+  line, so pair order only matters when one swatch lies on two runs.
+
+**Review 4, the rest:**
+- **M1** (co-builder): `useHoldBottom` shrinks the spacer instead of
+  collapsing it.
+  - On a scroll that leaves the held place, and on every content change,
+    the spacer becomes `min(held, max(0, need − gap))`, with `need =
+    scrollTop + clientHeight − (scrollHeight − spacer − gap)`.
+  - It collapses only at `need <= 0`. The shown spacer brings the 16 px
+    flex gap with it, so collapsing inside the gap would still clamp by up
+    to 16 px. `holdPlace` uses the same threshold.
+  - Tests: a 5 px scroll moves the brief 5 px (it was 54); typing moves
+    nothing; a resize moves only the browser's own clamp (200, was 254);
+    content that grows. 4 mutants, all killed.
+- **M2** (co-builder): "Not analyzed" leaves the faint archived group.
+  - It now has a rule of its own: `color: var(--sr-ink-light)`, about
+    5.7:1, the plain neutral badge colour. A CSS test pins it as the one
+    place that colour is set.
+  - MCP-SETUP's sentence now says so too.
+- **Surfaces N2:** a Commons tile's accessible name is its caption plus
+  each badge's written label ("Lane refs, Not analyzed"). The badges and
+  the name come from one list. Commons detail's own badge still exposes
+  the CSS capitals; that's left as a follow-up.
+- **L3** (co-builder): the stored alpha stamp and both alpha caches are
+  keyed by `file_version` = (mtime_ns, size, ino, ctime_ns), as
+  `input_sizes.py` keys its cache.
+  - A same-size rewrite with its mtime put back is read again (`utime`
+    can't set ctime). So are a replace by rename and a symlink repointed
+    to such a file.
+  - Old 2-element stamps never match. `lacks_alpha_stamp` counts them, so
+    boards stamped by rounds 4-5 are restamped once at startup.
+- **Beyond the brief (L3's class):** the colour-measure cache
+  (`_measure_file`) had the same `(mtime, size)` key. It's now keyed by
+  `file_version` too, with a test (the key mutant fails it).
+- **Surfaces N1:** `reanalyze-stale` goes through `records.reanalyze`, so a
+  too-transparent reference keeps its state. `queued` counts only what was
+  requeued.
+- **Surfaces L1:** SKILL.md says search rows carry `last_error_kind`, and
+  that `transparent` shows as "Not analyzed" with no re-analyze.
+- **Colour-maths N1** (co-builder): the fixture holds all 34 Sharma, Wu
+  and Dalal (2005) pairs, with `published` (4 dp) beside each.
+  - The values come from the authors' `ciede2000testdata.txt` and match
+    the reviewer's transcription row for row.
+  - Python and TS are each asserted against the published value within
+    1e-4. The backend's worst difference is 4.95e-5.
+  - Two hue-wrap pairs, (50, -40, -20) / (50, 60, 10) both ways, carry the
+    independent value 76.6850 (83.511 without the branch).
+  - Dropping the negative wrap fails on both sides, also when the fixture
+    is regenerated from the broken code. A published value off by 1e-3
+    fails on both sides.
+
+### Round 6 surprise: Chrome's downscale depends on what was drawn before
+
+- **What happened.** The first live run gave studio-product #f2f2f3,
+  #e1dfdc and #ac9261. Round 5 gave #e2e0de and #b29b6d.
+- **The cause.** Chrome downscales an image to 96 px differently once that
+  image has already been drawn at full size. I dumped both canvases from
+  Chrome and ran rounds 5 and 6 on each: each round gives the same answer
+  on the same pixels, so the difference is the canvas, not the code.
+- **The fix.** `extractPaletteFromImage` draws the 96 px downscale first,
+  as Extract always has, and reads the full size second. A test pins the
+  order.
+
+### Live (round 6, 8792/5792, isolated backend through `serve_isolated.py`)
+
+- **The canaries** were blocked in the backend (14 lines) and in the
+  browser, before and inside the app. The only off-lane requests were the
+  canaries.
+- **Extract** at 1440 (`shots6/`):
+  - seed 7 gives #040303 and #f07814; round 5 gave two blacks;
+  - studio-product gives #f2f2f3, #e2e0de and #b29b6d, round 5 exactly;
+  - neon-alley gives the 6 round 5 gave;
+  - mark74 gives #111413 and #e8593c; a644daa3 gave #111413, #d75439 and
+    #0f190f;
+  - bwgrey gives #000000, #ffffff and #808080.
+- **Hold (M1),** how far the brief moved, measured with the reviewer's
+  `hold.mjs`. The "before" figures are from a644daa3.
+
+  | Board | Action | Before | After |
+  |---|---|---|---|
+  | Long, list | wheel −5 | 53 px | 5 px |
+  | Long, list | wheel −15 | 53 px | 15 px |
+  | Long, list | wheel −100 | 100 px | 100 px |
+  | Mark, board panel | wheel −10 | 104 px | 10 px |
+  | Short, list | typing in the hand-written brief | 54 px | 0 px (PUT 200) |
+  | Mixed, list | window 900 → 1100 | 254 px | 200 px, the browser's own clamp |
+
+  Analyze moved the brief 0 px in every run.
+- **Commons:** "Not analyzed" is at 5.81:1, and the tiles are named
+  "Lane refs, Not analyzed".
+- **4K in Chrome:** 3840 x 2160, through the real `extractPaletteFromImage`
+  with decode, draws and `getImageData`, median of 5: 159 ms opaque, 187 ms
+  with transparency.
+- **Not this PR's to fix.** The 4K test image has a 13% #111413 disc on a
+  blue-to-orange gradient. It shows no black swatch in round 5 or round 6:
+  the deterministic k-means seeds miss the disc, and a muddy centroid
+  absorbs it. That's the seeding, which predates this PR.
+
+### Gates, round 6
+
+- `tsc -b --noEmit`, `npm run lint` (inline styles, Slava CSS scope): clean.
+- **Vitest** `--maxWorkers=2`, 120 files from an explicit array, including
+  every test that reads `src/` or `styles/`: 1872 passed, 0 errors.
+  - The palette files were run again after the draw-order fix: 7 files, 96
+    passed.
+- **Pytest**, isolated, 12 files: 427 passed. They are alpha facts, colour
+  alpha, reader, reader routes, store, the Commons api, worker, error kind
+  and records, the ΔE00 contract, the copy sweep, and moodboard analysis.
+- **Build budget:** 444,224 bytes raw, unchanged.
