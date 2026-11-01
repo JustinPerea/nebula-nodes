@@ -4,7 +4,8 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import selectorParser from 'postcss-selector-parser';
 import { readdirSync, statSync } from 'node:fs';
 import {
-  appRules, candidateRules, cascaded, declarationsOf, mediaMatches, selectorSpecificity, wins, type Viewport, type Winner,
+  appRules, candidateRules, candidatesIn, cascaded, declarationsOf, indexRules, mediaMatches, parseRules, selectorSpecificity, wins,
+  type Viewport, type Winner,
 } from './helpers/cssCascade';
 
 // fix/moodboard-board-layout: PR #198 added the studios' offline row with one
@@ -308,6 +309,8 @@ afterEach(() => {
  * (CI ran this past 5 s a test when each cascade walked every rule.)
  */
 const RESULTS = new Map<string, string[]>();
+// About 3 s on CI; the limit says so on purpose, with room for a loaded runner.
+const RESOLVE_TIMEOUT_MS = 60_000;
 beforeAll(() => {
   candidateRules(document.body);
   for (const studio of STUDIOS) {
@@ -315,7 +318,7 @@ beforeAll(() => {
   }
   document.body.className = '';
   document.body.innerHTML = '';
-});
+}, RESOLVE_TIMEOUT_MS);
 
 describe('every studio names its offline row and every child in its own template', () => {
   for (const studio of STUDIOS) {
@@ -512,16 +515,82 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
       if (rule.key !== null && !required.includes(rule.key)) wrong.push(`${rule.file}: ${rule.selector} -> ${rule.key}`);
     }
     expect(wrong).toEqual([]);
-    document.body.className = 'app-slava-restraint';
-    document.body.innerHTML = '';
-    // Two studios' DOM is enough for the spot check (a full scan is the slow path the index replaces).
-    for (const studio of STUDIOS.filter((one) => one.root.includes('--board') || one.name === 'Commons')) build(studio);
-    const matches = (rule: { base: string }, el: Element) => { try { return el.matches(rule.base); } catch { return false; } };
-    for (const el of document.body.querySelectorAll('*')) {
-      const full = appRules().filter((rule) => matches(rule, el));
-      const indexed = candidateRules(el).filter((rule) => matches(rule, el));
-      expect(indexed.length, el.className).toBe(full.length);
+    // The index's class lookup is an exact string match: right only where
+    // classes match case-sensitively, a no-quirks document.
+    expect(document.compatMode).toBe('CSS1Compat');
+    const matches = (selector: string, el: Element) => { try { return el.matches(selector); } catch { return false; } };
+    const differ: string[] = [];
+    // Every studio's DOM at once, under each skin. The full scan runs each
+    // rule's selector once over the document (not each rule against each
+    // element), which keeps this to about a second.
+    for (const slava of SKINS) {
+      document.body.className = slava ? 'app-slava-restraint' : '';
+      document.body.innerHTML = '';
+      for (const studio of STUDIOS) build(studio);
+      const elements = [document.documentElement, document.body, ...document.body.querySelectorAll('*')];
+      for (const mode of ['base', 'loose'] as const) {
+        const full = new Map<Element, unknown[]>(elements.map((el) => [el, []]));
+        for (const rule of appRules()) {
+          let hits: Element[] = [];
+          try { hits = [...document.querySelectorAll(rule[mode])]; } catch { hits = []; }
+          for (const el of hits) full.get(el)?.push(rule);
+        }
+        for (const el of elements) {
+          const indexed = candidateRules(el).filter((rule) => matches(rule[mode], el));
+          const scanned = full.get(el)!;
+          // The same rules, in the same order (a tie between one rule's selectors goes the same way).
+          if (indexed.length !== scanned.length || indexed.some((rule, at) => rule !== scanned[at])) {
+            differ.push(`${slava ? 'Slava' : 'no skin'}, ${mode}: <${el.tagName.toLowerCase()} class="${el.className}">`);
+          }
+        }
+      }
     }
+    document.body.className = '';
+    document.body.innerHTML = '';
+    expect(differ).toEqual([]);
+    // About 1.5-2 s here under heavy load (the full scan is the slow path the index replaces).
+  }, RESOLVE_TIMEOUT_MS);
+
+  it('the index finds what a full scan finds for case, escaped classes, combinators, pseudos and html/body', () => {
+    const rules = parseRules([
+      '.Foo { --t: 1; }', '.foo { --t: 2; }', '.md\\:grid { --t: 3; }', '.a\\.b { --t: 4; }', '.x > * { --t: 5; }',
+      '.x .y { --t: 6; }', '.y:hover { --t: 7; }', '.y::before { --t: 8; }', ':is(.a, .b) { --t: 9; }', '.a:not(.b) { --t: 10; }',
+      'div.a { --t: 11; }', '#id.a { --t: 12; }', '[class~="a"] { --t: 13; }', 'html { --t: 14; }', 'body.app { --t: 15; }',
+      '.a.b { --t: 16; }', '.b, .a { --t: 17; }', '* { --t: 18; }', '.\\31 23 { --t: 19; }', '.x :focus-visible { --t: 20; }',
+      '.a[data-x] { --t: 21; }', '.x ~ .y { --t: 22; }', '.x + .y { --t: 23; }', ':where(.a) .y { --t: 24; }', '.y:is(.a) { --t: 25; }',
+    ].join('\n'));
+    expect(rules.length).toBeGreaterThanOrEqual(25);
+    const index = indexRules(rules);
+    document.body.className = 'app';
+    document.body.innerHTML = '<div class="x"><div class="Foo"></div><div class="foo y"></div><div class="md:grid"></div>'
+      + '<div class="a.b"></div><div id="id" class="b a" data-x=""></div><div class="123 y a"></div><div class="FOO A"></div></div>';
+    const matches = (selector: string, el: Element) => { try { return el.matches(selector); } catch { return false; } };
+    const differ: string[] = [];
+    for (const el of [document.documentElement, document.body, ...document.body.querySelectorAll('*')]) {
+      for (const mode of ['base', 'loose'] as const) {
+        const full = rules.filter((rule) => matches(rule[mode], el));
+        const indexed = candidatesIn(index, el).filter((rule) => matches(rule[mode], el));
+        if (indexed.length !== full.length || indexed.some((rule, at) => rule !== full[at])) {
+          differ.push(`${mode} <${el.tagName.toLowerCase()} class="${el.className}">: ${indexed.map((r) => r.selector).join(' | ')} vs ${full.map((r) => r.selector).join(' | ')}`);
+        }
+      }
+    }
+    // A tie between two selectors of one rule (.b, .a on class="b a") reports the later one, as a full scan does.
+    const tied = document.getElementById('id')!;
+    expect(candidatesIn(index, tied).filter((rule) => rule.order === rules.find((r) => r.selector === '.b')!.order)
+      .map((rule) => rule.selector)).toEqual(['.b', '.a']);
+    document.body.className = '';
+    document.body.innerHTML = '';
+    expect(differ).toEqual([]);
+  });
+
+  it('declarationsOf lists a property\'s declarations in cascade order, the winner last (review 3 LOW-1)', () => {
+    // Source order and cascade order differ: specificity and !important reorder them.
+    const rules = parseRules('.x.y { width: 1px; } .x { width: 2px; } .y { width: 3px !important; } .x { width: 4px; } .z { width: 5px; }');
+    document.body.innerHTML = '<div id="t" class="y x"></div>';
+    const el = document.getElementById('t')!;
+    expect(declarationsOf(el, 'width', { rules }).map((decl) => decl.value)).toEqual(['2px', '4px', '1px', '3px']);
+    document.body.innerHTML = '';
   });
 
   it('applies an @media block only where its query holds', () => {

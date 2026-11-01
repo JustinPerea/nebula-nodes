@@ -270,3 +270,101 @@ CI's Frontend tests part 1 timed out two studioGridAreas tests at 5 s. With brea
 - Focused vitest, `--maxWorkers=2`, 115 files with studioGridAreas: 1829 passed, Errors 0.
 - Build budget: 444,245 bytes raw (limit 512,000).
 - The ratchet's header comment now lists the widths it checks: the breakpoints as well as 700/1000/1440/1600. The test title already said "at every breakpoint".
+
+## Round 4: fitted is read from the camera (review 3)
+
+### MEDIUM-1: one mouse-wheel notch hid every later scroll pan
+
+- **Cause, upstream.** @xyflow/system 0.0.76 `createPanOnScrollHandler` (dist/esm/index.mjs:2690-2744) sets `isPanScrolling` on a burst's first wheel event and arms the reset timer only from the second.
+  - A one-event burst (one mouse notch) leaves the flag stuck.
+  - Every later scroll then calls only `onMove`, then `onMoveEnd`, never `onMoveStart`.
+  - Its very first event calls only `onMoveStart` (the d3 events it causes are `internal`, so no `onMove`) and never ends.
+- **Rounds 2-3 relied on onMoveStart** to leave the fit, so a pan after a notch left the board "fitted". A resize or List → Board threw the pan away, and a pan into a refit spring was eaten by it (C3).
+- **Fix: fitted is a fact about the camera** (GM's words: "the camera is still where the last fit left it").
+  - `boardFitFollow` keeps the last fit's target. Fitted means the camera, read from React Flow's store, equals that target within `sameCamera`'s tolerance, or a fit spring is still heading there.
+  - The target is set by every whole-board fit: on open, the Fit button, Shift+1, a refit.
+  - The camera's own non-fit moves drop it: the zoom buttons, Show.
+  - No move is classified by its event any more. Any move React Flow reports that this view didn't make (`ownMove` is set around its own `setViewport`) stops a running spring and ends "heading". That includes onMoveStart and onMove, with or without a source event.
+  - This one rule covers the stuck-flag pan, the autopan during a card drag, the pan to a keyboard-focused off-view card (review 3 LOW-1), and any future programmatic move.
+  - `moveStart(event, cardDrag)` and the drag flag's part in it are gone.
+- **The tolerance:** 0.5 px in x and y, and 5e-4 of the fit's zoom.
+  - Half a screen pixel is less than anyone can see, and one notch pans about 50 px.
+  - It absorbs float rounding through d3; the spring itself lands on the target exactly.
+  - A zoom 5e-4 off moves the far edge of an 870 px column by under half a pixel.
+  - Both are pinned by a test: 0.4 px is fitted, 0.6 px isn't, and so on for the zoom.
+- **A person who pans back exactly onto the fit has a fitted board.** That's right under the camera definition, and pinned.
+- **The camera kept for the visit** (`keepCamera`) is read with `getViewport()`, not the move's captured viewport.
+  - It runs on onMoveEnd and on every outside move, so a single notch, which React Flow never ends, is kept too.
+  - The last spring frame's 150 ms end timer can't overwrite a later camera (LOW-2).
+  - While a spring runs, the store still holds where it lands.
+- **Fit on open is now this view's.** It replaces React Flow's `fitView` prop, so one mechanism sets the open fit's target. The board is fit at once, with no spring, as soon as three things are true: the board has a size that isn't 0 × 0, it has cards, and React Flow's camera exists.
+  - A board mounted at 0 × 0 and laid out later still opens fitted. That was the coordinator's call on review 3's 0×0 question; React Flow's init fitView would have fit it to nothing.
+  - The live run caught two cases the first version missed, with all mocked tests green:
+    - The cards load after the board mounts, so the first size had nothing to fit. `ready()` now runs when the first cards arrive.
+    - React Flow makes its d3 camera in an effect, at its default viewport, and makes it again when React runs effects twice in development (StrictMode). The fit was undone silently, with no move callback. BoardCanvas now notices a new camera (`panZoom`) and puts back the camera kept for the visit: fitted means fit again, moved means the kept viewport.
+    - The fit on open also waits for that camera to exist.
+  - The test stand-in now models all three: React Flow's store is one object, it makes the camera in an effect (under StrictMode too), and the cards arrive late. Before, the stand-in returned a new store object per render, which re-ran the effect and hid the late-cards bug.
+  - A move the person makes before the fit on open cancels it.
+  - An empty board waits for its first card, as React Flow's queued fitView did. Fit on it does nothing.
+
+### Equivalent mutants and R9
+
+- **Four guards are equivalent, and kept on purpose.**
+  - Every camera move reaches onMoveStart or onMove, and that ends "heading". So "heading" ending on a spring's landing (P22, round 3's R9) and the instant open fit setting `heading = false` (P23) only matter for a move React Flow didn't report.
+  - The review 3 argument that R9 isn't equivalent rested on a focus autopan after a landing being dropped. That can't happen now: an outside move clears the spring target itself.
+  - `reopen()` clearing the old target (Q9): the next open fit replaces it, and until then the camera sits at React Flow's default, not on it.
+  - `cameraMade` ignoring a camera it already knows (Q10): the store's subscription only reports a change, and the effect re-runs only with a new camera.
+  - All four are kept so the state stays true to what happened, with no caller relying on React Flow reporting every move.
+
+### Review 3's other items
+
+- **LOW-3 survivors.**
+  - N4: a reduced-motion spring, then a kept move end; killed as P27b.
+  - N5: Fit on an empty board does nothing (P26).
+  - N11: the spring stops on unmount, and no `setViewport` follows (P25).
+  - N10 (the drag flag) no longer guards fit-follow at all. The drag flag only serves arrow-key moves now.
+- **NIT-1.** The onMove/onMoveStart comment and boardFitFollow's header no longer claim every person's move reaches onMoveStart.
+
+### helpers/cssCascade's contract (review 3, speedup lens)
+
+- **LOW-1.** `declarationsOf` takes optional `rules`. A synthetic test whose source order differs from its cascade order (specificity, `!important`) pins the order, winner last. It kills I9 (sort removed).
+- **LOW-2.** The index-versus-full-scan check now builds all 11 studios under both skins and compares html, body and every element.
+  - It checks base and loose matching, by rule identity and order.
+  - The full scan runs each rule's selector once over the document with `querySelectorAll`, which keeps it to about 1.4-2 s under a load average near 60. Without that, element by element, it ran past 6 s.
+  - A synthetic table (25 selectors: case, escaped `.md\:grid` and `.a\.b`, `.\31 23`, combinators, pseudos, `:is`, `:where`, `:not`, attributes, ids, html, body) runs through `indexRules`/`candidatesIn` and kills a lower-casing lookup and a raw-escape key.
+- **LOW-3.** `document.compatMode` is asserted to be `CSS1Compat`.
+- **NIT-1.** `candidatesIn` returns rules in sheet order, so a tie between one rule's selectors (`.b, .a` on `class="b a"`) reports the same selector as the full scan. Pinned, and its sort mutant is killed.
+- **NIT-2.** The `beforeAll` and the index check carry an explicit 60 s timeout. They take about 3 s and 2 s.
+
+### Round 4 tests and mutants
+
+- **Fail on ed3a9381 (18 in BoardCanvas.fitFollow; the unit file doesn't compile against the old API).** Some of the open-fit ones fail there partly because the stand-in no longer plays React Flow's fitView.
+  - Fresh open fit at once; the 0 × 0 mount; a person's pan.
+  - The single-notch pan through a resize, and through List and back; C3; onMove without onMoveStart.
+  - The focus pan; the autopan; panning back onto the fit.
+  - The restored-fitted open; LOW-2.
+  - Cards that load late; the camera made late; the camera made again (StrictMode, a 0 × 0 column, a moved camera).
+- **Mutants P1-P34 and Q1-Q12 on the 5 BoardCanvas and store files, 44 killed.** The equivalent ones are listed above. The killed ones:
+  - the tolerance (P1-P3), heading and target (P4-P6c), the open fit (P7, P8, Q4, Q7), the frame's camera check (P9), leave (P10), zero size (P11), coalescing (P12), springEnded (P13);
+  - onMove and onMoveStart wiring (P14, P34), the ownMove guard and its reset (P15, P16), what an outside move does (P17-P19, Q3);
+  - onMoveEnd reading the captured viewport (P20), the landing clearing the target (P21), the open fit's store write (P24), unmount (P25), the empty-board guard (P26), the spring target's set order (P27, P27b), the non-fit spring leaving (P28), the mid-spring skip (P29), Fit springing (P30), restored fitted (P32, P33);
+  - the camera made again or late, and the cards arriving late (Q1, Q2, Q5, Q6, Q8, Q11, Q12).
+- **cssCascade:** I9, the candidatesIn sort, a lower-cased lookup, and a raw-escape key are all killed.
+
+### Round 4 live (8794/5794, serve_isolated.py, canary first)
+
+- **39/39** after the open-fit fixes. The first two runs failed 14 checks: every open stayed at (0,0,1), for the two reasons under "Fit on open".
+- **C:** one notch moved y 261.5 → 211.5. After Fit and a pan, the store says not fitted, and narrowing to 1000 keeps (-74, 81.5, 0.319).
+- **C2:** List and back keeps the pan exactly. **C3:** a pan 40 ms into the refit is kept, and the board isn't fitted.
+- **C4:** a notch and a notch back counts as fitted. **C0** (no notch) keeps the pan.
+- **R:** a fitted resize still refits, and round 3's set passes again.
+- blocked.log holds only canary lines and `canary ok`.
+- Shots: scratchpad `boardfix/shots4/` (14). md5 `uniq -d` is empty, and the C, C2, C3 and R shots were opened.
+
+### Round 4 gates
+
+- `tsc -b --noEmit`: 0.
+- `npm run lint` (check:inline-styles, check:slava-css-scope, eslint): passed.
+- Focused vitest, `--maxWorkers=2`, 115 files with studioGridAreas: 1854 passed, Errors 0.
+- `npm run build` and the budget: 444,245 bytes raw.
+- studioGridAreas alone: 6.5-9 s for the file at load 47-59. The slowest test is the index check, at 1.4-2 s.

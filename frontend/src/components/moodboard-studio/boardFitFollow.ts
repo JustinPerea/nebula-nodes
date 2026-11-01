@@ -4,76 +4,130 @@
  * size (GM, #209 (a): the window narrows or widens, the offline row opens or
  * closes, anything else that moves the grid).
  *
- * - A whole-board fit (fit on open, the Fit button, Shift+1, a refit) makes
- *   the board fitted. Anything else that moves the camera ends that: a
- *   person's pan, zoom, wheel, pinch or drag of the canvas (React Flow gives
- *   those a source event; the camera's own springs and fits have none), the
- *   autopan while a card is dragged to the board's edge (no source event, but
- *   the person's doing), the zoom buttons, and an Update's Show, which frames
- *   only its cards.
- * - A column resize refits only while fitted, at most once a frame, with the
- *   size read when the frame runs. The first size the board is measured at
- *   only records it: every open that starts fitted (a fresh one, or one whose
- *   kept camera was fitted) is fit by React Flow's fitView at that size.
+ * - Fitted is a fact about the camera, not about which events arrived: the
+ *   board is fitted while the camera is on the last fit's target (within
+ *   `sameCamera`'s tolerance), or while a fit spring is still heading there.
+ *   React Flow doesn't report every move a person makes the same way (after
+ *   one mouse-wheel notch its pan-on-scroll never calls onMoveStart again),
+ *   and some moves have no person event at all (the autopan while a card is
+ *   dragged to the edge, the pan to a card focused from the keyboard), so
+ *   none of them is relied on: whatever moved the camera off the fit, the
+ *   board is no longer fitted. A camera moved back onto the fit is fitted.
+ * - A whole-board fit (fit on open, the Fit button, Shift+1, a refit) sets
+ *   the target. The camera's own moves elsewhere (the zoom buttons, an
+ *   Update's Show, which frames only its cards) drop it.
+ * - A board that opens fitted (a fresh open, or a camera kept from earlier in
+ *   the visit that was fitted then) is fit at once as soon as it has both a
+ *   size that isn't 0 x 0 and cards to fit (`ready`): a board laid out late
+ *   (mounted while hidden), or whose cards arrive after it mounts, still
+ *   opens fitted to its column. A move the person makes first cancels it.
+ * - After that, a column resize refits at most once a frame, with the size
+ *   read and the camera compared when the frame runs.
  * - A refit changes the camera, never the column, so it can't call itself.
  */
+export interface FitCamera {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/**
+ * Half a screen pixel, in x and y: less than that isn't a move anyone can see
+ * (one mouse-wheel notch pans about 50 px), and it absorbs floating-point
+ * rounding on the way through d3. The zoom is compared relative to the fit's
+ * zoom: 5e-4 moves the far edge of an 870 px column by under half a pixel.
+ */
+export const FIT_TOLERANCE_PX = 0.5;
+export const FIT_TOLERANCE_ZOOM = 5e-4;
+
+export function sameCamera(a: FitCamera, b: FitCamera): boolean {
+  return Math.abs(a.x - b.x) <= FIT_TOLERANCE_PX && Math.abs(a.y - b.y) <= FIT_TOLERANCE_PX
+    && Math.abs(a.zoom - b.zoom) <= FIT_TOLERANCE_ZOOM * b.zoom;
+}
+
 export interface BoardFitFollow {
+  /** The camera is on the last fit's target, or a fit spring is heading there. */
   readonly fitted: boolean;
-  /** A whole-board fit was made (or is springing). */
-  markFitted(): void;
-  /** The camera moved for any other reason: the board is no longer fitted. */
+  /** A whole-board fit to `target`: on a spring still heading there, or already there. */
+  fitTo(target: FitCamera, springing: boolean): void;
+  /** The fit spring has landed: no spring is heading anywhere now. */
+  springEnded(): void;
+  /** A camera move this view didn't make: no spring heads anywhere, and no fit on open is still to come. */
+  taken(): void;
+  /** The board may have cards to fit now: make the fit on open if it is still to come. */
+  ready(): void;
+  /** React Flow made its camera again, at its default: fit at once again, as on open. */
+  reopen(): void;
+  /** The camera's own move somewhere other than a whole-board fit: there is no fit to keep. */
   leave(): void;
-  /**
-   * React Flow's move start, for a move that isn't the camera's own spring
-   * frame: the person's when it has a source `event`, or when it comes while
-   * a card is dragged (`cardDrag`: React Flow's autopan). Ends the fitted
-   * state and returns true for the person's move.
-   */
-  moveStart(event: unknown, cardDrag?: boolean): boolean;
   /** The board column measured at this size. */
   resize(width: number, height: number): void;
   dispose(): void;
 }
 
 export interface BoardFitFollowOptions {
-  /** Fitted to begin with: a fresh open (fit on open), or a camera kept from earlier in the visit that was fitted then. */
+  /** Fit on open: a fresh open, or a camera kept from earlier in the visit that was fitted then. */
   fitted: boolean;
-  refit: () => void;
+  /** Where the camera is now. */
+  camera: () => FitCamera;
+  /** Fit the whole board to the column: at once on open, on the spring after that. False when there was nothing to fit. */
+  refit: (instant: boolean) => boolean;
   requestFrame?: (callback: () => void) => number;
   cancelFrame?: (id: number) => void;
 }
 
-export function createBoardFitFollow({ fitted, refit, requestFrame = (cb) => window.requestAnimationFrame(cb),
+export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb) => window.requestAnimationFrame(cb),
   cancelFrame = (id) => window.cancelAnimationFrame(id) }: BoardFitFollowOptions): BoardFitFollow {
-  let isFitted = fitted;
+  let openFit = fitted;
+  let target: FitCamera | null = null;
+  let heading = false;
   let size: { width: number; height: number } | null = null;
   let frame = 0;
+  const isFitted = () => target !== null && (heading || sameCamera(camera(), target));
   const cancel = () => {
     if (frame) cancelFrame(frame);
     frame = 0;
   };
+  const open = () => {
+    if (openFit && size && refit(true)) openFit = false;
+  };
   return {
-    get fitted() { return isFitted; },
-    markFitted() { isFitted = true; },
-    leave() {
-      isFitted = false;
-      cancel();
+    get fitted() { return isFitted(); },
+    fitTo(next, springing) {
+      target = { x: next.x, y: next.y, zoom: next.zoom };
+      heading = springing;
     },
-    moveStart(event, cardDrag = false) {
-      if (!event && !cardDrag) return false;
-      this.leave();
-      return true;
+    springEnded() { heading = false; },
+    taken() {
+      heading = false;
+      openFit = false;
+    },
+    ready: open,
+    reopen() {
+      openFit = true;
+      target = null;
+      heading = false;
+      cancel();
+      open();
+    },
+    leave() {
+      target = null;
+      heading = false;
+      cancel();
     },
     resize(width, height) {
       if (!width || !height) return;
+      const same = size !== null && size.width === width && size.height === height;
       const first = size === null;
-      if (!first && size!.width === width && size!.height === height) return;
       size = { width, height };
-      if (first || !isFitted || frame) return;
-      // Leaving the fitted state cancels this frame, so it runs only while fitted.
+      if (openFit) {
+        open();
+        return;
+      }
+      if (first || same || frame) return;
       frame = requestFrame(() => {
         frame = 0;
-        refit();
+        if (isFitted()) refit(false);
       });
     },
     dispose: cancel,

@@ -29,7 +29,7 @@ const INHERITED = new Set([
   '-webkit-font-smoothing', '-moz-osx-font-smoothing',
 ]);
 
-interface SheetRule {
+export interface SheetRule {
   file: string;
   selector: string;
   /** The selector without its interaction states and pseudo-element: what `matches` tests. */
@@ -222,7 +222,41 @@ export function appRules(): SheetRule[] {
   return cached;
 }
 
-let index: { byClass: Map<string, SheetRule[]>; rest: SheetRule[] } | null = null;
+/** Rules parsed from `css` as one sheet named `file` (for the helper's own tests). */
+export function parseRules(css: string, file = 'test.css'): SheetRule[] {
+  return rulesOf(css, file, { next: 0 });
+}
+
+export interface RuleIndex { byClass: Map<string, SheetRule[]>; rest: SheetRule[]; position: Map<SheetRule, number> }
+
+/** `rules` by a class each one's subject requires (none: `rest`), with each rule's place in `rules`. */
+export function indexRules(rules: SheetRule[]): RuleIndex {
+  const byClass = new Map<string, SheetRule[]>();
+  const rest: SheetRule[] = [];
+  const position = new Map<SheetRule, number>();
+  rules.forEach((rule, at) => {
+    position.set(rule, at);
+    if (!rule.key) { rest.push(rule); return; }
+    const bucket = byClass.get(rule.key);
+    if (bucket) bucket.push(rule); else byClass.set(rule.key, [rule]);
+  });
+  return { byClass, rest, position };
+}
+
+/**
+ * The rules of `index` that can match `element`, in their sheet order (as a
+ * full scan meets them, so a tie between two selectors of one rule goes the
+ * same way). The class lookup is an exact string match, which is how a
+ * no-quirks document matches classes (case-sensitive); the tests check the
+ * document is one.
+ */
+export function candidatesIn(index: RuleIndex, element: Element): SheetRule[] {
+  const out = [...index.rest];
+  for (const cls of new Set(element.classList)) out.push(...(index.byClass.get(cls) ?? []));
+  return out.sort((a, b) => index.position.get(a)! - index.position.get(b)!);
+}
+
+let index: RuleIndex | null = null;
 
 /**
  * The app's rules that can match `element`: those whose subject requires a
@@ -232,19 +266,8 @@ let index: { byClass: Map<string, SheetRule[]>; rest: SheetRule[] } | null = nul
  * test when each cascade walked all of them).
  */
 export function candidateRules(element: Element): SheetRule[] {
-  if (!index) {
-    const byClass = new Map<string, SheetRule[]>();
-    const rest: SheetRule[] = [];
-    for (const rule of appRules()) {
-      if (!rule.key) { rest.push(rule); continue; }
-      const bucket = byClass.get(rule.key);
-      if (bucket) bucket.push(rule); else byClass.set(rule.key, [rule]);
-    }
-    index = { byClass, rest };
-  }
-  const out = [...index.rest];
-  for (const cls of new Set(element.classList)) out.push(...(index.byClass.get(cls) ?? []));
-  return out;
+  index ??= indexRules(appRules());
+  return candidatesIn(index, element);
 }
 
 export function wins(a: { important: boolean; specificity: [number, number, number]; order: number },
@@ -286,10 +309,15 @@ export function cascaded(element: Element, extraCss?: string,
   return out;
 }
 
-/** Every declaration of `prop` the app's stylesheets give `element` at rest (no state), in cascade order, winner last. */
-export function declarationsOf(element: Element, prop: string, { viewport }: { viewport?: Viewport } = {}): Winner[] {
+/**
+ * Every declaration of `prop` the app's stylesheets (or `rules`, for the
+ * helper's own tests) give `element` at rest (no state), in cascade order,
+ * winner last.
+ */
+export function declarationsOf(element: Element, prop: string,
+  { viewport, rules }: { viewport?: Viewport; rules?: SheetRule[] } = {}): Winner[] {
   const out: Winner[] = [];
-  for (const rule of candidateRules(element)) {
+  for (const rule of rules ? candidatesIn(indexRules(rules), element) : candidateRules(element)) {
     if (rule.state) continue;
     if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
     let hit = false;
