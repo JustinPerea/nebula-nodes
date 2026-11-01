@@ -18856,9 +18856,11 @@ class MoodboardImageModel(BaseModel):
     # Whether its file has transparency: Nebula stores it
     # (services/moodboard_analysis.HAS_TRANSPARENCY). A client that sends the
     # board's images back may echo it; what it sends is ignored. The same
-    # for hasClearPixels (services/moodboard_analysis.HAS_CLEAR_PIXELS).
+    # for hasClearPixels (services/moodboard_analysis.HAS_CLEAR_PIXELS) and
+    # the file stat they were read at (services/moodboard_analysis.ALPHA_STAMP).
     hasTransparency: bool | None = None
     hasClearPixels: bool | None = None
+    alphaFileStat: list[int] | None = None
 
 
 class MoodboardPinnedColorsModel(BaseModel):

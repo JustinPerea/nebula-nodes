@@ -643,3 +643,198 @@ the count of pairs under the frontend's 0.03:
   there. The L3 guard tests pass there, as they should, since they pin
   guards that already held.
 
+
+## Round 4 (base b972eb9d)
+
+### Review 3 M1: Extract measures colour with CIEDE2000
+
+Plain OKLab has no lightness toe, so it overstated differences near black:
+#000000 and #010101 were 0.067 apart, twice the 0.03 threshold, and an
+orange disc on a JPEG-like black (values 0-7) gave four swatches, three of
+them black.
+
+- **The metric.** `paletteExtract.ts` now ports the backend's CIEDE2000
+  (`commons/colour.delta_e00` on `cinema.color.rgb_to_lab`), the moodboard
+  palette's own distance. `contracts/fixtures/colour/delta_e00.json` holds
+  27 sRGB pairs (with their Lab) and 15 Sharma Lab pairs, written by
+  `scripts/generate-colour-delta-e00-fixture.py`.
+  `backend/tests/test_colour_delta_e00_contract.py` checks the backend
+  against it, including that the generator writes exactly that file;
+  `frontend/tests/colourDeltaE00Contract.test.ts` checks the port to 1e-5.
+  Neither side can drift.
+- **The threshold.** The brief said to retune only if GM's r3 and r4 shots
+  changed. At the backend's 5 they did. studio-product.webp went from the
+  four swatches GM signed off to two, because its three whites are
+  ΔE00 2.5 to 5.5 apart. Eleven more of the 22 preset and golden images
+  lost one to three tones (peach-skin 6 to 4, paper-studio 5 to 3, neon-alley
+  6 to 4). So Extract merges under ΔE00 2 (`MERGE_DELTA_E`). That's about
+  two noticeable steps. On the same 27 images:
+  - The only count changes are near-blacks. cinematic-noir goes 6 to 4 (its
+    #020202, #070707 and #0e0e0e are one black), editorial-flash 6 to 5,
+    the noisy-black disc 4 to 2, and the grey ramp test 6 to 5 (#000000 and
+    #070707).
+  - risograph-print's lightest swatch moves one level (#eff9fe to #f0f9ff),
+    because its two near-whites now average differently.
+  - Every other image, studio-product included, gives exactly what it gave
+    on b972eb9d.
+  - The 1-to-2 window is safe on both sides: noisy-black centroids sit 0.2
+    to 1.2 apart, and the closest pair GM signed off is 2.52.
+- **A limit, for GM:** blacks with independent per-channel noise (each of
+  R, G, B 0-7 on its own) give centroids about ΔE00 2.05 apart. CIEDE2000
+  doesn't shrink chroma near black, so at 2 those stay two or three black
+  swatches. At 3 they merge in 40 of 40 random images, but studio-product's
+  two lightest whites (2.52) merge too (4 to 3). The tests use grey noise,
+  as review 3's repro did. Real dark photos (noir, editorial-flash) merge
+  at 2. Raising it is one constant.
+- **Specks.** At 2, mark74 grew a third swatch: 0.007% of the image, a few
+  faint pixels k-means gave their own cluster, ΔE00 2.4 from the teal. OKLab
+  0.03 had merged it. A swatch under 0.1% of the image (`SPECK_SHARE`, the
+  backend's `ACCENT_MIN_SHARE`: the moodboard shows no colour that small)
+  now joins the nearest bigger swatch within ΔE00 5. A far speck (a real
+  one-pixel accent) stays.
+- **The edge line** uses ΔE00 5 (`EDGE_LINE_DELTA_E`, held equal to the
+  backend's `MERGE_DELTA_E` by the fixture) for how near a swatch must be
+  to the line between two bigger ones.
+
+### GM r6 item 1: the edge fold goes by evidence
+
+- `paletteFromPixels` now takes the image width and keeps each pixel's
+  k-means cluster. A swatch under 5% that lies on the line between two
+  bigger ones folds only when at least 70% of its pixels
+  (`EDGE_EVIDENCE_SHARE`) have a pixel of each within 2 px
+  (`EDGE_REACH`, a 5x5 window).
+- Merged and folded swatches carry their clusters (`members`), so evidence
+  for the next fold counts them.
+- Two pixels, so a two-pixel ramp (two mixes, each beside one end) still
+  counts as edge. A band three or more pixels wide has an interior row.
+- `mergeNearColors` without evidence (a bare colour list) folds nothing.
+- Pixels count once, whatever their alpha.
+- The cost is one pass over the 96 px labels per candidate line, only for
+  swatches under 5%. It's not heavy, so the under-2% fallback wasn't
+  needed.
+- On the 27 images, only the black-and-white logo with a grey caption
+  changes (2 to 3, the grey kept). Glow, logo, stripes, bands and
+  studio-product are unchanged.
+
+### Review 3, LOW and NIT (section 2)
+
+- **FC L1: stored facts carry the file's stat.**
+  - Each board image stores `alphaFileStat` (`[mtime_ns, size]` of the file
+    the facts were read from) beside `hasTransparency` and
+    `hasClearPixels`.
+  - Every use trusts the facts only while the current stat matches. That
+    covers the reader's clear check and `predates_alpha` (so the
+    out-of-date line, the dry run and the node). It costs one stat per
+    image and no decode.
+  - A file replaced in place is read again, decoded once per file version
+    through the existing cache.
+  - A client can't send the stamp. `_normalize_images` builds the entry from
+    the stored one, and `MoodboardImageModel` accepts `alphaFileStat` only
+    so an echoed board doesn't get a 422.
+  - Facts stored without a stamp exist only in the round 1-3 dev builds;
+    main never had them. They count as untrusted: they're read again on
+    use, and the startup pass now also runs on any board that holds them,
+    stamping them once. The old "stored opaque, so no clear pixels, no
+    decode" shortcut is gone, because it trusted an unstamped fact.
+  - Tradeoff: a list or get can now decode, but only for an image whose
+    stored facts no longer match its file, under a pre-v6 analysis.
+    Missing facts still never decode or mark a board out of date. A file
+    that's gone keeps its stored facts.
+- **FC L2:** `skills/nebula/SKILL.md` lists `transparent` as the fourth
+  Commons error kind.
+- **FC L3:** R4 (id and url), R5 and R6 (the cache key's mtime and size),
+  R12 (changed plus pre-alpha gets "board changed"), R21 (a truncated PNG
+  at intake is unknown, not a 500), R1 (`open_seen` turns EXIF) and R18
+  (`contact_sheet` turns EXIF) each have a test, and each is killed by its
+  mutant. Tests are in `test_moodboard_alpha_facts.py`,
+  `test_qc_infrastructure.py` and `test_output_preview.py`.
+- **FC N1, kept:** QC Camera Geometry turns an EXIF-rotated opaque reference
+  upright (`open_seen`), as the node shows it. That changes
+  `reference_match_score` for such references, so "opaque unchanged" in
+  the PR body doesn't cover QC. A handler test pins it.
+- **FC N3:** `_file_alpha_facts` reads both facts from one `getextrema`. An
+  opaque file still isn't converted.
+
+### GM r6 items 2-4
+
+- **The "Not analyzed" badge.**
+  - A too-transparent Commons asset wears the neutral muted badge
+    (`commons-badge--not-analyzed`, the archived rule, `--sr-ink-faint`)
+    with "Not analyzed", on the grid and in the detail. It shows uppercase,
+    like every badge.
+  - Search rows now carry `last_error_kind`, so the grid can tell.
+  - The detail's line is unchanged.
+- **No Re-analyze.**
+  - The detail hides Re-analyze for that asset.
+  - The person's route (`POST /assets/{id}/reanalyze`, `records.reanalyze`)
+    answers the transparent state (`queued: false`, the kind, `last_error`,
+    the line) instead of requeuing. The check and the requeue are one
+    transaction. Every other failure still requeues.
+  - "It comes back if the file changes" holds by design. Assets are stored
+    by sha256 and nothing rewrites one, so a changed file is a new asset
+    with its own state.
+  - Agents have no re-analyze: the route is person-only (403), and there's
+    no MCP tool or CLI command for it. So there was no agent surface to
+    change, and opening one is a separate decision.
+- **The brief holds its place.**
+  - `useHoldBottom` watches `.moodboard-analysis__outdated`. When a commit
+    removes those lines and the shorter content would clamp the scroll
+    position, a bottom spacer (`.moodboard-hold-spacer`, sized by
+    `--moodboard-hold-h`) takes the missing height before paint. It's
+    measured from the real layout, so flex gaps count.
+  - It collapses on a scroll that leaves the held position, or on the
+    panel's next DOM change.
+  - It's in both scroll panels (the list column and the board side panel).
+  - If a forced layout already clamped the scroll position, it's put back
+    to the same value before paint. That's the only scroll write.
+  - Live at 1440 on Mark and Mixed, scrolled to the bottom: the brief moved
+    0 px, the spacer held 37.6 px, and the next wheel scroll collapsed it
+    with no jump.
+
+### Mutants, round 4
+
+- **Frontend, 21:**
+  - The thresholds (merge at 5 and at 1, the edge line at 2).
+  - Each CIEDE2000 term (SL, G, the hue wrap, RT), CIE76 in its place,
+    and Lab without its toe.
+  - The evidence (share 0 and 0.9, reach 1 and 4, either side instead of
+    both).
+  - The speck share and the speck fold.
+  - The width ignored, in `paletteFromPixels` and in
+    `extractPaletteFromImage`.
+  - Members not carried through a merge and through a fold.
+  - All killed but one: dropping `hbp = hsum` for a zero-chroma pair. It's
+    equivalent, because with zero chroma `dhp` is 0, so every term that
+    reads `hbp` is multiplied by `dHp = 0`.
+  - Four survived the first run (reach 4, either side, the width, members).
+    They're now killed by four new tests: a 3 px line between black and
+    white is kept, a 1 px horizontal seam folds (also through
+    `extractPaletteFromImage` with a mocked canvas), and evidence is asked
+    about every cluster a merged or folded swatch holds.
+- **Backend, 16:** 14 killed. One is equivalent: adding the fact keys to
+  `IMAGE_KEYS` changes nothing, because `_normalize_images` builds entries
+  from a fixed list, and the mutant that merges raw client keys is killed.
+- **Commons and the spacer, 10:** all killed.
+- **On b972eb9d:**
+  - Fail there: the new behaviour tests. That's 12 in `paletteMerge` (the grey
+    ramp now giving 5, noisy black, the mid-tone threshold pair, cinematic-noir, the caption, the
+    purple band, the 3 px line, the seam with a caption, the merge
+    threshold, the speck, the evidence fold and evidence members), the
+    contract's threshold test, 5 of the backend facts tests, and every
+    Commons and spacer test.
+  - Pass there by design, as guards: noisy white stays 2, studio-product
+    stays GM's 4, a 1 px seam folds, and the GM r3 glow, logo and stripes.
+
+### Gates, round 4
+
+- Round 3's CI on b972eb9d: green, all eight jobs.
+- tsc, lint, check:inline-styles and check:slava-css-scope: rc 0.
+- Vitest `--maxWorkers=2` on 118 files (the changed tests and every test
+  that reads `src/` or `styles/`): 1936 passed, 0 errors.
+- Pytest, isolated, on 30 files (colour, moodboard, QC, output preview and
+  Commons): 787 passed.
+- `npm run build` and the budget: 444,224 bytes raw.
+- Live (isolated backend on 8792, Vite on 5792, canaries only off-lane):
+  - Extract: noisy-black disc 4 to 2; bwgrey 2 to 3, with the caption kept;
+    studio-product 4 and 4, identical hexes.
+  - The hold, as above.

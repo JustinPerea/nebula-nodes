@@ -276,7 +276,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
     A new image takes the ``placements`` it asks for (checked; ``placedBy``
     is ``by``), else Nebula places it after the last-added card. ``board``
     gives the frames and the saved analysis (for aspect ratios)."""
-    from services.moodboard_analysis import ALPHA_FACTS, stamp_transparency
+    from services.moodboard_analysis import ALPHA_KEYS, stamp_transparency
     from services.stored_image_refs import StoredImageError, board_image_problem
 
     board = board or {}
@@ -312,8 +312,9 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
             raise StoredImageError(refused)
         kept = dict(before or {})
         if kept.get("url") != url:
-            # A new file: its transparency is read below and stored.
-            for key in ALPHA_FACTS:
+            # A new file: its transparency (and the stat it was read at) is
+            # read below and stored.
+            for key in ALPHA_KEYS:
                 kept.pop(key, None)
             arrived.append(len(normalized))
         image: dict[str, Any] = {
@@ -355,7 +356,8 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         image["placements"] = made
 
     # Whether each new image's file has transparency, read once here and
-    # stored, so reads never decode it (moodboard_analysis.HAS_TRANSPARENCY).
+    # stored with the file's stat, so reads don't decode it while the file
+    # stays as it is (moodboard_analysis.HAS_TRANSPARENCY, ALPHA_STAMP).
     # The writes decode them before the board lock (_warm_new_files), so
     # here it is a stat per file.
     stamp_transparency([normalized[i] for i in arrived])
@@ -1078,18 +1080,21 @@ def migrate_brief_fields() -> dict[str, Any]:
 
 
 def stamp_transparency_once() -> dict[str, Any]:
-    """Store ``hasTransparency`` and ``hasClearPixels`` on the images of boards
+    """Store ``hasTransparency`` and ``hasClearPixels``, with the stat of the
+    file they were read from (``alphaFileStat``), on the images of boards
     whose analysis was made before alpha counted
-    (moodboard_analysis.ALPHA_VERSION) and that lack them, so a read can
-    tell whether those colours are out of date without decoding an image.
-    Run at startup, off the event loop. The files are decoded before the
-    board lock is taken; under it the board is read again and only the
-    entries still lacking the facts get them. It only adds those keys to
-    image entries (no backup: the board is otherwise unchanged, and its
-    version stays); an unknown file is left without them. Running it again
-    reads nothing it has read."""
+    (moodboard_analysis.ALPHA_VERSION) and that lack them or whose file has
+    changed since, so a read can tell whether those colours are out of date
+    without decoding an image. On any board, an entry stored with the facts
+    but no stamp (round 3 dev builds) is read again once and stamped. Run at
+    startup, off the event loop. The files are decoded before the board
+    lock is taken; under it the board is read again and only the entries
+    still needing it get them. It only writes those keys on image entries
+    (no backup: the board is otherwise unchanged, and its version stays); an
+    unknown file is left as it is. Running it again reads nothing it has
+    read (one stat per image)."""
     from services.asset_trash import RECORD_SUFFIX
-    from services.moodboard_analysis import ALPHA_VERSION, stamp_transparency, warm_alpha_facts
+    from services.moodboard_analysis import ALPHA_VERSION, lacks_alpha_stamp, stamp_transparency, warm_alpha_facts
 
     def pre_alpha(board: Any) -> bool:
         analysis = board.get("analysis") if isinstance(board, dict) else None
@@ -1100,6 +1105,10 @@ def stamp_transparency_once() -> dict[str, Any]:
         except (TypeError, ValueError):
             return False
 
+    def due(board: Any) -> bool:
+        images = board.get("images") if isinstance(board, dict) else None
+        return pre_alpha(board) or any(lacks_alpha_stamp(img) for img in images or [])
+
     report: dict[str, Any] = {"saved": [], "skipped": []}
     root = _moodboard_root()
     for scope in board_scopes(root):
@@ -1108,12 +1117,12 @@ def stamp_transparency_once() -> dict[str, Any]:
                 continue
             try:
                 board = json.loads(path.read_text(encoding="utf-8"))
-                if not pre_alpha(board):
+                if not due(board):
                     continue
                 warm_alpha_facts(board.get("images"))  # the decodes, outside the lock
                 with _board_lock(path.stem):
                     board = json.loads(path.read_text(encoding="utf-8"))
-                    if not pre_alpha(board) or not stamp_transparency(board.get("images")):
+                    if not due(board) or not stamp_transparency(board.get("images")):
                         continue
                     _write_json(path, board)
             except (OSError, json.JSONDecodeError) as exc:

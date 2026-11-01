@@ -25,6 +25,8 @@ UNREADABLE = "unreadable"
 OTHER = "other"
 TRANSPARENT = "transparent"
 KINDS = (UNAVAILABLE, UNREADABLE, OTHER, TRANSPARENT)
+# TRANSPARENT's line, as the person reads it (frontend lib/commonsAnalysisCopy.ts).
+TRANSPARENT_LINE = "This image is too transparent to analyze."
 
 # A provider's answer that says it is down, overloaded or slow, or a dropped
 # connection, as the claude CLI writes it into its result ("API Error: 529

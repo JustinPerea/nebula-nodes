@@ -730,6 +730,7 @@ body.app-slava-restraint .commons-badge--region-confirmed {
 
 body.app-slava-restraint .commons-badge--archived,
 body.app-slava-restraint .commons-badge--superseded,
+body.app-slava-restraint .commons-badge--not-analyzed,
 body.app-slava-restraint .commons-badge--fidelity-unverifiable {
   color: var(--sr-ink-faint);
 }

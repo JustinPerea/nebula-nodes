@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard } from '../../types';
@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
   fetchMoodboards: vi.fn(), keepMoodboardBriefOverride: vi.fn(), lookupStoredAsset: vi.fn(),
   moveStoredAsset: vi.fn(), updateMoodboard: vi.fn(),
 }));
-vi.mock('../../lib/api', () => api);
+vi.mock('../../lib/api', () => ({ ...api, SAVE_BOARD: "Couldn't save the board." }));
 vi.mock('../../lib/backend', async (importOriginal) => ({
   ...(await importOriginal<object>()), apiFetch: vi.fn(), backendAssetUrlSync: (url: string) => url,
 }));
@@ -72,7 +72,7 @@ beforeEach(() => {
   useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {} });
   setOpenProject(['p1', 'Project']);
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 async function open() {
   act(() => { useUIStore.getState().enterMoodboardEditor('mb1', 'global'); });
@@ -122,5 +122,111 @@ describe('a board whose saved colors are out of date', () => {
     expect(line.previousElementSibling?.querySelector('textarea')).not.toBeNull();
     expect(line.nextElementSibling?.textContent).toBe('Use the generated brief');
     expect(screen.queryByText(BRIEF_LINE)).toBeNull();
+  });
+});
+
+// GM r6 on #208, item 4: "The brief holds its place ... When clearing the
+// line would shorten a panel scrolled to the bottom, put a bottom spacer of
+// the removed height in its place. The spacer collapses on the person's next
+// scroll, or when the panel's content next changes. No jump, and no automatic
+// scroll." On b972eb9d clearing the two 27 px lines shortened the content by
+// 54 px, the browser clamped scrollTop (654 -> 600), and the brief moved.
+describe('Analyze clearing the lines while the panel is scrolled to the bottom', () => {
+  const LINE_H = 27;
+  const CONTENT_H = 1000;
+  const CLIENT_H = 400;
+
+  /** The panel's geometry as a browser lays it out: the content is a fixed
+   *  height plus each "old colors" line and the spacer, and scrollTop is
+   *  clamped to the bottom whenever it is read (layout). */
+  function layout(panel: HTMLElement) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const height = this.classList.contains('moodboard-analysis__outdated') ? LINE_H : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    });
+    const spacer = () => panel.querySelector<HTMLElement>('.moodboard-hold-spacer');
+    const spacerH = () => {
+      const el = spacer();
+      return el && 'holding' in el.dataset ? parseFloat(el.style.getPropertyValue('--moodboard-hold-h')) || 0 : 0;
+    };
+    const scrollHeight = () => CONTENT_H + LINE_H * panel.querySelectorAll('.moodboard-analysis__outdated').length + spacerH();
+    let stored = 0;
+    const max = () => Math.max(0, scrollHeight() - CLIENT_H);
+    Object.defineProperty(panel, 'clientHeight', { configurable: true, get: () => CLIENT_H });
+    Object.defineProperty(panel, 'scrollHeight', { configurable: true, get: scrollHeight });
+    Object.defineProperty(panel, 'scrollTop', {
+      configurable: true,
+      get: () => { stored = Math.min(Math.max(0, stored), max()); return stored; },
+      set: (value: number) => { stored = Math.min(Math.max(0, value), max()); },
+    });
+    /** The person scrolls to `top`. */
+    const scrollTo = (top: number) => { panel.scrollTop = top; fireEvent.scroll(panel); };
+    return { spacer, spacerH, scrollTo, bottom: () => max() };
+  }
+
+  /** Where the brief's text sits on screen: its place in the content (fixed:
+   *  the lines are after it) less how far the panel is scrolled. */
+  const briefOnScreen = (panel: HTMLElement) => 700 - panel.scrollTop;
+
+  async function analyzeAtTheBottom() {
+    current = board(true);
+    api.analyzeMoodboard.mockImplementation(async () => board(false));
+    await open();
+    await screen.findByText(BRIEF_LINE);
+    const panel = document.querySelector<HTMLElement>('.moodboard-studio-view__main')!;
+    const geo = layout(panel);
+    geo.scrollTo(10_000);
+    expect(panel.scrollTop).toBe(CONTENT_H + 2 * LINE_H - CLIENT_H);
+    const before = briefOnScreen(panel);
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    await waitFor(() => expect(screen.queryByText(BRIEF_LINE)).toBeNull());
+    expect(screen.queryByText(COLORS_LINE)).toBeNull();
+    await screen.findByRole('button', { name: 'Analyze' });
+    return { panel, geo, before };
+  }
+
+  it('moves the brief 0 px: a spacer of the removed height takes the lines\' place, with no scroll', async () => {
+    const { panel, geo, before } = await analyzeAtTheBottom();
+    expect(briefOnScreen(panel) - before).toBe(0);
+    expect(panel.scrollTop).toBe(654);
+    expect(geo.spacerH()).toBe(2 * LINE_H);
+    expect(geo.spacer()!.getAttribute('aria-hidden')).toBe('true');
+    // A scroll event that doesn't leave the held place (the browser's own) keeps it.
+    fireEvent.scroll(panel);
+    await act(async () => { await Promise.resolve(); });
+    expect(geo.spacerH()).toBe(2 * LINE_H);
+    expect(briefOnScreen(panel) - before).toBe(0);
+  });
+
+  it('collapses on the person\'s next scroll', async () => {
+    const { geo } = await analyzeAtTheBottom();
+    expect(geo.spacerH()).toBe(2 * LINE_H);
+    geo.scrollTo(500);
+    expect(geo.spacerH()).toBe(0);
+    expect('holding' in geo.spacer()!.dataset).toBe(false);
+    expect(geo.bottom()).toBe(CONTENT_H - CLIENT_H);
+  });
+
+  it('collapses when the panel\'s content next changes', async () => {
+    const { geo } = await analyzeAtTheBottom();
+    expect(geo.spacerH()).toBe(2 * LINE_H);
+    // Mode resets the analysis, which changes what the panel shows.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Mode' }), { target: { value: 'world' } });
+    await waitFor(() => expect(geo.spacerH()).toBe(0));
+  });
+
+  it('adds no spacer when the panel isn\'t scrolled far enough to be shortened', async () => {
+    current = board(true);
+    api.analyzeMoodboard.mockImplementation(async () => board(false));
+    await open();
+    await screen.findByText(BRIEF_LINE);
+    const panel = document.querySelector<HTMLElement>('.moodboard-studio-view__main')!;
+    const geo = layout(panel);
+    geo.scrollTo(100);
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    await waitFor(() => expect(screen.queryByText(BRIEF_LINE)).toBeNull());
+    expect(panel.scrollTop).toBe(100);
+    expect(geo.spacerH()).toBe(0);
+    expect('holding' in geo.spacer()!.dataset).toBe(false);
   });
 });

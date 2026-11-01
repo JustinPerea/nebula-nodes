@@ -1113,8 +1113,8 @@ def test_the_reader_never_decodes_an_image_stored_as_having_no_clear_pixel(monke
     from services import moodboard_reader as reader
 
     plain, faint, sprite = _write(opaque()), _write(sprite_49()), _write(sprite_49())
-    b = _board(plain, faint, sprite)
-    b["images"][0]["hasTransparency"] = False
+    b = _stamped(_board(plain, faint, sprite))  # the facts and the stat they were read at, as intake stores them
+    assert b["images"][0]["hasTransparency"] is False
     b["images"][1].update(hasTransparency=True, hasClearPixels=False)  # stored: semi-transparent only
     decoded: list[str] = []
     real = reader._path_is_clear
@@ -1286,17 +1286,24 @@ def test_semi_transparent_only_images_dont_get_the_outdated_line() -> None:
     assert none["images"][0]["hasClearPixels"] is False
 
 
-def test_a_stored_opaque_image_gets_no_clear_pixels_without_a_decode(monkeypatch) -> None:
+def test_facts_stored_before_the_stamp_are_read_again_once(monkeypatch) -> None:
+    # Round 4 (review 3 L1): a fact is trusted only with the stat of the file
+    # it was read from. One stored without it (round 3 builds) is read again,
+    # then stamped, and from then on only stated.
     from services import moodboard_analysis
 
-    images = [{"id": "a", "url": _write(sprite_49()), "hasTransparency": False}]
+    url = _write(sprite_49())
+    images = [{"id": "a", "url": url, "hasTransparency": False, "hasClearPixels": False}]
+    assert stamp_transparency(images) is True
+    stat = _file_of(url).stat()
+    assert images[0] == {**images[0], "hasTransparency": True, "hasClearPixels": True,
+                         "alphaFileStat": [stat.st_mtime_ns, stat.st_size]}
 
     def no_decode(*args, **kwargs):
-        raise AssertionError("decoded an image stored as opaque")
+        raise AssertionError("decoded an image whose stamp matches")
 
     monkeypatch.setattr(moodboard_analysis, "_file_alpha_facts", no_decode)
-    assert stamp_transparency(images) is True
-    assert images[0] == {**images[0], "hasTransparency": False, "hasClearPixels": False}
+    assert stamp_transparency(images) is False
 
 
 def test_the_dry_run_says_both_when_the_board_changed_and_its_colours_are_old(capsys) -> None:

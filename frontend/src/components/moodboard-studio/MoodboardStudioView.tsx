@@ -49,6 +49,7 @@ import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
 import { BoardCanvas, type BoardMove } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
+import { useHoldBottom } from './useHoldBottom';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
 import { MoodboardListView } from './MoodboardListView';
 import { selectedImageIds } from './boardNodes';
@@ -269,6 +270,8 @@ export function MoodboardStudioView() {
     if (board.brief) setServerBrief({ id: board.id, brief: board.brief, override: board.briefOverride ?? null });
   }, []);
   const analyzing = Boolean(pendingAnalysisId);
+  // Analyze clearing the "old colors" lines doesn't move a panel scrolled to the bottom (GM r6 on #208, item 4).
+  const holdSpacer = useHoldBottom('.moodboard-analysis__outdated');
   const [railScope, setRailScope] = useState<AssetScope>(moodboardEditorScope);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -1276,6 +1279,7 @@ export function MoodboardStudioView() {
             <div className="moodboard-board-panel__section">{boardFields}</div>
             {briefFields}
             {analysisSection}
+            <div ref={holdSpacer} className="moodboard-hold-spacer" aria-hidden="true" />
           </BoardSidePanel>
         )}
         {trashToast}
@@ -1316,6 +1320,7 @@ export function MoodboardStudioView() {
 
             {briefFields}
             {analysisSection}
+            <div ref={holdSpacer} className="moodboard-hold-spacer" aria-hidden="true" />
           </>
         )}
       </main>

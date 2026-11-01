@@ -377,7 +377,9 @@ def clear_targets(targets: Iterable[Target]) -> set[str]:
     worked out once and kept on it (``Target.clear``). An image the board
     stores as opaque, or as having no clear pixel
     (moodboard_analysis.HAS_TRANSPARENCY, HAS_CLEAR_PIXELS), is not clear,
-    with no decode; otherwise its file is decoded: call it off the loop."""
+    with one stat and no decode while its file is the one those facts were
+    read from (``alphaFileStat``); otherwise its file is decoded: call it
+    off the loop."""
     return {t.id for t in targets if target_is_clear(t)}
 
 
@@ -388,8 +390,17 @@ def target_is_clear(target: Target) -> bool:
 
 
 def _image_is_clear(image: Mapping[str, Any], path: Path) -> bool:
-    if image.get("hasTransparency") is False or image.get("hasClearPixels") is False:
-        return False  # stored when it arrived: no pixel is clear
+    from services.moodboard_analysis import HAS_CLEAR_PIXELS, HAS_TRANSPARENCY, stored_alpha_facts
+
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    # Stored when the file arrived, and trusted only while the file is the
+    # one they were read from (its stamp matches): no pixel is clear.
+    stored = stored_alpha_facts(image, stat)
+    if stored is not None and (stored[HAS_TRANSPARENCY] is False or stored[HAS_CLEAR_PIXELS] is False):
+        return False
     return _path_is_clear(path)
 
 

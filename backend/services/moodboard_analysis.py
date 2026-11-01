@@ -485,14 +485,21 @@ def colours_current(moodboard: dict[str, Any], analysis: Any) -> bool:
 
 # The image entry's stored facts about its file: whether it has a pixel less
 # than opaque (``hasTransparency``), and whether it has a clear one, under
-# cinema.color.ALPHA_MIN (``hasClearPixels``). Nebula writes them (at intake,
-# and once for older images by ``stamp_transparency`` at startup, off the
-# event loop and outside the board lock); reads only look at them, so listing
-# or opening a board never decodes an image. Missing means unknown, which
-# never marks a board out of date.
+# cinema.color.ALPHA_MIN (``hasClearPixels``), with the file's
+# ``[mtime_ns, size]`` when they were read (``alphaFileStat``). Nebula
+# writes them (at intake, and once for older images by ``stamp_transparency``
+# at startup, off the event loop and outside the board lock); a client can't
+# send them (moodboard_store.IMAGE_KEYS). A use trusts them only while the
+# file's stat still matches (``current_alpha_facts``), so a file replaced in
+# place at the same path is read again rather than kept as opaque (review 3
+# L1): one stat per image, no decode while it matches. Missing facts mean
+# unknown, which never marks a board out of date and is never decoded on a
+# read.
 HAS_TRANSPARENCY = "hasTransparency"
 HAS_CLEAR_PIXELS = "hasClearPixels"
 ALPHA_FACTS = (HAS_TRANSPARENCY, HAS_CLEAR_PIXELS)
+ALPHA_STAMP = "alphaFileStat"
+ALPHA_KEYS = (*ALPHA_FACTS, ALPHA_STAMP)
 
 
 def _measured_images(moodboard: dict[str, Any], analysis: dict[str, Any]) -> list[dict[str, Any]]:
@@ -523,7 +530,45 @@ def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
     if version >= ALPHA_VERSION:
         return False
     # Every measured image, set aside or not: the saved colours came from all of them.
-    return any(img.get(HAS_CLEAR_PIXELS) is True for img in _measured_images(moodboard, analysis))
+    return any((current_alpha_facts(img) or {}).get(HAS_CLEAR_PIXELS) is True
+               for img in _measured_images(moodboard, analysis))
+
+
+def _stamp_of(stat: Any) -> list[int]:
+    return [int(stat.st_mtime_ns), int(stat.st_size)]
+
+
+def stored_alpha_facts(image: Any, stat: Any) -> dict[str, bool] | None:
+    """The entry's stored facts when they were read from the file as it is
+    now (its ``alphaFileStat`` matches ``stat``); None otherwise: missing,
+    read from an older version of the file, or stored before the stamp."""
+    if not isinstance(image, dict) or any(key not in image for key in ALPHA_FACTS):
+        return None
+    if image.get(ALPHA_STAMP) != _stamp_of(stat):
+        return None
+    return {key: image[key] for key in ALPHA_FACTS}
+
+
+def current_alpha_facts(image: Any) -> dict[str, bool] | None:
+    """The facts of a board image's file as it is now. An entry with no
+    stored facts is unknown (None), with no stat and no decode. Stored facts
+    whose stamp matches the file's stat are used as they are. Otherwise (the
+    file was replaced in place, or the facts were stored before the stamp)
+    the file is read again (``file_alpha_facts``: one decode per file
+    version). A file that is gone keeps the stored facts: nothing to check
+    them against. Can decode in that one case: off the loop where it can."""
+    if not isinstance(image, dict) or any(key not in image for key in ALPHA_FACTS):
+        return None
+    kept = {key: image[key] for key in ALPHA_FACTS}
+    path = resolve_moodboard_image_path(str(image.get("url") or ""))
+    if path is None:
+        return kept
+    try:
+        stat = path.stat()
+    except OSError:
+        return kept
+    stored = stored_alpha_facts(image, stat)
+    return stored if stored is not None else _decoded_facts(path, stat)
 
 
 def file_alpha_facts(path: Path) -> dict[str, bool] | None:
@@ -535,6 +580,10 @@ def file_alpha_facts(path: Path) -> dict[str, bool] | None:
         stat = path.stat()
     except OSError:
         return None
+    return _decoded_facts(path, stat)
+
+
+def _decoded_facts(path: Path, stat: Any) -> dict[str, bool] | None:
     try:
         return dict(_file_alpha_facts(str(path), stat.st_mtime_ns, stat.st_size))
     except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
@@ -544,10 +593,11 @@ def file_alpha_facts(path: Path) -> dict[str, bool] | None:
 @functools.lru_cache(maxsize=1024)
 def _file_alpha_facts(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, bool], ...]:
     with Image.open(path) as pil:
-        if not has_transparency(pil):
+        if not pil.has_transparency_data:  # cinema.color.has_transparency's own shortcut
             return ((HAS_TRANSPARENCY, False), (HAS_CLEAR_PIXELS, False))
+        # One pass gives both: the lowest alpha (review 3 N3).
         low = as_rgba(pil).getchannel("A").getextrema()[0]
-    return ((HAS_TRANSPARENCY, True), (HAS_CLEAR_PIXELS, bool(low < ALPHA_MIN)))
+    return ((HAS_TRANSPARENCY, bool(low < 255)), (HAS_CLEAR_PIXELS, bool(low < ALPHA_MIN)))
 
 
 def image_alpha_facts(url: str) -> dict[str, bool] | None:
@@ -564,8 +614,26 @@ def image_has_transparency(url: str) -> bool | None:
     return facts[HAS_TRANSPARENCY] if facts is not None else None
 
 
-def _lacks_alpha_facts(img: Any) -> bool:
-    return isinstance(img, dict) and any(key not in img for key in ALPHA_FACTS)
+def lacks_alpha_stamp(image: Any) -> bool:
+    """Whether an entry has stored facts but no ``alphaFileStat``: stored
+    before the stamp (round 3 dev builds). The startup pass stamps these on
+    any board, so each is read again once, then trusted while its file holds."""
+    return isinstance(image, dict) and any(key in image for key in ALPHA_FACTS) and ALPHA_STAMP not in image
+
+
+def _to_read(image: Any) -> tuple[Path, Any] | None:
+    """The file and its stat when ``image``'s stored facts don't describe it
+    as it is now; None when they do, or when there is no readable file."""
+    if not isinstance(image, dict) or not image.get("url"):
+        return None
+    path = resolve_moodboard_image_path(str(image["url"]))
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return None if stored_alpha_facts(image, stat) is not None else (path, stat)
 
 
 def warm_alpha_facts(images: Any) -> None:
@@ -573,28 +641,29 @@ def warm_alpha_facts(images: Any) -> None:
     ``stamp_transparency`` would read, so it then only stats them: called
     before the board lock is taken, so a slow decode never holds it."""
     for img in images if isinstance(images, list) else []:
-        if _lacks_alpha_facts(img) and img.get(HAS_TRANSPARENCY) is not False and img.get("url"):
-            image_alpha_facts(str(img["url"]))
+        found = _to_read(img)
+        if found is not None:
+            _decoded_facts(*found)
 
 
 def stamp_transparency(images: Any) -> bool:
-    """Give each image entry in ``images`` the stored facts it lacks
-    (``hasTransparency``, ``hasClearPixels``), read from its file; an entry
-    already known to be opaque gets ``hasClearPixels`` False with no decode,
-    and an unknown file stays without them. Whether any entry changed.
-    Decodes images: call it off the loop (``warm_alpha_facts`` first, outside
-    the lock)."""
+    """Give each image entry in ``images`` the stored facts
+    (``hasTransparency``, ``hasClearPixels``) and the stat of the file they
+    were read from (``alphaFileStat``) when it lacks them or its file has
+    changed since; an entry whose stamp matches is left with one stat, and
+    an unknown file stays as it is. Whether any entry changed. Decodes
+    images: call it off the loop (``warm_alpha_facts`` first, outside the
+    lock)."""
     changed = False
     for img in images if isinstance(images, list) else []:
-        if not _lacks_alpha_facts(img):
+        found = _to_read(img)
+        if found is None:
             continue
-        if img.get(HAS_TRANSPARENCY) is False:
-            img[HAS_CLEAR_PIXELS] = False
-            changed = True
-            continue
-        found = image_alpha_facts(str(img.get("url") or ""))
-        if found is not None:
-            img.update(found)
+        path, stat = found
+        facts = _decoded_facts(path, stat)
+        if facts is not None:
+            img.update(facts)
+            img[ALPHA_STAMP] = _stamp_of(stat)
             changed = True
     return changed
 

@@ -19,7 +19,9 @@ export type TextField = (typeof TEXT_FIELDS)[number];
 
 export interface SearchRow {
   id: string; membership_id: string; collection_id: string; collection: string; summary: string | null;
-  role: Role; media: 'image' | 'video'; made_by: string; analysis_state: AnalysisState; in_inbox: boolean;
+  role: Role; media: 'image' | 'video'; made_by: string; analysis_state: AnalysisState;
+  /** Why a failed analysis failed (as AssetDetail's); absent from an older backend. */
+  last_error_kind?: string | null; in_inbox: boolean;
   comment_count: number; matched: string[]; score: number; blob_key: string; also_in: string[];
 }
 export interface PaletteEntry { index?: number; hex: string; share: number; is_accent: boolean }
@@ -58,7 +60,7 @@ export interface AssetDetail {
   asset: { id: string; media: 'image' | 'video'; width: number | null; height: number | null; made_by: string;
     analysis_state: AnalysisState; last_error: string | null;
     /** Why the analysis failed, for the person's line (backend commons/analysis_errors.py):
-     * 'unavailable' | 'unreadable' | 'other'; absent from a backend before error-copy round 3. */
+     * 'unavailable' | 'unreadable' | 'other' | 'transparent'; absent from a backend before error-copy round 3. */
     last_error_kind?: string | null;
     measurements: Record<string, unknown> | null };
   effective: { fields: EffectiveFields; sources: Record<string, string>; corrected_paths: string[];

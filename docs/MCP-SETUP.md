@@ -452,8 +452,11 @@ The server exposes these tools for building and running (see
   transparent to add colors (no pixel at alpha 16 of 255) is never sent and
   is marked failed with `last_error` "too transparent to add colors; not sent
   to the reader" and kind `transparent`, which the Commons shows in its
-  muted colour, as no error and with no Retry: "This image is too
-  transparent to analyze." References measured before
+  muted colour, as no error, with the neutral badge "Not analyzed" and no
+  Retry or Re-analyze: "This image is too transparent to analyze." The
+  person's re-analyze route answers that state rather than requeuing it,
+  since the file can't change (assets are stored by their sha256).
+  `commons_search` rows carry `last_error_kind` too. References measured before
   `measure-2` keep their palettes until analyzed again. The Vision node and
   QC send an image with transparency as it shows on a canvas node (#0a0a0a)
   too. Curating (corrections, regions, a reference's role,
@@ -4560,14 +4563,17 @@ nebula moodboard delete <board>
 - Nebula stores two facts on each image entry of the HTTP board
   (`GET /api/moodboards/{id}`; MCP's image views leave them out):
   `hasTransparency` (a pixel less than opaque) and `hasClearPixels` (a
-  pixel under alpha 16 of 255). Each is read once when the image is added
-  (off the event loop, before the board is locked), and once at startup
-  (in the background) for the images of boards analyzed before version 6;
-  a read only looks at them and never decodes an image, and an image
-  stored as opaque is never decoded to find clear pixels. A client that
-  sends the images back may echo them; what it sends is ignored. An
-  unreadable or missing file has neither, which never marks a board out
-  of date.
+  pixel under alpha 16 of 255), with `alphaFileStat`, the file's
+  `[mtime_ns, size]` when they were read. Each is read once when the image
+  is added (off the event loop, before the board is locked), and once at
+  startup (in the background) for the images of boards analyzed before
+  version 6. A use trusts them only while the file's stat still matches
+  `alphaFileStat` (one stat, no decode), so an image stored as opaque is
+  never decoded to find clear pixels; a file replaced in place at the same
+  path is read again (decoded once per file version). A client that sends
+  the images back may echo all three; what it sends is ignored. An
+  unreadable or missing file has none, which never marks a board out of
+  date.
 - A saved analysis older than version 6 that measured an image with clear
   pixels (set aside or not) has out-of-date colours: it counted the black
   those pixels hide. An image added after that analysis, or one that is

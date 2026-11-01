@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { CommonsMedia } from './CommonsMedia';
-import { STATE_LABELS } from '../../lib/commonsFormat';
+import { analysisBadge } from '../../lib/commonsFormat';
 import type { SearchRow } from '../../lib/commonsTypes';
 
 interface Props {
@@ -89,9 +89,10 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
                 <CommonsMedia className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} alt={row.summary ?? ''} loading="lazy" />
               )}
               <span className="commons-tile__badges">
-                {row.analysis_state !== 'ready' && (
-                  <span className={`commons-badge commons-badge--${row.analysis_state}`}>{STATE_LABELS[row.analysis_state]}</span>
-                )}
+                {row.analysis_state !== 'ready' && (() => {
+                  const badge = analysisBadge(row.analysis_state, row.last_error_kind);
+                  return <span className={`commons-badge commons-badge--${badge.modifier}`}>{badge.label}</span>;
+                })()}
                 {row.role !== 'neutral' && <span className={`commons-badge commons-badge--role-${row.role}`}>{row.role}</span>}
                 {row.in_inbox && <span className="commons-badge commons-badge--inbox">inbox</span>}
                 {proposed?.has(row.id) && (

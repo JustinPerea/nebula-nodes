@@ -579,8 +579,8 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
 def reanalyze(asset_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
         raise gone(None, "asset not found", "reference", "references", "assets")
-    records.requeue(store, asset_id, actor=actor.id)
-    return {"queued": True}
+    # A too-transparent reference isn't requeued: the answer is its state (GM r6 on #208).
+    return records.reanalyze(store, asset_id, actor=actor.id)
 
 
 class StaleIn(BaseModel):
