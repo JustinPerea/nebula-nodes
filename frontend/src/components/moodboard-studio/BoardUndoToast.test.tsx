@@ -69,6 +69,23 @@ describe('the board undo toast', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('held past its deadline and then drawn again (a view switch under the pointer), it gets the full time', () => {
+    vi.useFakeTimers();
+    const shown = toast();
+    const first = vi.fn();
+    const view = render(<BoardUndoToast toast={shown} onDismiss={first} />);
+    fireEvent.pointerEnter(screen.getByRole('status'));
+    act(() => { vi.advanceTimersByTime(BOARD_TOAST_MS + 4000); });
+    view.unmount();
+    const second = vi.fn();
+    render(<BoardUndoToast toast={shown} onDismiss={second} />);
+    act(() => { vi.advanceTimersByTime(BOARD_TOAST_MS - 1); });
+    expect(second).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
   it('closes on Escape from inside it', () => {
     const onDismiss = vi.fn();
     render(<BoardUndoToast toast={toast()} onDismiss={onDismiss} />);

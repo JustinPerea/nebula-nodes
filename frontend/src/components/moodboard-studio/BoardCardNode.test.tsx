@@ -13,7 +13,7 @@ const view = { zoom: 1 };
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => url }));
 
 import { BoardCardNode, type BoardCardData } from './BoardCardNode';
-import { BoardWideContext, wideFrom, type BoardCardNodeType } from './boardNodes';
+import { BoardFillContext, BoardWideContext, wideFrom, type BoardCardNodeType } from './boardNodes';
 
 afterEach(() => { cleanup(); view.zoom = 1; });
 
@@ -61,5 +61,43 @@ describe('a card on the board', () => {
     const { container } = mount({ url: 'https://example.com/a.jpg' });
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain('Image link from outside Nebula');
+  });
+});
+
+describe('a card taking a placeholder\'s spot (GM r5)', () => {
+  const props = {
+    id: 'c1', data: { imageId: 'i1', url: '/api/outputs/chat-uploads/new.png', number: 1, setAside: false },
+    width: 480, height: 270, selected: false, dragging: false, type: 'card', zIndex: 0, isConnectable: false,
+    positionAbsoluteX: 0, positionAbsoluteY: 0, draggable: true, selectable: true, deletable: false,
+  } as unknown as NodeProps<BoardCardNodeType>;
+  const fillOf = (filling: string[], progress = 0) => ({ has: (url: string) => filling.includes(url), progress: () => progress });
+  const tree = (fill: ReturnType<typeof fillOf>) => (
+    <BoardFillContext.Provider value={fill}>
+      <BoardWideContext.Provider value={wideFrom([480], 1)}><BoardCardNode {...props} /></BoardWideContext.Provider>
+    </BoardFillContext.Provider>
+  );
+  const draw = (filling: string[], progress = 0) => render(tree(fillOf(filling, progress)));
+
+  it('is marked with its url while its placeholder fills, so the board\'s spring can bring it in', () => {
+    const card = draw(['/api/outputs/chat-uploads/new.png']).container.querySelector('.moodboard-card') as HTMLElement;
+    expect(card.dataset.fillUrl).toBe('/api/outputs/chat-uploads/new.png');
+  });
+
+  it('carries no mark otherwise', () => {
+    expect(draw(['/api/outputs/other.png']).container.querySelector('.moodboard-card')!.hasAttribute('data-fill-url')).toBe(false);
+  });
+
+  it('drawn afresh mid-fade (React Flow remounts it), it starts where the spring is, not at 0 (live, r4)', () => {
+    const card = draw(['/api/outputs/chat-uploads/new.png'], 0.8).container.querySelector('.moodboard-card') as HTMLElement;
+    expect(card.style.opacity).toBe('0.8');
+  });
+
+  it('once the fill is over the stylesheet\'s opacity is back, even if the spring stopped short (a hidden tab)', () => {
+    const view = draw(['/api/outputs/chat-uploads/new.png'], 0.3);
+    const card = view.container.querySelector('.moodboard-card') as HTMLElement;
+    expect(card.style.opacity).toBe('0.3');
+    view.rerender(tree(fillOf([])));
+    expect(card.style.opacity).toBe('');
+    expect(card.hasAttribute('data-fill-url')).toBe(false);
   });
 });

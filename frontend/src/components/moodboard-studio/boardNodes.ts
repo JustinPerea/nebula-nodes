@@ -30,6 +30,16 @@ export function wideFrom(widths: readonly number[], zoom: number): number {
 /** `wideFrom` for the board as it is now: a card at least this wide shows its file. */
 export const BoardWideContext = createContext<number>(Number.POSITIVE_INFINITY);
 
+/** The images now taking a placeholder's spot (GM r5): which urls are
+ *  filling, and how far the board's spring has brought each in (0 to 1). A
+ *  card reads its progress when it mounts, so a card React Flow draws afresh
+ *  mid-fade starts where the spring is, not at 0 (live, r4). */
+export interface BoardFill {
+  has: (url: string) => boolean;
+  progress: (url: string) => number;
+}
+export const BoardFillContext = createContext<BoardFill>({ has: () => false, progress: () => 0 });
+
 /** A card the server hasn't placed yet (an image dropped a moment ago): drawn, never moved. */
 export const isProvisionalCard = (placementId: string) => placementId.startsWith('new-');
 

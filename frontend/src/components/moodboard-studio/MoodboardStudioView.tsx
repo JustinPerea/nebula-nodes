@@ -45,7 +45,7 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
 import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
-import { placeTiles } from '../../lib/boardPlacement';
+import { placeTiles, spotFree } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
 import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
@@ -60,6 +60,9 @@ import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
+
+/** A filled placeholder goes after this long even when no board ran its fade. */
+const FILL_FALLBACK_MS = 3000;
 
 interface MoodboardDraft {
   name: string;
@@ -273,7 +276,17 @@ export function MoodboardStudioView() {
     placeholdersRef.current = change(placeholdersRef.current);
     setPlaceholders(placeholdersRef.current);
   };
-  useEffect(() => { placeholdersRef.current = []; setPlaceholders([]); }, [key]);
+  // Each time a board is opened (its key comes, even back to the same one):
+  // an add started on an earlier visit lost its placeholders when the board
+  // went, so it gives up rather than land on a spot nothing holds (review 3, LOW-3).
+  const boardVisit = useRef(0);
+  useEffect(() => { boardVisit.current += 1; placeholdersRef.current = []; setPlaceholders([]); }, [key]);
+  /** Filled placeholders whose image has faded in (or ran out of time): gone. */
+  const dropFilled = useCallback((ids: string[]) => {
+    const gone = new Set(ids);
+    placeholdersRef.current = placeholdersRef.current.filter((holder) => !(gone.has(holder.id) && holder.filled));
+    setPlaceholders(placeholdersRef.current);
+  }, []);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
   // The saved override comes with it, so Studio can say who wrote it.
@@ -724,6 +737,9 @@ export function MoodboardStudioView() {
    *  (and their chip) away. */
   const dropFiles = (files: File[], target: BoardTarget): Promise<void> => {
     if (files.length === 0 || !isCurrent()) return Promise.resolve();
+    // Still the board, on the same visit, that the add started on.
+    const visit = boardVisit.current;
+    const here = () => isCurrent() && boardVisit.current === visit;
     // Each new add replaces the last one's chip.
     setOutsideTiles(null);
     setUploading(true);
@@ -739,7 +755,7 @@ export function MoodboardStudioView() {
     };
     return Promise.all(files.map((file) => readImageAspect(file)))
       .then(async (aspects) => {
-        if (!isCurrent()) return;
+        if (!here()) return;
         const sizes = aspects.map((aspect) => sizeFor(1, aspect));
         // The board's tiles and the spots earlier adds still hold.
         const occupied = [...(draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
@@ -747,7 +763,8 @@ export function MoodboardStudioView() {
         const { spots, outside } = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
         held = spots.map((spot, index) => {
           placeholderSeq.current += 1;
-          return { id: `placeholder-${placeholderSeq.current}`, ...spot, width: sizes[index][0], height: sizes[index][1] };
+          return { id: `placeholder-${placeholderSeq.current}`, ...spot, width: sizes[index][0], height: sizes[index][1],
+            source: { kind: 'file' as const, name: files[index].name } };
         });
         const holders = held;
         changePlaceholders((current) => [...current, ...holders]);
@@ -764,13 +781,45 @@ export function MoodboardStudioView() {
           // The chip pointed at spots that are gone now.
           const gone = chip;
           if (gone !== null) setOutsideTiles((current) => (current?.id === gone ? null : current));
-          throw err;
-        } finally {
           release();
+          throw err;
         }
-        if (!isCurrent()) return;
-        const placed = urls.map((url, index) => ({ url, aspect: aspects[index], at: { x: holders[index].x, y: holders[index].y } }))
+        if (!here()) { release(); return; }
+        // The board may have changed under a held spot meanwhile (an Undo, an
+        // agent's add, a drag): a spot now on a tile moves to the nearest
+        // free one, in the view the person had (review 3, LOW-2).
+        const batch = new Set(holders.map((holder) => holder.id));
+        const taken: Array<{ x: number; y: number; width: number; height: number }> = [
+          ...(draftNow()?.images ?? []).flatMap((image) => (image.placements ?? [])
+            .map((card) => ({ x: card.x, y: card.y, width: card.w, height: card.h }))),
+          ...placeholdersRef.current.filter((holder) => !batch.has(holder.id))];
+        const moved = new Map<string, { x: number; y: number }>();
+        holders.forEach((holder, index) => {
+          if (!urls[index]) return;
+          let rect = { x: holder.x, y: holder.y, width: holder.width, height: holder.height };
+          if (!spotFree(rect, taken)) {
+            const [spot] = placeTiles({ at: { x: holder.x + holder.width / 2, y: holder.y + holder.height / 2 },
+              sizes: [[holder.width, holder.height]], occupied: taken, view: target.view }).spots;
+            rect = { ...rect, ...spot };
+            moved.set(holder.id, spot);
+          }
+          taken.push(rect);
+        });
+        const spotOf = (holder: BoardPlaceholder) => moved.get(holder.id) ?? { x: holder.x, y: holder.y };
+        const placed = urls.map((url, index) => ({ url, aspect: aspects[index], at: spotOf(holders[index]) }))
           .filter((item) => item.url);
+        // Each uploaded image takes its spot: its placeholder stays under it
+        // while it fades in (the board drops it then, `dropFilled`); a spot
+        // with no image goes now.
+        const fills = new Map(holders.flatMap((holder, index) => (urls[index] ? [[holder.id, urls[index]] as const] : [])));
+        held = holders.filter((holder) => !fills.has(holder.id));
+        release();
+        if (fills.size) {
+          changePlaceholders((current) => current.map((holder) => (fills.has(holder.id)
+            ? { ...holder, ...spotOf(holder), filled: fills.get(holder.id) } : holder)));
+          // If no board is drawn to run the fade (List meanwhile), they go anyway.
+          window.setTimeout(() => dropFilled([...fills.keys()]), FILL_FALLBACK_MS);
+        }
         if (placed.length === 0) return;
         const thumb = urls[outside[0]];
         const shown = chip;
@@ -1473,7 +1522,7 @@ export function MoodboardStudioView() {
             <>
               <div className="moodboard-studio-view__board-notices">{notices}</div>
               <BoardCanvas key={key} boardKey={key} images={draft.images} onMove={moveCards} onDropFiles={dropFiles}
-                uploading={uploading} pasteTarget={pasteTarget} placeholders={placeholders}
+                uploading={uploading} pasteTarget={pasteTarget} placeholders={placeholders} onPlaceholdersFilled={dropFilled}
                 outside={outsideTiles} onOutsideDone={dismissOutside} />
               <NoticeLeave value={shownToast}>{(last, leave) => <BoardUndoToast key={last.id} toast={last} onDismiss={dismissToast} leave={leave} />}</NoticeLeave>
             </>

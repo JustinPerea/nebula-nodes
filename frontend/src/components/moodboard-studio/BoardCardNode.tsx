@@ -1,10 +1,10 @@
-import { memo, useContext, useState } from 'react';
+import { memo, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { overviewThumbnailUrl } from '../../lib/canvasOverview';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
-import { BoardWideContext, type BoardCardNodeType } from './boardNodes';
+import { BoardFillContext, BoardWideContext, type BoardCardNodeType } from './boardNodes';
 
 export type { BoardCardData } from './boardNodes';
 export { BOARD_THUMB_MAX_CSS_PX } from './boardNodes';
@@ -24,8 +24,19 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   const thumb = wide || !view.src ? null : overviewThumbnailUrl(view.src);
   const useThumb = thumb !== null && thumb !== failedThumb;
   const src = useThumb ? backendAssetUrlSync(thumb) : view.src;
+  // Just filled a placeholder: the board's spring brings it in (BoardCanvas
+  // writes each frame). Drawn afresh mid-fade, it starts where the spring is;
+  // once the fill is over the opacity is the stylesheet's again.
+  const fill = useContext(BoardFillContext);
+  const filling = fill.has(data.url);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (card) card.style.opacity = filling ? String(fill.progress(data.url)) : '';
+  }, [fill, filling, data.url]);
   return (
-    <div className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId}>
+    <div ref={cardRef} className={`moodboard-card${selected ? ' moodboard-card--selected' : ''}`} data-image-id={data.imageId}
+      data-fill-url={filling ? data.url : undefined}>
       {src === null ? (
         <div className="moodboard-card__placeholder">{view.outside && <OutsideImageNote />}</div>
       ) : <img

@@ -17,8 +17,10 @@ vi.mock('../../lib/backend', () => ({ apiFetch: vi.fn(), backendAssetUrlSync: (u
 
 const camera: { set: (x: number, y: number, zoom: number) => void } = { set: () => {} };
 const pan = (x: number, y: number, zoom: number) => camera.set(x, y, zoom);
+const storeOf: { current: ReturnType<typeof useStoreApi> | null } = { current: null };
 function Pan() {
   const store = useStoreApi();
+  useEffect(() => { storeOf.current = store; }, [store]);
   useEffect(() => { camera.set = (x, y, zoom) => act(() => { store.setState({ transform: [x, y, zoom] }); }); }, [store]);
   return null;
 }
@@ -90,6 +92,16 @@ describe('the outside-the-view chip', () => {
     pan(-100, 0, 1);
     expect(onDone).not.toHaveBeenCalled();
     pan(-700, -100, 1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('with several tiles, stays until every one is in view (review 3)', () => {
+    const split: OutsideTiles = { id: 5, rects: [{ x: 100, y: 100, width: 300, height: 200 }, { x: 1200, y: 100, width: 300, height: 200 }], thumb: null };
+    const { onDone } = mount(split);
+    // The first is in view from the start; the second is not.
+    pan(-100, 0, 1);
+    expect(onDone).not.toHaveBeenCalled();
+    pan(0, 0, 0.6);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -200,6 +212,18 @@ describe('focus and the chip', () => {
     chip.focus();
     fireEvent.keyDown(chip, { key: 'Escape' });
     expect(focusBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('Esc on the chip keeps the viewport exactly (GM r5): the board\'s transform is unchanged and nothing is shown', () => {
+    const { onShow, onDone } = mount(one);
+    pan(-120, -40, 0.75);
+    const chip = screen.getByRole('button');
+    const before = [...storeOf.current!.getState().transform];
+    chip.focus();
+    fireEvent.keyDown(chip, { key: 'Escape' });
+    expect(storeOf.current!.getState().transform).toEqual(before);
+    expect(onShow).not.toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it('Esc elsewhere dismisses it and leaves focus alone', () => {

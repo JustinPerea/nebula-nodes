@@ -109,6 +109,48 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
 - The placeholder held its spot during a 2.5 s upload, through a pan, and the card filled it there.
 - The shots show "This tab isn't connected as you". The tab used the Vite origin as its backend, so requests stayed same-origin; the moodboard routes don't need the person.
 
+## Round 4 (GM r5, review 3)
+
+**The placeholder's look (GM r5).** A fill at white 0.06, a 1 px dashed edge at white 0.28, and the file's name in the top-left corner at 12 screen px, cut by grapheme to 32 characters (`boardPlaceholder.ts`, `clipGraphemes`). The source is typed, `{kind: 'file', name} | {kind: 'link', host}`, so a pasted link's placeholder (its own PR) reads its host. `BoardCanvas` writes the zoom to `--mb-board-zoom` on the board through a `flowStore.subscribe` layout effect, so a zoom frame re-renders nothing; the CSS divides by it.
+
+**Why the edge is an SVG stroke whose width divides by the zoom.**
+- A CSS border of `calc(1px / zoom)` doesn't work: Chrome snaps a border's width to whole device pixels before the node's `scale()` applies, so it drew 3 px at zoom 3 and 0.75 px at zoom 0.25 (live, measured).
+- `vector-effect: non-scaling-stroke` doesn't either. Chrome undoes only the transforms inside the SVG, not the CSS `scale()` on the React Flow viewport above it. The first live run passed because it read the computed style, not the pixels. The pixel crops showed about 2.6 px of ink at zoom 3 and about 0.2 px at 0.25.
+- An SVG stroke isn't snapped. So the rect's `stroke-width` is `calc(1px / zoom)` and the dashes are `calc(4px / zoom) calc(3px / zoom)`. It is inset half a stroke, so the line sits inside the tile's box. Measured live by pixels (the ink across the edge's rows, against the fill between dashes): 0.98 px at zoom 0.25, 0.95 px at zoom 1 and 0.95 px at zoom 3, dashed 4 on 3 at each. Before this change the same count gave about 0.3 px and 2.6 px at 0.25 and 3.
+
+**The fill rides the board's spring (GM r5, a spring, not a timed fade).** On upload success the Studio marks the placeholder `filled: url`. `BoardCanvas` runs `springProgress` (new in `lib/viewportSpring.ts`; `springViewport` is now built on it) and writes the card's opacity each frame. The card is marked `data-fill-url` and the CSS holds it at opacity 0 with no transition. When the spring settles, `onPlaceholdersFilled` fires and the Studio drops the placeholder. A 3 s fallback timer drops it if no board ran the spring (List meanwhile). Under reduced motion the image swaps straight in.
+
+**The redraw fix.** Live, React Flow redrew the card mid-fade (a new element), and the new one started at the stylesheet's opacity 0 for a frame: a flash. Now `BoardFillContext` is `{has, progress}`: the spring's progress is kept per url, and a card applies the current progress in a layout effect when it mounts, before paint. Once the fill is over the card clears its inline opacity, so it can't be left part-faded if the spring stopped short. The live check samples the opacity every frame and found no drop across the redraw.
+
+**Esc on the chip doesn't move the view.** Rerunning r3-6's sequence, the viewport transform was `translate(-3939px, -921.626px) scale(4)` before and after Esc, unchanged over 1 s. Esc only dismisses and returns focus. The camera in r3-6 followed the driver's five "Zoom in" clicks in its section E, not Esc and not an Enter. Tests pin it: Esc leaves the board's transform unchanged and calls no spring, `setViewport` or `fitView`. They pass on c9477f76 too, since the behaviour was already right.
+
+**Progress bar: not built (a follow-up, its own PR).** GM asked for a 2 px bar that grows with the real upload progress, or nothing. The shared upload path can't report it: `uploadFiles` -> `apiRequest` -> `apiFetch` -> `fetch`, and fetch has no upload progress events. A real bar needs an XMLHttpRequest transport (`upload.onprogress`) in `lib/backend.ts`. That is a second transport in the module every upload caller uses (Commons, Cinema and the rest), which GM ruled out for this PR, so there is no bar and nothing fakes one. The follow-up: add an XHR upload branch to `lib/backend.ts` with the same headers, person token and error mapping as `apiFetch`, used only by callers that ask for progress; then draw the bar on the placeholder on the board's spring. It would also let a stalled upload be told from a slow one (see NIT-3 below).
+
+**Live, round 4** (scratchpad `live4/drive-r4.mjs`, 17 of 17; then `live4b/drive-r4b.mjs`, 9 of 9, for the edge after the stroke change). The backend ran only through `serve_isolated.py` on 8796 with the person token on stdin; its blocked log holds only canary lines and "canary ok". Vite ran on 5796 with #209's style changes applied uncommitted and reverted afterwards; the browser blocked shared ports and outside hosts, canary first, and no request left the lane. The zoom 3 shot has the tile's corner just inside the board's left edge, so its label is cut at the start.
+
+**Review 3 (placement-placeholder lens).**
+- LOW-1, the work bound. The counter now counts every block the search reads, and rows. The search no longer scans back over the tallest block on each row. Blocks are filed in a grid of cells (a few blocks wide, a quarter of one tall); a row walks the run of ruled-out spans out from the wish cell by cell, and stops once its end is past the view or farther than the best spot. A block too big to file (over 64 cells) sits in one short list every step reads. The outermost rows are tried first, so on a crowded board the best spot starts close and the walk keeps within reach of it. Exactness is unchanged: review 3's own brute-force oracle (300 random boards, 736 files) gives 0 mismatches against it, and the builder's brute-force test still passes. Measured on review 3's boards (five files, this Mac, wall time varies with load):
+
+  | Board | n | blocks read, before (review 3) | read now | ms before | ms now |
+  |---|---|---|---|---|---|
+  | jittered grid, no room | 500 | 288,306 | 400,191 | 45 | 14 |
+  | band of tall tiles | 500 | 344,300 | 19,863 | 33-46 | 2.5 |
+  | very tall tile + field | 500 | 686,669 | 216,222 | 10 | 10 |
+  | jittered grid, no room | 2,000 | 1,766,773 | 2,332,411 | 118-187 | 28 |
+  | band of tall tiles | 2,000 | 1,403,656 | 17,424 | 156-262 | 8 |
+  | very tall tile + field | 2,000 | 7,466,814 | 630,625 | 43-51 | 18 |
+
+  The full-grid board reads more blocks than before (a block sits in one or two cells per row) but runs three to six times faster, since rows no longer allocate and sort their spans. Its cost is the view with no room: every row of it must be shown covered. The test pins all four of review 3's shapes at 500 tiles (under 450,000) and 2,000 tiles (under 2,500,000), the band under 40,000, and a far tall tile adding under a quarter.
+- LOW-2, a held spot the board changed under. When the upload fills, each held spot is checked against the board as it is now plus the other placeholders. A spot now on a tile (an Undo brought one back, an agent added one, the person dragged one there) moves to the nearest free spot, from its own centre, in the view the person had at paste time, and its placeholder moves with it. That keeps "a tile never lands on another". Review 3 asked GM whether to move or overlap; this follows the existing rule and is easy to change. The chip isn't recomputed for a moved spot.
+- LOW-3, a board switch and back mid-upload. Each opening of a board counts as a visit, and an add only lands on the visit it started on. Leaving the board already drops its placeholders, so the add gives up rather than land where nothing holds a spot, the same as leaving and not coming back.
+- NIT-4, a toast held past its deadline and remounted. Holding the toast now clears its deadline, so a remount meanwhile gets the full 6 s.
+- Test gaps: each of review 3's twelve real survivors, and the drop one only its oracle caught, has a test now (an extra drop file keeps to the view; a touching edge is wholly outside; an early refusal is handled; another board shows none of this board's placeholders; a mixed paste is announced; another board's toast holds nothing back; a dismissed toast lets "Undid…" show; every tile must be in view for the chip to go; the placeholder is focusable; focus follows for 10 s only and never off a control; another add's thumbnail or failure leaves this chip alone).
+- Not changed, with the reason:
+  - NIT-1 (the chip's centre rule for a tile smaller than the view) and NIT-2 (the chip for an aimed tile under the toolbar) are review 3's questions 1 and 2 for GM. The code keeps its current reading of GM r4 answers 9 and 3.
+  - NIT-3 (a hung upload keeps its placeholder): `apiRequest` has no timeout, and that is the shared transport. A timer can't tell a stalled upload from a big one on a slow link. The XHR follow-up above can, through its progress events.
+  - NIT-5 (the placeholder too faint) is GM r5's new look.
+  - Three of review 3's surviving mutants are equivalent: two in the span merge (as review 3 found), and the dropped `isCurrent()` before the commit (`commitOps` checks it itself).
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -119,6 +161,7 @@ Until then, a clipboard that holds only http(s) links, as `text/plain` or only a
   - `BoardCanvas.tsx`: targets, the view rect, the toolbar as a bottom bar, and the chip.
   - `MoodboardStudioPaste.test.tsx` (new) and `BoardCanvas.test.tsx`.
 - `frontend/src/styles/moodboard-board.css`: the chip, the placeholder tile, the board's focus ring.
+- Round 4: `boardPlaceholder.ts` (new, with a test), `boardNodes.ts` (`BoardFillContext`), `BoardCardNode.tsx`, `lib/viewportSpring.ts` (`springProgress`, with a new test), `BoardUndoToast.tsx`.
 - `frontend/tests/focusRingCss.test.ts`: the placeholder's ring is listed with the card's.
 
 ## Docs

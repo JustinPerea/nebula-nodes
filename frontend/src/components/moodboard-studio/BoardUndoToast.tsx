@@ -43,7 +43,10 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   const wasHeld = useRef(false);
   useEffect(() => {
     if (held) {
+      // Held, the old deadline is void: a remount meanwhile (the view
+      // switched under the pointer) starts a fresh BOARD_TOAST_MS too.
       wasHeld.current = true;
+      deadlines.delete(toast);
       return;
     }
     const now = Date.now();

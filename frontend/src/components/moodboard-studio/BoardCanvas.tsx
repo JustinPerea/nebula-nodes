@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, MutableRefObject, PointerEvent as ReactPointerEvent } from 'react';
 import {
   Background, BackgroundVariant, Panel, ReactFlow, ReactFlowProvider, getViewportForBounds, useReactFlow, useStore, useStoreApi,
-  type Node, type NodeChange, type NodeTypes, type Viewport,
+  type Node, type NodeChange, type NodeProps, type NodeTypes, type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { MoodboardImage } from '../../types';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
-import { springViewport } from '../../lib/viewportSpring';
+import { springProgress, springViewport } from '../../lib/viewportSpring';
+import { placeholderLabel, type BoardPlaceholder } from './boardPlaceholder';
 import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasStore';
 import { BoardCardNode } from './BoardCardNode';
-import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
+import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, wideFrom, type BoardFill } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import type { NodeRect } from '../../lib/nodePlacement';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
@@ -48,6 +49,8 @@ export interface BoardCanvasProps {
   outside?: OutsideTiles | null;
   /** The chip went: pressed, the tiles came into view, Esc. */
   onOutsideDone?: () => void;
+  /** Filled placeholders whose image has finished fading in: the Studio drops them. */
+  onPlaceholdersFilled?: (ids: string[]) => void;
 }
 
 /** Where new tiles go: the point they gather around and the visible board, in
@@ -58,16 +61,7 @@ export interface BoardTarget {
   aim: boolean;
 }
 
-/** A spot held on the board for a tile still on its way (a file uploading;
- *  later a pasted link being fetched): where it sits and its size, in board
- *  pixels. Drawn, taken into account by placement, never moved or saved. */
-export interface BoardPlaceholder {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type { BoardPlaceholder } from './boardPlaceholder';
 
 /** Tiles placed outside the view (GM, #210 answer 1): their rects, the first
  *  one's image for the chip's thumbnail (once uploaded), and how many. */
@@ -77,9 +71,21 @@ export interface OutsideTiles {
   thumb: string | null;
 }
 
-/** A placeholder tile: the spot a file is uploading into. */
-function BoardPlaceholderNode() {
-  return <div className="moodboard-board__placeholder" />;
+/** A placeholder tile (GM r5): a calm fill, a dashed edge one screen pixel
+ *  wide at any zoom, and its label (the file's name) in the top-left corner.
+ *  The edge is an SVG stroke whose width divides by the zoom (the CSS): a
+ *  CSS border of 1px / zoom is snapped to whole pixels by Chrome before the
+ *  zoom scales it, so it drew 3 px at zoom 3 and 0.75 px at 0.25, and
+ *  non-scaling-stroke ignores the board's CSS scale() (live, r4). */
+function BoardPlaceholderNode({ data }: NodeProps<Node<{ label: string }, 'placeholder'>>) {
+  return (
+    <div className="moodboard-board__placeholder">
+      <svg className="moodboard-board__placeholder-edge" aria-hidden="true" focusable="false">
+        <rect className="moodboard-board__placeholder-stroke" />
+      </svg>
+      <span className="moodboard-board__placeholder-label">{data.label}</span>
+    </div>
+  );
 }
 
 const nodeTypes: NodeTypes = { card: BoardCardNode, placeholder: BoardPlaceholderNode };
@@ -140,7 +146,7 @@ function BoardDots() {
 }
 
 function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, pasteTarget: pasteTargetRef,
-  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone }: BoardCanvasProps) {
+  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -153,6 +159,20 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   movingRef.current = moving;
   const dragging = useRef(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // The zoom, as `--mb-board-zoom` on the board, so the placeholder's edge and
+  // label keep their screen size (the CSS divides by it). Written on the
+  // element as the zoom changes, so a zoom frame re-renders nothing.
+  useLayoutEffect(() => {
+    let last = 0;
+    const apply = (zoom: number | undefined) => {
+      const next = zoom || 1;
+      if (next === last) return;
+      last = next;
+      wrapperRef.current?.style.setProperty('--mb-board-zoom', String(next));
+    };
+    apply(flowStore.getState().transform?.[2]);
+    return flowStore.subscribe((state) => apply(state.transform?.[2]));
+  }, [flowStore]);
   const keyTimer = useRef<number | null>(null);
 
   const build = useMemo(() => createBoardNodeBuilder(), []);
@@ -165,12 +185,48 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
   const wide = useStore(useCallback((state: { transform: [number, number, number] }) => wideFrom(widths, state.transform[2]), [widths]));
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
-  // The cards and, after them, the placeholders (not selectable, not dragged).
-  const shown = useMemo<Node[]>(() => (placeholders.length === 0 ? nodes : [...nodes, ...placeholders.map((spot) => ({
+  // The placeholders, then the cards over them (a filled spot's image fades
+  // in on top of its placeholder). Not selectable, not dragged.
+  const shown = useMemo<Node[]>(() => (placeholders.length === 0 ? nodes : [...placeholders.map((spot) => ({
     id: spot.id, type: 'placeholder', position: { x: spot.x, y: spot.y }, width: spot.width, height: spot.height,
     measured: { width: spot.width, height: spot.height }, draggable: false, selectable: false, focusable: true,
-    ariaLabel: 'Adding an image', data: {},
-  }))]), [nodes, placeholders]);
+    ariaLabel: 'Adding an image', data: { label: placeholderLabel(spot.source) },
+  })), ...nodes]), [nodes, placeholders]);
+  // Images taking their spot: each fades in over its placeholder on the
+  // board's spring (GM r5, corrected: a spring, not a timed fade), written
+  // straight to the card's opacity per frame; reduced motion swaps at once.
+  // Then the placeholder goes.
+  const fillProgress = useRef(new Map<string, number>());
+  const filling = useMemo<BoardFill>(() => {
+    const urls = new Set(placeholders.flatMap((spot) => (spot.filled ? [spot.filled] : [])));
+    return { has: (url) => urls.has(url), progress: (url) => fillProgress.current.get(url) ?? 0 };
+  }, [placeholders]);
+  const fades = useRef(new Map<string, () => void>());
+  const filledDone = useRef(onPlaceholdersFilled);
+  filledDone.current = onPlaceholdersFilled;
+  useEffect(() => {
+    const filled = new Set(placeholders.flatMap((spot) => (spot.filled ? [spot.filled] : [])));
+    for (const url of fillProgress.current.keys()) if (!filled.has(url)) fillProgress.current.delete(url);
+    for (const spot of placeholders) {
+      const url = spot.filled;
+      if (!url || fades.current.has(spot.id)) continue;
+      const cards = () => wrapperRef.current?.querySelectorAll<HTMLElement>('.moodboard-card[data-fill-url]') ?? [];
+      const set = (progress: number) => {
+        const clamped = Math.min(1, Math.max(0, progress));
+        fillProgress.current.set(url, clamped);
+        const opacity = String(clamped);
+        for (const card of cards()) if (card.dataset.fillUrl === url) card.style.opacity = opacity;
+      };
+      fades.current.set(spot.id, springProgress(set, () => {
+        fades.current.delete(spot.id);
+        filledDone.current?.([spot.id]);
+      }));
+    }
+  }, [placeholders]);
+  useEffect(() => () => {
+    for (const cancel of fades.current.values()) cancel();
+    fades.current.clear();
+  }, []);
   const shownRef = useRef(shown);
   shownRef.current = shown;
   const imagesRef = useRef(images);
@@ -450,6 +506,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
       onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
       {/* Behind the cards, for the reader's ripple while Analyze runs (PR10b). */}
       <div className="moodboard-board__underlay" aria-hidden="true" data-layer="ripple" />
+      <BoardFillContext.Provider value={filling}>
       <BoardWideContext.Provider value={wide}>
         <ReactFlow
           className="moodboard-board__flow"
@@ -489,6 +546,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false, p
           </Panel>
         </ReactFlow>
       </BoardWideContext.Provider>
+      </BoardFillContext.Provider>
       {outside && onOutsideDone && (
         <OutsideChip key={outside.id} tiles={outside} viewOf={viewRect} onShow={showOutside} onDone={onOutsideDone}
           focusBoard={focusBoard} />
