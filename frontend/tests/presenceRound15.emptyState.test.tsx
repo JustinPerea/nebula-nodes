@@ -5,6 +5,10 @@
  * tab that isn't connected as you shows neither (the page line says why).
  * The lists: the references grid (All and Inbox), the Add to menu's "No collections", and
  * Settings' linked folders and vocabulary candidates.
+ * Round 17 (review 13 MEDIUM-1, GM r27 1): Agent review and Blind labeling too. After a failed load
+ * each shows only its eyebrow, its heading and the failure line: no "0 / 15 reviewed", no "Prepare
+ * the reference set in Blind labeling first.", no held-out set form. A read that answered "no batch"
+ * shows the setup state.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +26,9 @@ vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => n
 
 const { CommonsView } = await import('../src/components/commons/CommonsView');
 const { CommonsSettings } = await import('../src/components/commons/CommonsSettings');
+// The view's tests above stub the two panes; these take the real ones.
+const { CommonsReview } = await vi.importActual<typeof import('../src/components/commons/CommonsReview')>('../src/components/commons/CommonsReview');
+const { CommonsEvaluation } = await vi.importActual<typeof import('../src/components/commons/CommonsEvaluation')>('../src/components/commons/CommonsEvaluation');
 const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
@@ -32,19 +39,20 @@ const INBOX_EMPTY = 'Nothing waiting in the inbox. Items agents add land here fo
 const NO_FOLDERS = 'No folders linked. Linked folders are read, never written.';
 const NO_TERMS = 'No new terms proposed yet.';
 const TOKEN = 'a'.repeat(43);
-type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates';
+type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates' | 'review' | 'evaluation';
 const fails: Partial<Record<Load, number>> = {};
 /** A load the test holds until it lets it answer. */
 const held: Partial<Record<Load, Promise<void>>> = {};
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 async function answer(path: string): Promise<Response> {
-  const load = (['status', 'collections', 'search', 'folders', 'settings', 'candidates'] as const).find((name) => path.endsWith(`/${name}`));
+  const load = (['status', 'collections', 'search', 'folders', 'settings', 'candidates', 'review', 'evaluation'] as const).find((name) => path.endsWith(`/${name}`));
   if (load && held[load]) await held[load];
   if (load && fails[load]) return json({ detail: 'no' }, fails[load]);
   if (load === 'status') return json({ worker: { running: false, state: 'idle' }, queue: {} });
   if (load === 'collections') return json([]);
   if (load === 'search') return json({ results: [] });
   if (load === 'folders' || load === 'candidates') return json([]);
+  if (load === 'review' || load === 'evaluation') return json(null);
   return json({});
 }
 
@@ -211,5 +219,65 @@ describe('Settings\' lists (GM r24 b)', () => {
     await tick(100);
     expect(screen.getByText(NO_FOLDERS)).toBeTruthy();
     expect(screen.getByText(NO_TERMS)).toBeTruthy();
+  });
+});
+
+describe('Agent review and Blind labeling (review 13 MEDIUM-1, GM r27 1)', () => {
+  const REVIEW_LINE = 'Nebula couldn’t load Agent review because it didn’t respond. Try again.';
+  const LABELING_LINE = 'Nebula couldn’t load Blind labeling because it didn’t respond. Try again.';
+  const PREPARE_FIRST = 'Prepare the reference set in Blind labeling first.';
+  const COUNTS = /\d+ \/ \d+ reviewed|grades ready/;
+  const SETUP = 'Prepare the held-out set';
+  /** What the pane shows besides its heading block and its line. */
+  const rest = (section: Element) => [...section.children].filter((child) => !child.matches('header') && !child.hasAttribute('data-line-box') && !child.querySelector('[data-commons-line]') && !child.matches('[data-commons-line]'));
+
+  it('Agent review, a failed load: the eyebrow, the heading and the line, nothing else', async () => {
+    fails.review = 503;
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(text()).toContain(REVIEW_LINE);
+    expect(screen.getByRole('heading', { name: /Agent review/ })).toBeTruthy();
+    expect(text()).toContain('Does this read right?');
+    expect(seen).not.toContain(PREPARE_FIRST);
+    expect(seen).not.toMatch(COUNTS);
+    expect(seen).not.toContain('Download review record');
+    expect(document.querySelector('.review-progress')).toBeNull();
+    expect(rest(document.querySelector('section.commons-review')!)).toEqual([]);
+  });
+  it('Agent review, answered with no batch: the setup state and the counts', async () => {
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(screen.getByText(PREPARE_FIRST)).toBeTruthy();
+    expect(text()).toContain('0 / 15 reviewed');
+    expect(seen).not.toContain(REVIEW_LINE);
+  });
+  it('Agent review, failed and then the next poll answers: the setup state comes then', async () => {
+    fails.review = 503;
+    render(<CommonsReview />);
+    await tick(1000);
+    expect(seen).not.toContain(PREPARE_FIRST);
+    delete fails.review;
+    await tick(5000);
+    expect(screen.getByText(PREPARE_FIRST)).toBeTruthy();
+    expect(text()).not.toContain(REVIEW_LINE);
+  });
+  it('Blind labeling, a failed load: the eyebrow, the heading and the line, no setup form', async () => {
+    fails.evaluation = 503;
+    render(<CommonsEvaluation />);
+    await tick(1000);
+    expect(text()).toContain(LABELING_LINE);
+    expect(screen.getByRole('heading', { name: /Blind labeling/ })).toBeTruthy();
+    expect(text()).toContain('A fresh pair of eyes.');
+    expect(seen).not.toContain(SETUP);
+    expect(document.querySelector('form')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Prepare 15 held-out references/ })).toBeNull();
+    expect(rest(document.querySelector('section.commons-evaluation')!)).toEqual([]);
+  });
+  it('Blind labeling, answered with no batch: the setup form', async () => {
+    render(<CommonsEvaluation />);
+    await tick(1000);
+    expect(screen.getByText(SETUP)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Prepare 15 held-out references/ })).toBeTruthy();
+    expect(seen).not.toContain(LABELING_LINE);
   });
 });

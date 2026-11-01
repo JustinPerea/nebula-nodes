@@ -7,7 +7,7 @@ import { useUIStore } from '../../store/uiStore';
 import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } from '../../lib/commonsApi';
 import { holdCommonsCalls } from '../../lib/commonsHold';
 import { useDemotedView } from '../../hooks/useTabHeld';
-import { isBecauseLine } from '../../lib/notConnectedLine';
+import { expectBecauseLine, isBecauseLine } from '../../lib/notConnectedLine';
 import type { FailureCopy } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
@@ -312,6 +312,9 @@ export function CommonsView() {
   holdCommonsCalls(demoted);
   // Round 11: the flag is the view's; it goes with the view (commonsApi reads the session itself).
   useEffect(() => () => holdCommonsCalls(false), []);
+  // Round 17 (review 13 LOW-2, GM r27 2): a demote here brings the page's because line (its loads
+  // are refused), so the general notice waits for it rather than flashing in first.
+  useEffect(() => expectBecauseLine(), []);
   const view = demoted ? 'demoted' : `live-${epoch}`;
   // Round 11 (review 9 MEDIUM-3, GM r19 item 2): focus that the switch takes away (Add's menu, a
   // keyed pane's control) moves to the same control, the not-connected line, or the heading.
@@ -442,6 +445,8 @@ function CommonsViewBody({ view }: {
   const loadsClear = loads.clear;
   // Round 15 (GM r25 1): each load says when it is sent, so a failed one's line waits for the rest.
   const loadStarted = loads.start;
+  // Round 17 (review 13 LOW-1): and when it is cancelled before it answered, so no line waits for it.
+  const loadAbandoned = loads.abandon;
   // Round 15 (GM r24 b): what a list's last read answered for. Its empty state ("No matches…",
   // "No collections") shows only then: after a failure, or before the first answer, nothing was
   // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
@@ -519,8 +524,8 @@ function CommonsViewBody({ view }: {
         loadFailed('collections', e, "Couldn’t load the collections.");
       },
     );
-    return () => { cancelled = true; };
-  }, [collectionsKey, loadFailed, loadsClear, loadStarted, noteAnswered, view]);
+    return () => { cancelled = true; loadAbandoned('collections'); };
+  }, [collectionsKey, loadFailed, loadsClear, loadStarted, loadAbandoned, noteAnswered, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -536,8 +541,9 @@ function CommonsViewBody({ view }: {
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      loadAbandoned('status');
     };
-  }, [refreshKey, loadFailed, loadsClear, loadStarted, view]);
+  }, [refreshKey, loadFailed, loadsClear, loadStarted, loadAbandoned, view]);
 
   useEffect(() => {
     if (tab === 'settings' || tab === 'labeling' || tab === 'review') return undefined;
@@ -567,8 +573,11 @@ function CommonsViewBody({ view }: {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      // A search cancelled before it answered (a new search, or Settings, Blind labeling or
+      // Agent review, which search nothing) will never answer: nothing waits for it.
+      loadAbandoned('references');
     };
-  }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, noteAnswered, view]);
+  }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, loadAbandoned, noteAnswered, view]);
 
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {

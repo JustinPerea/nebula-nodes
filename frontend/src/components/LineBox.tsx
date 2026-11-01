@@ -1,5 +1,5 @@
 import { LineText } from './LineText';
-import { FOCUS_LINE_ATTR } from '../hooks/useFocusHandover';
+import { FOCUS_LINE_ATTR } from '../lib/lineAttrs';
 import '../styles/becauseLine.css';
 
 /**

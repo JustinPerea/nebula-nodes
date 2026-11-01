@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, type FocusEvent } from 'react';
 
-/** The attribute a section's lock or not-connected line carries so a handover can find it. */
-export const FOCUS_LINE_ATTR = 'data-focus-line';
+import { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR } from '../lib/lineAttrs';
 
-/** The attribute that names a pane for the handover, when its region has no aria-label. */
-export const FOCUS_SCOPE_ATTR = 'data-focus-scope';
+// Round 17 (review 13 NIT-3): the attributes live in lib/lineAttrs, so the lines that carry them
+// stay out of this module; it reads them.
+export { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR };
 
 const FRAMES = 30;
 
@@ -34,16 +34,29 @@ function textOfIds(ids: string): string {
 
 const PANE = `[${FOCUS_SCOPE_ATTR}], [aria-label], [aria-labelledby]`;
 
+/** A pane's name: its data-focus-scope, else its aria-label, else the words it is labelled by. */
+function nameOf(pane: HTMLElement): string {
+  const by = pane.getAttribute('aria-labelledby');
+  return pane.getAttribute(FOCUS_SCOPE_ATTR) || pane.getAttribute('aria-label') || (by ? textOfIds(by).replace(/\s+/g, ' ').trim() : '');
+}
+
 /**
  * The pane a control sits in, inside the handover's scope (round 14, review 11 MEDIUM-1): its
  * nearest data-focus-scope or labelled region, by that name. Two fields with the same words in
  * two panes (a reference's Role and the filter column's Role) are two controls.
+ *
+ * Round 17 (review 13 LOW-1): led by every data-focus-scope above that pane, so a labelled region
+ * inside a scope (a membership's "Comments in Refs") stays that scope's. Two memberships of
+ * same-named collections are two panes, not look-alikes told apart only by their place.
  */
 function paneOf(element: HTMLElement, scope: HTMLElement): string {
   const pane = element.parentElement?.closest<HTMLElement>(PANE);
   if (!pane || !scope.contains(pane)) return '';
-  const by = pane.getAttribute('aria-labelledby');
-  return pane.getAttribute(FOCUS_SCOPE_ATTR) || pane.getAttribute('aria-label') || (by ? textOfIds(by).replace(/\s+/g, ' ').trim() : '');
+  const names = [nameOf(pane)];
+  for (let up = pane.parentElement?.closest<HTMLElement>(`[${FOCUS_SCOPE_ATTR}]`); up && scope.contains(up); up = up.parentElement?.closest<HTMLElement>(`[${FOCUS_SCOPE_ATTR}]`)) {
+    names.unshift(up.getAttribute(FOCUS_SCOPE_ATTR) ?? '');
+  }
+  return names.join(' › ');
 }
 
 /** A control's key: its pane and its label, or null when nothing names it. */

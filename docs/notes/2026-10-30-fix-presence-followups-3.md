@@ -2049,8 +2049,11 @@ One thing left as it was: offline with the tab connected, OK still sends, create
     load answered (before it, too, nothing was read).
 - A held tab already showed no grid empty state (round 11); it now shows no "No collections"
   either (its collections read is refused).
-- Left as they are: CommonsReview and CommonsEvaluation show no list empty state on a failure
-  (no batch shows nothing); CommonsDetail's "Loading…" is not an empty state.
+- Left as they are: CommonsDetail's "Loading…" is not an empty state. (Corrected in round 17:
+  this said CommonsReview and CommonsEvaluation showed no empty state on a failure. They did:
+  "Prepare the reference set in Blind labeling first." with "0 / 15 reviewed", and the held-out
+  set form, since their `batch` was null after a failed load too. Review 13 MEDIUM-1; fixed in
+  round 17.)
 - Tests: `presenceRound15.emptyState` (a failed search, a real empty search, the Inbox, a failed
   refresh after an answer, offline then online before the search answers, collections failed /
   read and empty / read then failed on the reconnect, a held tab, Settings failed / before the
@@ -2111,11 +2114,15 @@ One thing left as it was: offline with the tab connected, OK still sends, create
 - Live (8795/5795): our own backend paused with SIGSTOP, a stale link then the real link taken
   in the open canvas tab, then resumed. The tab keeps the real token, is promoted and not held,
   shows no general notice, and its next person-only reads (Settings, Agents) are answered
-  (shot 10). The two-hellos-on-one-socket order itself could not be staged here: under Vite the
-  socket goes through Vite's proxy (origin 5795) while a valid link names the backend (8795), so
-  `personConnected` closes and reopens the socket on each link and only the new hello goes. The
-  built app serves the UI from the backend's origin, where the race happens; the unit test
-  (the reviewer's R1) is what pins it.
+  (shot 10). (Corrected in round 17: this said the two-hellos-on-one-socket order couldn't be
+  staged live. It can, and the fix holds: review 13 ran it on 8951/5951, where the canvas socket
+  is `ws://127.0.0.1:8951/ws`, direct to the backend. With the backend paused, a tab took a stale
+  link and then the real one, and in 3 of 3 trials the one socket carried a hello with the stale
+  token, a hello with the real one, `personRequired`, then `proposalSync`. The tab kept the real
+  token, was promoted and not held, and the other tab was untouched. My run's socket went through
+  Vite's proxy; the review's guess is that my tab opened without a link first. Either way it was
+  my setup, not a limit of the app.) The
+  unit test (the reviewer's R1) pins the order too.
 
 #### 2a.2 Focus never lands on a look-alike in the same pane (review 12 MEDIUM-1)
 - Cause: each membership in an open reference is an unlabelled section, so the second
@@ -2278,3 +2285,137 @@ One thing left as it was: offline with the tab connected, OK still sends, create
   tests: 127 files, 1,828 of 1,828, Errors 0.
 - Live (8795/5795, guarded launcher, canaries first; `blocked.log` only canary lines): the row
   changes once on the demote; the filmstrip retaken.
+
+## Round 17 (review 13 on 146a05e8; GM r27)
+
+### Agent review and Blind labeling after a failed load (review 13 MEDIUM-1, GM r27 1)
+- Both panes kept `batch` null after a failed load as well as after a read that answered "no
+  batch", so a failure showed "Prepare the reference set in Blind labeling first." with
+  "0 / 15 reviewed · 0 grades ready", and Blind labeling showed the whole held-out set form.
+  Nothing had been read, and the form invited a second batch the backend would refuse.
+- Each pane now keeps `answered`, set only when a read resolves (`api.get()`, the return-from-
+  section read, and in Blind labeling any batch the pane is handed, a finished scan included).
+  Until then, after a failure, the pane shows its eyebrow, its heading (title and intro) and the
+  failure line, nothing else: no counts, no Generate, no footer, no setup form (GM r27 1). A
+  panel that takes up a running scan starts answered: the scan came from a form shown after a
+  read that answered no batch.
+- Once a read has answered, a later failed poll keeps what that read showed, with the line.
+- Tests in `presenceRound15.emptyState` (the real panes): a failed load leaves only the header
+  and the line; an answered null shows the setup state and the counts; failed, then the next
+  poll answers, and the setup state comes then.
+
+### The comment field stays its membership's (review 13 token-focus LOW-1)
+- A membership's comment field sits in its thread, `aria-label="Comments in <collection>"`,
+  which was the nearest pane and shadowed the membership's `data-focus-scope`. Two manual
+  collections may share a name, so two memberships' comment fields were look-alikes told apart
+  only by their place: a same-count reorder while demoted (m1 gone, m3 "Refs" after m2) handed
+  m2's field to m3's, where Enter posts to the wrong collection.
+- Structural fix in `useFocusHandover` `paneOf`: the pane is its nearest scope or labelled
+  region, led by every `data-focus-scope` above it (`m2 › Comments in Refs`). Only explicit
+  scopes join the chain (ids, stable across a remount), not every labelled ancestor, so a
+  region's changing label can't break a match.
+- Tests in `presenceRound15.twoMemberships` (the real CommonsView, review 13's probes P1, P2,
+  P5, P3 as tests): nothing changed, the same-count reorder, a same-named membership inserted
+  before (now back in m2 rather than at the heading), and m2 gone.
+
+### A cancelled search no longer holds later lines (review 13 commons-lines LOW-1)
+- A search cancelled before it answered (the person went to Settings, Blind labeling or Agent
+  review, which search nothing) stayed "on its way", so every later Commons failure waited the
+  full 1.5 s.
+- `useCommonsLoadLines` returns `abandon(load)`; the search, collections and status effects call
+  it in their cleanup. A load re-sent by the next run of the effect is started again in the same
+  commit, so it is still waited for.
+- Tests in `presenceRound15.loadHold`: Inbox then Settings 50 ms later (inside the debounce)
+  and after the search answered, then a failed status poll: the line shows at once in both; the
+  hook alone; abandon then start in one commit still holds.
+
+### The general notice waits for the because line on a demote (review 13 LOW-2, GM r27 2)
+- Live, the notice slid in about 140 ms before the Commons' page line, then out.
+- `lib/notConnectedLine` gains `expectBecauseLine()`: a screen whose demote brings its own
+  because line says so while it is up. The Commons does, from mount. `PersonRequiredBanner`
+  holds the notice's entrance while one is expected, until a line it can count is up or
+  `BECAUSE_LINE_WAIT_MS` (1500, Add's hold) passes. When the line lands within the cap the
+  notice never shows. Only the entrance waits: a notice already up stays, one coming back when a
+  line goes isn't held, and if the Commons closes during the wait the notice enters then.
+  Nothing is announced while it waits.
+- Live caught a bug the first build had: the wait was decided by a render-phase state update,
+  and `useLeave` had already queued the notice in the pass before it, so the notice mounted at
+  once in its leave (drawn at full opacity, then fading out at about 210 ms). jsdom runs no
+  leave animation, so the element was gone before any test frame read it. The wait is now
+  decided in the same pass, and the frame test also records any notice mounted at all
+  (a MutationObserver with `takeRecords`). The first build fails it.
+- Tests in `presenceRound15.noticeCover`, 10 ms frames from the demote: no frame shows the
+  notice (also with the prompt open); with the line covered by an opaque layer the notice enters
+  at the cap and not before; no Commons, at once; Commons closed mid-wait, at once; a notice
+  already up isn't taken away. The round 15 control test now waits out the cap.
+  `agentPresenceFollowups.r7`'s leave ratchet reads the new `useLeave` line.
+
+### See-through below 0.6 (GM r27 3)
+- `SEE_THROUGH_ALPHA` is 0.6 (was 0.85). The prompt (0.4) and a dialog's dim (0.45) still let the
+  line count beneath them; the mask painter's overlay (0.72, read from mask-painter.css) and an
+  0.8 toast now cover it. Tests pin 0.4, 0.45, `45%`, 0.59 as see-through and 0.6, 0.72, 0.8 as
+  covers.
+
+### No empty toast offline (review 13 LOW-3)
+- The pin toast and Settings' notice bar wrap their line in a span beside a control (× or Undo),
+  so LineText's offline-first hide left an empty box. Both now ask `useOfflineFirstBecause` for
+  the line before they show: offline the toast or bar isn't there at all (the pin toast goes at
+  once, not through a leave that would draw it empty); back online it is, if the line still
+  applies. Another failure line keeps its toast offline.
+- Tests in `presenceRound15.offlineLines`: both surfaces, offline and back, no leave drawn, the
+  non-because cases, and a sweep: every `<span><LineText` wrapper in src (these two) asks the
+  rule itself.
+
+### NITs
+- Review 13 NIT-1 (token-focus): the Round 15 note and the PR body said the two-hellos order
+  couldn't be staged live. Corrected in both: review 13 staged it (3 of 3) and the fix holds.
+- NIT-2 (token-focus): `studioGridAreas` matches each child's class as a whole token; renaming
+  the row's `commons-messages` now fails (it passed through `commons-messages__lock-line`).
+- NIT-3 (token-focus): `presenceRound15.paneLoads` runs on fake time with a bounded `until`.
+- NIT-1 (commons-lines, mutant M26): `presenceRound16.searching` adds a connected tab whose status
+  got no answer while its search is out: "Searching…" stays.
+- NIT-2 (commons-lines, review 12 NIT-4): `tests/helpers/cssCascade.ts` `specificityOf`, checked
+  by hand against Selectors Level 4 section 16: the one-colon pseudo-elements (`:before`, `:after`,
+  `:first-line`, `:first-letter`) count as types, and `:nth-child`/`:nth-last-child(An+B of S)` add
+  S's most specific selector to the pseudo-class. `a:before` (0,0,2), `li:nth-child(2 of .x, #y)`
+  (1,1,1), `li:nth-last-child(odd of .a.b)` (0,3,1), pinned in `studioGridAreas`.
+- NIT-3 (commons-lines, first load): `lib/lineAttrs.ts` holds `FOCUS_LINE_ATTR`,
+  `FOCUS_SCOPE_ATTR`, `PAGE_LINES_ATTR`, `LOCK_PLACE_ATTR` and `LockPlace`. PersonLock, LineBox,
+  CommonsErrorLine and CommonsPageLines import them from there, so `hooks/useFocusHandover` and
+  `lib/lockPlacement` leave the entry chunk (both modules re-export them). A ratchet in
+  `presenceRound15.ratchetGaps` keeps it. Entry, same tree before and after the move: 459,301 B
+  raw, 456,484 B after (-2,817 B; gzip -9 141,144 to 140,192). The final build's budget check:
+  456,457 B raw / 140,725 B gzip, against CI's 458,625 / 141,501 on 146a05e8.
+
+### Round 17 gates
+- tsc and eslint clean; `check:inline-styles` and `check:slava-css-scope` pass.
+- vitest on two workers, an explicit zsh array of 291 files (checked non-empty): every test under
+  `tests` and `src` that reads files from disk, all presenceRound files, the ratchets, the Commons,
+  focus, notice, settings, pin, offline, wsClient, personSession, errorCopy and failureLines
+  tests, and every test that names a file this round changed.
+  - Run 1: 290 of 291 files, 3,428 of 3,429. The one failure was `agentPresenceFollowups.r7`'s
+    leave ratchet, which pins the banner's `useLeave` line; updated for the wait.
+  - Run 2, the final tree: 291 of 291 files, 3,431 of 3,431, Errors 0, no timeouts.
+- `npm run build` with the budget check: 456,457 B raw / 140,725 B gzip.
+- Mutations (an rsync copy, each mutant against the files that cover it): 26 run, 25 killed. The
+  one survivor is equivalent: the notice's first-pass wait without `expected` is undone in the
+  next render, in the same commit. Killed: the panes' `answered` gate (4), the pane chain, the
+  search's abandon (2), the threshold at 0.85, at 0.5 and as `<=`, the notice never waiting,
+  the cap at 3000, no cap timer, the Commons never expecting, waiting on after the Commons closes,
+  waiting on a change of words, the first build's late decision, the pin toast and the Settings bar
+  ungated, the pin toast leaving through an animation, the row class renamed, M26, both
+  specificity forms, and LineBox back on useFocusHandover.
+- Live (8951/5951; backend only through `harness/serve_isolated.py` with the person token on
+  stdin, temp roots, call budget 0, no key; CDP blocks 8000-8010, 5173, 8840, 5840; Fetch
+  interception fails every other host, with a dead proxy behind; canaries refused first and
+  `blocked.log` holds only canary lines): 22 of 23.
+  - Both panes at a 500: the header and the line only (no counts, footer or form).
+  - Demote, 3 trials: the because line at 177-188 ms, no frame shows the general notice; the
+    prompt open at a demote, the same.
+  - The cancelled search: a later status failure on Settings shows 52 ms (cancelled) and 99 ms
+    (answered) after it is sent, not 1.5 s.
+  - The pin toast: shown online, absent for 2 s of 100 ms samples offline, back online.
+  - The one failure is the harness's held-tab prompt check: on a never-connected tab
+    "New collection…" is disabled, so the prompt can't open there (review 13 said the same);
+    the demote case covers it.
+  - Shots at 1440 in the scratchpad (`fu3r/shots`), md5 `uniq -d` empty, each one opened.

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { PersonLockLine, type PersonLock } from '../PersonLock';
-import { PAGE_LINES_ATTR } from '../../lib/lockPlacement';
+import { PAGE_LINES_ATTR } from '../../lib/lineAttrs';
 
 /**
  * PR #204 round 12 (GM r20 1): the Commons' one row for page-level lines, just below its header.

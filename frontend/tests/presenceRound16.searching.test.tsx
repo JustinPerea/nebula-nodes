@@ -7,7 +7,7 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null, created: [] as string[] }));
+const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null, created: [] as string[], statusFails: false }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/backend')>(), apiFetch: transport.fetch }));
 vi.mock('../src/lib/personSession', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/personSession')>(),
@@ -18,7 +18,7 @@ vi.mock('../src/lib/personSession', async (importOriginal) => ({
  * reads the same on any machine. While `gate.hold` is set, the view's three loads wait for it
  * before they go to the real API (which still answers a held tab unsent).
  */
-const gate = vi.hoisted(() => ({ hold: null as Promise<void> | null }));
+const gate = vi.hoisted(() => ({ hold: null as Promise<void> | null, search: null as Promise<void> | null }));
 vi.mock('../src/lib/commonsApi', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/lib/commonsApi')>();
   const waits = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
@@ -31,7 +31,10 @@ vi.mock('../src/lib/commonsApi', async (importOriginal) => {
       ...real.commonsApi,
       status: waits(real.commonsApi.status),
       collections: waits(real.commonsApi.collections),
-      search: waits(real.commonsApi.search),
+      search: async (...args: Parameters<typeof real.commonsApi.search>) => {
+        if (gate.search) await gate.search;
+        return waits(real.commonsApi.search)(...args);
+      },
     },
   };
 });
@@ -52,6 +55,7 @@ const ADD_LINE = 'You can add references when this tab is connected as you.';
 const TOKEN = 'a'.repeat(43);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 function answer(path: string, init?: RequestInit): Response {
+  if (path.endsWith('/status') && transport.statusFails) return new Response('Service Unavailable', { status: 503, headers: { 'content-type': 'text/plain' } });
   if (path.endsWith('/status')) return json({ worker: { running: false, state: 'idle' }, queue: {} });
   if (path.endsWith('/collections') && String(init?.method ?? 'GET').toUpperCase() === 'POST') {
     transport.created.push(String(init?.body ?? ''));
@@ -79,6 +83,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   transport.token = null;
   transport.created = [];
+  transport.statusFails = false;
   transport.fetch.mockReset();
   transport.fetch.mockImplementation(async (path: string, init?: RequestInit) => answer(path, init));
   frames = [];
@@ -102,7 +107,8 @@ const VIEW_TIMEOUT = 20_000;
 
 describe('GM r26: “Searching…” goes with the because line', () => {
   let release: () => void = () => {};
-  afterEach(() => { gate.hold = null; release(); });
+  let releaseSearch: () => void = () => {};
+  afterEach(() => { gate.hold = null; gate.search = null; release(); releaseSearch(); });
 
   it('a demote: Searching… goes in the commit the page line lands, while the search still waits for its debounce', async () => {
     vi.useFakeTimers();
@@ -137,6 +143,24 @@ describe('GM r26: “Searching…” goes with the because line', () => {
     expect(rowTexts()).toEqual([]);
     gate.hold = null;
     release();
+    await tick(0);
+    expect(searchingShown()).toBe(false);
+  }, VIEW_TIMEOUT);
+
+  // Round 17 (review 13 NIT-1, mutant M26): only a because line clears "Searching…". Another
+  // line (the status poll got no answer) says nothing of the search, which can still succeed.
+  it('a connected tab whose status got no answer keeps Searching… while its search is out', async () => {
+    vi.useFakeTimers();
+    transport.token = TOKEN;
+    transport.statusFails = true;
+    act(() => notePersonPromoted());
+    gate.search = new Promise<void>((resolve) => { releaseSearch = resolve; });
+    render(<CommonsView />);
+    for (let waited = 0; waited < 2500; waited += 50) await tick(50); // past the 1.5 s hold
+    expect(rowTexts()).toEqual(['Nebula couldn’t check the Commons status because it didn’t respond. Try again.']);
+    expect(searchingShown()).toBe(true);
+    gate.search = null;
+    releaseSearch();
     await tick(0);
     expect(searchingShown()).toBe(false);
   }, VIEW_TIMEOUT);

@@ -5,7 +5,7 @@
  * cap the load's line shows on its own, and the page line joins when the others fail.
  * Deterministic: fake time, and each load answers only when the test releases it.
  */
-import { act, cleanup, render, renderHook } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -222,6 +222,54 @@ describe('useCommonsLoadLines\' hold', () => {
     act(() => view.result.current.start('status'));
     act(() => view.result.current.show('status', noAnswer('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
     act(() => view.result.current.start('status')); // the next poll
+    expect(view.result.current.lines).toEqual([STATUS]);
+  });
+});
+
+// Round 17 (review 13 LOW-1): a search cancelled before it answered will never answer. On the
+// tabs that search nothing (Settings, Blind labeling, Agent review) nothing settles it later, so it
+// must not stay "on its way": a later failure there shows at once, not after the 1.5 s hold.
+describe('a load cancelled before it answered (review 13 LOW-1)', () => {
+  const statusCalls = () => transport.fetch.mock.calls.filter((call) => String(call[0]).endsWith('/status')).length;
+  for (const cancelled of [true, false]) it(`a later status failure on Settings shows at once (search ${cancelled ? 'cancelled' : 'answered'} first)`, async () => {
+    gates = { status: gate(false), collections: gate(false), search: gate(false) };
+    gates.status.release(); gates.collections.release(); gates.search.release();
+    render(<CommonsView />);
+    await tick(1000);
+    expect(lines()).toEqual([]);
+    fireEvent.click(screen.getByRole('tab', { name: /Inbox/ }));
+    await tick(cancelled ? 50 : 600); // 50 ms is inside the search's debounce: it is never sent
+    fireEvent.click(screen.getByRole('tab', { name: /Settings/ }));
+    await tick(50);
+    const before = statusCalls();
+    gates.status = gate(true);
+    gates.status.release();
+    let sent = -1;
+    for (let t = 0; t < 10_000 && sent < 0; t += 10) {
+      if (statusCalls() > before) sent = t;
+      else await tick(10);
+    }
+    expect(sent).toBeGreaterThanOrEqual(0);
+    await tick(10);
+    expect(lines()).toEqual([STATUS]);
+  });
+
+  it('the hook: an abandoned load is no longer one the others wait for', () => {
+    const view = renderHook(() => useCommonsLoadLines(['status', 'references'] as const, 'test.loads', () => {}));
+    act(() => { view.result.current.start('status'); view.result.current.start('references'); });
+    act(() => view.result.current.abandon('references'));
+    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check the Commons status.', 503, {}), 'Couldn’t check the Commons status.'));
+    expect(view.result.current.lines).toEqual([STATUS]);
+  });
+
+  it('a search cancelled by the next search is still waited for, as the new one', async () => {
+    const view = renderHook(() => useCommonsLoadLines(['status', 'references'] as const, 'test.loads', () => {}));
+    // The effect's cleanup abandons, then the next run starts it again, in one commit.
+    act(() => { view.result.current.start('status'); view.result.current.start('references'); });
+    act(() => { view.result.current.abandon('references'); view.result.current.start('references'); });
+    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check the Commons status.', 503, {}), 'Couldn’t check the Commons status.'));
+    expect(view.result.current.lines).toEqual([]);
+    await act(() => vi.advanceTimersByTimeAsync(LOAD_LINE_HOLD_MS));
     expect(view.result.current.lines).toEqual([STATUS]);
   });
 });

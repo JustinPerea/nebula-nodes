@@ -58,6 +58,21 @@ function cssFiles(dir: string): string[] {
   });
 }
 
+type Specificity = [number, number, number];
+const most = (all: Specificity[]): Specificity => all.reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && (next[1] > best[1]
+  || (next[1] === best[1] && next[2] > best[2])))) ? next : best, [0, 0, 0] as Specificity);
+/** The four pseudo-elements CSS 2 wrote with one colon: still pseudo-elements, counted as types. */
+const LEGACY_ELEMENTS = new Set([':before', ':after', ':first-line', ':first-letter']);
+
+/** The most specific selector of an `An+B of S` argument's S, or none (Selectors 4, 16). */
+function ofListSpecificity(node: selectorParser.Pseudo): Specificity | null {
+  const of = /^\s*[^]*?\bof\s+([^]+)$/i.exec(node.nodes.map(String).join(','));
+  if (!of) return null;
+  let out: Specificity = [0, 0, 0];
+  selectorParser((root) => { out = most(root.nodes.map(specificityOf)); }).processSync(of[1]);
+  return out;
+}
+
 function specificityOf(selector: selectorParser.Selector): [number, number, number] {
   let a = 0; let b = 0; let c = 0;
   // The selector's own nodes, one by one (the fix from PR #204 round 13, brought here by
@@ -70,14 +85,21 @@ function specificityOf(selector: selectorParser.Selector): [number, number, numb
     else if (node.type === 'class' || node.type === 'attribute') b += 1;
     else if (node.type === 'tag' && node.value !== '*') c += 1;
     else if (node.type === 'pseudo') {
-      if (node.value.startsWith('::')) c += 1;
-      else if (node.value === ':where') continue;
-      else if ([':not', ':is', ':has'].includes(node.value)) {
-        const inner = node.nodes.map(specificityOf);
-        const max = inner.reduce((best, next) => (next[0] > best[0] || (next[0] === best[0] && (next[1] > best[1]
-          || (next[1] === best[1] && next[2] > best[2])))) ? next : best, [0, 0, 0] as [number, number, number]);
+      const name = node.value.toLowerCase();
+      // Round 17 (review 12 NIT-4, review 13 NIT-2), against Selectors Level 4 section 16: a
+      // pseudo-element counts as a type, the CSS 2 one-colon forms too (`a:before` is (0,0,2)).
+      if (name.startsWith('::') || LEGACY_ELEMENTS.has(name)) c += 1;
+      else if (name === ':where') continue;
+      else if ([':not', ':is', ':has'].includes(name)) {
+        const max = most(node.nodes.map(specificityOf));
         a += max[0]; b += max[1]; c += max[2];
-      } else b += 1;
+      } else {
+        // `:nth-child(An+B of S)` and `:nth-last-child(An+B of S)`: the pseudo-class, plus the most
+        // specific selector of S (`li:nth-child(2 of .x, #y)` is (1,1,1)).
+        b += 1;
+        const of = name === ':nth-child' || name === ':nth-last-child' ? ofListSpecificity(node) : null;
+        if (of) { a += of[0]; b += of[1]; c += of[2]; }
+      }
     }
   }
   return [a, b, c];

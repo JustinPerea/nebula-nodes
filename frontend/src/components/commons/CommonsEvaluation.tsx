@@ -71,8 +71,13 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
    * batch is replaced, except on reconnect when the item it drafts from is
    * unchanged: the draft survives and saves at the new revision. */
   const [formEpoch, setFormEpoch] = useState(0);
+  /** A read has answered (GM r24 b, r27 1): until one has, `batch` null means
+   * nothing was read, so the setup form doesn't show. A panel that takes up a
+   * running scan comes after a read that answered no batch. */
+  const [answered, setAnswered] = useState(() => scan !== null);
   const setBatch = useCallback((value: EvaluationBatch | null, keepDraft = false) => {
     setBatchState(value);
+    setAnswered(true);
     if (!keepDraft) setFormEpoch((epoch) => epoch + 1);
   }, []);
   const [notice, setNotice] = useState('');
@@ -185,11 +190,17 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     <header className="evaluation-heading"><div>{eyebrow}</div></header>
     <p className="commons-notice">Loading held-out references…</p>
   </section>;
+  const intro = <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
+    <p>Describe what you see. Accent observations come before palette swatches.</p></div>;
+  // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
+  if (!answered) return <section className="commons-evaluation" aria-labelledby={headingId}>
+    <header className="evaluation-heading">{intro}</header>
+    <CommonsErrorLine line={error} />
+  </section>;
   const count = batch?.items.filter((item) => evaluationComplete(item, batch)).length ?? 0;
   return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">
-      <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
-        <p>Describe what you see. Accent observations come before palette swatches.</p></div>
+      {intro}
       {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>

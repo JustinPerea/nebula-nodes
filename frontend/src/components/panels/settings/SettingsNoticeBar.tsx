@@ -3,6 +3,7 @@ import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { dismissNotice, undoAddedKey } from '../../../lib/settingsWrites';
 import { focusRowAfterMove } from './rowHelpers';
 import { LineText } from '../../LineText';
+import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { PersonLockLine } from '../../PersonLock';
 import { useGroupLockLineId } from './groupLockLines';
@@ -16,7 +17,12 @@ const UNDO_NOTICE_MS = 10000;
  * undone from here; the notice waits while the pointer or focus is on it.
  */
 export function SettingsNoticeBar() {
-  const notice = useSettingsDraftStore((s) => s.notice);
+  const stored = useSettingsDraftStore((s) => s.notice);
+  // Round 17 (review 13 LOW-3): offline first, the bar with it. A because line hidden offline
+  // (hooks/useOfflineFirstBecause) would leave an empty bar, so the notice doesn't show; back
+  // online it does, if it is still there.
+  const shownMessage = useOfflineFirstBecause(stored?.message ?? null);
+  const notice = stored && shownMessage !== null ? stored : null;
   // Held per notice, so a notice that vanished under the pointer can't pin the next one.
   const [heldId, setHeldId] = useState<number | null>(null);
   const held = !!notice && heldId === notice.id;

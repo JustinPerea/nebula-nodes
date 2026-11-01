@@ -7,8 +7,9 @@
  *   Commons Settings:     "Nebula couldn’t load the Commons settings because it didn’t respond. Try again."
  * The pane names its load whichever of its requests failed (Settings reads three). These run the
  * real Commons API and apiFetch; only the browser's fetch is stubbed.
+ * Round 17 (review 13 NIT-3): on fake time, each wait a fixed number of 50 ms steps.
  */
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
@@ -38,38 +39,48 @@ const { CommonsEvaluation } = await import('../src/components/commons/CommonsEva
 const { CommonsDetail } = await import('../src/components/commons/CommonsDetail');
 const { CommonsSettings } = await import('../src/components/commons/CommonsSettings');
 
+/** Moves fake time in 50 ms steps until `check` passes, up to `max` ms. */
+async function until(check: () => unknown, max = 3000): Promise<void> {
+  for (let waited = 0; ; waited += 50) {
+    try { check(); return; } catch (error) { if (waited >= max) throw error; }
+    await act(() => vi.advanceTimersByTimeAsync(50));
+  }
+}
+const shows = (words: string) => until(() => screen.getByText(words));
+
 beforeEach(() => {
+  vi.useFakeTimers();
   state.status = 503;
   vi.stubGlobal('fetch', vi.fn(backend));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('each pane load, no answer, verbatim', () => {
   for (const code of [503, 500, 408, 429]) {
     it(`Agent review (${code})`, async () => {
       state.failing = '/api/commons/review'; state.status = code;
       render(<CommonsReview />);
-      expect(await screen.findByText(REVIEW)).toBeTruthy();
+      await shows(REVIEW);
     });
   }
 
   it('reference detail', async () => {
     state.failing = '/api/commons/assets/a1';
     render(<CommonsDetail assetId="a1" onClose={vi.fn()} onChanged={vi.fn()} onDeleted={vi.fn()} />);
-    expect(await screen.findByText(REFERENCE)).toBeTruthy();
+    await shows(REFERENCE);
   });
 
   it('Blind labeling', async () => {
     state.failing = '/api/commons/evaluation';
     render(<CommonsEvaluation />);
-    expect(await screen.findByText(LABELING)).toBeTruthy();
+    await shows(LABELING);
   });
 
   for (const failing of ['/api/commons/settings', '/api/commons/folders', '/api/commons/vocabulary/candidates']) {
     it(`Commons Settings, whichever of its reads fails (${failing.slice('/api/commons/'.length)})`, async () => {
       state.failing = failing;
       render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={vi.fn()} />);
-      expect(await screen.findByText(SETTINGS)).toBeTruthy();
+      await shows(SETTINGS);
     });
   }
 });
@@ -82,7 +93,7 @@ describe('another cause keeps its own words', () => {
       return path === '/api/commons/review' ? json({ detail: 'The review set is closed.' }, 409) : backend(input);
     }));
     render(<CommonsReview />);
-    expect(await screen.findByText('Couldn’t load Agent review. The review set is closed.')).toBeTruthy();
+    await shows('Couldn’t load Agent review. The review set is closed.');
     expect(document.body.textContent).not.toContain('didn’t respond');
   });
 });

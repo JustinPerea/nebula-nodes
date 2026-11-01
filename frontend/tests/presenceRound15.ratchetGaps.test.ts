@@ -128,3 +128,20 @@ describe('review 12 NIT-6: curly apostrophes in the lines this PR wrote', () => 
     expect(text).not.toContain(`"${line.replace('’', "'")}"`);
   });
 });
+
+// Round 17 (review 13 NIT-3): the line surfaces in the first load name their attributes from
+// lib/lineAttrs, so hooks/useFocusHandover (the reader) loads only with the screens that hand
+// focus over, and lib/lockPlacement (the rule's check) with nothing in the app at all.
+describe('the line attributes keep their readers out of the first load', () => {
+  const importsOf = (text: string) => [...text.matchAll(/\bfrom\s+'([^']+)'/g)].map((match) => match[1]);
+  it('only the screens that call useFocusHandover import it', () => {
+    const users = sources().filter(({ text }) => importsOf(text).some((from) => from.endsWith('/useFocusHandover')))
+      .map(({ name }) => name).sort();
+    expect(users).toEqual(['components/commons/CommonsView.tsx', 'components/panels/settings/AgentSpendSection.tsx',
+      'components/panels/settings/PersonalAgentsSection.tsx']);
+    for (const name of users) expect(sources().find((file) => file.name === name)!.text, name).toMatch(/\buseFocusHandover\(/);
+  });
+  it('nothing in the app imports lib/lockPlacement', () => {
+    expect(sources().filter(({ text }) => importsOf(text).some((from) => from.endsWith('/lockPlacement'))).map(({ name }) => name)).toEqual([]);
+  });
+});

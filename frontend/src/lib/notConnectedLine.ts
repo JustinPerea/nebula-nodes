@@ -114,8 +114,11 @@ function samplePoints(element: Element): [number, number][] {
   return [at(0.5, 0.5), at(0.15, 0.5), at(0.85, 0.5), at(0.5, 0.2), at(0.5, 0.8)];
 }
 
-/** Below this background alpha a layer over the line is a dim, not a cover (a modal's backdrop). */
-export const SEE_THROUGH_ALPHA = 0.85;
+/** Below this background alpha a layer over the line is a dim, not a cover (a modal's backdrop).
+ * Round 17 (GM r27 3): 0.6. The rule asks whether the person can read the line behind the layer:
+ * through the prompt (0.4) or a dialog's dim (0.45) they can; through the mask painter's overlay
+ * (0.72) or a 0.8 toast, at 20–28% contrast, they can't. */
+export const SEE_THROUGH_ALPHA = 0.6;
 const REPLACED = new Set(['IMG', 'VIDEO', 'CANVAS', 'SVG', 'svg', 'IFRAME', 'INPUT', 'TEXTAREA', 'SELECT', 'OBJECT', 'EMBED']);
 
 function backgroundAlpha(color: string): number {
@@ -275,6 +278,36 @@ function drop(element: Element) {
   if (owners.size === 0) stopWatching();
 }
 
+/**
+ * Round 17 (review 13 LOW-2, GM r27 2): a screen whose demote brings its own because line (the
+ * Commons: its loads are refused and its page line says why) says so while it is up. The general
+ * notice then waits for that line before it enters, as Add's line waits, capped at
+ * BECAUSE_LINE_WAIT_MS: when the line lands within the cap the notice never shows at all.
+ */
+export const BECAUSE_LINE_WAIT_MS = 1500;
+let expecting = 0;
+const expectListeners = new Set<() => void>();
+
+/** Says a demote here brings a because line, until the returned release is called (once). */
+export function expectBecauseLine(): () => void {
+  expecting += 1;
+  expectListeners.forEach((listener) => listener());
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    expecting -= 1;
+    expectListeners.forEach((listener) => listener());
+  };
+}
+
+export const becauseLineExpected = (): boolean => expecting > 0;
+
+export function subscribeBecauseExpected(onChange: () => void): () => void {
+  expectListeners.add(onChange);
+  return () => { expectListeners.delete(onChange); };
+}
+
 /** Calls `onChange` (at most once a frame) when the `fix` line on screen changes. */
 export function subscribeToLines(onChange: () => void): () => void {
   listeners.add(onChange);
@@ -293,6 +326,7 @@ export function registeredLines(): ReadonlyMap<Element, Registered> {
 }
 
 export function resetLinesForTests(): void {
+  expecting = 0;
   for (const element of owners.keys()) { observer?.unobserve(element); element.removeAttribute(LINE_ATTR); }
   owners.clear();
   inView.clear();

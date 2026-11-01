@@ -145,7 +145,8 @@ describe('the one place an item leaves (lib/noticeLeave)', () => {
     const users: Array<[string, RegExp]> = [
       // GM r8 (1), #204 round 7: it steps out (through the same leave) while a specific line says it.
       // PR #204 round 14 (GM r23 3): offline comes first, so the notice also leaves while offline.
-      ['components/PersonRequiredBanner.tsx', /useLeave\(specific \|\| offline \? null : message\)/],
+      // PR #204 round 17 (GM r27 2): and its entrance waits for a because line on its way.
+      ['components/PersonRequiredBanner.tsx', /useLeave\(specific \|\| offline \|\| waiting \? null : message\)/],
       ['components/canvas/ProposalBar.tsx', /useLeave\(live \?\? null\)/],
       ['components/canvas/ProposalBar.tsx', /useLeave\([^)]*errors\[[^\n]*'row'\)/],
       ['components/canvas/DeferredRunNotice.tsx', /useLeave\(deferredRun\)/],

@@ -30,6 +30,9 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   // editable and unsaved until Nebula answers.
   const readOnly = useBackendOffline();
   const [batch, setBatch] = useState<ReviewBatch | null>(null);
+  /** A read has answered (GM r24 b, r27 1): until one has, `batch` null means
+   * nothing was read, so neither the counts nor the "prepare first" line show. */
+  const [answered, setAnswered] = useState(false);
   const headingId = useId();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,7 +61,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
       const version = ++requestVersion.current;
       return api.get().then((value) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
-          setBatch(value); setError('');
+          setBatch(value); setAnswered(true); setError('');
         }
       }, (e: unknown) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
@@ -86,7 +89,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     let cancelled = false;
     const version = ++requestVersion.current;
     api.get().then((value) => {
-      if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) setBatch(value);
+      if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) { setBatch(value); setAnswered(true); }
     }, () => undefined);
     return () => { cancelled = true; };
   }, [active]);
@@ -143,15 +146,21 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     <header className="evaluation-heading"><div>{eyebrow}</div></header>
     <p className="commons-notice">Loading agent reviews…</p>
   </section>;
+  const intro = <div>
+    {eyebrow}<p className="evaluation-title">Does this read right?</p>
+    <p>See the agent’s take. Agree, or change the parts you see differently.</p>
+  </div>;
+  // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
+  if (!answered) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
+    <header className="evaluation-heading">{intro}</header>
+    <CommonsErrorLine line={error} />
+  </section>;
   const reviewed = batch?.items.filter((i) => i.reviewed_at).length ?? 0;
   const ready = batch?.items.filter((i) => i.status === 'ready').length ?? 0;
   const running = generating || batch?.items.some((i) => i.status === 'running');
   const item = batch?.items[index];
   return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
-    <header className="evaluation-heading"><div>
-      {eyebrow}<p className="evaluation-title">Does this read right?</p>
-      <p>See the agent’s take. Agree, or change the parts you see differently.</p>
-    </div><div className="review-progress"><strong>{reviewed} / {batch?.items.length ?? 15} reviewed</strong>
+    <header className="evaluation-heading">{intro}<div className="review-progress"><strong>{reviewed} / {batch?.items.length ?? 15} reviewed</strong>
       <p>{ready} grades ready{running ? ' · Grading in progress…' : ''}</p>
       {batch?.state === 'open' && !running && batch.attempts < batch.call_budget && batch.items.some((i) => i.status === 'pending') &&
         <button className="commons-button" disabled={dirty || !!saving || readOnly} {...offlineMark(readOnly)} onClick={() => void generate()}>Generate remaining grades</button>}

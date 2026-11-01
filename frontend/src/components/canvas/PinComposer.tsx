@@ -17,6 +17,7 @@ import { useLeave, useLeavingRows } from '../../lib/noticeLeave';
 import { fitNoteHeading, HEADING_END, HEADING_START, noteHeading } from '../../lib/noteHeading';
 import '../../styles/canvasPins.css';
 import { LineText } from '../LineText';
+import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
  *
@@ -183,7 +184,12 @@ export function PinComposer() {
   // as the banner leaves.
   const errorLine = errorPersonGate && bannerUp
     ? (errorPersonGate === 'delete' ? PIN_REFUSAL_COPY.notDeleted : PIN_REFUSAL_COPY.notAdded) : error;
-  const errorLeave = useLeave(errorLine && (errorProject === null || errorProject === here) ? errorLine : null);
+  // Round 17 (review 13 LOW-3): offline first, the toast with it. A because line hidden offline
+  // (hooks/useOfflineFirstBecause) leaves nothing in the toast but its ×, so the toast doesn't show.
+  const errorShown = useOfflineFirstBecause(errorLine);
+  const errorLeave = useLeave(errorShown && (errorProject === null || errorProject === here) ? errorShown : null);
+  // Going offline it goes at once: a leave would draw the toast with its words already hidden.
+  const errorHiddenOffline = !!errorLine && errorShown === null;
 
   // Back to the newest two once no note is hidden (the next one kept starts
   // collapsed again).
@@ -339,7 +345,7 @@ export function PinComposer() {
         />
       )}
       {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
-      {errorLeave.shown && (
+      {errorLeave.shown && !errorHiddenOffline && (
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" data-line-box="" {...errorLeave.props}>
             <span><LineText text={errorLeave.shown} /></span>

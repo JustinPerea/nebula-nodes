@@ -5,7 +5,8 @@ import { clearsOnPromote } from '../lib/clearsOnPromote';
 import { InNoticeRegion } from './InNoticeRegion';
 import { useLeave } from '../lib/noticeLeave';
 import { useBackendOffline } from '../lib/useBackendOffline';
-import { currentFixLine, subscribeToLines, type FixLine } from '../lib/notConnectedLine';
+import { BECAUSE_LINE_WAIT_MS, becauseLineExpected, currentFixLine, subscribeBecauseExpected, subscribeToLines,
+  type FixLine } from '../lib/notConnectedLine';
 
 const subscribeToNothing = () => () => {};
 
@@ -43,15 +44,33 @@ export function PersonRequiredBanner() {
   // PR #204 round 14 (GM r23 3): offline comes first. While Nebula is offline only the offline
   // notice shows; connecting the tab wouldn't be enough, so this one waits until it is back.
   const offline = useBackendOffline();
-  const leave = useLeave(specific || offline ? null : message);
+  // Round 17 (review 13 LOW-2, GM r27 2): on a screen whose demote brings its own because line
+  // (lib/notConnectedLine expectBecauseLine), the notice waits for that line, capped at
+  // BECAUSE_LINE_WAIT_MS. The line within the cap: the notice never shows. Only its entrance
+  // waits: a notice already up, or one coming back when a line goes, isn't held.
+  const expected = useSyncExternalStore(subscribeBecauseExpected, becauseLineExpected, () => false);
+  const [wait, setWait] = useState<{ message: string | null; on: boolean }>({ message, on: false });
+  // Decided in this pass, not after the state update below: a render-phase update re-renders, but
+  // what useLeave queued in this pass is kept, so a notice let in here would enter and then leave.
+  const fresh = wait.message !== message;
+  const waiting = fresh ? message !== null && wait.message === null && expected && !specific
+    : wait.on && expected && !specific;
+  if (fresh || waiting !== wait.on) setWait({ message, on: waiting });
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const timer = window.setTimeout(() => setWait((now) => (now.message === message ? { message, on: false } : now)), BECAUSE_LINE_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [waiting, message]);
+  const leave = useLeave(specific || offline || waiting ? null : message);
   // Review 6 NIT-3: one polite live region, mounted while the app is, and empty until there is
   // something to say. A notice that mounts with its text in place often goes unannounced, and a
   // Settings row isn't a live region, so the swap is said here, once: the notice's words, or the
   // line that took its place (unless that line already announces itself).
-  const saying = message === null || offline ? '' : specific ? (fixLine.live ? '' : fixLine.text) : message;
+  const quiet = message === null || offline || (waiting && !specific);
+  const saying = quiet ? '' : specific ? (fixLine.live ? '' : fixLine.text) : message;
   // Review 8 MEDIUM-3 (round 10): a line whose words change in place is not a swap, so nothing new
   // is said. What is said changes only when the swap does (notice, line, or nothing).
-  const swap = message === null || offline ? 'none' : specific ? `line:${fixLine.live}` : `notice:${message}`;
+  const swap = quiet ? 'none' : specific ? `line:${fixLine.live}` : `notice:${message}`;
   const [said, setSaid] = useState({ swap, text: saying });
   if (said.swap !== swap) setSaid({ swap, text: saying });
   const announced = said.swap === swap ? said.text : saying;

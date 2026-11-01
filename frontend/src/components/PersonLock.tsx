@@ -1,11 +1,10 @@
 import { LineText } from './LineText';
 import type { PersonLock } from '../hooks/usePersonLock';
-import { LOCK_PLACE_ATTR, type LockPlace } from '../lib/lockPlacement';
-import { FOCUS_LINE_ATTR } from '../hooks/useFocusHandover';
+import { FOCUS_LINE_ATTR, LOCK_PLACE_ATTR, type LockPlace } from '../lib/lineAttrs';
 import '../styles/personLock.css';
 
 export type { LockProps, PersonLock } from '../hooks/usePersonLock';
-export type { LockPlace } from '../lib/lockPlacement';
+export type { LockPlace } from '../lib/lineAttrs';
 
 /**
  * The lock's line, while it shows. One per lock. PR #204 round 11 (GM r18): one placement rule,

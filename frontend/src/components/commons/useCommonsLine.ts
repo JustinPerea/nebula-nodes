@@ -183,5 +183,7 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
     return () => window.clearTimeout(timer);
   }, [holding]);
   const lines = any && (open || ready) ? all : NO_LINES;
-  return useMemo(() => ({ show, clear, start, lines }), [show, clear, start, lines]);
+  // Round 17 (review 13 LOW-1): a load cancelled before it answered (a search the person left for
+  // Settings) will never answer, so it is no longer on its way: later lines don't wait for it.
+  return useMemo(() => ({ show, clear, start, abandon: settle, lines }), [show, clear, start, settle, lines]);
 }

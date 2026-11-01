@@ -8,12 +8,10 @@
  * below its header): a control in a toolbar row keeps the row's height, so its line goes to the
  * page's one row for page-level lines, under that row's because line when one shows, else alone.
  */
-export type LockPlace = 'heading' | 'tab' | 'control' | 'page';
-
-/** The one row a page keeps for its page-level lines (components/commons/CommonsPageLines). */
-export const PAGE_LINES_ATTR = 'data-page-lines';
-
-export const LOCK_PLACE_ATTR = 'data-lock-place';
+// Round 17 (review 13 NIT-3): the attributes and the place type live in lib/lineAttrs, so the
+// lines that carry them stay out of this module; it reads them.
+import { LOCK_PLACE_ATTR, PAGE_LINES_ATTR, type LockPlace } from './lineAttrs';
+export { LOCK_PLACE_ATTR, PAGE_LINES_ATTR, type LockPlace };
 
 /** PR #204 round 11 (GM r19 1): the elements styles/disabled-buttons.css gives a person lock's one
  * disabled look. A locked control outside them would look live (lockPlacementProblems fails it). */

@@ -165,3 +165,78 @@ for (const field of ['select', 'why'] as const) {
   }, 30_000);
 }
 });
+
+// ── Round 17 (review 13 LOW-1): a labelled region inside a membership stays that membership's ──
+// Each membership's comment field sits in "Comments in <collection name>", and two manual
+// collections may share a name. The pane is the membership's scope and that region, so a same-count
+// reorder of same-named collections never hands m2's "Add a comment" to m3's (a comment there is
+// a person write to the wrong collection).
+
+const at = () => { const a = document.activeElement as HTMLElement; const s = a?.closest('.commons-membership');
+  return `${a?.tagName}${a?.hasAttribute(FOCUS_LINE_ATTR) ? '[line]' : ''}${a?.getAttribute('aria-label') ? `(${a.getAttribute('aria-label')})` : ''} in ${s ? s.getAttribute(FOCUS_SCOPE_ATTR) : a === document.body ? 'BODY' : 'elsewhere'}`; };
+
+/** Opens a1 in the memberships `before`, focuses `pick`, demotes, swaps to `after`, promotes:
+ * where focus was, demoted, just promoted, settled. */
+async function reorder(before: string[][], after: string[][], pick: (sections: Element[]) => HTMLElement) {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+  const { CommonsView } = await import('../src/components/commons/CommonsView');
+  const session = await import('../src/lib/personSession');
+  const { holdCommonsCalls } = await import('../src/lib/commonsHold');
+  const settle = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); await Promise.resolve(); }); };
+  const flush = async () => { await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); }); };
+  const out: string[] = [];
+  try {
+    session.resetPersonSessionForTests(); holdCommonsCalls(false);
+    net.rows = [{ id: 'a1', membership_id: 'm1', collection_id: 'c1', collection: 'Refs', summary: 'Warm serif poster',
+      role: 'neutral', media: 'image', made_by: 'human', analysis_state: 'ready', in_inbox: false, comment_count: 0,
+      matched: [], score: 1, blob_key: 'b1', also_in: [] }];
+    const detail = (m: string[][]) => ({ asset: { id: 'a1', media: 'image', width: 10, height: 10, made_by: 'human', analysis_state: 'ready', last_error: null, measurements: null },
+      effective: { fields: {}, sources: {}, corrected_paths: [], analysis: null }, corrections: [], regions: [],
+      memberships: m.map(([id, name]) => mem(id, name, 'neutral')), borrowings: [], blob_url: '/x.png' });
+    net.detail = detail(before);
+    act(() => session.notePersonPromoted());
+    render(<CommonsView />);
+    await settle(300); await flush();
+    act(() => { screen.getByText('Warm serif poster').closest('button, [role="button"], article, li')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await settle(300); await flush();
+    act(() => pick([...document.querySelectorAll('.commons-membership')]).focus());
+    out.push(at());
+    act(() => session.reportPersonRequired());
+    await settle(200); await flush(); await settle(50); await flush();
+    out.push(at());
+    net.detail = detail(after);
+    act(() => session.notePersonPromoted());
+    for (let i = 0; i < 8; i++) { await settle(100); await flush(); }
+    out.push(at());
+    for (let i = 0; i < 10; i++) { await settle(100); await flush(); }
+    out.push(at());
+  } finally {
+    cleanup(); act(() => session.notePersonPromoted()); vi.useRealTimers();
+  }
+  return out;
+}
+const comment = (n: number) => (sections: Element[]) => sections[n].querySelector<HTMLElement>('input[aria-label="Add a comment"]')!;
+
+describe('same-named collections: the comment field stays its membership\'s', () => {
+  it('nothing changed: the second\'s comment field comes back to itself', async () => {
+    const out = await reorder([['m1', 'Refs'], ['m2', 'Refs']], [['m1', 'Refs'], ['m2', 'Refs']], comment(1));
+    expect(out[0]).toBe('INPUT(Add a comment) in m2');
+    expect(out[3]).toBe('INPUT(Add a comment) in m2');
+  }, 30_000);
+  it('a same-count reorder (m1 gone, m3 "Refs" added after m2) while demoted: back in m2, never m3', async () => {
+    const out = await reorder([['m1', 'Refs'], ['m2', 'Refs']], [['m2', 'Refs'], ['m3', 'Refs']], comment(1));
+    expect(out[0]).toBe('INPUT(Add a comment) in m2');
+    for (const frame of out.slice(1)) expect(frame).not.toMatch(/in m3$/);
+    expect(out[3]).toBe('INPUT(Add a comment) in m2');
+  }, 30_000);
+  it('a same-named membership inserted before: back in m2, never m1', async () => {
+    const out = await reorder([['m1', 'Refs'], ['m2', 'Refs']], [['m0', 'Refs'], ['m1', 'Refs'], ['m2', 'Refs']], comment(1));
+    for (const frame of out.slice(1)) expect(frame).not.toMatch(/INPUT.* in m[01]$/);
+    expect(out[3]).toBe('INPUT(Add a comment) in m2');
+  }, 30_000);
+  it('m2 gone while demoted: never m1\'s comment field, never the page', async () => {
+    const out = await reorder([['m1', 'Refs'], ['m2', 'Refs']], [['m1', 'Refs']], comment(1));
+    for (const frame of out.slice(1)) expect(frame).not.toMatch(/INPUT.* in m1$/);
+    expect(out[3]).not.toMatch(/BODY/);
+  }, 30_000);
+});
