@@ -90,8 +90,12 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
     setViewport: flow.setViewport,
     getViewport: () => ({ ...flow.camera }),
-    // The whole board (three cards), or one card (an Update's Show of it).
-    getNodesBounds: (nodes: unknown[]) => (nodes.length > 1 ? { x: 0, y: 0, width: 2000, height: 1000 } : { x: 0, y: 0, width: 480, height: 270 }),
+    // The whole board (2000 x 1000 for the three cards, wider when a card
+    // sits further right: one added or moved there), or one card (an
+    // Update's Show of it).
+    getNodesBounds: (nodes: Array<{ position: { x: number } }>) => (nodes.length > 1
+      ? { x: 0, y: 0, width: 2000 + Math.max(...nodes.map((node) => node.position.x)) - 1040, height: 1000 }
+      : { x: 0, y: 0, width: 480, height: 270 }),
   }),
   // One store for the provider's life, as React Flow's is.
   useStoreApi: () => flow.store,
@@ -132,8 +136,8 @@ const step = (t: number) => act(() => { frames.splice(0).forEach((cb) => cb(t));
 /** The whole fit for the 2000 x 1000 board in a column this size, above the
  *  control bar's band (lib/boardViewInsets: jsdom has no layout to measure,
  *  so the band is BOARD_BAR_BAND_PX). */
-const fitViewport = (width: number, height: number) =>
-  getViewportForBounds({ x: 0, y: 0, width: 2000, height: 1000 }, width, height - BOARD_BAR_BAND_PX, 0.02, 1, 0.12);
+const fitViewport = (width: number, height: number, boardWidth = 2000) =>
+  getViewportForBounds({ x: 0, y: 0, width: boardWidth, height: 1000 }, width, height - BOARD_BAR_BAND_PX, 0.02, 1, 0.12);
 const fitButton = () => document.querySelector<HTMLButtonElement>('[aria-label="Fit the board"]')!;
 const press = (label: string) => act(() => { document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click(); });
 const wheel = () => new WheelEvent('wheel', { deltaY: 100 });
@@ -969,5 +973,110 @@ describe('a move is any change of the camera (#213 review 1 NIT-2)', () => {
       for (const listener of flow.listeners) listener({ ...flow.state, panZoom: flow.panZoom }, previous);
     });
     expect(kept()).toEqual({ viewport: moved, fitted: false });
+  });
+});
+
+// GM, #213 round 3b: fitted is the person's intent. A card added or moved
+// while the board is fitted keeps it fitted: the camera doesn't move, and the
+// next resize refits to the cards there are then.
+describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
+  const rerender = (view: ReturnType<typeof mount>, list: MoodboardImage[]) =>
+    view.rerender(<BoardCanvas boardKey="k1" images={list} onMove={() => {}} onDropFiles={() => {}} />);
+  const added = [...images, { id: 'd', url: '/api/outputs/d.png', weight: 1, notes: '', privateNote: '', excluded: false, placements: [card('cd', 1560)] }];
+  const moved = images.map((image) => (image.id === 'a' ? { ...image, placements: [card('ca', 1560)] } : image));
+
+  it('Fit, then a card added: the camera stays, the board stays fitted, and a resize refits to all four cards', () => {
+    const view = mounted();
+    notch();
+    act(() => { fitButton().click(); });
+    runFrames();
+    expect(kept().fitted).toBe(true);
+    flow.setViewport.mockClear();
+    rerender(view, added);
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(camera()).toEqual(fitViewport(870, 851));
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851, 2520));
+    expect(kept()).toEqual({ viewport: fitViewport(430, 851, 2520), fitted: true });
+  });
+
+  it('fitted, then a card moved further out: the camera stays, and a resize refits to where the cards are now', () => {
+    const view = mounted();
+    flow.setViewport.mockClear();
+    rerender(view, moved);
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851, 2520));
+  });
+
+  it('fitted, a card added, then List and back: it reopens fitted to all four cards', () => {
+    const view = mounted();
+    rerender(view, added);
+    act(() => { flow.props!.onMoveEnd!(null, camera()); }); // a late move end keeps the camera with its flag
+    expect(kept().fitted).toBe(true);
+    view.unmount();
+    render(<BoardCanvas boardKey="k1" images={added} onMove={() => {}} onDropFiles={() => {}} />);
+    expect(camera()).toEqual(fitViewport(870, 851, 2520));
+  });
+
+  it('a card added, then a pan: not fitted, and a resize keeps the view', () => {
+    const view = mounted();
+    rerender(view, added);
+    stuckPan();
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    expect(kept().fitted).toBe(false);
+  });
+
+  it('a pan off the fit, then a card added: still not fitted', () => {
+    const view = mounted();
+    stuckPan();
+    rerender(view, added);
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+
+  it('a pan back exactly onto the fit, then a card added: fitted, and a resize refits to all four', () => {
+    const view = mounted();
+    autopan({ ...fitViewport(870, 851), x: -400 });
+    expect(kept().fitted).toBe(false);
+    autopan(fitViewport(870, 851));
+    expect(kept().fitted).toBe(true);
+    rerender(view, added);
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851, 2520));
+  });
+
+  it('the zoom buttons after a card added: zoom in clears it', () => {
+    const view = mounted();
+    rerender(view, added);
+    press('Zoom in');
+    runFrames();
+    expect(kept().fitted).toBe(false);
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+
+  it('a Fit spring with a card added while it runs: it lands fitted, and a resize refits to all four', () => {
+    const view = mounted();
+    notch();
+    act(() => { fitButton().click(); });
+    step(0);
+    step(16);
+    rerender(view, added);
+    runFrames();
+    expect(kept().fitted).toBe(true);
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851, 2520));
   });
 });

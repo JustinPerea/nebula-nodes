@@ -233,7 +233,7 @@ Review 1 (two lenses) found one MEDIUM, four LOWs and NITs. GM ruled on the ques
 - **A spring that lands on the fit is a fit** (GM 4, review LOW-2): `springTo` asks `follow.onFit(to)`; if the spring is going onto the fit (Fit, a refit, a zoom back out, a Show of every card) it is heading to the fit, so a resize while it runs refits it to the new column.
 - **Covered by the same rule:** a Show of every card after a resize while not fitted lands on the new column's fit and is fitted (review NIT-1); zooming back onto the fit is fitted (the round-1 ruling).
 - **Tolerance (GM):** 0.5 px in x and y, and 0.001 of zoom, absolute (it was 5e-4 relative). Tests at both edges: 0.5 px and 0.0009 zoom off are fitted, 0.51 px and 0.0011 are not, in the follower unit tests and through the board (an autopan that lands there, then a resize).
-- **A consequence to know.** Cards are part of the layout: a card added or moved while fitted leaves the camera off the new fit, so the board is no longer fitted, and a later resize keeps the view. Before, the old target still counted.
+- **(Superseded in round 3b.)** Round 3 noted that a card added or moved while fitted left the board unfitted. GM ruled the other way: a card edit keeps it fitted; see Round 3b.
 
 ### GM 1: a short window and the view insets
 
@@ -292,3 +292,40 @@ Survivors, each equivalent:
 - `tsc -b --noEmit`: clean. `npm run lint` (inline styles, Slava scope, eslint): clean.
 - Focused vitest, `--maxWorkers=2`, from a non-empty zsh array (round 2's set plus the three new test files): 113 files, 1,478 tests passed, 2 timed out under a load average of about 26: `agentPresenceFollowups.ratchet` (its 120 s limit) and `modalStyles.round11` (5 s). Both were in round 2's set and passed then, and both pass rerun alone (2 files, 54 tests).
 - `npm run build` with the budget check: passed, 444,562 bytes raw / 136,500 gzip (+317 raw: the title hook in WorkspaceHeader).
+
+## Round 3b: a card edit keeps the board fitted (GM), and the no-skin check
+
+GM's ruling on round 3 (2026-11-01): the 40vh cap is right as built (the panel is at most 40vh, gives way below it so the board keeps 300 px, never grows past it). Cards: "a card added or moved while the board is fitted KEEPS it fitted. Fitted is the person's intent, set by Fit or by landing on the fit. Only the person's own camera moves clear it: pan, zoom, or a Show that doesn't land on the fit." The camera doesn't move on the add or move; the next resize refits to the cards there are then. Being exactly on the current fit still sets fitted.
+
+### The anchor (boardFitFollow)
+
+- The follower keeps **the camera where the board was last fitted** (`anchor`). Fitted is: a spring is heading to the fit, or the camera is on the fit of the board as it is now, or **the camera hasn't moved from the anchor**.
+- **Set** by: the fit on open; a spring that was heading to the fit landing (Fit, Shift+1, a refit, a zoom or Show onto the fit), even if a card changed while it ran; a camera move this view didn't make that lands on the fit (`taken()` reads the camera).
+- **Cleared** by: a camera move this view didn't make that lands elsewhere (`taken()`), the camera's own move elsewhere (`aside()`: the zoom buttons, a Show of some cards), React Flow making its camera again (`reopen()`, until the fit on open lands).
+- **Why a camera, not a flag.** A card edit moves no camera, so it keeps the anchor; any camera move does, even one no callback reported, unless it lands on the fit. A plain "intent" flag would trust that every move reached `taken()`; the anchor still reads the camera, as #209's rule did.
+- Nothing is set by asking: an earlier draft also anchored whenever `fitted` was read with the camera on the fit, which made the result depend on whether anything had asked in between (its mutant survived); it was dropped. Being on the current fit still counts as fitted directly.
+- BoardCanvas is unchanged: card edits never touch the follower, and the kept `fitted` flag comes from `follow.fitted` as before.
+
+### Tests
+
+- Follower: a card change while fitted keeps it fitted with the camera still, and the next resize refits to the new fit; a pan, an unreported camera move, `aside()` or `reopen()` after it clears it; a pan that lands on the fit, then a card change, stays fitted; a spring that was heading to the fit leaves the board fitted where it lands, one that wasn't leaves nothing.
+- Board (stand-in, whose whole-board bounds now follow the cards' positions): Fit, a card added, resize: refits to all four cards; fitted, a card moved further out, resize: refits to where they are; a card added, then List and back: reopens fitted to all four; a card added then a pan, or a pan then a card added: no refit; a pan back exactly onto the fit then a card added: refits; zoom in after a card added: cleared; a card added while a Fit spring runs: lands fitted and refits on the next resize.
+- Live: Fit at 1100, a tenth card added with Add images (the camera didn't move), resize to 969: all ten in the column, fitted, above the bar. Then a card dragged 30 px (the camera didn't move; the fit's bounds changed, zoom 0.194 to 0.187), resize to 1100: it refit to the new bounds (Fit moves nothing). The added card landed inside the old bounds (Add images puts it in the middle of the view, over a card: main's placement, which #210 replaces), so the drag is the live case where the fit itself changed.
+
+### Mutants (round 3b)
+
+9 on the anchor, all killed: no anchor (round 3's rule, 8 tests fail); `taken()` keeps the anchor; `taken()` always clears it; `aside()` keeps it; a landed fit spring sets none; the open fit sets none; `reopen()` keeps it; on the current fit doesn't count; any landing anchors, heading or not.
+
+### The no-skin view at 700x640 is an older gap, not #213
+
+- **Compared live** on 8794/5794: main 529665ef (a detached worktree of my own, removed after) and #213, no skin, at 700x640, 700x900 and 1440x900. Both are unstyled the same way: the header's Back button and the rail's buttons in Arial with the browser's grey button face and outset border, the title at 32 px. The computed styles match on both at every size, and Slava at 700x640 matches on both too. (Main's board at 700 is also the 130 px column #213 fixes.) Shots: `shots3b/main-noskin-*.png`, `shots3b/pr213-noskin-*.png`, `shots3b/main-slava-700x640.png`.
+- **Why.** The app has one appearance: `lib/skins.ts:28-31` (`applySkinBodyClass`, called from `store/uiStore.ts:1010`) always adds `app-slava-restraint` to the body. The header, toolbar and rail are styled only under that class, for example `styles/workspace-header.css:29` (the title) and `:64` (Back), `styles/moodboard-studio.css:29` (the toolbar), `:39` (its buttons) and `:142` (the rail). So "no skin" is reachable only by removing the class by hand, as the live harness does to check the layout survives without the skin's rules. The Board's own sheet (moodboard-board.css) styles the board and panel without the class, which is why they look styled.
+- For the desktop pass, not this PR.
+
+### Live and gates (round 3b)
+
+- Live (8794/5794, serve_isolated.py, canary first): round 3's checks plus the card section, 101/101 (`scratchpad/boardnarrow/live3.mjs`, `live3b.log`); the no-skin comparison 15/15 on main and 15/15 on #213 (`livenoskin.mjs`). 19 shots in `scratchpad/boardnarrow/shots3b/`, no md5 duplicates. #213's Slava 700x640 from the comparison run was dropped as identical to the main run's `r3b-short-700x640` (the same view of the same code, twice).
+
+- `tsc -b --noEmit`: clean. `npm run lint`: clean.
+- Focused vitest, `--maxWorkers=2`, from a non-empty zsh array (round 3's 113 files): 113 files, 1,495 tests passed, none timed out.
+- `npm run build` with the budget check: passed, 444,562 bytes raw / 136,501 gzip (the same raw size as round 3).

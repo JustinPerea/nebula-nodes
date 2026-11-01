@@ -12,12 +12,17 @@ const FIT = fitAt(870, 851);
 function harness(fitted = true) {
   const frames: Array<() => void> = [];
   const camera: FitCamera = { x: 0, y: 0, zoom: 1 };
-  const board = { cards: true, width: 0, height: 0 };
-  const fitFor = vi.fn((width: number, height: number) => (board.cards ? fitAt(width, height) : null));
+  const board = { cards: true, width: 0, height: 0, wider: 0 };
+  /** A card added or moved changes the fit: `wider` widens the board by that many card widths. */
+  const fitNow = (width: number, height: number) => {
+    const fit = fitAt(width, height);
+    return { ...fit, zoom: fit.zoom / (1 + board.wider / 4), x: fit.x - board.wider * 7 };
+  };
+  const fitFor = vi.fn((width: number, height: number) => (board.cards ? fitNow(width, height) : null));
   /** A fit lands where it is going at once (the spring is the component's). */
   const refit = vi.fn<(instant: boolean) => boolean>(() => {
     if (!board.cards) return false;
-    Object.assign(camera, fitAt(board.width, board.height));
+    Object.assign(camera, fitNow(board.width, board.height));
     return true;
   });
   const follow: BoardFitFollow = createBoardFitFollow({
@@ -32,7 +37,7 @@ function harness(fitted = true) {
   const flush = () => { for (const cb of frames.splice(0)) cb(); };
   /** Fitted at 870 x 851, as a fresh open leaves it. */
   const opened = () => { resize(870, 851); refit.mockClear(); };
-  return { follow, refit, flush, frames, camera, opened, resize, board, fitFor };
+  return { follow, refit, flush, frames, camera, opened, resize, board, fitFor, fitNow };
 }
 
 describe('opening', () => {
@@ -166,12 +171,26 @@ describe('fitted is read from the camera', () => {
     expect(refit).toHaveBeenCalledTimes(1);
   });
 
-  it('a spring heading to the fit counts as fitted; once it ends off the fit, it does not', () => {
-    const { follow, camera, resize } = harness(false);
+  it('a spring heading to the fit counts as fitted while it runs, and where it lands (#213 round 3b)', () => {
+    const { follow, camera, resize, board } = harness(false);
     resize(870, 851);
     follow.headingToFit();
     Object.assign(camera, { x: 200, y: 10, zoom: 0.5 });
     expect(follow.fitted).toBe(true);
+    // It lands where it was going; a card added while it ran has moved the fit since.
+    Object.assign(camera, FIT);
+    board.wider = 1;
+    follow.springEnded();
+    expect(follow.fitted).toBe(true);
+    camera.x += 30; // then a pan
+    expect(follow.fitted).toBe(false);
+  });
+
+  it('a spring that was not heading to the fit leaves nothing fitted when it lands', () => {
+    const { follow, camera, resize } = harness(false);
+    resize(870, 851);
+    follow.aside();
+    Object.assign(camera, { x: 200, y: 10, zoom: 0.5 });
     follow.springEnded();
     expect(follow.fitted).toBe(false);
   });
@@ -302,5 +321,79 @@ describe('the tolerance: half a screen pixel, and 0.001 of zoom (GM, #213 round 
     expect(sameCamera({ ...FIT, zoom: FIT.zoom - 0.0011 }, FIT)).toBe(false);
     expect(sameCamera({ x: 0, y: 0, zoom: 1.0009 }, { x: 0, y: 0, zoom: 1 })).toBe(true);
     expect(sameCamera({ x: 0, y: 0, zoom: 0.0511 }, { x: 0, y: 0, zoom: 0.05 })).toBe(false);
+  });
+});
+
+// GM, #213 round 3b: fitted is the person's intent. A card added or moved
+// while fitted keeps it fitted; only a camera move off the fit clears it.
+describe('cards change while fitted (GM, #213 round 3b)', () => {
+  it('a card added while fitted: still fitted, the camera stays, and the next resize refits to the cards there are now', () => {
+    const { follow, refit, flush, camera, opened, resize, board, fitNow } = harness();
+    opened();
+    board.wider = 1;
+    expect(camera).toEqual(FIT); // nothing moved it
+    expect(follow.fitted).toBe(true);
+    expect(follow.onFit(camera)).toBe(false); // it isn't on the new fit
+    resize(430, 851);
+    flush();
+    expect(refit).toHaveBeenCalledWith(false);
+    expect(camera).toEqual(fitNow(430, 851));
+  });
+
+  it('a pan after the card change clears it: no refit', () => {
+    const { follow, refit, flush, camera, opened, resize, board } = harness();
+    opened();
+    board.wider = 1;
+    camera.y -= 40;
+    follow.taken();
+    expect(follow.fitted).toBe(false);
+    resize(430, 851);
+    flush();
+    expect(refit).not.toHaveBeenCalled();
+  });
+
+  it('a camera move no callback reported clears it too', () => {
+    const { follow, refit, flush, camera, opened, resize, board } = harness();
+    opened();
+    board.wider = 1;
+    camera.x += 12;
+    resize(430, 851);
+    flush();
+    expect(follow.fitted).toBe(false);
+    expect(refit).not.toHaveBeenCalled();
+  });
+
+  it('a pan that lands on the fit sets it: a card change after it keeps it fitted', () => {
+    const { follow, refit, flush, camera, opened, resize, board, fitNow } = harness(false);
+    opened();
+    camera.x += 50;
+    follow.taken();
+    expect(follow.fitted).toBe(false);
+    Object.assign(camera, fitNow(870, 851));
+    follow.taken();
+    board.wider = 2;
+    expect(follow.fitted).toBe(true);
+    resize(430, 851);
+    flush();
+    expect(refit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a zoom or Show that goes elsewhere (aside) clears it', () => {
+    const { follow, camera, opened, board } = harness();
+    opened();
+    board.wider = 1;
+    follow.aside();
+    expect(follow.fitted).toBe(false);
+    expect(camera).toEqual(FIT);
+  });
+
+  it('React Flow making its camera again clears it until the fit on open lands', () => {
+    const { follow, refit, camera, opened, board } = harness();
+    opened();
+    board.wider = 1;
+    refit.mockImplementationOnce(() => false);
+    follow.reopen();
+    expect(follow.fitted).toBe(false);
+    expect(camera).toEqual(FIT);
   });
 });
