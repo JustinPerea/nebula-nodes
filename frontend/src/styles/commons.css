@@ -398,6 +398,11 @@ body.app-slava-restraint .commons-notice--error {
   color: var(--sr-error);
 }
 
+/* A reason that isn't an error (a too-transparent reference, GM r5 on #208). */
+body.app-slava-restraint .commons-notice--muted {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .commons-notice--proposal {
   justify-content: space-between;
   color: var(--sr-ink);

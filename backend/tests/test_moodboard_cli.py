@@ -1408,7 +1408,20 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
     assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == brief_line
     assert [b["brief"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [brief_line]
     out = _cli(app, ["moodboard", "show", board["id"]], capsys)
-    assert f"  Brief sent to generators (generated):\n    {brief_line}\n" in out
+    # Right after the brief's text (GM r5 on #208).
+    brief_text = mcp_server.moodboard_get(board["id"])["brief"]["styleBrief"]
+    assert f"  Brief sent to generators (generated):\n    {brief_text}\n    {brief_line}\n" in out
+    # A hand-written brief keeps its words, and at strength 0 nothing is sent (GM r5).
+    override_line = "This brief uses the old colors. The next run sends it with the updated ones."
+    store.update(board["id"], by="agent", briefOverride={"text": "Dusk light."})
+    assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == override_line
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert f"  Brief sent to generators (written by an agent):\n    Dusk light.\n    {override_line}\n" in out
+    store.update(board["id"], strength=0.0)
+    assert "outdated" not in mcp_server.moodboard_get(board["id"])["brief"]
+    out = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert override_line not in out and brief_line not in out
+    store.update(board["id"], by="agent", strength=0.7, briefOverride=None)
     # One "analyze again", not a second one for the colour sources.
     old = {**analyze_moodboard(store.get(board["id"])), "version": 5}
     old["colors"] = [{k: v for k, v in c.items() if k != "sources"} for c in old["colors"]]

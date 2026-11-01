@@ -144,6 +144,10 @@ async def test_a_fully_transparent_reference_is_never_sent(store):
     asset = store.get_asset(added.asset["id"])
     assert asset["analysis_state"] == "analysis_failed" and asset["last_error"] == CLEAR_ERROR
     assert CLEAR_ERROR == "too transparent to add colors; not sent to the reader"
+    # Its own reason (review 2 L5, GM r5): not "the analyzer couldn't read this image".
+    assert asset["last_error_kind"] == "transparent"
+    from commons import analysis_errors
+    assert analysis_errors.classify_text(CLEAR_ERROR) == "transparent"  # a row from before the kind
     assert await w.run_once() == "idle"  # no retry: it won't change
 
 

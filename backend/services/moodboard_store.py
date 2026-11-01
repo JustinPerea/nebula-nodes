@@ -216,6 +216,43 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _urls_in(value: Any) -> set[str]:
+    """Every ``url`` string, and each string of a ``urls`` list, anywhere in
+    ``value`` (images, or edit ops: moodboard_edits' ``add`` takes both)."""
+    found: set[str] = set()
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get("url"), str) and item["url"].strip():
+                found.add(item["url"].strip())
+            if isinstance(item.get("urls"), list):
+                found.update(u.strip() for u in item["urls"] if isinstance(u, str) and u.strip())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+    return found
+
+
+def _warm_new_files(path: Path | None, sent: Any) -> None:
+    """Read the transparency of the files ``sent`` adds to the board at
+    ``path`` before its lock is taken, so the write under the lock only
+    stats them (moodboard_analysis.warm_alpha_facts): a slow decode never
+    holds the board. Best effort: the write reads what this misses."""
+    from services.moodboard_analysis import image_alpha_facts
+
+    held: set[str] = set()
+    if path is not None:
+        try:
+            board = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            board = {}
+        images = board.get("images") if isinstance(board, dict) else None
+        held = {str(img.get("url") or "").strip() for img in images or [] if isinstance(img, dict)}
+    for url in sorted(_urls_in(sent) - held):
+        image_alpha_facts(url)
+
+
 def _weight(raw: Any, default: float = 1.0) -> float:
     try:
         weight = float(raw)
@@ -239,7 +276,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
     A new image takes the ``placements`` it asks for (checked; ``placedBy``
     is ``by``), else Nebula places it after the last-added card. ``board``
     gives the frames and the saved analysis (for aspect ratios)."""
-    from services.moodboard_analysis import HAS_TRANSPARENCY, stamp_transparency
+    from services.moodboard_analysis import ALPHA_FACTS, stamp_transparency
     from services.stored_image_refs import StoredImageError, board_image_problem
 
     board = board or {}
@@ -276,7 +313,8 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         kept = dict(before or {})
         if kept.get("url") != url:
             # A new file: its transparency is read below and stored.
-            kept.pop(HAS_TRANSPARENCY, None)
+            for key in ALPHA_FACTS:
+                kept.pop(key, None)
             arrived.append(len(normalized))
         image: dict[str, Any] = {
             **kept,
@@ -318,6 +356,8 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
 
     # Whether each new image's file has transparency, read once here and
     # stored, so reads never decode it (moodboard_analysis.HAS_TRANSPARENCY).
+    # The writes decode them before the board lock (_warm_new_files), so
+    # here it is a stat per file.
     stamp_transparency([normalized[i] for i in arrived])
 
     unplaced = [i for i, image in enumerate(normalized) if "placements" not in image]
@@ -727,6 +767,7 @@ class MoodboardStore:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
         moodboard_id = uuid4().hex[:12]
         now = _now_iso()
+        _warm_new_files(None, images)
         normalized_images = _normalize_images(images, by=by)
         from services.stored_image_refs import check_board_analysis
         check_board_analysis(analysis)
@@ -864,6 +905,8 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        if "images" in fields:
+            _warm_new_files(path, fields["images"])
         with _board_lock(moodboard_id):
             return self._update(path, by=by, base_version=base_version, fields=fields)
 
@@ -903,6 +946,7 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        _warm_new_files(path, ops)
         with _board_lock(moodboard_id):
             moodboard = _read_for_write(path, moodboard_id)
             _check_base_version(moodboard, base_version)
@@ -941,7 +985,7 @@ class MoodboardStore:
             return self._keep_brief_override(path, by=by)
 
     def _keep_brief_override(self, path: Path, *, by: str) -> dict[str, Any]:
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
+        moodboard = _read_for_write(path, path.stem)
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
@@ -1034,15 +1078,27 @@ def migrate_brief_fields() -> dict[str, Any]:
 
 
 def stamp_transparency_once() -> dict[str, Any]:
-    """Store ``hasTransparency`` on the images of boards whose analysis was
-    made before alpha counted (moodboard_analysis.ALPHA_VERSION) and that
-    lack it, so a read can tell whether those colours are out of date
-    without decoding an image. Run at startup, off the event loop. It only
-    adds that one key to image entries (no backup: the board is otherwise
-    unchanged, and its version stays); an unknown file is left without it.
-    Running it again reads nothing it has read."""
+    """Store ``hasTransparency`` and ``hasClearPixels`` on the images of boards
+    whose analysis was made before alpha counted
+    (moodboard_analysis.ALPHA_VERSION) and that lack them, so a read can
+    tell whether those colours are out of date without decoding an image.
+    Run at startup, off the event loop. The files are decoded before the
+    board lock is taken; under it the board is read again and only the
+    entries still lacking the facts get them. It only adds those keys to
+    image entries (no backup: the board is otherwise unchanged, and its
+    version stays); an unknown file is left without them. Running it again
+    reads nothing it has read."""
     from services.asset_trash import RECORD_SUFFIX
-    from services.moodboard_analysis import ALPHA_VERSION, stamp_transparency
+    from services.moodboard_analysis import ALPHA_VERSION, stamp_transparency, warm_alpha_facts
+
+    def pre_alpha(board: Any) -> bool:
+        analysis = board.get("analysis") if isinstance(board, dict) else None
+        if not isinstance(analysis, dict):
+            return False
+        try:
+            return int(analysis.get("version") or 1) < ALPHA_VERSION
+        except (TypeError, ValueError):
+            return False
 
     report: dict[str, Any] = {"saved": [], "skipped": []}
     root = _moodboard_root()
@@ -1051,16 +1107,13 @@ def stamp_transparency_once() -> dict[str, Any]:
             if path.name.endswith(RECORD_SUFFIX) or path.name.endswith(".json.tmp"):
                 continue
             try:
+                board = json.loads(path.read_text(encoding="utf-8"))
+                if not pre_alpha(board):
+                    continue
+                warm_alpha_facts(board.get("images"))  # the decodes, outside the lock
                 with _board_lock(path.stem):
                     board = json.loads(path.read_text(encoding="utf-8"))
-                    analysis = board.get("analysis") if isinstance(board, dict) else None
-                    if not isinstance(analysis, dict):
-                        continue
-                    try:
-                        version = int(analysis.get("version") or 1)
-                    except (TypeError, ValueError):
-                        continue
-                    if version >= ALPHA_VERSION or not stamp_transparency(board.get("images")):
+                    if not pre_alpha(board) or not stamp_transparency(board.get("images")):
                         continue
                     _write_json(path, board)
             except (OSError, json.JSONDecodeError) as exc:

@@ -152,6 +152,15 @@ def open_rgb(path: Path) -> Image.Image:
         return image.convert("RGB")
 
 
+def open_seen(path: Path) -> Image.Image:
+    """An image as the person sees it on a canvas node: a reference with
+    transparency composited onto the node's surface, never onto the colour
+    hidden under its alpha (``open_rgb`` drops alpha, and is for video
+    frames). An opaque one is ``open_rgb``'s result after its EXIF turn."""
+    with Image.open(path) as image:
+        return seen_on(ImageOps.exif_transpose(image), NODE_MEDIA_SURFACE)
+
+
 def normalized_rgb(image: Image.Image, size: tuple[int, int] = (320, 180)) -> np.ndarray:
     # A transparent reference is measured as it shows on a canvas node, not
     # over the black hidden under its alpha; a frame (opaque) as before.

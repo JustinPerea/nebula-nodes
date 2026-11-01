@@ -236,13 +236,13 @@ def _area_pixels(rgba: np.ndarray, max_dim: int | None) -> tuple[np.ndarray, np.
     full = float(f * f * 255)
     for top in range(0, h, f):
         strip = rgba[top:top + f]
-        a = strip[..., 3].astype(np.uint32)
+        a = strip[..., 3].astype(np.uint64)
         a[a < ALPHA_MIN] = 0
         pad = (-w) % f
         rows = strip.shape[0]
         if pad:
             a = np.pad(a, ((0, 0), (0, pad)))
-        prem = strip[..., :3].astype(np.uint32) * a[:, :w, None]
+        prem = strip[..., :3].astype(np.uint64) * a[:, :w, None]
         if pad:
             prem = np.pad(prem, ((0, 0), (0, pad), (0, 0)))
         cells = a.shape[1] // f

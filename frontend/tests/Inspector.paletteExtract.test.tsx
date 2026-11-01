@@ -90,12 +90,12 @@ describe("the palette's Extract from reference", () => {
     expect(swatches()).toEqual([]);
   });
 
-  it('says a fully transparent image is fully transparent', async () => {
+  it('says a clear or faint image is too transparent to pull colors from', async () => {
     palette.extract.mockResolvedValue({ ok: false, reason: 'transparent' });
     const { container } = show();
     await extractFrom(container, png('clear.png'));
     await waitFor(() => expect(notice()?.text)
-      .toBe("Couldn't find colors in “clear.png”.\nThe image is fully transparent."));
+      .toBe("Couldn't find colors in “clear.png”.\nThis image is too transparent to pull colors from."));
   });
 
   it("gives only the heading when it can't tell why", async () => {

@@ -37,6 +37,7 @@ import { useStoredAssetsStore } from '../../store/storedAssetsStore';
 
 const COLORS_LINE = 'These colors counted transparent areas as dark. Analyze again to update them.';
 const BRIEF_LINE = 'This brief uses the old colors. The next run analyzes the board again and sends an updated one.';
+const OVERRIDE_LINE = 'This brief uses the old colors. The next run sends it with the updated ones.';
 
 function board(outdated: boolean): Moodboard {
   const image = { id: 'img1', url: '/api/outputs/chat-uploads/mark.png', weight: 1, notes: '', privateNote: '',
@@ -94,6 +95,32 @@ describe('a board whose saved colors are out of date', () => {
     await open();
     expect(await screen.findByText('Color palette: #040605.')).toBeTruthy();
     expect(screen.queryByText(COLORS_LINE)).toBeNull();
+    expect(screen.queryByText(BRIEF_LINE)).toBeNull();
+  });
+
+  it('sits right after the brief text and before its controls (GM r5)', async () => {
+    current = board(true);
+    await open();
+    const line = await screen.findByText(BRIEF_LINE);
+    const text = screen.getByText('Color palette: #040605.', { selector: '.moodboard-brief__text' });
+    const write = screen.getByRole('button', { name: 'Write your own' });
+    expect(text.nextElementSibling).toBe(line);
+    expect(line.nextElementSibling).toBe(write);
+  });
+
+  it('shows the hand-written line after the person’s brief, before its controls', async () => {
+    const withOverride = board(true) as unknown as Record<string, unknown>;
+    const brief = withOverride.brief as Record<string, unknown>;
+    current = {
+      ...withOverride,
+      briefOverride: { text: 'Warm dusk light.', by: 'person', basis: 'b', updatedAt: '' },
+      brief: { ...brief, styleBrief: 'Warm dusk light.', override: { active: true, stale: false },
+        outdated: OVERRIDE_LINE },
+    } as unknown as Moodboard;
+    await open();
+    const line = await screen.findByText(OVERRIDE_LINE);
+    expect(line.previousElementSibling?.querySelector('textarea')).not.toBeNull();
+    expect(line.nextElementSibling?.textContent).toBe('Use the generated brief');
     expect(screen.queryByText(BRIEF_LINE)).toBeNull();
   });
 });

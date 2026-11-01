@@ -109,6 +109,16 @@ describe('a reference whose analysis failed', () => {
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
   });
 
+  it('says a too-transparent reference in the muted colour, as no error (GM r5 on #208)', async () => {
+    asset.mockResolvedValue(failed('transparent'));
+    render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+    const line = await screen.findByText('This image is too transparent to analyze.');
+    expect(line.className).toBe('commons-notice commons-notice--muted');
+    expect(document.querySelector('.commons-notice--error')).toBeNull();
+    expect(screen.queryByText("Couldn't analyze this reference.")).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
   it('with no last_error there is no Details toggle', async () => {
     const base = failed('other');
     asset.mockResolvedValue({ ...base, asset: { ...base.asset, last_error: null } });

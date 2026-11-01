@@ -135,13 +135,13 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
-    if composed.get("outdated"):
-        # The saved colours are out of date, and a run sends a new brief.
-        print(f"    {composed['outdated']}")
     if composed.get("styleBrief"):
         print(f"    {composed['styleBrief']}")
     else:
         print(f"    Not built yet: `nebula moodboard analyze {board_id}`")
+    if composed.get("outdated"):
+        # Right after the brief's text (GM r5): its saved colours are out of date.
+        print(f"    {composed['outdated']}")
     if override and override.get("stale"):
         if override["by"] == "agent":
             print(f"    The board changed since this was written. Keep it with `nebula moodboard set {board_id} "
@@ -326,10 +326,13 @@ def _print_dry_run(result: dict[str, Any]) -> None:
     saved = result.get("saved") or {}
     if not saved.get("analyzed"):
         print("  The board has no saved analysis, so everything below is new.")
-    elif saved.get("outdated"):
-        print(f"  {saved['outdated']}")
-    elif not saved.get("current"):
-        print("  The saved analysis is out of date, so the changes include edits to the board.")
+    else:
+        # Both can hold: a board edited since, whose saved colours also
+        # counted transparent areas as dark.
+        if not saved.get("current"):
+            print("  The saved analysis is out of date, so the changes include edits to the board.")
+        if saved.get("outdated"):
+            print(f"  {saved['outdated']}")
     analysis = result.get("analysis") or {}
     print("  Would give:")
     _print_colours(analysis, result.get("id"))
@@ -392,6 +395,10 @@ def _price_text(est: dict[str, Any]) -> str:
     return text
 
 
+# A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
+TRANSPARENT_ESTIMATE_LINE = "#{number} wasn’t read because it’s too transparent."
+
+
 def _print_estimate(est: dict[str, Any]) -> None:
     reader = est.get("reader") or {}
     count, batches = est.get("count", 0), est.get("batches", 0)
@@ -400,8 +407,8 @@ def _print_estimate(est: dict[str, Any]) -> None:
           f"{_price_text(est)}.")
     if est.get("unreadable"):
         print(f"  Not on this computer, so not read: {', '.join(f'#{n}' for n in est['unreadable'])}")
-    if est.get("transparent"):
-        print(f"  Too transparent, so not read: {', '.join(f'#{n}' for n in est['transparent'])}")
+    for number in est.get("transparent") or []:
+        print(f"  {TRANSPARENT_ESTIMATE_LINE.format(number=number)}")
     price = est.get("price") or {}
     low = price.get("low") or {}
     if low:

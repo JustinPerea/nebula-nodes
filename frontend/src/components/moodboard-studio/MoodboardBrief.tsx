@@ -55,8 +55,6 @@ export function BriefPanel({
         <span className="moodboard-swatches__label">Brief sent to generators</span>
         <span className="moodboard-brief__source">{override?.text.trim() ? (byAgent ? 'Written by an agent' : 'Written by you') : 'Generated'}</span>
       </div>
-      {/* The saved colours are out of date: this brief uses them, a run sends a new one (GM r2 on #208). */}
-      {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
       {stale && (
         <div className="moodboard-brief__stale" role="status">
           <span>{byAgent ? 'Board changed since an agent wrote this.' : 'Board changed since you edited this.'}</span>
@@ -71,6 +69,9 @@ export function BriefPanel({
             <textarea rows={5} value={override.text} maxLength={BRIEF_LIMITS.override}
               onChange={(event) => onEdit(event.target.value)} onBlur={onEditDone} />
           </label>
+          {/* Right after the brief's text, before its controls, so clearing it shifts nothing
+              above (GM r5 on #208). The backend leaves it out at strength 0. */}
+          {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
           {!stale && (
             <button type="button" className="moodboard-brief__action" onClick={onRegenerate} disabled={busy}>
               Use the generated brief
@@ -82,6 +83,9 @@ export function BriefPanel({
           <p className="moodboard-brief__text">
             {brief?.styleBrief || (saving ? 'Saving…' : 'Analyze to build the brief.')}
           </p>
+          {/* Right after the brief's text, before its controls, so clearing it shifts nothing
+              above (GM r5 on #208). The backend leaves it out at strength 0. */}
+          {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
           <button
             type="button"
             className="moodboard-brief__action"

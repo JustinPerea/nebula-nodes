@@ -517,8 +517,8 @@ def test_a_clear_reference_is_never_sent_or_priced() -> None:
     assert [line["text"] for line in skip] == ["#2 is too transparent to add colors."]
     placement = next(r for r in result["results"] if r["id"] == "img2")
     assert placement["status"] == "couldntRead"
-    assert placement["why"] == "It's too transparent to add colors."
-    assert "#2 Unsorted: it's too transparent" in [line["text"] for line in result["trace"]]
+    assert placement["why"] == "It’s too transparent to add colors."  # GM r5: curly, no colon
+    assert "#2 is unsorted because it’s too transparent." in [line["text"] for line in result["trace"]]
     assert len([b for b in google.bodies if "readings" in json.dumps(b)]) >= 1
 
 
@@ -586,11 +586,12 @@ async def test_the_node_says_why_it_analyzed_a_pre_alpha_board_again(tmp_path, m
 
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
     store = MoodboardStore()
-    made = store.create(name="Sprites", images=[{"url": _write(sprite_49())}])
+    made = store.create(name="Sprites", images=[{"url": _write(sprite_49())}, {"url": _write(clear())}])
     store.update(made["id"], analysis={**analyze_moodboard(store.get(made["id"])), "version": 5})
     result = await handle_moodboard_node(
         GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": made["id"]}), {}, {})
-    assert result["moodboard"]["value"]["analysis"]["warnings"][-1] == RERUN_LINE
+    # The run's own warning first, then the per-image lines (review 2 surfaces L3).
+    assert result["moodboard"]["value"]["analysis"]["warnings"] == [RERUN_LINE, "#2 is too transparent to add colors."]
 
 
 @pytest.mark.asyncio
@@ -622,7 +623,9 @@ def test_the_cli_estimate_names_clear_references(capsys) -> None:
 
     moodboard_cmd._print_estimate({"reader": {"name": "Argon"}, "thinkingLevel": "low", "count": 2, "batches": 1,
                                    "low": 0.01, "high": 0.02, "transparent": [2]})
-    assert "  Too transparent, so not read: #2" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "  #2 wasn’t read because it’s too transparent.\n" in out  # GM r5
+    assert "Too transparent, so not read" not in out
 
 
 # -- round 2, review 1 (affb9b25): each fails there ------------------------------------------
@@ -816,6 +819,7 @@ def _pre_alpha_board(root: Path, *images: Image.Image) -> str:
     raw = json.loads(path.read_text(encoding="utf-8"))
     for image in raw["images"]:
         image.pop("hasTransparency", None)
+        image.pop("hasClearPixels", None)
     path.write_text(json.dumps(raw), encoding="utf-8")
     return made["id"]
 
@@ -826,6 +830,7 @@ def test_intake_stores_whether_each_image_has_transparency(tmp_path, monkeypatch
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
     store = MoodboardStore()
     junk = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:10]}.png"
+    junk.parent.mkdir(parents=True, exist_ok=True)
     junk.write_bytes(b"not an image")
     made = store.create(name="Mixed", images=[{"url": _write(sprite_49())}, {"url": _write(opaque())},
                                               {"url": f"/api/outputs/alpha-tests/{junk.name}"}])
@@ -838,6 +843,20 @@ def test_intake_stores_whether_each_image_has_transparency(tmp_path, monkeypatch
     store.update(made["id"], images=images)
     assert [img.get("hasTransparency") for img in _raw(tmp_path / "boards", made["id"])["images"]][:2] == [False,
                                                                                                          False]
+    # Both facts are read again for the new file, not kept from the old one,
+    # even when the new file can't be read.
+    assert _raw(tmp_path / "boards", made["id"])["images"][0]["hasClearPixels"] is False
+    sprite_entry = _raw(tmp_path / "boards", made["id"])["images"]
+    sprite_entry[1] = {**sprite_entry[1], "url": _write(sprite_49())}
+    store.update(made["id"], images=sprite_entry)
+    assert _raw(tmp_path / "boards", made["id"])["images"][1]["hasClearPixels"] is True
+    broken = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:10]}.png"
+    broken.write_bytes(b"not an image")
+    entries = store.get(made["id"])["images"]
+    entries[1] = {**entries[1], "url": f"/api/outputs/alpha-tests/{broken.name}"}
+    store.update(made["id"], images=entries)
+    after = _raw(tmp_path / "boards", made["id"])["images"][1]
+    assert "hasTransparency" not in after and "hasClearPixels" not in after
 
 
 def test_listing_old_boards_never_decodes_an_image(tmp_path, monkeypatch) -> None:
@@ -874,15 +893,22 @@ def test_the_startup_pass_stores_the_fact_once(tmp_path, monkeypatch) -> None:
     raw_new = json.loads(new_path.read_text(encoding="utf-8"))
     for image in raw_new["images"]:
         image.pop("hasTransparency", None)  # as if added before the flag existed
+        image.pop("hasClearPixels", None)
     new_path.write_text(json.dumps(raw_new), encoding="utf-8")
     before_new = _raw(tmp_path / "boards", current["id"])
 
     opened: list[str] = []
     real = moodboard_analysis.Image.open
     monkeypatch.setattr(moodboard_analysis.Image, "open", lambda p, *a, **k: (opened.append(str(p)), real(p, *a, **k))[1])
+    moodboard_analysis._file_alpha_facts.cache_clear()  # a fresh start: intake's decodes aren't in memory
     report = stamp_transparency_once()
-    assert len(opened) == 3  # the old board's two images and the unreadable one; never the v6 board's
+    # The old board's two images, decoded once each (outside the lock, then
+    # read from memory under it), and the unreadable one, which fails at
+    # open each time it is tried; never the v6 board's.
+    readable = [p for p in opened if p != str(path)]
+    assert len(readable) == 2 and len(set(readable)) == 2 and set(opened) - set(readable) == {str(path)}
     assert [img["hasTransparency"] for img in _raw(tmp_path / "boards", old)["images"]] == [True, False]
+    assert [img["hasClearPixels"] for img in _raw(tmp_path / "boards", old)["images"]] == [True, False]
     raw_gone = _raw(tmp_path / "boards", gone)
     assert "hasTransparency" not in raw_gone["images"][0]  # unreadable: unknown, left without it
     assert _raw(tmp_path / "boards", current["id"]) == before_new
@@ -894,7 +920,7 @@ def test_the_startup_pass_stores_the_fact_once(tmp_path, monkeypatch) -> None:
     assert "outdated" not in store.get(gone)["analysis"]  # unknown never marks a board out of date
     opened.clear()
     stamp_transparency_once()
-    assert opened == [str(path)]  # only the unknown one is tried again
+    assert set(opened) == {str(path)}  # only the unknown one is tried again
 
 
 def test_a_set_aside_transparent_image_still_makes_the_colours_outdated() -> None:
@@ -921,14 +947,18 @@ def test_outdated_is_never_written_to_disk(tmp_path, monkeypatch) -> None:
               lambda: store.apply_edits(made["id"], [{"op": "place", "placement": card, "x": 40, "y": 40}],
                                         by="person"),
               # A client that sends the analysis back as it read it.
-              lambda: store.update(made["id"], analysis=store.get(made["id"])["analysis"])]
+              lambda: store.update(made["id"], analysis=store.get(made["id"])["analysis"]),
+              # Review 2 L1: keeping a hand-written brief read the board without the strip.
+              lambda: store.update(made["id"], by="agent", briefOverride={"text": "Mine"}),
+              lambda: store.keep_brief_override(made["id"], by="agent")]
     for write in writes:
         write()
         assert "outdated" not in _raw(tmp_path / "boards", made["id"])["analysis"]
     # Worked out again on read: a stored stale one never outlives its cause.
     path = next((tmp_path / "boards").rglob(f"{made['id']}.json"))
     raw = json.loads(path.read_text(encoding="utf-8"))
-    raw["analysis"]["outdated"], raw["images"][0]["hasTransparency"] = ALPHA_OUTDATED, False
+    raw["analysis"]["outdated"] = ALPHA_OUTDATED
+    raw["images"][0]["hasTransparency"] = raw["images"][0]["hasClearPixels"] = False
     path.write_text(json.dumps(raw), encoding="utf-8")
     assert "outdated" not in store.get(made["id"])["analysis"]
 
@@ -1002,3 +1032,360 @@ def test_qc_frames_and_references_show_as_on_the_node() -> None:
     assert measured[0, 7].tolist() == pytest.approx([10 / 255] * 3, abs=1e-6)
     flat = np.asarray(ImageOps.fit(opaque(), (8, 8), method=Image.Resampling.LANCZOS), dtype=np.float32) / 255.0
     assert np.array_equal(normalized_rgb(opaque(), (8, 8)), flat)
+
+
+# -- round 3, review 2 ------------------------------------------------------------------------
+
+def _hidden_red_reference() -> Image.Image:
+    """A reference with red stored under alpha 0 and an opaque orange box."""
+    a = np.zeros((90, 160, 4), np.uint8)
+    a[..., :3] = (255, 0, 0)
+    a[30:60, 60:100] = (*ORANGE, 255)
+    return Image.fromarray(a, "RGBA")
+
+
+@pytest.mark.asyncio
+async def test_qc_camera_geometry_measures_and_sends_the_reference_as_on_the_node(monkeypatch) -> None:
+    # Review 2 M1: open_rgb flattened the reference before seen_on saw it.
+    import handlers.qc_camera_geometry as handler
+    from models.graph import GraphNode, PortValueDict
+    from services import qc_jev
+    from services.qc_common import normalized_rgb
+
+    frame = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:8]}-frame.png"
+    frame.parent.mkdir(parents=True, exist_ok=True)
+    opaque().resize((160, 90)).save(frame)
+
+    async def frames(_source, _points, _temp):
+        return [frame] * 5
+
+    seen: dict = {}
+
+    def metrics(frames_in, *, reference=None, opencv=False):
+        seen["measured"] = normalized_rgb(reference, (16, 9))
+        raise RuntimeError("stop after the metrics")
+
+    monkeypatch.setattr(handler, "required_video", lambda inputs: frame)
+    monkeypatch.setattr(handler, "extract_frames", frames)
+    monkeypatch.setattr(handler, "camera_geometry_metrics", metrics)
+    node = GraphNode(id="q1", definitionId="qc-camera-geometry", params={"mode": "opencv"})
+    inputs = {"reference": PortValueDict(type="Image", value=_write(_hidden_red_reference()))}
+    with pytest.raises(RuntimeError, match="stop after the metrics"):
+        await handler.handle_qc_camera_geometry(node, inputs, {})
+    assert seen["measured"][0, 0].tolist() == pytest.approx([10 / 255] * 3, abs=1e-6)
+
+    # Jev mode: the extra it is sent shows the node surface, not the hidden red.
+    sent: dict = {}
+
+    async def prepare(frames_in, *, extras=()):
+        sent.update(dict(extras))
+        raise RuntimeError("stop before Jev")
+
+    monkeypatch.setattr(handler, "camera_geometry_metrics", lambda *a, **k: {
+        "expected_angle": None, "horizon_line": None, "detected_camera_angle": "eye-level",
+        "motion_estimate": {"pan": 0.0, "tilt": 0.0, "zoom": 0.0}})
+    monkeypatch.setattr(qc_jev, "setup", lambda params, keys: object())
+    monkeypatch.setattr(qc_jev, "prepare_frames", prepare)
+    node = GraphNode(id="q2", definitionId="qc-camera-geometry", params={"mode": "jev"})
+    with pytest.raises(RuntimeError, match="stop before Jev"):
+        await handler.handle_qc_camera_geometry(node, inputs, {})
+    corner = _decoded(qc_jev._data_uri(sent["reference"])).getpixel((0, 0))
+    assert max(abs(c - 10) for c in corner) <= 3
+
+
+def _on_loop() -> bool:
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def _file_of(url: str) -> Path:
+    return OUTPUT_ROOT / url.removeprefix("/api/outputs/")
+
+
+# Review 2 M2: the reader trusts a stored opaque image and decodes off the loop.
+
+def test_the_reader_never_decodes_an_image_stored_as_having_no_clear_pixel(monkeypatch) -> None:
+    from services import moodboard_reader as reader
+
+    plain, faint, sprite = _write(opaque()), _write(sprite_49()), _write(sprite_49())
+    b = _board(plain, faint, sprite)
+    b["images"][0]["hasTransparency"] = False
+    b["images"][1].update(hasTransparency=True, hasClearPixels=False)  # stored: semi-transparent only
+    decoded: list[str] = []
+    real = reader._path_is_clear
+    monkeypatch.setattr(reader, "_path_is_clear", lambda p: (decoded.append(str(p)), real(p))[1])
+    targets = reader.select_targets(b)
+    assert reader.clear_targets(targets) == set()
+    assert decoded == [str(_file_of(sprite))]
+    # Worked out once: the estimate and the read reuse it.
+    reader.clear_targets(targets)
+    assert decoded == [str(_file_of(sprite))]
+    assert [t.clear for t in targets] == [False, False, False]
+
+
+def test_an_unreadable_reference_is_not_called_too_transparent() -> None:
+    from services import moodboard_reader as reader
+
+    junk = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:10]}.png"
+    junk.parent.mkdir(parents=True, exist_ok=True)
+    junk.write_bytes(b"not an image")
+    stat = junk.stat()
+    assert reader._file_is_clear(str(junk), stat.st_mtime_ns, stat.st_size) is False
+    targets = reader.select_targets(_board(f"/api/outputs/alpha-tests/{junk.name}"))
+    assert reader.clear_targets(targets) == set()
+
+
+def test_the_reader_routes_work_out_clear_references_off_the_loop(tmp_path, monkeypatch, person) -> None:
+    import httpx
+    from fastapi.testclient import TestClient
+
+    import main
+    from services import agent_spend
+    from services import moodboard_reader as reader
+    from tests.test_moodboard_reader_routes import SETTINGS, RouteGoogle
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
+    monkeypatch.setattr(main, "_moodboard_reader_transport", httpx.MockTransport(RouteGoogle().handler))
+
+    async def ignore(data):
+        return None
+
+    monkeypatch.setattr(main.manager, "broadcast_raw", ignore)
+    monkeypatch.setattr(main.manager, "broadcast_browser", ignore)
+    monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
+    SETTINGS.clear()
+    SETTINGS.update({"apiKeys": {"GOOGLE_API_KEY": "g-test"}, "runCostConfirmUsd": 50.0,
+                     "agentSpend": {"sessionUsd": None, "models": {}}})
+    monkeypatch.setattr(main, "load_settings", lambda: json.loads(json.dumps(SETTINGS)))
+    client = TestClient(main.app)
+    plain, sprite, gone = _write(opaque()), _write(sprite_49()), _write(clear())
+    made = client.post("/api/moodboards", json={"name": "Read", "images": [{"url": u} for u in (plain, sprite, gone)]})
+    assert made.status_code == 200, made.text
+    board_id = made.json()["id"]
+
+    calls: list[tuple[str, bool]] = []
+    real = reader._path_is_clear
+
+    def watched(path):
+        assert path != _file_of(plain), "decoded an image stored as opaque"
+        calls.append((Path(path).name, _on_loop()))
+        return real(path)
+
+    monkeypatch.setattr(reader, "_path_is_clear", watched)
+    est = client.post(f"/api/moodboards/{board_id}/read/estimate", json={"model": "gemini-4-argon"})
+    assert est.status_code == 200, est.text
+    assert est.json()["transparent"] == [3] and est.json()["count"] == 2
+    result = client.post(f"/api/moodboards/{board_id}/read?dryRun=1", json={"model": "gemini-4-argon"})
+    assert result.status_code == 200, result.text
+    assert calls and not any(on_loop for _, on_loop in calls)
+    assert sorted(name for name, _ in calls) == sorted([_file_of(sprite).name, _file_of(gone).name] * 2)
+
+
+# Review 2 L2: intake and the startup pass decode off the loop and outside the board lock.
+
+def test_the_board_routes_decode_new_files_off_the_loop_and_outside_the_lock(tmp_path, monkeypatch, person) -> None:
+    from fastapi.testclient import TestClient
+
+    import main
+    from services import moodboard_analysis, moodboard_store
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
+
+    async def ignore(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(main.manager, "broadcast_raw", ignore)
+    monkeypatch.setattr(main.manager, "broadcast_browser", ignore)
+    real = moodboard_analysis._file_alpha_facts
+    decodes: list[tuple[str, bool, bool]] = []
+
+    def watched(path, mtime_ns, size):
+        misses = real.cache_info().misses
+        out = real(path, mtime_ns, size)
+        if real.cache_info().misses > misses:  # a real decode, not a stat
+            held = any(lock._is_owned() for lock in moodboard_store._LOCKS.values())
+            decodes.append((Path(path).name, _on_loop(), held))
+        return out
+
+    monkeypatch.setattr(moodboard_analysis, "_file_alpha_facts", watched)
+    client = TestClient(main.app)
+    first, second, third = _write(sprite_49()), _write(soft_disc()), _write(mark_74())
+    made = client.post("/api/moodboards", json={"name": "Intake", "images": [{"url": first}]}).json()
+    images = [*made["images"], {"url": second}]
+    put = client.put(f"/api/moodboards/{made['id']}", json={"images": images})
+    assert put.status_code == 200, put.text
+    edits = client.post(f"/api/moodboards/{made['id']}/edits",
+                        json={"ops": [{"op": "add", "urls": [third]}]})
+    assert edits.status_code == 200, edits.text
+    assert [name for name, _, _ in decodes] == [_file_of(u).name for u in (first, second, third)]
+    assert not any(on_loop or held for _, on_loop, held in decodes)
+    raw = _raw(tmp_path / "boards", made["id"])
+    assert [(i["hasTransparency"], i["hasClearPixels"]) for i in raw["images"]] == [(True, True)] * 3
+
+
+def test_the_startup_pass_decodes_outside_the_lock_and_writes_under_it(tmp_path, monkeypatch) -> None:
+    from services import moodboard_analysis, moodboard_store
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "boards"))
+    old = _pre_alpha_board(tmp_path / "boards", sprite_49(), opaque())
+    moodboard_analysis._file_alpha_facts.cache_clear()
+    real_facts, real_write = moodboard_analysis._file_alpha_facts, moodboard_store._write_json
+    seen: dict[str, list[bool]] = {"decode": [], "write": []}
+
+    def facts(path, mtime_ns, size):
+        misses = real_facts.cache_info().misses
+        out = real_facts(path, mtime_ns, size)
+        if real_facts.cache_info().misses > misses:
+            seen["decode"].append(moodboard_store._LOCKS.get(old) is not None and moodboard_store._LOCKS[old]._is_owned())
+        return out
+
+    def write(path, data):
+        seen["write"].append(path.stem == old and moodboard_store._LOCKS[old]._is_owned())
+        return real_write(path, data)
+
+    monkeypatch.setattr(moodboard_analysis, "_file_alpha_facts", facts)
+    monkeypatch.setattr(moodboard_store, "_write_json", write)
+    moodboard_store.stamp_transparency_once()
+    assert seen == {"decode": [False, False], "write": [True]}
+
+
+# Review 2 surfaces M1 and L2: only colours that really counted clear areas as dark.
+
+def test_an_image_added_after_the_analysis_doesnt_make_it_outdated() -> None:
+    board = _stamped(_board(_write(opaque())))
+    old = _saved_v5(board)
+    board["images"].append({"id": "new", "url": _write(sprite_49()), "weight": 1.0, "notes": "", "excluded": False})
+    _stamped(board)
+    assert board["images"][1]["hasClearPixels"] is True
+    assert not predates_alpha(board, old)
+    assert "outdated" not in dry_run({**board, "analysis": old})["saved"]
+    # The same image measured by that analysis does.
+    assert predates_alpha(board, _saved_v5(board))
+
+
+def test_semi_transparent_only_images_dont_get_the_outdated_line() -> None:
+    uniform = Image.new("RGBA", (64, 64), (*GREEN, 125))
+    faint_wash = np.zeros((64, 64, 4), np.uint8)
+    faint_wash[...] = (*ORANGE, 40)
+    board = _stamped(_board(_write(uniform), _write(Image.fromarray(faint_wash, "RGBA"))))
+    assert [(i["hasTransparency"], i["hasClearPixels"]) for i in board["images"]] == [(True, False)] * 2
+    assert not predates_alpha(board, _saved_v5(board))
+    assert "outdated" not in (with_alpha_outdated({**board, "analysis": _saved_v5(board)})["analysis"])
+    # One pixel under ALPHA_MIN is a clear pixel.
+    edge = np.asarray(uniform).copy()
+    edge[0, 0, 3] = ALPHA_MIN - 1
+    one = _stamped(_board(_write(Image.fromarray(edge, "RGBA"))))
+    assert one["images"][0]["hasClearPixels"] is True
+    edge[0, 0, 3] = ALPHA_MIN
+    none = _stamped(_board(_write(Image.fromarray(edge, "RGBA"))))
+    assert none["images"][0]["hasClearPixels"] is False
+
+
+def test_a_stored_opaque_image_gets_no_clear_pixels_without_a_decode(monkeypatch) -> None:
+    from services import moodboard_analysis
+
+    images = [{"id": "a", "url": _write(sprite_49()), "hasTransparency": False}]
+
+    def no_decode(*args, **kwargs):
+        raise AssertionError("decoded an image stored as opaque")
+
+    monkeypatch.setattr(moodboard_analysis, "_file_alpha_facts", no_decode)
+    assert stamp_transparency(images) is True
+    assert images[0] == {**images[0], "hasTransparency": False, "hasClearPixels": False}
+
+
+def test_the_dry_run_says_both_when_the_board_changed_and_its_colours_are_old(capsys) -> None:
+    from cli.commands import moodboard as moodboard_cmd
+
+    board = _stamped(_board(_write(sprite_49())))
+    old = _saved_v5(board)
+    board["images"][0]["weight"] = 0.5  # edited since
+    result = dry_run({**board, "analysis": old})
+    assert result["saved"] == {"analyzed": True, "current": False, "outdated": ALPHA_OUTDATED}
+    moodboard_cmd._print_dry_run(result)
+    out = capsys.readouterr().out
+    assert "  The saved analysis is out of date, so the changes include edits to the board.\n" in out
+    assert f"  {ALPHA_OUTDATED}\n" in out
+
+
+# GM r5 3: the brief line, true on a hand-written brief and absent at strength 0.
+
+BRIEF_LINE = "This brief uses the old colors. The next run analyzes the board again and sends an updated one."
+OVERRIDE_BRIEF_LINE = "This brief uses the old colors. The next run sends it with the updated ones."
+
+
+def test_the_brief_line_on_each_kind_of_brief(capsys) -> None:
+    from cli.commands import moodboard as moodboard_cmd
+    from services.moodboard_brief import with_brief
+
+    board = _stamped(_board(_write(sprite_49())))
+    shown = with_alpha_outdated({**board, "analysis": _saved_v5(board), "direction": "", "avoid": [],
+                                 "pinnedColors": {"include": [], "exclude": []}})
+    assert with_brief(shown)["brief"]["outdated"] == BRIEF_LINE
+    override = {**shown, "briefOverride": {"text": "Dusk light.", "by": "person", "basis": "", "updatedAt": ""}}
+    assert with_brief(override)["brief"]["outdated"] == OVERRIDE_BRIEF_LINE
+    for off in (shown, override):
+        assert "outdated" not in with_brief({**off, "strength": 0})["brief"]
+    assert with_brief({**override, "strength": 0.2})["brief"]["outdated"] == OVERRIDE_BRIEF_LINE
+
+    # The CLI: right after the brief's text.
+    moodboard_cmd._print_brief(with_brief(override))
+    lines = capsys.readouterr().out.splitlines()
+    text = lines.index("    Dusk light.")
+    assert lines[text + 1] == f"    {OVERRIDE_BRIEF_LINE}"
+
+
+# Review 2 L3: the guards no test pinned.
+
+def test_seen_on_shows_a_clear_image_as_the_bare_surface() -> None:
+    from cinema.color import seen_on
+
+    hidden = Image.new("RGBA", (8, 8), (255, 0, 0, 0))
+    assert set(seen_on(hidden, (10, 10, 10)).getdata()) == {(10, 10, 10)}
+
+
+@pytest.mark.parametrize("method", ["lab-transfer", "reinhard"])
+def test_what_hides_under_clear_or_faint_pixels_never_changes_the_grade(method: str) -> None:
+    from cinema.color import transfer_to_palette
+
+    def made(hidden: tuple[int, int, int], alpha: int) -> Image.Image:
+        a = np.zeros((32, 64, 4), np.uint8)
+        a[:, :32] = (*hidden, alpha)
+        a[:, 32:48] = (*ORANGE, 255)
+        a[:, 48:] = (*GREEN, 200)  # two seen colours, so the std matters
+        return Image.fromarray(a, "RGBA")
+
+    grades = [np.asarray(transfer_to_palette(made(hidden, alpha), ["#1b3a4b", "#d98841"], strength=0.9,
+                                             method=method))[:, 32:, :3]
+              for hidden, alpha in (((0, 0, 0), 0), ((255, 255, 255), 0), ((255, 255, 255), ALPHA_MIN - 1))]
+    assert np.array_equal(grades[0], grades[1]) and np.array_equal(grades[0], grades[2])
+
+
+def test_a_clear_image_is_graded_unchanged() -> None:
+    from cinema.color import transfer_to_palette
+
+    hidden = Image.new("RGBA", (16, 16), (255, 0, 0, 0))
+    graded = transfer_to_palette(hidden, ["#1b3a4b"], strength=1.0)
+    assert graded.mode == "RGBA" and graded.tobytes() == hidden.tobytes()
+
+
+# Review 2 L4: the agent's contact sheet shows a transparent output as the node does.
+
+def test_the_contact_sheet_shows_transparent_outputs_on_the_node_surface() -> None:
+    from services.output_preview import contact_sheet
+
+    paths = []
+    for _ in range(2):
+        path = OUTPUT_ROOT / "alpha-tests" / f"{uuid4().hex[:8]}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _hidden_red_reference().save(path)
+        paths.append(path)
+    data, mime = contact_sheet(paths, "small")
+    with Image.open(io.BytesIO(data)) as sheet:
+        corner = sheet.convert("RGB").getpixel((2, 2))
+    assert max(abs(c - 10) for c in corner) <= 4, corner

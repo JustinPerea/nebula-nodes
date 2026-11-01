@@ -783,11 +783,14 @@ def with_brief(board: Any) -> Any:
         return {**board, "brief": None}
     mode, choices, send_notes = board_options(board)
     analysis = board.get("analysis")
-    if isinstance(analysis, dict) and analysis.get("outdated"):
+    if isinstance(analysis, dict) and analysis.get("outdated") and not board_is_off(board):
         # The saved colours are out of date (moodboard_analysis.with_alpha_outdated):
-        # this brief is built from them, and a run analyzes again and sends a new one.
-        from services.moodboard_analysis import BRIEF_OUTDATED
-        brief = {**brief, "outdated": BRIEF_OUTDATED}
+        # this brief is built from them, and a run analyzes again and sends a
+        # new one. At strength 0 no run sends it, so nothing is said (GM r5).
+        from services.moodboard_analysis import BRIEF_OUTDATED, BRIEF_OUTDATED_OVERRIDE
+        override = board.get("briefOverride") if isinstance(board.get("briefOverride"), dict) else {}
+        hand_written = bool(str(override.get("text") or "").strip())  # as compose() reads it
+        brief = {**brief, "outdated": BRIEF_OUTDATED_OVERRIDE if hand_written else BRIEF_OUTDATED}
     return {**board, "clashMode": mode, "colorChoices": choices, "sendNotes": send_notes, "colorCheck": check,
             "brief": brief}
 

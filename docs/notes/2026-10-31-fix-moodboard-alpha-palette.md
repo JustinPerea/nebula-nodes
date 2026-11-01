@@ -131,10 +131,11 @@ Commons:
 | `services/vision_llm._encoded_images` (the Vision node) | image for the vision model | fixed in round 2 (review 1 F7): composited onto the canvas node surface #0a0a0a; a clear image is sent as the bare surface (the node must send something) |
 | `services/qc_jev._data_uri` (Jev QC frames and reference) | image for the vision model | fixed in round 2 (F7): same surface; frames are opaque, so unchanged |
 | `services/qc_common.normalized_rgb` (`qc_metrics` histograms, `color_drift_score`, `reference_match`) | measures | fixed in round 2 (F7): composited onto #0a0a0a. Frames are video and opaque, so their scores don't move; a transparent reference no longer reads as black |
-| `services/qc_common.open_rgb`, `create_annotated_frame` | frames for QC | left: video frames, no alpha |
+| `services/qc_common.open_rgb`, `create_annotated_frame` | frames for QC | left: video frames, no alpha. Round 3 (review 2 M1): `open_rgb` is for frames only; QC Camera Geometry's reference opens with `open_seen` (alpha kept, EXIF-turned, onto #0a0a0a), so its metrics and the Jev extra see the node's surface, not the hidden colour |
 | `commons/review.py`, `commons/evaluation.py` (snapshot PNG + palette) | the labelled evaluation batch | left: the batch's PNG, palette and labels must match each other, and the stored batches are frozen. Round 2 (F8): the manifest records `measure-1`, which is what measures an RGB snapshot, not `CODE_VERSION` |
 | `commons/measure.phash` | perceptual hash, not colour | left (intake passes RGB) |
-| `services/output_preview.py`, `output_thumbnail.py` | previews | left: alpha already kept |
+| `services/output_preview.image_preview`, `output_thumbnail.py` | previews | left: alpha already kept |
+| `services/output_preview.contact_sheet` (the agent's preview of image arrays and frames) | image an agent looks at | fixed in round 3 (review 2 L4): each tile onto the node surface #0a0a0a with `seen_on`; opaque tiles unchanged |
 | `services/image_transcode.py` | JPEG output, flattened onto white | left: output |
 | `services/edit_masks.py`, `scripts/smoke_ideogram_live.py` | masks | left: not colour |
 | `handlers/jev_box.py`, `handlers/veo.py` | output encoding | left: alpha already kept |
@@ -453,3 +454,192 @@ tests fail.
     request body;
   - 02: the frontend extract before and after, on the same pixels;
   - 03: Cinema Color's RGBA output over a checkerboard, with its alpha.
+
+## Round 3 (base 7886a137)
+
+### GM r3: Extract from reference shows each colour once
+
+GM: "the After row is five identical #1e5adc swatches and one orange. The
+image has two colors, so it should show two swatches." There were three
+causes, in `frontend/src/lib/paletteExtract.ts`:
+
+1. **Seeds of one colour.** k-means seeded at evenly spaced pixels, and on
+   a striped or banded image several seeds landed on the same colour. A
+   six-colour striped image gave one swatch of a mix plus five copies of
+   red. Now a seed with exactly the colour of a seed already taken moves to
+   the next pixel with a new colour. Seeds that already differ are the
+   same as before.
+2. **Near-identical swatches.** `mergeNearColors` merges the closest pair
+   under `MERGE_DELTA_E` (OKLab distance 0.03), weight-averaging the colour
+   (the weights add up), and repeats. Empty clusters are dropped. The
+   result is ordered by weight.
+3. **Edge mixes.** A swatch under 5% of the image that lies on the line
+   between two bigger swatches is their antialiased edge, not a colour of
+   its own. The glow's purple ring at 1.4% is one. It folds into the nearer
+   of the two. The line is drawn in sRGB values, where the canvas mixes
+   them; the distance from it is read in OKLab. A small swatch that isn't
+   such a mix (a real accent) stays.
+
+**How the thresholds were picked.** I ran 27 real images: the 12 preset
+thumbnails, the 10 golden board images and 5 character-smoke JPEGs. Each
+was read at the Inspector's 96 px, alongside the synthetic cases.
+- k-means's copies of one flat colour sit 0.0017 to 0.0075 apart. Those are
+  the risograph print, the studio product, the line art, and the logo's
+  dark edge shades.
+- The closest pair of real, different swatches k-means keeps on a photo is
+  0.025 to 0.05 apart. Paper-studio's two paper whites are 0.025 apart; the
+  rest are above 0.03.
+- 0.03 is about one and a half just-noticeable steps in OKLab. It merges
+  every copy and, of the real images, only those two paper whites.
+- Folding at a 2%, 5% or 8% share changed no real image. 5% catches a 1 px
+  ring around a shape at 96 px.
+
+**What changed on those images.**
+- The line art goes from 6 swatches to 2, the risograph print from 6 to 4,
+  the studio product from 6 to 4, and paper-studio from 6 to 5.
+- Two preset thumbnails had seeds of one colour, so their hexes move by one
+  level (#0d0d0d to #0e0e0e) while the count stays the same.
+- Every other real image gives exactly what it gave before.
+
+**Tests** are in `frontend/tests/paletteMerge.test.ts`. Each image-level
+test fails on 7886a137's extract (checked against a copy of that file).
+- A two-colour logo with soft edges gives exactly 2, charcoal first.
+- The glow gives 2: #1e5adc, then #e8593c.
+- Six colours give 6, in stripes and in bands.
+- A grey gradient gives 6, with no near pair, and a colour gradient gives at
+  least 3.
+- A 2% green accent stays.
+- An opaque image with no near-identical swatches gives exactly 7886a137's
+  colours.
+- `mergeNearColors` adds the weights, averages the colour by weight, orders
+  by the merged weight, and splits at the threshold (written as a literal).
+- An edge mix folds at 4% and stays at 6%.
+
+**Mutants:** 11 frontend, all killed:
+- the threshold;
+- no merge;
+- weights not added;
+- no sort (killed once the merged-order test was added);
+- empty clusters kept;
+- seeds of one colour kept;
+- no fold;
+- the fold share;
+- the fold's between-the-ends check;
+- folding into the wrong end;
+- the merge average weighting.
+
+### Backend palettes: measured, not changed
+
+Same images, through the code the backend runs:
+- the moodboard analysis (palette plus accents);
+- Commons `measure_image`;
+- Cinema Color's `extract_palette`.
+
+For each, the minimum CIEDE2000 and OKLab distance between swatches, and
+the count of pairs under the frontend's 0.03:
+
+| image | moodboard | Commons | Cinema `extract_palette` (k=6) |
+|---|---|---|---|
+| mark, 74% clear | 2, min ΔE00 49.6 | same | 6: five identical #111413 and #e8593c |
+| sprite, 49% clear | 1 | 1 | 6 identical #3caa5a |
+| soft-edged disc | 1 | 1 | 6 identical #e8593c |
+| minimal-line-art | 5, min ΔE00 12.0 | same | 6, three pairs under 0.03 (#f1f1f1, #f6f6f6, #f9f9f9) |
+| risograph-print | 8, min ΔE00 11.5 | same | 6, none |
+| studio-product | 7, min ΔE00 6.7 | same | 6, none |
+| cinematic-noir | 7, min ΔE00 7.7 | same | 6, none |
+| golden-hour-portrait | 8, min ΔE00 8.9 | same | 6, none |
+
+- **The moodboard and Commons have no near-duplicates.** They already
+  merge swatches under ΔE00 5 (`commons/measure._merge`), so the closest
+  pair is ΔE00 6.7.
+- **Cinema Color's `extract_palette` repeats colours** (k=6, no merge). The
+  repeats are never shown: the swatches are only the transfer target. In
+  the transfer each swatch counts once, so a repeated colour counts as its
+  coverage (the mark's target is five parts charcoal to one orange).
+  Merging them would change every graded output from such a source,
+  unless the transfer learned to weigh each swatch by its coverage, which
+  is a bigger change for no visible gain. So my
+  recommendation is to leave all three as they are, and that is what I
+  did. If the swatches are ever shown, merge them with weights then.
+
+### Review 2, fixed (round 3, section 2)
+
+- **M1, QC Camera Geometry's reference.** `open_rgb` dropped alpha before
+  `seen_on` saw it. The reference now opens with `qc_common.open_seen`. A
+  handler test checks the measured reference and the Jev extra, and the
+  `open_rgb` mutant fails it. Out of scope, on purpose: an opaque reference
+  with an EXIF turn is now turned, as `vision_llm` already does.
+- **M2, the reader's decode.**
+  - A stored `hasTransparency: False` or `hasClearPixels: False` means not
+    clear, with no decode.
+  - `Target.clear` holds the answer, so the estimate and the read work it
+    out once.
+  - Both routes run `_reader_plan` in `asyncio.to_thread`, and `run()`
+    covers any target left over off the loop too.
+- **The outdated line is only true where it is (surfaces M1, L2).**
+  - A new additive `hasClearPixels` fact: any alpha under 16. It is stored
+    next to `hasTransparency`, from the same single decode, and cached by
+    path, mtime and size; a failure isn't cached.
+  - `predates_alpha` counts only images the saved analysis measured
+    (matched by id and url), and only when one has clear pixels. An
+    analysis with no image list counts every image.
+  - Images that are only semi-transparent get no line (GM r5 4).
+  - The startup pass stamps whichever fact is missing. An image already
+    stored as opaque gets `hasClearPixels: False` with no decode.
+  - The CLI dry run prints both lines when both hold.
+- **L1:** `_keep_brief_override` reads with `_read_for_write`. It's in the
+  never-written-to-disk test.
+- **L2, decodes off the loop and outside the lock.**
+  - `create`, `update_with_before` and `apply_edits` decode a write's new
+    files (`_warm_new_files`) before they take the board lock. Under the
+    lock, the stamp is only a stat.
+  - The three routes call the store in `asyncio.to_thread`.
+  - The startup pass reads each pre-v6 board, decodes outside the lock,
+    then re-reads and stamps under it.
+  - Tests check that no real decode happens on the loop or under any board
+    lock, and that the startup write holds the lock.
+- **L3:** each of the seven survivors now has a test that fails when it is
+  mutated: `seen_on` clear, the Cinema weights at `ALPHA_MIN`, the
+  weighted std, the all-clear guard, `_file_is_clear` on an unreadable
+  file, the startup lock, and the frontend's weighted `finalCounts`.
+- **L4:** `contact_sheet` (see the audit table above).
+- **L5:** a too-transparent Commons asset gets its own kind, `transparent`.
+  The worker writes it, and `classify_text` maps an older row's
+  `last_error` to it. Commons shows GM's line in the muted colour, with no
+  error heading and no Retry (retrying can't change it). That Retry choice
+  is mine; ask GM if it should stay. The grid badge still says "failed",
+  out of scope.
+- **Surfaces L3:** the Moodboard node puts its "analyzed it again" warning
+  first, and the preview shows every warning.
+- **N1:** MCP-SETUP documents both facts (on the HTTP board only, not in
+  MCP image views). `_area_pixels` now sums in uint64. That one has no test:
+  an overflow needs an image over about 65,800 px wide.
+
+### GM r5 (round 3, section 3), built verbatim
+
+1. Commons: "This image is too transparent to analyze." (neutral, muted).
+2. Extract from reference: "This image is too transparent to pull colors
+   from." for clear and faint images alike. A faint image now gives
+   `transparent`, not `other`.
+3. The brief line:
+   - "This brief uses the old colors. The next run sends it with the
+     updated ones." on a hand-written brief.
+   - None at strength 0. It comes back above 0, because it's worked out on
+     every read.
+   - It sits right after the brief's text and before its controls, in
+     Studio, `moodboard show` and MCP.
+4. No line for semi-transparent-only boards (above).
+5. The CLI estimate says "#N wasn’t read because it’s too transparent.",
+   one line per image. The reader trace says "#N is unsorted because it’s
+   too transparent." and the `why` is "It’s too transparent to add colors."
+
+### Mutants, round 3 section 2
+
+- 32 backend (B2–B33) and 7 frontend (F1–F7), all killed.
+- B21 (the rerun warning appended last) and B33 (only `hasTransparency`
+  popped on a new url) survived at first. Their tests now use a board with
+  a per-image warning, and a replacement file that can't be read.
+- The new backend tests were also run against 7886a137's code: 19 fail
+  there. The L3 guard tests pass there, as they should, since they pin
+  guards that already held.
+

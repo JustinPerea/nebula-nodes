@@ -324,6 +324,9 @@ class Target:
     index: int
     image: dict[str, Any]
     path: Path | None
+    # Whether its file is fully transparent: worked out once (clear_targets),
+    # off the event loop, and reused by the estimate and the read.
+    clear: bool | None = None
 
     @property
     def number(self) -> int:
@@ -363,14 +366,31 @@ def select_targets(board: Mapping[str, Any], image_ids: Sequence[str] | None = N
 
 # The trace line for a reference that is never sent: nothing in it is seen.
 CLEAR_LINE = "#{number} is too transparent to add colors."
-CLEAR_WHY = "It's too transparent to add colors."
+CLEAR_WHY = "It’s too transparent to add colors."
+CLEAR_RESULT_LINE = "#{number} is unsorted because it’s too transparent."
 
 
 def clear_targets(targets: Iterable[Target]) -> set[str]:
     """The ids of the targets whose file is fully transparent
     (cinema.color.is_clear). They are never sent to a reader, and the
-    estimate and the spend gate leave them out too."""
-    return {t.id for t in targets if t.path is not None and _path_is_clear(t.path)}
+    estimate and the spend gate leave them out too. Each target's answer is
+    worked out once and kept on it (``Target.clear``). An image the board
+    stores as opaque, or as having no clear pixel
+    (moodboard_analysis.HAS_TRANSPARENCY, HAS_CLEAR_PIXELS), is not clear,
+    with no decode; otherwise its file is decoded: call it off the loop."""
+    return {t.id for t in targets if target_is_clear(t)}
+
+
+def target_is_clear(target: Target) -> bool:
+    if target.clear is None:
+        target.clear = target.path is not None and _image_is_clear(target.image, target.path)
+    return target.clear
+
+
+def _image_is_clear(image: Mapping[str, Any], path: Path) -> bool:
+    if image.get("hasTransparency") is False or image.get("hasClearPixels") is False:
+        return False  # stored when it arrived: no pixel is clear
+    return _path_is_clear(path)
 
 
 def _path_is_clear(path: Path) -> bool:
@@ -1506,7 +1526,9 @@ class MoodboardRead:
     # -- phase 1 --------------------------------------------------------------------------
 
     async def run(self) -> dict[str, Any]:
-        clear = clear_targets(self.targets)
+        # Worked out off the loop already when the route planned the read;
+        # a target it didn't cover is decoded off the loop here.
+        clear = await asyncio.to_thread(clear_targets, self.targets)
         for target in self.targets:
             if target.path is None:
                 self._fail(target, "its file isn't on this computer")
@@ -1663,7 +1685,7 @@ class MoodboardRead:
                 self.trace.add("result", f"#{target.number} Unsorted: {placed['why']}", refs=[target],
                                phase="sorting", fit=placed["fit"])
             elif placed.get("why") == CLEAR_WHY:
-                self.trace.add("result", f"#{target.number} Unsorted: it's too transparent", refs=[target],
+                self.trace.add("result", CLEAR_RESULT_LINE.format(number=target.number), refs=[target],
                                phase="sorting")
             else:
                 self.trace.add("result", f"#{target.number} Unsorted: couldn't read it", refs=[target],

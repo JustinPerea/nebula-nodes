@@ -44,7 +44,7 @@ from urllib.parse import urlparse
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-from cinema.color import as_rgb, as_rgba, has_transparency, visible_pixels
+from cinema.color import ALPHA_MIN, as_rgb, as_rgba, has_transparency, visible_pixels
 from commons.colour import delta_e00, hex_to_lab, lab_to_hex
 from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MAX_DIM, MERGE_DELTA_E, measure_image
 from services.file_access import ProtectedPathError, require_allowed_path
@@ -169,10 +169,14 @@ TRANSPARENT_IMAGE_LINE = "#{number} is too transparent to add colors."
 # has transparency (``with_alpha_outdated``).
 ALPHA_OUTDATED = "These colors counted transparent areas as dark. Analyze again to update them."
 # The Moodboard node's warning when it analyzes such a board again (handlers/moodboard.py).
-# By "Brief sent to generators" while the saved colours are out of date
-# (GM r2 on #208): the brief shown is the saved one, and a run sends a new one.
+# Right after the brief's text while the saved colours are out of date
+# (GM r2 and r5 on #208): the brief shown is built from them, and a run
+# analyzes again and sends a new one. A hand-written brief keeps its words,
+# so a run sends it with the new colours (BRIEF_OUTDATED_OVERRIDE). At
+# strength 0 nothing is sent, so neither shows.
 BRIEF_OUTDATED = ("This brief uses the old colors. The next run analyzes the board again and sends an "
                   "updated one.")
+BRIEF_OUTDATED_OVERRIDE = "This brief uses the old colors. The next run sends it with the updated ones."
 ALPHA_RERUN_WARNING = ("The board’s saved colors counted transparent areas as dark, so this run analyzed it again. "
                        "Analyze it in Moodboard Studio to save the new analysis.")
 # The summary of a board with images none of which steers.
@@ -479,19 +483,37 @@ def colours_current(moodboard: dict[str, Any], analysis: Any) -> bool:
     return analysis_is_current(moodboard, analysis) and not predates_alpha(moodboard, analysis)
 
 
-# The image entry's stored fact: whether its file has a pixel less than
-# opaque. Nebula writes it (at intake, and once for older images by
-# ``stamp_transparency`` at startup, off the event loop); reads only look at
-# it, so listing or opening a board never decodes an image. Missing means
-# unknown, which never marks a board out of date.
+# The image entry's stored facts about its file: whether it has a pixel less
+# than opaque (``hasTransparency``), and whether it has a clear one, under
+# cinema.color.ALPHA_MIN (``hasClearPixels``). Nebula writes them (at intake,
+# and once for older images by ``stamp_transparency`` at startup, off the
+# event loop and outside the board lock); reads only look at them, so listing
+# or opening a board never decodes an image. Missing means unknown, which
+# never marks a board out of date.
 HAS_TRANSPARENCY = "hasTransparency"
+HAS_CLEAR_PIXELS = "hasClearPixels"
+ALPHA_FACTS = (HAS_TRANSPARENCY, HAS_CLEAR_PIXELS)
+
+
+def _measured_images(moodboard: dict[str, Any], analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    """The board's images that ``analysis`` measured: matched to its own
+    image list by id and url, so an image added since (which it never saw)
+    isn't counted. An analysis with no image list counts every image."""
+    images = [img for img in moodboard.get("images") or [] if isinstance(img, dict)]
+    seen = analysis.get("images")
+    if not isinstance(seen, list):
+        return images
+    measured = {(str(item.get("id") or ""), str(item.get("url") or "")) for item in seen if isinstance(item, dict)}
+    return [img for img in images if (str(img.get("id") or ""), str(img.get("url") or "")) in measured]
 
 
 def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
-    """Whether a saved analysis was made before alpha counted (version 6) on a
-    board with an image that has transparency, so its colours are wrong: a
-    transparent background was measured as a colour (near black). An older
-    analysis of a board with no transparency is right as it stands."""
+    """Whether a saved analysis was made before alpha counted (version 6) and
+    measured an image with clear pixels, so its colours are wrong: the black
+    those pixels hide was measured as a colour. A semi-transparent image
+    with no clear pixel was counted in its real colour (only weighted
+    fully), so it doesn't make the colours wrong; nor does an image the
+    analysis never measured (GM r5 on #208)."""
     if not isinstance(analysis, dict):
         return False
     try:
@@ -500,36 +522,79 @@ def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
         return False
     if version >= ALPHA_VERSION:
         return False
-    # Every image, set aside or not: the saved colours came from all of them.
-    return any(isinstance(img, dict) and img.get(HAS_TRANSPARENCY) is True
-               for img in moodboard.get("images") or [])
+    # Every measured image, set aside or not: the saved colours came from all of them.
+    return any(img.get(HAS_CLEAR_PIXELS) is True for img in _measured_images(moodboard, analysis))
+
+
+def file_alpha_facts(path: Path) -> dict[str, bool] | None:
+    """``{hasTransparency, hasClearPixels}`` for an image file, decoded once
+    per file version (cached by path, mtime and size, so a warm call only
+    stats it). None when it can't be read. A full decode: never on the event
+    loop, and best done before a board lock is taken (``warm_alpha_facts``)."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    try:
+        return dict(_file_alpha_facts(str(path), stat.st_mtime_ns, stat.st_size))
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
+        return None  # not cached: an unreadable file is tried again next time
+
+
+@functools.lru_cache(maxsize=1024)
+def _file_alpha_facts(path: str, mtime_ns: int, size: int) -> tuple[tuple[str, bool], ...]:
+    with Image.open(path) as pil:
+        if not has_transparency(pil):
+            return ((HAS_TRANSPARENCY, False), (HAS_CLEAR_PIXELS, False))
+        low = as_rgba(pil).getchannel("A").getextrema()[0]
+    return ((HAS_TRANSPARENCY, True), (HAS_CLEAR_PIXELS, bool(low < ALPHA_MIN)))
+
+
+def image_alpha_facts(url: str) -> dict[str, bool] | None:
+    """``file_alpha_facts`` for a board image's url; None when it isn't a
+    file on this computer or can't be read: unknown."""
+    path = resolve_moodboard_image_path(str(url or ""))
+    return file_alpha_facts(path) if path is not None else None
 
 
 def image_has_transparency(url: str) -> bool | None:
-    """Whether a board image's file has a pixel less than opaque, read from
-    the file (a full decode, so never on the event loop). None when it isn't
-    a file on this computer or can't be read: unknown, not transparent."""
-    path = resolve_moodboard_image_path(str(url or ""))
-    if path is None:
-        return None
-    try:
-        with Image.open(path) as pil:
-            return has_transparency(pil)
-    except (OSError, UnidentifiedImageError, Image.DecompressionBombError, ValueError):
-        return None
+    """Whether a board image's file has a pixel less than opaque (None:
+    unknown). Decodes: never on the event loop."""
+    facts = image_alpha_facts(url)
+    return facts[HAS_TRANSPARENCY] if facts is not None else None
+
+
+def _lacks_alpha_facts(img: Any) -> bool:
+    return isinstance(img, dict) and any(key not in img for key in ALPHA_FACTS)
+
+
+def warm_alpha_facts(images: Any) -> None:
+    """Decode, ahead of a write, the files of the entries in ``images`` that
+    ``stamp_transparency`` would read, so it then only stats them: called
+    before the board lock is taken, so a slow decode never holds it."""
+    for img in images if isinstance(images, list) else []:
+        if _lacks_alpha_facts(img) and img.get(HAS_TRANSPARENCY) is not False and img.get("url"):
+            image_alpha_facts(str(img["url"]))
 
 
 def stamp_transparency(images: Any) -> bool:
-    """Give each image entry in ``images`` without one its stored
-    ``hasTransparency``, read from its file; an unknown file stays without
-    it. Whether any entry changed. Decodes images: call it off the loop."""
+    """Give each image entry in ``images`` the stored facts it lacks
+    (``hasTransparency``, ``hasClearPixels``), read from its file; an entry
+    already known to be opaque gets ``hasClearPixels`` False with no decode,
+    and an unknown file stays without them. Whether any entry changed.
+    Decodes images: call it off the loop (``warm_alpha_facts`` first, outside
+    the lock)."""
     changed = False
     for img in images if isinstance(images, list) else []:
-        if not isinstance(img, dict) or HAS_TRANSPARENCY in img:
+        if not _lacks_alpha_facts(img):
             continue
-        found = image_has_transparency(str(img.get("url") or ""))
+        if img.get(HAS_TRANSPARENCY) is False:
+            img[HAS_CLEAR_PIXELS] = False
+            changed = True
+            continue
+        found = image_alpha_facts(str(img.get("url") or ""))
         if found is not None:
-            img[HAS_TRANSPARENCY] = found
+            img.update(found)
             changed = True
     return changed
 

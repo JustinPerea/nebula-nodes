@@ -62,11 +62,13 @@ async def handle_moodboard_node(
         # It reads every image file, so it runs off the event loop.
         analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
         if stale:
+            # First, ahead of the per-image lines: it says why this run's
+            # colours differ from the saved ones (the node shows it first).
             analysis["warnings"] = [
-                *analysis.get("warnings", []),
                 ALPHA_RERUN_WARNING if before_alpha else
                 "The board changed after its saved analysis, so this run analyzed it again. "
                 "Analyze it in Moodboard Studio to save the new analysis.",
+                *analysis.get("warnings", []),
             ]
 
     # The node's own say on the board's notes ("board", the default, follows

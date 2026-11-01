@@ -18855,8 +18855,10 @@ class MoodboardImageModel(BaseModel):
     placements: list[MoodboardPlacementModel] | None = None
     # Whether its file has transparency: Nebula stores it
     # (services/moodboard_analysis.HAS_TRANSPARENCY). A client that sends the
-    # board's images back may echo it; what it sends is ignored.
+    # board's images back may echo it; what it sends is ignored. The same
+    # for hasClearPixels (services/moodboard_analysis.HAS_CLEAR_PIXELS).
     hasTransparency: bool | None = None
+    hasClearPixels: bool | None = None
 
 
 class MoodboardPinnedColorsModel(BaseModel):
@@ -19326,7 +19328,10 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
-        moodboard = store.create(
+        # Off the event loop: a new image's file is decoded to store its
+        # transparency (services/moodboard_store._warm_new_files).
+        moodboard = await asyncio.to_thread(
+            store.create,
             name=body.name,
             # Only what was sent: an image's weight left out comes from its
             # placements, if it asks for any.
@@ -19465,8 +19470,8 @@ async def _update_moodboard(moodboard_id: str, body: MoodboardUpdate, *, proposa
     from services.moodboard_edits import diff
     from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected, VersionConflict
     try:
-        before, moodboard = store.update_with_before(moodboard_id, by=_moodboard_author(),
-                                                     base_version=base_version, **updates)
+        before, moodboard = await asyncio.to_thread(  # off the loop: new files are decoded
+            store.update_with_before, moodboard_id, by=_moodboard_author(), base_version=base_version, **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
@@ -19505,8 +19510,8 @@ async def edit_moodboard(moodboard_id: str, body: MoodboardEditsBody) -> dict:
     base_version = _base_version(body.baseVersion)
     store = _moodboard_store()
     try:
-        before, board, result = store.apply_edits(moodboard_id, body.ops, by=_moodboard_author(),
-                                                  base_version=base_version)
+        before, board, result = await asyncio.to_thread(  # off the loop: new files are decoded
+            store.apply_edits, moodboard_id, body.ops, by=_moodboard_author(), base_version=base_version)
     except KeyError:
         return _asset_not_found("moodboard", moodboard_id)
     except VersionConflict as exc:
@@ -19710,7 +19715,9 @@ async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest)
     """What reading these references would cost (C10, Q16), sending nothing:
     ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
     them. ``available`` says whether the reader's key is set."""
-    _, entry, _, _, estimate = _reader_plan(moodboard_id, body)
+    # Off the event loop: which references are too transparent to send can
+    # take a decode (services/moodboard_reader.clear_targets).
+    _, entry, _, _, estimate = await asyncio.to_thread(_reader_plan, moodboard_id, body)
     keys = node_readiness.configured_keys(load_settings())
     return {**estimate, "available": str(entry["keyName"]) in keys}
 
@@ -19734,7 +19741,9 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
         raise HTTPException(status_code=422, detail=(
             "Reading references can only be a dry run in this version of Nebula: send dryRun=1. "
             "It reads and prices them and says how Analyze would sort them, and moves nothing."))
-    board, entry, source, targets, estimate = _reader_plan(moodboard_id, body)
+    # Off the event loop; it works out once which targets are clear, and the
+    # read reuses that (moodboard_reader.Target.clear).
+    board, entry, source, targets, estimate = await asyncio.to_thread(_reader_plan, moodboard_id, body)
     if not estimate["count"]:
         raise HTTPException(status_code=422, detail=(
             "Nothing to read: none of these references is a file on this computer."

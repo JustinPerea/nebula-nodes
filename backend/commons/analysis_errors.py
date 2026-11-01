@@ -5,6 +5,8 @@ over a reason mapped from last_error's kind:
   - network, timeout or provider 5xx -> "The analysis service didn't respond."  (UNAVAILABLE)
   - the model refused or couldn't read the image -> "The analyzer couldn't read this image."  (UNREADABLE)
   - anything else -> "Something went wrong during analysis."  (OTHER)
+  - no pixel of it is seen, so it was never sent -> "This image is too
+    transparent to analyze."  (TRANSPARENT; neutral, not an error: GM r5 on #208)
 
 The kind is decided where the analysis fails (worker.py, reader.py,
 intake.py's video probe) and stored next to last_error in
@@ -21,7 +23,8 @@ import re
 UNAVAILABLE = "unavailable"
 UNREADABLE = "unreadable"
 OTHER = "other"
-KINDS = (UNAVAILABLE, UNREADABLE, OTHER)
+TRANSPARENT = "transparent"
+KINDS = (UNAVAILABLE, UNREADABLE, OTHER, TRANSPARENT)
 
 # A provider's answer that says it is down, overloaded or slow, or a dropped
 # connection, as the claude CLI writes it into its result ("API Error: 529
@@ -67,6 +70,7 @@ _TEXT_KINDS = (
     ("no result event", UNAVAILABLE),
     ("cannot load image", UNREADABLE),
     ("video probe failed", UNREADABLE),
+    ("too transparent to add colors", TRANSPARENT),  # commons/worker.CLEAR_ERROR
 )
 
 

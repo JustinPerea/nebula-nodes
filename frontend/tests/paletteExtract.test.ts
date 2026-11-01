@@ -18,9 +18,9 @@ describe('paletteFromPixels', () => {
     expect(paletteFromPixels(pixels([10, 20, 30, 0], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'transparent' });
   });
 
-  it("doesn't call a faint image fully transparent", () => {
+  it('gives a faint image the same reason as a clear one (GM r5 on #208)', () => {
     // Every pixel under the visibility cut (alpha 16, as the backend), but not all of them clear.
-    expect(paletteFromPixels(pixels([10, 20, 30, 15], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'other' });
+    expect(paletteFromPixels(pixels([10, 20, 30, 15], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'transparent' });
   });
 
   it('has no reason for an empty image', () => {
@@ -53,7 +53,7 @@ describe('extractPaletteFromImage', () => {
 describe('paletteNotice', () => {
   it('puts the reason under the heading for the two known cases', () => {
     expect(paletteNotice('a.png', 'decode')).toBe("Couldn't find colors in “a.png”.\nNebula can't read this image. Try a PNG or JPEG.");
-    expect(paletteNotice('a.png', 'transparent')).toBe("Couldn't find colors in “a.png”.\nThe image is fully transparent.");
+    expect(paletteNotice('a.png', 'transparent')).toBe("Couldn't find colors in “a.png”.\nThis image is too transparent to pull colors from.");
   });
 
   it('gives the heading alone otherwise', () => {

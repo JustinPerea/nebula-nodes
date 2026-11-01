@@ -119,7 +119,7 @@ class AnalysisWorker:
             # Fully transparent: nothing to read, so it is never sent and no
             # call is counted. It fails for good (no retries: it won't change).
             await asyncio.to_thread(records.write_analysis_failed, store, asset["id"], error=CLEAR_ERROR,
-                                    raw_output=None, fewshot_ids=[], error_kind=analysis_errors.UNREADABLE,
+                                    raw_output=None, fewshot_ids=[], error_kind=analysis_errors.TRANSPARENT,
                                     max_attempts=0, **common)
             self.state = "running"
             return "failed"
