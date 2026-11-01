@@ -106,49 +106,14 @@ body.app-slava-restraint .editor-view__empty-message {
   color: var(--sr-ink-light);
 }
 /* The offline banner is a row of every studio's layout right under its top
-   header (GM, PR #198 r2; components/StudioOfflineRow.tsx): each grid names
-   it `offline`, a track that is 0 tall until the row opens, so it pushes the
-   content down instead of covering it. The video editor is a flex column,
-   where the row simply sits after the header. */
-body.app-slava-restraint .cinema-studio-view.cinema-studio-view {
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas: "toolbar" "offline" "body";
-}
-/* Composition's toolbar is a row of its own under the offline row (GM, PR
-   #198 r3 a: the banner sits right under the top header, above the
-   toolbar, as on every other screen). */
-body.app-slava-restraint .remotion-editor-view.remotion-editor-view {
-  grid-template-rows: auto auto auto minmax(0, 1fr) 320px;
-  grid-template-areas: "header header" "offline offline" "toolbar toolbar" "player panel" "timeline panel";
-}
-body.app-slava-restraint .remotion-editor-view__toolbar {
-  grid-area: toolbar;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 16px;
-  min-width: 0;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--sr-edge-strong);
-  background: var(--sr-glass);
-}
-body.app-slava-restraint .remotion-editor-view__empty-state.remotion-editor-view__empty-state { grid-row: 4 / -1; }
-body.app-slava-restraint .commons-view.commons-view {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
-  grid-template-areas: "toolbar toolbar toolbar" "offline offline offline" "messages messages messages"
-    "candidates candidates candidates" "filters main detail";
-}
-body.app-slava-restraint .character-studio-view.character-studio-view,
-body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view {
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas: "toolbar toolbar" "offline offline" "rail main";
-}
-body.app-slava-restraint .create-view.create-view {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  grid-template-areas: "header" "offline" "stage" "composer";
-}
-/* The video editor is a flex column with a 10px gap (16px when empty): the
+   header (GM, PR #198 r2; components/StudioOfflineRow.tsx): a track that is
+   0 tall until the row opens, so it pushes the content down instead of
+   covering it. Each studio's grid, and each variant's (Moodboard Studio's
+   Board view), names its `offline` row in that studio's own stylesheet, the
+   one place its template is written (fix/moodboard-board-layout: a generic
+   template here overrode the Board view's, and its canvas and panel fell into
+   implicit tracks; tests/studioGridAreas.test.ts).
+   The video editor is a flex column with a 10px gap (16px when empty): the
    row cancels the gap above it, so it sits right under the header, and,
    while open, the one below it, so the content starts 8px under the line,
    both on the same spring as the row. Closed, it adds nothing. */
@@ -162,21 +127,6 @@ body.app-slava-restraint .editor-view--empty > .studio-offline-row { margin-top:
 body.app-slava-restraint .editor-view--empty > .studio-offline-row[data-open='true'] { margin-bottom: -16px; }
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .editor-view > .studio-offline-row { transition: none; }
-}
-body.app-slava-restraint .create-view > .create-view__topbar { grid-area: header; }
-body.app-slava-restraint .create-view > .create-view__stage { grid-area: stage; }
-body.app-slava-restraint .create-view > .create-view__composer-area { grid-area: composer; }
-body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar,
-body.app-slava-restraint .remotion-editor-view__toolbar .remotion-editor-toolbar__group {
-  flex-wrap: wrap;
-  min-width: 0;
-  max-width: 100%;
-}
-@media (max-width: 760px) {
-  body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view {
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    grid-template-areas: "toolbar" "offline" "rail" "main";
-  }
 }
 @media (max-width: 700px) {
   body.app-slava-restraint .workspace-header__actions { justify-content: flex-start; }
