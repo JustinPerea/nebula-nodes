@@ -1,4 +1,9 @@
 /*
+ * PR #204 round 18 (GM r28 1): a Commons load's line that got no answer ("Nebula couldn’t load
+ * the references because it didn’t respond. Try again.") destroys nothing too, so it takes this
+ * same style, the token swap below that a because line's own element takes: CommonsErrorLine
+ * marks its line `data-line-neutral`.
+ *
  * GM r14 (4), PR #204 round 9: a "because" line ("Nebula couldn’t … because this tab isn’t
  * connected as you. …") destroys nothing, so it never takes the warning colour, on any surface.
  * One shared style, not a per-screen fix: <LineText> (components/LineText.tsx) marks the element
@@ -16,7 +21,8 @@
 [data-line-because],
 :has(> [data-line-because='own']),
 :has(> .failure-lines > [data-line-because='own']),
-[data-line-box]:has([data-line-because]) {
+[data-line-box]:has([data-line-because]),
+[data-line-neutral] {
   --line-warning: var(--sr-ink-light);
   --line-warning-soft: var(--sr-surface-control);
   --line-warning-edge: var(--sr-edge-strong);
@@ -49,7 +55,8 @@
  * text under Details and code inside keep it.
  */
 [data-line-because],
-[data-line-box]:has([data-line-because]) {
+[data-line-box]:has([data-line-because]),
+[data-line-neutral] {
   font-family: var(--sr-ui) !important;
 }
 [data-line-box]:has([data-line-because]) :is(code, kbd, samp, pre, .error-details__raw) {

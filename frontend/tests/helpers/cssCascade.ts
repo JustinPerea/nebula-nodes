@@ -106,6 +106,9 @@ function specificityOf(selector: selectorParser.Selector): [number, number, numb
 }
 
 /** One selector's specificity, as the cascade here counts it (tests/studioGridAreas.test.ts checks it). */
+/** Attributes that mark a line, not a state a control takes (see `loose` below). */
+const LINE_MARKS = new Set(['data-line-because', 'data-line-neutral']);
+
 export function selectorSpecificity(selector: string): [number, number, number] {
   let out: [number, number, number] = [0, 0, 0];
   selectorParser((root) => { out = specificityOf(root.first); }).processSync(selector);
@@ -207,7 +210,8 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
           // PR #204 round 11: `data-line-because` marks a line's words (components/LineText), not
           // a state a control takes, so a rule for it reaches only an element that carries it:
           // the because sheet's sans face (styles/becauseLine.css) isn't a pin edge's own font.
-          root.walkAttributes((attribute) => { if (attribute.attribute !== 'data-line-because') attribute.remove(); });
+          // Round 18 (GM r28 1): `data-line-neutral` marks a Commons load line's box the same way.
+          root.walkAttributes((attribute) => { if (!LINE_MARKS.has(attribute.attribute)) attribute.remove(); });
           root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
           // A compound left empty ("> [data-x]") matches anything: "*".
           root.each((sel) => {

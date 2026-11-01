@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
-import { LineText } from '../LineText';
+import { CommonsErrorLine } from './CommonsErrorLine';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
@@ -45,7 +45,8 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
   const current = media?.path === path ? media : undefined;
   // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
   const shownError = useOfflineFirstBecause(error);
-  if (error && errorPath === path) return shownError ? <span role="alert"><LineText text={shownError} /></span> : null;
+  // Round 18 (GM r28 1): its load's line in the one Commons line style (a span: it sits in a tile).
+  if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} /> : null;
   return video ? <video {...props} src={current?.url} /> :
     <img {...props} src={current?.url} alt={alt} loading={loading} />;
 }

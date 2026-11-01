@@ -201,7 +201,17 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
   if (!status) {
     // PR #204 round 11 (GM r18 d): "Connecting…" only while a read of the status is on its way
     // (the first one, or right after the promote), never once it was refused: the banner says why.
-    if (!connecting) return null;
+    // Round 18 (GM r28 3): the status keeps its place, so the header never moves when the tab
+    // isn't connected: the slot the default status takes ("Stopped" and Start), held empty. It
+    // says nothing (nothing was read) and takes no focus.
+    if (!connecting) {
+      return (
+        <span className="commons-status commons-status--stopped commons-status--held" aria-hidden="true" data-status-held="">
+          <StatusText text="Stopped" title="" />
+          <span className="commons-button commons-button--primary">Start</span>
+        </span>
+      );
+    }
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
   if (status.evaluation_waiting) {
@@ -735,9 +745,12 @@ function CommonsViewBody({ view }: {
           onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
-          <select value={target} onChange={(event) => void chooseTarget(event.target.value)}>
+          <select value={target} onChange={(event) => void chooseTarget(event.target.value)}
+            {...(addLock.locked && collections.length === 0 ? addLine.control() : {})}>
             {/* Round 15 (GM r24 b): "No collections" only when the collections answered with none. */}
-            {collections.length === 0 && answered.collections && <option value="">No collections</option>}
+            {/* Round 18 (GM r28 3): and on a tab that isn't connected, in the one disabled look (the
+                person lock's, below), so the select never shows empty. */}
+            {collections.length === 0 && (answered.collections || addLock.locked) && <option value="">No collections</option>}
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             {/* Round 11: locked with Add (its line covers it); picking a target stays live. */}
             <option value={NEW_COLLECTION} disabled={addLock.locked}>New collection…</option>

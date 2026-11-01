@@ -136,6 +136,13 @@ export function noResponseBecause(what: string): string {
   return `Nebula couldn’t ${what} because it didn’t respond. Try again.`;
 }
 
+/** PR #204 round 18 (GM r28 1): a line in noResponseBecause's form. Only a load says it (the
+ * Commons page and its panes), and a load that failed destroys nothing, so it is drawn neutral,
+ * as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
+export function isNoResponseLine(text: string): boolean {
+  return /^Nebula couldn’t .+ because it didn’t respond\. Try again\.$/.test(text);
+}
+
 /**
  * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
  * retries on the promote).

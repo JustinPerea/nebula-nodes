@@ -212,7 +212,8 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position, loadEpoch, line]);
   return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-    {shownError ? <p role="alert"><LineText text={shownError} /></p> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
+    {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
+    {shownError ? <CommonsErrorLine line={shownError} /> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
 }

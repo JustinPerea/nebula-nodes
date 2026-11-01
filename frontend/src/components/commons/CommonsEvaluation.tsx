@@ -299,7 +299,8 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
   return <>
     <div className="evaluation-image">
       <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
-      {shownImageError && <p role="alert"><LineText text={shownImageError} /></p>}
+      {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
+      {shownImageError && <CommonsErrorLine line={shownImageError} />}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
         <canvas ref={canvas} width={item.width} height={item.height} tabIndex={0}

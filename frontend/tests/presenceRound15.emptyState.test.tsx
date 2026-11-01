@@ -192,8 +192,33 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
     expect(commonsLines()).toHaveLength(1);
     expect(commonsLines()[0]).toMatch(/^Nebula couldn’t load the Commons because this tab isn’t connected as you\./);
     expect(seen).not.toContain(NO_MATCHES);
-    expect(noCollectionsOption()).toBeNull();
+    // PR #204 round 18 (GM r28 3): the Add to select isn't left empty: "No collections", in the
+    // one disabled look (the person lock's), so the header never looks broken.
+    const select = screen.getByRole('combobox', { name: 'Add to' }) as HTMLSelectElement;
+    expect(noCollectionsOption()).not.toBeNull();
+    expect(select.selectedOptions[0]?.textContent).toBe('No collections');
+    expect(select).toHaveAttribute('data-person-lock', 'add references');
+    expect(select).toHaveAttribute('aria-disabled', 'true');
     expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it('the header keeps the status\'s place, held empty (GM r28 3)', async () => {
+    transport.token = TOKEN;
+    act(() => notePersonPromoted());
+    render(<CommonsView />);
+    await tick(1000);
+    const connected = document.querySelector('.commons-status')!;
+    expect(connected.textContent).toContain('Stopped');
+    expect(connected.hasAttribute('data-status-held')).toBe(false);
+    act(() => reportPersonRequired());
+    await tick(1000);
+    const held = document.querySelector('.commons-status')!;
+    expect(held.hasAttribute('data-status-held')).toBe(true);
+    expect(held.getAttribute('aria-hidden')).toBe('true');
+    // The same words and control as the default status, so it takes the same room; no button.
+    expect(held.textContent).toBe('StoppedStart');
+    expect(held.querySelector('button')).toBeNull();
+    expect(held.classList.contains('commons-status--stopped')).toBe(true);
   });
 });
 

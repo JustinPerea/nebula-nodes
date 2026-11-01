@@ -4,6 +4,7 @@ import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
 import { cappedPopoverOpen, setWaitingNotices, subscribeNoticeWaiting } from '../lib/noticeWaiting';
+import { watchSidePanels } from '../lib/noticeSides';
 import '../styles/noticeRegion.css';
 
 /** What a screen shows in the region besides the toasts. */
@@ -57,6 +58,13 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
     const region = regionRef.current;
     const stopKeeping = region ? keepNoticeFocus(region) : () => {};
     return () => { window.removeEventListener('keydown', noticeKeys, true); stopKeeping(); };
+  }, []);
+
+  // PR #204 round 18 (GM r28 2): centred above the bar, clear of any open side panel
+  // (lib/noticeSides.ts), measured only while a notice shows.
+  useEffect(() => {
+    const region = regionRef.current;
+    return region ? watchSidePanels(region) : undefined;
   }, []);
 
   useEffect(() => {

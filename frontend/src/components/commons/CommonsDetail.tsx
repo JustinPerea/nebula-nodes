@@ -18,7 +18,6 @@ import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection'
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
-import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
 
 interface Props {
@@ -179,8 +178,8 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   // PR #204 round 9: a not-connected line clears on the promote, and the reference loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.detail-load', loadAgain);
-  // Offline comes first (GM r23 3): the not-loaded state's because line hides while offline.
-  const shownError = useOfflineFirstBecause(error);
+  // Offline comes first (GM r23 3): the not-loaded state's line goes through CommonsErrorLine,
+  // which hides a because line while offline.
 
   const load = useCallback(async () => {
     try {
@@ -246,7 +245,11 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <div className="commons-detail__bar">
           <button type="button" className="commons-button" onClick={onClose}>Close</button>
         </div>
-        <p className="commons-empty"><LineText text={shownError ?? (error ? '' : 'Loading…')} /></p>
+        {/* Round 18 (GM r28 1): a failed load is a Commons line, in the one style every Commons
+            load line takes (CommonsErrorLine: neutral when it got no answer or for a because
+            line). Hidden offline when it is a because line, as before; "Loading…" until then. */}
+        {error ? <CommonsErrorLine line={error} />
+          : <p className="commons-empty"><LineText text="Loading…" /></p>}
       </aside>
     );
   }

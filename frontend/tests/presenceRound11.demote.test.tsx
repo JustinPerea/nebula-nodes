@@ -148,7 +148,11 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
     const select = screen.getByRole('combobox', { name: 'Add to' });
     const option = [...select.querySelectorAll('option')].find((o) => o.textContent === 'New collection…')!;
     expect(option.disabled).toBe(true);
-    expect(select).not.toHaveAttribute('aria-disabled');
+    // PR #204 round 18 (GM r28 3): with nothing to pick (a held tab reads no collections) the
+    // select shows "No collections" in the one disabled look, the person lock's, with Add's line.
+    expect(select).toHaveAttribute('aria-disabled', 'true');
+    expect(select).toHaveAttribute('data-person-lock', 'add references');
+    expect((select as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('No collections');
     fireEvent.change(select, { target: { value: '__new__' } });
     await flush();
     expect(screen.queryByRole('textbox', { name: /New collection name/ })).toBeNull();
@@ -156,6 +160,7 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
     act(() => session.notePersonPromoted());
     await flush();
     expect(option.disabled).toBe(false);
+    expect(select).not.toHaveAttribute('aria-disabled');
     fireEvent.change(select, { target: { value: '__new__' } });
     await flush();
     expect(screen.getByRole('textbox', { name: /New collection name/ })).toBeTruthy();

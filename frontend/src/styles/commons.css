@@ -250,6 +250,12 @@ body.app-slava-restraint .commons-status > .commons-button {
   flex: none;
 }
 
+/* PR #204 round 18 (GM r28 3): a tab that isn't connected holds the status's place (the default
+ * "Stopped" and Start), drawn as nothing, so the tabs and Add never move. */
+body.app-slava-restraint .commons-status--held {
+  visibility: hidden;
+}
+
 body.app-slava-restraint .commons-status--stopped,
 body.app-slava-restraint .commons-status--cap_reached,
 body.app-slava-restraint .commons-status--paused_load,

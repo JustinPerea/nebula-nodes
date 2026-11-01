@@ -216,6 +216,8 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
 
   it('the region reads it', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
-    expect(css).toMatch(/right:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\)\)/);
+    // Round 18 (GM r28 2): the right inset is the larger of the gutter, the log and a right side panel.
+    expect(css).toMatch(/--notice-r:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\), var\(--notice-right-clearance, 0px\)\)/);
+    expect(css).toMatch(/\bright:\s*max\(var\(--notice-r\),/);
   });
 });

@@ -2419,3 +2419,72 @@ One thing left as it was: offline with the tab connected, OK still sends, create
     "New collection…" is disabled, so the prompt can't open there (review 13 said the same);
     the demote case covers it.
   - Shots at 1440 in the scratchpad (`fu3r/shots`), md5 `uniq -d` empty, each one opened.
+
+## Round 18 (GM r28; base 7377ccf4)
+
+GM's three fixes; with them the PR is signed off on design.
+
+### 1. "Nebula couldn’t load …" lines are neutral
+- Only a load says a line in `noResponseBecause`'s form ("Nebula couldn’t X because it didn’t
+  respond. Try again."). `errorCopy.isNoResponseLine` reads that form; `CommonsErrorLine` marks
+  such a line's box `data-line-neutral` (never for a person-only reason line).
+- `styles/becauseLine.css` adds `[data-line-neutral]` to the token swap and the sans face, not
+  to the box rule: the because line's own element resolves its rule to `currentColor`
+  (ink-light), and the box rule would have made it edge-strong. Same look, checked by resolving
+  both through the app's sheets.
+- One component for every such line: the reference detail drew its failure as bare
+  `.commons-empty` text, and the review and labeling reference images and `CommonsMedia` as bare
+  LineText or text. All now go through `CommonsErrorLine` (`as="span"` in a media tile).
+- A failure with a reason the backend wrote ("Couldn’t load Agent review. The review set is
+  closed.") keeps the error look; it isn't in the no-answer form.
+- `tests/helpers/cssCascade.ts`: `data-line-neutral` joins `data-line-because` as a line mark,
+  not a control state, in the loose cascade. Without it the ratchet's pin-edge corpus read the
+  because sheet's sans face as the edge's own font.
+
+### 2. Toasts keep clear of side panels
+- The fix is in the notice region (every toast), not the pin toast. `lib/noticeSides.ts`
+  measures the open side panels (dock drawers, Chat, the Inspector panel, Agent notes) where they
+  reach the toast band, skips a panel on its way out, and writes `--notice-left-clearance` /
+  `--notice-right-clearance` on the region. It watches (MutationObserver, ResizeObserver,
+  resize, animation and transition ends, one rAF) only while a slot holds a notice; the first
+  measure lands without a transition.
+- `styles/noticeRegion.css`: the region stays symmetric about the window centre while a 420 px
+  slot (`--notice-centred-min-w`) fits between the panels, then narrows into the free space. At
+  first the threshold was the 560 px cap, which moved the toast 38 px off centre with Settings
+  open although it fitted.
+- `pr198Fix7Ui`'s regex pinned the old `right:`; it now pins `--notice-r` and the new `right`.
+
+### 3. The Commons header holds its place
+- Not connected, the status keeps an empty slot the size of "Stopped / Start"
+  (`commons-status--held`, `visibility: hidden`, `aria-hidden`, nothing focusable). Nothing was
+  read, so a visible "Stopped" would be a claim.
+- The "Add to" select shows "No collections" when held and is in the person-lock disabled look
+  (`addLine.control()`). `presenceRound11.demote` and `presenceRound15.emptyState` asserted the
+  earlier rules and are updated.
+
+### Gates
+- tsc and eslint clean; check:inline-styles and check:slava-css-scope pass.
+- vitest on two workers, an explicit zsh array of 312 files (every test that reads `src/` or
+  `styles/` from disk, all presence rounds, the ratchets, Commons, focus, notice, settings, pin,
+  offline, wsClient, personSession, errorCopy and failureLines tests, and every test naming a file
+  this round changed). Run 1: 310 of 312 (the pin-edge corpus and the region regex above). Final
+  tree: 312 of 312, 4,145 of 4,145, Errors 0.
+- `npm run build` with the budget check: 458,384 B raw / 141,241 B gzip (from 456,457; the
+  watcher is in the entry with the region).
+- Mutations (rsync copy): 21 run, 21 killed. Lines: the sheet selector, never marked, the form
+  never read, every failure marked, the detail, the review image and the media back to bare text
+  (the media one first survived; `presenceRound18.mediaLine` added). Region: left as before,
+  right not symmetric, left panels ignored, the band check, exiting panels counted, never
+  watching, the region not running it, the 560 threshold, the log ignored. Header: the slot
+  dropped, the slot visible, no "No collections", the select unlocked, a real Start in the slot.
+- Live (8951/5951, backend only through `harness/serve_isolated.py` with the person token on
+  stdin; canaries first; `blocked.log` holds only canary lines): 25 of 25.
+  - Lines: Agent review, Blind labeling, Commons settings and the page line at
+    rgba(255,255,255,0.55) ink and rule, the because line's look.
+  - Headers: tab x the same connected, not connected and never connected (All 399.7, Inbox
+    437.8, Agent review 493, Blind labeling 591.3, Settings 691.1); the select at 817.7 and Add
+    at 956.7 in both.
+  - Toast at 1440: 510..930, y 772..820, centre 720 over the bar's 720 with nothing open, Nodes
+    (panel 70..416; region 424..1016), Assets, History, Settings (panel 70..470; region
+    478..962), Chat (1050..1424; region 399..1041) and the Agent log open. No overlap in any.
+  - Shots at 1440 in the scratchpad (`fu3r/shots-r18`), md5 `uniq -d` empty, opened.

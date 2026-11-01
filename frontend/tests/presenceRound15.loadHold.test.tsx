@@ -7,6 +7,7 @@
  */
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lineLook, NEUTRAL } from './helpers/lineLook';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../src/lib/backend', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/backend')>(), apiFetch: transport.fetch }));
@@ -101,6 +102,34 @@ describe('a connected tab whose loads fail for one reason (GM r25 1)', () => {
     await tick(50);
     expect(lines()).toEqual([PAGE]);
     expect(frames).toEqual([[PAGE]]); // one line, one change: no load's own line before it
+  });
+
+  // Round 18 (GM r28 1): the page's lines, and each load's own, are neutral: nothing was destroyed.
+  it('the page line and each load\'s own line are neutral, in the because line\'s look', async () => {
+    document.body.className = 'app-slava-restraint';
+    try {
+      gates = { status: gate(true), collections: gate(false), search: gate(false) };
+      render(<CommonsView />);
+      gates.collections.release(); gates.search.release();
+      await tick(400);
+      gates.status.release();
+      await tick(100);
+      expect(lines()).toEqual([STATUS]);
+      const own = document.querySelector('[data-commons-line]')!;
+      expect(own.hasAttribute('data-line-neutral')).toBe(true);
+      expect(lineLook(own)).toEqual(NEUTRAL);
+      cleanup();
+      gates = { status: gate(true), collections: gate(true), search: gate(true) };
+      render(<CommonsView />);
+      gates.status.release(); gates.collections.release(); gates.search.release();
+      await tick(500);
+      expect(lines()).toEqual([PAGE]);
+      const page = document.querySelector('[data-commons-line]')!;
+      expect(page.hasAttribute('data-line-neutral')).toBe(true);
+      expect(lineLook(page)).toEqual(NEUTRAL);
+    } finally {
+      document.body.className = '';
+    }
   });
 
   it('slow path: past the cap the first load\'s line shows alone, then the page line replaces it', async () => {

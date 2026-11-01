@@ -45,12 +45,22 @@
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
   position: fixed;
-  left: var(--page-gutter, 16px);
   /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
      Agent log on the right edge takes its width out of the region
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
-     covers it; the stack centres in what is left. */
-  right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
+     covers it. PR #204 round 18 (GM r28 2): so does any open side panel
+     that reaches the notices' line (lib/noticeSides.ts writes
+     --notice-left-clearance and --notice-right-clearance), and the stack is
+     centred above the bar (the window's centre), not in what is left: each
+     side takes the larger of the two clearances, so the region stays
+     centred and narrows. Only when that would leave less than
+     --notice-centred-min-w does it give up the centre, as little as it must:
+     the side with the smaller clearance comes back toward its own. */
+  --notice-centred-min-w: 420px;
+  --notice-l: max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px));
+  --notice-r: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px), var(--notice-right-clearance, 0px));
+  left: max(var(--notice-l), min(var(--notice-r), calc(100vw - var(--notice-r) - var(--notice-centred-min-w))));
+  right: max(var(--notice-r), min(var(--notice-l), calc(100vw - var(--notice-l) - var(--notice-centred-min-w))));
   bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
   z-index: var(--sr-layer-notice, 20010);
   display: flex;
@@ -58,7 +68,7 @@
   pointer-events: none;
   /* Follows the bar when it grows (its Canvas actions panel opens) on the
      undo notice's spring. */
-  transition: bottom 420ms var(--agent-log-spring);
+  transition: bottom 420ms var(--agent-log-spring), left 420ms var(--agent-log-spring), right 420ms var(--agent-log-spring);
 }
 
 /* The reserved band (GM, round 2: "Floating panels stop above a reserved

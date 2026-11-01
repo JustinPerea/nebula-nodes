@@ -11,6 +11,7 @@
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lineLook, NEUTRAL } from './helpers/lineLook';
 
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => null }));
@@ -46,14 +47,23 @@ async function until(check: () => unknown, max = 3000): Promise<void> {
     await act(() => vi.advanceTimersByTimeAsync(50));
   }
 }
-const shows = (words: string) => until(() => screen.getByText(words));
+/** The line shows, and (round 18, GM r28 1) in the neutral look: a load that got no answer
+ * destroys nothing. Read through the app's stylesheets. */
+async function shows(words: string): Promise<void> {
+  await until(() => screen.getByText(words));
+  if (!words.includes('didn’t respond')) return; // the 409 case keeps its own words and look
+  const line = [...document.querySelectorAll('[data-commons-line]')].find((el) => el.textContent === words)!;
+  expect(line.hasAttribute('data-line-neutral'), words).toBe(true);
+  expect(lineLook(line), words).toEqual(NEUTRAL);
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
+  document.body.className = 'app-slava-restraint';
   state.status = 503;
   vi.stubGlobal('fetch', vi.fn(backend));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); document.body.className = ''; });
 
 describe('each pane load, no answer, verbatim', () => {
   for (const code of [503, 500, 408, 429]) {
