@@ -75,7 +75,9 @@ const STUDIOS: Studio[] = [
   },
   {
     name: 'Commons', root: 'commons-view commons-scope',
-    owners: ['styles/commons.css'], component: ['components/commons/CommonsView.tsx', 'components/commons/CommonsDetail.tsx', 'components/commons/CommonsFilters.tsx'],
+    // CommonsPageLines renders the messages row (PR #204: the page's lines and Add's line).
+    owners: ['styles/commons.css'], component: ['components/commons/CommonsView.tsx', 'components/commons/CommonsDetail.tsx', 'components/commons/CommonsFilters.tsx',
+      'components/commons/CommonsPageLines.tsx'],
     children: [header('commons-toolbar'), offline, { tag: 'div', cls: 'commons-messages' }, { tag: 'section', cls: 'commons-candidates' },
       { tag: 'aside', cls: 'commons-filters' }, { tag: 'main', cls: 'commons-main' }],
   },
