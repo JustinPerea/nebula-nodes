@@ -343,6 +343,86 @@ describe('every studio names its offline row and every child in its own template
   });
 });
 
+describe('the Board view in a narrow window (GM, #209 NIT-1 (b))', () => {
+  const board = STUDIOS.find((studio) => studio.root.includes('--board'))!;
+  const areasAt = (width: number, slava: boolean) => {
+    document.body.className = slava ? 'app-slava-restraint' : '';
+    document.body.innerHTML = '';
+    const { template } = resolveTemplate(build(board), { width, height: 900 });
+    return [...(template.areas ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1].trim().split(/\s+/).join(' '));
+  };
+  const SIDE_BY_SIDE = ['toolbar toolbar toolbar', 'offline offline offline', 'rail board panel'];
+  const PANEL_UNDER = ['toolbar toolbar', 'offline offline', 'rail board', 'rail panel'];
+  const FOLDED = ['toolbar', 'offline', 'rail', 'board', 'panel'];
+
+  for (const slava of SKINS) {
+    const skin = slava ? 'Slava' : 'no skin';
+    it(`${skin}: 1000 and 900 keep the panel beside the board; under 900 it goes under the board, in its column`, () => {
+      expect(areasAt(1000, slava)).toEqual(SIDE_BY_SIDE);
+      expect(areasAt(900, slava)).toEqual(SIDE_BY_SIDE);
+      expect(areasAt(899, slava)).toEqual(PANEL_UNDER);
+      expect(areasAt(761, slava)).toEqual(PANEL_UNDER);
+    });
+
+    it(`${skin}: at 760 and under (the List view's breakpoint) the rail folds above the board, which takes the full width`, () => {
+      expect(areasAt(760, slava)).toEqual(FOLDED);
+      expect(areasAt(700, slava)).toEqual(FOLDED);
+      document.body.className = slava ? 'app-slava-restraint' : '';
+      document.body.innerHTML = '';
+      const rail = build(board).querySelector('.moodboard-studio-view__rail')!;
+      const own = cascaded(rail, undefined, { viewport: { width: 700, height: 900 } });
+      expect(own.get('|max-height')?.value).toBe('150px');
+      expect(own.get('|border-right')?.value).toBe('0');
+    });
+
+    it(`${skin}: the panel under the board has a top edge, not a left one, and scrolls inside itself`, () => {
+      for (const width of [899, 700]) {
+        document.body.className = slava ? 'app-slava-restraint' : '';
+        document.body.innerHTML = '';
+        const panel = build(board).querySelector('.moodboard-board-panel')!;
+        const own = cascaded(panel, undefined, { viewport: { width, height: 900 } });
+        expect(own.get('|border-left')?.value, `${width}`).toBe('0');
+        expect(own.get('|border-top')?.value, `${width}`).toMatch(/^1px solid/);
+        expect(own.get('|max-height')?.value, `${width}`).toBe('40vh');
+        expect(own.get('|overflow-y')?.value, `${width}`).toBe('auto');
+      }
+      document.body.className = slava ? 'app-slava-restraint' : '';
+      document.body.innerHTML = '';
+      const wide = cascaded(build(board).querySelector('.moodboard-board-panel')!, undefined, { viewport: { width: 1000, height: 900 } });
+      expect(wide.get('|max-height')).toBeUndefined();
+    });
+  }
+
+  it('the board comes before the panel in the DOM at every width, so focus follows the screen', () => {
+    const view = source('components/moodboard-studio/MoodboardStudioView.tsx');
+    const boardView = view.slice(view.indexOf('className="moodboard-studio-view moodboard-studio-view--board"'));
+    const at = (needle: string) => boardView.indexOf(needle);
+    expect(at('{rail}')).toBeGreaterThan(0);
+    expect(at('className="moodboard-studio-view__board"')).toBeGreaterThan(at('{rail}'));
+    expect(at('<BoardSidePanel')).toBeGreaterThan(at('className="moodboard-studio-view__board"'));
+    expect(SIDE_BY_SIDE.join(' ').indexOf('board')).toBeLessThan(SIDE_BY_SIDE.join(' ').indexOf('panel'));
+    for (const areas of [PANEL_UNDER, FOLDED]) expect(areas.findIndex((row) => row.includes('board')))
+      .toBeLessThan(areas.findIndex((row) => row.includes('panel')));
+  });
+});
+
+describe('the Studio header title (GM, #210 r1)', () => {
+  it('cuts with an ellipsis on one line, and never breaks inside a word', () => {
+    document.body.className = 'app-slava-restraint';
+    document.body.innerHTML = '<header class="workspace-header workspace-header--updates-slot"><div class="workspace-header__identity">'
+      + '<h1 class="workspace-header__title">Moodboard</h1></div></header>';
+    const title = document.querySelector('.workspace-header__title')!;
+    const own = cascaded(title, undefined, { viewport: { width: 700, height: 900 } });
+    expect(own.get('|white-space')?.value).toBe('nowrap');
+    expect(own.get('|text-overflow')?.value).toBe('ellipsis');
+    expect(own.get('|overflow')?.value).toBe('hidden');
+    expect(own.get('|min-width')?.value).toBe('0');
+    expect(own.get('|overflow-wrap')).toBeUndefined();
+    const identity = cascaded(document.querySelector('.workspace-header__identity')!, undefined, { viewport: { width: 700, height: 900 } });
+    expect(identity.get('|min-width')?.value).toBe('0');
+  });
+});
+
 /** The last compound of a selector: the element the rule styles. */
 function subject(selector: string): string {
   let last = selector;
@@ -559,11 +639,14 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
       '.a.b { --t: 16; }', '.b, .a { --t: 17; }', '* { --t: 18; }', '.\\31 23 { --t: 19; }', '.x :focus-visible { --t: 20; }',
       '.a[data-x] { --t: 21; }', '.x ~ .y { --t: 22; }', '.x + .y { --t: 23; }', ':where(.a) .y { --t: 24; }', '.y:is(.a) { --t: 25; }',
     ].join('\n'));
-    expect(rules.length).toBeGreaterThanOrEqual(25);
+    // 25 rules, 26 selectors (`.b, .a` is two): a selector the parser dropped would shrink the table quietly (review 4 NIT-A).
+    expect(rules.length).toBe(26);
+    expect(rules.map((rule) => rule.selector)).toEqual(expect.arrayContaining(['.md\\:grid', '.a\\.b', '.\\31 23', '.b', '.a']));
     const index = indexRules(rules);
     document.body.className = 'app';
     document.body.innerHTML = '<div class="x"><div class="Foo"></div><div class="foo y"></div><div class="md:grid"></div>'
-      + '<div class="a.b"></div><div id="id" class="b a" data-x=""></div><div class="123 y a"></div><div class="FOO A"></div></div>';
+      + '<div class="a.b"></div><div id="id" class="b a" data-x=""></div><div class="123 y a"></div><div class="FOO A"></div>'
+      + '<i id="tie" class="a b"></i></div>';
     const matches = (selector: string, el: Element) => { try { return el.matches(selector); } catch { return false; } };
     const differ: string[] = [];
     for (const el of [document.documentElement, document.body, ...document.body.querySelectorAll('*')]) {
@@ -575,10 +658,14 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
         }
       }
     }
-    // A tie between two selectors of one rule (.b, .a on class="b a") reports the later one, as a full scan does.
-    const tied = document.getElementById('id')!;
-    expect(candidatesIn(index, tied).filter((rule) => rule.order === rules.find((r) => r.selector === '.b')!.order)
-      .map((rule) => rule.selector)).toEqual(['.b', '.a']);
+    // A tie between two selectors of one rule (.b, .a) comes in selector-list order whatever the
+    // element's class order, as a full scan meets them. class="a b" is the case that tells the two
+    // apart: its class buckets come .a first (review 4 LOW-A; sorting by rule.order would keep that).
+    const tieOrder = rules.find((r) => r.selector === '.b')!.order;
+    for (const id of ['id', 'tie']) {
+      expect(candidatesIn(index, document.getElementById(id)!).filter((rule) => rule.order === tieOrder)
+        .map((rule) => rule.selector), id).toEqual(['.b', '.a']);
+    }
     document.body.className = '';
     document.body.innerHTML = '';
     expect(differ).toEqual([]);

@@ -85,7 +85,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
     setViewport: flow.setViewport,
     getViewport: () => ({ ...flow.camera }),
-    getNodesBounds: () => ({ x: 0, y: 0, width: 2000, height: 1000 }),
+    // The whole board (three cards), or one card (an Update's Show of it).
+    getNodesBounds: (nodes: unknown[]) => (nodes.length > 1 ? { x: 0, y: 0, width: 2000, height: 1000 } : { x: 0, y: 0, width: 480, height: 270 }),
   }),
   // One store for the provider's life, as React Flow's is.
   useStoreApi: () => flow.store,
@@ -401,6 +402,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
     flow.setViewport.mockClear();
     runFrames();
     expect(flow.setViewport).not.toHaveBeenCalled();
+    act(() => { flow.props!.onMoveEnd!(wheel(), camera()); }); // its end, 150 ms on
     expect(kept()).toEqual({ viewport: panned, fitted: false });
   });
 
@@ -432,6 +434,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
     act(() => {
       flow.camera.y += 50;
       flow.props!.onMove!(wheel(), camera());
+      flow.props!.onMoveEnd!(wheel(), camera());
     });
     expect(kept().fitted).toBe(true);
     resize(430, 851);
@@ -539,8 +542,9 @@ describe('the person takes the camera', () => {
     step(0);
     step(16);
     act(() => {
-      flow.props!.onMoveStart!(wheel(), camera());
+      // A scroll pan's first event: React Flow moves the camera, then calls onMoveStart.
       flow.camera.x -= 60;
+      flow.props!.onMoveStart!(wheel(), camera());
     });
     flow.setViewport.mockClear();
     runFrames();
@@ -550,6 +554,26 @@ describe('the person takes the camera', () => {
     resize(870, 851);
     runFrames();
     expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+
+  it('a drag pan during a refit spring: the press moves nothing, the first frame that moves the camera stops the spring', () => {
+    mounted();
+    resize(430, 851);
+    step(0);
+    step(16);
+    act(() => { flow.props!.onMoveStart!(new MouseEvent('mousedown', { button: 2 }), camera()); });
+    step(32); // the press alone moved nothing: the spring still runs
+    expect(flow.setViewport).toHaveBeenCalledTimes(2);
+    act(() => {
+      flow.camera.x -= 60;
+      flow.props!.onMove!(new MouseEvent('mousemove', { buttons: 2 }), camera());
+    });
+    const panned = camera();
+    flow.setViewport.mockClear();
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+    act(() => { flow.props!.onMoveEnd!(new MouseEvent('mouseup', { button: 2 }), camera()); });
+    expect(kept()).toEqual({ viewport: panned, fitted: false });
   });
 
   it('a card drag that never moves the camera keeps the board fitted', () => {
@@ -567,6 +591,143 @@ describe('the person takes the camera', () => {
     view.unmount();
     runFrames();
     expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+});
+
+// #209 review 4 LOW-1 (GM): d3 calls React Flow's onMoveStart on the press
+// of a right or middle button, or of the left with Space held, before any
+// pan. A press with no drag moves nothing, so the refit carries on to the fit.
+describe('a press with no pan (review 4 LOW-1)', () => {
+  const presses: Array<[string, () => MouseEvent]> = [
+    ['a right press', () => new MouseEvent('mousedown', { button: 2 })],
+    ['a middle press', () => new MouseEvent('mousedown', { button: 1 })],
+    ['Space+click', () => new MouseEvent('mousedown', { button: 0 })],
+  ];
+  for (const [name, press] of presses) {
+    it(`${name} during a refit spring, released without a drag: the refit lands on the fit`, () => {
+      mounted();
+      resize(430, 851);
+      step(0);
+      step(16);
+      act(() => { flow.props!.onMoveStart!(press(), camera()); });
+      const before = camera();
+      step(32);
+      expect(camera()).not.toEqual(before); // still springing
+      act(() => { flow.props!.onMoveEnd!(new MouseEvent('mouseup'), camera()); });
+      runFrames();
+      expect(camera()).toEqual(fitViewport(430, 851));
+      expect(kept()).toEqual({ viewport: fitViewport(430, 851), fitted: true });
+      resize(870, 851);
+      runFrames();
+      expect(camera()).toEqual(fitViewport(870, 851));
+    });
+
+    it(`${name} at rest leaves the board fitted`, () => {
+      mounted();
+      act(() => { flow.props!.onMoveStart!(press(), camera()); });
+      act(() => { flow.props!.onMoveEnd!(new MouseEvent('mouseup'), camera()); });
+      expect(kept()).toEqual({ viewport: fitViewport(870, 851), fitted: true });
+      resize(430, 851);
+      runFrames();
+      expect(camera()).toEqual(fitViewport(430, 851));
+    });
+  }
+});
+
+// GM, review 4 question 2: landing on the exact fit by any route counts as fitted.
+describe('the zoom buttons', () => {
+  it('zoom in, then back out: back on the fit, the board is fitted, refits and is kept fitted', () => {
+    mounted();
+    press('Zoom in');
+    runFrames();
+    expect(kept().fitted).toBe(false);
+    press('Zoom out');
+    runFrames();
+    const fit = fitViewport(870, 851);
+    expect(camera().zoom).toBeCloseTo(fit.zoom, 9);
+    expect(camera().x).toBeCloseTo(fit.x, 6);
+    expect(camera().y).toBeCloseTo(fit.y, 6);
+    expect(kept().fitted).toBe(true);
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851));
+  });
+
+  it('zoom out, then back in, then List and back: it reopens fitted to the column it has then', () => {
+    const view = mounted();
+    press('Zoom out');
+    runFrames();
+    press('Zoom in');
+    runFrames();
+    view.unmount();
+    flow.state.width = 430;
+    mount();
+    expect(flow.props?.defaultViewport).toBeUndefined();
+    expect(camera()).toEqual(fitViewport(430, 851));
+  });
+
+  it('zoom in twice and out once is not on the fit: a resize keeps the view', () => {
+    mounted();
+    press('Zoom in');
+    runFrames();
+    press('Zoom in');
+    runFrames();
+    press('Zoom out');
+    runFrames();
+    expect(kept().fitted).toBe(false);
+    flow.setViewport.mockClear();
+    resize(430, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+});
+
+// #209 review 4 NIT-3: the kept camera is written once a gesture, not each frame.
+describe('keeping the camera for the visit', () => {
+  const writes = () => {
+    let count = 0;
+    const stop = useBoardCanvasStore.subscribe((state, previous) => { if (state.viewports !== previous.viewports) count += 1; });
+    return { count: () => count, stop };
+  };
+
+  it('a drag pan writes it once, when it ends', () => {
+    mounted();
+    const w = writes();
+    act(() => { flow.props!.onMoveStart!(new MouseEvent('mousedown', { button: 1 }), camera()); });
+    act(() => {
+      for (let i = 0; i < 12; i += 1) {
+        flow.camera.x -= 10;
+        flow.props!.onMove!(new MouseEvent('mousemove', { buttons: 4 }), camera());
+      }
+    });
+    expect(w.count()).toBe(0);
+    act(() => { flow.props!.onMoveEnd!(new MouseEvent('mouseup', { button: 1 }), camera()); });
+    expect(w.count()).toBe(1);
+    expect(kept()).toEqual({ viewport: camera(), fitted: false });
+    w.stop();
+  });
+
+  it('a press with no pan on a camera reopened where the person left it writes nothing', () => {
+    useBoardCanvasStore.setState({ viewports: { k1: { x: 1, y: 2, zoom: 0.3 } }, fitted: { k1: false } });
+    mount();
+    const w = writes();
+    act(() => { flow.props!.onMoveStart!(new MouseEvent('mousedown', { button: 2 }), camera()); });
+    expect(w.count()).toBe(0);
+    w.stop();
+  });
+
+  it('a scroll pan writes it at its first event (a lone notch never ends) and at its end, not in between', () => {
+    mounted();
+    const w = writes();
+    notch();
+    expect(w.count()).toBe(1);
+    expect(kept()).toEqual({ viewport: camera(), fitted: false });
+    stuckPan(30, 45, false);
+    expect(w.count()).toBe(1);
+    act(() => { flow.props!.onMoveEnd!(wheel(), camera()); });
+    expect(w.count()).toBe(2);
+    expect(kept()).toEqual({ viewport: camera(), fitted: false });
+    w.stop();
   });
 });
 

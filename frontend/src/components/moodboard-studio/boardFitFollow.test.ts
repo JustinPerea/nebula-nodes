@@ -166,22 +166,28 @@ describe('fitted is read from the camera', () => {
     expect(follow.fitted).toBe(false);
   });
 
-  it('the camera\'s own move elsewhere (zoom buttons, Show) leaves no fit, even back on the old target', () => {
+  it('the camera\'s own move elsewhere (zoom buttons, Show): off the target it is not fitted, back on it it is (GM, review 4)', () => {
     const { follow, refit, flush, camera, opened } = harness();
     opened();
-    follow.leave();
-    Object.assign(camera, FIT);
+    follow.fitTo(FIT, true); // a fit spring still heading there
+    follow.aside();
+    Object.assign(camera, { ...FIT, zoom: FIT.zoom * 1.25 });
     expect(follow.fitted).toBe(false);
     follow.resize(430, 851);
     flush();
     expect(refit).not.toHaveBeenCalled();
+    Object.assign(camera, FIT);
+    expect(follow.fitted).toBe(true);
+    follow.resize(870, 851);
+    flush();
+    expect(refit).toHaveBeenCalledTimes(1);
   });
 
-  it('leave() cancels a refit already waiting for its frame', () => {
+  it('aside() cancels a refit already waiting for its frame', () => {
     const { follow, refit, flush, opened } = harness();
     opened();
     follow.resize(430, 851);
-    follow.leave();
+    follow.aside();
     flush();
     expect(refit).not.toHaveBeenCalled();
   });

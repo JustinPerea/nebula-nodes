@@ -212,30 +212,41 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   // True while this view moves the camera itself: React Flow calls the move
   // callbacks inside setViewport, and that move is the camera's own.
   const ownMove = useRef(false);
+  /** The camera as React Flow holds it now. */
+  const readCamera = useCallback((): Viewport => {
+    const [x, y, zoom] = flowStore.getState().transform;
+    return { x, y, zoom };
+  }, [flowStore]);
+  // The camera as this view last saw it: where its own move left it, or
+  // where the last outside move did. A move callback with the camera still
+  // there moved nothing (#209 review 4 LOW-1: a right or middle press, or
+  // Space+click, with no drag, reaches onMoveStart before any pan).
+  const seen = useRef<Viewport | null>(null);
+  // An outside move's camera not kept yet: a pan or pinch keeps its camera
+  // once, when it ends, not on every frame (#209 review 4 NIT-3).
+  const unkept = useRef(false);
   const moveCamera = useCallback((viewport: Viewport) => {
     ownMove.current = true;
     try {
       void setViewport(viewport);
     } finally {
       ownMove.current = false;
+      seen.current = readCamera();
     }
-  }, [setViewport]);
+  }, [setViewport, readCamera]);
   // A whole-board fit's refit while its column resizes (#209): `follow` knows
   // whether the camera is still where the last fit left it, by comparing it.
   const fitRef = useRef<(instant: boolean) => boolean>(() => false);
   const follow = useRef<BoardFitFollow | null>(null);
   follow.current ??= createBoardFitFollow({
     fitted: startsFitted,
-    camera: () => {
-      const [x, y, zoom] = flowStore.getState().transform;
-      return { x, y, zoom };
-    },
+    camera: readCamera,
     refit: (instant) => fitRef.current(instant),
   });
   /** Spring the camera to `to`: a whole-board fit when `fitted`, any other move otherwise. */
   const springTo = useCallback((to: Viewport, fitted = false) => {
     if (fitted) follow.current!.fitTo(to, true);
-    else follow.current!.leave();
+    else follow.current!.aside();
     // A new move takes over from the one still running (a refit while the
     // window is dragged starts from where the last one had got to).
     stopSpring.current?.();
@@ -247,14 +258,24 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
       springTarget.current = null;
       follow.current!.springEnded();
     });
-    // Where the camera lands is kept for the visit, as a pan or scroll is.
-    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted);
+    // Where the camera lands is kept for the visit, as a pan or scroll is,
+    // fitted when it lands on the fit (zoom in, then back out).
+    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted || follow.current!.onFit(to));
   }, [getViewport, moveCamera, boardKey]);
   useEffect(() => () => {
     stopSpring.current?.();
     follow.current?.dispose();
   }, []);
 
+  // The camera, kept for the visit with whether it is still fitted, read
+  // from the camera itself (a move's own viewport can be a spring frame
+  // React Flow reports 150 ms late). While a spring runs, the store holds
+  // where it lands (springTo).
+  const keepCamera = useCallback(() => {
+    unkept.current = false;
+    if (springTarget.current) return;
+    useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
+  }, [boardKey, getViewport]);
   /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
   const fit = useCallback((instant = false) => {
     const { width, height, panZoom } = flowStore.getState();
@@ -291,17 +312,27 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     const again = knownCamera.current !== null;
     knownCamera.current = panZoom;
     if (!again) {
+      seen.current = readCamera();
       follow.current!.ready();
       return;
     }
     stopSpring.current?.();
     stopSpring.current = null;
     springTarget.current = null;
+    // A move the person made that isn't kept yet is the camera to put back
+    // (the store still holds the one before it).
+    const moved = unkept.current ? seen.current : null;
+    seen.current = readCamera();
+    if (moved) {
+      moveCamera(moved);
+      keepCamera();
+      return;
+    }
     const { viewports, fitted } = useBoardCanvasStore.getState();
     const kept = viewports[boardKey];
     if (!kept || fitted[boardKey]) follow.current!.reopen();
     else moveCamera(kept);
-  }, [boardKey, moveCamera]);
+  }, [boardKey, moveCamera, readCamera, keepCamera]);
 
   // The column React Flow measures (its own ResizeObserver on the board):
   // a new size refits while the board is fitted (boardFitFollow).
@@ -361,14 +392,6 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     return () => document.removeEventListener('keydown', onKey);
   }, [fit]);
 
-  // The camera, kept for the visit with whether it is still fitted, read
-  // from the camera itself (a move's own viewport can be a spring frame
-  // React Flow reports 150 ms late). While a spring runs, the store holds
-  // where it lands (springTo).
-  const keepCamera = useCallback(() => {
-    if (springTarget.current) return;
-    useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
-  }, [boardKey, getViewport]);
   // Any camera move this view didn't make takes the camera from a spring
   // still running, so the spring can't undo it: a person's pan, pinch or
   // wheel, and the moves React Flow makes for them with no source event (the
@@ -377,13 +400,37 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   // single mouse-wheel notch, React Flow's pan-on-scroll stops calling
   // onMoveStart (@xyflow/system 0.0.76). Whether the board is still fitted is
   // read from the camera (boardFitFollow), not from these calls.
-  const onCameraMove = useCallback(() => {
+  //
+  // A move is one only when the camera changed (#209 review 4 LOW-1, GM): a
+  // right or middle press, or Space+click, reaches onMoveStart on the press,
+  // before any pan, and a press with no drag moves nothing, so a refit
+  // carries on to the fit. React Flow applies a move to its store before it
+  // calls back (the d3 zoom event; pan-on-scroll's first event too).
+  //
+  // The camera is kept for the visit once a gesture: at onMoveStart (one
+  // mouse-wheel notch reports nothing else, ever) and at onMoveEnd, not on
+  // each onMove frame. Only this view reads the kept camera, when it mounts
+  // and when React Flow makes its camera again (cameraMade): a gesture still
+  // unkept then, or when the view closes, is kept from `seen`.
+  const outsideMove = useCallback((keep: boolean) => {
     if (ownMove.current) return;
+    const now = readCamera();
+    const was = seen.current;
+    if (was && was.x === now.x && was.y === now.y && was.zoom === now.zoom) return;
+    seen.current = now;
     stopSpring.current?.();
     stopSpring.current = null;
     springTarget.current = null;
     follow.current!.taken();
-    keepCamera();
+    if (keep) keepCamera();
+    else unkept.current = true;
+  }, [readCamera, keepCamera]);
+  const onCameraMoveStart = useCallback(() => outsideMove(true), [outsideMove]);
+  const onCameraMove = useCallback(() => outsideMove(false), [outsideMove]);
+  // A gesture's camera not kept yet when the view closes (React Flow's move
+  // end comes 150 ms after a scroll pan) is kept now.
+  useEffect(() => () => {
+    if (unkept.current) keepCamera();
   }, [keepCamera]);
 
   const addFiles = (list: FileList | null) => {
@@ -435,7 +482,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onSelectionDragStop={onSelectionDragStop}
-          onMoveStart={onCameraMove}
+          onMoveStart={onCameraMoveStart}
           onMove={onCameraMove}
           onMoveEnd={keepCamera}
           defaultViewport={startsFitted ? undefined : savedViewport}

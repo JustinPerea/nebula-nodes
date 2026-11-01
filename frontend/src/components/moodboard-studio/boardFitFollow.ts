@@ -15,7 +15,9 @@
  *   board is no longer fitted. A camera moved back onto the fit is fitted.
  * - A whole-board fit (fit on open, the Fit button, Shift+1, a refit) sets
  *   the target. The camera's own moves elsewhere (the zoom buttons, an
- *   Update's Show, which frames only its cards) drop it.
+ *   Update's Show, which frames only its cards) leave it unfitted unless they
+ *   land back on that target: zooming in and back out is fitted again, as a
+ *   pan back onto the fit is.
  * - A board that opens fitted (a fresh open, or a camera kept from earlier in
  *   the visit that was fitted then) is fit at once as soon as it has both a
  *   size that isn't 0 x 0 and cards to fit (`ready`): a board laid out late
@@ -48,6 +50,8 @@ export function sameCamera(a: FitCamera, b: FitCamera): boolean {
 export interface BoardFitFollow {
   /** The camera is on the last fit's target, or a fit spring is heading there. */
   readonly fitted: boolean;
+  /** `camera` is on the last fit's target: a move landing there leaves the board fitted. */
+  onFit(camera: FitCamera): boolean;
   /** A whole-board fit to `target`: on a spring still heading there, or already there. */
   fitTo(target: FitCamera, springing: boolean): void;
   /** The fit spring has landed: no spring is heading anywhere now. */
@@ -58,8 +62,14 @@ export interface BoardFitFollow {
   ready(): void;
   /** React Flow made its camera again, at its default: fit at once again, as on open. */
   reopen(): void;
-  /** The camera's own move somewhere other than a whole-board fit: there is no fit to keep. */
-  leave(): void;
+  /**
+   * The camera's own move somewhere other than a whole-board fit (the zoom
+   * buttons, an Update's Show): no fit spring heads anywhere now, and a refit
+   * still waiting doesn't run. The last fit's target stays, so landing back
+   * on it by any route counts as fitted again (GM, #209 review 4: zoom in,
+   * then back out).
+   */
+  aside(): void;
   /** The board column measured at this size. */
   resize(width: number, height: number): void;
   dispose(): void;
@@ -93,6 +103,7 @@ export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb
   };
   return {
     get fitted() { return isFitted(); },
+    onFit: (at) => target !== null && sameCamera(at, target),
     fitTo(next, springing) {
       target = { x: next.x, y: next.y, zoom: next.zoom };
       heading = springing;
@@ -110,8 +121,7 @@ export function createBoardFitFollow({ fitted, camera, refit, requestFrame = (cb
       cancel();
       open();
     },
-    leave() {
-      target = null;
+    aside() {
       heading = false;
       cancel();
     },
