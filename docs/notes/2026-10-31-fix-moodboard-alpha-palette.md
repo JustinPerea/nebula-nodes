@@ -838,3 +838,75 @@ them black.
   - Extract: noisy-black disc 4 to 2; bwgrey 2 to 3, with the caption kept;
     studio-product 4 and 4, identical hexes.
   - The hold, as above.
+
+## Round 5 (base b2de5877): Extract merges under ΔE00 3
+
+GM ruled on round 4's open question: "Move to 3. Duplicate blacks look
+broken, and noisy blacks are common in photos and renders. Studio-product
+going from three near-whites to two is a subtle loss by comparison." It's
+one threshold, with nothing special for near-black. `MERGE_DELTA_E` is now
+3. Nothing else changed.
+
+**Which near-whites merged.** studio-product.webp at 96 px gave #ededee,
+#f9f9f9, #e1e0dd and #b49d71 in round 4. #ededee and #f9f9f9 are ΔE00 2.52
+apart, so they now merge into #f2f2f3. #e1e0dd stays: it is 4.41 from the
+merged white, and the pairs were 3.53 and 5.53 before. Live in the
+Inspector the browser's resample gives #eeeeee and #f9f9f9 merging into
+#f2f2f3, with #e2e0de and #b29b6d kept.
+
+**The 27 real images.** studio-product is the only one that changes (4 to
+3). The other 21 preset and golden images, and the five probes (noisyblack,
+bwgrey, mark74, softlogo, sprite49), give exactly round 4's swatches.
+paper-studio's closest pair is 3.12, so it stays at 5. For comparison, at
+3.5 paper-studio drops to 3, and cyberpunk-neon, neon-alley and
+rust-portrait each lose one.
+
+**Blacks noisy on each channel apart.** This means R, G and B each 0-7 on
+their own, under an orange disc.
+- At 2, none of these gave two swatches.
+- At 3, most do, but not all. Round 4's count of 40 of 40 was a lucky
+  sample.
+- With a larger sample, 196 of 200 merge with `Math.random` noise, and 37
+  of 40 numpy seeds (0-39) do. The test's 40 xoshiro seeds give 39 of 40.
+  So about 2 to 8% of such images keep two blacks.
+- The two blacks left are about ΔE00 3.5 apart: #030403 and #050106 on
+  seed 167299; #040304 and #020602 on numpy seed 7.
+- 3.5 merges all 200, but costs paper-studio and three photos (above).
+- Grey-noise blacks (review 3's repro) always merge.
+
+**Mid-tones.** Round 4's 1.96, 2.14 and 2.35 pairs now each merge into
+one. The threshold test pairs are now 2.73 and 2.93 (merge) against 3.12
+and 3.31 (stay apart).
+
+**The speck rule** is unchanged. Its test speck moved from ΔE00 2.4 to 4.0
+from the teal, so it still tests the fold between the merge threshold and
+5 rather than an ordinary merge. mark74's 0.007% speck (2.4) now merges
+directly.
+
+**Tests:**
+- The threshold is 3, with the pairs above.
+- studio-product gives #f2f2f3, #e1e0dd and #b49d71.
+- Blacks noisy on each channel merge in exactly 39 of the 40 seeds. The
+  remaining seed is named, and its two blacks are pinned as more than 3
+  apart.
+- The contract test expects 3.
+
+**Mutants:** 26 frontend. Killed: the threshold at 2, 2.9, 3.2, 4 and 5,
+plus round 4's 21 again. Survivors:
+- `hbp` at zero chroma, equivalent as in round 4.
+- The merge's `<` written as `<=`. It differs only for a pair exactly
+  3.000 apart, or in which of two equal-distance pairs merges first.
+
+**Gates, round 5:**
+- tsc, lint, check:inline-styles (256 files) and check:slava-css-scope:
+  rc 0.
+- Vitest `--maxWorkers=2` from an explicit zsh array of 119 files. That's
+  round 4's list, plus `studioGridAreas.test.ts`, which reads `src/` and
+  came in with main. 1966 passed, 0 errors.
+- The backend isn't touched, so there was no pytest.
+- **Live (isolated backend on 8792, Vite on 5792):**
+  - studio-product went from 4 to 3, as above.
+  - A per-channel noisy black went from 3 to 2 on numpy seed 0, and from 4
+    to 3 on seed 7.
+  - The shots were retaken after the session move (same values) and
+    opened, with no md5 duplicates.

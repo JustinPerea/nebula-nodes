@@ -167,19 +167,19 @@ describe('mergeNearColors', () => {
   });
 
   it('merges under the threshold and not at it', () => {
-    expect(MERGE_DELTA_E).toBe(2);
-    const near = [{ rgb: [120, 120, 120], weight: 1 }, { rgb: [125, 125, 125], weight: 1 }];
-    const far = [{ rgb: [120, 120, 120], weight: 1 }, { rgb: [126, 126, 126], weight: 1 }];
-    expect(deltaE00(near[0].rgb, near[1].rgb)).toBeLessThan(2);
-    expect(deltaE00(far[0].rgb, far[1].rgb)).toBeGreaterThan(2);
+    expect(MERGE_DELTA_E).toBe(3);
+    const near = [{ rgb: [120, 120, 120], weight: 1 }, { rgb: [127, 127, 127], weight: 1 }];
+    const far = [{ rgb: [120, 120, 120], weight: 1 }, { rgb: [128, 128, 128], weight: 1 }];
+    expect(deltaE00(near[0].rgb, near[1].rgb)).toBeLessThan(3);
+    expect(deltaE00(far[0].rgb, far[1].rgb)).toBeGreaterThan(3);
     expect(mergeNearColors(near)).toHaveLength(1);
     expect(mergeNearColors(far)).toHaveLength(2);
   });
 
-  it('folds a speck under 0.1% into the nearest bigger swatch within ΔE00 5, and keeps a far one', () => {
+  it('folds a speck under 0.1% into the nearest bigger swatch within ΔE00 5, past the merge threshold, and keeps a far one', () => {
     const teal = { rgb: [29, 143, 138], weight: 2000 };
     const orange = { rgb: [242, 107, 29], weight: 7998 };
-    const speck = { rgb: [23, 139, 139], weight: 0.7 }; // ΔE00 2.4 from the teal: a few faint pixels
+    const speck = { rgb: [19, 136, 139], weight: 0.7 }; // ΔE00 4.0 from the teal: a few faint pixels
     expect(mergeNearColors([orange, teal, speck]).map((c) => c.weight)).toEqual([7998, 2000.7]);
     expect(mergeNearColors([orange, teal, { ...speck, weight: 11 }])).toHaveLength(3); // 0.11%: a colour
     expect(mergeNearColors([orange, teal, { rgb: [40, 200, 70], weight: 0.7 }])).toHaveLength(3); // far: kept
@@ -230,15 +230,19 @@ function rng(seed: number): () => number {
 
 const DISC = [240, 120, 20];
 const SEEDS = [7, 11, 2026, 31337, 424242];
+/** GM r7 on #208 (round 5): "noisy blacks are common in photos and renders
+ *  (40 of 40)". Forty seeds for the noise on each channel apart. */
+const SEEDS_40 = Array.from({ length: 40 }, (_, i) => 1000 + i * 7919);
 
 /** An orange disc on a noisy grey background, as review 3 built it: each
  *  background pixel ``base`` moved by 0 to 7 levels (toward white when
  *  ``sign`` is 1). */
-function noisyDisc(seed: number, base: number, sign: 1 | -1): Img {
+function noisyDisc(seed: number, base: number, sign: 1 | -1, perChannel = false): Img {
   const next = rng(seed);
   const level = () => base + sign * Math.floor(next() * 8);
   return image(96, 96, (x, y) => {
     if (Math.hypot(x - 48, y - 48) < 20) return [...DISC, 255] as Px;
+    if (perChannel) return [level(), level(), level(), 255];
     const v = level();
     return [v, v, v, 255];
   });
@@ -256,6 +260,23 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
     }
   });
 
+  it('merges blacks noisy on each channel apart in 39 of 40 seeds (GM, round 5)', () => {
+    // Their k-means blacks sit about ΔE00 2.05 apart, so at 2 none of these
+    // gave two swatches. At 3, one seed in 40 (about 2% of random images)
+    // still has two blacks ΔE00 3.49 apart: #030403 and #050106.
+    const three: number[] = [];
+    for (const seed of SEEDS_40) {
+      const out = colors(noisyDisc(seed, 0, 1, true));
+      if (out.length !== 2) three.push(seed);
+      expect(Math.max(...rgbOf(out[0]))).toBeLessThanOrEqual(7);
+      expect(deltaE00(rgbOf(out[out.length - 1]), DISC)).toBeLessThan(1);
+    }
+    expect(three).toEqual([167299]);
+    const left = colors(noisyDisc(167299, 0, 1, true));
+    expect(left).toEqual(['#030403', '#050106', '#f07814']);
+    expect(deltaE00(rgbOf(left[0]), rgbOf(left[1]))).toBeGreaterThan(MERGE_DELTA_E);
+  });
+
   it('gives exactly two for the disc on a noisy white (248-255)', () => {
     for (const seed of SEEDS) {
       const out = colors(noisyDisc(seed, 255, -1));
@@ -266,9 +287,14 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
 
   it('keeps mid-tones just past the threshold apart, and merges them just under it', () => {
     const halves = (a: number[], b: number[]) => colors(image(96, 96, (x) => [...(x < 48 ? a : b), 255] as Px));
-    expect(halves([120, 120, 120], [126, 126, 126])).toEqual(['#787878', '#7e7e7e']); // ΔE00 2.35
-    expect(halves([120, 140, 160], [120, 140, 165])).toHaveLength(2); // ΔE00 2.14
-    expect(halves([120, 120, 120], [125, 125, 125])).toHaveLength(1); // ΔE00 1.96
+    expect(halves([120, 120, 120], [128, 128, 128])).toEqual(['#787878', '#808080']); // ΔE00 3.12
+    expect(halves([120, 140, 160], [120, 140, 168])).toHaveLength(2); // ΔE00 3.31
+    expect(halves([120, 140, 160], [120, 140, 167])).toHaveLength(1); // ΔE00 2.93
+    expect(halves([120, 120, 120], [127, 127, 127])).toHaveLength(1); // ΔE00 2.73
+    // Round 4's cases (ΔE00 1.96, 2.14, 2.35) are all under 3 now: one swatch each.
+    for (const [a, b] of [[[120, 120, 120], [125, 125, 125]], [[120, 140, 160], [120, 140, 165]], [[120, 120, 120], [126, 126, 126]]]) {
+      expect(halves(a, b)).toHaveLength(1);
+    }
   });
 
   it("merges a dark photo's blacks and leaves its greys (cinematic-noir.webp at 96 px)", () => {
@@ -276,8 +302,10 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
     expect(colors(fixture('cinematic-noir', 96))).toEqual(['#070808', '#1a1a1a', '#393939', '#7f7f7f']);
   });
 
-  it('gives studio-product.webp the four swatches GM signed off (r4)', () => {
-    expect(colors(fixture('studio-product', 96))).toEqual(['#ededee', '#f9f9f9', '#e1e0dd', '#b49d71']);
+  it('gives studio-product.webp three: its two lightest whites merge (GM, round 5)', () => {
+    // Round 4 gave #ededee #f9f9f9 #e1e0dd #b49d71; #ededee and #f9f9f9 are
+    // ΔE00 2.52 apart and merge into #f2f2f3. #e1e0dd stays (3.5 and 5.5 away).
+    expect(colors(fixture('studio-product', 96))).toEqual(['#f2f2f3', '#e1e0dd', '#b49d71']);
   });
 });
 

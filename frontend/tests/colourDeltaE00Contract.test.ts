@@ -35,6 +35,6 @@ describe('CIEDE2000 matches the backend', () => {
 
   it("uses the backend's merge threshold for the edge line and keeps its own, smaller, for merging", () => {
     expect(EDGE_LINE_DELTA_E).toBe(CONTRACT.mergeDeltaE);
-    expect(MERGE_DELTA_E).toBe(2);
+    expect(MERGE_DELTA_E).toBe(3);
   });
 });

@@ -125,16 +125,18 @@ export function deltaE00(a: number[], b: number[]): number {
 }
 
 /** Swatches closer than this (CIEDE2000) read as one colour and are merged:
- *  about two just-noticeable steps. The metric is the moodboard palette's
- *  (backend commons/measure.py ``_merge``); plain OKLab, used before (at
- *  0.03), had no lightness toe and put #000000 and #010101 twice its
- *  threshold apart, so a noisy black gave three or four black swatches
- *  (review 3, M1). CIEDE2000 puts the blacks of a noisy black 0.2 to 1.2
- *  apart. The backend merges at 5 (``EDGE_LINE_DELTA_E``); at 5 Extract also
- *  merged the three whites of studio-product.webp (2.5 to 5.5 apart, which
- *  GM signed off as three) and two to three tones of most photos, so Extract
- *  keeps 2 (see the notes for round 4). */
-export const MERGE_DELTA_E = 2;
+ *  about three just-noticeable steps, one threshold for every lightness (GM
+ *  on #208, round 5). The metric is the moodboard palette's (backend
+ *  commons/measure.py ``_merge``); plain OKLab, used before (at 0.03), had no
+ *  lightness toe and put #000000 and #010101 twice its threshold apart, so a
+ *  noisy black gave three or four black swatches (review 3, M1). CIEDE2000
+ *  puts grey-noise blacks 0.2 to 1.2 apart, and blacks noisy on each channel
+ *  about 2 apart (CIEDE2000 doesn't shrink chroma near black), which 3
+ *  merges in most images. At 3, studio-product.webp's #ededee and #f9f9f9
+ *  (2.52) are one white. The backend merges at 5 (``EDGE_LINE_DELTA_E``); at
+ *  5 Extract also merged two to three tones of most photos (see the notes
+ *  for rounds 4 and 5). */
+export const MERGE_DELTA_E = 3;
 
 /** A swatch under this share of the image is a speck, not a colour of its
  *  own, when it is within ``EDGE_LINE_DELTA_E`` of a bigger swatch: it goes
