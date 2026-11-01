@@ -4066,6 +4066,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _send_questions_sync(websocket)
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
+                # Every live cursor, person form, for this tab only (GM -
+                # Design, PR #211 r3): numbers match across tabs because each
+                # shows the backend's. Built here, after the other syncs, so
+                # it holds every cursor event already sent to this socket; a
+                # later event arrives after it.
+                await websocket.send_text(json.dumps({"type": "agentPresenceReplay",
+                                                      "cursors": agent_presence.replay()}))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -5377,24 +5384,38 @@ def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
     return agent_presence.point(identity, project_id=project_id, **kwargs)
 
 
-def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: Any) -> dict[str, Any]:
-    """agent_presence.person_form, built apart from the agent form: if the
-    person's copy fails, that is logged and the event goes out as the agent
-    form alone, as before sessions (review 1, LOW-1). It never silences the
-    agent form or fails the route."""
+def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: Any) -> dict[str, Any] | None:
+    """agent_presence.person_form, built apart from the agent form, so a
+    failure in the person's copy is logged and never silences the agent form
+    or fails the route (review 1, LOW-1).
+
+    On that failure the person's tabs get the agent form with this session's
+    real number when its cursor is already live (``session_tag``), else
+    nothing for this event (None). Never the bare agent form: a tab reads an
+    event with no session as the plain cursor, number 1, and would drop
+    whichever session holds 1 (review 2, NIT-3)."""
     try:
         return agent_presence.person_form(event, identity, session=presence_session(headers), **kwargs)
     except Exception:  # noqa: BLE001 - decoration: the agent form still goes out
         logging.getLogger("nebula.presence").exception("person form failed; sending the agent form only")
-        return event
+    if "target" not in event:
+        return event  # the Agent log only: no cursor, so no number to get wrong
+    try:
+        tag = agent_presence.session_tag(identity, presence_session(headers))
+    except Exception:  # noqa: BLE001 - no number is better than a wrong one
+        tag = None
+    return {**event, "session": tag} if tag else None
 
 
-async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any]) -> None:
+async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any] | None) -> None:
     """Send a cursor event: ``person`` (agent_presence.person_form) to the
     person's canvas sockets and ``event``, the agent form, to every other
     socket. One form, as before sessions, when the two are the same object:
-    whatever an agent can read stays as it was."""
-    if person is event:
+    whatever an agent can read stays as it was. With no ``person`` (a
+    failed person form, _person_form), only the other sockets get it."""
+    if person is None:
+        await manager.broadcast_others(event)
+    elif person is event:
         await manager.broadcast_raw(event)
     else:
         await manager.broadcast_raw(person, others=event)

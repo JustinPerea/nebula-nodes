@@ -115,8 +115,8 @@ describe('sessions of one agent', () => {
     expect(five(0.85)).toEqual([0.85, 0.75, 0.65, 0.55, 0.45]);
     // Dark: −0.10 and −0.20 would fall under 0.35 and mirror up.
     expect(five(0.4)).toEqual([0.4, 0.5, 0.6, 0.7, 0.8]);
-    // Pure white shows at 0.92, never #ffffff.
-    expect(five(1)).toEqual([0.92, 0.8, 0.7, 0.6, 0.5]);
+    // Pure white is pulled to 0.92 before stepping (GM - Design, PR #211 r3), never #ffffff.
+    expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
     for (const L of [0.36, 0.5, 0.6, 0.85, 0.91]) {
       expect(sessionLightness(L, 6)).toBe(sessionLightness(L, 1));
       expect(sessionLightness(L, 7)).toBe(sessionLightness(L, 2));
@@ -146,6 +146,40 @@ describe('sessions of one agent', () => {
     }
     // Two Claude sessions look like Claude, and like two.
     expect(sessionFill(CLAUDE, { ordinal: 2 })).not.toBe(CLAUDE);
+  });
+
+  it('holds session 1 in the band too: black starts visible at L 0.35, white at 0.92 (GM - Design, PR #211 r3)', () => {
+    const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(6));
+    // The three lists GM confirmed: black steps up from the band's floor.
+    expect(five(0)).toEqual([0.35, 0.45, 0.55, 0.65, 0.75]);
+    expect(five(0.85)).toEqual([0.85, 0.75, 0.65, 0.55, 0.45]);
+    expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
+    // A base past either edge is pulled to it before any stepping.
+    expect(sessionLightness(0.95, 1)).toBeCloseTo(0.92, 9);
+    expect(five(0.95)).toEqual(five(1));
+    expect(sessionLightness(0.2, 1)).toBeCloseTo(0.35, 9);
+    expect(five(0.2)).toEqual(five(0));
+    // #000000 and #030303 share one session-1 fill, and it is visible: L 0.35.
+    const black = sessionFill('#000000', { ordinal: 1 });
+    expect(sessionFill('#030303', { ordinal: 1 })).toBe(black);
+    expect(hexToOklch(black)!.l).toBeCloseTo(0.35, 2);
+    expect(black.toLowerCase()).not.toBe('#000000');
+    // Inside the band the agent's colour is kept exactly.
+    expect(sessionFill(CLAUDE, { ordinal: 1 })).toBe(CLAUDE);
+  });
+
+  it('for every base L from 0 to 1, sessions 1-5 stay in 0.35-0.92 and at least 0.05 apart (review 2)', () => {
+    for (let i = 0; i <= 1000; i += 1) {
+      const base = i / 1000;
+      const Ls = [1, 2, 3, 4, 5].map((n) => sessionLightness(base, n));
+      for (const L of Ls) {
+        expect(L, `base ${base}`).toBeGreaterThanOrEqual(0.35 - 1e-9);
+        expect(L, `base ${base}`).toBeLessThanOrEqual(0.92 + 1e-9);
+      }
+      for (let a = 0; a < 5; a += 1) {
+        for (let b = a + 1; b < 5; b += 1) expect(Math.abs(Ls[a] - Ls[b]), `base ${base} ${a + 1}/${b + 1}`).toBeGreaterThanOrEqual(0.05 - 1e-9);
+      }
+    }
   });
 
   it('never fills pure white, and keeps sessions of the extremes apart', () => {

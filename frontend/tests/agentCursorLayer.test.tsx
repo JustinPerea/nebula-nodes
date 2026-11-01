@@ -17,19 +17,32 @@ const lookup = new Map([
   }],
 ]);
 const pane = vi.hoisted(() => {
-  const state = { dom: null as HTMLElement | null, api: null as unknown };
+  const state = {
+    dom: null as HTMLElement | null,
+    api: null as unknown,
+    transform: [0, 0, 1] as [number, number, number],
+    listeners: new Set<(state: unknown) => void>(),
+  };
   state.api = {
-    getState: () => ({ nodeLookup: lookupRef.current, transform: [0, 0, 1], domNode: state.dom }),
-    subscribe: () => () => {},
+    getState: () => ({ nodeLookup: lookupRef.current, transform: state.transform, domNode: state.dom }),
+    subscribe: (listener: (state: unknown) => void) => {
+      state.listeners.add(listener);
+      return () => state.listeners.delete(listener);
+    },
   };
   return state;
+});
+/** React Flow's store changed (a node moved, the viewport moved). */
+const notifyStore = () => act(() => {
+  const state = (pane.api as { getState: () => unknown }).getState();
+  for (const listener of [...pane.listeners]) listener(state);
 });
 const lookupRef = vi.hoisted(() => ({ current: new Map() as Map<string, unknown> }));
 lookupRef.current = lookup;
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
   ViewportPortal: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useStore: (select: (state: { transform: [number, number, number] }) => unknown) => select({ transform: [0, 0, 1] }),
+  useStore: (select: (state: { transform: [number, number, number] }) => unknown) => select({ transform: pane.transform }),
   // One store, as React Flow gives: a new object per render would re-run every effect keyed on it.
   useStoreApi: () => pane.api,
 }));
@@ -45,12 +58,16 @@ import { AGENT_CURSOR_HOVER_SLOP_PX, inkFor, sessionFill } from '../src/lib/agen
  */
 
 let frames: FrameRequestCallback[] = [];
+// Ids of the frames still asked for, so cancelAnimationFrame cancels, as in a browser.
+let frameIds: number[] = [];
+let nextFrameId = 0;
 let clock = 0;
 /** Run animation frames 1/60 s apart until none is asked for (or the cap). */
 const flush = (max = 400) => act(() => {
   for (let i = 0; i < max && frames.length > 0; i += 1) {
     const run = frames;
     frames = [];
+    frameIds = [];
     clock += 1000 / 60;
     for (const callback of run) callback(clock);
   }
@@ -79,15 +96,26 @@ const reduceMotion = (on: boolean) => {
 
 beforeEach(() => {
   frames = [];
+  frameIds = [];
   clock = 0;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    nextFrameId += 1;
     frames.push(callback);
-    return frames.length;
+    frameIds.push(nextFrameId);
+    return nextFrameId;
   });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    const at = frameIds.indexOf(id);
+    if (at >= 0) {
+      frames.splice(at, 1);
+      frameIds.splice(at, 1);
+    }
+  });
   useAgentPresenceStore.getState().clear();
   reduceMotion(false);
   pane.dom = null;
+  pane.transform = [0, 0, 1];
+  lookupRef.current = lookup;
 });
 afterEach(() => {
   cleanup();
@@ -338,6 +366,54 @@ describe('a tab that hears an event while hidden snaps (GM - Design, PR #211 r2)
   });
 });
 
+describe('the replay a person tab gets on connect (GM - Design, PR #211 r3)', () => {
+  const replay = (cursors: unknown[]) => act(() => { useAgentPresenceStore.getState().replay(cursors as never); });
+  const live = (ordinal: number, extra: Partial<AgentPresenceEvent> = {}) => ({
+    ...event({ session: { key: String(ordinal).repeat(12), ordinal }, ...extra }), replay: true, secondsAgo: 0,
+  });
+
+  it('a fresh tab with sessions 1 and 3 live shows "Claude" and "Claude · 3" where they are, with no flight', () => {
+    render(<AgentCursorLayer />);
+    replay([live(1, { target: { nodeId: 'n1' }, action: 'click' }), live(3, { target: { nodeId: 'n2' }, action: 'click' })]);
+    tickFrames(1);
+    const els = cursors();
+    expect(els.map((el) => el.getAttribute('aria-label')?.split(':')[0]).sort()).toEqual(['Claude', 'Claude · 3']);
+    const byName = Object.fromEntries(els.map((el) => [el.querySelector('.agent-cursor__name')!.textContent, el]));
+    expect(byName.Claude.style.transform).toBe('translate(500px, 344px) scale(1)');
+    expect(byName['Claude · 3'].style.transform).toBe('translate(1000px, 344px) scale(1)');
+    flush();
+    // Nothing is shown as if it happened now.
+    expect(ripple()).toBeNull();
+  });
+
+  it('a tab that connects during a flight lands the cursor on its target at once', () => {
+    render(<AgentCursorLayer />);
+    send(event({ session: { key: '111111111111', ordinal: 1 }, target: { nodeId: 'n1' } }));
+    flush();
+    send(event({ session: { key: '111111111111', ordinal: 1 }, target: { nodeId: 'n2' } }));
+    tickFrames(3);
+    expect(cursors()[0].style.transform).not.toBe('translate(1000px, 344px) scale(1)');
+    // The reconnect's replay: the same cursor, mid-flight on the backend's clock.
+    replay([live(1, { target: { nodeId: 'n2' } })]);
+    tickFrames(1);
+    expect(cursors()).toHaveLength(1);
+    expect(cursors()[0].style.transform).toBe('translate(1000px, 344px) scale(1)');
+  });
+
+  it('a replayed cursor moves normally on its next event', () => {
+    render(<AgentCursorLayer />);
+    replay([live(1, { target: { nodeId: 'n1' } })]);
+    flush();
+    send(event({ session: { key: '111111111111', ordinal: 1 }, target: { nodeId: 'n2' } }));
+    tickFrames(3);
+    const mid = cursors()[0].style.transform;
+    expect(mid).not.toBe('translate(500px, 344px) scale(1)');
+    expect(mid).not.toBe('translate(1000px, 344px) scale(1)');
+    flush();
+    expect(cursors()[0].style.transform).toBe('translate(1000px, 344px) scale(1)');
+  });
+});
+
 describe('no layout read per frame or per pointermove (review 1, L1 and F7)', () => {
   const rectFor = (el: Element): DOMRect => {
     if (el === pane.dom) return new DOMRect(0, 0, 1440, 900);
@@ -404,6 +480,109 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
 
   it('hover slop is 4 px', () => {
     expect(AGENT_CURSOR_HOVER_SLOP_PX).toBe(4);
+  });
+
+  const moveNode = (id: string, dx: number) => {
+    const next = new Map(lookupRef.current) as Map<string, { internals: { positionAbsolute: { x: number; y: number } } }>;
+    const node = next.get(id)!;
+    next.set(id, { ...node, internals: { ...node.internals, positionAbsolute: {
+      x: node.internals.positionAbsolute.x + dx, y: node.internals.positionAbsolute.y } } });
+    lookupRef.current = next as never;
+    notifyStore();
+  };
+
+  it('re-tests hover after following its node under a still pointer (review 2, L1)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+    try {
+      render(<AgentCursorLayer />);
+      send(event());
+      flush();
+      act(() => { vi.advanceTimersByTime(1600); });
+      const el = cursors()[0];
+      pointer(505, 350); // over the arrow at (500, 344)
+      expect(el.dataset.label).toBe('name');
+      // The person moves the node a little (a drag, under the stack radius per frame) away and back.
+      for (let i = 0; i < 20; i += 1) { moveNode('n1', 10); tickFrames(1); }
+      flush();
+      expect(el.dataset.label).toBe('none');
+      for (let i = 0; i < 20; i += 1) { moveNode('n1', -10); tickFrames(1); }
+      flush();
+      expect(at(el)).toEqual({ x: 500, y: 344 });
+      // Back under the still pointer: the name shows, with no pointer move.
+      expect(el.dataset.label).toBe('name');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hit-tests a resting cursor where it followed its node to, not where its boxes were read (review 2, L1)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+    try {
+      render(<AgentCursorLayer />);
+      send(event());
+      flush();
+      act(() => { vi.advanceTimersByTime(1600); });
+      const el = cursors()[0];
+      pointer(1400, 880); // far off: the boxes are read at (500, 344)
+      expect(el.dataset.label).toBe('none');
+      // The person drags n1 200 px right, 10 px a frame: the cursor follows.
+      for (let i = 0; i < 20; i += 1) { moveNode('n1', 10); tickFrames(1); }
+      flush();
+      expect(at(el)).toEqual({ x: 700, y: 344 });
+      // The pointer goes to where the cursor is now: its name shows.
+      pointer(705, 350);
+      expect(el.dataset.label).toBe('name');
+      // And where it was is no longer it.
+      pointer(505, 350);
+      expect(el.dataset.label).toBe('none');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the cached pane and boxes on a viewport change, a pane resize and a window resize, and only then (review 2, L4)', () => {
+    const observers: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { observers.push(callback); }
+      observe() {}
+      disconnect() {}
+    });
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    pointer(1400, 880);
+    const settled = reads.count;
+    pointer(1390, 880);
+    expect(reads.count).toBe(settled); // cached
+    const rereads = (change: () => void) => {
+      const before = reads.count;
+      change();
+      pointer(1380, 880);
+      return reads.count > before;
+    };
+    expect(rereads(() => { pane.transform = [5, 0, 1]; notifyStore(); })).toBe(true);
+    expect(rereads(() => {})).toBe(false);
+    expect(rereads(() => act(() => { observers.forEach((callback) => callback()); }))).toBe(true);
+    expect(rereads(() => act(() => { window.dispatchEvent(new Event('resize')); }))).toBe(true);
+    expect(rereads(() => {})).toBe(false);
+  });
+
+  it('re-reads its boxes when its label changes (a pill appears or goes)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+    try {
+      render(<AgentCursorLayer />);
+      send(event({ say: 'Reading' }));
+      flush();
+      // The say pill sits under the arrow until it fades (3 s): hovering it shows the name.
+      pointer(530, 392);
+      expect(cursors()[0].dataset.label).toBe('name+say');
+      act(() => { vi.advanceTimersByTime(4000); });
+      // The pill is gone; the same spot is no longer over the cursor.
+      pointer(531, 392);
+      expect(cursors()[0].dataset.label).toBe('none');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -477,3 +656,256 @@ describe('ratchets (review 1, L2 and F5)', () => {
   });
 });
 
+
+describe('a tab hidden mid-flight lands with no ring and no wire (GM - Design, PR #211 r5; review 2, M1)', () => {
+  const setVisibility = (state: 'hidden' | 'visible') => act(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  });
+
+  it.each([1500, 5000])('hidden %s ms after a click took off: the tip lands, and that is all', (hiddenMs) => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click', target: { nodeId: 'n2' }, say: 'Clicking Run' }));
+    tickFrames(12); // 200 ms in, mid-flight
+    expect(at(cursors()[0]).x).toBeLessThan(1000);
+    setVisibility('hidden');
+    clock += hiddenMs; // no frames while hidden
+    setVisibility('visible');
+    flush();
+    expect(at(cursors()[0])).toEqual({ x: 1000, y: 344 });
+    expect(ripple()).toBeNull();
+  });
+
+  it.each([1500, 5000])('a drag hidden %s ms mid-flight lands with its wire gone and no ripple', (hiddenMs) => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
+    const wire = document.querySelector<SVGLineElement>('.agent-cursor__wire')!;
+    for (let i = 0; i < 200 && wire.style.opacity !== '1'; i += 1) tickFrames(1);
+    expect(wire.style.opacity).toBe('1');
+    setVisibility('hidden');
+    clock += hiddenMs;
+    setVisibility('visible');
+    flush();
+    expect(wire.style.opacity).toBe('0');
+    expect(ripple()).toBeNull();
+  });
+
+  it('a hide shorter than 0.25 s mid-flight still lands with no ring: the return is not now', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click', target: { nodeId: 'n2' } }));
+    tickFrames(15); // 250 ms in, mid-flight
+    expect(ripple()).toBeNull();
+    setVisibility('hidden');
+    clock += 150;
+    setVisibility('visible');
+    flush();
+    expect(at(cursors()[0])).toEqual({ x: 1000, y: 344 });
+    expect(ripple()).toBeNull();
+  });
+
+  it('a stall past 0.25 s with no visibility change does the same; a slow frame under it does not', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click', target: { nodeId: 'n2' } }));
+    tickFrames(6);
+    clock += 300; // one 300 ms frame
+    tickFrames(1);
+    expect(at(cursors()[0])).toEqual({ x: 1000, y: 344 });
+    flush();
+    expect(ripple()).toBeNull();
+    // 200 ms is a slow frame: the move carries on and the ring shows on arrival.
+    send(event({ action: 'click', target: { nodeId: 'n1' } }));
+    tickFrames(6);
+    clock += 200;
+    tickFrames(1);
+    expect(at(cursors()[0]).x).toBeGreaterThan(500);
+    flush();
+    expect(ripple()).not.toBeNull();
+  });
+});
+
+describe('the stale-event threshold is the move\'s own duration (review 2, L4)', () => {
+  it('an event just older than its flight snaps; one just younger flies', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    // n1 to n2 is 500 screen px: 593 ms.
+    act(() => { useAgentPresenceStore.getState().apply(event({ target: { nodeId: 'n2' } }), Date.now() - 640); });
+    tickFrames(1);
+    expect(at(cursors()[0])).toEqual({ x: 1000, y: 344 });
+    act(() => { useAgentPresenceStore.getState().apply(event({ target: { nodeId: 'n1' } }), Date.now() - 540); });
+    tickFrames(1);
+    expect(at(cursors()[0]).x).toBeGreaterThan(500);
+  });
+});
+
+describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
+  const moveNode = (id: string, dx: number, dy: number) => {
+    const next = new Map(lookupRef.current) as Map<string, { internals: { positionAbsolute: { x: number; y: number } } }>;
+    const node = next.get(id)!;
+    next.set(id, { ...node, internals: { ...node.internals, positionAbsolute: {
+      x: node.internals.positionAbsolute.x + dx, y: node.internals.positionAbsolute.y + dy } } });
+    lookupRef.current = next as never;
+    notifyStore();
+  };
+
+  it('a click on a node being dragged fires at first arrival and the cursor rides along', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click', target: { nodeId: 'n2' } }));
+    let firedWhileMoving = false;
+    for (let i = 0; i < 150; i += 1) {
+      moveNode('n2', 0, 2.5); // 150 px/s down, never stopping in this test
+      tickFrames(1);
+      if (ripple()) firedWhileMoving = true;
+    }
+    expect(firedWhileMoving).toBe(true);
+    // Riding along: the tip is on the moving node's spot within 2 px.
+    const node = (lookupRef.current as Map<string, { internals: { positionAbsolute: { x: number; y: number } } }>).get('n2')!;
+    const spot = { x: node.internals.positionAbsolute.x + 100, y: node.internals.positionAbsolute.y + 44 };
+    const tip = at(cursors()[0]);
+    expect(Math.hypot(tip.x - spot.x, tip.y - spot.y)).toBeLessThanOrEqual(2.5);
+  });
+
+  it('a newer event before arrival drops the old action\'s look', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click', target: { nodeId: 'n2' } }));
+    tickFrames(10);
+    send(event({ action: 'move', target: { nodeId: 'n1' } }));
+    let rippled = false;
+    for (let i = 0; i < 200; i += 1) {
+      tickFrames(1);
+      if (ripple()) rippled = true;
+    }
+    expect(rippled).toBe(false);
+    expect(at(cursors()[0])).toEqual({ x: 500, y: 344 });
+  });
+
+  it('a click on the spot it already rests on ripples on the next frame (review 2, N3)', () => {
+    render(<AgentCursorLayer />);
+    send(event());
+    flush();
+    send(event({ action: 'click' }));
+    tickFrames(1);
+    expect(ripple()).not.toBeNull();
+  });
+});
+
+describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () => {
+  it('cursors that leave take their places with them: a cursor alone on a spot is never pushed aside (live, after a restart\'s empty replay)', () => {
+    render(<AgentCursorLayer />);
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    send(event({ ...A, target: { x: 360, y: 640 } }));
+    send(event({ ...B, target: { x: 760, y: 640 } }));
+    flush();
+    // A restarted backend replays nothing: every cursor leaves at once. A
+    // leaving cursor wakes the others; one already gone must not run again.
+    act(() => { useAgentPresenceStore.getState().replay([]); });
+    flush();
+    expect(cursors()).toHaveLength(0);
+    // New keys on the old spots, each alone there.
+    const C = { session: { key: 'cccccccccccc', ordinal: 1 } };
+    const D = { session: { key: 'dddddddddddd', ordinal: 2 } };
+    send(event({ ...C, target: { x: 760, y: 640 } }));
+    flush();
+    expect(at(cursors()[0])).toEqual({ x: 760, y: 640 });
+    send(event({ ...D, target: { x: 360, y: 640 } }));
+    flush();
+    const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    expect(byKey).toEqual({ cccccccccccc: { x: 760, y: 640 }, dddddddddddd: { x: 360, y: 640 } });
+  });
+
+  it('two cursors sent 100 ms apart from different distances: the one that lands second moves aside', () => {
+    render(<AgentCursorLayer />);
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    // A rests far off; B rests near n2.
+    send(event({ ...A, target: { x: -1400, y: 344 } }));
+    send(event({ ...B, target: { x: 960, y: 344 } }));
+    flush();
+    // A is sent first, from 2,400 px; B 100 ms later, from 40 px. B lands first.
+    send(event({ ...A, target: { nodeId: 'n2' } }));
+    tickFrames(6);
+    send(event({ ...B, target: { nodeId: 'n2' } }));
+    flush();
+    const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    expect(byKey.bbbbbbbbbbbb).toEqual({ x: 1000, y: 344 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 1010, y: 354 });
+  });
+
+  it('while both are on their way, the one due to land first aims at the spot: it never lands aside and hops back', () => {
+    render(<AgentCursorLayer />);
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    send(event({ ...A, target: { x: -1400, y: 344 } }));
+    send(event({ ...B, target: { x: 960, y: 344 } }));
+    flush();
+    send(event({ ...A, target: { nodeId: 'n2' } }));
+    tickFrames(6);
+    send(event({ ...B, target: { nodeId: 'n2' } }));
+    const b = () => at(cursors().find((el) => el.dataset.session === 'bbbbbbbbbbbb')!);
+    let aside = false;
+    for (let i = 0; i < 400 && frames.length > 0; i += 1) {
+      tickFrames(1);
+      const p = b();
+      if (Math.hypot(p.x - 1010, p.y - 354) < 3) aside = true;
+    }
+    expect(b()).toEqual({ x: 1000, y: 344 });
+    expect(aside).toBe(false);
+  });
+
+  it('the stamp radius is 16 screen px at any zoom', () => {
+    pane.transform = [0, 0, 0.5];
+    render(<AgentCursorLayer />);
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    send(event({ ...A, target: { x: 300, y: 300 } }));
+    flush();
+    send(event({ ...B, target: { x: 300, y: 300 } }));
+    flush();
+    const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    expect(where().bbbbbbbbbbbb).toEqual({ x: 320, y: 320 }); // 10 screen px at zoom 0.5
+    // A shifts 20 flow px: 10 screen px, inside the radius. It keeps its
+    // stamp, so it is never pushed off its own target.
+    send(event({ ...A, target: { x: 320, y: 300 } }));
+    flush();
+    expect(where().aaaaaaaaaaaa).toEqual({ x: 320, y: 300 });
+  });
+
+  it('a node dragged slowly under a landed cursor carries no stamp: the cursor already there keeps the spot (review 2, L2)', () => {
+    render(<AgentCursorLayer />);
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    send(event({ ...A, target: { nodeId: 'n1' } }));
+    flush();
+    send(event({ ...B, target: { x: 800, y: 344 } }));
+    flush();
+    // The person drags n1 (A's node) onto B's spot, 5 px per frame.
+    for (let i = 0; i < 60; i += 1) {
+      const next = new Map(lookupRef.current) as Map<string, { internals: { positionAbsolute: { x: number; y: number } } }>;
+      const node = next.get('n1')!;
+      next.set('n1', { ...node, internals: { ...node.internals, positionAbsolute: {
+        x: node.internals.positionAbsolute.x + 5, y: node.internals.positionAbsolute.y } } });
+      lookupRef.current = next as never;
+      notifyStore();
+      tickFrames(1);
+    }
+    flush();
+    const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    // B was there first: it keeps (800, 344); A, arriving on the dragged node, steps aside.
+    expect(byKey.bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 810, y: 354 });
+  });
+});

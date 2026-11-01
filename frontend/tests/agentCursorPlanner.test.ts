@@ -9,7 +9,9 @@ import {
   AGENT_CURSOR_LAND_HANDOFF,
   AGENT_CURSOR_LEAN_REST,
   AGENT_CURSOR_LEAN_SPRING,
+  AGENT_CURSOR_STALE_GAP_SECONDS,
   AGENT_CURSOR_STEP_SECONDS,
+  bowAgainst,
   createMotion,
   arcGapPx,
   cursorBow,
@@ -277,12 +279,66 @@ describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
     expect(arrivals).toBe(1);
   });
 
-  it('a frame gap over 2 s snaps to the target with no flight (arrived, never handed off)', () => {
+  it('a frame gap past 0.25 s lands the tip unseen, with no arrival (GM - Design, PR #211 r5: no ring)', () => {
+    expect(AGENT_CURSOR_STALE_GAP_SECONDS).toBe(0.25);
+    for (const gap of [0.26, 1.5, 5]) {
+      const m = createMotion({ x: 0, y: 0 }, 1);
+      planMove(m, { x: 900, y: 0 }, { zoom: 1, pointer: null });
+      stepMotion(m, { x: 900, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 });
+      const r = stepMotion(m, { x: 900, y: 0 }, gap, { zoom: 1, reduced: false, opacityTarget: 1 });
+      expect(r).toEqual({ arrived: false, handedOff: false, atRest: true, caughtUp: true });
+      expect(m.pos).toEqual({ x: 900, y: 0 });
+      expect(m.awaiting).toBe(false);
+    }
+    // Just under it: a slow frame, stepped as motion.
     const m = createMotion({ x: 0, y: 0 }, 1);
     planMove(m, { x: 900, y: 0 }, { zoom: 1, pointer: null });
-    const r = stepMotion(m, { x: 900, y: 0 }, 2.01, { zoom: 1, reduced: false, opacityTarget: 1 });
-    expect(r).toEqual({ arrived: true, handedOff: false, atRest: true });
-    expect(m.pos).toEqual({ x: 900, y: 0 });
+    const r = stepMotion(m, { x: 900, y: 0 }, 0.24, { zoom: 1, reduced: false, opacityTarget: 1 });
+    expect(r.caughtUp).toBeUndefined();
+    expect(m.pos.x).toBeLessThan(900);
+  });
+
+  it('a move to the spot it already rests on arrives on the next step, not after the progress spring', () => {
+    const m = createMotion({ x: 50, y: 50 }, 1);
+    planMove(m, { x: 50, y: 50 }, { zoom: 1, pointer: null });
+    expect(m.plan).toBeNull();
+    expect(stepMotion(m, { x: 50, y: 50 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 }).arrived).toBe(true);
+    // 1.5 screen px away at zoom 1 is still "there"; 3 px is a move.
+    const near = createMotion({ x: 0, y: 0 }, 1);
+    planMove(near, { x: 1.5, y: 0 }, { zoom: 1, pointer: null });
+    expect(stepMotion(near, { x: 1.5, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 }).arrived).toBe(true);
+    const far = createMotion({ x: 0, y: 0 }, 1);
+    planMove(far, { x: 3, y: 0 }, { zoom: 1, pointer: null });
+    expect(far.plan).not.toBeNull();
+  });
+
+  it('"already there" is 2 screen px at any zoom', () => {
+    // At zoom 3, 1 flow px is 3 screen px: a move. At zoom 0.25, 6 flow px is 1.5: there.
+    const near3 = createMotion({ x: 0, y: 0 }, 1);
+    planMove(near3, { x: 1, y: 0 }, { zoom: 3, pointer: null });
+    expect(near3.plan).not.toBeNull();
+    const far025 = createMotion({ x: 0, y: 0 }, 1);
+    planMove(far025, { x: 6, y: 0 }, { zoom: 0.25, pointer: null });
+    expect(far025.plan).toBeNull();
+  });
+
+  it.each([0.25, 3])('arrives within 2 screen px, never 2 flow px, at zoom %s', (zoom) => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    const to = { x: 600 / zoom, y: 0 };
+    planMove(m, to, { zoom, pointer: null });
+    let arrivedAt: number | null = null;
+    let lastGap = Infinity;
+    for (let i = 0; i < 200 && arrivedAt === null; i += 1) {
+      const before = Math.hypot(m.pos.x - to.x, m.pos.y - to.y) * zoom;
+      if (stepMotion(m, to, 1 / 60, { zoom, reduced: false, opacityTarget: 1 }).arrived) {
+        arrivedAt = Math.hypot(m.pos.x - to.x, m.pos.y - to.y) * zoom;
+        lastGap = before;
+      }
+    }
+    expect(arrivedAt).not.toBeNull();
+    expect(arrivedAt!).toBeLessThanOrEqual(AGENT_CURSOR_ARRIVE_PX);
+    // The step before was still farther than 2 screen px: arrival is the first frame within.
+    expect(lastGap).toBeGreaterThan(AGENT_CURSOR_ARRIVE_PX);
   });
 });
 
@@ -293,8 +349,167 @@ describe('long chords keep follow-through to 2 px (GM - Design, PR #211 r2)', ()
     expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
     expect(flight.motion.pos).toEqual({ x: d, y: 0 });
   });
+  it('accepted as measured (GM - Design, PR #211 r3): a 5K diagonal (2,940 px) rests by 1,050 ms, and no later change may make it slower', () => {
+    // GM: 2560 × 1440 CSS px is about 2,940 px corner to corner, the
+    // realistic worst case on one screen; about a second is within the calm
+    // timing rule. No new spring constants.
+    for (const to of [{ x: 2940, y: 0 }, { x: 2560, y: 1440 }]) {
+      const flight = fly(to);
+      expect(flight.restMs!).toBeLessThanOrEqual(1050 + 1e-6);
+      expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
+    }
+    // The measured table in the notes: 2,000, 3,000 and 6,000 px.
+    expect(fly({ x: 2000, y: 0 }).restMs!).toBeLessThanOrEqual(967 + 1e-6);
+    expect(fly({ x: 3000, y: 0 }).restMs!).toBeLessThanOrEqual(1067 + 1e-6);
+    expect(fly({ x: 6000, y: 0 }).restMs!).toBeLessThanOrEqual(1200 + 1e-6);
+  });
   it('the diagonal 1500 px move stays within 2 px', () => {
     expect(fly({ x: 1500 / Math.SQRT2, y: 1500 / Math.SQRT2 }).overshootPx).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('screen px at any zoom (review 2, L4)', () => {
+  it.each([0.25, 3])('a 3,000 screen-px chord at zoom %s still runs at most 2 screen px past', (zoom) => {
+    const flight = fly({ x: 3000 / zoom, y: 0 }, { zoom });
+    expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
+    expect(flight.restMs!).toBeLessThanOrEqual(1067 + 1e-6);
+  });
+  it('arcGapPx is in screen px', () => {
+    const a = { from: { x: 0, y: 0 }, control: { x: 50, y: 0 }, to: { x: 100, y: 0 } };
+    const b = { from: { x: 0, y: 10 }, control: { x: 50, y: 10 }, to: { x: 100, y: 10 } };
+    expect(arcGapPx(a, b, 1)).toBeCloseTo(10, 6);
+    expect(arcGapPx(a, b, 3)).toBeCloseTo(30, 6);
+    expect(arcGapPx(a, b, 0.25)).toBeCloseTo(2.5, 6);
+  });
+  it('a short move arrives only once its arc has handed off, not part way along it', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 3, y: 0 }, { zoom: 1, pointer: null });
+    for (let i = 0; i < 120; i += 1) {
+      const r = stepMotion(m, { x: 3, y: 0 }, 1 / 120, { zoom: 1, reduced: false, opacityTarget: 1 });
+      if (r.arrived) {
+        expect(m.plan).toBeNull();
+        return;
+      }
+    }
+    throw new Error('never arrived');
+  });
+});
+
+describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
+  const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
+  it('fires at first arrival on the target where it is now, then rides along at that offset until the next event', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    let target = { x: 600, y: 0 };
+    planMove(m, target, { zoom: 1, pointer: null });
+    let firedAt: number | null = null;
+    let firedOffset = 0;
+    // The person drags the node down at 150 px/s from 100 ms in, and keeps going.
+    for (let i = 1; i <= 240; i += 1) {
+      if (i > 6) target = { x: 600, y: target.y + 150 / 60 };
+      const r = stepMotion(m, target, 1 / 60, opts);
+      if (r.arrived) {
+        expect(firedAt).toBeNull(); // fires once
+        firedAt = i / 60;
+        firedOffset = Math.hypot(m.pos.x - target.x, m.pos.y - target.y);
+      }
+      if (firedAt !== null && i / 60 > firedAt + 0.5) {
+        // Riding along at the offset it fired at (within half a px), not left behind.
+        const off = { x: m.pos.x - target.x, y: m.pos.y - target.y };
+        expect(Math.hypot(off.x - m.attached!.x, off.y - m.attached!.y)).toBeLessThan(0.5);
+        expect(Math.hypot(m.attached!.x, m.attached!.y)).toBeLessThanOrEqual(AGENT_CURSOR_ARRIVE_PX);
+      }
+    }
+    // It fired while the drag was still going (it never stops in this test).
+    expect(firedAt).not.toBeNull();
+    expect(firedAt!).toBeLessThan(1.5);
+    expect(firedOffset).toBeLessThanOrEqual(AGENT_CURSOR_ARRIVE_PX);
+    // A new event ends the ride: it flies to the new target and arrives there.
+    planMove(m, { x: 0, y: 0 }, { zoom: 1, pointer: null });
+    expect(m.attached).toBeNull();
+  });
+
+  it('a still target still lands exactly on it', () => {
+    const flight = fly({ x: 400, y: 0 });
+    expect(flight.motion.pos).toEqual({ x: 400, y: 0 });
+    expect(flight.motion.attached).toBeNull();
+  });
+
+  it.each([5, 15, 23])('a resting cursor whose node is dragged %s px a frame rides along and never flies an arc', (perFrame) => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 0, y: 0 }, { zoom: 1, pointer: null });
+    for (let i = 0; i < 10; i += 1) stepMotion(m, { x: 0, y: 0 }, 1 / 60, opts);
+    let flew = false;
+    for (let i = 1; i <= 60; i += 1) {
+      stepMotion(m, { x: perFrame * i, y: 0 }, 1 / 60, opts);
+      if (m.plan) flew = true;
+    }
+    expect(flew).toBe(false);
+  });
+
+  it('a jump of the target (a sync, not a drag) flies there again', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 300, y: 0 }, { zoom: 1, pointer: null });
+    for (let i = 0; i < 90; i += 1) stepMotion(m, { x: 300, y: 0 }, 1 / 60, opts);
+    stepMotion(m, { x: 300, y: 300 }, 1 / 60, opts);
+    expect(m.plan).not.toBeNull();
+  });
+});
+
+describe('three or more flights (GM - Design, PR #211 r5): the side with the most room against every flight', () => {
+  const opts = { zoom: 1, pointer: null };
+  const interiorRoom = (plan: { from: Point; control: Point; to: Point }, others: { from: Point; control: Point; to: Point }[]) =>
+    Math.min(...others.map((o) => arcGapPx(plan, o, 1, [0.2, 0.8])));
+  it('review 2\'s three flights: C never shares B\'s flipped arc', () => {
+    const a = createMotion({ x: 0, y: 0 }, 1);
+    planMove(a, { x: 800, y: 0 }, opts);
+    for (let i = 0; i < 3; i += 1) stepMotion(a, { x: 800, y: 0 }, 1 / 60, { ...opts, reduced: false, opacityTarget: 1 });
+    const b = createMotion({ x: 800, y: 0 }, 1);
+    planMove(b, { x: 0, y: 0 }, { ...opts, others: [a.plan!] });
+    expect(b.plan!.control.y).toBeGreaterThan(0); // flipped down, clear of A
+    const c = createMotion({ x: 0, y: 4 }, 1);
+    planMove(c, { x: 800, y: 4 }, { ...opts, others: [a.plan!, b.plan!] });
+    const up = cursorBow({ x: 0, y: 4 }, { x: 800, y: 4 }, null, 1);
+    const down = cursorBow({ x: 0, y: 4 }, { x: 800, y: 4 }, null, 1, true);
+    const roomUp = interiorRoom({ from: { x: 0, y: 4 }, control: up, to: { x: 800, y: 4 } }, [a.plan!, b.plan!]);
+    const roomDown = interiorRoom({ from: { x: 0, y: 4 }, control: down, to: { x: 800, y: 4 } }, [a.plan!, b.plan!]);
+    const chosen = interiorRoom(c.plan!, [a.plan!, b.plan!]);
+    expect(chosen).toBe(Math.max(roomUp, roomDown) > roomUp ? roomDown : roomUp);
+    expect(chosen).toBeGreaterThanOrEqual(Math.min(roomUp, roomDown));
+  });
+
+  it('a flight blocked by the second of two others takes the clear side; a crowded side with more room than the other is kept', () => {
+    const from = { x: 0, y: 0 };
+    const to = { x: 800, y: 0 };
+    const line = (y: number) => ({ from: { x: 0, y }, control: { x: 400, y }, to: { x: 800, y }, aimed: { x: 800, y },
+      durationMs: 800, omega: 8, v0: 0, elapsed: 0 });
+    const up = cursorBow(from, to, null, 1);
+    const down = cursorBow(from, to, null, 1, true);
+    expect(up.y).toBeLessThan(0);
+    // A far flight first, then one the usual (up) arc crosses: the down side is clear.
+    expect(bowAgainst(from, to, null, 1, [line(600), line(-60)])).toEqual(down);
+    expect(bowAgainst(from, to, null, 1, [line(-60), line(600)])).toEqual(down);
+    // Up is crowded (20 px from a flight above) but down crosses one below: up has more room.
+    expect(bowAgainst(from, to, null, 1, [line(-100), line(60)])).toEqual(up);
+  });
+
+  it('checks every flight, not only the first: a fourth flight clear of three keeps its side; one blocked on both sides by different flights takes the roomier one', () => {
+    const fly0 = (from: Point, to: Point, others: ReturnType<typeof createMotion>['plan'][] = []) => {
+      const m = createMotion(from, 1);
+      planMove(m, to, { ...opts, others: others as never });
+      return m.plan!;
+    };
+    const a = fly0({ x: 0, y: 0 }, { x: 800, y: 0 });
+    const far = fly0({ x: 0, y: 600 }, { x: 800, y: 600 }, [a]);
+    expect(far.control.y).toBeLessThan(600); // clear: default up
+    // Blocked above by A only when it bows up; below by a flight 60 px down.
+    const below = fly0({ x: 0, y: 120 }, { x: 800, y: 120 });
+    const d = fly0({ x: 0, y: 30 }, { x: 800, y: 30 }, [far, below, a]);
+    const up = cursorBow({ x: 0, y: 30 }, { x: 800, y: 30 }, null, 1);
+    const down = cursorBow({ x: 0, y: 30 }, { x: 800, y: 30 }, null, 1, true);
+    const room = (control: Point) => interiorRoom({ from: { x: 0, y: 30 }, control, to: { x: 800, y: 30 } }, [far, below, a]);
+    expect(room(d.control)).toBe(Math.max(room(up), room(down)));
+    // With nothing in flight the default side stands.
+    expect(bowAgainst({ x: 0, y: 30 }, { x: 800, y: 30 }, null, 1, [])).toEqual(up);
   });
 });
 

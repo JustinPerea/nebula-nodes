@@ -74,7 +74,15 @@ export const AGENT_CURSOR_CROSS_PX = 24;
 export const AGENT_CURSOR_STEP_SECONDS = 1 / 120;
 
 /** A frame gap longer than this (a backgrounded tab) finishes the move at once. */
-const MAX_CATCH_UP_SECONDS = 2;
+/**
+ * A frame gap longer than this (s) means nobody watched the move: the tab
+ * was hidden or throttled, or the machine stalled. 0.25 s is 15 frames at
+ * 60 Hz, far past any jank the eye follows as motion (a heavy frame is 30 to
+ * 100 ms), and short enough that a return never shows a move as if it were
+ * happening now. The cursor lands on its target with no arrival: no ring, no
+ * wire (GM - Design, PR #211 r5: "the tip lands, and that's all").
+ */
+export const AGENT_CURSOR_STALE_GAP_SECONDS = 0.25;
 /** The land spring snaps onto the target within these (screen px, px/s). */
 const REST_DISTANCE_PX = 0.2;
 const REST_SPEED_PX = 2;
@@ -115,6 +123,14 @@ export interface CursorMotion {
   carry: number;
   /** A planned move whose tip hasn't arrived yet (StepResult.arrived is still to come). */
   awaiting: boolean;
+  /** The live target last step, and its velocity (flow px/s): the land
+   *  spring follows a target that keeps moving with no lag (feed-forward). */
+  lastLive: Point | null;
+  liveVel: Point;
+  /** After arrival, where the tip sits relative to the target: it stays
+   *  attached at this offset, riding along a drag, until its next event
+   *  (GM - Design, PR #211 r5). */
+  attached: Point | null;
 }
 
 export interface StepResult {
@@ -124,6 +140,9 @@ export interface StepResult {
   handedOff: boolean;
   /** Nothing moves any more: the loop can sleep. */
   atRest: boolean;
+  /** A frame gap past AGENT_CURSOR_STALE_GAP_SECONDS: the cursor was put on
+   *  its target unseen. No arrival, so no action is shown as if it were now. */
+  caughtUp?: boolean;
 }
 
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -138,7 +157,36 @@ export function createMotion(at: Point, opacity = 0): CursorMotion {
     opacity: { x: opacity, v: 0 },
     carry: 0,
     awaiting: false,
+    lastLive: null,
+    liveVel: { x: 0, y: 0 },
+    attached: null,
   };
+}
+
+const BOW_ROOM_ALONG = [0.2, 0.8] as const;
+
+/**
+ * The bow for a new flight against every other flight still under way
+ * (GM - Design, PR #211 r5): the default side when it is clear of all of
+ * them by AGENT_CURSOR_CROSS_PX, else the other side when that one is, else
+ * whichever leaves the most room; the default side when neither has more.
+ */
+export function bowAgainst(
+  from: Point,
+  to: Point,
+  pointer: Point | null,
+  zoom: number,
+  others: readonly CursorPlan[] | undefined,
+): Point {
+  const usual = cursorBow(from, to, pointer, zoom);
+  if (!others || others.length === 0) return usual;
+  // Room along the middle of the new arc: its ends sit where they sit, and no
+  // bow moves them, so they would rate both sides the same.
+  const room = (control: Point) => Math.min(...others.map((other) => arcGapPx({ from, control, to }, other, zoom, BOW_ROOM_ALONG)));
+  const usualRoom = room(usual);
+  if (usualRoom >= AGENT_CURSOR_CROSS_PX) return usual;
+  const flipped = cursorBow(from, to, pointer, zoom, true);
+  return room(flipped) > usualRoom ? flipped : usual;
 }
 
 /** How long a move of this many screen px takes. */
@@ -177,11 +225,13 @@ export function pathAt(plan: CursorPlan, p: number): Point {
   };
 }
 
-/** The closest two arcs come to each other, in screen px (sampled). */
+/** The closest two arcs come to each other, in screen px (sampled). `along`
+ *  limits the part of `a` that counts (progress from, to). */
 export function arcGapPx(
   a: Pick<CursorPlan, 'from' | 'control' | 'to'>,
   b: Pick<CursorPlan, 'from' | 'control' | 'to'>,
   zoom: number,
+  along: readonly [number, number] = [0, 1],
 ): number {
   const samples = 32;
   const at = (plan: Pick<CursorPlan, 'from' | 'control' | 'to'>, p: number) => {
@@ -194,7 +244,7 @@ export function arcGapPx(
   const bs = Array.from({ length: samples + 1 }, (_, j) => at(b, j / samples));
   let gap = Infinity;
   for (let i = 0; i <= samples; i += 1) {
-    const q = at(a, i / samples);
+    const q = at(a, along[0] + ((along[1] - along[0]) * i) / samples);
     for (const r of bs) gap = Math.min(gap, dist(q, r));
   }
   return gap * zoom;
@@ -219,6 +269,19 @@ export function planMove(
   const { zoom, pointer } = opts;
   const from = { ...m.pos };
   const d = dist(from, to);
+  // A new event (or a re-plan) ends the ride along the last target, and
+  // `to` is where the target is now: its next move is measured from here.
+  m.attached = null;
+  m.lastLive = { x: to.x, y: to.y };
+  m.liveVel = { x: 0, y: 0 };
+  if (d * zoom < AGENT_CURSOR_ARRIVE_PX) {
+    // Already there (a click on the spot it rests on): no arc to fly, so the
+    // action fires on the next step, not after a 380 ms progress spring.
+    m.plan = null;
+    m.landing = d > 0 ? { ...to } : null;
+    m.awaiting = true;
+    return;
+  }
   const durationMs = cursorDurationMs(d * zoom);
   const omega = AGENT_CURSOR_PROGRESS_K / (durationMs / 1000);
   const speed = Math.hypot(m.vel.x, m.vel.y);
@@ -234,12 +297,9 @@ export function planMove(
     // dB/dp at 0 is 2·reach, so this keeps the speed.
     v0 = Math.min(omega, speed / (2 * reach));
   } else {
-    control = cursorBow(from, to, pointer, zoom);
     // Another cursor still in flight on a path this one would cross or
-    // graze: this later-starting flight bows the other way.
-    if (opts.others?.some((other) => arcGapPx({ from, control, to }, other, zoom) < AGENT_CURSOR_CROSS_PX)) {
-      control = cursorBow(from, to, pointer, zoom, true);
-    }
+    // graze: this later-starting flight takes the side with more room.
+    control = bowAgainst(from, to, pointer, zoom, opts.others);
   }
   m.plan = { from, control, to: { ...to }, aimed: { ...to }, durationMs, omega, v0, elapsed: 0 };
   m.landing = null;
@@ -324,13 +384,24 @@ function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityT
     const k = AGENT_CURSOR_LAND_SPRING.stiffness;
     const c = AGENT_CURSOR_LAND_SPRING.damping;
     const mass = AGENT_CURSOR_LAND_SPRING.mass;
-    m.vel.x += ((-k * (m.pos.x - live.x) - c * m.vel.x) / mass) * h;
-    m.vel.y += ((-k * (m.pos.y - live.y) - c * m.vel.y) / mass) * h;
+    const aimX = live.x + (m.attached?.x ?? 0);
+    const aimY = live.y + (m.attached?.y ?? 0);
+    // Damping acts on the speed relative to the target (feed-forward), so a
+    // target that keeps moving (a node being dragged) is caught with no
+    // steady lag: the tip can arrive on it while it moves (GM - Design,
+    // PR #211 r5). A still target gives the same spring as before.
+    // The pull is toward where the target was at the start of this step, so
+    // that after the step the tip is where the target is now (no lead of one
+    // step's travel). For a still target both are the same.
+    m.vel.x += ((-k * (m.pos.x - (aimX - m.liveVel.x * h)) - c * (m.vel.x - m.liveVel.x)) / mass) * h;
+    m.vel.y += ((-k * (m.pos.y - (aimY - m.liveVel.y * h)) - c * (m.vel.y - m.liveVel.y)) / mass) * h;
     m.pos.x += m.vel.x * h;
     m.pos.y += m.vel.y * h;
-    if (Math.hypot(m.vel.x, m.vel.y) * zoom < REST_SPEED_PX && dist(m.pos, live) * zoom < REST_DISTANCE_PX) {
-      m.pos.x = live.x;
-      m.pos.y = live.y;
+    const targetStill = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom < REST_SPEED_PX;
+    if (targetStill && Math.hypot(m.vel.x, m.vel.y) * zoom < REST_SPEED_PX
+      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX) {
+      m.pos.x = aimX;
+      m.pos.y = aimY;
       m.vel.x = 0;
       m.vel.y = 0;
       m.landing = null;
@@ -340,6 +411,11 @@ function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityT
   if (m.awaiting && !m.plan && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
     m.awaiting = false;
     arrived = true;
+    // Fired at first arrival, within 2 px of where the target is now. On a
+    // target still moving, the tip keeps this offset and rides along until
+    // its next event; on a still one it settles onto the target.
+    const moving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+    m.attached = moving ? { x: m.pos.x - live.x, y: m.pos.y - live.y } : null;
   }
   const speedPx = Math.hypot(m.vel.x, m.vel.y) * zoom;
   stepSpring1(m.lean, leanTarget(m.vel.x * zoom, speedPx), AGENT_CURSOR_LEAN_SPRING, h);
@@ -368,6 +444,9 @@ export function stepMotion(
   const { zoom, reduced, opacityTarget } = opts;
   const finish = (arrived: boolean): StepResult => {
     m.awaiting = false;
+    m.attached = null;
+    m.lastLive = { ...live };
+    m.liveVel = { x: 0, y: 0 };
     m.pos = { ...live };
     m.vel = { x: 0, y: 0 };
     m.plan = null;
@@ -378,16 +457,34 @@ export function stepMotion(
     return { arrived, handedOff: false, atRest: true };
   };
   if (reduced) return finish(false);
-  if (dtSeconds > MAX_CATCH_UP_SECONDS) return finish(m.awaiting);
+  if (dtSeconds > AGENT_CURSOR_STALE_GAP_SECONDS) return { ...finish(false), caughtUp: true };
 
   const replanPx = AGENT_CURSOR_REPLAN_PX;
   const pointer = opts.pointer ?? null;
-  if (m.plan && dist(live, m.plan.aimed) * zoom > replanPx) planMove(m, live, { zoom, pointer });
-  else if (m.landing && dist(live, m.landing) * zoom > replanPx) planMove(m, live, { zoom, pointer });
-  else if (!m.plan && !m.landing) {
-    // At rest and the target moved (a node dragged or synced): follow it.
-    const away = dist(m.pos, live) * zoom;
-    if (away > replanPx) planMove(m, live, { zoom, pointer });
+  // The target's own motion since the last step. A jump past the re-plan
+  // distance in one step (a node synced or moved elsewhere at once) is a new
+  // place to fly to; anything less is a target moving (a drag), which the
+  // arc's end and the land spring track as it goes.
+  const jumpPx = m.lastLive ? dist(live, m.lastLive) * zoom : 0;
+  const jumped = jumpPx > replanPx;
+  // Where the target was a frame ago, when it is moving: the steps in this
+  // frame see it move from there to here, as it did, not hold still and jump.
+  const glideFrom = m.lastLive && !jumped && jumpPx > 0 ? { x: m.lastLive.x, y: m.lastLive.y } : null;
+  m.liveVel = m.lastLive && !jumped && dtSeconds > 0
+    ? { x: (live.x - m.lastLive.x) / dtSeconds, y: (live.y - m.lastLive.y) / dtSeconds }
+    : { x: 0, y: 0 };
+  m.lastLive = { x: live.x, y: live.y };
+  if ((m.plan || m.landing) && jumped) {
+    planMove(m, live, { zoom, pointer });
+  } else if (m.plan) {
+    m.plan.aimed = { x: live.x, y: live.y };
+  } else if (m.landing) {
+    m.landing = { x: live.x, y: live.y };
+  } else {
+    // At rest and the target moved: a jump flies there; a drag rides along.
+    const aim = { x: live.x + (m.attached?.x ?? 0), y: live.y + (m.attached?.y ?? 0) };
+    const away = dist(m.pos, aim) * zoom;
+    if (jumped && away > replanPx) planMove(m, live, { zoom, pointer });
     else if (away >= REST_DISTANCE_PX) m.landing = { ...live };
   }
 
@@ -395,9 +492,16 @@ export function stepMotion(
   let handedOff = false;
   m.carry += Math.max(0, dtSeconds);
   const h = AGENT_CURSOR_STEP_SECONDS;
-  while (m.carry >= h - 1e-9) {
+  const steps = Math.floor((m.carry + 1e-9) / h);
+  const at = { x: live.x, y: live.y };
+  for (let i = 1; m.carry >= h - 1e-9; i += 1) {
     m.carry -= h;
-    const step = substep(m, live, h, zoom, opacityTarget);
+    if (glideFrom && steps > 0) {
+      const f = Math.min(1, i / steps);
+      at.x = glideFrom.x + (live.x - glideFrom.x) * f;
+      at.y = glideFrom.y + (live.y - glideFrom.y) * f;
+    }
+    const step = substep(m, at, h, zoom, opacityTarget);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
   }

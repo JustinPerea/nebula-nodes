@@ -243,8 +243,8 @@ def _upload_failing_with_a_switch_away_and_back(race, monkeypatch) -> Any:
     real = main.manager.broadcast_raw
     state: dict[str, Any] = {}
 
-    async def hook(data: dict, **_kw) -> None:
-        await real(data)
+    async def hook(data: dict, **kw) -> None:
+        await real(data, **kw)
         if "fired" not in state and data.get("type") == "graphSync":
             state["fired"] = True
             await race.switch()
@@ -286,8 +286,8 @@ def test_an_upload_rolled_back_off_the_live_graph_resyncs_the_open_canvas(race, 
     real = main.manager.broadcast_raw
     state: dict[str, Any] = {}
 
-    async def hook(data: dict, **_kw) -> None:
-        await real(data)
+    async def hook(data: dict, **kw) -> None:
+        await real(data, **kw)
         if "fired" not in state and data.get("type") == "graphSync":
             state["fired"] = True
             await race.switch()

@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Mapping
 
 from services import node_route, universal_ports
-from services.cursor_actions import ACTIONS, refusal as action_refusal
+from services.cursor_actions import ACTIONS, SESSION_RE as _SESSION_RE, refusal as action_refusal
 from services.input_file_name import input_file_name
 from services.selection_context import _safe_value as safe_value
 from services.text_cut import safe_cut
@@ -57,7 +57,7 @@ MAX_SNAPSHOT_NODES = 300
 
 # One cursor per agent session, on the person's tabs (person_form).
 SESSIONS_PER_AGENT = 8          # live slots per agent; the frontend caps at the same number
-SESSION_IDLE_SECONDS = 20.0     # = the frontend's AGENT_CURSOR_IDLE_MS
+SESSION_IDLE_SECONDS = 20.0     # = the frontend's AGENT_CURSOR_IDLE_MS (the cap's idle, see _slot)
 SESSION_AGENT_MEMORY = 256      # agents whose live sessions are kept (least recently seen go first)
 SESSION_KEY_CHARS = 12
 # Where a request's session id may come from, besides an agent token's own
@@ -76,7 +76,6 @@ _NAME_ALLOWED = re.compile(r"[^A-Za-z0-9 ._()\-·]")
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 _COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _NODE_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
-_SESSION_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 _request_headers: ContextVar[Mapping[str, str] | None] = ContextVar("presence_request_headers", default=None)
 
@@ -325,6 +324,23 @@ class _SessionSlot:
     ordinal: int
     last_t: float
     target: dict[str, Any] | None
+    # The latest person form sent for it: what a person tab that connects
+    # later is shown (replay), so every tab draws the same live cursors.
+    event: dict[str, Any] | None = None
+
+
+def _forget_in_event(slot: _SessionSlot, gone: Callable[[dict[str, Any]], bool]) -> None:
+    """A slot's kept event loses a node that went, as _agents' copy does:
+    its drag origin, and the node in its last action (the name stays)."""
+    event = slot.event
+    if event is None:
+        return
+    origin = event.get("from")
+    if isinstance(origin, dict) and gone(origin):
+        event.pop("from")
+    did = event.get("did")
+    if isinstance(did, dict) and did.get("nodeId") and gone({"nodeId": did["nodeId"]}):
+        event["did"] = {**did, "nodeId": None}
 
 
 class AgentPresence:
@@ -456,7 +472,7 @@ class AgentPresence:
         message = f"{agent_id}\0{raw}".encode("utf-8")
         return hmac.new(self._session_secret, message, hashlib.sha256).hexdigest()[:SESSION_KEY_CHARS]
 
-    def _slot(self, agent_id: str, raw: str, now: float) -> _SessionSlot:
+    def _slot(self, agent_id: str, raw: str, now: float) -> _SessionSlot | None:
         """This session's live slot, made on its first event with a target.
 
         Numbers go among the agent's live sessions (GM - Design, PR #211 r1):
@@ -466,12 +482,23 @@ class AgentPresence:
         A cursor leaves when it has had no event for PRESENCE_TTL_SECONDS (the
         frontend's AGENT_CURSOR_EXPIRE_MS, when the tab prunes it too), or
         when the cap below pushes it out. Its number is free from then on.
+
+        At most SESSION_AGENT_MEMORY agents keep slots. Past that, the least
+        recently seen agent with no live cursor goes; an agent with a live
+        cursor is never pushed out, so its numbers never change under the
+        person (GM - Design, PR #211 r5). When every kept agent is live, a new
+        agent gets None: its events go out with no session, the plain agent
+        cursor, until room frees.
         """
         slots = self._slots.get(agent_id)
         if slots is None:
+            if len(self._slots) >= SESSION_AGENT_MEMORY:
+                gone = next((other for other, kept in self._slots.items()
+                             if all(now - live.last_t > PRESENCE_TTL_SECONDS for live in kept.values())), None)
+                if gone is None:
+                    return None
+                del self._slots[gone]
             slots = self._slots[agent_id] = OrderedDict()
-            while len(self._slots) > SESSION_AGENT_MEMORY:
-                self._slots.popitem(last=False)
         else:
             self._slots.move_to_end(agent_id)
         for stale in [k for k, slot in slots.items() if now - slot.last_t > PRESENCE_TTL_SECONDS]:
@@ -479,10 +506,12 @@ class AgentPresence:
         slot = slots.get(raw)
         if slot is None:
             if len(slots) >= SESSIONS_PER_AGENT:
-                # An agent can't flood the canvas with cursors: the oldest
-                # idle session goes first, else the oldest.
-                idle = [(k, v) for k, v in slots.items() if now - v.last_t >= SESSION_IDLE_SECONDS]
-                victim = min(idle or slots.items(), key=lambda item: item[1].last_t)[0]
+                # An agent can't flood the canvas with cursors: the least
+                # recently seen session goes. That is an idle one (quiet for
+                # SESSION_IDLE_SECONDS) whenever any is idle, since idle means
+                # seen longest ago; no separate idle rule is needed (review 2,
+                # N5 was an equivalent mutant of one).
+                victim = min(slots.items(), key=lambda item: item[1].last_t)[0]
                 del slots[victim]
             taken = {live.ordinal for live in slots.values()}
             number = 1
@@ -492,6 +521,16 @@ class AgentPresence:
             slots[raw] = slot
         slot.last_t = now
         return slot
+
+    def session_tag(self, identity: AgentIdentity, session: str | None) -> dict[str, Any] | None:
+        """``{key, ordinal}`` of this session's live cursor, read only (no slot
+        is made or touched), or None when it has none: for main._person_form
+        when the person form fails, so the tab gets the real number or none."""
+        raw = session if session is not None and _valid_session(session) else ""
+        slot = (self._slots.get(identity.id) or {}).get(raw)
+        if slot is None or self._clock() - slot.last_t > PRESENCE_TTL_SECONDS:
+            return None
+        return {"key": slot.key, "ordinal": slot.ordinal}
 
     def live_sessions(self, agent_id: str) -> list[tuple[str, int]]:
         """(key, number) of an agent's live sessions, oldest first (tests, diagnostics)."""
@@ -508,13 +547,15 @@ class AgentPresence:
     ) -> dict[str, Any]:
         """The person tabs' copy of ``event`` (the agent form point returned).
 
-        It adds ``session`` ({key, ordinal}) unless this is the agent's only
-        kind of cursor (no session, number 1), and shows ``shown`` (the
+        It adds ``session`` ({key, ordinal}), the plain cursor's too: the
+        backend is the one place that numbers, so a tab never works out a
+        number for itself (GM - Design, PR #211 r3). The one event with no
+        session is a new agent's past the agent cap (``_slot``): the tab
+        draws it as the plain agent cursor, with no number. It shows ``shown`` (the
         action a backend edit really was) in place of ``action``. With
         ``in_place`` (a line said with no target), the target is this
         session's own cursor, else the middle of the view, never another
-        session's cursor. Returns ``event`` itself when nothing differs, so
-        the caller sends one form, as before sessions.
+        session's cursor. The result is kept on the slot for ``replay``.
         """
         if "target" not in event:
             return event  # the Agent log only: no cursor, no session
@@ -524,6 +565,8 @@ class AgentPresence:
         person = dict(event)
         if shown is not None and shown in ACTIONS:
             person["action"] = shown
+        if slot is None:
+            return person  # past the agent cap: the plain agent cursor, with no session or number
         if in_place:
             if slot.target is not None:
                 person["target"] = dict(slot.target)
@@ -531,9 +574,39 @@ class AgentPresence:
                 # A session's first words: not on another session's cursor.
                 person["target"] = self._view_middle()[0]
         slot.target = dict(person["target"])
-        if raw or slot.ordinal != 1:
-            person["session"] = {"key": slot.key, "ordinal": slot.ordinal}
-        return event if person == event else person
+        person["session"] = {"key": slot.key, "ordinal": slot.ordinal}
+        slot.event = person
+        return person
+
+    def replay(self) -> list[dict[str, Any]]:
+        """Every live cursor in its person form, for one person tab that just
+        connected (its verified hello), oldest first so the newest paints on
+        top. Person-only: it carries sessions and numbers, so it never goes to
+        a socket without a verified hello. Each has ``replay: true`` (the tab
+        draws it where it is, no flight) and ``secondsAgo`` (how old its last
+        event is, so the tab shows a say only while it is still current). A
+        drag's ``from`` is left out: there is nothing to replay."""
+        now = self._clock()
+        out: list[dict[str, Any]] = []
+        for slots in self._slots.values():
+            for raw, slot in list(slots.items()):
+                if now - slot.last_t > PRESENCE_TTL_SECONDS:
+                    del slots[raw]  # it left: its number is free, as _slot drops it
+                    continue
+                if slot.event is None or slot.target is None:
+                    continue
+                age = now - slot.last_t
+                cursor = {key: value for key, value in slot.event.items() if key != "from"}
+                cursor["target"] = dict(slot.target)
+                cursor["session"] = {"key": slot.key, "ordinal": slot.ordinal}
+                if isinstance(cursor.get("did"), dict):
+                    did = cursor["did"]
+                    cursor["did"] = {**did, "secondsAgo": round(float(did.get("secondsAgo") or 0) + age, 1)}
+                cursor["secondsAgo"] = round(age, 1)
+                cursor["replay"] = True
+                out.append(cursor)
+        out.sort(key=lambda cursor: cursor["at"])
+        return out
 
     def last_point(self, node_id: str) -> dict[str, float] | None:
         """Where the browser last drew a node (its centre), for pointing at a deleted node."""
@@ -562,6 +635,7 @@ class AgentPresence:
                     value["target"] = dict(fallback)
         for slots in self._slots.values():
             for raw, slot in list(slots.items()):
+                _forget_in_event(slot, lambda anchor: anchor.get("nodeId") == node_id)
                 if slot.target is not None and slot.target.get("nodeId") == node_id:
                     if fallback is None:
                         del slots[raw]  # it leaves, as the agent's cursor does: its number is free
@@ -588,6 +662,7 @@ class AgentPresence:
         # /clear that clears the canvas frees the old chat's number.
         for slots in self._slots.values():
             for raw, slot in list(slots.items()):
+                _forget_in_event(slot, lambda anchor: "nodeId" in anchor)
                 if slot.target is not None and "nodeId" in slot.target:
                     del slots[raw]
 

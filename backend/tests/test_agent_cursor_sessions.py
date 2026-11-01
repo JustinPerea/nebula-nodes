@@ -328,11 +328,19 @@ def test_leaving_means_the_same_on_the_backend_and_the_tab():
     assert cap == SESSIONS_PER_AGENT
 
 
-def test_the_no_session_cursor_takes_part_and_carries_a_number_only_after_others():
+def test_the_no_session_cursor_takes_part_and_carries_its_number_to_the_person():
+    """GM - Design, PR #211 r3: every person-tab event carries the backend's
+    number, the plain cursor's too, so a tab never works one out. The agent
+    form is untouched."""
     clock = Clock()
     alone = AgentPresence(clock)
     event = _event(alone)
-    assert alone.person_form(event, AGENT, session=None) is event  # one form, as before
+    before = json.dumps(event)
+    person = alone.person_form(event, AGENT, session=None)
+    assert person is not event
+    assert person["session"] == {"key": alone.session_key(AGENT.id, ""), "ordinal": 1}
+    assert {k: v for k, v in person.items() if k != "session"} == event
+    assert json.dumps(event) == before  # the agent form, byte for byte
 
     presence = AgentPresence(clock)
     presence.person_form(_event(presence), AGENT, session="a")
@@ -501,8 +509,12 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
         "did": {"verb": "Looked at", "nodeId": node, "label": "Text Input", "secondsAgo": 0.0},
     })
     assert _presence_frames(api.listener) == [expected]
-    # No session: the person's canvas gets the very same bytes.
-    assert _presence_frames(api.person_socket) == [expected]
+    # No session: the person's canvas gets the same event plus the backend's
+    # number for the plain cursor (r3), and nothing else differs.
+    (plain,) = _presence_frames(api.person_socket)
+    plain = json.loads(plain)
+    assert plain.pop("session")["ordinal"] == 1
+    assert json.dumps(plain) == expected
 
     def reads(headers: dict) -> list[str]:
         return [json.dumps(api.client.get(path, headers=headers).json(), sort_keys=True)
@@ -605,10 +617,15 @@ def test_each_edit_shows_its_real_action_to_the_person_and_agents_read_what_they
     assert {cursor["action"] for cursor in api.main.agent_presence.active()} <= {"click", "drag", "move"}
 
 
-def test_an_edit_with_no_session_and_its_own_action_sends_one_form(sockets):
+def test_an_edit_with_no_session_reaches_the_person_with_its_number_and_agents_unchanged(sockets):
     api = sockets
     api.client.post("/api/graph/node", headers=CLAUDE, json={"definitionId": "text-input", "params": {}})
-    assert _presence_frames(api.person_socket) == _presence_frames(api.listener)
+    (agent_frame,) = _presence_frames(api.listener)
+    (person_frame,) = _presence_frames(api.person_socket)
+    assert "session" not in json.loads(agent_frame)
+    person = json.loads(person_frame)
+    assert person.pop("session")["ordinal"] == 1
+    assert json.dumps(person) == agent_frame
 
 
 def test_a_session_edit_reaches_the_person_with_its_session(sockets):
@@ -738,21 +755,26 @@ def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets
     pointed = api.client.post("/api/canvas/cursor", headers={**CLAUDE, **MCP_SESSION},
                               json={"target": {"nodeId": node}, "action": "look"})
     assert pointed.status_code == 200, pointed.text
-    # Everyone gets the agent form, the person's tabs included.
-    for socket in (api.listener, api.person_socket):
-        frames = [json.loads(t) for t in _presence_frames(socket)]
-        assert frames and frames[-1]["action"] == "look" and "session" not in frames[-1]
+    # Agents get the agent form. The person's tabs get nothing for a session
+    # with no live cursor yet: never a bare form the tab would number 1
+    # (review 2, NIT-3; test_agent_cursor_review2 covers a live one).
+    frames = [json.loads(t) for t in _presence_frames(api.listener)]
+    assert frames and frames[-1]["action"] == "look" and "session" not in frames[-1]
+    assert _presence_frames(api.person_socket) == []
     # An edit emitter too.
     api.listener.sent.clear()
     api.person_socket.sent.clear()
     put = api.client.put(f"/api/graph/node/{node}", headers=CLAUDE, json={"params": {"value": "yo"}})
     assert put.status_code < 300
     assert [json.loads(t)["action"] for t in _presence_frames(api.listener)] == ["click"]
-    assert [json.loads(t)["action"] for t in _presence_frames(api.person_socket)] == ["click"]
+    assert _presence_frames(api.person_socket) == []
 
 
-def test_the_agents_kept_are_bounded_and_the_oldest_goes_with_its_slots():
-    """Review 1, LOW-3: at most SESSION_AGENT_MEMORY agents keep live slots."""
+def test_the_agents_kept_are_bounded_and_a_left_one_goes_with_its_slots():
+    """Review 1, LOW-3: at most SESSION_AGENT_MEMORY agents keep slots.
+    Review 2, LOW-2 (GM - Design, PR #211 r5): only an agent whose cursors
+    have all left goes; a live one keeps its numbers, and a new agent past
+    the cap gets the plain agent cursor, no session, until room frees."""
     from services.agent_presence import SESSION_AGENT_MEMORY
 
     clock = Clock()
@@ -760,13 +782,19 @@ def test_the_agents_kept_are_bounded_and_the_oldest_goes_with_its_slots():
     first = AgentIdentity(id="ext:a0", name="A0", color="#3FC1A5", verified=False)
     presence.person_form(presence.point(first, target={"x": 1, "y": 1}), first, session="s")
     assert presence.live_sessions(first.id)
+    clock.now += PRESENCE_TTL_SECONDS + 1  # A0's cursor leaves
+    sessions = []
     for n in range(1, SESSION_AGENT_MEMORY + 4):
         clock.now += 0.001
         agent = AgentIdentity(id=f"ext:a{n}", name=f"A{n}", color="#3FC1A5", verified=False)
-        presence.person_form(presence.point(agent, target={"x": 1, "y": 1}), agent, session="s")
+        sessions.append(presence.person_form(presence.point(agent, target={"x": 1, "y": 1}), agent,
+                                             session="s").get("session"))
     assert presence.live_sessions(first.id) == []
+    assert "ext:a0" not in presence._slots
     assert len(presence._slots) == SESSION_AGENT_MEMORY
-    # Seen again, it starts afresh: "A0" is plain number 1.
+    assert all(sessions[:SESSION_AGENT_MEMORY]) and sessions[SESSION_AGENT_MEMORY:] == [None, None, None]
+    # Seen again once room frees, it starts afresh: "A0" is plain number 1.
+    clock.now += PRESENCE_TTL_SECONDS + 1
     again = presence.person_form(presence.point(first, target={"x": 1, "y": 1}), first, session="s")
     assert again["session"]["ordinal"] == 1
 
@@ -792,32 +820,63 @@ def test_a_marked_socket_with_the_real_token_is_never_the_persons(api, person): 
     assert manager.promote(plain, token) is True
 
 
-def test_every_broadcast_raw_fake_in_the_tests_takes_others():
+def test_every_broadcast_raw_stand_in_must_take_others():
     """Review 1, LOW-2: a fake that can't take ``others=`` raised a TypeError
     that _show_agent swallowed, so presence events vanished in 40 test files.
-    Every fake patched over manager.broadcast_raw must take ``others``."""
-    import ast
-    import pathlib
+    Review 2, LOW-3: the guard is now a runtime check in conftest.py (after
+    every monkeypatch.setattr, and when each test body ends), so every way of
+    installing a narrow stand-in is caught, not only the ones a syntax scan
+    could read."""
+    import functools
 
-    narrow = []
-    for path in sorted(pathlib.Path(__file__).parent.glob("test_*.py")):
-        tree = ast.parse(path.read_text())
-        defs: dict[str, list] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                defs.setdefault(node.name, []).append(node)
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "setattr" and len(node.args) >= 3):
-                continue
-            if not (isinstance(node.args[1], ast.Constant) and node.args[1].value == "broadcast_raw"):
-                continue
-            fake = node.args[2]
-            fns = defs.get(fake.id, []) if isinstance(fake, ast.Name) else [fake] if isinstance(fake, ast.Lambda) else []
-            for fn in fns:
-                args = fn.args
-                if args.kwarg is None and not any(a.arg == "others" for a in args.args + args.kwonlyargs):
-                    narrow.append(f"{path.name}:{getattr(fn, 'lineno', node.lineno)}")
-    assert narrow == []
+    import main
+    from tests.conftest import _check_broadcast_raw, broadcast_raw_takes_others
+
+    async def narrow(data):
+        return None
+
+    async def wide(data, **kw):
+        return None
+
+    class Narrow:
+        async def __call__(self, data):
+            return None
+
+    class Wide:
+        async def __call__(self, data, *, others=None):
+            return None
+
+    async def two(data, extra):
+        return None
+
+    narrow_ones = [narrow, functools.partial(two, extra=1), Narrow(), lambda data: None]
+    for fake in narrow_ones:
+        assert not broadcast_raw_takes_others(fake), fake
+    for fake in [wide, Wide(), main.manager.broadcast_raw, lambda data, **_: None]:
+        assert broadcast_raw_takes_others(fake), fake
+    real = main.manager.broadcast_raw
+    installs = [
+        lambda mp, fake: mp.setattr(main.manager, "broadcast_raw", fake),
+        lambda mp, fake: mp.setattr(target=main.manager, name="broadcast_raw", value=fake),
+        lambda mp, fake: mp.setattr("main.manager.broadcast_raw", fake),
+    ]
+    for install in installs:
+        for fake in narrow_ones:
+            with pytest.MonkeyPatch.context() as mp:
+                with pytest.raises(TypeError, match="can't take others="):
+                    install(mp, fake)
+            assert main.manager.broadcast_raw == real
+        with pytest.MonkeyPatch.context() as mp:
+            install(mp, wide)  # a wide one goes in quietly
+    # A direct assignment is caught when the test body ends.
+    main.manager.broadcast_raw = narrow
+    try:
+        with pytest.raises(TypeError, match="can't take others="):
+            _check_broadcast_raw("here")
+    finally:
+        del main.manager.broadcast_raw
+    assert main.manager.broadcast_raw == real
+    _check_broadcast_raw("here")
 
 
 def test_the_shared_capture_records_both_forms(sockets, broadcast_capture):
@@ -826,3 +885,213 @@ def test_the_shared_capture_records_both_forms(sockets, broadcast_capture):
     api.client.post("/api/canvas/cursor", headers={**CLAUDE, **MCP_SESSION}, json={"target": {"nodeId": node}})
     person, agent = broadcast_capture.sent[-1], broadcast_capture.others[-1]
     assert person["session"]["ordinal"] == 1 and "session" not in agent
+
+
+# -- round 3 (GM - Design, PR #211 r3) ---------------------------------------
+
+def test_a_refused_clear_keeps_the_old_chat_live_so_the_new_one_is_2_and_keeps_it():
+    """GM r3, answer 3: a /clear whose canvas clear is refused (a run going)
+    leaves the old chat's cursor live, so the new chat is "Claude · 2" and
+    keeps 2 after the old one leaves. No borrowing of the freed 1."""
+    clock = Clock()
+    presence = AgentPresence(clock)
+    old = presence.person_form(_event(presence), AGENT, session="chat:old")
+    assert old["session"]["ordinal"] == 1
+    # The clear was refused: forget_graph never ran. The new chat speaks.
+    new = presence.person_form(_event(presence), AGENT, session="chat:new")
+    assert new["session"]["ordinal"] == 2
+    # The old chat goes quiet and leaves; the new one keeps talking.
+    for _ in range(5):
+        clock.now += 30
+        assert presence.person_form(_event(presence), AGENT, session="chat:new")["session"]["ordinal"] == 2
+    assert [number for _, number in presence.live_sessions(AGENT.id)] == [2]
+    # A third chat takes the freed 1; the new one still reads 2.
+    assert presence.person_form(_event(presence), AGENT, session="chat:third")["session"]["ordinal"] == 1
+    assert presence.person_form(_event(presence), AGENT, session="chat:new")["session"]["ordinal"] == 2
+
+
+def test_the_replay_lists_every_live_cursor_with_its_number_where_it_is():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    for raw, x in (("a", 10), ("b", 20), ("c", 30)):
+        presence.person_form(_event(presence, {"x": x, "y": 5}, say=f"from {raw}"), AGENT, session=raw)
+    # b goes quiet past the TTL; a and c keep talking.
+    for _ in range(5):
+        clock.now += 30
+        presence.person_form(_event(presence, {"x": 10, "y": 5}), AGENT, session="a")
+        presence.person_form(_event(presence, {"x": 30, "y": 5}), AGENT, session="c")
+    clock.now += 2
+    cursors = presence.replay()
+    assert [(c["target"]["x"], c["session"]["ordinal"]) for c in cursors] == [(10, 1), (30, 3)]
+    for cursor in cursors:
+        assert cursor["replay"] is True
+        assert cursor["secondsAgo"] == 2.0
+        assert cursor["type"] == "agentPresence"
+        assert cursor["agent"] == AGENT.as_dict()
+    # b's number is free again, and the replay agrees with what tabs were sent.
+    assert presence.person_form(_event(presence), AGENT, session="d")["session"]["ordinal"] == 2
+
+
+def test_the_replay_leaves_out_a_drag_origin_and_follows_a_deleted_or_cleared_node():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    presence.person_form(_event(presence, {"nodeId": "n2"}, origin={"nodeId": "n1"}, action="drag"), AGENT, session="a")
+    presence.person_form(_event(presence, {"x": 1, "y": 2}), AGENT, session="b")
+    (drag, plain) = presence.replay()
+    assert "from" not in drag and drag["target"] == {"nodeId": "n2"}
+    presence.forget_graph()
+    assert [c["session"]["ordinal"] for c in presence.replay()] == [2]
+    assert plain["target"] == {"x": 1, "y": 2}
+
+
+def test_the_replay_keeps_the_eight_cursor_cap():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    for n in range(10):
+        clock.now += 1
+        presence.person_form(_event(presence, {"x": n, "y": 0}), AGENT, session=f"s{n}")
+    cursors = presence.replay()
+    assert len(cursors) == SESSIONS_PER_AGENT
+    assert sorted(c["session"]["ordinal"] for c in cursors) == list(range(1, 9))
+
+
+class _HelloSocket:
+    """Enough of a WebSocket for websocket_endpoint: the frames it will
+    receive, then a disconnect. Run under a timeout, so it can never hang."""
+
+    def __init__(self, frames: list[dict], headers: dict | None = None) -> None:
+        self.headers = headers or {}
+        self.incoming = [json.dumps(frame) for frame in frames]
+        self.sent: list[dict] = []
+
+    async def accept(self) -> None:
+        return None
+
+    async def send_text(self, text: str) -> None:
+        self.sent.append(json.loads(text))
+
+    async def receive_text(self) -> str:
+        from fastapi import WebSocketDisconnect
+
+        if not self.incoming:
+            raise WebSocketDisconnect()
+        return self.incoming.pop(0)
+
+
+def _connect(api, frames, headers=None) -> list[dict]:  # noqa: F811
+    socket = _HelloSocket(frames, headers)
+    asyncio.run(asyncio.wait_for(api.main.websocket_endpoint(socket), 20))
+    return socket.sent
+
+
+def test_a_person_tab_gets_the_replay_on_its_hello_and_no_one_else_does(sockets, person):
+    api = sockets
+    node = api.graph.add_node("text-input", {"value": "hi"})
+    no_hello_before = _connect(api, [])
+    for raw in ("lane-a", "lane-b", "lane-c"):
+        body = {"target": {"nodeId": node}, "action": "look", "say": f"Reading in {raw}"}
+        assert api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": raw},
+                               json=body).status_code == 200
+    # b leaves (quiet past the TTL); a and c keep going.
+    for _ in range(5):
+        api.presence_clock.now += 30
+        for raw in ("lane-a", "lane-c"):
+            api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": raw},
+                            json={"target": {"x": 10, "y": 10}, "action": "move"})
+
+    sent = _connect(api, [{"type": "hello", "personToken": person.token}])
+    types = [message["type"] for message in sent]
+    replay_at = types.index("agentPresenceReplay")
+    # The last of the syncs a verified hello gets, after the person's pins.
+    assert types[replay_at - 1] == "canvasPins" and replay_at == len(types) - 1
+    cursors = sent[replay_at]["cursors"]
+    assert [c["session"]["ordinal"] for c in cursors] == [1, 3]
+    assert all(c["replay"] is True and c["agent"] == identify(CLAUDE).as_dict() for c in cursors)
+
+    # A second tab (or a reconnect) gets the same list: the same keys, numbers.
+    again = next(m for m in _connect(api, [{"type": "hello", "personToken": person.token}])
+                 if m["type"] == "agentPresenceReplay")["cursors"]
+    assert [(c["session"]["key"], c["session"]["ordinal"]) for c in again] == [
+        (c["session"]["key"], c["session"]["ordinal"]) for c in cursors]
+
+    # No replay without a verified hello: no hello, a wrong token, or an agent-marked socket.
+    for frames, headers in (([], None),
+                            ([{"type": "hello", "personToken": "wrong"}], None),
+                            ([{"type": "hello", "personToken": person.token}], {"x-nebula-agent": "Claude"})):
+        assert "agentPresenceReplay" not in [m["type"] for m in _connect(api, frames, headers)]
+    # The boundary, key for key: a socket that never says hello gets exactly
+    # what it got before any session was live, and agents' reads don't change.
+    def timeless(messages):  # a notes sync stamps its send time
+        return [{k: v for k, v in m.items() if k != "at"} for m in messages]
+    assert timeless(_connect(api, [])) == timeless(no_hello_before)
+    for path in ("/api/canvas/agents", "/api/canvas/snapshot"):
+        read = json.dumps(api.client.get(path, headers=CLAUDE).json())
+        assert '"session"' not in read and '"ordinal"' not in read and '"replay"' not in read, path
+
+
+def test_every_person_form_carries_the_backends_number_and_the_tab_has_no_fallback():
+    """GM r3, answer 4: the backend numbers in every event a person tab gets;
+    the tab computes none (no `?? 1` or the like)."""
+    import pathlib
+
+    presence = AgentPresence(Clock())
+    for session in (None, "a", None, "b"):
+        assert "ordinal" in presence.person_form(_event(presence), AGENT, session=session)["session"]
+    store = (pathlib.Path(__file__).resolve().parents[2] / "frontend/src/store/agentPresenceStore.ts").read_text()
+    assert "ordinal ?? " not in store and "ordinal || " not in store
+
+
+def test_the_replay_never_names_a_node_that_went():
+    """A cursor that moved off a node keeps its last action's name, not the
+    node: after a clear or a delete, the replay says "Added “Hero”" with no
+    node id (ids restart per graph), as the agents' copy does."""
+    clock = Clock()
+    presence = AgentPresence(clock)
+    did = {"verb": "Added", "nodeId": "n1", "label": "Hero"}
+    presence.person_form(_event(presence, {"x": 5, "y": 5}, did=did), AGENT, session="a")
+    presence.person_form(_event(presence, {"x": 9, "y": 9}, did={**did, "nodeId": "n2"},
+                                origin={"nodeId": "n2"}, action="drag"), AGENT, session="b")
+    presence.forget_node("n1")
+    (first, second) = presence.replay()
+    assert first["did"]["nodeId"] is None and first["did"]["label"] == "Hero"
+    assert second["did"]["nodeId"] == "n2"
+    presence.forget_graph()
+    assert all(cursor["did"]["nodeId"] is None for cursor in presence.replay())
+
+
+def test_the_replay_drops_cursors_that_left_with_no_event_since():
+    """Expiry is lazy (on the agent's next event); the replay checks it too,
+    so a tab that connects after everyone went quiet gets no ghost."""
+    clock = Clock()
+    presence = AgentPresence(clock)
+    presence.person_form(_event(presence, {"x": 1, "y": 1}), AGENT, session="a")
+    presence.person_form(_event(presence, {"x": 2, "y": 2}), AGENT, session="b")
+    clock.now += PRESENCE_TTL_SECONDS - 1
+    assert len(presence.replay()) == 2
+    clock.now += 2
+    assert presence.replay() == []
+    # Their numbers are free: the next session is 1.
+    assert presence.person_form(_event(presence), AGENT, session="c")["session"]["ordinal"] == 1
+
+
+def test_the_replay_is_oldest_first_so_the_newest_paints_on_top():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    presence.person_form(_event(presence, {"x": 1, "y": 1}), AGENT, session="a")
+    clock.now += 1
+    presence.person_form(_event(presence, {"x": 2, "y": 2}), AGENT, session="b")
+    assert [c["target"]["x"] for c in presence.replay()] == [1, 2]
+    clock.now += 1
+    presence.person_form(_event(presence, {"x": 3, "y": 3}), AGENT, session="a")
+    assert [c["target"]["x"] for c in presence.replay()] == [2, 3]
+
+
+def test_the_replay_puts_a_cursor_whose_node_went_where_the_node_was():
+    clock = Clock()
+    presence = AgentPresence(clock)
+    presence.report_view({"viewport": {"x": 0, "y": 0, "zoom": 1},
+                          "nodes": [{"id": "n1", "x": 100, "y": 200, "width": 40, "height": 20}]})
+    presence.person_form(_event(presence, {"nodeId": "n1"}), AGENT, session="a")
+    presence.forget_node("n1")
+    (cursor,) = presence.replay()
+    assert cursor["target"] == {"x": 120.0, "y": 210.0}

@@ -657,11 +657,23 @@ the person's canvas, in the agent's colour at a different lightness. The
 first is named as the agent ("Claude"). A new session takes the lowest
 number free among the agent's live cursors, where the plain "Claude" counts
 as 1 ("Claude · 2", "Claude · 3"). A live cursor keeps its number until it
-leaves, so nothing renumbers under the person. A cursor leaves when it has
-had no event for 120 s, when its node is deleted or the canvas is cleared or
-replaced, or when a ninth session of the agent pushes out its oldest idle one
-(one agent shows at most 8 at once). The backend is the one place that
-numbers; every tab shows the number it gives. Where the session comes from:
+leaves, so nothing renumbers under the person. A cursor leaves when:
+
+- it has had no event for 120 s;
+- the canvas is cleared or replaced while it points at a node (a cursor at
+  a spot on the canvas stays);
+- the node it points at is deleted before Nebula knew where that node was
+  drawn (once it knows, the cursor stays where the node was);
+- a ninth session of the agent pushes it out: the least recently seen idle
+  one (quiet for 20 s) goes first, else the least recently seen (one agent
+  shows at most 8 at once).
+
+Its number is then free. A tab still showing that cursor drops it when
+another session of the agent takes the number, or after 120 s. The backend is the one place that
+numbers; every tab shows the number it gives. A tab of the person's that
+opens mid-session gets every live cursor at once, where it is, so all tabs
+show the same cursors and numbers. None of this reaches agents. Where the
+session comes from:
 
 | Client | Its session |
 |---|---|
@@ -671,8 +683,9 @@ numbers; every tab shows the number it gives. Where the session comes from:
 | `nebula` elsewhere, an app token, a bare `X-Nebula-Agent` request | `NEBULA_AGENT_SESSION` (the `X-Nebula-Agent-Session` header) if set, else one cursor for the agent's name, as before |
 
 **`NEBULA_AGENT_SESSION`, for orchestrators.** It says which session a
-call is: up to 64 of `A-Z a-z 0-9 _ . : -` (anything else is ignored, as if
-unset). The CLI sends it on every call; the MCP server reads it once at
+call is: up to 64 of `A-Z a-z 0-9 _ . : -`. Anything else is ignored for
+the cursor, as if unset: under Claude Code the CLI still uses the Claude Code
+session's cursor, and an MCP server its own per-process one. The CLI sends it on every call; the MCP server reads it once at
 start, for every call it serves.
 
 - **Without it, subagents share the parent's cursor.** A Claude Code

@@ -846,7 +846,8 @@ own.
 sessions has its own cursor on the person's canvas: "Claude Code", then
 "Claude Code · 2" (the lowest number free among your live cursors; a cursor
 keeps its number until it leaves). `NEBULA_AGENT_SESSION` says which session
-a call is: up to 64 of `A-Z a-z 0-9 _ . : -`, anything else is ignored.
+a call is: up to 64 of `A-Z a-z 0-9 _ . : -`; anything else is ignored for
+the cursor, as if unset.
 
 - **Without it**, under Claude Code the CLI uses your Claude Code session.
   Your subagents see the same one, so every subagent moves your cursor, and

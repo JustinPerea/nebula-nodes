@@ -23,7 +23,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
-from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal
+from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -356,12 +356,27 @@ def _agent_name(client: str) -> str:
 # two sessions of one agent (two Codex lanes) never share one (fix round 9,
 # M-2; services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
 _AGENT_SESSION = os.environ.get("NEBULA_AGENT_SESSION") or secrets.token_hex(8)
+# A NEBULA_AGENT_SESSION the backend ignores for the cursor counts as unset
+# there (review 2, NIT-1): this process's own cursor, through the cursor-only
+# header. _AGENT_SESSION is still sent as given, so scene reads are unchanged.
+def _own_cursor_session(agent_session: str) -> str | None:
+    return None if session_ok(agent_session) else secrets.token_hex(8)
+
+
+_CURSOR_SESSION = _own_cursor_session(_AGENT_SESSION)
+
+
+def _session_headers() -> dict[str, str]:
+    headers = {"X-Nebula-Agent-Session": _AGENT_SESSION}
+    if _CURSOR_SESSION:
+        headers["X-Nebula-Cursor-Session"] = _CURSOR_SESSION
+    return headers
 
 
 def _agent_headers(ctx: Context | None) -> dict[str, str]:
     """Who this agent is on the canvas (its cursor name) and this session;
     nebula_api adds the token."""
-    return {"X-Nebula-Agent": _cursor_name(ctx), "X-Nebula-Agent-Session": _AGENT_SESSION}
+    return {"X-Nebula-Agent": _cursor_name(ctx), **_session_headers()}
 
 
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
@@ -2931,7 +2946,7 @@ CHANNEL_CAPABILITY = "claude/channel"
 async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
     """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
     url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
-    headers = with_identity({"X-Nebula-Agent": agent, "X-Nebula-Agent-Session": _AGENT_SESSION})
+    headers = with_identity({"X-Nebula-Agent": agent, **_session_headers()})
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             response = await client.get(f"{url}{path}", params=params, headers=headers)

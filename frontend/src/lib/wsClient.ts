@@ -75,9 +75,18 @@ export interface AgentPresenceEvent {
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
   did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
-  /** Person tabs only: which session of this agent (display only). Absent
-   * for an agent's one cursor, as before sessions. */
+  /** Person tabs only: which session of this agent and its number (display
+   * only). Every cursor event a person tab gets carries it, the agent's plain
+   * cursor's too; the agents' form never does. */
   session?: AgentPresenceSession;
+}
+
+/** Person tabs only, right after a verified hello: every live cursor, so a
+ * tab that connects mid-session shows the same cursors and numbers as the
+ * others (GM - Design, PR #211 r3). Each is drawn where it is, no flight. */
+export interface AgentPresenceReplayEvent {
+  type: 'agentPresenceReplay';
+  cursors: (AgentPresenceEvent & { replay?: boolean; secondsAgo?: number })[];
 }
 
 /** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
@@ -354,6 +363,7 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | AgentPresenceReplayEvent
   | AgentStatusEvent
   | AgentRunEvent
   | CanvasPinsEvent

@@ -41,6 +41,9 @@ export interface AgentCursor {
   seq: number;
   /** What the last action was, for the Agents panel (Q125 item 2). */
   did: AgentCursorDid | null;
+  /** From the replay a person tab gets on connect: drawn where it is, with no
+   *  flight, until its next event. */
+  replayed: boolean;
   /** The project open when it happened. */
   projectId: string | null;
 }
@@ -57,6 +60,9 @@ export interface AgentCursorDid {
 interface AgentPresenceState {
   agents: Record<string, AgentCursor>;
   apply: (event: AgentPresenceEvent, now?: number) => void;
+  /** The live cursors the backend replays to this tab on connect: they
+   *  replace what the tab had, so a reconnect never doubles a cursor. */
+  replay: (cursors: readonly AgentPresenceEvent[], now?: number) => void;
   prune: (now?: number) => void;
   /** Drop node anchors when the whole graph is cleared or replaced: ids restart per graph. */
   forgetGraph: () => void;
@@ -104,59 +110,87 @@ function isAnchor(value: unknown): value is AgentCursorAnchor {
   return Number.isFinite(anchor.x) && Number.isFinite(anchor.y);
 }
 
+/** `agents` with one event applied (a new object), or `agents` itself when
+ *  the event has no cursor. */
+function withEvent(
+  agents: Record<string, AgentCursor>,
+  event: AgentPresenceEvent & { replay?: unknown; secondsAgo?: unknown },
+  now: number,
+): Record<string, AgentCursor> {
+  const agent = event.agent;
+  // No target: an action with no place on the canvas, for the Agent log only (agentLogStore).
+  const target = event.target;
+  if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string' || !isAnchor(target)) return agents;
+  const session = cleanSession(event.session);
+  const key = session ? `${agent.id}#${session.key}` : agent.id;
+  const replayed = event.replay === true;
+  const ago = replayed && typeof event.secondsAgo === 'number' && Number.isFinite(event.secondsAgo)
+    ? Math.min(Math.max(0, event.secondsAgo), AGENT_CURSOR_EXPIRE_MS / 1000) : 0;
+  const receivedAt = now - ago * 1000;
+  const previous = agents[key];
+  const next = { ...agents };
+  if (session && (!previous || previous.session?.ordinal !== session.ordinal)) {
+    // Only the backend numbers, and this tab shows its number as given. A new
+    // cursor with a number another cursor of this agent still shows means
+    // that one has left the backend (it went quiet for
+    // AGENT_CURSOR_EXPIRE_MS, or the cap pushed it out): it goes here too,
+    // so two cursors never read the same name. The same holds when a cursor
+    // the tab already shows comes with a new number (review 2, LOW-2).
+    for (const other of Object.values(next)) {
+      if (other.id === agent.id && other.session?.ordinal === session.ordinal) delete next[other.key];
+    }
+  }
+  if (!previous) {
+    // One agent can't flood the canvas: past the cap, its cursor heard
+    // from longest ago goes.
+    const mine = Object.values(next).filter((cursor) => cursor.id === agent.id);
+    mine.sort((a, b) => a.receivedAt - b.receivedAt);
+    for (const old of mine.slice(0, Math.max(0, mine.length + 1 - AGENT_CURSOR_SESSIONS_PER_AGENT))) {
+      delete next[old.key];
+    }
+  }
+  next[key] = {
+    id: agent.id,
+    key,
+    session,
+    name: agent.name,
+    color: SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
+    verified: Boolean(agent.verified),
+    target,
+    from: !replayed && isAnchor(event.from) ? event.from : undefined,
+    action: cursorAction(event.action),
+    say: typeof event.say === 'string' ? event.say : '',
+    receivedAt,
+    seq: (previous?.seq ?? 0) + 1,
+    did: cleanDid(event.did, now),
+    projectId: typeof event.projectId === 'string' ? event.projectId : null,
+    replayed,
+  };
+  return next;
+}
+
 export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
   agents: {},
-  apply: (event, now = Date.now()) => {
-    const agent = event.agent;
-    // No target: an action with no place on the canvas, for the Agent log only (agentLogStore).
-    const target = event.target;
-    if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string' || !isAnchor(target)) return;
-    const session = cleanSession(event.session);
-    const key = session ? `${agent.id}#${session.key}` : agent.id;
-    set((state) => {
-      const previous = state.agents[key];
-      const agents = { ...state.agents };
-      if (!previous) {
-        // The backend numbers sessions among the live ones, and this tab only
-        // shows its number. A new cursor with a number another cursor of this
-        // agent still shows means that one has left the backend (it went
-        // quiet for AGENT_CURSOR_EXPIRE_MS, or the cap pushed it out): it goes
-        // here too, so two cursors never read the same name.
-        const ordinal = session?.ordinal ?? 1;
-        for (const other of Object.values(agents)) {
-          if (other.id === agent.id && (other.session?.ordinal ?? 1) === ordinal) delete agents[other.key];
-        }
-        // One agent can't flood the canvas: past the cap, its cursor heard
-        // from longest ago goes.
-        const mine = Object.values(agents).filter((cursor) => cursor.id === agent.id);
-        mine.sort((a, b) => a.receivedAt - b.receivedAt);
-        for (const old of mine.slice(0, Math.max(0, mine.length + 1 - AGENT_CURSOR_SESSIONS_PER_AGENT))) {
-          delete agents[old.key];
-        }
+  apply: (event, now = Date.now()) => set((state) => {
+    const agents = withEvent(state.agents, event, now);
+    return agents === state.agents ? state : { agents };
+  }),
+  replay: (cursors, now = Date.now()) => set((state) => {
+    // The backend's live set, as of this tab's hello. Cursors drawn from the
+    // agents' form before the hello (no session) are the same cursors under
+    // another key, so the replay replaces them; a cursor it doesn't list has
+    // left. One kept with the same key keeps counting its seq.
+    let agents: Record<string, AgentCursor> = {};
+    for (const cursor of Array.isArray(cursors) ? cursors : []) {
+      if (!cursor || typeof cursor !== 'object') continue;
+      const before = agents;
+      agents = withEvent(agents, { ...cursor, replay: true }, now);
+      for (const key of Object.keys(agents)) {
+        if (!(key in before) && state.agents[key]) agents[key] = { ...agents[key], seq: state.agents[key].seq + 1 };
       }
-      return {
-        agents: {
-          ...agents,
-          [key]: {
-            id: agent.id,
-            key,
-            session,
-            name: agent.name,
-            color: SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
-            verified: Boolean(agent.verified),
-            target,
-            from: isAnchor(event.from) ? event.from : undefined,
-            action: cursorAction(event.action),
-            say: typeof event.say === 'string' ? event.say : '',
-            receivedAt: now,
-            seq: (previous?.seq ?? 0) + 1,
-            did: cleanDid(event.did, now),
-            projectId: typeof event.projectId === 'string' ? event.projectId : null,
-          },
-        },
-      };
-    });
-  },
+    }
+    return { agents };
+  }),
   prune: (now = Date.now()) => set((state) => {
     const kept = Object.fromEntries(
       Object.entries(state.agents).filter(([, cursor]) => now - cursor.receivedAt < AGENT_CURSOR_EXPIRE_MS),
@@ -178,6 +212,7 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
 
 wsClient.subscribe((event) => {
   if (event.type === 'agentPresence') useAgentPresenceStore.getState().apply(event);
+  else if (event.type === 'agentPresenceReplay') useAgentPresenceStore.getState().replay(event.cursors);
   else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) {
     useAgentPresenceStore.getState().forgetGraph();
   }

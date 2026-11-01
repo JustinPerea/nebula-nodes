@@ -10,6 +10,7 @@ import httpx
 
 from nebula_api import NebulaAPI, NebulaAPIError, never_reached, offline_read_only
 from services.agent_params import internal_keys, internal_refusal
+from services.cursor_actions import session_ok
 
 
 def cursor_session(environ: Any = None) -> str | None:
@@ -63,10 +64,14 @@ class NebulaClient:
             headers.setdefault("X-Nebula-Agent", agent_name)
         # One agent session's scene reads are its own (fix round 9, M-2):
         # set NEBULA_AGENT_SESSION when several sessions share a name.
+        # Sent as given, valid or not: the scene-read keys stay exactly as
+        # before. For the cursor, a value the backend ignores counts as unset
+        # (review 2, NIT-1), so under Claude Code the session's own cursor
+        # still applies through the cursor-only header.
         session = os.environ.get("NEBULA_AGENT_SESSION")
         if session:
             headers.setdefault("X-Nebula-Agent-Session", session)
-        else:
+        if not session_ok(session):
             cursor = cursor_session()
             if cursor:
                 headers.setdefault("X-Nebula-Cursor-Session", cursor)

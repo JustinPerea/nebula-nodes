@@ -376,3 +376,55 @@ def broadcast_capture(monkeypatch) -> BroadcastCapture:
     capture = BroadcastCapture()
     monkeypatch.setattr(main.manager, "broadcast_raw", capture)
     return capture
+
+
+# -- every broadcast_raw stand-in takes ``others=`` (PR #211 review 2, LOW-3) --
+#
+# A stand-in that can't take ``others=`` raises a TypeError that _show_agent
+# swallows, so presence events vanish from a test with no failure (review 1,
+# LOW-2). The old guard read the test files' syntax and missed
+# functools.partial, a class with __call__, string-path and keyword setattr
+# and direct assignment. This checks behaviour instead: whatever sits at
+# main.manager.broadcast_raw after any monkeypatch.setattr, and again when a
+# test's body ends, must bind ``(data, others=None)``.
+
+def broadcast_raw_takes_others(fake: object) -> bool:
+    import inspect
+
+    try:
+        inspect.signature(fake).bind({}, others=None)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+    except ValueError:  # no signature to read (a C builtin): nothing to check
+        return True
+    return True
+
+
+def _check_broadcast_raw(where: str) -> None:
+    import sys
+
+    manager = getattr(sys.modules.get("main"), "manager", None)
+    fake = getattr(manager, "broadcast_raw", None) if manager is not None else None
+    if fake is not None and not broadcast_raw_takes_others(fake):
+        raise TypeError(
+            f"{where}: main.manager.broadcast_raw is now {fake!r}, which can't take others=. "
+            "Use the broadcast_capture fixture, or give the stand-in `**kw` and forward it.")
+
+
+_monkeypatch_setattr = pytest.MonkeyPatch.setattr
+
+
+def _checked_setattr(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+    result = _monkeypatch_setattr(self, *args, **kwargs)
+    _check_broadcast_raw("monkeypatch.setattr")
+    return result
+
+
+pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):  # type: ignore[no-untyped-def]
+    result = yield
+    _check_broadcast_raw(item.nodeid)  # catches a direct assignment left in place
+    return result

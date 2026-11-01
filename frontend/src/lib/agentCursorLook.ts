@@ -107,10 +107,14 @@ const inGamut = (rgb: Rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
  * mirrored up, and one landing within 0.05 of an earlier session's L takes
  * the next unused offset. The offsets cycle after five, so sessions 1 and 6
  * share a fill (their names differ, and with two or more cursors names show).
+ * The band holds session 1 too (r3): a base outside 0.35-0.92 is pulled to
+ * the nearer edge before any stepping, so black starts at L 0.35, visible on
+ * the dark canvas, and white at 0.92.
  */
-export function sessionLightness(baseL: number, ordinal: number): number {
+export function sessionLightness(rawBaseL: number, ordinal: number): number {
   const steps = AGENT_CURSOR_SESSION_LIGHTNESS;
   const { max, min, minGap } = AGENT_CURSOR_SESSION_BAND;
+  const baseL = Math.min(max, Math.max(min, rawBaseL));
   const place = (delta: number) => {
     const L = baseL + delta;
     if (L > max) return baseL - Math.abs(delta);
@@ -120,8 +124,8 @@ export function sessionLightness(baseL: number, ordinal: number): number {
   const index = (ordinal - 1) % steps.length;
   const used: number[] = [];
   const taken = new Set<number>();
-  // Session 1 is the agent's own colour, unless that is white (shown at 0.92).
-  let L = baseL >= 0.9999 ? max : baseL;
+  // Session 1 is the agent's own colour, pulled into the band.
+  let L = baseL;
   used.push(L);
   taken.add(0);
   for (let k = 1; k <= index; k += 1) {
@@ -167,16 +171,16 @@ function fillAt(base: { l: number; c: number; h: number }, L: number): string {
  * The fill for one session of an agent: the agent's own hue and chroma at
  * the session's lightness (sessionLightness), with chroma lowered only as far
  * as it must be to stay in sRGB. The first session is the agent's colour
- * exactly, unless that is pure white, which no cursor ever is.
+ * exactly when its L is inside the band, else pulled to the band's edge.
  */
 export function sessionFill(hex: string, session: SessionLike | null): string {
   const ordinal = session && Number.isInteger(session.ordinal) && session.ordinal > 0 ? session.ordinal : 1;
   const base = hexToOklch(hex);
   if (!base) return hex;
   const L = Math.min(1, Math.max(0, sessionLightness(base.l, ordinal)));
-  // sessionLightness keeps every L at or under 0.92 except an agent's own
-  // off-white colour as its session 1, so no fill is ever #ffffff.
-  return L === base.l && hex.toLowerCase() !== '#ffffff' ? hex : fillAt(base, L);
+  // sessionLightness keeps every L inside 0.35-0.92, so no fill is ever
+  // #ffffff or invisible black; a colour already in the band is kept exactly.
+  return L === base.l ? hex : fillAt(base, L);
 }
 
 /** WCAG relative luminance. */
