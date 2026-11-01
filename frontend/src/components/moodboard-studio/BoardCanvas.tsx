@@ -13,6 +13,7 @@ import { BoardCardNode } from './BoardCardNode';
 import { BoardWideContext, createBoardNodeBuilder, wideFrom } from './boardNodes';
 import { visibleFlowCenter } from '../../lib/visibleFlowRect';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
+import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
 import '../../styles/moodboard-board.css';
 
 /** A card moved on the board: where its top-left now is, in whole board pixels. */
@@ -47,7 +48,6 @@ const ZOOM_STEP = 1.25;
 // Props React Flow gets the same object for on every render: a new one (an
 // inline `[]` or `{}`) would make it update its store on each pointer move.
 const NO_EDGES: [] = [];
-const FIT_VIEW_OPTIONS = { padding: FIT_PADDING, maxZoom: 1 };
 const PRO_OPTIONS = { hideAttribution: true };
 // React Flow's screen-reader words, about references instead of nodes.
 const ARIA_LABELS = {
@@ -94,6 +94,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
   const selection = useBoardSelection(boardKey);
   const setSelection = useBoardCanvasStore((state) => state.setSelection);
   const savedViewport = useRef(useBoardCanvasStore.getState().viewports[boardKey]).current;
+  // Fitted (#209, GM (a)): a fresh open is, and so is a camera kept from
+  // earlier in the visit that was fitted when it was kept. Either is fit at
+  // once to the column the board has now, at the first size it's measured
+  // at (boardFitFollow): a fitted camera kept at another column size, or with
+  // cards added since, would be a stale fit. A camera the person moved opens
+  // exactly as kept.
+  const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true).current;
 
   // Where cards being dragged or nudged are, until the move is sent.
   const [moving, setMoving] = useState<Record<string, { x: number; y: number }>>({});
@@ -198,20 +205,115 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
 
   // One camera spring at a time: a new move stops the one still running.
   const stopSpring = useRef<(() => void) | null>(null);
-  const springTo = useCallback((to: Viewport) => {
+  // Where the running spring is going (null when none is): the store already
+  // holds it, so React Flow's move end for a frame on the way (it can fire
+  // 150 ms later, after the view has closed) doesn't keep a camera mid-spring.
+  const springTarget = useRef<Viewport | null>(null);
+  // True while this view moves the camera itself: React Flow calls the move
+  // callbacks inside setViewport, and that move is the camera's own.
+  const ownMove = useRef(false);
+  const moveCamera = useCallback((viewport: Viewport) => {
+    ownMove.current = true;
+    try {
+      void setViewport(viewport);
+    } finally {
+      ownMove.current = false;
+    }
+  }, [setViewport]);
+  // A whole-board fit's refit while its column resizes (#209): `follow` knows
+  // whether the camera is still where the last fit left it, by comparing it.
+  const fitRef = useRef<(instant: boolean) => boolean>(() => false);
+  const follow = useRef<BoardFitFollow | null>(null);
+  follow.current ??= createBoardFitFollow({
+    fitted: startsFitted,
+    camera: () => {
+      const [x, y, zoom] = flowStore.getState().transform;
+      return { x, y, zoom };
+    },
+    refit: (instant) => fitRef.current(instant),
+  });
+  /** Spring the camera to `to`: a whole-board fit when `fitted`, any other move otherwise. */
+  const springTo = useCallback((to: Viewport, fitted = false) => {
+    if (fitted) follow.current!.fitTo(to, true);
+    else follow.current!.leave();
+    // A new move takes over from the one still running (a refit while the
+    // window is dragged starts from where the last one had got to).
     stopSpring.current?.();
-    stopSpring.current = springViewport(getViewport(), to, (viewport) => { void setViewport(viewport); });
-    // Where the camera lands is kept for the visit, as a pan or scroll is
-    // (onMoveEnd fires only for the person's own moves, not these).
-    useBoardCanvasStore.getState().setViewport(boardKey, to);
-  }, [getViewport, setViewport, boardKey]);
-  useEffect(() => () => stopSpring.current?.(), []);
+    springTarget.current = to;
+    stopSpring.current = springViewport(getViewport(), to, (viewport) => {
+      moveCamera(viewport);
+      if (viewport !== to) return;
+      // The last frame (viewportSpring applies `to` itself): the spring has landed.
+      springTarget.current = null;
+      follow.current!.springEnded();
+    });
+    // Where the camera lands is kept for the visit, as a pan or scroll is.
+    useBoardCanvasStore.getState().setViewport(boardKey, to, fitted);
+  }, [getViewport, moveCamera, boardKey]);
+  useEffect(() => () => {
+    stopSpring.current?.();
+    follow.current?.dispose();
+  }, []);
 
-  const fit = useCallback(() => {
-    const { width, height } = flowStore.getState();
-    if (!width || !height || nodesRef.current.length === 0) return;
-    springTo(getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING));
-  }, [flowStore, getNodesBounds, springTo]);
+  /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
+  const fit = useCallback((instant = false) => {
+    const { width, height, panZoom } = flowStore.getState();
+    if (!width || !height || nodesRef.current.length === 0) return false;
+    // React Flow can measure the board before its camera exists; the fit on
+    // open waits for it (it can't move a camera that isn't there yet).
+    if (instant && !panZoom) return false;
+    const to = getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING);
+    if (!instant) {
+      springTo(to, true);
+      return true;
+    }
+    // Only on open (the first size), before any spring has run.
+    follow.current!.fitTo(to, false);
+    moveCamera(to);
+    useBoardCanvasStore.getState().setViewport(boardKey, to, true);
+    return true;
+  }, [flowStore, getNodesBounds, springTo, moveCamera, boardKey]);
+  fitRef.current = fit;
+  // Cards that arrive after the board mounts (it opens before they load) get
+  // the fit on open once there are some.
+  const hasCards = nodes.length > 0;
+  useEffect(() => {
+    if (hasCards) follow.current!.ready();
+  }, [hasCards]);
+
+  // React Flow's camera (its d3 pan-zoom). It can make it again, at its
+  // default viewport, while this view stays mounted: React runs effects twice
+  // in development (StrictMode), and React Flow makes its camera in one. The
+  // camera kept for the visit is put back then, as on reopening.
+  const knownCamera = useRef<unknown>(null);
+  const cameraMade = useCallback((panZoom: unknown) => {
+    if (!panZoom || panZoom === knownCamera.current) return;
+    const again = knownCamera.current !== null;
+    knownCamera.current = panZoom;
+    if (!again) {
+      follow.current!.ready();
+      return;
+    }
+    stopSpring.current?.();
+    stopSpring.current = null;
+    springTarget.current = null;
+    const { viewports, fitted } = useBoardCanvasStore.getState();
+    const kept = viewports[boardKey];
+    if (!kept || fitted[boardKey]) follow.current!.reopen();
+    else moveCamera(kept);
+  }, [boardKey, moveCamera]);
+
+  // The column React Flow measures (its own ResizeObserver on the board):
+  // a new size refits while the board is fitted (boardFitFollow).
+  useEffect(() => {
+    const at = flowStore.getState();
+    cameraMade(at.panZoom);
+    follow.current!.resize(at.width, at.height);
+    return flowStore.subscribe((state, previous) => {
+      if (state.panZoom !== previous.panZoom) cameraMade(state.panZoom);
+      if (state.width !== previous.width || state.height !== previous.height) follow.current!.resize(state.width, state.height);
+    });
+  }, [flowStore, cameraMade]);
 
   // An Update's Show (Q113 c): spring the camera to the cards it names, once
   // the view has its size (a Show from List mounts this view first).
@@ -253,15 +355,36 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || studioKey(event) !== 'fit' || !isStudioShortcutTarget(event.target)) return;
       event.preventDefault();
-      fit();
+      fit(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [fit]);
 
-  const rememberViewport = useCallback((_event: unknown, viewport: Viewport) => {
-    useBoardCanvasStore.getState().setViewport(boardKey, viewport);
-  }, [boardKey]);
+  // The camera, kept for the visit with whether it is still fitted, read
+  // from the camera itself (a move's own viewport can be a spring frame
+  // React Flow reports 150 ms late). While a spring runs, the store holds
+  // where it lands (springTo).
+  const keepCamera = useCallback(() => {
+    if (springTarget.current) return;
+    useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
+  }, [boardKey, getViewport]);
+  // Any camera move this view didn't make takes the camera from a spring
+  // still running, so the spring can't undo it: a person's pan, pinch or
+  // wheel, and the moves React Flow makes for them with no source event (the
+  // autopan while a card is dragged to the edge, the pan to a card focused
+  // from the keyboard). It's caught at onMove as well as onMoveStart: after a
+  // single mouse-wheel notch, React Flow's pan-on-scroll stops calling
+  // onMoveStart (@xyflow/system 0.0.76). Whether the board is still fitted is
+  // read from the camera (boardFitFollow), not from these calls.
+  const onCameraMove = useCallback(() => {
+    if (ownMove.current) return;
+    stopSpring.current?.();
+    stopSpring.current = null;
+    springTarget.current = null;
+    follow.current!.taken();
+    keepCamera();
+  }, [keepCamera]);
 
   const addFiles = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
@@ -312,10 +435,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onSelectionDragStop={onSelectionDragStop}
-          onMoveEnd={rememberViewport}
-          defaultViewport={savedViewport}
-          fitView={!savedViewport}
-          fitViewOptions={FIT_VIEW_OPTIONS}
+          onMoveStart={onCameraMove}
+          onMove={onCameraMove}
+          onMoveEnd={keepCamera}
+          defaultViewport={startsFitted ? undefined : savedViewport}
           minZoom={MIN_ZOOM}
           maxZoom={MAX_ZOOM}
           deleteKeyCode={null}
@@ -331,7 +454,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
               aria-label="Zoom out" title="Zoom out">−</button>
             <button type="button" className="moodboard-board__control" onClick={() => zoomBy(ZOOM_STEP)}
               aria-label="Zoom in" title="Zoom in">+</button>
-            <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={fit}
+            <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={() => fit(false)}
               aria-label="Fit the board" title="Fit the board (Shift+1)">Fit</button>
             <label className={`moodboard-board__control moodboard-board__control--text${uploading ? ' moodboard-board__control--busy' : ''}`}
               title="Add images to the middle of the view">
