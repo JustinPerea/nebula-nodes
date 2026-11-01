@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -17,8 +17,8 @@ vi.mock('../src/lib/agentRoster', async (original) => ({
 }));
 vi.mock('@xyflow/react', async (importOriginal) => {
   const original = await importOriginal<typeof import('@xyflow/react')>();
-  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
-  const store = (await import('./helpers/fakeFlowStore')).fakeFlowStore();
+  // Selectors run against an empty 1280x800 flow, fresh each test (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...original,
     ReactFlow: ({ children, fitView }: { children: React.ReactNode; fitView: boolean }) => {
@@ -35,9 +35,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       getEdges: () => useGraphStore.getState().edges,
     }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
-    useStore: store.useStore,
+    useStore: fakeFlow.useStore,
     // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-    useStoreApi: store.useStoreApi,
+    useStoreApi: fakeFlow.useStoreApi,
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -57,7 +57,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { preloadFlowLayers } from './helpers/fakeFlowStore';
+import { quietConsole, installFakeFlowStore } from './helpers/fakeFlowStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
@@ -83,8 +83,9 @@ const scene = { id: 'n4', type: 'cinemaSceneNode', position: { x: 0, y: 0 }, sel
 const brief = { id: 'n5', type: 'model-node', position: { x: 300, y: 0 }, selected: true,
   data: { label: 'Brief', definitionId: 'text-input', params: { text: '' }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
-// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
-beforeAll(preloadFlowLayers);
+// The canvas's store-reading layers draw in every test, and a test fails if one
+// crashes on the fake store's answers.
+installFakeFlowStore();
 describe('M1: the Delete key during the tab\'s own run', () => {
   beforeEach(() => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -92,8 +93,8 @@ describe('M1: the Delete key during the tab\'s own run', () => {
     fetchMock.mockImplementation(async (url: string) => (String(url).includes('/api/cinema/generate-shot')
       ? json({ status: 'started', runId: 'own-run' }) : json({})));
     resetBackendConnectionForTests();
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Quiet, but a canvas layer that crashes still fails the test (fakeFlowStore.ts).
+    quietConsole();
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     useUIStore.setState(initialUI, true);
     useGraphStore.getState().resetExecution();

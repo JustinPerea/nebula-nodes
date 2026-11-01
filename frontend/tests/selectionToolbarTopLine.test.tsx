@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,8 +25,8 @@ vi.mock('../src/lib/agentRoster', async (original) => ({
 }));
 vi.mock('@xyflow/react', async (importOriginal) => {
   const original = await importOriginal<typeof import('@xyflow/react')>();
-  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
-  const store = (await import('./helpers/fakeFlowStore')).fakeFlowStore();
+  // Selectors run against an empty 1280x800 flow, fresh each test (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...original,
     // The real Panel (it passes extra props to its div); only the flow is a stand-in.
@@ -34,8 +34,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     Background: () => null,
     useReactFlow: () => ({ fitView: vi.fn(), viewportInitialized: false, screenToFlowPosition: (point: unknown) => point }),
     useInternalNode: () => undefined,
-    useStore: store.useStore,
-    useStoreApi: store.useStoreApi,
+    useStore: fakeFlow.useStore,
+    useStoreApi: fakeFlow.useStoreApi,
   };
 });
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));
@@ -54,7 +54,7 @@ vi.mock('../src/lib/canvasSelection', async (importOriginal) => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { preloadFlowLayers } from './helpers/fakeFlowStore';
+import { installFakeFlowStore } from './helpers/fakeFlowStore';
 import { floatingTopLimit } from '../src/lib/bottomBar';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
@@ -64,8 +64,9 @@ const initialGraph = useGraphStore.getState();
 const node = (id: string, selected = false): Node<NodeData> => ({ id, type: 'model-node', position: { x: 0, y: 0 }, selected,
   data: { label: 'Text Input', definitionId: 'text-input', params: { value: 'hello' }, state: 'idle', outputs: {} } });
 
-// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
-beforeAll(preloadFlowLayers);
+// The canvas's store-reading layers draw in every test, and a test fails if one
+// crashes on the fake store's answers.
+installFakeFlowStore();
 describe('the selection toolbar\'s top line', () => {
   beforeEach(() => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));

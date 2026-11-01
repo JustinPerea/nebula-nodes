@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node, Viewport } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -34,8 +34,8 @@ vi.mock('../src/lib/agentRoster', async (original) => ({
   fetchAgentRoster: () => new Promise(() => {}),
 }));
 vi.mock('@xyflow/react', async (importOriginal) => {
-  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
-  const store = (await import('./helpers/fakeFlowStore')).fakeFlowStore();
+  // Selectors run against an empty 1280x800 flow, fresh each test (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...await importOriginal<typeof import('@xyflow/react')>(),
     ReactFlow: (props: CanvasCallbacks & { children: React.ReactNode }) => {
@@ -48,9 +48,9 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       zoomIn: flow.zoomIn, zoomOut: flow.zoomOut, zoomTo: flow.zoomTo,
       screenToFlowPosition: (point: unknown) => point }),
     useInternalNode: (id: string) => flow.internalNodes.get(id),
-    useStore: store.useStore,
+    useStore: fakeFlow.useStore,
     // Fit view reads the canvas size to frame open proposals' ghosts (useFitCanvasView).
-    useStoreApi: store.useStoreApi,
+    useStoreApi: fakeFlow.useStoreApi,
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -74,7 +74,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 }));
 
 import { Canvas } from '../src/components/Canvas';
-import { preloadFlowLayers } from './helpers/fakeFlowStore';
+import { installFakeFlowStore } from './helpers/fakeFlowStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore, type ViewMode } from '../src/store/uiStore';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
@@ -89,8 +89,9 @@ function node(id: string): Node<NodeData> {
 const history: RunRecord[] = [{ id: 'saved-run', trigger: 'graph', status: 'complete', startedAt: 1,
   snapshot: { nodes: [], edges: [] } }];
 
-// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
-beforeAll(preloadFlowLayers);
+// The canvas's store-reading layers draw in every test, and a test fails if one
+// crashes on the fake store's answers.
+installFakeFlowStore();
 beforeEach(() => {
   vi.useFakeTimers();
   flow.fitView.mockReset().mockResolvedValue(true);

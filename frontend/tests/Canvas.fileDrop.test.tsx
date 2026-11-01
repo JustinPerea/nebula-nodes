@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, createEvent, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
@@ -27,9 +27,8 @@ vi.mock('../src/lib/agentRoster', async (original) => ({
   fetchAgentRoster: () => new Promise(() => {}),
 }));
 vi.mock('@xyflow/react', async (importOriginal) => {
-  // Selectors run against an empty 1280x800 flow (tests/helpers/fakeFlowStore.ts).
-  const { fakeFlowStore } = await import('./helpers/fakeFlowStore');
-  const store = fakeFlowStore();
+  // Selectors run against an empty 1280x800 flow, fresh each test (tests/helpers/fakeFlowStore.ts).
+  const { fakeFlow } = await import('./helpers/fakeFlowStore');
   return {
     ...await importOriginal<typeof import('@xyflow/react')>(),
     ReactFlow: (props: DropProps) => {
@@ -42,8 +41,8 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: true,
       screenToFlowPosition: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }) }),
     useInternalNode: () => undefined,
-    useStore: store.useStore,
-    useStoreApi: store.useStoreApi,
+    useStore: fakeFlow.useStore,
+    useStoreApi: fakeFlow.useStoreApi,
   };
 });
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
@@ -67,7 +66,7 @@ import { Canvas } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { ConnectionLostError } from '../src/lib/errorCopy';
-import { preloadFlowLayers } from './helpers/fakeFlowStore';
+import { installFakeFlowStore } from './helpers/fakeFlowStore';
 
 const TYPES = 'Nebula takes images, video, audio, PDFs and text files.';
 const initialUI = useUIStore.getState();
@@ -121,8 +120,9 @@ async function drop(files: File[], at?: { x: number; y: number }) {
   await act(async () => { await vi.runOnlyPendingTimersAsync(); });
 }
 
-// The canvas's store-reading layers draw in every test, not whenever their chunk lands.
-beforeAll(preloadFlowLayers);
+// The canvas's store-reading layers draw in every test, and a test fails if one
+// crashes on the fake store's answers.
+installFakeFlowStore();
 beforeEach(() => {
   vi.useFakeTimers();
   api.fetch.mockReset().mockImplementation(async () => new Response('{}', { status: 200 }));

@@ -60,9 +60,14 @@ Vitest 4's default reporter in an agent session shows no console output, so the
 plain command printed 0 lines both before and after; the counts below are with
 `--reporter=verbose`.
 
+Main's local numbers depend on when the mark layer's chunk lands: during the
+portrait-photo test (its old `URL` stub breaks the load, so the layer never
+draws) or before it (the layer draws and crashes). Both outcomes are real, so
+the table gives both.
+
 | run | key.split lines | "URL is not a constructor" lines | stderr blocks |
 | --- | --- | --- | --- |
-| main | 0 | 42 | 18 |
+| main, local (timing-dependent: 0 / 42 / 18 in this session; a reviewer's run got 60 / 0 / 26) | 0 or 60 | 42 or 0 | 18 or 26 |
 | main + layers preloaded (CI's timing, on demand) | 72 | 0 | 28 |
 | this branch (3 runs) | 0 | 0 | 4 |
 
@@ -74,3 +79,44 @@ The other four files: no `key.split` and nothing new on stderr. `Canvas.continui
 and `canvasRunLockDelete` keep the one "A suspended resource finished loading …
 not wrapped in act" warning they already had on main, which comes from another
 deferred chunk and is not touched here.
+
+## Review 1 follow-up (same day)
+
+- **F1, a regression now fails a test.** Before, `DeferredBoundary` caught the
+  layer's throw, so a constant `useStore` brought back 189 `key.split` lines
+  across the five files with every test green (re-checked on 7a80fe2).
+  `installFakeFlowStore()` (in the helper; each Canvas test calls it once at top
+  level) preloads the layers, wraps `console.error` / `console.warn` for each
+  test, and fails the test in `afterEach` when a line matches `.split is not a
+  function` or DeferredBoundary's "A deferred part of the app failed while
+  drawing". Messages still print. It wraps the console instead of a
+  `vi.spyOn`, because a file's own `vi.restoreAllMocks()` in `afterEach` runs
+  first and would take the spy's calls with it.
+  - `canvasRunLockDelete` silenced the console with
+    `vi.spyOn(console, …).mockImplementation(() => {})`, which replaced the
+    wrapper and hid the crash: under a constant `useStore` it stayed green.
+    It now calls `quietConsole()` (helper): nothing prints, but a crash still
+    fails the test.
+  - New `tests/fakeFlowStore.test.tsx` renders the preloaded mark layer with one
+    placeholder node in `nodeLookup` and checks its outline is drawn at the
+    node's box (`ViewportPortal` draws in place there, since the real one reads
+    React Flow's own store).
+  - Evidence: with `useStore` temporarily returning `1`, 55 of 66 tests fail
+    across the six files (fakeFlowStore 3/4, fileDrop 22/23, focus 4/10,
+    continuity 22/24, canvasRunLockDelete 2/2, selectionToolbarTopLine 2/3); the
+    ones still passing never render the canvas. Reverted, all 66 pass three
+    runs in a row.
+  - The name is `install…`, not `use…`: lint's rules-of-hooks reads `use…` as a
+    React hook and refuses a top-level call.
+- **F2, fresh state per test.** The helper keeps one state per test file
+  (`fakeFlow`); `reset()` builds a new one, and `installFakeFlowStore()` calls it
+  in `beforeEach`. `setState` now replaces the state object instead of
+  `Object.assign` on a shared one. Two tests in `fakeFlowStore.test.tsx` check a
+  `setState` in one test is gone in the next.
+- **F3** is the table note above.
+- **Follow-up, not done here (F4):** `tsc -b` only covers `src/`
+  (`tsconfig.app.json` includes `src`), so nothing typechecks `tests/`. That
+  was already true before this PR. An ad hoc check of the touched tests shows
+  only the two `paramsVersion` errors `Canvas.continuity` already has on main.
+  A `tsconfig.test.json` in the build would catch them, after those two are
+  fixed.
