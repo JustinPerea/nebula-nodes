@@ -225,6 +225,17 @@ The cost: an add that lands while the person is away has no Undo step, because t
 
 **For #213 (view insets).** Placement reads the view only through `BoardCanvas.viewRect()` (`VIEW_INSET` = 16 px plus the toolbar). That one rect reaches three places: the first placement (`placeTiles` in `addFiles`), the move of a spot the board took (the same `target.view`), and the chip (`viewOf={viewRect}`, and `followMovedSpots`). Whichever of #210 and #213 lands second points `viewRect` at the shared insets.
 
+**Merged with main (#209, board fit-follow).**
+- #209 added its own `follow` ref (`BoardFitFollow`), so the paste's 10 s focus follow is now `focusFollow`.
+- The chip's press frames the tiles through `springTo` without `fitted`, so it leaves the fitted state. A person's pan also leaves it, through #209's `onCameraMove`.
+- Fit bounds read the cards only, not the placeholders.
+- `BoardCanvas.test.tsx`'s mock store now hands listeners the previous state too, which #209's subscriber reads.
+- Live on 8797/5797, 18 of 18 checks passed:
+  - The paste repros again.
+  - A fitted board refits when the window narrows, with an upload held, and the held spot doesn't move on the board.
+  - After a pan, a resize keeps the camera.
+  - After Fit, a resize refits again.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.

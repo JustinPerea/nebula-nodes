@@ -613,11 +613,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // tile (GM r4 answer 6): onto it once it is drawn in view, and onto it
   // again when its placeholder becomes the card (a new element). Only while
   // focus would otherwise be on the board or nowhere, and for a short while.
-  const follow = useRef<{ x: number; y: number; until: number } | null>(null);
+  const focusFollow = useRef<{ x: number; y: number; until: number } | null>(null);
   const focusFollowed = useCallback(() => {
-    const spot = follow.current;
+    const spot = focusFollow.current;
     if (!spot || Date.now() > spot.until) {
-      follow.current = null;
+      focusFollow.current = null;
       return true;
     }
     const active = document.activeElement;
@@ -631,7 +631,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     return true;
   }, []);
   useEffect(() => { focusFollowed(); }, [shown, focusFollowed]);
-  useEffect(() => () => { follow.current = null; }, []);
+  useEffect(() => () => { focusFollow.current = null; }, []);
 
   // Focus on a tile that is being replaced moves on to what replaces it
   // (review 4, HIGH-1 and MEDIUM-2; GM: never the page body, never pulled
@@ -747,7 +747,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (!focus) return;
     // The board holds focus until the tile is drawn (it is culled until in view).
     focusBoard();
-    follow.current = { x: rects[0].x, y: rects[0].y, until: Date.now() + FOLLOW_FOCUS_MS };
+    focusFollow.current = { x: rects[0].x, y: rects[0].y, until: Date.now() + FOLLOW_FOCUS_MS };
     let frames = 0;
     const tick = () => {
       if (focusFollowed() || frames++ > 120) return;

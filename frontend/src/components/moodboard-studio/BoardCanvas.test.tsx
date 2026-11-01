@@ -21,8 +21,10 @@ type FlowProps = {
   selectionOnDrag?: boolean;
   children?: ReactNode;
 };
+type FlowState = { width: number; height: number; transform: [number, number, number]; panZoom?: unknown };
 const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: vi.fn(), fitView: vi.fn(),
-  zoom: 1, zoomListeners: new Set<(state: { transform: [number, number, number] }) => void>(),
+  // React Flow's store listeners get the state and the one before it (#209's fit-follow reads both).
+  zoom: 1, zoomListeners: new Set<(state: FlowState, previous: FlowState) => void>(),
   fill: null as null | { progress: (imageId: string) => number },
   // Draws the stand-in again on its own, as React Flow does a commit after the board's (the board doesn't render).
   redraw: () => {},
@@ -57,7 +59,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodesBounds: flow.getNodesBounds,
   }),
   useStoreApi: () => ({ getState: () => ({ width: 1000, height: 700, minZoom: 0.1, maxZoom: 2, transform: [0, 0, flow.zoom] }),
-    subscribe: (listener: (state: { transform: [number, number, number] }) => void) => { flow.zoomListeners.add(listener); return () => flow.zoomListeners.delete(listener); } }),
+    subscribe: (listener: (state: FlowState, previous: FlowState) => void) => { flow.zoomListeners.add(listener); return () => flow.zoomListeners.delete(listener); } }),
   };
 });
 // The camera's spring, recorded: each move and the cancel it returned.
@@ -699,7 +701,8 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
       const board = view.container.querySelector('.moodboard-board') as HTMLElement;
       expect(board.style.getPropertyValue('--mb-board-zoom')).toBe('0.25');
       for (const zoom of [1, 3]) {
-        act(() => { for (const listener of flow.zoomListeners) listener({ transform: [10, 20, zoom] }); });
+        const state: FlowState = { width: 1000, height: 700, transform: [10, 20, zoom] };
+        act(() => { for (const listener of flow.zoomListeners) listener(state, { ...state, transform: [0, 0, 1] }); });
         expect(board.style.getPropertyValue('--mb-board-zoom')).toBe(String(zoom));
       }
     } finally { flow.zoom = 1; }
