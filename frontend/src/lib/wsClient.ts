@@ -375,9 +375,12 @@ class WebSocketClient {
   /** The socket the server promoted as the person (its person-only
    * `proposalSync` came, which the backend sends on a verified hello only). */
   private promoted: WebSocket | null = null;
-  /** The token each socket's hello carried, so a refusal of that hello can drop exactly that
-   * token (Justin, 2026-10-31). Kept in memory only, never logged. */
-  private helloTokens = new WeakMap<WebSocket, string>();
+  /** The tokens each socket's hellos carried, oldest first, one entry per hello, so a refusal
+   * drops exactly the token of the hello it answers (Justin, 2026-10-31). A socket can carry two
+   * hellos: a link taken while the first hello's answer is on its way says hello again, and the
+   * server answers hellos in order, one answer each (`personRequired`, or the promote's
+   * `proposalSync`). Kept in memory only, never logged. */
+  private helloTokens = new WeakMap<WebSocket, string[]>();
 
   constructor(path: string) {
     this.path = path;
@@ -393,7 +396,9 @@ class WebSocketClient {
         return;
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
-        this.helloTokens.set(socket, personToken);
+        const sent = this.helloTokens.get(socket) ?? [];
+        sent.push(personToken);
+        this.helloTokens.set(socket, sent);
         socket.send(JSON.stringify({ type: 'hello', personToken }));
       }
     });
@@ -452,8 +457,8 @@ class WebSocketClient {
               if (this.promoted === socket) this.promoted = null;
               // Justin, 2026-10-31: that refusal is the backend saying the token this hello
               // carried is invalid, so the tab drops it (lib/personSession, with its guards).
-              dropRefusedPersonToken(this.helloTokens.get(socket) ?? null);
-              this.helloTokens.delete(socket);
+              // This refusal answers the oldest hello still unanswered, so only its token can drop.
+              dropRefusedPersonToken(this.helloTokens.get(socket)?.shift() ?? null);
               reportPersonRequired();
               return;
             }
@@ -461,6 +466,9 @@ class WebSocketClient {
             // only (backend websocket_endpoint), by whatever path the hello
             // came: a new link, the same link again, a reconnect, the desktop
             // app's token. The hold and the banner follow it.
+            // The promote answers a hello too: it takes that hello's entry, so a later answer
+            // on this socket lines up with its own hello.
+            if (parsed.type === 'proposalSync') this.helloTokens.get(socket)?.shift();
             if (parsed.type === 'proposalSync' && this.ws === socket) {
               this.promoted = socket;
               notePersonPromoted();

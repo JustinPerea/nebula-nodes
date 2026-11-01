@@ -234,7 +234,7 @@ async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWan
       holdRead(surface, key, wanted);
       afterPersonRefusal(`agentNotes.read:${key}`, error, () => sendHeldRead(key));
     } else {
-      setState({ error: failureMessage(error, "Couldn't mark the notes read.") });
+      setState({ error: failureMessage(error, "Couldn’t mark the notes read.") });
       // (A board's list is read again by the corner when this error shows.)
       if (surface.kind === 'canvas') void getState().hydrateCanvas();
     }
@@ -389,7 +389,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
         set((state) => ({ lists: withList(state.lists, key, (list) => ({ ...list, unread })) }));
       }
     } catch (error) {
-      const line = failureMessage(error, "Couldn't dismiss the note.");
+      const line = failureMessage(error, "Couldn’t dismiss the note.");
       clearLineOnPromote(error, () => get().error, line, () => set({ error: null })); // clears-on-promote: notes.dismiss
       set((state) => ({
         error: line,

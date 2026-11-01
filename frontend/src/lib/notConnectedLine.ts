@@ -114,13 +114,46 @@ function samplePoints(element: Element): [number, number][] {
   return [at(0.5, 0.5), at(0.15, 0.5), at(0.85, 0.5), at(0.5, 0.2), at(0.5, 0.8)];
 }
 
+/** Below this background alpha a layer over the line is a dim, not a cover (a modal's backdrop). */
+export const SEE_THROUGH_ALPHA = 0.85;
+const REPLACED = new Set(['IMG', 'VIDEO', 'CANVAS', 'SVG', 'svg', 'IFRAME', 'INPUT', 'TEXTAREA', 'SELECT', 'OBJECT', 'EMBED']);
+
+function backgroundAlpha(color: string): number {
+  if (!color || color === 'transparent') return 0;
+  const parts = /rgba?\(([^)]+)\)/.exec(color)?.[1].split(/[\s,/]+/).filter(Boolean);
+  if (!parts) return 1;
+  return parts.length >= 4 ? Number.parseFloat(parts[3]) * (parts[3].endsWith('%') ? 0.01 : 1) : 1;
+}
+
+/** PR #204 round 15 (GM r24 a): a layer the line shows through: a dimmed backdrop or an empty
+ * wrapper, with no picture, blur, text or replaced content of its own. */
+function seeThrough(layer: Element): boolean {
+  if (REPLACED.has(layer.tagName)) return false;
+  if ([...layer.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '')) return false;
+  const style = getComputedStyle(layer);
+  if (style.visibility === 'hidden') return true;
+  if (style.backgroundImage && style.backgroundImage !== 'none') return false;
+  const blur = style.backdropFilter || (style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter;
+  if (blur && blur !== 'none') return false;
+  return backgroundAlpha(style.backgroundColor) < SEE_THROUGH_ALPHA;
+}
+
 /** Review 8 MEDIUM-2: nothing opaque covers the whole line. A browser with no hit testing
- * (jsdom) has nothing to ask, so the line counts. */
+ * (jsdom) has nothing to ask, so the line counts. PR #204 round 15 (GM r24 a): a layer the line
+ * shows through (a modal's dim backdrop) doesn't cover it: the hit test looks beneath it. */
 export function lineUncovered(element: Element): boolean {
   if (typeof document.elementFromPoint !== 'function') return true;
+  const reaches = (hit: Element) => element.contains(hit) || hit.contains(element);
   return samplePoints(element).some(([x, y]) => {
     const hit = document.elementFromPoint(x, y);
-    return hit !== null && (element.contains(hit) || hit.contains(element));
+    if (hit === null) return false;
+    if (reaches(hit)) return true;
+    if (typeof document.elementsFromPoint !== 'function') return false;
+    for (const layer of document.elementsFromPoint(x, y)) {
+      if (reaches(layer)) return true;
+      if (!seeThrough(layer)) return false;
+    }
+    return false;
   });
 }
 

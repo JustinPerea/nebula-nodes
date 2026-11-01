@@ -182,7 +182,7 @@ export function PersonalAgentsSection() {
       load();
       announceChange();
     } catch (exc) {
-      const line = failureMessage(exc, "Couldn't update your agents.");
+      const line = failureMessage(exc, "Couldn’t update your agents.");
       setError(line);
       clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents (GM, #204 r3)
     } finally {

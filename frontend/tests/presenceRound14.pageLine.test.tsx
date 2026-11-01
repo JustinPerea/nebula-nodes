@@ -9,7 +9,7 @@
  *   page's order (GM confirmed both).
  * Add's lock line still comes after the page line (its x is the live check's).
  */
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const transport = vi.hoisted(() => ({ fetch: vi.fn(), token: null as string | null }));
@@ -51,7 +51,7 @@ let seen: string[] = [];
 let watcher: MutationObserver | null = null;
 
 beforeEach(() => {
-  vi.useRealTimers();
+  vi.useFakeTimers();
   resetPersonSessionForTests();
   resetCommonsSessionForTests();
   resetLinesForTests();
@@ -64,7 +64,17 @@ beforeEach(() => {
   watcher = new MutationObserver(() => { seen.push(...shownLines()); });
   watcher.observe(document.body, { subtree: true, childList: true, characterData: true });
 });
-afterEach(() => { watcher?.disconnect(); cleanup(); act(() => notePersonPromoted()); });
+afterEach(() => { watcher?.disconnect(); cleanup(); act(() => notePersonPromoted()); vi.useRealTimers(); });
+
+/** Round 15 (CI on d2040a0f): fake time moves only when the test moves it, so a line's arrival
+ * doesn't depend on the machine's speed. `until` moves it 50 ms at a time, up to `max` ms. */
+const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+async function until(check: () => void, max = 3000): Promise<void> {
+  for (let waited = 0; ; waited += 50) {
+    try { check(); return; } catch (error) { if (waited >= max) throw error; }
+    await tick(50);
+  }
+}
 
 const LOAD_WORDS = /check the Commons status|load the references|search the library|load the collections|library status/;
 
@@ -84,9 +94,9 @@ describe('pageLoadLines (GM r22)', () => {
 
 describe('a tab that isn\'t connected as you: one page line, never a load\'s own (GM r22)', () => {
   const expectPageLineOnly = async () => {
-    await waitFor(() => expect(shownLines()).toEqual([PAGE]));
+    await until(() => expect(shownLines()).toEqual([PAGE]));
     // The status poll and the loads keep refusing for a while: still the one line.
-    await new Promise((resolve) => { setTimeout(resolve, 300); });
+    await tick(300);
     expect(shownLines()).toEqual([PAGE]);
     expect(seen.filter((text) => LOAD_WORDS.test(text))).toEqual([]);
     // Add's line comes after it, in the same row.
@@ -103,7 +113,7 @@ describe('a tab that isn\'t connected as you: one page line, never a load\'s own
   it('demoted', async () => {
     transport.token = TOKEN;
     render(<CommonsView />);
-    await waitFor(() => expect(transport.fetch).toHaveBeenCalled());
+    await until(() => expect(transport.fetch).toHaveBeenCalled());
     act(() => { notePersonPromoted(); reportPersonRequired(); });
     await expectPageLineOnly();
   });
@@ -113,7 +123,7 @@ describe('a tab that isn\'t connected as you: one page line, never a load\'s own
     transport.token = 'stale-person-token-0123456789';
     act(() => reportPersonRequired());
     // Held past the 150 ms handover, as a reloaded tab is by the time it opens the Commons.
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    await tick(200);
     render(<CommonsView />);
     await expectPageLineOnly();
     expect(transport.fetch).not.toHaveBeenCalled();
@@ -125,18 +135,19 @@ describe('a connected tab (GM r22, confirmed)', () => {
     transport.token = TOKEN;
     fails.search = 500;
     render(<CommonsView />);
-    await waitFor(() => expect(shownLines()).toHaveLength(1));
-    expect(shownLines()[0]).toMatch(/^Couldn’t load the references\./);
+    await until(() => expect(shownLines()).toHaveLength(1));
+    // Round 15 (GM r24 c), verbatim.
+    expect(shownLines()[0]).toBe('Nebula couldn’t load the references because it didn’t respond. Try again.');
   });
 
   it('every load failing for one reason shows the page line with that reason', async () => {
     transport.token = TOKEN;
     fails.status = 500; fails.collections = 500; fails.search = 500;
     render(<CommonsView />);
-    await waitFor(() => expect(shownLines()).toHaveLength(1));
-    await new Promise((resolve) => { setTimeout(resolve, 600); });
+    await until(() => expect(shownLines()).toHaveLength(1));
+    await tick(600);
     expect(shownLines()).toHaveLength(1);
-    expect(shownLines()[0]).toMatch(/^Couldn’t load the Commons\./);
+    expect(shownLines()[0]).toBe('Nebula couldn’t load the Commons because it didn’t respond. Try again.');
   });
 
   it('two different reasons show one line per failed load, in the page\'s order', async () => {
@@ -148,10 +159,10 @@ describe('a connected tab (GM r22, confirmed)', () => {
       return answer(path);
     });
     render(<CommonsView />);
-    await waitFor(() => expect(shownLines()).toHaveLength(2));
+    await until(() => expect(shownLines()).toHaveLength(2));
     const [first, second] = shownLines();
-    expect(first).toMatch(/^Couldn’t check the Commons status\./);
-    expect(second).toMatch(/^Couldn’t load the references\./);
-    expect(first.replace(/^[^.]+\./, '')).not.toBe(second.replace(/^[^.]+\./, ''));
+    expect(first).toBe('Nebula couldn’t check the Commons status because it didn’t respond. Try again.');
+    expect(second).toMatch(/^Couldn’t load the references\. /);
+    expect(second).not.toMatch(/respond/);
   });
 });

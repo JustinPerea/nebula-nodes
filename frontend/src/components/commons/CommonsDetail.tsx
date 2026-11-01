@@ -76,7 +76,9 @@ function Membership({ assetId, membership, run }: {
   const [posting, setPosting] = useState(false);
   const postingRef = useRef(false);
   return (
-    <section className="commons-detail__section commons-membership">
+    // data-focus-scope (hooks/useFocusHandover FOCUS_SCOPE_ATTR): each membership is its own pane,
+    // so its Role and Why are never another collection's to the focus handover (review 12 MEDIUM-1).
+    <section className="commons-detail__section commons-membership" data-focus-scope={membership.id}>
       <header className="commons-membership__head">
         <strong>{membership.collection_name}</strong>
         {membership.brand && <span className="commons-badge">{membership.brand}</span>}
@@ -185,7 +187,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       setDetail(await commonsApi.asset(assetId));
       setError(null);
     } catch (e) {
-      line.show(e, "Couldn’t load the reference.", { reload: true });
+      line.show(e, "Couldn’t load this reference.", { reload: true });
     }
   }, [assetId, line]);
 
@@ -193,7 +195,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
     let cancelled = false;
     commonsApi.asset(assetId).then(
       (d) => { if (!cancelled) { setDetail(d); setError(null); } },
-      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the reference.", { reload: true }); },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load this reference.", { reload: true }); },
     );
     return () => { cancelled = true; };
   }, [assetId, loadEpoch, line]);

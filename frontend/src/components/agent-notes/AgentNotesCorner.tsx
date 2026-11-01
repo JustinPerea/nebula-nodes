@@ -665,7 +665,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
    * card, or when the list closed meanwhile.
    */
   function fail(failure: unknown) {
-    const line = failureMessage(failure, "Couldn't update the note.");
+    const line = failureMessage(failure, "Couldn’t update the note.");
     useAgentNotesStore.setState({ error: line });
     // GM, #204 r3: refused only because this tab isn't connected as you: gone on the promote.
     clearLineOnPromote(failure, () => useAgentNotesStore.getState().error, line, // clears-on-promote: notes.corner

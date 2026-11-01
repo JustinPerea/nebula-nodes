@@ -107,7 +107,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       followScan(resumed, () => !cancelled, showScan);
       return () => { cancelled = true; };
     }
-    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the review.", { reload: true }); })
+    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Blind labeling.", { reload: true }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [resumed, showScan, setBatch, loadEpoch, line]);

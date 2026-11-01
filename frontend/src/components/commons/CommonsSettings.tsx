@@ -77,6 +77,9 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const linkingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
+  // yet.") only once they were read: before that, or when the load failed, nothing was.
+  const [loaded, setLoaded] = useState(false);
   // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
@@ -86,6 +89,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     setFolders(f);
     setSettings(s);
     setCandidates(c);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -96,6 +100,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setFolders(f);
         setSettings(s);
         setCandidates(c);
+        setLoaded(true);
       },
       (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the Commons settings.", { reload: true }); },
     );
@@ -149,7 +154,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         <ul className="commons-folders">
           {folders.map((link) => <FolderRow key={link.id} link={link} run={run} />)}
         </ul>
-        {folders.length === 0 && <p className="commons-meta">No folders linked. Linked folders are read, never written.</p>}
+        {loaded && folders.length === 0 && <p className="commons-meta">No folders linked. Linked folders are read, never written.</p>}
         <form
           className="commons-detail__row"
           onSubmit={(event) => {
@@ -216,7 +221,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       <section className="commons-detail__section" aria-label="Vocabulary candidates">
         <h3 className="commons-heading">Vocabulary candidates</h3>
         {candidates.length === 0 ? (
-          <p className="commons-meta">No new terms proposed yet.</p>
+          loaded && <p className="commons-meta">No new terms proposed yet.</p>
         ) : (
           <ul className="commons-list">
             {candidates.map((c) => (

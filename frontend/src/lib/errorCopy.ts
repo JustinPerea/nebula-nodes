@@ -127,6 +127,16 @@ export function notConnectedBecause(what: string, desktop: boolean = inDesktopSh
 }
 
 /**
+ * GM r24 c (PR #204 round 15): a load Nebula answered with no reason (a 5xx, 408 or 429:
+ * NO_RESPONSE_COPY's case), as one sentence with Nebula the subject, verbatim for the references:
+ * "Nebula couldn’t load the references because it didn’t respond. Try again." `what` is what
+ * Nebula was doing, as notConnectedBecause's.
+ */
+export function noResponseBecause(what: string): string {
+  return `Nebula couldn’t ${what} because it didn’t respond. Try again.`;
+}
+
+/**
  * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
  * retries on the promote).
  * - The cluster itself refused: GM r10 (3), verbatim for a tab, the r2 general words after

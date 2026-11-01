@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { failureMessage, failureUnder, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { failureCopy, failureMessage, failureUnder, NO_RESPONSE_COPY, noResponseBecause, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 
 /** The heading the request itself carries (lib/commonsApi: each call names itself). */
@@ -48,8 +48,14 @@ export function useCommonsLine<T extends string | null>(
   const show = useCallback((error: unknown, heading: string, options: Options = {}) => {
     // A refusal says why in the because form (GM r6 (2), r12 (2)), under the request's own words
     // ("Couldn’t load the references." gives "Nebula couldn’t load the references because …").
-    const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
-    const line = (isPersonRefusal(error) && what ? notConnectedBecause(what) : failureMessage(error, heading)) as T;
+    // Round 15 (GM r25, pane loads): a pane's load is named by the pane's own words ("load Agent
+    // review", "load this reference", "load the Commons settings"), whichever of its requests
+    // failed, and no answer is the because form too: "Nebula couldn’t load Agent review because
+    // it didn’t respond. Try again."
+    const what = /^Couldn['’]t (.+)\.$/.exec((options.reload ? heading : '') || requestHeading(error) || heading)?.[1];
+    const noResponse = options.reload === true && failureCopy(error).reason === NO_RESPONSE_COPY;
+    const line = (isPersonRefusal(error) && what ? notConnectedBecause(what)
+      : noResponse && what ? noResponseBecause(what) : failureMessage(error, heading)) as T;
     setLine(line);
     register(error, line);
     if (options.reload && reloadKey && reload) retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.reload-retry
@@ -87,6 +93,12 @@ export function pageLoadLines(failures: readonly LoadFailure[]): string[] {
   return [...new Set(failures.map((failure) => failure.line))];
 }
 
+/** How long a load's own line waits for the page's other loads (GM r25 1): Add's wait, the same
+ * 1.5 s (useLockLineHold ADD_LINE_HOLD_MS; tests/presenceRound15.loadHold pins them equal). */
+export const LOAD_LINE_HOLD_MS = 1500;
+
+const NO_LINES: string[] = [];
+
 /**
  * A page's loads and their lines (GM r22, PR #204 round 14), so the page never sets a line
  * itself (tests/presenceRound9.commons). `order` is the page's order of its loads.
@@ -94,10 +106,25 @@ export function pageLoadLines(failures: readonly LoadFailure[]): string[] {
  *   and the loads run again (`reload`, once per `reloadKey`), as `useCommonsLine` does.
  * - `clear(load)`: that load answered, which also ends any "not connected" line (the tab is
  *   connected now); `clear()` empties all (a new view, a reconnect).
- * - `lines`: what shows (pageLoadLines).
+ * - `start(load)`: that load was sent. Round 15 (GM r25 1): a failed load's own line waits until
+ *   the page's other loads sent meanwhile have answered or failed, capped at LOAD_LINE_HOLD_MS,
+ *   so a connected tab whose loads fail for one reason sees one line (the page line), not a
+ *   load's line swapped for it. Past the cap the lines show as they stand. A not-connected
+ *   refusal's page line never waits (Add's line waits on it). Once shown, lines stay while any
+ *   load still fails.
+ * - `lines`: what shows (pageLoadLines, after the hold).
  */
 export function useCommonsLoadLines<K extends string>(order: readonly K[], reloadKey: string, reload: () => void) {
   const [failures, setFailures] = useState<Partial<Record<K, LoadFailure>>>({});
+  /** The loads sent and not answered yet (start, then show or clear). */
+  const [inFlight, setInFlight] = useState<ReadonlySet<K>>(() => new Set());
+  const settle = useCallback((load: K) => setInFlight((current) => {
+    if (!current.has(load)) return current;
+    const next = new Set(current);
+    next.delete(load);
+    return next;
+  }), []);
+  const start = useCallback((load: K) => setInFlight((current) => (current.has(load) ? current : new Set(current).add(load))), []);
   /** The lines already waiting for the promote, per load (the sweep empties it). */
   const pending = useRef(new Set<string>());
   const setFailure = useCallback((load: K, line: string, page: string, person: boolean) => setFailures((current) => {
@@ -123,19 +150,38 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
     // A refusal says why in the because form, under the request's own words; the page line
     // under the page's (GM r22).
     const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
-    const line = isPersonRefusal(error) && what ? notConnectedBecause(what) : failureMessage(error, heading);
+    // Round 15 (GM r24 c): no answer's reason is the because form too, one sentence for one cause.
+    const noResponse = failureCopy(error).reason === NO_RESPONSE_COPY;
+    const line = isPersonRefusal(error) && what ? notConnectedBecause(what)
+      : noResponse && what ? noResponseBecause(what) : failureMessage(error, heading);
     // The page's own words over the failure's reason (the request names only itself).
-    const page = isPersonRefusal(error) ? notConnectedBecause('load the Commons') : failureUnder(error, COMMONS_PAGE_HEADING) || line;
+    const page = isPersonRefusal(error) ? notConnectedBecause('load the Commons')
+      : noResponse ? noResponseBecause('load the Commons') : failureUnder(error, COMMONS_PAGE_HEADING) || line;
     setFailure(load, line, page, isPersonRefusal(error));
+    settle(load);
     register(load, error, line);
     retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.load-lines-retry
-  }, [setFailure, register, reloadKey, reload]);
-  const clear = useCallback((load?: K) => setFailures((current) => {
+  }, [setFailure, settle, register, reloadKey, reload]);
+  const clear = useCallback((load?: K) => { if (load !== undefined) settle(load); setFailures((current) => {
     // A load that answered also ends every "not connected" line: the tab is connected now.
     const kept = Object.entries(current).filter(([key, failure]) => load !== undefined && key !== load
       && !(failure as LoadFailure).person);
     return kept.length === Object.keys(current).length ? current : Object.fromEntries(kept) as Partial<Record<K, LoadFailure>>;
-  }), []);
-  const lines = useMemo(() => pageLoadLines(order.flatMap((load) => failures[load] ?? [])), [order, failures]);
-  return useMemo(() => ({ show, clear, lines }), [show, clear, lines]);
+  }); }, [settle]);
+  const all = useMemo(() => pageLoadLines(order.flatMap((load) => failures[load] ?? [])), [order, failures]);
+  // GM r25 1: hold the lines while another load is still on its way, up to the cap.
+  const any = all.length > 0;
+  const othersOnTheWay = order.some((load) => inFlight.has(load) && !failures[load]);
+  const ready = any && (Object.values(failures).some((failure) => (failure as LoadFailure).person) || !othersOnTheWay);
+  const [open, setOpen] = useState(false);
+  if (!any && open) setOpen(false);
+  else if (ready && !open) setOpen(true);
+  const holding = any && !open && !ready;
+  useEffect(() => {
+    if (!holding) return undefined;
+    const timer = window.setTimeout(() => setOpen(true), LOAD_LINE_HOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, [holding]);
+  const lines = any && (open || ready) ? all : NO_LINES;
+  return useMemo(() => ({ show, clear, start, lines }), [show, clear, start, lines]);
 }

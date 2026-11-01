@@ -65,12 +65,37 @@ interface Focused {
   path: HTMLElement[];
   /** The scope's named elements when focus was taken: none of them is the control come back. */
   there: WeakSet<Element>;
+  /** Round 15 (review 12 MEDIUM-1): how many of the scope's elements had this key when focus was
+   * taken, and which of them (in document order) this one was. Look-alikes in one pane (two
+   * memberships' Role) share a key; the one come back is the one at the same place, and only
+   * while the count is the same. */
+  ordinal: number;
+  count: number;
   /** Focus was handed here (a line or the heading) in place of the control `key` names: a later
    * change may move it on, to that control once it is back, or to a line that came meanwhile. */
   handed?: boolean;
 }
 
 const LINE = `[${FOCUS_LINE_ATTR}]`;
+
+/** The scope's elements with this key, in document order. */
+function sameKey(scope: HTMLElement, key: string): HTMLElement[] {
+  return [...scope.querySelectorAll<HTMLElement>(NAMED)].filter((el) => keyOf(el, scope) === key);
+}
+
+/**
+ * The control come back (round 15, review 12 MEDIUM-1): never a guess between look-alikes. Of
+ * the elements with its key, the one at its place, when there are as many as when focus was
+ * taken, it is new (not there then) and it isn't disabled. Otherwise none, and focus goes to
+ * the line.
+ */
+function cameBack(was: Focused, scope: HTMLElement): HTMLElement | undefined {
+  if (!was.key) return undefined;
+  const now = sameKey(scope, was.key);
+  if (now.length !== was.count) return undefined;
+  const el = now[was.ordinal];
+  return el && !was.there.has(el) && !el.matches(':disabled') ? el : undefined;
+}
 
 /**
  * The line nearest where the control was (round 14): one in its own pane, else, from the nearest
@@ -111,6 +136,10 @@ function nearestLine(was: Focused, scope: HTMLElement): HTMLElement | null {
  * when focus was taken, with the same label in the same pane (the nearest data-focus-scope or
  * labelled region). A look-alike that was there all along, in another pane or the same one, is
  * another control: focus goes to the line instead.
+ *
+ * Round 15 (review 12 MEDIUM-1): when look-alikes in one pane all come back new (two
+ * memberships' Role remount on the promote), the hook takes the one at the control's own place
+ * among them, and goes to the line when their count changed. It never takes the first.
  */
 export function useFocusHandover(change: unknown, root: () => HTMLElement | null, heading: () => HTMLElement | null) {
   const last = useRef<Focused | null>(null);
@@ -118,8 +147,10 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
     const scope = root();
     const path: HTMLElement[] = [];
     for (let at = element.parentElement; at && scope?.contains(at); at = at.parentElement) path.push(at);
+    const alike = scope && key ? sameKey(scope, key) : [];
+    const ordinal = Math.max(0, alike.indexOf(element));
     return { element, key, pane: pane ?? (scope ? paneOf(element, scope) : ''), path,
-      there: new WeakSet(scope ? scope.querySelectorAll(NAMED) : []) };
+      there: new WeakSet(scope ? scope.querySelectorAll(NAMED) : []), ordinal, count: Math.max(alike.length, 1) };
     // `root` is read when it runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -142,10 +173,7 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
       if (!lost()) return; // focus went somewhere on its own: leave it
       const scope = root();
       if (!scope) return;
-      const same = was.key
-        ? [...scope.querySelectorAll<HTMLElement>(NAMED)].find((el) => !was.there.has(el)
-          && keyOf(el, scope) === was.key && !el.matches(':disabled'))
-        : undefined;
+      const same = cameBack(was, scope);
       const line = nearestLine(was, scope);
       // The line can arrive a moment later (a held read answers on the next tick): wait for it.
       const target = same ?? line ?? (frame >= FRAMES ? heading() : null);
@@ -154,7 +182,8 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
         // Keep the control's own key: the promote brings it back, and focus goes back to it. What
         // is there now isn't it.
         last.current = same ? snapshot(same, keyOf(same, scope))
-          : was.key ? { ...snapshot(target, was.key, was.pane), path: was.path, there: was.there, handed: true } : snapshot(target, keyOf(target, scope));
+          : was.key ? { ...snapshot(target, was.key, was.pane), path: was.path, there: was.there, ordinal: was.ordinal,
+            count: was.count, handed: true } : snapshot(target, keyOf(target, scope));
         return;
       }
       frame += 1;

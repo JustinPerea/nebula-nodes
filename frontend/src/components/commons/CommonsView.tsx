@@ -439,9 +439,18 @@ function CommonsViewBody({ view }: {
   const loads = useCommonsLoadLines(COMMONS_LOADS, 'commons.view-load', runLoadsAgain);
   const loadFailed = loads.show;
   const loadsClear = loads.clear;
+  // Round 15 (GM r25 1): each load says when it is sent, so a failed one's line waits for the rest.
+  const loadStarted = loads.start;
+  // Round 15 (GM r24 b): what a list's last read answered for. Its empty state ("No matches…",
+  // "No collections") shows only then: after a failure, or before the first answer, nothing was
+  // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
+  const [answered, setAnswered] = useState<{ references: Tab | null; collections: boolean }>({ references: null, collections: false });
+  const noteAnswered = useCallback(<K extends keyof typeof answered>(load: K, value: (typeof answered)[K]) =>
+    setAnswered((current) => (current[load] === value ? current : { ...current, [load]: value })), []);
   const [dataView, setDataView] = useState(view);
   if (dataView !== view) {
     setDataView(view);
+    setAnswered({ references: null, collections: false });
     setRows([]);
     setLoading(true);
     setCollections([]);
@@ -488,30 +497,37 @@ function CommonsViewBody({ view }: {
     const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
     setCollections(list);
     setTarget((current) => current || list[0]?.id || '');
-  }, []);
+    noteAnswered('collections', true);
+  }, [noteAnswered]);
 
   useEffect(() => {
     let cancelled = false;
+    loadStarted('collections');
     commonsApi.collections().then(
       (all) => {
         if (cancelled) return;
         const list = all.filter((c) => c.kind !== 'system');
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
+        noteAnswered('collections', true);
         loadsClear('collections');
       },
-      (e: unknown) => { if (!cancelled) loadFailed('collections', e, "Couldn’t load the collections."); },
+      (e: unknown) => {
+        if (cancelled) return;
+        noteAnswered('collections', false);
+        loadFailed('collections', e, "Couldn’t load the collections.");
+      },
     );
     return () => { cancelled = true; };
-  }, [collectionsKey, loadFailed, loadsClear, view]);
+  }, [collectionsKey, loadFailed, loadsClear, loadStarted, noteAnswered, view]);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () => commonsApi.status().then((s) => {
+    const poll = () => { loadStarted('status'); return commonsApi.status().then((s) => {
       if (!cancelled) { setStatus(s); setStatusFailed(false); loadsClear('status'); }
     }, (e: unknown) => {
       if (!cancelled) { setStatusFailed(true); loadFailed('status', e, "Couldn’t load the library status."); }
-    });
+    }); };
     // A new round of reads (mount, a refresh, the promote's reload) is an attempt again.
     setStatusFailed(false);
     poll();
@@ -520,11 +536,13 @@ function CommonsViewBody({ view }: {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [refreshKey, loadFailed, loadsClear, view]);
+  }, [refreshKey, loadFailed, loadsClear, loadStarted, view]);
 
   useEffect(() => {
     if (tab === 'settings' || tab === 'labeling' || tab === 'review') return undefined;
     let cancelled = false;
+    // Sent from the debounce's start: a load failing meanwhile waits for this one too.
+    loadStarted('references');
     const timer = window.setTimeout(() => {
       setLoading(true);
       const request = filtersToRequest({ ...filters, inbox: tab === 'inbox' });
@@ -533,11 +551,13 @@ function CommonsViewBody({ view }: {
           if (cancelled) return;
           setRows(r.results);
           setError(null);
+          noteAnswered('references', tab);
           loadsClear('references');
           setLoading(false);
         },
         (e: unknown) => {
           if (cancelled) return;
+          noteAnswered('references', null);
           loadFailed('references', e, "Couldn’t search the library.");
           setLoading(false);
         },
@@ -547,7 +567,7 @@ function CommonsViewBody({ view }: {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [filters, tab, refreshKey, loadFailed, loadsClear, view]);
+  }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, noteAnswered, view]);
 
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {
@@ -663,8 +683,10 @@ function CommonsViewBody({ view }: {
   const addLine = useLockLineHold(addLock, Boolean(shownError?.length));
 
   // GM r18: on a tab that isn't connected as you nothing was searched and a drop won't add, so
-  // the area stays empty while the banner explains.
-  const emptyHint = addLock.locked ? ''
+  // the area stays empty while the banner explains. Round 15 (GM r24 b): a search that failed
+  // found nothing either, so the area shows only its failure line; and offline, or back online
+  // before the search reads again, nothing claims the library is empty.
+  const emptyHint = addLock.locked || answered.references !== tab ? ''
     : tab === 'inbox'
       ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
       : 'No matches. Drop images or videos here, or use Add.';
@@ -701,7 +723,8 @@ function CommonsViewBody({ view }: {
         <label className="commons-field commons-field--inline">
           Add to
           <select value={target} onChange={(event) => void chooseTarget(event.target.value)}>
-            {collections.length === 0 && <option value="">No collections</option>}
+            {/* Round 15 (GM r24 b): "No collections" only when the collections answered with none. */}
+            {collections.length === 0 && answered.collections && <option value="">No collections</option>}
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             {/* Round 11: locked with Add (its line covers it); picking a target stays live. */}
             <option value={NEW_COLLECTION} disabled={addLock.locked}>New collection…</option>

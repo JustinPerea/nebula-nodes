@@ -1815,6 +1815,9 @@ and where its lines sit changed.
 - Other tabs: the token lives in each tab's session storage and in memory, so this drop never
   reaches another tab. Each drops its own copy only on its own explicit refusal, and a tab that
   holds a newer token keeps it (the comparison), so the person's live tab doesn't flicker.
+  (Round 15: until review 12, a new link taken while the old hello's answer was on its way was
+  the exception; one entry per hello closes it. A duplicated tab copies session storage once, at
+  duplication, and is independent after that.)
 - Never on a close, an error, a 5xx, 403, 404, 408, a network error or a timeout.
 - Live (8795/5795): a tab holding a made-up token says hello with it, the real backend answers
   `personRequired`, and the tab drops the token and holds none. The check first failed twice:
@@ -1985,3 +1988,252 @@ One thing left as it was: offline with the tab connected, OK still sends, create
   promote: the line, the heading, the line, the field; and focus moved by the person stays).
   Mutants caught: the offline state left out of the change, no re-entry for a handed focus, the
   lost check ignoring it, the handed mark missing.
+
+## Round 15 (CI on d2040a0f; GM r24)
+
+#### The one-shift test no longer races the machine (CI on d2040a0f)
+- `presenceRound14.commonsLock` "Add locks at once …" waited for the page line with waitFor's 1 s
+  default on real time, while the product's own cap is 1.5 s; under CI load the line came late
+  and the test failed. Raising the timeout would not have fixed it (past 1.5 s the product
+  correctly shows Add's line alone, which the old test also rejected).
+- The test now runs on fake time and holds the page's three loads (status, collections, search)
+  in the API until it lets them answer, so it says when the because line is ready:
+  - fast path: the loads answer at 1.4 s; both lines land in the same commit, and no commit
+    showed Add's line without the page line above it;
+  - slow path: no answer by 1.5 s; Add's line shows alone at exactly 1500 ms (not at 1499), and
+    the page line joins above it when the loads answer. The commits read: nothing, Add's line,
+    then both.
+- The other Commons renders in round 14's tests (the offline Commons test, the New collection
+  prompt tests, `usePersonLock` offline, and all of `presenceRound14.pageLine`) moved to fake time
+  too, with an `until` that moves the clock 50 ms at a time up to a fixed bound, so no line's
+  arrival depends on real time. `tokenDrop` (health answers driven by the test) and
+  `offlineFirst` (no timer in the path) had no real-time race and are unchanged.
+- Mutants caught: no hold (both paths), no cap (slow path), the cap at 1000 ms (both), `ready`
+  ignored (fast path).
+- Five runs in a row with four CPU burners beside them (load average 24 to 29), round 14's five
+  timing files together: 56/56 each time.
+
+#### a. A because line sends the general notice away under the prompt's backdrop (GM r24 a)
+- Cause: the New collection prompt's backdrop (`.commons-prompt`: `position: fixed; inset: 0`,
+  `rgba(0, 0, 0, 0.4)`) covers the whole window. The shared rule's hit test (`lineUncovered`)
+  got the backdrop for every point of the page line, so the line read as covered, didn't count,
+  and the general notice stayed. Held, demoted and stale-token states without the prompt were
+  already right; the live check confirms 01's bottom (no notice).
+- Fix, in the shared rule (lib/notConnectedLine `lineUncovered`): when the topmost element at a
+  point isn't the line, it looks down the stack (`elementsFromPoint`) past layers the line shows
+  through, and stops at the first one it doesn't. See-through: a background alpha under
+  `SEE_THROUGH_ALPHA` (0.85), or `visibility: hidden`, with no background image, no backdrop
+  blur, no text of its own and not a replaced element (img, video, canvas, svg, iframe, a form
+  control). A browser with no `elementsFromPoint` keeps the topmost answer, as before. The
+  Settings dock and any opaque or nearly opaque panel still cover a line (review 8 MEDIUM-2).
+- Tests: `presenceRound15.noticeCover`: the rule's cases (the prompt's own backdrop with the
+  rule read from commons.css, dims at 0.4 and 0.8, transparent, hidden; opaque and 0.85+;
+  words, a picture, img/video/canvas, a blur; an opaque layer under a dim; a stack that never
+  reaches the line; no `elementsFromPoint`), and the Commons with the general notice mounted:
+  held, demoted, a stale token, and the prompt open at a demote all show no general notice; a
+  control case with an opaque layer under the backdrop brings it back. On d2040a0f four fail,
+  the prompt-open state among them. Mutants caught (12): always see-through, the threshold at
+  1.01 and at 0.3, the text, replaced, image, blur and hidden checks removed, the stack's end
+  counted, no-`elementsFromPoint` counted, an opaque layer skipped, the alpha not parsed.
+
+#### b. No empty state where nothing was read (GM r24 b)
+- Each list's empty state now shows only when its last read answered:
+  - the references grid ("No matches. Drop images or videos here, or use Add." and the Inbox's
+    "Nothing waiting in the inbox. …"): CommonsView keeps which tab the last search answered for
+    (`answered.references`), cleared by a failed search and by a new view. A failed search shows
+    only its line; offline, and back online before the search reads again, nothing claims the
+    library is empty; the Inbox's empty state never stands on All's answer (found by the test:
+    the switch showed it for the search's 250 ms debounce).
+  - the Add to menu's "No collections" option: only after the collections answered with none.
+  - Settings' "No folders linked. …" and "No new terms proposed yet.": only after the settings
+    load answered (before it, too, nothing was read).
+- A held tab already showed no grid empty state (round 11); it now shows no "No collections"
+  either (its collections read is refused).
+- Left as they are: CommonsReview and CommonsEvaluation show no list empty state on a failure
+  (no batch shows nothing); CommonsDetail's "Loading…" is not an empty state.
+- Tests: `presenceRound15.emptyState` (a failed search, a real empty search, the Inbox, a failed
+  refresh after an answer, offline then online before the search answers, collections failed /
+  read and empty / read then failed on the reconnect, a held tab, Settings failed / before the
+  read / read and empty). On d2040a0f eight of eleven fail. Mutants caught: the option ungated,
+  folders and terms ungated, Settings counted as loaded from the start, any tab's answer counting,
+  a failed search or collections read not clearing the answer.
+
+#### c. "because it didn’t respond" for the Commons loads (GM r24 c)
+- `noResponseBecause(what)` in lib/errorCopy: "Nebula couldn’t {what} because it didn’t respond.
+  Try again." (curly apostrophes). `useCommonsLoadLines` uses it when a load's reason is the
+  no-answer reason (a 5xx, 408 or 429 with no reason: NO_RESPONSE_COPY), so each is one sentence
+  with Nebula the subject. The lines:
+  - references: "Nebula couldn’t load the references because it didn’t respond. Try again."
+    (GM's words, verbatim)
+  - status: "Nebula couldn’t check the Commons status because it didn’t respond. Try again."
+  - collections: "Nebula couldn’t load the collections because it didn’t respond. Try again."
+  - the page line (every load failing for that reason): "Nebula couldn’t load the Commons because
+    it didn’t respond. Try again."
+- Another reason (the backend's own words, a refusal) keeps the heading form ("Couldn’t load the
+  references. {reason}").
+- HAND_BUILT (tests/lib/errorCopy.namedLine) and the copy ratchets had no entry quoting the old
+  Commons load lines; they pass unchanged. `presenceRound14.pageLine` now pins the new lines
+  verbatim (three fail on d2040a0f); the live harness's 02 check reads the new line.
+- The panes' own loads were left for GM here; GM r25 answered (below, 2c).
+
+#### Section 0 and the chunk-aa failures (round 15 leftovers)
+- The three files that failed in round 15's first union chunk (`App.commonsLifecycle`,
+  `agentPresenceFollowups.ratchet`, `CommonsDetail.test`) pass alone, 59 of 59, on the worktree
+  with section 1's changes. They failed at a load average of 41 to 44 (a button not found in
+  time, a 120 s limit, a group not found in time), so they were load; no base run was needed.
+- Review 12 NIT-2 is section 0's one-shift test: it runs on fake time with the loads held, so
+  it no longer depends on the machine.
+
+#### 2a.1 A new link taken while the old hello is answered keeps the new token (review 12 MEDIUM-1)
+- Cause: a canvas socket can carry two hellos. A link taken in an open, unpromoted tab says hello
+  again on the same socket, and the server answers hellos in order, one answer each. `wsClient`
+  kept one token per socket (the newest), so the refusal of the old hello was read against the
+  new token, which is the tab's, and the drop rule forgot it. Round 14's regression, inside
+  Justin's token drop.
+- Fix, inside `wsClient`'s per-hello bookkeeping only: `helloTokens` is
+  `WeakMap<WebSocket, string[]>`, one entry per hello, pushed when the hello is sent. A
+  `personRequired` takes the oldest entry (`shift()`) and passes only that token to
+  `dropRefusedPersonToken`; the promote's `proposalSync` takes its hello's entry too. The drop
+  rule, the gate and every read boundary are unchanged.
+- Why not close and reconnect on every new link: it would also work (one hello per socket), but
+  it tears down a live socket and its graph sync for every link opened, and it moves the problem
+  to the close and reopen ordering. Keeping the server's own one-answer-per-hello contract in
+  the client is the smaller change and keeps today's reconnect paths as they are.
+- The backend sends `proposalSync` only on a verified hello (`main.py` websocket loop), and
+  ignores hellos on a socket it already promoted, so no other message consumes an entry.
+- Tests: `presenceRound15.tokenRace`: the reviewer's R1 (the old hello refused, then the new one
+  promoted: the new token is stored and held, one promote); two hellos both refused (the second
+  refusal drops the second token); a promote then a refusal (the refusal names the second
+  hello's token: a pin on the bookkeeping, since today's backend never answers a promoted
+  socket again); a refusal with no hello waiting drops nothing. On d2040a0f three fail, R1
+  among them. Mutants caught: the refusal takes the newest (`pop`), the promote takes no entry,
+  one entry per socket (overwrite), the refusal reads without taking (`[0]`).
+- Live (8795/5795): our own backend paused with SIGSTOP, a stale link then the real link taken
+  in the open canvas tab, then resumed. The tab keeps the real token, is promoted and not held,
+  shows no general notice, and its next person-only reads (Settings, Agents) are answered
+  (shot 10). The two-hellos-on-one-socket order itself could not be staged here: under Vite the
+  socket goes through Vite's proxy (origin 5795) while a valid link names the backend (8795), so
+  `personConnected` closes and reopens the socket on each link and only the new hello goes. The
+  built app serves the UI from the backend's origin, where the race happens; the unit test
+  (the reviewer's R1) is what pins it.
+
+#### 2a.2 Focus never lands on a look-alike in the same pane (review 12 MEDIUM-1)
+- Cause: each membership in an open reference is an unlabelled section, so the second
+  membership's Role select and Why field had the same key as the first's; the promote remounts
+  both, and the handover took the first new match. An arrow key then changed the wrong
+  collection's role, a person write.
+- Fix, structural (`hooks/useFocusHandover`): the snapshot records how many of the scope's
+  elements share the control's key and which one (document order) it was. Coming back, the
+  hook takes the element at that place only if the count is the same, it is new, and it isn't
+  disabled; otherwise it goes to the line (then the heading). It never takes the first match.
+  A handed-over focus keeps the ordinal and count. Locally, each Membership section carries
+  `data-focus-scope={membership.id}`, so the two are two panes anyway.
+- Tests: `presenceRound15.twoMemberships`: the hook alone (three look-alikes in one pane, each
+  comes back to itself; a direct remount; a changed count goes to the line, or to the heading
+  with no line; a look-alike that stayed sits at the lost control's place, so focus goes to the
+  line), and the reviewer's probe in the real CommonsView (one reference in Refs and Moodboard,
+  the second's Role and Why come back to Moodboard). On d2040a0f seven fail. Mutants caught:
+  the count not checked, the first look-alike taken, no scope on Membership, the "new" check
+  removed, a handed-over focus losing its ordinal.
+- Live: two collections and one image uploaded to both in the isolated backend (the person's
+  tab, no model call: the call budget is 0 and no key exists), the reference opened, focus on
+  Moodboard's Role, demote, promote: focus is on Moodboard's Role again. Shots 11 and 11b.
+
+#### 2b Review 12 LOW and NIT
+- TD LOW-1, as built. Justin's call: keep until the next refusal or reload. A refusal that
+  arrives while the tab's last health answer says offline keeps the token, and a later online
+  answer doesn't drop it; the next refusal with online answered does. After a restart this keeps
+  the old token until the socket reconnects or the tab reloads with an online first probe (5 of
+  12 restarts live in review 12). It never drops while Nebula is starting. Pinned by
+  `presenceRound15.tokenRace` "after a restart".
+- TD LOW-2: the Commons drop's comparison is pinned (the 401 for the old token after a new link
+  was taken keeps the new one). Mutant D12 (the current token in place of the sent one) is
+  caught.
+- TD NIT-1: the body and the notes say each tab's token is its own, a duplicated tab copies it
+  once, and MEDIUM-1's exception is closed.
+- CL LOW-1, offline first for every because line: one rule in `components/LineText` instead of
+  call sites. While Nebula is offline a because line renders no words; with no `className` the
+  surface's element is hidden too when the line is all it holds (no empty alert box), and with
+  one its span is hidden. A surface the screen already hid stays hidden. Back online the line
+  shows again if it still applies. Every surface that draws a not-connected line goes through
+  LineText (the line-registration ratchet), so this covers the places review 12 found unfiltered:
+  the Updates list's dismiss and corner lines, Settings writes (Preferences' cost line, the
+  providers' key lines), Connected apps, Trash, Pins add/remove, the canvas and asset proposal
+  decide lines, the questions form, CreateComposer, KreaSignInRow, PersonalAgentWarning and the
+  asset studio draft. `useOfflineFirstBecause` stays where it was (the Commons, Inspector's
+  favorite, Settings' held views, the canvas undo slot); applying both is harmless.
+  Tests: `presenceRound15.offlineLines` (alone in its surface, beside other content, with a
+  className, a surface already hidden, another failure line kept, and the reviewer's Updates
+  probe). On d2040a0f four fail. Mutants caught, 7 of 7.
+- CL LOW-2, replaced by GM r25 1 (2c below).
+- CL NIT-3: shot 04 is now a filmstrip of the demote (CDP screencast frames: before, the first
+  frame with the lines, +200 ms, +600 ms, settled), with the rAF row log beside it in the live
+  log.
+- CL NIT-5, two ratchet blind spots closed in `presenceRound15.ratchetGaps`:
+  - in a function that retries on the promote, every line variable worded from a failure
+    (`line`, `page`, `…Line`) must branch on `isPersonRefusal` to the because form. Round 6's
+    rule passed a block when one line had it, so a load's own line could lose it beside the page
+    line (mutant X21); the new rule catches X21 in the real hook;
+  - `pageLoadLines` is used only by `useCommonsLine.ts`, so no screen draws its own words
+    through it.
+- CL NIT-6: curly apostrophes in the five headings this PR wrote that render as written ("Couldn’t
+  mark the notes read.", "Couldn’t dismiss the note.", "Couldn’t update the note.", "Couldn’t
+  update the connected apps.", "Couldn’t update your agents."), pinned. Left for the wording
+  batch: the headings this PR only moved whose words are also a request heading in
+  `lib/api.ts` (main, straight), since the request's heading is what renders and a partial
+  change would mix spellings and rewrite about 30 tests; and `NO_RESPONSE_COPY` ("Nebula didn't
+  respond. Try again."), used across the app.
+
+#### 2c GM r25
+1. A load's own line waits like Add's. `useCommonsLoadLines` now knows which loads are on
+   their way (`start(load)`, called by CommonsView when each load is sent: the collections, each
+   status poll, the search from its debounce's start). A failed load's line waits until the
+   page's other loads sent meanwhile have answered or failed, capped at `LOAD_LINE_HOLD_MS`
+   (1.5 s, equal to `ADD_LINE_HOLD_MS`, pinned). So a connected tab whose loads fail for one
+   reason shows one line, the page line, in one change; past the cap the first load's line shows
+   alone, then the page line replaces it. A not-connected page line never waits (Add's line
+   waits on it). Once shown, lines stay while any load still fails (a later poll on its way
+   doesn't hide them), and the hold starts again after they have gone. A failed load sent again
+   (the next status poll) isn't one the others wait for.
+   Tests: `presenceRound15.loadHold`, deterministic (fake time, each load answers only when the
+   test releases it): fast path (one change, the page line), slow path (nothing at 1499 ms after
+   the first failure, the status line at 1500, then the page line), one failure with the others
+   answering, a failure with nothing on its way (at once), a shown line kept through a poll, and
+   the hook alone (a person line never waits, the hold re-arms, a load cleared by the promote is
+   no longer on its way, a failed load sent again). Mutants caught, 8 of 8: no hold, no cap,
+   the cap at 1000 ms, the person line held, the hold never re-arming, a failed load sent again
+   holding itself, the search never said sent, a failure not settling its load.
+2. The connected page line was already "Nebula couldn’t load the Commons because it didn’t
+   respond. Try again." (section 1 c); `presenceRound14.pageLine` pins it.
+3. and 4. Confirmed as built (r24 a and b).
+5. The pane loads take the same form. In `useCommonsLine.show`, a load (`{ reload: true }`) is
+   named by the pane's own words, whichever of its requests failed, and no answer (a 5xx, 408 or
+   429 with no reason) is the because form:
+   - Agent review: "Nebula couldn’t load Agent review because it didn’t respond. Try again."
+   - reference detail: "Nebula couldn’t load this reference because it didn’t respond. Try again."
+     (CommonsDetail's heading is now "Couldn’t load this reference.", as the media and review
+     image loads already said)
+   - Blind labeling: "Nebula couldn’t load Blind labeling because it didn’t respond. Try again."
+   - Commons Settings: "Nebula couldn’t load the Commons settings because it didn’t respond. Try
+     again." (it reads three requests; before, whichever failed first named the line)
+   - The not-connected form of these lines uses the same words ("Nebula couldn’t load the
+     Commons settings because this tab isn’t connected as you. …").
+   - Any other cause: a refusal with the backend's own reason keeps the heading form ("Couldn’t
+     load Agent review. The review set is closed."), pinned. A lost connection ("Nebula's server
+     isn't answering. …") has no because clause yet; GM's "any other cause gets its own because
+     clause" needs words for it, so it is a question for GM rather than words I made up.
+   - HAND_BUILT and the copy ratchets quote none of these lines; `noResponseBecause` is a helper,
+     not a hand-built line. Tests: `presenceRound15.paneLoads` pins each line verbatim (Agent
+     review at 503, 500, 408 and 429; Settings for each of its three reads). Mutants caught: the
+     request's words over the pane's, no because form for a pane, the detail's old heading.
+
+#### Round 15 gates (sections 1 and 2)
+- tsc and eslint clean; `check:inline-styles` and `check:slava-css-scope` pass. `vite build`
+  passes; the build budget passes at 458,677 bytes raw (512,000 allowed).
+- Focused vitest on two workers, 79 files (round 14 and 15 tests, the Commons tests, the tests
+  that pair offline with a because line, the ratchets reading `src/` and `styles/`): 1,139 of
+  1,139, Errors 0. Per the round's gate rule no full union and no backend run (no backend file
+  changed).
+- Live (8795/5795, the backend only through the shared guarded launcher, canaries first):
+  section 2's run 9 of 10 plus a membership-only rerun 6 of 6; the one miss is the two-hellos
+  staging explained in 2a.1. Shots 04 (filmstrip), 10, 11 and 11b; `md5 | uniq -d` empty.

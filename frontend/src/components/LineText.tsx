@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
+import { useBackendOffline } from '../lib/useBackendOffline';
 import '../styles/becauseLine.css';
 
 const ANCHOR_STYLE = { display: 'none' } as const;
@@ -20,12 +21,20 @@ export const BECAUSE_ATTR = 'data-line-because';
  *
  * GM r14 (4): a because line marks the element it registers on (`data-line-because`), and one
  * shared sheet (styles/becauseLine.css) keeps it out of the warning colour on every surface.
+ *
+ * Round 15 (review 12 LOW-1, GM r23 3: offline comes first): a because line is hidden while Nebula
+ * is offline, wherever it is drawn, since the offline notice says what is wrong and connecting the
+ * tab wouldn't be enough. Back online it shows again if it still applies. With no `className` the
+ * surface's element is hidden too when the line is all it holds (a `role="alert"` paragraph, a
+ * toast's span), so no empty box is left; with one, the span is. Any other line is unchanged.
  */
 export function LineText({ text, className, children }: { text: string | null | undefined; className?: string; children?: ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
   const words = text || null;
+  const offline = useBackendOffline();
+  const hide = offline && words !== null && isBecauseLine(words);
   // Review 8 MEDIUM-3 (round 10): one registration while the line is mounted (keyed to its
   // element), its words updated in place below, so a change of words keeps what the observer
   // said and the notice never flashes back. Unmounted (or no words): unregistered.
@@ -49,7 +58,18 @@ export function LineText({ text, className, children }: { text: string | null | 
     if (isBecauseLine(words)) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
     else element.removeAttribute(BECAUSE_ATTR);
   }, [own, words]);
+  // Offline first, bare: the surface's element goes too when the line is all it holds.
+  useLayoutEffect(() => {
+    const anchor = ref.current;
+    const element = anchor?.parentElement;
+    if (own || !hide || !element || element.hidden) return undefined;
+    const alone = [...element.childNodes].every((node) => node === anchor
+      || (node.nodeType === Node.TEXT_NODE && !(node.textContent ?? '').trim()));
+    if (!alone) return undefined;
+    element.hidden = true;
+    return () => { element.hidden = false; };
+  }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className}>{children ?? text}</span>;
-  return <>{children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? text}</span>;
+  return <>{hide ? null : children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }

@@ -9,7 +9,7 @@
  *    locked with "You can create collections when this tab is connected as you." under it; on the
  *    promote OK unlocks in place.
  */
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PersonLock } from '../src/hooks/usePersonLock';
 
@@ -19,6 +19,28 @@ vi.mock('../src/lib/personSession', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/personSession')>(),
   personToken: async () => transport.token,
 }));
+/**
+ * Round 15 (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
+ * reads the same on any machine. While `gate.hold` is set, the view's three loads wait for it
+ * before they go to the real API (which still answers a held tab unsent).
+ */
+const gate = vi.hoisted(() => ({ hold: null as Promise<void> | null }));
+vi.mock('../src/lib/commonsApi', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/lib/commonsApi')>();
+  const waits = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
+    if (gate.hold) await gate.hold;
+    return fn(...args);
+  };
+  return {
+    ...real,
+    commonsApi: {
+      ...real.commonsApi,
+      status: waits(real.commonsApi.status),
+      collections: waits(real.commonsApi.collections),
+      search: waits(real.commonsApi.search),
+    },
+  };
+});
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsEvaluation', () => ({ CommonsEvaluation: () => null }));
 vi.mock('../src/components/commons/CommonsReview', () => ({ CommonsReview: () => null }));
@@ -82,31 +104,78 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** Round 15 (CI on d2040a0f): fake time moves only when the test moves it, so a line's arrival
+ * doesn't depend on the machine's speed. `until` moves it 50 ms at a time, up to `max` ms. */
+const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+async function until(check: () => void, max = 3000): Promise<void> {
+  for (let waited = 0; ; waited += 50) {
+    try { check(); return; } catch (error) { if (waited >= max) throw error; }
+    await tick(50);
+  }
+}
+
 /** The real Commons under a loaded machine: well past the default 5 s. */
 const VIEW_TIMEOUT = 20_000;
-const sleep = (ms: number) => act(() => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
 
 // ── 1. One shift ────────────────────────────────────────────────────────────
 
 describe('a demote: one shift (GM r23 1)', () => {
-  it('Add locks at once; its line never shows before the page line, and both land together', async () => {
+  let release: () => void = () => {};
+
+  /** A connected tab first, so the hold starts at the demote (not at the mount's unconfirmed
+   * moment: the cap would count from there); then the demote, with the loads held. */
+  async function demoteWithLoadsHeld() {
+    vi.useFakeTimers();
     transport.token = TOKEN;
-    // A connected tab first, so the hold starts at the demote (not at the mount's unconfirmed
-    // moment: the cap would count from there).
     act(() => notePersonPromoted());
     render(<CommonsView />);
-    await waitFor(() => expect(transport.fetch).toHaveBeenCalled());
-    await sleep(50);
+    await tick(1000);
+    expect(transport.fetch).toHaveBeenCalled();
     expect(addButton()).not.toHaveAttribute('aria-disabled');
+    gate.hold = new Promise<void>((resolve) => { release = resolve; });
     frames = [];
     act(() => reportPersonRequired());
     // At once: locked (the lock's own first moment, then its look).
     expect(addButton()).toHaveAttribute('aria-disabled', 'true');
     expect(addButton()).toHaveAttribute('data-person-lock', 'add references');
-    await waitFor(() => expect(rowTexts()).toEqual([PAGE, ADD_LINE]));
+  }
+  async function answerLoads() {
+    gate.hold = null;
+    release();
+    await tick(0);
+  }
+  afterEach(() => { gate.hold = null; release(); });
+
+  it('fast path: the because line comes before 1.5 s; Add\'s line never shows before it, and both land together', async () => {
+    await demoteWithLoadsHeld();
+    // The held rule's 150 ms, the search's debounce and more: no line yet, Add's held for the page's.
+    await tick(ADD_LINE_HOLD_MS - 100);
+    expect(rowTexts()).toEqual([]);
+    await answerLoads();
+    expect(rowTexts()).toEqual([PAGE, ADD_LINE]);
     // No commit showed Add's line without the page line above it.
     expect(frames.filter((texts) => texts.includes(ADD_LINE) && !texts.includes(PAGE))).toEqual([]);
+    expect(frames.some((texts) => texts.length > 0)).toBe(true);
+    // Past the cap nothing moves again.
+    await tick(ADD_LINE_HOLD_MS);
+    expect(rowTexts()).toEqual([PAGE, ADD_LINE]);
     expect(addButton().getAttribute('aria-describedby')).toBe(document.querySelector('.commons-messages__lock-line')!.id);
+    expect(lockPlacementProblems()).toEqual([]);
+  }, VIEW_TIMEOUT);
+
+  it('slow path: no because line by 1.5 s, so Add\'s line shows alone at the cap, and the page line joins after', async () => {
+    await demoteWithLoadsHeld();
+    await tick(ADD_LINE_HOLD_MS - 1);
+    expect(rowTexts()).toEqual([]);
+    expect(frames.filter((texts) => texts.includes(ADD_LINE))).toEqual([]);
+    await tick(1);
+    expect(rowTexts()).toEqual([ADD_LINE]);
+    expect(addButton().getAttribute('aria-describedby')).toBe(document.querySelector('.commons-messages__lock-line')!.id);
+    await answerLoads();
+    expect(rowTexts()).toEqual([PAGE, ADD_LINE]);
+    // Every commit: nothing, then Add's line alone (from the cap), then the page line above it.
+    const shapes = frames.map((texts) => texts.join(' | ')).filter((shape, i, all) => i === 0 || shape !== all[i - 1]);
+    expect(shapes).toEqual(['', ADD_LINE, `${PAGE} | ${ADD_LINE}`]);
     expect(lockPlacementProblems()).toEqual([]);
   }, VIEW_TIMEOUT);
 });
@@ -203,9 +272,10 @@ function Locked() {
 
 describe('offline comes first (GM r23 3)', () => {
   it('usePersonLock: while offline the control stays locked and no line shows; back online it does', async () => {
+    vi.useFakeTimers();
     act(() => reportPersonRequired());
     render(<Locked />);
-    await sleep(200);
+    await tick(200);
     const button = screen.getByRole('button', { name: 'Change' });
     expect(screen.getByText('You can change this when this tab is connected as you.')).toBeTruthy();
     act(() => noteBackendConnection('offline'));
@@ -221,18 +291,19 @@ describe('offline comes first (GM r23 3)', () => {
   });
 
   it('the Commons: offline on a held tab shows neither Add\'s line nor the page line; back online both come', async () => {
+    vi.useFakeTimers();
     act(() => reportPersonRequired());
     render(<CommonsView />);
-    await waitFor(() => expect(rowTexts()).toEqual([PAGE, ADD_LINE]));
+    await until(() => expect(rowTexts()).toEqual([PAGE, ADD_LINE]));
     act(() => noteBackendConnection('offline'));
     expect(screen.queryByText(ADD_LINE)).toBeNull();
     expect(screen.queryByText(PAGE)).toBeNull();
     expect(addButton()).toHaveAttribute('aria-disabled', 'true');
-    await sleep(300);
+    await tick(300);
     expect(screen.queryByText(ADD_LINE)).toBeNull();
     frames = [];
     act(() => noteBackendConnection('online'));
-    await waitFor(() => expect(rowTexts()).toEqual([PAGE, ADD_LINE]));
+    await until(() => expect(rowTexts()).toEqual([PAGE, ADD_LINE]));
     expect(frames.filter((texts) => texts.includes(ADD_LINE) && !texts.includes(PAGE))).toEqual([]);
   }, VIEW_TIMEOUT);
 });
@@ -254,9 +325,11 @@ describe('a Commons pane\'s because line, offline (GM r23 3)', () => {
 // ── 4. The New collection prompt stays ──────────────────────────────────────
 
 describe('the New collection prompt at a demote (GM r23 4)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
   const openPrompt = async () => {
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
-    const field = await screen.findByRole('textbox', { name: /New collection name/ });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
+    await tick(0);
+    const field = screen.getByRole('textbox', { name: /New collection name/ });
     fireEvent.change(field, { target: { value: 'Warm serifs' } });
     expect(document.activeElement).toBe(field);
     return field as HTMLInputElement;
@@ -266,11 +339,11 @@ describe('the New collection prompt at a demote (GM r23 4)', () => {
   it('stays on screen, the typed name and focus kept, OK locked with its line under it', async () => {
     transport.token = TOKEN;
     render(<CommonsView />);
-    await waitFor(() => expect(screen.getAllByRole('option', { name: 'Refs' }).length).toBeGreaterThan(0));
+    await until(() => expect(screen.getAllByRole('option', { name: 'Refs' }).length).toBeGreaterThan(0));
     const field = await openPrompt();
     const button = ok();
     act(() => { notePersonPromoted(); reportPersonRequired(); });
-    await waitFor(() => expect(screen.getByText(CREATE_LINE)).toBeTruthy());
+    await until(() => expect(screen.getByText(CREATE_LINE)).toBeTruthy());
     expect(screen.getByRole('textbox', { name: /New collection name/ })).toBe(field);
     expect(field.value).toBe('Warm serifs');
     expect(document.activeElement).toBe(field);
@@ -285,7 +358,7 @@ describe('the New collection prompt at a demote (GM r23 4)', () => {
     // Pressed, or Enter in the field: nothing is sent and the prompt stays.
     fireEvent.click(button);
     fireEvent.submit(field.form!);
-    await sleep(20);
+    await tick(20);
     expect(transport.created).toEqual([]);
     expect(screen.getByRole('textbox', { name: /New collection name/ })).toBe(field);
   }, VIEW_TIMEOUT);
@@ -293,22 +366,22 @@ describe('the New collection prompt at a demote (GM r23 4)', () => {
   it('the promote unlocks OK in place; focus stays in the field; OK then creates it', async () => {
     transport.token = TOKEN;
     render(<CommonsView />);
-    await waitFor(() => expect(screen.getAllByRole('option', { name: 'Refs' }).length).toBeGreaterThan(0));
+    await until(() => expect(screen.getAllByRole('option', { name: 'Refs' }).length).toBeGreaterThan(0));
     const field = await openPrompt();
     const button = ok();
     act(() => { notePersonPromoted(); reportPersonRequired(); });
-    await waitFor(() => expect(screen.getByText(CREATE_LINE)).toBeTruthy());
+    await until(() => expect(screen.getByText(CREATE_LINE)).toBeTruthy());
     act(() => notePersonPromoted());
-    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+    await until(() => expect(button).not.toHaveAttribute('aria-disabled'));
     expect(screen.queryByText(CREATE_LINE)).toBeNull();
     expect(ok()).toBe(button);
     expect(button).not.toHaveAttribute('aria-describedby');
     expect(screen.getByRole('textbox', { name: /New collection name/ })).toBe(field);
     expect(field.value).toBe('Warm serifs');
-    await sleep(100);
+    await tick(100);
     expect(document.activeElement).toBe(field);
     fireEvent.click(button);
-    await waitFor(() => expect(transport.created).toHaveLength(1));
+    await until(() => expect(transport.created).toHaveLength(1));
     expect(transport.created[0]).toContain('Warm serifs');
   }, VIEW_TIMEOUT);
 });

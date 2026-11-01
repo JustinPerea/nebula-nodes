@@ -62,7 +62,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         }
       }, (e: unknown) => {
         if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
-          line.show(e, "Couldn’t load the review.", { reload: true });
+          line.show(e, "Couldn’t load Agent review.", { reload: true });
         }
       }).finally(() => { if (!cancelled) setLoading(false); });
     };
