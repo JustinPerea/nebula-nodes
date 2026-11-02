@@ -734,3 +734,46 @@ Review 7 (one MEDIUM, three LOWs that each broke a GM rule) and GM's r17. The sp
   - Left flip: the say drew left of its arrow, beside a foreign cursor, with 0 pairs meeting.
   - Wait then log: waiting at 250 ms, in the log at 900 ms (the Agent log line shows it), and back on the canvas on the right once the room cleared.
   - Greek name after the font loaded: the reserved width went from 133 to 139 px against a drawn pill of 136.4, with the cursor below 5 px clear.
+
+## Round 4f
+
+GM signed off round 4e's design in r18, with one change and one addition. The spec's "Rulings from #211 round 4e" section is the source.
+
+### A say in the log keeps no room (r18 item 3)
+
+- The layout counts only what is drawn. The view now tells the field a say is there only while it waits for its room or shows (`setSay` sets it with each say state). A say in the Agent log counts as none, so the cursor below settles back at a name step (42).
+- **Coming back.** From the log, once another column no longer blocks a side, the say goes back to waiting as a new say does:
+  - its wait clock starts again;
+  - the layout counts it, so the cursors below glide down to the say step on the land spring;
+  - then it fades in, right or left by the 4e rules.
+  
+  The 600 ms cap and the log fallback are unchanged. Under reduced motion, it decides at once.
+- **For GM.** A say that waits and then goes to the log moves the cursors below twice: down while it waits, then back up to 42 once it's in the log. Both moves are glides on the spring.
+
+### A folded member's say is in the log only (r18 item 1)
+
+- A cursor folded into the count cursor draws no say, and the layout keeps no room for it. The count cursor draws none either. The Agent log lists it, as it lists every say.
+- **For GM: unfolding.** When the member unfolds into a full cursor while its say is still current (within the say's 3 s), the say shows by the normal order: it waits for its room, then fades in. That's the natural reading of the spec, since an unfolded cursor is a full cursor.
+- The layer also wakes a cursor's loop when it starts or stops drawing its say, as it does for idle. The mutant without this wake survives, and it's equivalent: in every unfold the member above glides, and the column floor wakes the one below.
+
+### Checks (round 4f)
+
+- `tsc -b` exit 0; `npm run lint` exit 0.
+- **Focused vitest.** `--maxWorkers=2`, the same 144 files: 781 + 376 + 632 + 599 = 2,388 passed (the cursor files alone: 284).
+- **Build budget.** Pass: the entry is unchanged at 443,707 B raw (136,254 gzip).
+- **Isolated pytest:** not re-run. No backend or test file changed.
+- **Mutation checks:** 6 of 6 caught (G1 to G6):
+  - G1, the log keeps its room;
+  - G2, the say shows at once on return;
+  - G3, the old wait clock is kept on return;
+  - G4, a folded member draws its say;
+  - G5, a render re-reserves a logged say;
+  - G6, the say never comes back from the log.
+- **Live at 1440, Restraint, on 8780 and 5780, with the library closed.** The canary blocked everything else, and there were 0 page errors. The shots have no md5 duplicates, and I opened each one. Puppeteer's own Chrome download is no longer in its cache, so this run used the installed Chrome (156).
+  - **Back from the log** (strip):
+    - frame 0, in the log: the step is 42, with no gap;
+    - frame 1, the right blocker gone: the say waits while the cursor below glides (46.5);
+    - frame 2: the step is 65 and the say is in.
+    
+    The say showed after 18 frames at a 65.08 px step. The least step was 42 throughout, and the member moved at most 3.8 px per frame.
+  - **Folded say:** four cursors, so the count reads "2 more". The fourth one's "Reading the brief" is in the Agent log, no say is on the canvas, and nothing moved.

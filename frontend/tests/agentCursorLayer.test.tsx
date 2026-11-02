@@ -57,6 +57,7 @@ const SS = stackStepPx(true);
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AGENT_CURSOR_IDLE_MS, AGENT_SAY_FADE_MS, AGENT_SAY_MS } from '../src/store/agentPresenceStore';
+import { agentActionEntry } from '../src/store/agentLogStore';
 import { forgetPersonPlaced, notePersonPlaced } from '../src/lib/personNodeMoves';
 
 /**
@@ -2316,5 +2317,95 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       else delete (document as unknown as { fonts?: unknown }).fonts;
       vi.unstubAllGlobals();
     }
+  });
+
+
+  // GM r18 item 3: the layout counts only what is drawn. A say in the Agent
+  // log keeps no room under its cursor; when it comes back, the cursors
+  // below glide first and then it fades in (the review 6 order).
+  it('a say in the Agent log reserves no room; coming back, the column glides first, then the say fades in, nothing jumps (r18 item 3)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column(['a', 'b'], { x: 300, y: 300 });
+      // Another column on each side of a's say row, clear of a and b.
+      blocker('e', 3, 400, 318);
+      blocker('f', 4, 150, 322);
+      const before = where();
+      expect(before.b).toEqual({ x: 300, y: 300 + S });
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const a = byKey('a');
+      for (let i = 0; i < 60 && a.dataset.sayWait !== 'log'; i += 1) frame();
+      expect(a.dataset.sayWait).toBe('log');
+      // In the log: b settles back at a name step, no say step kept.
+      for (let i = 0; i < 90; i += 1) frame();
+      expect(a.dataset.sayWait).toBe('log');
+      expect(where().b.y - where().a.y).toBeCloseTo(S, 6);
+      expect(where().e).toEqual(before.e);
+      expect(where().f).toEqual(before.f);
+      // e goes: the right side clears. b glides down to the say step first,
+      // then the say fades in.
+      send(event({ ...session('e', 3), target: { nodeId: 'n2' } }));
+      let prev = where();
+      let shownAt = -1;
+      let gliding = 0;
+      for (let i = 0; i < 120 && shownAt < 0; i += 1) {
+        frame();
+        const w = where();
+        expect(Math.abs(w.b.y - prev.b.y)).toBeLessThan(4);
+        expect(w.b.y - w.a.y).toBeGreaterThanOrEqual(S - 1e-6);
+        if (w.b.y !== prev.b.y) gliding += 1;
+        if (painted(a)) {
+          shownAt = i;
+          expect(w.b.y - w.a.y).toBeGreaterThanOrEqual(stackStepPx(true) - 0.01);
+          expect(anyMeet()).toBe(false);
+        } else {
+          expect(a.dataset.sayWait).toBeDefined();
+        }
+        prev = w;
+      }
+      expect(shownAt).toBeGreaterThan(3);
+      expect(gliding).toBeGreaterThan(3);
+      expect(a.dataset.saySide).toBeUndefined();
+      flush();
+      expect(where().b.y - where().a.y).toBeCloseTo(stackStepPx(true), 6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r18 item 1: a folded member's say is in the Agent log only. Once it
+  // unfolds, a say still current shows by the normal order.
+  it('a folded member\'s say shows only in the Agent log; unfolded while still current, it shows by the normal order (r18 item 1)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b', 'c', 'd']);
+    const before = where();
+    const d = byKey('d');
+    expect(d.dataset.collapsed).toBe('true');
+    const said = event({ ...session('d', 4), target: { nodeId: 'n1' }, say: 'Reading the brief' });
+    send(said);
+    flush();
+    expect(agentActionEntry(said)?.message).toBe('Reading the brief');
+    expect(d.dataset.collapsed).toBe('true');
+    expect(painted(d)).toBe(false);
+    expect(d.querySelector('.agent-cursor__say')).toBeNull();
+    // No room kept for it, and the count cursor draws no say either.
+    expect(where()).toEqual(before);
+    expect(painted(byKey('c'))).toBe(false);
+    // a leaves: d unfolds as the last full cursor, and its say, still
+    // current, shows below it.
+    act(() => {
+      const st = useAgentPresenceStore;
+      const agents = { ...st.getState().agents };
+      for (const k of Object.keys(agents)) if (agents[k].session?.key === 'a'.repeat(12)) delete agents[k];
+      st.setState({ agents });
+    });
+    // The unfold renders after the column's frames have run: nothing but
+    // d's own say is left to wake its loop.
+    flush();
+    flush();
+    expect(d.dataset.collapsed).toBeUndefined();
+    expect(painted(d)).toBe(true);
+    expect(anyMeet()).toBe(false);
   });
 });

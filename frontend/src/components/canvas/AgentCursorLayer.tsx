@@ -627,6 +627,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     }
     if (state === 'right' || state === 'left') field.paint.set(cursor.key, state);
     else field.paint.delete(cursor.key);
+    // The layout counts only what is drawn (GM - Design, PR #211 r18 item
+    // 3): a say in the Agent log keeps no room under its cursor, and one
+    // waiting for its room (from the log too) has the cursors below glide
+    // out of its way first.
+    field.setSay(cursor.key, state !== 'none' && state !== 'log', widths);
   };
   // Where a waiting say goes now, from where the cursors are drawn this
   // frame: right of its arrow when that side has room; left when another
@@ -645,8 +650,20 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       return;
     }
     const z = zoomRef.current;
+    if (state === 'log') {
+      // From the log, once another column no longer blocks a side, it waits
+      // for its room as a new say does: the cursors below glide down first,
+      // then it fades in (review 6 order, r18 item 3), with the same cap.
+      const free = !field.sayRoom(cursor.key, 'right', m.pos, z).foreign
+        || !field.sayRoom(cursor.key, 'left', m.pos, z).foreign;
+      if (!free) return;
+      sayWaitSince.current = performance.now();
+      setSay.current('wait');
+      if (capNow || prefersReducedMotion()) decideSay.current(true);
+      return;
+    }
     const since = sayWaitSince.current;
-    const capped = capNow || state === 'log' || (since !== null && performance.now() - since > SAY_WAIT_MAX_MS);
+    const capped = capNow || (since !== null && performance.now() - since > SAY_WAIT_MAX_MS);
     const right = field.sayRoom(cursor.key, 'right', m.pos, z);
     if (!right.wait && !right.foreign) {
       setSay.current('right');
@@ -660,7 +677,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       }
     }
     if (!capped) return;
-    setSay.current(right.foreign || state === 'log' ? 'log' : 'right');
+    setSay.current(right.foreign ? 'log' : 'right');
   };
   // A say that replaces one still drawn: does its side still have room?
   const sayFits = useRef<() => boolean>(() => false);
@@ -687,7 +704,9 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     collapsedRef.current = collapsed;
     field.names.set(cursor.key, name);
     const sayNow = showSay && !idle && drawsSay;
-    field.setSay(cursor.key, sayNow, widths);
+    // A folded member's say is in the Agent log only (r18 item 1); one in
+    // the log keeps no room (setSay below sets it as it is drawn).
+    field.setSay(cursor.key, sayNow && sayState.current !== 'log', widths);
     if (!sayNow) {
       setSay.current('none');
     } else if (!sayWasShown.current || sayText.current !== cursor.say) {
@@ -1102,10 +1121,12 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     frame.current = null;
   }, []);
 
-  // Idle dims on the fade spring, and the say pill's own timers change the label.
+  // Idle dims on the fade spring, and the say pill's own timers change the
+  // label. A member unfolding from its count cursor (no new event) may now
+  // draw a say still current: the loop finds it its room (r18 item 1).
   useEffect(() => {
     wake.current();
-  }, [idle]);
+  }, [idle, drawsSay]);
   useLayoutEffect(() => {
     updateLabel.current();
   });
