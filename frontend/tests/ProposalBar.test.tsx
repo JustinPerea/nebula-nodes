@@ -124,9 +124,43 @@ describe('ProposalBar', () => {
       providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Runs “Nano Banana” · ~$0.07').getAttribute('title')).toBe('List prices, not a quote');
+    // Only on the price segment (GM - Design, PR #216 r1), with the words as
+    // text for screen readers, since a title shows only on hover.
+    const line = document.querySelector('.proposal-bar__plan')!;
+    expect(line.hasAttribute('title')).toBe(false);
+    const price = line.querySelector('.proposal-bar__price')!;
+    expect(price.textContent).toBe('~$0.07');
+    expect(price.getAttribute('title')).toBe('List prices, not a quote');
+    expect(line.querySelector('.proposal-bar__sr-only')?.textContent).toBe(' (list prices, not a quote)');
+    expect(line.textContent).toBe('Runs “Nano Banana” · ~$0.07 (list prices, not a quote)');
     const details = screen.getByLabelText('What Accept writes');
     expect(details.firstElementChild?.textContent).toBe('List prices, not a quote');
+  });
+
+  it('marks no price on a line with no list price', () => {
+    open(proposal('p_a', { plan: 'Runs “Nano Banana” · Nano Banana on your Google key · no list price' }));
+    render(<ProposalBar />);
+    expect(document.querySelector('.proposal-bar__price')).toBeNull();
+    expect(document.querySelector('.proposal-bar__sr-only')).toBeNull();
+  });
+
+  // GM - Design, PR #216 r1: under 400 px of room beside the docked Agent
+  // log the card sits above it (canvasProposals.css data-above-log).
+  it('sits above the Agent log when the region beside it leaves under 400 px', () => {
+    let regionWidth = 300;
+    const box = (width: number) => ({ left: 0, right: width, top: 0, bottom: 40, width, height: 40, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-notice-region') ? box(regionWidth) : box(0);
+    });
+    open(proposal('p_a'));
+    render(<div data-notice-region=""><ProposalBar /></div>);
+    const card = document.querySelector<HTMLElement>('.proposal-bar')!;
+    expect(card.dataset.aboveLog).toBe('true');
+    expect(card.style.getPropertyValue('--proposal-bar-top-line')).toBe('16px');
+    regionWidth = 400;
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(card.dataset.aboveLog).toBeUndefined();
+    spy.mockRestore();
   });
 
   it('offers a plain Accept when no run is requested', () => {

@@ -50,3 +50,43 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 - Backend: `tests/test_proposal_plan_line.py` covers the chip parity, every plan-line case, `billed_to`, and the view, CLI and HTTP reads end to end. The placeholder cases moved here from `proposalPendingSummary.test.ts`, which is deleted.
 - Frontend: `tests/proposalCardLayout.test.ts` covers the column, the note's W − 36 at 320–600, the one-line name, Accept as primary, the icon-only Show, and the chip parity. ProposalBar tests cover the disclosure (fixed label, `aria-expanded`/`aria-controls`/`inert`, closing on page), Show all and less, the header and the titles.
 - Live, at 1000 px and 420 px, in Restraint. The isolated backend on 8798 and Vite on 5798 were network-guarded, with a fake OpenAI key. Nothing was accepted or run.
+
+## Round 2 (GM - Design's review of #216, 2026-11-01)
+
+**Fixes, built to GM's words:**
+1. **No serial comma in the plan line.** When the same node is changed and run, the clause merges, whatever else the proposal adds: "Adds “Second take” and 2 connections, changes and runs “Alt still”". When the clause before the last already has its own "and", a comma alone joins the last clause (`canvas_proposals._join_clauses`).
+2. **Node names in curly quotes on the not-ready line.**
+   - "“Hero shot” needs your Krea account. Connect it in Settings." The API-token line reads the same way: "“Alt still” needs your OpenAI API key. Add it in Settings."
+   - A route's line starts with the model's name; `main._quoted_name_line` gives it the node's name, quoted.
+   - Agents keep `missing`, find_nodes' words.
+3. **"Show all" can't push the card off screen.** The card's height is capped at the region's room: from the region's bottom edge (`--notice-region-bottom`, now one token in noticeRegion.css), less any lift over the log, up to the app's top line (`floatingTopLimit`, which ProposalBar writes as `--proposal-bar-top-line`). Past that cap, only `.proposal-bar__note-area` scrolls; the header, the plan line and the footer stay put. "Show all"/"Show less" sits outside the scroll area, so it is always reachable.
+
+**GM's calls:**
+- **The note clamp** stays as built.
+- **"List prices, not a quote"** is now on the price segment only (`.proposal-bar__price` has the title). Visually hidden text follows it for screen readers: " (list prices, not a quote)". The card finds the price because the plan line's last segment is the run chip's label (`proposalEstimateLabel`); the two sides are checked to match by the shared fixture.
+- **The Agent log overlap (the bug on main).**
+  - Only one clearance applies now: the notice region's `--agent-log-clearance`. The proposal card's room rule and left shift in `layouts.css` are deleted; they were the double count.
+  - While the region beside a docked log is at least 400 px wide, the card stays there.
+  - Below 400 px, ProposalBar marks the card `data-above-log`. Its CSS sets it to the full width (`min(600, 100vw − 32)`), moves it back to the window's centre, and lifts it so its bottom clears the log's top edge. AgentLog writes that edge as `--agent-log-top` beside the clearance it already measured.
+  - The log never moves or collapses for the card.
+  - Size: about 40 lines of code across AgentLog, ProposalBar, canvasProposals.css, noticeRegion.css and layouts.css, so it is in this PR.
+- **MCP.** `propose_change` and `get_proposal` return `plan` and every field it is made from. A new test runs both through the app and rebuilds the line from the view without `plan`: `plan_line(view) == plan`.
+
+**Checks:**
+- tsc and lint are clean.
+- Focused vitest (an explicit array of 144 files): 2520 passed, 0 errors.
+- Isolated pytest (88 files): 2865 passed.
+- Entry size: 443,579 B raw (unchanged; the card's code is in its own deferred chunk).
+- Mutation checks: 16, all caught. The not-ready quoting has two paths that cover for each other, so it was checked with each path mutated on its own and with both together.
+
+**Live (Restraint, isolated backend on 8798, Vite on 5798; nothing accepted or run):**
+
+| Shot | Card (px) | Log | Result |
+|---|---|---|---|
+| 1440, 3-change plan line | 600 wide, left edge at 229 | closed, from x 1050 | no overlap |
+| 900, log open | 520 wide, left edge at 16 (the whole region) | from x 544 | beside the log, no overlap |
+| 420, log open | 388 wide, bottom at 532 | top at 540 | above the log, no overlap, fully on screen |
+| 420, "Show all" | 416 tall, top at 116, bottom at 532 | open | note scrolls; header and footer don't move when it scrolls |
+
+- At 900 the card sits beside the log because that leaves it 520 px, over the 400 px threshold; 520 is the region's full width.
+- At 420 the card is 388 px, the window less its gutters.

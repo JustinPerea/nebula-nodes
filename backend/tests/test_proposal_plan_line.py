@@ -81,6 +81,23 @@ def test_adds_and_runs_the_new_node():
     assert plan_line(view) == "Adds “Krea 2” and 1 connection and runs it · Krea 2 on your Krea API token · $0.07 + unpriced"
 
 
+def test_an_add_a_change_and_a_run_never_take_a_serial_comma():
+    """GM - Design, PR #216 r1: the same node changed and run is one clause,
+    whatever else is added, and the list never has a serial comma."""
+    alt = {"nodeId": "n3", "name": "Alt still (n3)", "title": "Alt still", "model": "GPT Image 2",
+           "changes": {"quality": {"from": None, "to": "high"}}}
+    cost = {"paidRuns": 1, "estimate": {"low": 0.16, "high": 0.16, "open": False},
+            "nodes": [_entry("n3", "Alt still", model="GPT Image 2", billed="your OpenAI key", node_id="n3")]}
+    merged = _view(nodes=[{"ref": "+t", "name": "Second take"}], edges=[{}, {}], params=[alt], run=["n3"], cost=cost)
+    assert plan_line(merged) == ("Adds “Second take” and 2 connections, changes and runs “Alt still”"
+                                 " · GPT Image 2 on your OpenAI key · ~$0.16")
+    three = _view(nodes=[{"ref": "+t", "name": "Second take"}], params=[{**alt, "nodeId": "n2", "title": "Prompt"}],
+                  run=["n3"], cost=cost)
+    assert plan_line(three) == ("Adds “Second take”, changes “Prompt” and runs “Alt still”"
+                                " · GPT Image 2 on your OpenAI key · ~$0.16")
+    assert ", and " not in plan_line(merged) + plan_line(three)
+
+
 def test_several_paid_runs_are_a_count_and_free_runs_say_free():
     view = _view(run=["n4", "n5"], cost={"paidRuns": 3, "upTo": True, "nodes": [
         _entry("n4", "A", node_id="n4"), _entry("n5", "B", node_id="n5"), _entry("n3", "C", node_id="n3")]})
@@ -143,6 +160,64 @@ def test_the_view_card_cli_and_mcp_read_the_same_names(api):  # noqa: F811 - pyt
     assert (entry["name"], entry["model"], entry["billedTo"]) == ("Hero shot", "Krea 2", "your Krea plan")
     # The CLI prints the card's line word for word, beside its own id lines.
     assert f"  card     {view['plan']}" in format_proposal(view).splitlines()
+    # The not-ready line names the node in curly quotes (GM - Design, PR #216 r1).
+    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea account. Connect it in Settings."
     # get_proposal (MCP) and the HTTP read return the same view.
     again = api.client.get(f"/api/canvas/proposals/{view['id']}", headers={"X-Nebula-Agent": "Claude Code"})
     assert again.json()["proposal"]["plan"] == view["plan"]
+
+
+def test_the_api_token_not_ready_line_quotes_the_name_too(api):  # noqa: F811 - pytest fixture
+    node_id = api.graph.add_node("gpt-image-2-generate", {})
+    api.graph.set_label(node_id, "Alt still")
+    response = _propose(api, {"note": "Try it", "params": [{"nodeId": node_id, "params": {"quality": "high"}}],
+                              "run": [node_id]})
+    assert response.status_code == 201, response.text
+    row = response.json()["proposal"]["cost"]["notReady"][0]
+    assert row["person"] == "“Alt still” needs your OpenAI API key. Add it in Settings."
+    # Agents keep find_nodes' words.
+    assert row["missing"].startswith("needs ")
+
+
+def test_mcp_reads_the_plan_and_every_field_it_is_made_from(api, monkeypatch):  # noqa: F811 - pytest fixture
+    """Every feature ships for agents (Justin's standing rule): propose_change
+    and get_proposal return `plan`, and it is derivable from the fields beside
+    it (names, models, payers, the estimate)."""
+    import httpx
+
+    import mcp_server
+
+    def through_the_app(method, url, *, headers, timeout, **kwargs):
+        path = url.split("://", 1)[1].split("/", 1)[1]
+        response = api.client.request(method, f"/{path}", headers=headers, **{
+            key: value for key, value in kwargs.items() if key in ("json", "params")})
+        return httpx.Response(response.status_code, json=response.json(), request=httpx.Request(method, url))
+
+    monkeypatch.setattr(mcp_server.httpx, "request", through_the_app)
+    monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
+    api.graph.set_label(node_id, "Hero shot")
+    created = mcp_server.propose_change("One image at 1:1 first",
+                                        params=[{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}], run=[node_id])
+    view = created["proposal"]
+    assert view["plan"] == "Changes and runs “Hero shot” · Krea 2 on your Krea plan · no list price"
+    entry = view["cost"]["nodes"][0]
+    assert {"name", "model", "billedTo"} <= set(entry)
+    assert {"title", "model"} <= set(view["params"][0])
+    read = mcp_server.get_proposal(view["id"])["proposal"]
+    assert read["plan"] == view["plan"]
+    assert plan_line({key: value for key, value in read.items() if key != "plan"}) == read["plan"]
+
+
+def test_a_route_line_names_the_node_in_curly_quotes():
+    """node_route.route_unavailable_line starts with the model's name; the
+    card names the node, quoted (GM - Design, PR #216 r1)."""
+    import main
+
+    flux = {"displayName": "FLUX 3"}
+    assert main._quoted_name_line("FLUX 3 can't run on BFL: no key. Add it in Settings.", "Hero shot", flux) == (
+        "“Hero shot” can't run on BFL: no key. Add it in Settings.")
+    assert main._quoted_name_line("“Hero shot” needs your Krea account.", "Hero shot", flux) == (
+        "“Hero shot” needs your Krea account.")
+    assert main._quoted_name_line("needs a key", "Hero shot", flux) == "needs a key"

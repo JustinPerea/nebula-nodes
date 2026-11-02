@@ -199,8 +199,11 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     const { unmount } = render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe(`${1180 - 820 + 8}px`);
+    // Its top edge plus the gap, for a proposal card that sits above it (PR #216 r1).
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
     unmount();
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
   });
 
@@ -211,11 +214,13 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
     spy.mockRestore();
   });
 
   it('the region reads it', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
     expect(css).toMatch(/right:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\)\)/);
+    expect(css).toMatch(/bottom:\s*var\(--notice-region-bottom\)/);
   });
 });

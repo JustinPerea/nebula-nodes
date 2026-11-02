@@ -648,9 +648,14 @@ def _quoted(names: list[str | None], noun: str = "node") -> str:
 
 
 def _join_clauses(clauses: list[str]) -> str:
+    """Clauses joined as a list, never with a serial comma (GM - Design,
+    PR #216 r1): "A, B and C"; when the clause before the last already has
+    its own "and" (“A” and “B”, "and 2 connections"), a comma alone, so the
+    two "and"s don't run together: "Adds “Second take” and 2 connections,
+    changes and runs “Alt still”"."""
     if len(clauses) < 2:
         return "".join(clauses)
-    last = ", and " if any(" and " in clause for clause in clauses[:-1]) else " and "
+    last = ", " if " and " in clauses[-2] else " and "
     return f"{', '.join(clauses[:-1])}{last}{clauses[-1]}"
 
 
@@ -686,8 +691,10 @@ def plan_line(view: Mapping[str, Any]) -> str:
     changed = [str(change.get("nodeId")) for change in changes]
 
     clauses: list[str] = []
-    runs_added = bool(run) and not runs_nothing and not changed and set(run) == set(added)
-    runs_changed = bool(run) and not runs_nothing and not added and set(run) == set(changed)
+    # The same nodes changed and run read as one clause, "changes and runs",
+    # whatever else it adds (GM - Design, PR #216 r1).
+    runs_changed = bool(run) and not runs_nothing and set(run) == set(changed)
+    runs_added = bool(run) and not runs_nothing and not runs_changed and set(run) == set(added)
     if added or edges:
         what = _quoted([names.get(ref) for ref in added]) if added else ""
         if edges:

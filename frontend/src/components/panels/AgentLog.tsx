@@ -230,20 +230,29 @@ export function AgentLog() {
   // the log while it sits on the right edge, low enough for a toast to reach
   // it: --agent-log-clearance is the room it takes from the right
   // (noticeRegion.css), 0 otherwise. Measured, since the log can be dragged
-  // and resized.
+  // and resized. --agent-log-top is how far its top edge (plus the gap)
+  // sits above the window's bottom: a proposal card too narrow beside the
+  // log sits above it instead (GM - Design, PR #216 r1; canvasProposals.css).
+  // The log itself never moves for the card.
   useEffect(() => {
     const root = document.documentElement;
     const log = logRef.current;
     if (!visible || !log) {
       root.style.removeProperty('--agent-log-clearance');
+      root.style.removeProperty('--agent-log-top');
       return undefined;
     }
     const measure = () => {
       const rect = log.getBoundingClientRect();
       const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
-      if (docked) root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
-      else root.style.removeProperty('--agent-log-clearance');
+      if (docked) {
+        root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
+        root.style.setProperty('--agent-log-top', `${Math.ceil(window.innerHeight - rect.top + AGENT_LOG_GAP_PX)}px`);
+      } else {
+        root.style.removeProperty('--agent-log-clearance');
+        root.style.removeProperty('--agent-log-top');
+      }
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -253,6 +262,7 @@ export function AgentLog() {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
       root.style.removeProperty('--agent-log-clearance');
+      root.style.removeProperty('--agent-log-top');
     };
   }, [visible, open, position]);
 

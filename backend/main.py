@@ -7858,11 +7858,24 @@ def _not_ready_nodes(
                 # The line the proposal bar and layer show (error copy round
                 # 3f): the key by its provider, the node by its name. Agents
                 # keep `missing`, find_nodes' words, as before.
-                "person": node_readiness.instance_missing_line(
+                "person": _quoted_name_line(node_readiness.instance_missing_line(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
-                    wired.get(node_id, {}), name=name) or need,
+                    wired.get(node_id, {}), name=f"“{name}”") or need, name, definition),
             })
     return rows
+
+
+def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
+    """The card names nodes in curly quotes (GM - Design, PR #216 r1):
+    "“Hero shot” needs your Krea account. Connect it in Settings." A route's
+    line (node_route.route_unavailable_line) starts with the model's name;
+    it gets the node's, quoted, the same way."""
+    if line.startswith("“"):
+        return line
+    for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition), name):
+        if lead and line.startswith(f"{lead} "):
+            return f"“{name}”{line[len(lead):]}"
+    return line
 
 
 def _estimate_proposal_run(

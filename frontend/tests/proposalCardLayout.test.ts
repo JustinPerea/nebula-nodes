@@ -47,8 +47,10 @@ describe('the proposal card is one column', () => {
     const edge = px(card['border-left'].split(' ')[0]);
     const [, horizontal] = rule('.proposal-bar__body').padding.split(' ').map(px);
     const note = rule('.proposal-bar__note');
-    expect(note.margin).toBe('8px 0 0');
+    expect(note.margin).toBe('0');
     expect(note['max-width']).toBeUndefined();
+    const area = rule('.proposal-bar__note-area');
+    expect(area['margin-top']).toBe('8px');
     for (let width = 320; width <= 600; width += 10) {
       const noteWidth = width - border - edge - 2 * horizontal;
       expect(noteWidth).toBeGreaterThanOrEqual(width - 36);

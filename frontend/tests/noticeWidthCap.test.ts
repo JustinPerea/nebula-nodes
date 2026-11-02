@@ -93,6 +93,8 @@ describe('notices are capped at 560 px', () => {
           if (prop === 'width' && /^var\(--proposal-bar-w\)$/.test(value)) continue;
           if (prop === 'width' && value === 'max-content') continue;
           if (prop === '--proposal-bar-max-w' && selector === '.proposal-bar' && value === PROPOSAL_CARD_CAP) continue;
+          // Above the Agent log (PR #216 r1) the card is held to the same token.
+          if (prop === 'max-width' && value === 'var(--proposal-bar-max-w)') continue;
           if (!withinCap(value)) wide.push(`${relative(SRC, file)}: ${selector} { ${prop}: ${value} }`);
         }
       }

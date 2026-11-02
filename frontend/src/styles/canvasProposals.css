@@ -253,9 +253,30 @@
   pointer-events: auto;
   /* The footer's narrow form reads the card's own width. */
   container: proposal-card / inline-size;
+  /* At most the room the notice region has, from its bottom edge (and any
+     lift over the Agent log) up to the app's top line (ProposalBar writes
+     it); past that the note scrolls inside the card, and the header, the
+     plan line and the footer stay put (GM - Design, PR #216 r1). */
+  --proposal-bar-lift: 0px;
+  max-height: calc(100dvh - var(--notice-region-bottom, 32px) - var(--proposal-bar-lift) - var(--proposal-bar-top-line, 72px));
   /* Its own surface in the notice region: it scales in on the toasts'
      spring (GM r9 answer 2; noticeRegion.css). */
   animation: notice-surface-in 420ms var(--notice-spring) both;
+}
+
+/* Too narrow beside the docked Agent log (under 400 px; ProposalBar marks
+   it): the card stops clearing the log sideways and sits above it, at the
+   full width (up to 600), its bottom over the log's top edge. Only one
+   clearance applies, and the log never moves for it (GM - Design, PR #216
+   r1). The region ends left of the log, so the card is moved back to the
+   window's centre; with no docked log both offsets are 0. */
+.proposal-bar[data-above-log='true'] {
+  --proposal-bar-lift: max(0px, var(--agent-log-top, 0px) - var(--notice-region-bottom, 32px));
+  width: min(var(--proposal-bar-max-w), calc(100vw - 2 * var(--page-gutter, 16px)));
+  max-width: var(--proposal-bar-max-w);
+  translate:
+    calc((max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px)) - var(--page-gutter, 16px)) / 2)
+    calc(-1 * var(--proposal-bar-lift));
 }
 
 /* The proposal's run-later notice (DeferredRunNotice) keeps the bar's
@@ -313,9 +334,24 @@
 
 .proposal-bar__body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: 14px 16px;
+}
+
+/* Only the note area gives way when the card reaches its height cap. */
+.proposal-bar__body > * {
+  flex-shrink: 0;
+}
+
+.proposal-bar__note-area {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* 1. The header: one 20 px line. */
@@ -403,7 +439,7 @@
 .proposal-bar__note {
   display: -webkit-box;
   overflow: hidden;
-  margin: 8px 0 0;
+  margin: 0;
   color: var(--sr-ink, rgb(255 255 255 / 0.92));
   font-size: 14px;
   line-height: 1.45;
@@ -459,6 +495,18 @@
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+/* For screen readers only: the price's "list prices, not a quote", which
+   its title shows only on hover. */
+.proposal-bar__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Run nodes that can't run here, in the person's words. */
@@ -637,6 +685,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
    left; Reject, then Accept, on the right. */
 .proposal-bar__footer {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   padding: 10px 16px 12px;

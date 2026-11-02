@@ -46,7 +46,10 @@
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
      covers it; the stack centres in what is left. */
   right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
-  bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  /* Its bottom edge's height above the window's bottom, once, for the
+     proposal card's own placement too (canvasProposals.css). */
+  --notice-region-bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  bottom: var(--notice-region-bottom);
   z-index: var(--sr-layer-notice, 20010);
   display: flex;
   justify-content: center;

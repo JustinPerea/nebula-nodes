@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
+import { floatingTopLimit } from '../../lib/bottomBar';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -46,6 +47,43 @@ function useLongNote(note: string | undefined, open: boolean): [RefObject<HTMLPa
     return () => observer.disconnect();
   }, [note, open]);
   return [ref, long && Boolean(note)];
+}
+
+/** Below this width beside the docked Agent log, the card sits above the log
+ * at the region's full width instead (GM - Design, PR #216 r1). */
+const BESIDE_LOG_MIN_W = 400;
+/** The card's top never passes the app's top line plus this gutter. */
+const TOP_GUTTER = 16;
+
+/**
+ * Where the card sits (GM - Design, PR #216 r1). Only one clearance from the
+ * Agent log ever applies: the notice region's (it ends left of a docked
+ * log). While that leaves the card at least 400 px, it stays there; below,
+ * it is marked `data-above-log` and its CSS lifts it over the log's top edge
+ * at the full width (up to 600). The log never moves for it. Also writes
+ * the app's top line, which caps the card's height: past it, the note
+ * scrolls inside the card. Re-measured whenever the region's width changes
+ * (a resize, the log docking or leaving) and on window resizes.
+ */
+function useCardPlace(ref: RefObject<HTMLDivElement | null>, mounted: boolean): void {
+  useLayoutEffect(() => {
+    const card = ref.current;
+    const region = card?.closest<HTMLElement>('[data-notice-region]');
+    if (!card || !region) return;
+    const place = () => {
+      if (region.getBoundingClientRect().width < BESIDE_LOG_MIN_W) card.dataset.aboveLog = 'true';
+      else delete card.dataset.aboveLog;
+      card.style.setProperty('--proposal-bar-top-line', `${Math.round(floatingTopLimit(TOP_GUTTER))}px`);
+    };
+    place();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+    observer?.observe(region);
+    window.addEventListener('resize', place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, [ref, mounted]);
 }
 
 /** Ticks once a second while something is counting down. */
@@ -119,6 +157,15 @@ export function ProposalBar() {
   const detailsOpen = shownViewId !== null && detailsFor === shownViewId;
   const noteOpen = shownViewId !== null && noteFor === shownViewId;
   const [noteRef, noteLong] = useLongNote(current?.view.note, noteOpen);
+  const cardEl = useRef<HTMLDivElement | null>(null);
+  const [cardMounted, setCardMounted] = useState(false);
+  useCardPlace(cardEl, cardMounted);
+  const leaveRef = leave.props.ref;
+  const cardRef = useCallback((node: HTMLDivElement | null) => {
+    leaveRef(node);
+    cardEl.current = node;
+    setCardMounted(node !== null);
+  }, [leaveRef]);
 
   useEffect(() => {
     pruneExpired(now);
@@ -170,6 +217,10 @@ export function ProposalBar() {
   const priced = current.view.run.length > 0 && current.view.cost.paidRuns > 0
     && proposalEstimateLabel(current.view) !== null;
   const plan = proposalPlan(current.view);
+  // "List prices, not a quote" belongs to the price alone (GM - Design, PR
+  // #216 r1): the plan line's last segment is the run chip's label.
+  const price = priced ? proposalEstimateLabel(current.view) : null;
+  const priceAt = price && plan.endsWith(` · ${price}`) ? plan.length - price.length : -1;
   const pendingKind = pending[current.view.id];
 
   const show = (entry: ProposalEntry) => {
@@ -202,6 +253,7 @@ export function ProposalBar() {
         aria-label={`Proposal from ${current.view.agent.name}`}
         style={{ ['--agent-color' as string]: current.view.agent.color }}
         {...leave.props}
+        ref={cardRef}
       >
         <div className="proposal-bar__body">
           <div className="proposal-bar__head">
@@ -233,15 +285,19 @@ export function ProposalBar() {
             </span>
           </div>
           {/* The whole note reads first: up to six lines, then "Show all". */}
-          <p
-            ref={noteRef}
-            id={noteId}
-            className="proposal-bar__note"
-            data-long={noteLong ? 'true' : undefined}
-            data-open={noteOpen ? 'true' : undefined}
-          >
-            {current.view.note}
-          </p>
+          {/* Past the card's height cap, this area scrolls; the header, the
+              plan line and the footer stay put (GM - Design, PR #216 r1). */}
+          <div className="proposal-bar__note-area">
+            <p
+              ref={noteRef}
+              id={noteId}
+              className="proposal-bar__note"
+              data-long={noteLong ? 'true' : undefined}
+              data-open={noteOpen ? 'true' : undefined}
+            >
+              {current.view.note}
+            </p>
+          </div>
           {noteLong && (
             <button
               type="button"
@@ -254,7 +310,16 @@ export function ProposalBar() {
             </button>
           )}
           {plan && (
-            <p className="proposal-bar__plan" title={priced ? 'List prices, not a quote' : undefined}>{plan}</p>
+            <p className="proposal-bar__plan">
+              {priceAt < 0 ? plan : (
+                <>
+                  {plan.slice(0, priceAt)}
+                  <span className="proposal-bar__price" title="List prices, not a quote">{price}</span>
+                  {/* The title shows only on hover: screen readers get it as text. */}
+                  <span className="proposal-bar__sr-only"> (list prices, not a quote)</span>
+                </>
+              )}
+            </p>
           )}
           {notReady.length > 0 && (
             // Accept stays as the Run button does for a node without its
