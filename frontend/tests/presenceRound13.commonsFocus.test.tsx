@@ -12,6 +12,7 @@
  *   in one render (the old remount's retry ran on the unmounted body and did nothing).
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const net = vi.hoisted(() => ({ sent: [] as string[] }));
@@ -83,9 +84,9 @@ const CONTROLS: Array<[string, () => HTMLElement]> = [
   ['the ΔE range', () => filters().getAllByRole('slider').at(-1)!],
   ['Corrected only', () => filters().getByRole('checkbox', { name: 'Corrected only' })],
   ['Has comments', () => filters().getByRole('checkbox', { name: 'Has comments' })],
-  ['the Add to select', () => screen.getByRole('combobox', { name: 'Add to' })],
+  ['the Add to select', () => screen.getByRole('combobox', { name: ADD_TO_NAME })],
   ['a section tab', () => screen.getByRole('tab', { name: 'Inbox' })],
-  ['Add itself (it locks in place)', () => screen.getByRole('button', { name: 'Add' })],
+  ['Add itself (it locks in place)', () => screen.getByRole('button', { name: ADD_NAME })],
 ];
 
 describe('a demote keeps focus on a Commons control that is still there (review 10 MEDIUM-2)', () => {
@@ -114,7 +115,7 @@ describe('a demote keeps focus on a Commons control that is still there (review 
     const media = filters().getByRole('combobox', { name: 'Media' });
     fireEvent.change(media, { target: { value: 'image' } });
     const search = document.querySelector<HTMLInputElement>('input[name="commons-search"]')!;
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: ADD_NAME }));
     const url = screen.getByRole('textbox', { name: 'Image or page URL' });
     fireEvent.change(url, { target: { value: 'https://example.invalid/half' } });
     act(() => url.focus());

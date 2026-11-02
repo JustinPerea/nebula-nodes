@@ -30,7 +30,7 @@ vi.mock('../src/lib/commonsApi', () => ({
   commonsEvaluationApi: { get: vi.fn() },
   filtersToRequest: () => ({ query: '', filters: {} }),
 }));
-vi.mock('../src/lib/commonsCapability', () => ({ fetchCommonsEnabled: capability.enabled }));
+vi.mock('../src/lib/commonsCapability', () => ({ fetchCommonsCapability: async () => ((await capability.enabled()) ? 'on' : 'unknown') }));
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => null }));

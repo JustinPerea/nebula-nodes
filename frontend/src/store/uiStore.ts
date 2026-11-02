@@ -220,6 +220,10 @@ interface UIState {
   // Editor view state — Phase 1 video-editor pivot
   viewMode: ViewMode;
   commonsEnabled: boolean;
+  /** PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend runs without
+   * it shows the Commons-off view (components/commons/CommonsView CommonsOffView) over any
+   * screen, until the person leaves it. The Commons stays unavailable (commonsEnabled). */
+  commonsOffShown: boolean;
   commonsReturnView: Exclude<ViewMode, 'commons'>;
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
@@ -332,6 +336,7 @@ interface UIState {
   enterMoodboardEditor: (moodboardId: string, scope?: AssetScope) => void;
   exitMoodboardEditor: () => void;
   setCommonsEnabled: (enabled: boolean) => void;
+  setCommonsOffShown: (shown: boolean) => void;
   enterCommons: () => void;
   exitCommons: () => void;
   enterCreateView: () => void;
@@ -434,6 +439,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   canvasFocusRevision: 0,
   viewMode: 'canvas',
   commonsEnabled: false,
+  commonsOffShown: false,
   commonsReturnView: 'canvas',
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
@@ -618,13 +624,14 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
     commonsEnabled: enabled,
     ...(!enabled && state.viewMode === 'commons' ? { viewMode: state.commonsReturnView } : {}),
   })),
+  setCommonsOffShown: (shown) => set((state) => (state.commonsOffShown === shown ? {} : { commonsOffShown: shown })),
   enterCommons: () => set((state) => {
     if (!state.commonsEnabled || state.viewMode === 'commons') return {};
     return { viewMode: 'commons', commonsReturnView: state.viewMode };
   }),
   exitCommons: () => set((state) => state.viewMode === 'commons'
-    ? { viewMode: state.commonsReturnView }
-    : {}),
+    ? { viewMode: state.commonsReturnView, commonsOffShown: false }
+    : state.commonsOffShown ? { commonsOffShown: false } : {}),
 
   enterCreateView: () => {
     const restoredSession = useGraphStore.getState().runHistory.find((run) => run.createOrigin)?.createOrigin?.sessionId;

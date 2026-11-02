@@ -7,6 +7,7 @@
  * content of its own. Anything else over the line still covers it (review 8 MEDIUM-2).
  */
 import { readFileSync } from 'node:fs';
+import { ADD_TO_NAME } from './helpers/commonsAddNames';
 import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -246,7 +247,7 @@ function Page() {
   return <><CommonsView /><PersonRequiredBanner /></>;
 }
 const openPrompt = async () => {
-  fireEvent.change(screen.getByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
+  fireEvent.change(screen.getByRole('combobox', { name: ADD_TO_NAME }), { target: { value: '__new__' } });
   await tick(0);
   fireEvent.change(screen.getByRole('textbox', { name: /New collection name/ }), { target: { value: 'Warm serifs' } });
 };

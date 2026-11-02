@@ -48,10 +48,11 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
     const cases: Array<[string, number, string | undefined, string]> = [
       ['load Agent review', 503, undefined, noResponseBecause('load Agent review')],
       ['load Agent review', 408, undefined, noResponseBecause('load Agent review')],
-      ['load Agent review', 429, undefined, noResponseBecause('load Agent review')],
+      // GM r31: a rate limit has its own line.
+      ['load Agent review', 429, undefined, 'Nebula couldn’t load Agent review because the server is busy. Try again in a moment.'],
       ['load Agent review', 502, undefined, noResponseBecause('load Agent review')],
-      ['load Agent review', 500, 'Internal Server Error', 'Nebula couldn’t load Agent review because Nebula’s server hit an error. Try again.'],
-      ['load the Commons', 0, undefined, 'Nebula couldn’t load the Commons because Nebula’s server isn’t answering. Check that it’s running, then try again.'],
+      ['load Agent review', 500, 'Internal Server Error', 'Nebula couldn’t load Agent review because the server hit an error. Try again.'],
+      ['load the Commons', 0, undefined, 'Nebula couldn’t load the Commons because the server isn’t answering. Check that Nebula is running, then try again.'],
       ['load this reference', 404, "That reference isn't there anymore. Reload to get the latest references.",
         'Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.'],
       ['load this reference', 409, "That reference isn't in this held-out set. Reload to get the latest references.",
@@ -68,7 +69,7 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
         'Nebula couldn’t load the Commons settings because this window isn’t signed in as you. Reload to sign in again.'],
       ['load the Commons settings', 403, undefined,
         'Nebula couldn’t load the Commons settings because you don’t have access to this anymore. Reload to sign in again.'],
-      ['load the references', 422, undefined, 'Nebula couldn’t load the references because Nebula’s server didn’t accept it. Try again.'],
+      ['load the references', 422, undefined, 'Nebula couldn’t load the references because the server didn’t accept it. Try again.'],
       ['load Agent review', 404, 'Commons is disabled', COMMONS_OFF_COPY],
     ];
     for (const [what, status, detail, line] of cases) expect(loadFailedLine(what, failed(status, detail)), `${status} ${detail}`).toBe(line);
@@ -78,7 +79,7 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const line = loadFailedLine('load Agent review', failed(409, 'The review set is closed.'));
-      expect(line).toBe('Nebula couldn’t load Agent review because Nebula’s server didn’t accept it. Try again.');
+      expect(line).toBe('Nebula couldn’t load Agent review because the server didn’t accept it. Try again.');
       expect(warn.mock.calls.flat().join(' ')).toContain('The review set is closed.');
     } finally { warn.mockRestore(); }
   });
@@ -190,8 +191,11 @@ describe('the reasons mapped here are the backend\'s own words (round 18c)', () 
       .map((file) => readFileSync(join(__dirname, '../../backend', file), 'utf8')).join('\n');
     const { COMMONS_OFF_DETAIL } = await import('../src/lib/errorCopy');
     expect(backend).toContain(`detail="${COMMONS_OFF_DETAIL}"`);
+    // Round 18d (review 14 LOW-4): the blob route's own 404, not a longer "… not found".
+    expect(backend).toContain('detail="not found"');
     for (const detail of LOAD_BECAUSE.keys()) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
+      if (detail === 'not found') continue;
       if (detail.startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
       expect(backend, detail).toContain(detail);
     }

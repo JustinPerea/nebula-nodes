@@ -7,6 +7,9 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { COMMONS_OFF_COPY, loadFailedCause, savedReadBackLine } from '../../lib/errorCopy';
+import { isPersonRefusal } from '../../lib/clearsOnPromote';
 
 interface Props {
   status: CommonsStatus | null;
@@ -109,23 +112,29 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   }, [loadEpoch, line]);
 
   const run = useCallback(async (work: () => Promise<unknown>, done?: string) => {
-    let committed = false;
     try {
       await work();
-      committed = true;
-      setError(null);
-      if (done) setMessage(done);
-      await load();
-      onChanged();
-      return true;
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
       if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the settings.");
-      // The write may have committed even if its read-back failed. Preserve
-      // the error without inviting the user to submit that write again.
-      if (committed) onChanged();
-      return committed;
+      return false;
     }
+    setError(null);
+    if (done) setMessage(done);
+    try {
+      await load();
+    } catch (e) {
+      // Round 18d (review 14 LOW-1, GM r32 3): the write landed and only reading it back failed.
+      // A load's failure, neutral, in GM's words, with no "Try again" that would send the write
+      // again; never the backend's words. Refused because this tab isn't connected as you: the
+      // settings load's own because line, which loads them again on the promote.
+      const cause = isPersonRefusal(e) ? null : loadFailedCause('load the settings back', e);
+      if (isPersonRefusal(e)) line.show(e, "Couldn’t load the Commons settings.", { reload: true });
+      else if (cause && cause !== COMMONS_OFF_COPY) line.keep(e, savedReadBackLine(cause));
+    }
+    // The write committed even if its read-back failed.
+    onChanged();
+    return true;
   }, [load, onChanged, line]);
 
   const exportZip = async () => {
@@ -149,7 +158,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   if (!loaded) return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
-      <CommonsErrorLine line={error} />
+      {/* Round 18d (GM r32 5): the one loading look, under the heading. */}
+      {error ? <CommonsErrorLine line={error} /> : <CommonsLoadingLine text="Loading settings…" />}
     </section>
   );
   return (

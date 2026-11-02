@@ -238,6 +238,10 @@ describe('A: one source for the read-only state', () => {
     // notice. They show nothing offline and edit nothing, so the canvas lock (which also covers
     // following, when a lock line should still show) has nothing to add.
     'components/PersonRequiredBanner.tsx',
+    // Round 18d (live LOW-1, GM r23 3): a Commons load line and the Commons-off line hide beside
+    // "Nebula is offline". They edit nothing.
+    'components/commons/CommonsErrorLine.tsx',
+    'components/commons/CommonsOffView.tsx',
     'components/commons/useLockLineHold.ts',
     'hooks/useOfflineFirstBecause.ts',
     'hooks/usePersonLock.ts',

@@ -129,12 +129,18 @@ export function notConnectedBecause(what: string, desktop: boolean = inDesktopSh
 /**
  * GM r24 c (PR #204 round 15): a load Nebula answered with no reason (a 5xx, 408 or 429:
  * NO_RESPONSE_COPY's case), as one sentence with Nebula the subject, verbatim for the references:
- * "Nebula couldn’t load the references because it didn’t respond. Try again." `what` is what
+ * "Nebula couldn’t load the references because the server didn’t respond. Try again." `what` is what
  * Nebula was doing, as notConnectedBecause's.
  */
 export function noResponseBecause(what: string): string {
-  return `Nebula couldn’t ${what} because it didn’t respond. Try again.`;
+  return `Nebula couldn’t ${what} because ${NO_RESPONSE_CLAUSE}`;
 }
+
+/** GM r31 (PR #204 round 18d): the server is the subject of every reason. 408 and a gateway's
+ * 502-504: no answer in time. */
+const NO_RESPONSE_CLAUSE = 'the server didn’t respond. Try again.';
+/** GM r31: a rate limit (429) has its own line. */
+const SERVER_BUSY_CLAUSE = 'the server is busy. Try again in a moment.';
 
 /**
  * PR #204 round 18b (GM r29 1) and 18c (GM r30, the wording batch): a load's failure, as the
@@ -163,12 +169,12 @@ export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
 ]);
 /** 401 or 403 with no reason (GM's line, kept by GM r30). */
 const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to sign in again.';
-/** GM r30 3: a server error (500) isn't "didn't respond". */
-const SERVER_ERROR_CLAUSE = 'Nebula’s server hit an error. Try again.';
-/** GM r30: no answer at all. */
-const NOT_ANSWERING_CLAUSE = 'Nebula’s server isn’t answering. Check that it’s running, then try again.';
-/** GM r30: a 4xx with no readable reason, and any reason not listed above. */
-export const LOAD_NOT_ACCEPTED = 'Nebula’s server didn’t accept it. Try again.';
+/** GM r30 3: a server error (500) isn't "didn't respond". GM r31: "the server", not "Nebula's server". */
+const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
+/** GM r30: no answer at all (GM r31's wording). */
+const NOT_ANSWERING_CLAUSE = 'the server isn’t answering. Check that Nebula is running, then try again.';
+/** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
+export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
  * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
  * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
@@ -179,21 +185,53 @@ export const COMMONS_OFF_COPY = 'Commons is turned off for this Nebula.';
  * the failure says nothing (a request refused offline). A refusal because this tab isn't
  * connected as you is the caller's (notConnectedBecause). */
 export function loadFailedLine(what: string, error: unknown): string {
+  const clause = loadFailedClause(what, error);
+  if (clause === null) return '';
+  return clause === COMMONS_OFF_COPY ? COMMONS_OFF_COPY : `Nebula couldn’t ${what} because ${clause}`;
+}
+
+/** The clause after "because" for a load's failure (loadFailedLine), COMMONS_OFF_COPY for the
+ * Commons turned off, or null when the failure says nothing (a request refused offline). */
+function loadFailedClause(what: string, error: unknown): string | null {
   const { reason } = failureCopy(error);
-  if (!reason) return '';
-  const because = (clause: string) => `Nebula couldn’t ${what} because ${clause}`;
+  if (!reason) return null;
   const status = error instanceof RequestFailedError ? error.status : null;
-  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return because(NOT_ANSWERING_CLAUSE);
+  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return NOT_ANSWERING_CLAUSE;
   const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
-  if (status === 404 && detail === COMMONS_OFF_DETAIL) return COMMONS_OFF_COPY;
+  if (isCommonsOff(error)) return COMMONS_OFF_COPY;
   if (status !== null && failureKind(status) === 'no-response') {
-    // 408, 429 and a gateway's 502-504 are "didn't respond"; the server's own 5xx is an error.
-    return status >= 500 && !GATEWAY_STATUSES.has(status) ? because(SERVER_ERROR_CLAUSE) : noResponseBecause(what);
+    // GM r31: 429 is busy; 408 and a gateway's 502-504 didn't respond; the server's own 5xx is an error.
+    if (status === 429) return SERVER_BUSY_CLAUSE;
+    return status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
   const clause = LOAD_BECAUSE.get(detail) ?? (reason === ACCESS_LOST_COPY ? ACCESS_LOST_CLAUSE : undefined);
-  if (clause) return because(clause);
+  if (clause) return clause;
   if (detail) console.warn(`[nebula] Couldn’t ${what}: the backend said "${detail}" (not shown).`);
-  return because(LOAD_NOT_ACCEPTED);
+  return LOAD_NOT_ACCEPTED;
+}
+
+/** Whether a Commons call was refused because the backend runs without the Commons (its 404
+ * "Commons is disabled", whatever the call). */
+export function isCommonsOff(error: unknown): boolean {
+  return error instanceof RequestFailedError && error.status === 404 && detailText(error.detail) === COMMONS_OFF_DETAIL;
+}
+
+/**
+ * PR #204 round 18d (GM r32 3): a load's cause alone, for a line that says its own next step
+ * ("Saved. Nebula couldn’t load the settings back because {cause}. Reload to see them."): the
+ * shared clause's first sentence, without its period or its own "Try again". Null when the
+ * failure says nothing; COMMONS_OFF_COPY for the Commons turned off.
+ */
+export function loadFailedCause(what: string, error: unknown): string | null {
+  const clause = loadFailedClause(what, error);
+  if (clause === null || clause === COMMONS_OFF_COPY) return clause;
+  return clause.replace(/\. .*$|\.$/, '');
+}
+
+/** PR #204 round 18d (GM r32 3), verbatim: a settings write landed, and reading it back failed for
+ * `cause` (loadFailedCause). No "Try again": that would send the write again. */
+export function savedReadBackLine(cause: string): string {
+  return `Saved. Nebula couldn’t load the settings back because ${cause}. Reload to see them.`;
 }
 
 /** PR #204 round 18 (GM r28 1), widened in round 18b (GM r29 1): a load's failure line, whatever
@@ -201,7 +239,8 @@ export function loadFailedLine(what: string, error: unknown): string {
  * action's line says "Couldn’t save …"), and a load that failed destroys nothing, so it is drawn
  * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
 export function isLoadLine(text: string): boolean {
-  return /^Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
+  // Round 18d (GM r32 3): a read-back after a saved write is a load's line too (savedReadBackLine).
+  return /^(?:Saved\. )?Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
 }
 
 /**

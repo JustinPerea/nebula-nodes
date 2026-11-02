@@ -13,6 +13,7 @@
  * and L18's code (the toolbar ratchet's lock-line allowance) is gone since round 12.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { ADD_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const net = vi.hoisted(() => ({ sent: [] as string[], rows: [] as unknown[] }));
@@ -101,7 +102,7 @@ describe('the Commons\' empty hint stays away while adding is locked, the search
     await flush();
     await settle(300);
     await flush();
-    expect(screen.getByRole('button', { name: 'Add' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: ADD_NAME })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.queryByText('Searching…')).toBeNull();
     expect(document.querySelector('.commons-empty')).toBeNull();
     expect(document.body.textContent).not.toMatch(HINT);

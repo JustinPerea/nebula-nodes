@@ -30,9 +30,9 @@ const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 const { resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
 
-const PAGE = 'Nebula couldn’t load the Commons because it didn’t respond. Try again.';
-const STATUS = 'Nebula couldn’t check the Commons status because it didn’t respond. Try again.';
-const REFERENCES = 'Nebula couldn’t load the references because it didn’t respond. Try again.';
+const PAGE = 'Nebula couldn’t load the Commons because the server didn’t respond. Try again.';
+const STATUS = 'Nebula couldn’t check the Commons status because the server didn’t respond. Try again.';
+const REFERENCES = 'Nebula couldn’t load the references because the server didn’t respond. Try again.';
 
 type Load = 'status' | 'collections' | 'search';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

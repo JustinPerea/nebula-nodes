@@ -29,7 +29,7 @@ function Shell() {
 beforeEach(() => {
   vi.resetAllMocks();
   history.replaceState({}, '', '/');
-  useUIStore.setState({ viewMode: 'canvas', commonsEnabled: false, commonsReturnView: 'canvas', onboardingActive: false });
+  useUIStore.setState({ viewMode: 'canvas', commonsEnabled: false, commonsOffShown: false, commonsReturnView: 'canvas', onboardingActive: false });
   commons.collections.mockResolvedValue([]);
   commons.status.mockResolvedValue({ worker: { running: false, state: 'idle' }, queue: {} });
   commons.search.mockResolvedValue({ results: [] });
@@ -81,6 +81,8 @@ describe('Commons backend capability', () => {
     await waitFor(() => expect(transport.fetch).toHaveBeenCalledTimes(1));
     expect(useUIStore.getState().viewMode).toBe('canvas');
     expect(commons.status).not.toHaveBeenCalled();
+    // PR #204 round 18d (GM r32 1): the app shows the Commons-off view for it (App), reading nothing.
+    await waitFor(() => expect(useUIStore.getState().commonsOffShown).toBe(true));
     first.unmount();
     transport.fetch.mockResolvedValue(json({ enabled: true }));
     render(<Shell />);

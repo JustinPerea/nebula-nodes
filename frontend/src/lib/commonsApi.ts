@@ -2,8 +2,9 @@ import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
 import { personHeldSettled } from './personSession';
 import { apiFetch } from './backend';
 import { CommonsRequestError } from './commonsRequestError';
+import { noteCommonsAnswered, noteCommonsOff } from './commonsOff';
 import {
-  CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS,
+  COMMONS_OFF_COPY, COMMONS_OFF_DETAIL, CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, detailText,
   REFUSED_FALLBACK_COPY, commonsNotConnected, copyForStatus, isNoAnswer, readDetail, requestSucceeded,
   warnFailure, type FailureCopy,
 } from './errorCopy';
@@ -25,6 +26,7 @@ export function resetCommonsSessionForTests(): void {
   session = null;
   holdCommonsCalls(false);
   resetPersonSessionForTests();
+  noteCommonsAnswered();
 }
 
 /** No person session to send: this tab isn't connected as the person (GM r12 (2), #204 round 9;
@@ -118,8 +120,15 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
     // console (once per call until it works again).
     const detail = await readDetail(response);
     warnFailure(heading, response.status, detail);
+    // Round 18d (GM r32 1): the backend runs without the Commons. Whatever the call, the view
+    // turns to the off view (lib/commonsOff), and its words are GM's, never the backend's.
+    if (response.status === 404 && detailText(detail) === COMMONS_OFF_DETAIL) {
+      noteCommonsOff();
+      throw new CommonsRequestError(COMMONS_OFF_COPY, response.status, { detail, heading });
+    }
     throw new CommonsRequestError(copyForStatus(response.status, detail), response.status, { detail, heading });
   }
+  noteCommonsAnswered();
   requestSucceeded(heading);
   const type = response.headers.get('content-type') ?? '';
   try {

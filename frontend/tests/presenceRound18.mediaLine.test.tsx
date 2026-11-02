@@ -24,7 +24,7 @@ it('a media load with no answer draws the neutral Commons line, not bare text', 
     expect(box).not.toBeNull();
     return box!;
   });
-  expect(line.textContent).toBe('Nebula couldn’t load this image because it didn’t respond. Try again.');
+  expect(line.textContent).toBe('Nebula couldn’t load this image because the server didn’t respond. Try again.');
   expect(line.tagName).toBe('SPAN');
   expect(line.hasAttribute('data-line-neutral')).toBe(true);
   expect(lineLook(line)).toEqual(NEUTRAL);

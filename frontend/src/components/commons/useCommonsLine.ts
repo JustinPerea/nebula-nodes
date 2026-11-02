@@ -51,7 +51,7 @@ export function useCommonsLine<T extends string | null>(
     // Round 15 (GM r25, pane loads): a pane's load is named by the pane's own words ("load Agent
     // review", "load this reference", "load the Commons settings"), whichever of its requests
     // failed, and no answer is the because form too: "Nebula couldn’t load Agent review because
-    // it didn’t respond. Try again."
+    // the server didn’t respond. Try again." (GM r31 wording)
     const what = /^Couldn['’]t (.+)\.$/.exec((options.reload ? heading : '') || requestHeading(error) || heading)?.[1];
     // Round 18b (GM r29 1): a load says every reason in the because form (loadFailedLine).
     const line = (isPersonRefusal(error) && what ? notConnectedBecause(what)

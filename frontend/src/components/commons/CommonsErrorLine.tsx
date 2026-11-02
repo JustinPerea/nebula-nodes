@@ -3,6 +3,7 @@ import { isLoadLine } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
+import { useBackendOffline } from '../../lib/useBackendOffline';
 
 /**
  * A Commons screen's failure line (GM r12 (2), PR #204 round 9). A refusal because this tab
@@ -18,7 +19,11 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }:
   as?: 'p' | 'span';
 }) {
   const line = useOfflineFirstBecause(given);
+  const offline = useBackendOffline();
   if (!line) return null;
+  // Round 18d (review 14 live LOW-1, GM r23 3: offline comes first): a load's line hides beside
+  // "Nebula is offline", which says what is wrong, as the page row's do; it shows again online.
+  if (offline && isLoadLine(line)) return null;
   // A not-connected refusal (a because line, the general words, or a dev setup's line).
   const person = isBecauseLine(line);
   // Round 18 (GM r28 1): a load that got no answer destroys nothing either: neutral, in the same

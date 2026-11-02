@@ -12,6 +12,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -188,7 +189,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const eyebrow = <SectionEyebrow id={headingId} name="Blind labeling" detail="C1 / C2 human ground truth" />;
   if (loading) return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading"><div>{eyebrow}</div></header>
-    <p className="commons-notice">Loading held-out references…</p>
+    <CommonsLoadingLine text="Loading held-out references…" />
   </section>;
   const intro = <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
     <p>Describe what you see. Accent observations come before palette swatches.</p></div>;

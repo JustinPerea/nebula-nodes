@@ -168,10 +168,11 @@ describe('one heading pattern for the Commons sections (GM review, round 2)', ()
     await view();
     fromTab('Blind labeling');
     expectEyebrow((await expectSection('Blind labeling')).heading, 'Blind labeling · C1 / C2 human ground truth');
-    expect(screen.getByText('Loading held-out references…')).toBeTruthy();
+    // Round 18d (GM r32 5): the loading line shows once the load has taken 300 ms.
+    expect(await screen.findByText('Loading held-out references…')).toBeTruthy();
     fromTab('Agent review');
     expectEyebrow((await expectSection('Agent review')).heading, 'Agent review · agent grades · your judgment');
-    expect(screen.getByText('Loading agent reviews…')).toBeTruthy();
+    expect(await screen.findByText('Loading agent reviews…')).toBeTruthy();
   });
 
   it('keeps the More button\'s text "More" with a folded section open', async () => {

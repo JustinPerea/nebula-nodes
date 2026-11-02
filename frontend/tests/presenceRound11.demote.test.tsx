@@ -8,6 +8,7 @@
  *   back to the same control on the promote, and never away from a control that is still there.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const net = vi.hoisted(() => ({ sent: [] as string[] }));
@@ -99,7 +100,7 @@ describe('drafts and focus across a demote and the promote (GM r19 item 2)', () 
     await flush();
     const search = document.querySelector<HTMLInputElement>('input[name="commons-search"]')!;
     fireEvent.change(search, { target: { value: 'warm serif' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: ADD_NAME }));
     const url = screen.getByRole('textbox', { name: 'Image or page URL' });
     fireEvent.change(url, { target: { value: 'https://example.invalid/half' } });
     act(() => url.focus());
@@ -150,14 +151,14 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);
     await settle(200);
-    const select = screen.getByRole('combobox', { name: 'Add to' });
-    const option = [...select.querySelectorAll('option')].find((o) => o.textContent === 'New collection…')!;
-    expect(option.disabled).toBe(true);
-    // PR #204 round 18 (GM r28 3): with nothing to pick (a held tab reads no collections) the
-    // select shows "No collections" in the one disabled look, the person lock's, with Add's line.
+    const select = screen.getByRole('combobox', { name: ADD_TO_NAME });
+    // Round 18d (GM r31 2): a held tab reads no collections, so the select holds one option, "Not
+    // loaded", with the reason, in the one disabled look, the person lock's, with Add's line;
+    // "New collection…" isn't offered at all.
+    expect([...select.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Not loaded']);
+    expect(select).toHaveAttribute('aria-label', 'Add to, not loaded. It works once this tab is connected as you.');
     expect(select).toHaveAttribute('aria-disabled', 'true');
     expect(select).toHaveAttribute('data-person-lock', 'add references');
-    expect((select as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('No collections');
     fireEvent.change(select, { target: { value: '__new__' } });
     await flush();
     expect(screen.queryByRole('textbox', { name: /New collection name/ })).toBeNull();
@@ -182,7 +183,7 @@ describe('Add on a held tab (GM r18)', () => {
     render(<CommonsView />);
     await settle(200);
     await flush();
-    const add = screen.getByRole('button', { name: 'Add' });
+    const add = screen.getByRole('button', { name: ADD_NAME });
     expect(add).toHaveAttribute('aria-disabled', 'true');
     const line = document.getElementById(add.getAttribute('aria-describedby')!.split(' ').pop()!)!;
     expect(line.textContent).toBe('You can add references when this tab is connected as you.');

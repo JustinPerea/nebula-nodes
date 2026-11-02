@@ -2686,3 +2686,136 @@ GM's three fixes; with them the PR is signed off on design.
   - M: every Commons call answered with the backend's own 404 body for a disabled Commons; on
     every tab one line, "Commons is turned off for this Nebula.", and no content.
   - Shots at 1440 in the scratchpad (`fu3r/shots-r18c`), md5 `uniq -d` empty, opened.
+
+## Round 18d (GM r31, GM r32, review 14; base 00089609 plus main e51f789f)
+
+### 1. GM r31's wording and the not-connected tab
+- Every load reason has the server as its subject (`errorCopy.loadFailedClause`):
+
+  | Failure | Line |
+  |---|---|
+  | No answer at all | Nebula couldn’t X because the server isn’t answering. Check that Nebula is running, then try again. |
+  | 500, 501, 505+ | Nebula couldn’t X because the server hit an error. Try again. |
+  | 408, 502-504 | Nebula couldn’t X because the server didn’t respond. Try again. |
+  | 429 | Nebula couldn’t X because the server is busy. Try again in a moment. |
+  | Any other 4xx, unlisted | Nebula couldn’t X because the server didn’t accept it. Try again. |
+
+- A tab not connected as you: Add to holds one option, "Not loaded", labelled "Add to, not loaded.
+  It works once this tab is connected as you."; Add is labelled "Add, not loaded. It works once
+  this tab is connected as you." Both keep the person lock's look and Add's lock line.
+- `tests/helpers/bareLines` (review 9's P3: "connected as you" in an aria-label is never right)
+  now lets exactly these two names, and only on a control with `data-person-lock`. GM r31 asked
+  for them verbatim; the line on screen is still the page's because line and Add's lock line, which
+  register. Flagged for the reviewer: this is the one exception to P3.
+- Tests that queried "Add" / "Add to" by name now use `tests/helpers/commonsAddNames` (connected
+  or not).
+
+### 2. The Commons turned off (GM r31 layout M, GM r32 1)
+- `lib/commonsOff` holds whether this window last heard the Commons is off. `lib/commonsApi`
+  sets it on any Commons call's 404 "Commons is disabled" (a load's or an action's) and clears it on
+  any call that answers OK. So "off" comes from the failures, never from the lines shown (which
+  hide offline), and going offline never brings the sections back (review 14 LOW-2).
+- That 404 is thrown with GM's line as its reason, so no surface can show "Commons is disabled".
+  An action refused that way puts up no line at all; the off view says it.
+- CommonsView, while off: the header keeps only the way back, the title and Updates (no tabs, More,
+  Add to, Add, status, Start or Stop); the page row shows only "Commons is turned off for this
+  Nebula." (hidden offline, as every load line); the status read before, any action line, notice,
+  upload failures and page candidates are dropped; an open Add menu closes. When a call answers
+  again, the loads all read again.
+- A reload: `lib/commonsCapability.fetchCommonsCapability` now says `on`, `off` or `unknown`.
+  When the backend says `off` and the address asks for the Commons, `uiStore.commonsOffShown`
+  opens `CommonsOffView` over whatever screen would show (the Projects home after a reload). It
+  reads and sends nothing of the Commons (the capability test's rule), and the Commons stays
+  unavailable (`commonsEnabled` false). "← Canvas" (and Projects) leave it and take #commons off
+  the address; a hash edit leaves it too. No answer, an older backend's 404 or an unreadable answer
+  say nothing about the Commons: no off view. After a reload there is no project open, so
+  "← Canvas" lands on the Projects home; for GM if it should read otherwise there.
+- The off route mounts none of the canvas's or a project's parts (graph file actions, the zoom
+  recorder, the chat and settings overlays).
+
+### 3. Add to after a failed re-read (GM r32 2, review 14 LOW-3)
+- A failed collections read no longer marks the collections unread: Add to keeps the last good
+  list, live, beside the load's neutral line. "Not loaded" is only for a view whose collections
+  never answered (a new view starts the data again, round 13).
+- The list's read-back after New collection… or Import moodboards is a load (its neutral line, the
+  list kept), not the action's line.
+- An open Add menu: with the list kept, Add never stops working under it, so it never comes back by
+  itself. A demote and going offline still hide it and bring it back with its URL and focus (GM r19
+  2, `presenceRound13.commonsFocus`, `presenceRound14.focusOffline`); the Commons turned off closes
+  it.
+
+### 4. A settings write that landed, whose read-back failed (GM r32 3, review 14 LOW-1)
+- `CommonsSettings.run` is two steps. A failed write keeps the action's line. A failed read-back
+  says "Saved. Nebula couldn’t load the settings back because {cause}. Reload to see them."
+  (`savedReadBackLine`), where {cause} is the shared clause's first sentence without its own next
+  step (`loadFailedCause`). It is neutral (`isLoadLine` reads the "Saved. " form), has no Try
+  again, and never the backend's words. A read-back refused because the tab isn't connected gets
+  the settings load's because line, which loads them again on the promote.
+- Probe P3 is a test (409 with raw words, 503, 500, 429).
+
+### 5. The grid while the collections haven't loaded (GM r32 4)
+- `emptyHint` is empty while they haven't: no "No matches", no drop hint.
+
+### 6. One loading look (GM r32 5)
+- `CommonsLoadingLine`: a plain muted line (`.commons-loading`, `--sr-ink-meta`, no box or rail)
+  where the content will appear, only after 300 ms. "Loading agent reviews…", "Loading settings…"
+  (under Settings' heading), "Loading details…", and Blind labeling's "Loading held-out
+  references…" in the same look.
+
+### 7. Offline
+- CommonsErrorLine hides a load line (`isLoadLine`) while Nebula is offline, so no pane shows a
+  second "isn’t answering" beside "Nebula is offline" (live LOW-1). Back online the line shows
+  again if it still applies.
+
+### 8. Review 14's remaining items
+- LOW-4: the backend-string test pins `detail="not found"`.
+- NIT-1:
+  - X6 (`person ||`): an action's because line in the one-look test.
+  - X4 (the `^` anchor): an action line naming a load later in its text.
+  - X11 (aria-expanded): a menu open across a demote, promoted with the collections not read yet.
+  - X13 (return from a section): a failed load, away, then back; the setup state before the next poll.
+  - X16 (zero-size panels): a hidden panel in the band takes nothing.
+  - X2 (drop lock): a drag over the grid while not loaded isn't taken, and a drop sends nothing.
+  - X8 (`requireTarget`'s guard): equivalent now. With a failed re-read keeping the list, the
+    collections are "not loaded" only before a view's first answer, when no page candidates can
+    exist and the drop is already locked (X2). Kept as a guard.
+  - `isNoAnswer(error) ||` in the load clause: equivalent for Commons calls (`lostConnection`
+    always carries status 0); only a bare AbortError would differ. Kept.
+- Live NIT-3: `presenceRound15.paneLoads` has a 30 s test timeout.
+- Ratchet lists: `round22Surfaces` lists CommonsErrorLine and CommonsOffView as offline-only
+  readers; `studioGridAreas` lists the Commons-off screen.
+
+### Gates
+- tsc and eslint clean; check:inline-styles and check:slava-css-scope pass. No backend file
+  changed, so no pytest ran (the backend-string test reads the backend's files).
+- vitest on two workers, an explicit array of 354 files (every test that reads `src/` or
+  `styles/`, every presenceRound*, Commons, errorCopy, failureLines, capability and App test):
+  4,702 of 4,706. The four were real and are fixed: two ratchet lists (`round22Surfaces`,
+  `studioGridAreas`) didn't know the new files, and two capability tests saw the off state an
+  earlier test left (the capability answering "on" now clears it). The 13 files that touch them,
+  rerun: 153 of 153. The new 18d tests, added after: 27 and 7, passing.
+- `npm run build` with the budget check: 469,802 B raw / 144,746 B gzip.
+- Mutations (rsync copy, the backend's five read files copied beside it): 41 run, 40 killed. The
+  wording (5), the off view (10: offline, the header, the line, the action line, the API's off and
+  answered marks, the offline row, the reload when back, the menu, the stale status), the reload
+  route (4), the kept list and the read-back (2), the settings read-back (3), the grid (2), the
+  loading look (3), the offline hide, review 14's X6, X11, X13, X16, the not-connected names (3),
+  the blob detail in the backend, and the bare-lines exception's lock check. The survivor is
+  `requireTarget`'s guard, equivalent (section 8).
+- Live (8951/5951, backend only through `harness/serve_isolated.py` with the person token on
+  stdin; canaries first; `blocked.log` holds only canary lines): 18 of 18.
+  - Add to after a failed re-read (offline, then the collections read at 503): "Refs" kept, Add to
+    and Add live, the neutral rail line.
+  - Settings: a real Link folder with the folders read-back at 503: "Saved. Nebula couldn’t load
+    the settings back because the server didn’t respond. Reload to see them.", neutral, alone; no
+    "Try again" anywhere.
+  - Agent review's read held: nothing at 150 ms, then "Loading agent reviews…" with no fill or rail
+    (rgba(255,255,255,0.4)).
+  - The real Commons off: the backend started again through the harness with the same token and
+    without `NEBULA_COMMONS_ENABLED`. Mid-visit: no tabs, Add to, Add, status or content, the one
+    line. Then a real reload (a new document) on #commons: the off view with only "← Canvas",
+    "Commons" and Updates (no project controls: nothing is open), the one line, never "Commons is
+    disabled"; "← Canvas" takes #commons off the address and shows the Projects home.
+  - Shots at 1440 in the scratchpad (`fu3r/shots-r18d`: M after a reload, M mid-visit, N Add to
+    keeping its list, S the settings read-back, L the loading line, and after ← Canvas), md5
+    `uniq -d` empty, opened.

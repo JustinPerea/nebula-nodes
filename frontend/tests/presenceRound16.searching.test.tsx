@@ -157,7 +157,7 @@ describe('GM r26: “Searching…” goes with the because line', () => {
     gate.search = new Promise<void>((resolve) => { releaseSearch = resolve; });
     render(<CommonsView />);
     for (let waited = 0; waited < 2500; waited += 50) await tick(50); // past the 1.5 s hold
-    expect(rowTexts()).toEqual(['Nebula couldn’t check the Commons status because it didn’t respond. Try again.']);
+    expect(rowTexts()).toEqual(['Nebula couldn’t check the Commons status because the server didn’t respond. Try again.']);
     expect(searchingShown()).toBe(true);
     gate.search = null;
     releaseSearch();

@@ -10,6 +10,7 @@
  *    promote OK unlocks in place.
  */
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { ADD_NAME, ADD_TO_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PersonLock } from '../src/hooks/usePersonLock';
 
@@ -76,7 +77,7 @@ function answer(path: string, init?: RequestInit): Response {
 
 const row = () => document.querySelector('[data-page-lines]');
 const rowTexts = () => [...(row()?.children ?? [])].map((kid) => kid.textContent ?? '');
-const addButton = () => screen.getByRole('button', { name: 'Add' });
+const addButton = () => screen.getByRole('button', { name: ADD_NAME });
 /** Every state of the row while the test ran, each commit. */
 let frames: string[][] = [];
 let watcher: MutationObserver | null = null;
@@ -327,7 +328,7 @@ describe('a Commons pane\'s because line, offline (GM r23 3)', () => {
 describe('the New collection prompt at a demote (GM r23 4)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   const openPrompt = async () => {
-    fireEvent.change(screen.getByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
+    fireEvent.change(screen.getByRole('combobox', { name: ADD_TO_NAME }), { target: { value: '__new__' } });
     await tick(0);
     const field = screen.getByRole('textbox', { name: /New collection name/ });
     fireEvent.change(field, { target: { value: 'Warm serifs' } });

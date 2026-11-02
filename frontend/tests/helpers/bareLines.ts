@@ -17,6 +17,13 @@
  * - P3: a "connected as you" line in a `title` (a tooltip) or an `aria-label` is never right.
  */
 import { LINE_ATTR, registeredLines } from '../../src/lib/notConnectedLine';
+import { ADD_NOT_CONNECTED, ADD_TO_NOT_CONNECTED } from '../../src/lib/commonsAddCopy';
+import { PERSON_LOCK_ATTR } from '../../src/hooks/usePersonLock';
+
+/** PR #204 round 18d (GM r31 2): the one exception to P3. The Commons' Add to and Add, locked on a
+ * tab that isn't connected as you, carry GM's verbatim names; their line on screen is the page's
+ * because line and Add's lock line, which register. Only these two names, on a locked control. */
+const LOCKED_NAMES = new Set([ADD_TO_NOT_CONNECTED, ADD_NOT_CONNECTED]);
 
 const WORDS = 'connected as you';
 const NOTICE = '.person-required, .person-required__announce';
@@ -68,6 +75,7 @@ export function bareLinesIn(root: Node = document.body): string[] {
     for (const element of elements) {
       for (const attribute of ['title', 'aria-label']) {
         const value = element.getAttribute(attribute);
+        if (attribute === 'aria-label' && value && LOCKED_NAMES.has(value) && element.hasAttribute(PERSON_LOCK_ATTR)) continue;
         if (value?.includes(WORDS) && !element.closest(NOTICE)) found.push(`${attribute}: ${value.trim().slice(0, 110)}`);
       }
     }

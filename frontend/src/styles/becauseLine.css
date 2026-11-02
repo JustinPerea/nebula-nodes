@@ -1,6 +1,6 @@
 /*
  * PR #204 round 18 (GM r28 1): a Commons load's line that got no answer ("Nebula couldn’t load
- * the references because it didn’t respond. Try again.") destroys nothing too, so it takes this
+ * the references because the server didn’t respond. Try again.") destroys nothing too, so it takes this
  * same style, the token swap below that a because line's own element takes: CommonsErrorLine
  * marks its line `data-line-neutral`.
  *

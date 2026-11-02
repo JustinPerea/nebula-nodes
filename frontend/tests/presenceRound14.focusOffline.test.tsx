@@ -4,6 +4,7 @@
  * control it stands in for: back online it returns to the line, and on the promote to the field.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { ADD_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const net = vi.hoisted(() => ({ sent: [] as string[] }));
@@ -73,7 +74,7 @@ describe('offline hides the focused line; focus moves on and comes back', () => 
   it('the URL field: Add\'s line, the heading while offline, the line again, then the field on the promote', async () => {
     render(<CommonsView />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: ADD_NAME }));
     const url = screen.getByRole('textbox', { name: 'Image or page URL' });
     fireEvent.change(url, { target: { value: 'https://example.invalid/half' } });
     act(() => url.focus());
@@ -100,7 +101,7 @@ describe('offline hides the focused line; focus moves on and comes back', () => 
   it('focus the person moved elsewhere meanwhile stays where they put it', async () => {
     render(<CommonsView />);
     await flush();
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: ADD_NAME }));
     act(() => screen.getByRole('textbox', { name: 'Image or page URL' }).focus());
     await demote();
     await settle(1600);

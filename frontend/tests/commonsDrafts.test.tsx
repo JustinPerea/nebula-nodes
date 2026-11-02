@@ -83,7 +83,7 @@ describe('Commons comment submissions', () => {
     fireEvent.change(input, { target: { value: 'Committed comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load this reference because Nebula’s server didn’t accept it. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load this reference because the server didn’t accept it. Try again.');
     expect(api.comment).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -140,7 +140,11 @@ describe('Commons linked-folder submissions', () => {
     fireEvent.change(input, { target: { value: '/synthetic/committed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the folders. Folder refresh offline.");
+    // Round 18d (GM r32 3, review 14 LOW-1): the write landed; the read-back's failure is a load's,
+    // neutral, in GM's words, never the failure's own.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Saved. Nebula couldn’t load the settings back because the server didn’t accept it. Reload to see them.');
+    expect(screen.getByRole('alert')).toHaveAttribute('data-line-neutral');
+    expect(document.body.textContent).not.toContain('Folder refresh offline.');
     expect(api.linkFolder).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });

@@ -7,6 +7,7 @@
  * header keeps its 48 px (measured in a real browser by the live check).
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { ADD_NAME } from './helpers/commonsAddNames';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/lib/backend', async (original) => ({
@@ -50,7 +51,7 @@ describe('the Commons banner row (GM r20 1)', () => {
     expect(kids[0].getAttribute('data-commons-line')).toBe('not-connected');
     expect(kids[1].textContent).toBe(ADD_LINE);
     expect(kids[1].classList.contains('person-lock-line')).toBe(true);
-    const add = screen.getByRole('button', { name: 'Add' });
+    const add = screen.getByRole('button', { name: ADD_NAME });
     expect((add.getAttribute('aria-describedby') ?? '').split(' ')).toContain(kids[1].id);
     expect(document.querySelector('.commons-toolbar .person-lock-line')).toBeNull();
     expect(lockPlacementProblems(document).filter((problem) => problem.startsWith(ADD_LINE))).toEqual([]);

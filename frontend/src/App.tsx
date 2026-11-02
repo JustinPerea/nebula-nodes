@@ -94,6 +94,9 @@ const BrandShowcaseView = lazy(() =>
 const CommonsView = lazy(() =>
   import('./components/commons/CommonsView').then((module) => ({ default: module.CommonsView })),
 );
+const CommonsOffView = lazy(() =>
+  import('./components/commons/CommonsOffView').then((module) => ({ default: module.CommonsOffView })),
+);
 
 /** Headless component that wires the zoom-manifest recorder. Lives inside
  * ReactFlowProvider because the hook uses `useReactFlow` for node lookups. */
@@ -276,9 +279,13 @@ export default function App() {
   const assetsPanelVisible = useUIStore((s) => s.panels.assets.visible);
 
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
-  const isHome = projects.screen === 'home' && viewMode !== 'brand-showcase';
-  const isCommons = !isHome && viewMode === 'commons' && commonsEnabled;
-  const isCanvas = !isHome && (viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled));
+  // PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend runs without it
+  // opens to the Commons-off view, over whichever screen it would have shown (the Projects home
+  // after a reload). Nothing of the canvas's or a project's mounts behind it.
+  const commonsOffRoute = useUIStore((s) => s.commonsOffShown) && !commonsEnabled;
+  const isHome = projects.screen === 'home' && viewMode !== 'brand-showcase' && !commonsOffRoute;
+  const isCommons = commonsOffRoute || (!isHome && viewMode === 'commons' && commonsEnabled);
+  const isCanvas = !isHome && !commonsOffRoute && (viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled));
   const isRemotion = viewMode === 'remotion-editor';
   const isCinema = viewMode === 'cinema-editor';
   const isCharacter = viewMode === 'character-editor';
@@ -305,7 +312,7 @@ export default function App() {
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {
-    mainView = <CommonsView />;
+    mainView = commonsOffRoute ? <CommonsOffView /> : <CommonsView />;
   } else if (isBrandShowcase) {
     mainView = <BrandShowcaseView />;
   } else if (isRemotion) {
@@ -335,8 +342,8 @@ export default function App() {
       <ProviderRecoveryStatus />
       <ProjectCoordinator />
       <ProjectSwitchToast />
-      {!isHome && <GraphFileActions />}
-      {!isHome && <ZoomManifestRecorder />}
+      {!isHome && !commonsOffRoute && <GraphFileActions />}
+      {!isHome && !commonsOffRoute && <ZoomManifestRecorder />}
       {isCanvas && <CanvasTabs />}
       <Suspense
         fallback={(
@@ -352,7 +359,7 @@ export default function App() {
       {isCanvas && assetsPanelVisible && <AssetsPanel />}
       {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
-      {!isHome && !isBrandShowcase && (
+      {!isHome && !isBrandShowcase && !commonsOffRoute && (
         <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}${isCommons ? ' workspace-overlays--hidden' : ''}`} inert={isCommons}>
           <Settings />
           <ChatPanel />

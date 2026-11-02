@@ -137,7 +137,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(1));
     // Round 15 (GM r24 c), verbatim.
-    expect(shownLines()[0]).toBe('Nebula couldn’t load the references because it didn’t respond. Try again.');
+    expect(shownLines()[0]).toBe('Nebula couldn’t load the references because the server didn’t respond. Try again.');
   });
 
   it('every load failing for one reason shows the page line with that reason', async () => {
@@ -147,7 +147,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     await until(() => expect(shownLines()).toHaveLength(1));
     await tick(600);
     expect(shownLines()).toHaveLength(1);
-    expect(shownLines()[0]).toBe('Nebula couldn’t load the Commons because it didn’t respond. Try again.');
+    expect(shownLines()[0]).toBe('Nebula couldn’t load the Commons because the server didn’t respond. Try again.');
   });
 
   it('two different reasons show one line per failed load, in the page\'s order', async () => {
@@ -161,7 +161,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(2));
     const [first, second] = shownLines();
-    expect(first).toBe('Nebula couldn’t check the Commons status because it didn’t respond. Try again.');
+    expect(first).toBe('Nebula couldn’t check the Commons status because the server didn’t respond. Try again.');
     // Round 18b (GM r29 1): a load's other reason is a Nebula-subject load line too.
     expect(second).toMatch(/^Nebula couldn’t load the references[. ]/);
     expect(second).not.toMatch(/respond/);

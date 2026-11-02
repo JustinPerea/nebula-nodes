@@ -112,6 +112,11 @@ describe('what a side panel takes (lib/noticeSides)', () => {
     const { region } = page([['chat-panel', rect(1060, 300, 364, 520)], ['panel workspace-dock-panel panel--exiting', rect(72, 140, 344, 700)]]);
     expect(sideClearance(region, 1440)).toEqual({ left: 0, right: 1440 - 1060 + SIDE_PANEL_GAP });
   });
+  // Round 18d (review 14 NIT-1, X16): a panel drawn at no size (hidden, display: none) takes nothing.
+  it('a hidden panel (no width, or no height, inside the band) takes nothing', () => {
+    const { region } = page([['panel workspace-dock-panel', rect(0, 140, 0, 700)], ['chat-panel', rect(1060, 800, 364, 0)]]);
+    expect(sideClearance(region, 1440)).toEqual({ left: 0, right: 0 });
+  });
   it('the region writes it only while it holds a notice', async () => {
     vi.stubGlobal('requestAnimationFrame', (run: FrameRequestCallback) => { run(0); return 1; });
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });

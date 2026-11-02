@@ -8,7 +8,11 @@ import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } fr
 import { holdCommonsCalls } from '../../lib/commonsHold';
 import { useDemotedView } from '../../hooks/useTabHeld';
 import { expectBecauseLine, isBecauseLine } from '../../lib/notConnectedLine';
-import { COMMONS_OFF_COPY, type FailureCopy } from '../../lib/errorCopy';
+import { isCommonsOff, type FailureCopy } from '../../lib/errorCopy';
+import { useCommonsOff } from '../../lib/commonsOff';
+import { CommonsOffLine } from './CommonsOffView';
+import { clearCommonsHash } from '../../lib/commonsRoute';
+import { ADD_NOT_CONNECTED, ADD_NOT_LOADED, ADD_TO_NOT_CONNECTED, ADD_TO_NOT_LOADED } from '../../lib/commonsAddCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
 import { pickFiles } from '../../lib/commonsFiles';
@@ -345,10 +349,6 @@ export function CommonsView() {
 
 /** The page's loads, in its order (GM r22: one line covers them on a held tab). */
 const COMMONS_LOADS = ['status', 'references', 'collections'] as const;
-/** GM r30 2, verbatim: Add to and Add while the collections haven't loaded. */
-export const ADD_TO_NOT_LOADED = 'Add to, not loaded. It works again once the collections load.';
-export const ADD_NOT_LOADED = 'Add, not loaded. It works again once the collections load.';
-
 function CommonsViewBody({ view }: {
   /** The data's generation: a new one (the switch to demoted, the promote) empties the loaded
    * data and reads again; the controls and drafts stay. */
@@ -359,12 +359,7 @@ function CommonsViewBody({ view }: {
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
     restoreWorkspace();
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    if (window.location.hash === '#commons' || hash.get('view') === 'commons') {
-      hash.delete('view');
-      const rest = window.location.hash === '#commons' ? '' : hash.toString();
-      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (rest ? `#${rest}` : ''));
-    }
+    clearCommonsHash();
   };
   const [tab, setTab] = useCommonsDraft<Tab>('tab', 'all');
   const folded = useToolbarFolds();
@@ -464,9 +459,10 @@ function CommonsViewBody({ view }: {
   // "No collections") shows only then: after a failure, or before the first answer, nothing was
   // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
   const [answered, setAnswered] = useState<{ references: Tab | null; collections: boolean }>({ references: null, collections: false });
-  // Round 18c (GM r30 2): the collections read failed or hasn't answered: Add to says "Not loaded"
-  // and Add is disabled, both with the one reason. A tab not connected as you keeps its lock
-  // (round 18, GM r28 3: "No collections", locked, with Add's lock line).
+  // Round 18c (GM r30 2): the collections haven't answered: Add to says "Not loaded" and Add is
+  // disabled, both with the one reason. A tab not connected as you keeps its lock (round 18, GM
+  // r28 3: "No collections", locked, with Add's lock line). Round 18d (GM r32 2): only when they
+  // never loaded in this view; a failed re-read keeps the last good list, live, beside its line.
   const collectionsNotLoaded = !answered.collections && !addLock.locked;
   const noteAnswered = useCallback(<K extends keyof typeof answered>(load: K, value: (typeof answered)[K]) =>
     setAnswered((current) => (current[load] === value ? current : { ...current, [load]: value })), []);
@@ -513,15 +509,29 @@ function CommonsViewBody({ view }: {
   }, [refresh]);
   useEffect(() => { reloadLoads.current = reloadAll; }, [reloadAll]);
   const actionLine = useCommonsLine(setError, null);
-  // Refused offline before it was sent: the banner says why (round 16, L4).
-  const fail = (e: unknown) => { if (!isOfflineRefusal(e)) actionLine.show(e, "Couldn’t update the library."); };
+  // Refused offline before it was sent: the banner says why (round 16, L4). Round 18d (GM r32 1):
+  // refused because the backend runs without the Commons: the off view says it (lib/commonsApi
+  // turned the view off), no action line, then or once the Commons is back.
+  const fail = (e: unknown) => {
+    if (isCommonsOff(e)) return;
+    if (!isOfflineRefusal(e)) actionLine.show(e, "Couldn’t update the library.");
+  };
 
+  // Round 18d (review 14 LOW-1, GM r32 3): after New collection… or Import moodboards landed, the
+  // list is read again; that read failing is a load's failure (its neutral line, the last good
+  // list kept), never the action's.
   const loadCollections = useCallback(async () => {
-    const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
-    setCollections(list);
-    setTarget((current) => current || list[0]?.id || '');
-    noteAnswered('collections', true);
-  }, [noteAnswered]);
+    loadStarted('collections');
+    try {
+      const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
+      setCollections(list);
+      setTarget((current) => current || list[0]?.id || '');
+      noteAnswered('collections', true);
+      loadsClear('collections');
+    } catch (e) {
+      loadFailed('collections', e, "Couldn’t load the collections.");
+    }
+  }, [noteAnswered, loadStarted, loadsClear, loadFailed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -537,7 +547,6 @@ function CommonsViewBody({ view }: {
       },
       (e: unknown) => {
         if (cancelled) return;
-        noteAnswered('collections', false);
         loadFailed('collections', e, "Couldn’t load the collections.");
       },
     );
@@ -706,11 +715,37 @@ function CommonsViewBody({ view }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewAsked]);
 
+  // Round 18d (review 14 LOW-3): a failed re-read keeps the list, so Add never stops working
+  // under an open menu and brings it back later by itself. A demote and going offline still
+  // hide it and bring it back with its URL and focus (GM r19 2, tests/presenceRound13.commonsFocus).
+  // The Commons turned off closes it: there is no Add to come back to.
+  const commonsOff = useCommonsOff();
+  useEffect(() => { if (commonsOff) setAddOpen(false); }, [commonsOff, setAddOpen]);
+
   // An action's failure first; a load's only while Nebula is online.
   const shownError = error ? [error] : shownLoadLines;
-  // Round 18c (GM r30, the wording batch): the backend runs without the Commons. Its page line,
-  // "Commons is turned off for this Nebula.", stands in place of every tab's content.
-  const commonsOff = Boolean(shownLoadLines?.includes(COMMONS_OFF_COPY));
+  // Round 18c (GM r30): the backend runs without the Commons. Its page line, "Commons is turned
+  // off for this Nebula.", stands in place of every tab's content. Round 18d (GM r31 layout M,
+  // GM r32 1, review 14 LOW-2): and the header keeps only the way back, the title and Updates;
+  // the status read before goes. "Off" is what the Commons' calls last heard (lib/commonsOff, set
+  // by any call's 404 "disabled", a load's or an action's), never the lines shown, which hide
+  // offline: it stays until a Commons call answers, so going offline never brings the sections back.
+  const [offSeen, setOffSeen] = useState(commonsOff);
+  if (offSeen !== commonsOff) {
+    setOffSeen(commonsOff);
+    if (commonsOff) {
+      setStatus(null);
+      setError(null);
+      setNotice(null);
+      setUploadFailures([]);
+      setPage(null);
+    } else {
+      // A Commons read answered: the Commons is back, so every load reads again (their off
+      // lines go with them).
+      loads.clear();
+      reloadAll();
+    }
+  }
   // Round 14 (GM r23 1): Add locks at once; its line waits for the page's because line, so the
   // row moves once (useLockLineHold, capped).
   const addLine = useLockLineHold(addLock, Boolean(shownError?.length));
@@ -722,7 +757,9 @@ function CommonsViewBody({ view }: {
   // the area stays empty while the banner explains. Round 15 (GM r24 b): a search that failed
   // found nothing either, so the area shows only its failure line; and offline, or back online
   // before the search reads again, nothing claims the library is empty.
-  const emptyHint = addLock.locked || answered.references !== tab ? ''
+  // Round 18d (GM r32 4, review 14 live LOW-2): and while the collections haven't loaded, Add and
+  // the drop do nothing, so nothing invites them.
+  const emptyHint = addLock.locked || collectionsNotLoaded || answered.references !== tab ? ''
     : tab === 'inbox'
       ? 'Nothing waiting in the inbox. Items agents add land here for you to accept.'
       : 'No matches. Drop images or videos here, or use Add.';
@@ -733,6 +770,7 @@ function CommonsViewBody({ view }: {
         onBack={() => request({ anchor: backRef.current, go: exitCommons, busy: busyFor('back') }, true)}
         backBusy={busyAt === 'back'} homeBusy={busyAt === 'home'}
         onHome={(button) => request({ anchor: button, go: () => void useProjectStore.getState().goHome(), busy: busyFor('home') }, true)}>
+        {!commonsOff && <>
         <div className="commons-tabs" role="tablist" aria-label="Commons sections">
           {TABS.map((t) => {
             const folds = FOLDED_TABS.includes(t);
@@ -758,21 +796,20 @@ function CommonsViewBody({ view }: {
           onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
-          <select value={collectionsNotLoaded ? '' : target}
-            onChange={(event) => { if (!collectionsNotLoaded) void chooseTarget(event.target.value); }}
+          <select value={collectionsNotLoaded || addLock.locked ? '' : target}
+            onChange={(event) => { if (!collectionsNotLoaded && !addLock.locked) void chooseTarget(event.target.value); }}
             {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_TO_NOT_LOADED, 'data-not-loaded': '' } : {})}
             // Round 18c (GM r30 2): loaded with none, "No collections" in the disabled look; the
             // select stays live, since New collection… is how one is made.
             {...(!collectionsNotLoaded && !addLock.locked && collections.length === 0 ? { 'data-no-choice': '' } : {})}
-            {...(addLock.locked && collections.length === 0 ? addLine.control() : {})}>
-            {collectionsNotLoaded ? <option value="">Not loaded</option> : <>
+            // Round 18d (GM r31 2): a tab that isn't connected as you reads no collections: "Not
+            // loaded", with the reason, in the person lock's one disabled look, with Add's line.
+            {...(addLock.locked ? { ...addLine.control(), 'aria-label': ADD_TO_NOT_CONNECTED } : {})}>
+            {collectionsNotLoaded || addLock.locked ? <option value="">Not loaded</option> : <>
             {/* Round 15 (GM r24 b): "No collections" only when the collections answered with none. */}
-            {/* Round 18 (GM r28 3): and on a tab that isn't connected, in the one disabled look (the
-                person lock's, below), so the select never shows empty. */}
-            {collections.length === 0 && (answered.collections || addLock.locked) && <option value="">No collections</option>}
+            {collections.length === 0 && answered.collections && <option value="">No collections</option>}
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            {/* Round 11: locked with Add (its line covers it); picking a target stays live. */}
-            <option value={NEW_COLLECTION} disabled={addLock.locked}>New collection…</option>
+            <option value={NEW_COLLECTION}>New collection…</option>
             </>}
           </select>
         </label>
@@ -781,6 +818,7 @@ function CommonsViewBody({ view }: {
             type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly && !addLock.locked && !collectionsNotLoaded}
             disabled={readOnly} {...offlineMark(readOnly)} {...addLine.control()}
             {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_NOT_LOADED, 'data-not-loaded': '' } : {})}
+            {...(addLock.locked ? { 'aria-label': ADD_NOT_CONNECTED } : {})}
             onClick={addLock.guard(() => { if (!collectionsNotLoaded) setAddOpen((open) => !open); })}
           >
             Add
@@ -826,9 +864,12 @@ function CommonsViewBody({ view }: {
           onStart={() => workerAction(commonsApi.workerStart)}
           onStop={() => workerAction(commonsApi.workerStop)}
         />
+        </>}
       </WorkspaceHeader>
 
-      {/* Round 12 (GM r20 1): the banner row holds Add's lock line too, under the because line. */}
+      {/* Round 18d (GM r31 layout M): the Commons off says only that, in the page row. */}
+      {commonsOff ? <CommonsOffLine /> : (
+      /* Round 12 (GM r20 1): the banner row holds Add's lock line too, under the because line. */
       <CommonsPageLines line={shownError} lock={addLine} more={Boolean(notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0)}>
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert" data-line-box="">
@@ -840,8 +881,9 @@ function CommonsViewBody({ view }: {
           {!shownError && notice && <p className="commons-notice" role="status"><LineText text={notice} /></p>}
           <CommonsProposalsLine onOpen={reviewProposal} />
       </CommonsPageLines>
+      )}
 
-      {page && (
+      {!commonsOff && page && (
         <section className="commons-candidates" aria-label="Images on the page">
           <div className="commons-candidates__head">
             <span>{page.page_title || page.page_url}</span>

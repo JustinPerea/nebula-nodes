@@ -7,6 +7,7 @@
  *   OK locked (tests/presenceRound14.commonsLock pins the rest).
  */
 import { useEffect, useState } from 'react';
+import { ADD_TO_NAME } from './helpers/commonsAddNames';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LabelingWork } from '../src/components/commons/commonsLeave';
@@ -86,7 +87,7 @@ describe('what the old remount ended', () => {
   it('the New collection prompt stays through the demote and the promote, the same field (GM r23 4)', async () => {
     render(<CommonsView />);
     await flush();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Add to' }), { target: { value: '__new__' } });
+    fireEvent.change(screen.getByRole('combobox', { name: ADD_TO_NAME }), { target: { value: '__new__' } });
     await flush();
     const field = screen.getByRole('textbox', { name: /New collection name/ });
 

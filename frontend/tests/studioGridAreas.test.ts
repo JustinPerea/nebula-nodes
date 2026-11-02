@@ -82,6 +82,13 @@ const STUDIOS: Studio[] = [
       { tag: 'aside', cls: 'commons-filters' }, { tag: 'main', cls: 'commons-main' }],
   },
   {
+    // PR #204 round 18d (GM r31 layout M): the Commons turned off, mid-visit (CommonsView) or on a
+    // tab opened on it (CommonsOffView): the header, the offline row and the one line.
+    name: 'Commons turned off', root: 'commons-view commons-scope',
+    owners: ['styles/commons.css'], component: ['components/commons/CommonsOffView.tsx', 'components/commons/CommonsView.tsx'],
+    children: [header('commons-toolbar'), offline, { tag: 'div', cls: 'commons-messages' }],
+  },
+  {
     name: 'Commons with a reference open', root: 'commons-view commons-scope commons-view--detail',
     owners: ['styles/commons.css'], component: ['components/commons/CommonsView.tsx', 'components/commons/CommonsDetail.tsx', 'components/commons/CommonsFilters.tsx'],
     children: [header('commons-toolbar'), offline, { tag: 'aside', cls: 'commons-filters' }, { tag: 'main', cls: 'commons-main' },

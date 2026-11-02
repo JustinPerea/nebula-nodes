@@ -16,9 +16,9 @@ import { ErrorDetails } from '../failure/ErrorDetails';
 import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
-import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 interface Props {
   assetId: string;
@@ -247,9 +247,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         </div>
         {/* Round 18 (GM r28 1): a failed load is a Commons line, in the one style every Commons
             load line takes (CommonsErrorLine: neutral when it got no answer or for a because
-            line). Hidden offline when it is a because line, as before; "Loading…" until then. */}
-        {error ? <CommonsErrorLine line={error} />
-          : <p className="commons-empty"><LineText text="Loading…" /></p>}
+            line). Hidden offline when it is a because line, as before. Round 18d (GM r32 5): the one
+            loading look until then. */}
+        {error ? <CommonsErrorLine line={error} /> : <CommonsLoadingLine text="Loading details…" />}
       </aside>
     );
   }

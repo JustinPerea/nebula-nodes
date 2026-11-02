@@ -12,6 +12,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
@@ -144,7 +145,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   const eyebrow = <SectionEyebrow id={headingId} name="Agent review" detail="agent grades · your judgment" />;
   if (loading) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading"><div>{eyebrow}</div></header>
-    <p className="commons-notice">Loading agent reviews…</p>
+    <CommonsLoadingLine text="Loading agent reviews…" />
   </section>;
   const intro = <div>
     {eyebrow}<p className="evaluation-title">Does this read right?</p>

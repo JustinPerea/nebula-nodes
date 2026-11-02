@@ -1,25 +1,29 @@
 /**
  * PR #204 round 15 (GM r25, pane loads): a Commons pane's load that Nebula answered with no reason
  * (a 5xx, 408 or 429) says it in the because form, under the pane's own words, verbatim:
- *   Agent review:         "Nebula couldn’t load Agent review because it didn’t respond. Try again."
- *   reference detail:     "Nebula couldn’t load this reference because it didn’t respond. Try again."
- *   Blind labeling:       "Nebula couldn’t load Blind labeling because it didn’t respond. Try again."
- *   Commons Settings:     "Nebula couldn’t load the Commons settings because it didn’t respond. Try again."
+ *   Agent review:         "Nebula couldn’t load Agent review because the server didn’t respond. Try again."
+ *   reference detail:     "Nebula couldn’t load this reference because the server didn’t respond. Try again."
+ *   Blind labeling:       "Nebula couldn’t load Blind labeling because the server didn’t respond. Try again."
+ *   Commons Settings:     "Nebula couldn’t load the Commons settings because the server didn’t respond. Try again."
  * The pane names its load whichever of its requests failed (Settings reads three). These run the
  * real Commons API and apiFetch; only the browser's fetch is stubbed.
  * Round 17 (review 13 NIT-3): on fake time, each wait a fixed number of 50 ms steps.
+ * Round 18d (review 14 live NIT-3): each test imports and renders a whole pane; under a loaded
+ * run that took 5.4 s once, so the file has the 30 s the held-status test got.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lineLook, NEUTRAL } from './helpers/lineLook';
 
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
 vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () => null }));
 
-const REVIEW = 'Nebula couldn’t load Agent review because it didn’t respond. Try again.';
-const REFERENCE = 'Nebula couldn’t load this reference because it didn’t respond. Try again.';
-const LABELING = 'Nebula couldn’t load Blind labeling because it didn’t respond. Try again.';
-const SETTINGS = 'Nebula couldn’t load the Commons settings because it didn’t respond. Try again.';
+const REVIEW = 'Nebula couldn’t load Agent review because the server didn’t respond. Try again.';
+const REFERENCE = 'Nebula couldn’t load this reference because the server didn’t respond. Try again.';
+const LABELING = 'Nebula couldn’t load Blind labeling because the server didn’t respond. Try again.';
+const SETTINGS = 'Nebula couldn’t load the Commons settings because the server didn’t respond. Try again.';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 /** The path that fails, and how. */
@@ -66,19 +70,25 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); document.body.className = ''; });
 
 describe('each pane load, no answer, verbatim', () => {
-  for (const code of [503, 502, 504, 408, 429]) {
+  for (const code of [503, 502, 504, 408]) {
     it(`Agent review (${code})`, async () => {
       state.failing = '/api/commons/review'; state.status = code;
       render(<CommonsReview />);
       await shows(REVIEW);
     });
   }
+  // Round 18d (GM r31): a rate limit has its own line.
+  it('Agent review (429): the server is busy', async () => {
+    state.failing = '/api/commons/review'; state.status = 429;
+    render(<CommonsReview />);
+    await shows('Nebula couldn’t load Agent review because the server is busy. Try again in a moment.');
+  });
   // Round 18c (GM r30 3): the server's own error isn't "didn't respond".
   for (const code of [500, 501]) {
     it(`Agent review (${code}): the server hit an error`, async () => {
       state.failing = '/api/commons/review'; state.status = code;
       render(<CommonsReview />);
-      await shows('Nebula couldn’t load Agent review because Nebula’s server hit an error. Try again.');
+      await shows('Nebula couldn’t load Agent review because the server hit an error. Try again.');
     });
   }
 
@@ -138,7 +148,7 @@ describe('another cause: the because form, its clause or the 4xx line (GM r29 1,
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     answer('/api/commons/review', 409, 'The review set is closed.');
     render(<CommonsReview />);
-    await shows('Nebula couldn’t load Agent review because Nebula’s server didn’t accept it. Try again.');
+    await shows('Nebula couldn’t load Agent review because the server didn’t accept it. Try again.');
     expect(document.body.textContent).not.toContain('The review set is closed');
     expect(warn.mock.calls.flat().join(' ')).toContain('The review set is closed.');
   });

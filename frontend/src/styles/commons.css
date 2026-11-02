@@ -698,6 +698,13 @@ body.app-slava-restraint .commons-tile__caption {
   text-overflow: ellipsis;
 }
 
+/* PR #204 round 18d (GM r32 5): the one loading look in the panes, a plain muted line where the
+   content will appear: no box, no rail (CommonsLoadingLine). */
+body.app-slava-restraint .commons-loading {
+  margin: 0;
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .commons-empty {
   margin: 40px auto;
   max-width: 360px;
