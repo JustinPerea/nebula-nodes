@@ -106,23 +106,31 @@ def test_the_check_is_in_before_any_fixture_runs(tmp_path):
         "    assert seen\n",
         encoding="utf-8",
     )
+    # Checked by behaviour, not by pytest's private record of what it saved
+    # (pytest 9.2 records an instance attribute that isn't in __dict__ as
+    # NOTSET and deletes it on undo; 9.0 saved the bound method). Either way,
+    # once the patching fixture is undone the sender in use must be the checked one.
     lazy = tmp_path / "test_lazy_probe.py"
     lazy.write_text(
         "import pytest\n\n"
         "@pytest.fixture\n"
-        "def saved(monkeypatch):\n"
+        "def patched(monkeypatch):\n"
         "    import main\n"
         "    async def fake(data, **kw):\n"
         "        return None\n"
         "    monkeypatch.setattr(main.manager, 'broadcast_raw', fake)\n"
-        "    return monkeypatch._setattr[-1][2]\n\n"
-        "def test_a_lazy_fixture_saves_the_checked_sender(saved):\n"
-        "    assert getattr(saved, '_nebula_cursor_route', False)\n",
+        "    return fake\n\n"
+        "def test_a_lazy_fixture_patches_a_sender(patched):\n"
+        "    assert patched  # the check wraps the stand-in; what matters is what comes back\n\n"
+        "def test_after_it_the_checked_sender_is_back():\n"
+        "    import main\n"
+        "    sender = main.manager.broadcast_raw\n"
+        "    assert getattr(getattr(sender, '__func__', sender), '_nebula_cursor_route', False)\n",
         encoding="utf-8",
     )
-    for path in (probe, lazy):
+    for path, passed in ((probe, "1 passed"), (lazy, "2 passed")):
         run = _pytest_alone("-p", "tests.conftest", "--rootdir", str(tmp_path), str(path))
-        assert run.returncode == 0 and "1 passed" in run.stdout, run.stdout[-3000:]
+        assert run.returncode == 0 and passed in run.stdout, run.stdout[-3000:]
 
 
 # -- LOW-1: the content, at run time --------------------------------------------
