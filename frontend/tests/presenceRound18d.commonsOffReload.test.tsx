@@ -1,10 +1,12 @@
 /**
  * PR #204 round 18d (GM r32 1): a tab opened on the Commons (a reload on #commons) while the
- * backend runs without it opens to the Commons-off view, with "← Canvas", not the Projects home,
+ * backend runs without it opens to the Commons-off view, not the Projects home,
  * the same view the Commons turned off mid-visit shows (GM r31 layout M): only the way back, the
  * title and Updates, and the line "Commons is turned off for this Nebula.". Nothing of the
  * Commons is read or sent (the capability answered off). Only the backend's own "off" does this:
  * no answer says nothing about the Commons.
+ * Round 18e (GM r33 3): with no project open (always so after a reload) its way back reads
+ * "← Projects", named "Projects", and goes to the Projects home; with one open, "← Canvas".
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -75,7 +77,9 @@ it('a reload on #commons with the Commons off opens to the off view, not the Pro
   render(<App />);
   expect(await screen.findByText(OFF)).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Commons', level: 1 })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Back to Canvas' })).toBeTruthy();
+  const back = screen.getByRole('button', { name: 'Projects' });
+  expect(back.textContent).toBe('Projects');
+  expect(screen.queryByRole('button', { name: 'Back to Canvas' })).toBeNull();
   expect(screen.getByText('Updates')).toBeTruthy();
   expect(text()).not.toContain('Projects home');
   // Layout M: no sections, Add to, Add, status, Start or Stop.
@@ -95,15 +99,34 @@ it('a reload on #commons with the Commons off opens to the off view, not the Pro
   expect(useUIStore.getState().commonsEnabled).toBe(false);
 });
 
-it('← Canvas leaves the off view and takes #commons off the address', async () => {
+it('← Projects leaves the off view for the Projects home and takes #commons off the address', async () => {
   api.fetch.mockResolvedValue(json({ enabled: false }));
+  const goHome = vi.spyOn(useProjectStore.getState(), 'goHome');
   render(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Back to Canvas' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Projects' }));
   await act(async () => {});
   expect(screen.queryByText(OFF)).toBeNull();
   expect(screen.getByText('Projects home')).toBeTruthy();
   expect(location.hash).toBe('');
   expect(useUIStore.getState().commonsOffShown).toBe(false);
+  expect(goHome).toHaveBeenCalled();
+});
+
+it('with a project open the off view\'s way back reads "← Canvas" and goes back to the canvas', async () => {
+  useProjectStore.setState({ screen: 'workspace', activeProject: { id: 'p1', name: 'Lighthouse' } as never });
+  useUIStore.setState({ commonsOffShown: true });
+  history.replaceState({}, '', '/#commons');
+  api.fetch.mockReturnValue(new Promise(() => {}));
+  const goHome = vi.spyOn(useProjectStore.getState(), 'goHome');
+  render(<App />);
+  const back = await screen.findByRole('button', { name: 'Back to Canvas' });
+  expect(back.textContent).toBe('Canvas');
+  expect(screen.queryByRole('button', { name: 'Projects' })).toBeNull();
+  fireEvent.click(back);
+  await act(async () => {});
+  expect(screen.getByText('Current canvas')).toBeTruthy();
+  expect(goHome).not.toHaveBeenCalled();
+  expect(location.hash).toBe('');
 });
 
 it('a hash edit away from #commons leaves it too', async () => {

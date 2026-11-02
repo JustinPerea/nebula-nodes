@@ -2819,3 +2819,56 @@ GM's three fixes; with them the PR is signed off on design.
   - Shots at 1440 in the scratchpad (`fu3r/shots-r18d`: M after a reload, M mid-visit, N Add to
     keeping its list, S the settings read-back, L the loading line, and after ← Canvas), md5
     `uniq -d` empty, opened.
+
+## Round 18e
+
+GM r33 on #204: two copy fixes and one shot.
+
+### The way back from the Commons-off view
+- With no project open, the button reads "← Projects", its aria-label is "Projects", and it goes
+  to the Projects home. With a project open it stays "← Canvas" (aria-label "Back to Canvas") and
+  returns to the canvas.
+- One helper, `backTarget(returnView, projectOpen)` in `lib/workspaceLabel.ts`, returns the label,
+  the aria-label and where the button goes, so the words and the destination can't disagree.
+  `WorkspaceHeader` takes an optional `backAriaLabel`; without it the label stays
+  "Back to {label}".
+- "Project open" means `screen === 'workspace'` with an active project. After a reload on
+  #commons with the Commons off, nothing is open, so the button reads "← Projects".
+- CommonsView keeps "← Canvas": the app shows it only with a project open (App's `isCommons`
+  needs `!isHome`), and many tests render it without one. A comment in it says this.
+
+### The linked-folder notice
+- It now reads: Linked “moodboards”. Scanning it now. The name is the folder's last path segment
+  in curly quotes, and the full path is the notice's title attribute.
+- `folderName(path)` and `linkedFolderNotice(path)` live in `lib/commonsFormat.ts`.
+  - Trailing slashes or backslashes are dropped first.
+  - Both separators split, so Windows paths work.
+  - The input is trimmed.
+  - A root keeps its own text: "/" stays "/", and "C:\" becomes "C:".
+  - The name is never empty.
+- The Re-analyze and Import notices clear the title.
+- Agent wording: only a person can link a folder (the backend's `link_folder` route is
+  person-only and answers `{"status": "scanning"}`). No MCP tool or CLI command links a folder, so
+  there's no agent-facing string to match.
+
+### Left alone
+- The meter's "resets …" line is unchanged. It is queued for the wording batch.
+
+### Gates
+- tsc and eslint are clean.
+- vitest ran on an explicit list of 356 files: 4,755 of 4,755 passed. The 18d test files grew:
+  the reload file has 8 tests and the Commons file has 29.
+- `npm run build` is within budget at 470,302 B raw / 144,914 B gzip.
+- Mutations: 12 of 12 killed.
+  - The back target, the aria-label and the project-open read: 5.
+  - The folder name and notice: 7 (trailing separators, the Windows separator, a root, the trim,
+    the curly quotes, the title, and the old wording coming back).
+- Live on 8951/5951, backend only through `harness/serve_isolated.py`, with canaries first: 12 of 12.
+  - A real Link folder shows Linked “moodboards”. Scanning it now., with the full path as its
+    title.
+  - The Commons off mid-visit with a project open shows "← Canvas".
+  - After a real reload on #commons there is one "Projects" button and the off line.
+    "← Projects" opens the Projects home and takes #commons off the address.
+  - Nothing reached a blocked host.
+- Shots at 1440 are in the scratchpad (`fu3r/shots-r18e`): M after a reload, M mid-visit, and
+  S the linked notice. md5 `uniq -d` was empty and each shot was opened.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
+import { linkedFolderNotice } from '../../lib/commonsFormat';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
@@ -79,6 +80,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [linking, setLinking] = useState(false);
   const linkingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** The message's tooltip: a linked folder's full path (GM r33). */
+  const [messageTitle, setMessageTitle] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
   // yet.") only once they were read: before that, or when the load failed, nothing was. Round 18b
@@ -111,7 +114,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     return () => { cancelled = true; };
   }, [loadEpoch, line]);
 
-  const run = useCallback(async (work: () => Promise<unknown>, done?: string) => {
+  const run = useCallback(async (work: () => Promise<unknown>, done?: string, doneTitle?: string) => {
     try {
       await work();
     } catch (e) {
@@ -120,7 +123,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       return false;
     }
     setError(null);
-    if (done) setMessage(done);
+    if (done) { setMessage(done); setMessageTitle(doneTitle); }
     try {
       await load();
     } catch (e) {
@@ -166,7 +169,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
       <CommonsErrorLine line={error} />
-      {message && <p className="commons-notice" role="status">{message}</p>}
+      {message && <p className="commons-notice" role="status" title={messageTitle}>{message}</p>}
 
       <section className="commons-detail__section" aria-label="Linked folders">
         <h3 className="commons-heading">Linked folders</h3>
@@ -184,7 +187,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             const submittedPath = linkPath;
             linkingRef.current = true;
             setLinking(true);
-            void run(() => commonsApi.linkFolder(path), `Linked ${path}; scanning.`).then((saved) => {
+            void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path).then((saved) => {
               if (saved) setLinkPath((current) => current === submittedPath ? '' : current);
             }).finally(() => {
               linkingRef.current = false;
@@ -264,6 +267,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
+              setMessageTitle(undefined);
               setMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
             })}
           >
@@ -273,6 +277,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
+              setMessageTitle(undefined);
               setMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
             })}
           >

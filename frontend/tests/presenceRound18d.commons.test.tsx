@@ -346,7 +346,8 @@ describe('a settings write that landed, whose read-back failed (GM r32 3, review
       expect(seen).not.toContain('ZZRAW');
       expect(seen).not.toContain('Try again');
       // The form stays, with the write's own message.
-      expect(screen.getByText('Linked /x; scanning.')).toBeTruthy();
+      // Round 18e (GM r33): the folder's own name, its full path in the title.
+      expect(screen.getByText('Linked “x”. Scanning it now.')).toHaveAttribute('title', '/x');
       warn.mockRestore();
     });
   }
@@ -493,5 +494,32 @@ describe('the bare-lines ratchet lets GM r31\'s two names, and only on a locked 
     root.innerHTML = `<button aria-label="${ADD_NOT_CONNECTED}">Add</button>`
       + '<button aria-label="Save, when this tab is connected as you." data-person-lock="save">Save</button>';
     expect(bareLinesIn(root)).toHaveLength(2);
+  });
+});
+
+describe('a linked folder\'s name (round 18e, GM r33)', () => {
+  it('the last segment, by either separator, trailing ones ignored; a root names itself; never empty', async () => {
+    const { folderName, linkedFolderNotice } = await import('../src/lib/commonsFormat');
+    expect(folderName('/private/tmp/x/moodboards')).toBe('moodboards');
+    expect(folderName('/Users/me/Pictures/refs/')).toBe('refs');
+    expect(folderName('/Users/me/Pictures/refs//')).toBe('refs');
+    expect(folderName('C:\\Users\\me\\Refs')).toBe('Refs');
+    expect(folderName('C:\\Users\\me\\Refs\\')).toBe('Refs');
+    expect(folderName('/')).toBe('/');
+    expect(folderName('C:\\')).toBe('C:');
+    expect(folderName('  /a/b c  ')).toBe('b c');
+    expect(folderName('refs')).toBe('refs');
+    for (const path of ['/', '//', 'C:\\', '\\', ' / ']) expect(folderName(path), path).not.toBe('');
+    expect(linkedFolderNotice('/private/tmp/x/moodboards')).toBe('Linked “moodboards”. Scanning it now.');
+  });
+  it('Settings shows it after Link folder, the full path in the title', async () => {
+    render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
+    await tick(1000);
+    fireEvent.change(screen.getByPlaceholderText('/Users/you/Pictures/refs'), { target: { value: '/Users/me/Pictures/refs/' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
+    await tick(1000);
+    const notice = screen.getByText('Linked “refs”. Scanning it now.');
+    expect(notice).toHaveAttribute('title', '/Users/me/Pictures/refs/');
+    expect(text()).not.toContain('scanning.');
   });
 });

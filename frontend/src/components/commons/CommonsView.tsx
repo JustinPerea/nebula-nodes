@@ -356,6 +356,8 @@ function CommonsViewBody({ view }: {
 }) {
   const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
+  // GM r33 3's "← Projects" is CommonsOffView's: the app shows this view only with a project
+  // open (App: never over the Projects home), so its way back is always the screen it came from.
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
     restoreWorkspace();

@@ -3,7 +3,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { COMMONS_OFF_COPY } from '../../lib/errorCopy';
 import { PAGE_LINES_ATTR } from '../../lib/lineAttrs';
 import { useBackendOffline } from '../../lib/useBackendOffline';
-import { workspaceLabel } from '../../lib/workspaceLabel';
+import { backTarget } from '../../lib/workspaceLabel';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { clearCommonsHash } from '../../lib/commonsRoute';
@@ -30,15 +30,18 @@ export function CommonsOffLine() {
 
 export function CommonsOffView() {
   const returnView = useUIStore((s) => s.commonsReturnView);
+  const projectOpen = useProjectStore((s) => s.screen === 'workspace' && s.activeProject !== null);
+  const back = backTarget(returnView, projectOpen);
   const leave = () => {
     useUIStore.getState().exitCommons();
     clearCommonsHash();
   };
+  const home = () => { leave(); void useProjectStore.getState().goHome(); };
   return (
     <div className="commons-view-root">
       <div className="commons-view commons-scope" data-commons-off="">
-        <WorkspaceHeader title="Commons" backLabel={workspaceLabel(returnView)} className="commons-toolbar"
-          onBack={leave} onHome={() => { leave(); void useProjectStore.getState().goHome(); }} />
+        <WorkspaceHeader title="Commons" backLabel={back.label} backAriaLabel={back.ariaLabel} className="commons-toolbar"
+          onBack={back.toProjects ? home : leave} onHome={home} />
         <CommonsOffLine />
       </div>
     </div>
