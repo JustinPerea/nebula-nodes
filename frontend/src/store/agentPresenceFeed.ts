@@ -10,9 +10,10 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
  * cursor layer and the Agents panel) attaches and takes it in order. The
  * normalising, the numbering rules and the replay itself stay in the chunk.
  *
- * Bounded: a replay replaces every cursor, so what came before it goes, and
- * past AGENT_PRESENCE_FEED_MAX events the oldest go (a cursor that loses its
- * event shows again on its next one).
+ * Bounded: a replay replaces every cursor, so what came before it goes. The
+ * latest replay is kept apart, and past AGENT_PRESENCE_FEED_MAX events after
+ * it the oldest of those go (a cursor that loses its event shows again on
+ * its next one), never the replay itself (review 4, NIT-3).
  */
 export const AGENT_PRESENCE_FEED_MAX = 64;
 
@@ -23,8 +24,11 @@ export type PresenceFeedEvent = Extract<
 /** One event and when this tab heard it (ms), so a late drain keeps its age. */
 export type PresenceSink = (event: PresenceFeedEvent, receivedAt: number) => void;
 
+type Held = { event: PresenceFeedEvent; at: number };
+
 let sink: PresenceSink | null = null;
-let held: { event: PresenceFeedEvent; at: number }[] = [];
+let replay: Held | null = null;
+let held: Held[] = [];
 
 function wanted(event: ExecutionEvent): event is PresenceFeedEvent {
   return event.type === 'agentPresence' || event.type === 'agentPresenceReplay' || event.type === 'socketDemoted'
@@ -34,14 +38,15 @@ function wanted(event: ExecutionEvent): event is PresenceFeedEvent {
 /** The store takes the feed: what is held first, in order, then each event as it comes. */
 export function attachPresenceSink(next: PresenceSink): void {
   sink = next;
-  const drained = held;
+  const drained = replay ? [replay, ...held] : held;
+  replay = null;
   held = [];
   for (const { event, at } of drained) next(event, at);
 }
 
-/** What is held for the store (tests). */
+/** What is held for the store, in order (tests). */
 export function heldPresenceEvents(): readonly PresenceFeedEvent[] {
-  return held.map(({ event }) => event);
+  return (replay ? [replay, ...held] : held).map(({ event }) => event);
 }
 
 wsClient.subscribe((event) => {
@@ -51,7 +56,11 @@ wsClient.subscribe((event) => {
     sink(event, at);
     return;
   }
-  if (event.type === 'agentPresenceReplay') held = [];
+  if (event.type === 'agentPresenceReplay') {
+    replay = { event, at };
+    held = [];
+    return;
+  }
   held.push({ event, at });
   if (held.length > AGENT_PRESENCE_FEED_MAX) held.shift();
 });

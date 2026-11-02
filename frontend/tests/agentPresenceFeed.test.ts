@@ -110,6 +110,30 @@ describe('the feed holds presence until the cursor chunk loads (N3)', () => {
     const { useAgentPresenceStore: store } = await import('../src/store/agentPresenceStore');
     expect(Object.keys(store.getState().agents)).toEqual(['claude#cccccccccccc']);
   });
+
+  it('the cap never pushes the held replay out: the replay, then the latest events after it (review 4, NIT-3)', async () => {
+    const feed = await import('../src/store/agentPresenceFeed');
+    emit({ type: 'agentPresenceReplay', cursors: [
+      { ...presence({ agent: { ...CLAUDE, id: 'quiet', name: 'Quiet' } }), ...session('c', 1), replay: true, secondsAgo: 0 },
+    ] });
+    for (let i = 0; i < feed.AGENT_PRESENCE_FEED_MAX + 5; i += 1) emit(presence({ ...session('a', 2), say: String(i) }));
+    const held = feed.heldPresenceEvents();
+    expect(held).toHaveLength(feed.AGENT_PRESENCE_FEED_MAX + 1);
+    expect(held[0].type).toBe('agentPresenceReplay');
+    expect((held[1] as AgentPresenceEvent).say).toBe('5');
+    const { useAgentPresenceStore: store } = await import('../src/store/agentPresenceStore');
+    // The quiet session's cursor is there, as on every other tab.
+    expect(Object.keys(store.getState().agents).sort()).toEqual(['claude#aaaaaaaaaaaa', 'quiet#cccccccccccc']);
+    expect(store.getState().agents['claude#aaaaaaaaaaaa'].say).toBe(String(feed.AGENT_PRESENCE_FEED_MAX + 4));
+  });
+
+  it('holds graph clears and replacements only, not every graph sync (review 4, NIT-2)', async () => {
+    const feed = await import('../src/store/agentPresenceFeed');
+    emit({ type: 'graphSync', nodes: [], edges: [] });
+    emit({ type: 'graphSync', nodes: [], edges: [], graphReplaced: true });
+    emit({ type: 'graphSync', nodes: [], edges: [], empty: true });
+    expect(feed.heldPresenceEvents()).toHaveLength(2);
+  });
 });
 
 describe('a demoted tab (GM - Design, PR #211 r9 item 6; review 3, LOW-1)', () => {
@@ -132,7 +156,7 @@ describe('a demoted tab (GM - Design, PR #211 r9 item 6; review 3, LOW-1)', () =
     expect(agents.map((cursor) => [cursor.key, cursor.session, cursor.replayed])).toEqual([['claude', null, false]]);
   });
 
-  it('keeps unnumbered cursors (they are the agents\' form already), and a still-promoted tab never demotes', async () => {
+  it('keeps unnumbered cursors: they are the agents\' form already', async () => {
     const { store } = await load();
     emit(presence({ agent: { ...CLAUDE, id: 'codex', name: 'Codex' } }));
     emit(presence(session('a', 2)));

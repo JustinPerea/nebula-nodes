@@ -404,10 +404,10 @@ Review 3 (boundary and replay; motion, look and live) and GM's answers to it.
 
 - **Pin reply and accept go through `_broadcast_presence` (MEDIUM-1).** The pin resolve reply now sends the person form on the agent's own session, so a session's pin reply lands on that session's cursor, is counted for its number and is replayed to a later tab. Accepting a proposal lands on the cursor of the session that proposed it: the proposal keeps `presence_session` (person-side only, `repr=False`), and `_accepted_person_form` sends the person form only while that session is still live. If it has left, no person frame goes out (no stray cursor is revived); the agent form still goes to agent sockets as before.
 - **The proposing session never leaves the person side.** A test reads every agent surface after a session-scoped proposal (agent socket, agent HTTP reads, `_proposal_view`, the journal, the listener and `repr`) and finds no session key.
-- **Guard.** An AST test fails if any cursor event outside the helper calls `broadcast_raw(_point(...))` with a target. The two left (`target=None`, Agent log only) are counted.
+- **Guard.** An AST test reads `main.py` for a cursor event with a target sent outside `_broadcast_presence` (round 4b widened it; see below). The two left (`target=None`, Agent log only) are counted.
 - **B24.** The replay ages `did.secondsAgo` by the time since the event (pinned at 42.5 s).
 - **NIT-1, NIT-3.** The hello comment now says what the replay holds (every event built before it, same key and number, so nothing doubles); `SESSION_IDLE_SECONDS` says it's pinned by tests and read by nothing here.
-- **NIT-2.** Past the cap the oldest session is dropped from the replay; documented and pinned by a test rather than changed.
+- **NIT-2.** A new agent past `SESSION_AGENT_MEMORY` (256 live agents) gets no slot, so it shows as the plain cursor with no number and isn't in the replay until room frees; no session is dropped. Documented and pinned by a test rather than changed (wording fixed in round 4b, review 4 NIT-4).
 - `person_gate.py`, `scene_keys.py`, `person_session.py` and the read boundaries are untouched.
 
 ### Motion
@@ -438,3 +438,64 @@ Review 3 (boundary and replay; motion, look and live) and GM's answers to it.
 - Build and `check-build-budget.mjs` pass (443,057 B raw).
 - Mutation checks: backend 8, all caught. Frontend 30 on the first pass, 25 caught; the five survivors got tests or proved equivalent (attaching at arrival, which the settle overwrites). Second pass 6, 3 caught; the two real survivors (co-node shift, no carrier) caught after new tests, one equivalent (carried keyed on node only, same result for node-centre anchors). Third pass 4 (dragged flag, release and claim), all caught.
 - Live at 1440 on isolated ports: pin plain and lane 200, propose 201, accept 200; tabs A, B and a later C show the same three cursors (Claude, Claude · 2, Claude · 3), none doubled. Network canary blocked 8000, 8005, 5173, 8840 and outside; 0 page errors.
+
+## Round 4b
+
+Review 4 (boundary and accept; motion, look and live) and GM's answers (r10, r11). The spec's "Rulings from #211 review 4" section is the source.
+
+### The presence exit (GM r11 item 1)
+
+- **Every removal fades.** A cursor the store drops (a prune, a number taken over, a demoted tab, a refused hello, a forgotten token, the cap, a replay that no longer lists it) stays drawn for one exit. The layer keeps the removed cursor's last event and renders it as leaving. The tip, the name pill and the say pill are one element, so they fade together, on the planner's opacity spring (`stepExit`, the same spring idle dimming uses). The cursor stops where it is. Once the fade is at rest, the cursor is forgotten. Under reduced motion it goes in one frame. A frame gap past the stale gap (a hidden tab) ends the exit at once.
+- **While it leaves,** it takes no events. It isn't counted for de-stacking: it leaves the field as its exit starts, so another cursor heads for the spot while it fades. It paints under every live cursor, and it isn't announced (`aria-hidden`).
+- **Number takeover.** When a live cursor shows the same name, the leaving one hides its pill at once (`data-taken`, `visibility: hidden`). Live, at every frame of the exit, at most one "Swap · 2" pill showed.
+- **Return mid-exit.** The same key coming back ends the exit, and the same view continues: the fade reverses on the same spring from where it was, and no second cursor mounts. A return through a replay (a reconnect) is put on its spot and its fade reverses too. The store now keeps counting `seq` across a cursor's exit (`nextSeq`), so a timer keyed on the old seq (idle, say, ripple) never applies to the returning event.
+- **Demote is the same exit** (GM r10 item 2: "drops" means the normal exit). Live, a demote of two numbered cursors faded over 46 frames; the real path (a backend restart with a new token) did too, over 46 frames.
+
+### Any person move carries resting cursors (GM r11 item 2)
+
+- A drag sets React Flow's `dragging` flag. A keyboard nudge (arrows, Shift+arrows) and Arrange (the whole canvas or the selection) don't, but all three end in `graphStore.persistNodePositions`. That call now records where the person put each node (`lib/personNodeMoves.ts`, bounded at 2,000 nodes). The layer treats a node at the person's spot as the person's move, so a resting cursor rides it at 0 px. A sync, an undo or another agent puts the node elsewhere, so a cursor still flies there.
+- **Jumps are read from the carrier now,** not the de-stacked spot. A step aside is 26 px, past the 24 px re-plan distance, so with the new pill step it would otherwise have flown an arc instead of landing on the land spring. A test pins it.
+- At 300% zoom, the tests show 0 px trail and 0° lean for a 20 px Shift nudge, a 5 px nudge and a 300 px Arrange, and a sync still flies. Live, 10 Shift+ArrowRight presses at 300% moved the node 180 flow px. The cursor was 0 frames off its rest offset (0.003 flow px of float noise), had 0 lean frames and was never promoted.
+
+### The accept past the agent memory (GM r11 item 3), and NIT-1
+
+- An agent past `SESSION_AGENT_MEMORY` gets no click: its cursor is the unnumbered one, and nothing ties it to the proposing session. `_accepted_person_form` now calls `person_form(..., live_only=True)`, which lands only on a live slot the session already has, and returns None otherwise. Liveness and the slot come from one clock read, so a TTL running out between two reads can't bring an ended session's cursor back (review 4 NIT-1). On any failure the person gets nothing, never the bare agent form (R15, now pinned).
+
+### The lost token (GM r11 item 4, review 4 LOW-2)
+
+- `wsClient.sayHello` with no token now also dispatches `socketDemoted` for the current socket. A tab that forgot its link after a second 401 drops its numbered cursors on the exit, as on a refused hello. Tested in `personPromote.r29` (no hello sent, one `socketDemoted`). The `this.ws === socket` gate is pinned too: a refusal on a stale socket doesn't demote the tab (review 4 NIT-2, F10).
+
+### The pill edge (GM r10 item 1)
+
+- `will-change` is gone from the CSS. The layer sets it only while a cursor flies (a plan or a landing), and sets `auto` at rest.
+- At rest a cursor is drawn on whole device pixels. The pane's offset, the pan and the zoom are all counted, and the device pixel ratio too (2x gives half pixels). The snap is in the drawing only, never in the motion, so nothing drifts.
+- **No frame jump at the switch.** The landing aims at the snapped spot (`restOffset`), so the last flying frame and the first at rest differ only by the land spring's own last step. Live, the demote switch moved the pill 0.062 px (the step before it was 0.044 px). Without the aim it would have been up to half a pixel; the layer test's fractional case gives 0.54 px. The promote switch is the flight's first step (1.36 px of motion).
+- **Black pill at rest, Restraint.** The ring is crisp: 102 on #000, 3.66:1. On the classic #111 canvas (a diagnostic) it is 111, 3.76:1. Round 4 measured 2.19:1 and 2.13:1 under `will-change`.
+
+### The pill step (GM r10 item 3)
+
+- A later cursor whose target is within 16 px of an earlier one's lands 10 px right and 24 px down (one pill height, 20 px, plus 4). A third goes one more step. `AGENT_CURSOR_PILL` holds the pill's box from the tip, and a test checks it against `agentCursor.css`. The most recently active cursor still paints on top, and each cursor keeps its step offset through a drag (the round 4 carry rules).
+- Tests cover 2 and 3 cursors at pill widths of 30, 60 and 140: no pill boxes meet, and no tip is on another cursor's pill, at rest and after a drag. Live with three cursors: 0 pill overlaps at rest, during 51 drag frames and after the drag.
+- **For GM:** the arrow's bounding box of each later cursor overlaps the lower-left corner of the earlier pill by about 15 × 13 px. The arrow covers part of the earlier pill's left end (its padding, not the text), and that shows in shot 3. A step of about 14 px right instead of 10 would clear it.
+- **The dimmed "Claude" in round 4's shot 4** is the spec's idle state (§3 "Idle": 0.45 after 20 s with no event). It's not a style outside the spec.
+
+### LOWs and NITs
+
+- **L2 (fling at every-other-frame input).** The person's own drag latches the hold on its first jump (`dragged || chase >= 2`). At 60 and 120 Hz with a move every other frame, the action fires within 30 ms of the drag's end (tests).
+- **LOW-1 (cursor-event guard), tests only.** The AST guard now catches every shape review 4 found: the quiet helper, `broadcast_browser`, `_broadcast_presence(e, e)`, annotated and tuple assignment, walrus, `{**e}`, `dict(e)`, `e.copy()`, `json.dumps(e)`, an alias, `agent_presence.point`, a literal or f-string dict, a socket's `send_text`, and an event built in one function and sent from another. Review 4's four real edits to `main.py` (G01–G04) now fail it. `conftest.py` also checks behaviour in every test: the ConnectionManager's senders record a targeted `agentPresence` that didn't come through `_broadcast_presence`, and that test fails. The wrappers are installed once per run, so a monkeypatch saves and restores the checked sender. A subprocess test shows the hook failing a stray send. The backend itself doesn't refuse (that would change the boundary; it's for Justin).
+- **NIT-2.** R15 and F10 are pinned (above). F11 is pinned too: the feed holds only graph clears and replacements.
+- **NIT-3.** The feed keeps the latest replay apart from its bounded ring, so 64 events after it never push it out.
+- **NIT-4.** The NIT-2 line above, the feed test's title, and the PR body's guard sentence are fixed.
+- **N1.** A test covers the carry rule's "already beside" check: a cursor riding n1 beside a later cursor on a flow point keeps its order through a small drag.
+
+### Checks (round 4b)
+
+- `tsc -b` exit 0. `npm run lint` exit 0: eslint, `check:inline-styles` (255 files) and `check:slava-css-scope` (4 files).
+- Focused vitest, `--maxWorkers=2`, 133 files in four runs (every test that reads `src/` or `styles/`, plus the cursor, presence, promote, entry-split and graph-store move tests): 562 + 354 + 600 + 552 = 2,068 passed, 0 failed, no timeouts.
+- Isolated pytest, 120 files (every file that touches presence, broadcasts, cursors, pins or proposals, all under the new conftest check), in three runs: 1,227 + 2,140 + 900 passed. One known failure: `test_cli_apply.py::test_arrange_from_the_builder_and_in_the_reply`, the existing order leak after `test_canvas_pins.py`. It passes alone.
+- Build budget: pass. The entry is 443,226 B raw and 136,096 gzip (+169 B for `personNodeMoves`, the token demote and the feed's held replay). The cursor chunk is 22,723 B (round 4: 20,435), `wsClient` 2,550 B, the store 3,155 B.
+- Mutation checks:
+  - Backend: 16, all caught. The AST guard alone catches review 4's G01–G04.
+  - Frontend: 29 on the first pass, 28 caught. The survivor, the leaving branch's own `release`, was redundant with the effect's cleanup, so it was removed; with both releases off, the strengthened test catches it.
+  - Frontend, after that: 2 more for the whole-pixel landing, both caught.
+- Live at 1440, Restraint, on isolated ports: the canary showed 8000, 8005, 5173, 8840 and outside blocked. 0 page errors, and only the canary's two requests were intercepted.

@@ -39,8 +39,16 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
-  will-change: transform, opacity;
+  /* will-change is set from JS only while a cursor flies (AgentCursorLayer):
+     at rest it sits on whole device pixels, off its own layer, so the pill
+     and its edge draw crisp (GM - Design, PR #211 r10 item 1). */
   opacity: 0;
+}
+
+/* A leaving cursor whose name a live cursor now shows (a number taken over)
+   hides its pill at once: one name never shows twice (PR #211 review 4). */
+.agent-cursor[data-taken='true'] .agent-cursor__label {
+  visibility: hidden;
 }
 
 .agent-cursor__pointer {

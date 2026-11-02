@@ -20,6 +20,8 @@ don't pile up folders in /tmp (a run that is killed still leaves its one).
 from __future__ import annotations
 
 import atexit
+import contextlib
+import contextvars
 import os
 import shutil
 import tempfile
@@ -423,8 +425,87 @@ def _checked_setattr(self, *args, **kwargs):  # type: ignore[no-untyped-def]
 pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 
 
+# -- a cursor event with a target goes out only through _broadcast_presence --
+#
+# PR #211 review 4, LOW-1: the person's tabs must get a cursor event in the
+# person form (its session and number), so every one is sent by
+# main._broadcast_presence. The AST guard in test_agent_cursor_round4.py reads
+# the source; this checks behaviour, in every test: while a test runs, the
+# ConnectionManager's senders record any ``agentPresence`` with a target that
+# reaches them from anywhere else, and the test fails. Tests only: the
+# backend itself doesn't refuse (that would change the boundary).
+
+_PRESENCE_ROUTE: contextvars.ContextVar[bool] = contextvars.ContextVar("nebula_presence_route", default=False)
+# Where the senders record a stray event while a test runs; None between tests.
+_STRAY_CURSORS: list[str] | None = None
+
+
+def _targeted_cursor(data: object) -> bool:
+    return isinstance(data, Mapping) and data.get("type") == "agentPresence" and data.get("target") is not None
+
+
+def _install_cursor_route_check() -> None:
+    """Wrap main's senders once, for the rest of the run (and again if main
+    is reloaded). Installed for good, not per test, so a monkeypatch that
+    saves and restores a sender saves and restores the checked one."""
+    import functools
+    import sys
+
+    main = sys.modules.get("main")
+    manager_class = getattr(main, "ConnectionManager", None)
+    route = getattr(main, "_broadcast_presence", None)
+    if manager_class is None or route is None:
+        return
+    if not getattr(route, "_nebula_cursor_route", False):
+        @functools.wraps(route)
+        async def routed(*args, **kwargs):  # type: ignore[no-untyped-def]
+            token = _PRESENCE_ROUTE.set(True)
+            try:
+                return await route(*args, **kwargs)
+            finally:
+                _PRESENCE_ROUTE.reset(token)
+
+        routed._nebula_cursor_route = True  # type: ignore[attr-defined]
+        main._broadcast_presence = routed
+    for name in ("broadcast_raw", "broadcast_others", "broadcast_browser"):
+        sender = manager_class.__dict__.get(name)
+        if sender is None or getattr(sender, "_nebula_cursor_route", False):
+            continue
+
+        def checked(sender=sender, name=name):  # type: ignore[no-untyped-def]
+            @functools.wraps(sender)
+            async def send(self, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+                stray = _STRAY_CURSORS
+                if stray is not None and not _PRESENCE_ROUTE.get() and (
+                        _targeted_cursor(data) or _targeted_cursor(kwargs.get("others"))):
+                    stray.append(f"{name}: {dict(data) if isinstance(data, Mapping) else data!r}")
+                return await sender(self, data, *args, **kwargs)
+            send._nebula_cursor_route = True  # type: ignore[attr-defined]
+            return send
+
+        setattr(manager_class, name, checked())
+
+
+@contextlib.contextmanager
+def watch_cursor_routes():  # type: ignore[no-untyped-def]
+    """Record, for the block, every cursor event with a target that reaches a
+    sender other than through main._broadcast_presence."""
+    global _STRAY_CURSORS
+    _install_cursor_route_check()
+    outer, _STRAY_CURSORS = _STRAY_CURSORS, []
+    try:
+        yield _STRAY_CURSORS
+    finally:
+        _STRAY_CURSORS = outer
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item):  # type: ignore[no-untyped-def]
-    result = yield
+    with watch_cursor_routes() as stray:
+        result = yield
     _check_broadcast_raw(item.nodeid)  # catches a direct assignment left in place
+    if stray:
+        raise AssertionError(
+            f"{item.nodeid}: a cursor event with a target went out other than through "
+            f"main._broadcast_presence (PR #211 review 4, LOW-1): {stray[0]}")
     return result

@@ -49,7 +49,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
-import { AGENT_CURSOR_HOVER_SLOP_PX, inkFor, sessionFill } from '../src/lib/agentCursorLook';
+import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, inkFor, sessionFill } from '../src/lib/agentCursorLook';
+import { forgetPersonPlaced, notePersonPlaced } from '../src/lib/personNodeMoves';
 
 /**
  * GM - Design's agent cursor spec, phase 1 in the layer: each action draws
@@ -205,7 +206,7 @@ describe('one cursor per session', () => {
     flush();
     expect(cursors().map((el) => el.dataset.session)).toEqual(['aaaaaaaaaaaa', 'bbbbbbbbbbbb']);
     expect(cursors()[0].style.transform).toBe('translate(500px, 344px) scale(1)');
-    expect(cursors()[1].style.transform).toBe('translate(510px, 354px) scale(1)');
+    expect(cursors()[1].style.transform).toBe('translate(510px, 368px) scale(1)');
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, say: 'Back again' }));
     flush();
     expect(cursors().map((el) => el.dataset.session)).toEqual(['bbbbbbbbbbbb', 'aaaaaaaaaaaa']);
@@ -292,7 +293,7 @@ describe('two cursors on one spot keep their places (review 1, F2)', () => {
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, el.style.transform]));
     const before = where();
     expect(before.aaaaaaaaaaaa).toBe('translate(500px, 344px) scale(1)');
-    expect(before.bbbbbbbbbbbb).toBe('translate(510px, 354px) scale(1)');
+    expect(before.bbbbbbbbbbbb).toBe('translate(510px, 368px) scale(1)');
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, say: 'Again' }));
     flush();
     expect(where()).toEqual(before);
@@ -311,13 +312,14 @@ describe('a cursor that shifts a little on its spot keeps its place in the stack
     send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, target: { x: 300, y: 300 } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, el.style.transform]));
-    expect(where().bbbbbbbbbbbb).toBe('translate(310px, 310px) scale(1)');
+    expect(where().bbbbbbbbbbbb).toBe('translate(310px, 324px) scale(1)');
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, target: { x: 304, y: 300 } }));
     flush();
-    // a came first: it is never pushed off its own target. b, 6 px right
-    // and 10 down of a's tip, steps on to stay clear of it.
+    // a came first: it is never pushed off its own target. b, a step from
+    // its own target, is 6 px right and 24 down of a's tip, out of its
+    // 16 px, so it stays.
     expect(where().aaaaaaaaaaaa).toBe('translate(304px, 300px) scale(1)');
-    expect(where().bbbbbbbbbbbb).toBe('translate(320px, 320px) scale(1)');
+    expect(where().bbbbbbbbbbbb).toBe('translate(310px, 324px) scale(1)');
   });
 });
 
@@ -842,7 +844,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     flush();
     const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
     expect(byKey.bbbbbbbbbbbb).toEqual({ x: 1000, y: 344 });
-    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 1010, y: 354 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 1010, y: 368 });
   });
 
   it('while both are on their way, the one due to land first aims at the spot: it never lands aside and hops back', () => {
@@ -876,7 +878,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     send(event({ ...B, target: { x: 300, y: 300 } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    expect(where().bbbbbbbbbbbb).toEqual({ x: 320, y: 320 }); // 10 screen px at zoom 0.5
+    expect(where().bbbbbbbbbbbb).toEqual({ x: 320, y: 348 }); // 10 and 24 screen px at zoom 0.5
     // A shifts 20 flow px: 10 screen px, inside the radius. It keeps its
     // stamp, so it is never pushed off its own target.
     send(event({ ...A, target: { x: 320, y: 300 } }));
@@ -908,7 +910,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
     // B was there first: it keeps (800, 344); A, arriving on the dragged node, steps aside.
     expect(byKey.bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
-    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 810, y: 354 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 810, y: 368 });
   });
 });
 
@@ -938,7 +940,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     flush();
     send(event({ ...second, target: { nodeId: 'n1' } }));
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: spotOf('n1'), aaaaaaaaaaaa: { x: 510, y: 354 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spotOf('n1'), aaaaaaaaaaaa: { x: 510, y: 368 } });
     const frames300 = Math.round(300 / perFrame);
     for (let i = 0; i < frames300; i += 1) {
       // The person's drag (React Flow's dragging flag): carried at any speed.
@@ -947,19 +949,19 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
       const spot = spotOf('n1');
       // Carried: on their spots every frame, the second never on the first's.
       expect(where().bbbbbbbbbbbb).toEqual(spot);
-      expect(where().aaaaaaaaaaaa).toEqual({ x: spot.x + 10, y: spot.y + 10 });
+      expect(where().aaaaaaaaaaaa).toEqual({ x: spot.x + 10, y: spot.y + 24 });
     }
     moveNode('n1', 0, 0, false);
     flush();
     const spot = spotOf('n1');
-    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 10 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 24 } });
     // And again, back the other way.
     for (let i = 0; i < frames300; i += 1) {
       moveNode('n1', -perFrame, 0);
       tickFrames(1);
     }
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 510, y: 354 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 510, y: 368 } });
   });
 
   it.each([5, 20])('keeps their order when the second one\'s frame runs first, dragged %s px a frame', (perFrame) => {
@@ -978,10 +980,10 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
       moveNode('n1', perFrame, 0);
       tickFrames(1);
       const spot = spotOf('n1');
-      expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 10 } });
+      expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 24 } });
     }
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 800, y: 344 }, aaaaaaaaaaaa: { x: 810, y: 354 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 800, y: 344 }, aaaaaaaaaaaa: { x: 810, y: 368 } });
   });
 
   it('a cursor that flies onto a dragged node lands aside: the one the node carries keeps the spot', () => {
@@ -999,7 +1001,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     }
     flush();
     const spot = spotOf('n1');
-    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 10 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x + 10, y: spot.y + 24 } });
   });
 
   it('a cursor set aside goes back onto its spot on the land spring when the other leaves, not in one jump', () => {
@@ -1010,7 +1012,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     flush();
     send(event({ ...second, target: { nodeId: 'n1' } }));
     flush();
-    expect(where().aaaaaaaaaaaa).toEqual({ x: 510, y: 354 });
+    expect(where().aaaaaaaaaaaa).toEqual({ x: 510, y: 368 });
     // The first moves off to n2: the second's spot is the node's own again.
     send(event({ ...first, target: { nodeId: 'n2' } }));
     let last = where().aaaaaaaaaaaa;
@@ -1092,9 +1094,337 @@ describe('a view whose effects reconnect keeps its place (round 4: StrictMode in
     send(pair('bbbbbbbbbbbb', 2));
     flush();
     const before = where();
-    expect(before).toEqual({ claude: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 510, y: 354 }, bbbbbbbbbbbb: { x: 520, y: 364 } });
+    expect(before).toEqual({ claude: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 510, y: 368 }, bbbbbbbbbbbb: { x: 520, y: 392 } });
     send(pair('aaaaaaaaaaaa', 1, 'look'));
     flush();
     expect(where()).toEqual(before);
+  });
+});
+
+describe('the presence exit, for every removal (GM - Design, PR #211 review 4)', () => {
+  const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
+  const opacity = (el: HTMLElement) => Number(el.style.opacity);
+  const demote = () => act(() => { useAgentPresenceStore.getState().demote(); });
+
+  it('5 -> 0 on a demoted tab: every cursor fades over more than one frame, then goes', () => {
+    render(<AgentCursorLayer />);
+    for (const [i, key] of ['a', 'b', 'c', 'd', 'e'].entries()) {
+      send(event({ ...session(key, i + 1), target: { x: 100 + 60 * i, y: 100 } }));
+    }
+    flush();
+    expect(cursors()).toHaveLength(5);
+    expect(cursors().every((el) => opacity(el) === 1)).toBe(true);
+    demote();
+    let partial = 0;
+    for (let i = 0; i < 400 && cursors().length > 0; i += 1) {
+      tickFrames(1);
+      if (cursors().length === 5 && cursors().every((el) => opacity(el) > 0 && opacity(el) < 1)) partial += 1;
+    }
+    expect(partial).toBeGreaterThan(1);
+    expect(cursors()).toHaveLength(0);
+  });
+
+  it('fades on the opacity spring, tip, pill and say pill together (one element), and never moves', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), say: 'On it' }));
+    flush();
+    const el = cursors()[0];
+    const start = at(el);
+    demote();
+    const seen: number[] = [];
+    for (let i = 0; i < 400 && el.isConnected; i += 1) {
+      tickFrames(1);
+      if (el.isConnected) {
+        seen.push(opacity(el));
+        expect(at(el)).toEqual(start);
+        expect(el.querySelector('.agent-cursor__name')).not.toBeNull();
+      }
+    }
+    // Falls all the way, without a jump: no frame drops more than a fifth.
+    for (let i = 1; i < seen.length; i += 1) expect(seen[i - 1] - seen[i]).toBeLessThan(0.2);
+    expect(seen.length).toBeGreaterThan(5);
+  });
+
+  it('a prune and a number taken over fade too', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), target: { x: 100, y: 100 } }));
+    send(event({ ...session('b', 3), target: { x: 400, y: 100 } }));
+    flush();
+    act(() => { useAgentPresenceStore.getState().prune(Date.now() + 10 * 60_000); });
+    tickFrames(3);
+    expect(cursors()).toHaveLength(2);
+    expect(cursors().every((el) => el.dataset.leaving === 'true')).toBe(true);
+    flush();
+    expect(cursors()).toHaveLength(0);
+  });
+
+  it('under reduced motion it goes in one frame', () => {
+    reduceMotion(true);
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2) }));
+    flush();
+    expect(cursors()).toHaveLength(1);
+    demote();
+    expect(cursors()).toHaveLength(0);
+  });
+
+  it('a number taken over never shows two "Claude · 2" pills: the leaving one hides its pill at once', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), target: { x: 100, y: 100 } }));
+    flush();
+    const visiblePills = () => cursors().filter((el) => el.dataset.taken !== 'true')
+      .map((el) => el.querySelector('.agent-cursor__name')!.textContent);
+    // The backend gave number 2 to another session: the old one has left.
+    send(event({ ...session('b', 2), target: { x: 400, y: 100 } }));
+    expect(cursors()).toHaveLength(2);
+    expect(visiblePills()).toEqual(['Claude · 2']);
+    for (let i = 0; i < 400 && cursors().length > 1; i += 1) {
+      tickFrames(1);
+      expect(visiblePills().filter((text) => text === 'Claude · 2')).toHaveLength(1);
+    }
+    expect(cursors()).toHaveLength(1);
+  });
+
+  it('a return mid-exit reverses on the same spring: one cursor all the way, never a second', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), target: { x: 100, y: 100 } }));
+    flush();
+    const el = cursors()[0];
+    demote();
+    tickFrames(6);
+    const low = opacity(el);
+    expect(low).toBeGreaterThan(0);
+    expect(low).toBeLessThan(1);
+    send(event({ ...session('a', 2), target: { x: 100, y: 100 }, say: 'Back' }));
+    const seen: number[] = [];
+    for (let i = 0; i < 400; i += 1) {
+      tickFrames(1);
+      expect(cursors()).toHaveLength(1);
+      seen.push(opacity(cursors()[0]));
+    }
+    expect(cursors()[0]).toBe(el); // the same view: no second cursor mounted
+    expect(el.dataset.leaving).toBeUndefined();
+    expect(Math.min(...seen)).toBeGreaterThanOrEqual(low - 0.05); // no restart from 0
+    expect(seen.at(-1)).toBe(1);
+    expect(el.querySelector('.agent-cursor__say')?.textContent).toBe('Back');
+  });
+
+  it('back mid-exit in a replay (a reconnect): put on its spot, and the fade reverses rather than snapping in', () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), target: { x: 100, y: 100 } }));
+    flush();
+    const el = cursors()[0];
+    demote();
+    tickFrames(6);
+    const low = opacity(el);
+    act(() => { useAgentPresenceStore.getState().replay([{ ...event({ ...session('a', 2), target: { x: 100, y: 100 } }), secondsAgo: 0 } as never]); });
+    tickFrames(1);
+    expect(cursors()).toEqual([el]);
+    const next = opacity(el);
+    expect(next).toBeLessThan(0.9);
+    expect(next).toBeGreaterThanOrEqual(low - 0.05);
+    flush();
+    expect(opacity(el)).toBe(1);
+  });
+
+  it("a leaving cursor isn't counted for de-stacking, and paints under live cursors", () => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 2), target: { nodeId: 'n1' } }));
+    flush();
+    send(event({ ...session('b', 3), target: { nodeId: 'n1' } }));
+    flush();
+    const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    expect(where()).toEqual({ aaaaaaaaaaaa: { x: 500, y: 344 }, bbbbbbbbbbbb: { x: 510, y: 368 } });
+    // a's session leaves (a takeover of its number by another agent's tab is
+    // the same): b takes the spot while a still fades.
+    act(() => {
+      const { agents } = useAgentPresenceStore.getState();
+      const rest = { ...agents };
+      delete rest['claude#aaaaaaaaaaaa'];
+      useAgentPresenceStore.setState({ agents: rest });
+    });
+    send(event({ ...session('c', 4), target: { x: 900, y: 900 } }));
+    tickFrames(1);
+    expect(cursors().map((el) => el.dataset.session)).toEqual(['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc']);
+    expect(cursors()[0].dataset.leaving).toBe('true');
+    // b heads for the spot while a is still fading there.
+    let movedWhileLeaving = false;
+    for (let i = 0; i < 400 && cursors().some((el) => el.dataset.leaving); i += 1) {
+      tickFrames(1);
+      if (cursors().some((el) => el.dataset.leaving) && where().bbbbbbbbbbbb.y < 366) movedWhileLeaving = true;
+    }
+    expect(movedWhileLeaving).toBe(true);
+    flush();
+    expect(where().bbbbbbbbbbbb).toEqual({ x: 500, y: 344 });
+  });
+});
+
+describe('a cursor at rest is drawn on whole device pixels, off its own layer (GM - Design, PR #211 r10 item 1)', () => {
+  // The pane at the page's origin (jsdom's boxes are all 0).
+  beforeEach(() => { pane.dom = document.createElement('div'); });
+  it('will-change only while it flies; at rest the screen position is a whole pixel', () => {
+    pane.transform = [0.3, 0.7, 1.37];
+    render(<AgentCursorLayer />);
+    send(event({ target: { x: 100.13, y: 200.41 } }));
+    tickFrames(3);
+    expect(cursors()[0].style.willChange).toBe('transform, opacity');
+    flush();
+    const el = cursors()[0];
+    expect(el.style.willChange).toBe('auto');
+    const tip = at(el);
+    const [tx, ty, z] = pane.transform;
+    for (const screen of [tx + tip.x * z, ty + tip.y * z]) expect(Math.abs(screen - Math.round(screen))).toBeLessThan(1e-6);
+    // Within half a pixel of where it aimed.
+    expect(Math.abs((tip.x - 100.13) * z)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs((tip.y - 200.41) * z)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('on a 2x display, whole device pixels are half CSS pixels', () => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    pane.transform = [0, 0, 1];
+    render(<AgentCursorLayer />);
+    send(event({ target: { x: 100.3, y: 200.2 } }));
+    flush();
+    expect(at(cursors()[0])).toEqual({ x: 100.5, y: 200 });
+  });
+
+  it('no frame jump at the switch: it lands on the whole pixel, so coming off its layer adds nothing past the landing\'s own last step', () => {
+    pane.transform = [0.3, 0.7, 1.37];
+    render(<AgentCursorLayer />);
+    send(event({ target: { x: 100.13, y: 200.41 } }));
+    const frames: { at: { x: number; y: number }; promoted: boolean }[] = [];
+    for (let i = 0; i < 400; i += 1) {
+      tickFrames(1);
+      const el = cursors()[0];
+      frames.push({ at: at(el), promoted: el.style.willChange !== 'auto' });
+      if (frames.length > 2 && !frames.at(-1)!.promoted && !frames.at(-2)!.promoted) break;
+    }
+    const switchAt = frames.findIndex((f, i) => i > 0 && frames[i - 1].promoted && !f.promoted);
+    expect(switchAt).toBeGreaterThan(0);
+    const [before, after] = [frames[switchAt - 1].at, frames[switchAt].at];
+    const z = pane.transform[2];
+    // The land spring settles within 0.2 screen px; the snap here (0.48 px
+    // and 0.26 px off the whole pixel) would jump 0.54 px if drawn only at rest.
+    expect(Math.hypot(after.x - before.x, after.y - before.y) * z).toBeLessThanOrEqual(0.2);
+  });
+});
+
+describe('any person move of a node carries resting cursors at 0 px (GM - Design, PR #211 review 4, item 2)', () => {
+  type Entry = { position?: { x: number; y: number }; dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
+  const nodes = () => lookupRef.current as Map<string, Entry>;
+  const spotOf = (id: string) => {
+    const node = nodes().get(id)!;
+    return { x: node.internals.positionAbsolute.x + 100, y: node.internals.positionAbsolute.y + 44 };
+  };
+  /** The node moves to (x, y); `person` says the person put it there (a nudge, Arrange). */
+  const putNode = (id: string, x: number, y: number, person: boolean) => {
+    const next = new Map(nodes());
+    next.set(id, { ...next.get(id)!, position: { x, y }, internals: { ...next.get(id)!.internals, positionAbsolute: { x, y } } });
+    if (person) notePersonPlaced({ [id]: { x, y } });
+    lookupRef.current = next as never;
+    notifyStore();
+  };
+  const lean = (el: HTMLElement) => el.querySelector<SVGElement>('.agent-cursor__pointer')!.style.transform;
+
+  beforeEach(() => forgetPersonPlaced());
+
+  it.each([['Shift+Arrow nudge', 20], ['arrow nudge', 5], ['Arrange', 300]])('a %s at 300%% zoom: 0 px trail and 0° lean', (_, step) => {
+    pane.transform = [0, 0, 3];
+    render(<AgentCursorLayer />);
+    putNode('n1', 400, 300, true);
+    send(event());
+    flush();
+    const el = cursors()[0];
+    expect(at(el)).toEqual(spotOf('n1'));
+    for (let press = 1; press <= 5; press += 1) {
+      putNode('n1', 400 + step * press, 300, true);
+      tickFrames(1);
+      expect(at(el)).toEqual(spotOf('n1'));
+      expect(lean(el)).toBe('');
+      tickFrames(2);
+      expect(at(el)).toEqual(spotOf('n1'));
+    }
+    flush();
+    expect(at(el)).toEqual(spotOf('n1'));
+  });
+
+  it("a move the person didn't make (a sync) still flies at 300% zoom", () => {
+    pane.transform = [0, 0, 3];
+    render(<AgentCursorLayer />);
+    putNode('n1', 400, 300, true);
+    send(event());
+    flush();
+    const el = cursors()[0];
+    putNode('n1', 420, 300, false);
+    tickFrames(1);
+    expect(at(el)).not.toEqual(spotOf('n1'));
+    flush();
+    expect(at(el)).toEqual(spotOf('n1'));
+  });
+});
+
+describe('the pill step (GM - Design, PR #211 r10 item 3)', () => {
+  type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
+  const pills = () => cursors().map((el) => {
+    const tip = at(el);
+    return { left: tip.x + AGENT_CURSOR_PILL.left, top: tip.y + AGENT_CURSOR_PILL.top, width: 70, height: AGENT_CURSOR_PILL.height };
+  });
+  const apart = (a: ReturnType<typeof pills>[number], b: ReturnType<typeof pills>[number]) =>
+    a.left + a.width <= b.left || b.left + b.width <= a.left || a.top + a.height <= b.top || b.top + b.height <= a.top;
+  const noOverlap = () => {
+    const boxes = pills();
+    for (const [i, a] of boxes.entries()) for (const b of boxes.slice(i + 1)) expect(apart(a, b)).toBe(true);
+  };
+  const drag = (dx: number) => {
+    const next = new Map(lookupRef.current) as Map<string, Entry>;
+    const node = next.get('n1')!;
+    next.set('n1', { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: {
+      x: node.internals.positionAbsolute.x + dx, y: node.internals.positionAbsolute.y } } });
+    lookupRef.current = next as never;
+    notifyStore();
+  };
+
+  it.each([2, 3])('%i cursors on one node: no pill boxes meet, at rest and after a drag, each keeping its step', (count) => {
+    render(<AgentCursorLayer />);
+    for (const [i, key] of ['a', 'b', 'c'].slice(0, count).entries()) {
+      send(event({ session: { key: key.repeat(12), ordinal: i + 1 }, target: { nodeId: 'n1' } }));
+      flush();
+    }
+    const steps = cursors().map((el) => ({ x: at(el).x - 500, y: at(el).y - 344 }));
+    expect(steps).toEqual([{ x: 0, y: 0 }, { x: 10, y: 24 }, { x: 20, y: 48 }].slice(0, count));
+    noOverlap();
+    for (let i = 0; i < 30; i += 1) {
+      drag(12);
+      tickFrames(1);
+      noOverlap();
+    }
+    flush();
+    noOverlap();
+    expect(cursors().map((el) => ({ x: at(el).x - 860, y: at(el).y - 344 }))).toEqual(steps);
+  });
+});
+
+describe('a cursor carried beside one that is not on its node keeps its order (review 4, N1)', () => {
+  type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
+  it('B rides n1 with C, a later cursor on a flow point beside it: a small drag swaps nothing', () => {
+    render(<AgentCursorLayer />);
+    send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 1 }, target: { nodeId: 'n1' } }));
+    flush();
+    // C lands later on the flow point where n1's spot is: it steps aside.
+    send(event({ session: { key: 'cccccccccccc', ordinal: 2 }, target: { x: 500, y: 344 } }));
+    flush();
+    const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, cccccccccccc: { x: 510, y: 368 } });
+    for (let i = 1; i <= 3; i += 1) {
+      const next = new Map(lookupRef.current) as Map<string, Entry>;
+      const node = next.get('n1')!;
+      next.set('n1', { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: { x: 400 + 2 * i, y: 300 } } });
+      lookupRef.current = next as never;
+      notifyStore();
+      tickFrames(1);
+      expect(where().cccccccccccc).toEqual({ x: 510, y: 368 });
+    }
+    flush();
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 506, y: 344 }, cccccccccccc: { x: 510, y: 368 } });
   });
 });

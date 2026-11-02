@@ -5430,14 +5430,16 @@ def _accepted_person_form(event: dict[str, Any], proposal: Proposal) -> dict[str
     it was made (``Proposal.presence_session``, person side only). When that
     session's cursor has left by now, None: the person's tabs get no click
     (a cursor coming back for an ended session would be false; the node's
-    run state shows what happened), and agents still get the agent form."""
-    session = proposal.presence_session
+    run state shows what happened), and agents still get the agent form.
+    The same holds for an agent past the agent memory, whose cursor has no
+    session to tie the click to (GM - Design, PR #211 review 4). On any
+    failure, None too: never the bare agent form, which a tab would draw as
+    the plain cursor."""
     try:
-        if agent_presence.session_tag(proposal.agent, session) is None:
-            return None
+        return agent_presence.person_form(event, proposal.agent, session=proposal.presence_session, live_only=True)
     except Exception:  # noqa: BLE001 - no click is better than a wrong cursor
+        logging.getLogger("nebula.presence").exception("accepted person form failed; agents get the agent form only")
         return None
-    return _person_form(event, proposal.agent, {"X-Nebula-Cursor-Session": session} if session else None)
 
 
 async def _show_agent(

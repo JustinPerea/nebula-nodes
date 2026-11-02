@@ -20,6 +20,7 @@ import {
   entranceStart,
   isMoving,
   planMove,
+  stepExit,
   progressAt,
   stepMotion,
   type CursorMotion,
@@ -880,6 +881,55 @@ describe('riding a dragged node stops dead with it (GM - Design, PR #211 r9 item
   });
 });
 
+describe('a step aside is no jump (the pill step, GM - Design, PR #211 r10 item 3)', () => {
+  it('a resting tip whose spot moves a step (10, 24) on a still node lands there on the land spring, never a flight', () => {
+    const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
+    const node = { x: 500, y: 344 };
+    const m = createMotion(node, 1);
+    stepMotion(m, node, 1 / 60, { ...opts, carrier: node });
+    stepMotion(m, node, 1 / 60, { ...opts, carrier: node });
+    const aside = { x: 510, y: 368 };
+    stepMotion(m, aside, 1 / 60, { ...opts, carrier: node });
+    expect(m.plan).toBeNull();
+    expect(m.landing).not.toBeNull();
+    for (let i = 0; i < 200; i += 1) stepMotion(m, aside, 1 / 60, { ...opts, carrier: node });
+    expect(m.pos).toEqual(aside);
+  });
+});
+
+describe('the presence exit (GM - Design, PR #211 review 4)', () => {
+  it('stops where it is and fades to 0 on the opacity spring over more than one frame', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+    stepMotion(m, { x: 400, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 1 });
+    const at = { ...m.pos };
+    const seen: number[] = [];
+    let done = false;
+    for (let i = 0; i < 200 && !done; i += 1) {
+      done = stepExit(m, 1 / 60);
+      seen.push(m.opacity.x);
+      expect(m.pos).toEqual(at);
+      expect(m.plan).toBeNull();
+    }
+    expect(done).toBe(true);
+    expect(seen.length).toBeGreaterThan(5);
+    expect(m.opacity).toEqual({ x: 0, v: 0 });
+    // The spring's own curve: the same one stepMotion dims on.
+    const spring = createMotion({ x: 0, y: 0 }, 1);
+    for (let i = 0; i < 3; i += 1) stepMotion(spring, { x: 0, y: 0 }, 1 / 60, { zoom: 1, reduced: false, opacityTarget: 0 });
+    const exit = createMotion({ x: 0, y: 0 }, 1);
+    for (let i = 0; i < 3; i += 1) stepExit(exit, 1 / 60);
+    expect(exit.opacity.x).toBeCloseTo(spring.opacity.x, 9);
+    expect(AGENT_CURSOR_FADE_SPRING).toEqual({ stiffness: 170, damping: 26, mass: 1 });
+  });
+
+  it('a frame gap past the stale gap ends it at once (the tab was hidden)', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    expect(stepExit(m, AGENT_CURSOR_STALE_GAP_SECONDS + 0.01)).toBe(true);
+    expect(m.opacity.x).toBe(0);
+  });
+});
+
 describe('a fling holds the action no later than the drag\'s end (GM - Design, PR #211 r9 item 5)', () => {
   const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
 
@@ -916,6 +966,28 @@ describe('a fling holds the action no later than the drag\'s end (GM - Design, P
       // The tip still lands on the node, with no second arrival.
       expect(m.pos).toEqual(target);
     }
+  });
+
+  it.each([60, 120])('input every other frame at %i Hz (review 4, L2): the person\'s drag latches the hold, so it fires by the drag\'s end', (hz) => {
+    const dt = 1 / hz;
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+    let target = { x: 400, y: 0 };
+    let early = 0;
+    for (let i = 1; i <= 60; i += 1) {
+      // 60 px every 2nd frame: one still frame between each move.
+      if (i % 2 === 1) target = { x: target.x + 60, y: 0 };
+      if (stepMotion(m, target, dt, { ...opts, dragged: true }).arrived) early += 1;
+    }
+    expect(early).toBe(0);
+    expect(m.held).toBe(true);
+    let firedAfter = -1;
+    for (let i = 1; i <= 120 && firedAfter < 0; i += 1) {
+      if (stepMotion(m, target, dt, { ...opts, dragged: false }).arrived) firedAfter = i * dt;
+    }
+    // The last move was frame 59; frame 60 was still already.
+    expect(firedAfter).toBeGreaterThan(0);
+    expect(firedAfter).toBeLessThanOrEqual(AGENT_CURSOR_DRAG_END_SECONDS + 1e-9);
   });
 
   it('a one-frame jump mid-flight (a sync) is no fling: the action fires on arrival at the target', () => {

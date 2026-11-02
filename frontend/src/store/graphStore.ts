@@ -14,6 +14,7 @@ import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { notePersonPlaced } from '../lib/personNodeMoves';
 import { useArrangeStore } from './arrangeStore';
 import {
   clearPersistedRunHistory,
@@ -5973,6 +5974,9 @@ export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void
 }
 
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
+  // Every person move of a node comes through here: an agent cursor resting
+  // on it rides it, never flies (lib/personNodeMoves.ts).
+  notePersonPlaced(positions);
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
   );

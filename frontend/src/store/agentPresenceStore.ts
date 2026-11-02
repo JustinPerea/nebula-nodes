@@ -73,6 +73,23 @@ const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SESSION_KEY = /^[0-9a-f]{12}$/;
 const MAX_SESSION_ORDINAL = 100_000;
 
+/**
+ * The last seq each cursor key had, kept after the cursor leaves: one that
+ * comes back while the layer still fades it out (the presence exit) goes on
+ * counting, so nothing keyed on its old seq (the say and idle timers, the
+ * ripple) applies to its new event. Bounded; `clear` empties it.
+ */
+const lastSeq = new Map<string, number>();
+const LAST_SEQ_MAX = 512;
+
+function nextSeq(key: string, previous: number | undefined): number {
+  const seq = Math.max(previous ?? 0, lastSeq.get(key) ?? 0) + 1;
+  lastSeq.delete(key);
+  lastSeq.set(key, seq);
+  if (lastSeq.size > LAST_SEQ_MAX) lastSeq.delete(lastSeq.keys().next().value as string);
+  return seq;
+}
+
 export function cursorAction(raw: unknown): AgentCursorAction {
   return AGENT_CURSOR_ACTIONS.includes(raw as AgentCursorAction) ? (raw as AgentCursorAction) : 'move';
 }
@@ -161,7 +178,7 @@ function withEvent(
     action: cursorAction(event.action),
     say: typeof event.say === 'string' ? event.say : '',
     receivedAt,
-    seq: (previous?.seq ?? 0) + 1,
+    seq: nextSeq(key, previous?.seq),
     did: cleanDid(event.did, now),
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
     replayed,
@@ -175,19 +192,15 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
     const agents = withEvent(state.agents, event, now);
     return agents === state.agents ? state : { agents };
   }),
-  replay: (cursors, now = Date.now()) => set((state) => {
+  replay: (cursors, now = Date.now()) => set(() => {
     // The backend's live set, as of this tab's hello. Cursors drawn from the
     // agents' form before the hello (no session) are the same cursors under
     // another key, so the replay replaces them; a cursor it doesn't list has
-    // left. One kept with the same key keeps counting its seq.
+    // left. One kept with the same key keeps counting its seq (nextSeq).
     let agents: Record<string, AgentCursor> = {};
     for (const cursor of Array.isArray(cursors) ? cursors : []) {
       if (!cursor || typeof cursor !== 'object') continue;
-      const before = agents;
       agents = withEvent(agents, { ...cursor, replay: true }, now);
-      for (const key of Object.keys(agents)) {
-        if (!(key in before) && state.agents[key]) agents[key] = { ...agents[key], seq: state.agents[key].seq + 1 };
-      }
     }
     return { agents };
   }),
@@ -211,7 +224,10 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
     }
     return { agents: kept };
   }),
-  clear: () => set({ agents: {} }),
+  clear: () => {
+    lastSeq.clear();
+    set({ agents: {} });
+  },
 }));
 
 // The socket feed (agentPresenceFeed, in the startup entry) held whatever

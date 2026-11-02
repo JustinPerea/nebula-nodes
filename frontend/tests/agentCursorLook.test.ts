@@ -18,7 +18,9 @@ import {
   paintOrder,
   sessionFill,
   sessionName,
+  AGENT_CURSOR_PILL,
   AGENT_CURSOR_PILL_EDGE,
+  AGENT_CURSOR_STACK,
   pillEdge,
 } from '../src/lib/agentCursorLook';
 
@@ -280,13 +282,13 @@ describe('the name rule', () => {
 });
 
 describe('no stacking', () => {
-  it('lands a later cursor 10 px down-right of an earlier one within 16 px', () => {
+  it('lands a later cursor 10 px right and a pill height plus 4 px down of an earlier one within 16 px (GM r10 item 3)', () => {
     const spots = deStack([
       { key: 'b', target: { x: 105, y: 100 }, since: 2 },
       { key: 'a', target: { x: 100, y: 100 }, since: 1 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 100, y: 100 });
-    expect(spots.get('b')).toEqual({ x: 115, y: 110 });
+    expect(spots.get('b')).toEqual({ x: 115, y: 124 });
   });
 
   it('leaves cursors 16 px or more apart where they are', () => {
@@ -303,8 +305,8 @@ describe('no stacking', () => {
       { key: 'b', target: { x: 0, y: 0 }, since: 2 },
       { key: 'c', target: { x: 0, y: 0 }, since: 3 },
     ], 1);
-    expect(spots.get('b')).toEqual({ x: 10, y: 10 });
-    expect(spots.get('c')).toEqual({ x: 20, y: 20 });
+    expect(spots.get('b')).toEqual({ x: 10, y: 24 });
+    expect(spots.get('c')).toEqual({ x: 20, y: 48 });
   });
 
   it('never lands on an earlier tip: one aimed up-left of it steps past (review 1, F1)', () => {
@@ -313,7 +315,7 @@ describe('no stacking', () => {
       { key: 'b', target: { x: -10, y: -10 }, since: 2 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 10, y: 10 });
+    expect(spots.get('b')).toEqual({ x: 10, y: 38 });
   });
 
   it('two later cursors never share a spot (review 1, F1)', () => {
@@ -323,8 +325,8 @@ describe('no stacking', () => {
       { key: 'b', target: { x: 0, y: 0 }, since: 3 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('c')).toEqual({ x: 10, y: 10 });
-    expect(spots.get('b')).toEqual({ x: 20, y: 20 });
+    expect(spots.get('c')).toEqual({ x: 20, y: 34 });
+    expect(spots.get('b')).toEqual({ x: 30, y: 72 });
     const all = [...spots.values()];
     for (const p of all) for (const q of all) if (p !== q) expect(p.x === q.x && p.y === q.y).toBe(false);
   });
@@ -336,11 +338,12 @@ describe('no stacking', () => {
       { key: 'b', target: { x: 0, y: 0 }, since: 2 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 10, y: 10 });
+    expect(spots.get('b')).toEqual({ x: 10, y: 24 });
   });
 
   it('measures in screen px at any zoom', () => {
-    // At zoom 2, 10 flow px is 20 screen px: not stacked. 5 flow px is 10: stacked, offset 5 flow px.
+    // At zoom 2, 10 flow px is 20 screen px: not stacked. 5 flow px is 10:
+    // stacked, a step of 5 right and 12 down in flow px.
     expect(deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: 10, y: 0 }, since: 2 },
@@ -348,7 +351,55 @@ describe('no stacking', () => {
     expect(deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: 5, y: 0 }, since: 2 },
-    ], 2).get('b')).toEqual({ x: 10, y: 5 });
+    ], 2).get('b')).toEqual({ x: 10, y: 12 });
+  });
+
+  it.each([2, 3])('%i cursors on one target: no two name pills intersect, at any pill width', (count) => {
+    const spots = [...deStack(Array.from({ length: count }, (_, i) => ({
+      key: String(i), target: { x: 50, y: 50 }, since: i + 1,
+    })), 1).values()];
+    for (const width of [30, 60, 140]) {
+      const pills = spots.map((tip) => ({
+        left: tip.x + AGENT_CURSOR_PILL.left, top: tip.y + AGENT_CURSOR_PILL.top, width, height: AGENT_CURSOR_PILL.height,
+      }));
+      for (const [i, a] of pills.entries()) {
+        for (const b of pills.slice(i + 1)) {
+          const apart = a.left + a.width <= b.left || b.left + b.width <= a.left
+            || a.top + a.height <= b.top || b.top + b.height <= a.top;
+          expect(apart).toBe(true);
+        }
+      }
+      // No tip is on another cursor's pill.
+      for (const [i, tip] of spots.entries()) {
+        for (const [j, pill] of pills.entries()) {
+          if (i === j) continue;
+          const inside = tip.x >= pill.left && tip.x <= pill.left + pill.width
+            && tip.y >= pill.top && tip.y <= pill.top + pill.height;
+          expect(inside).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('a leaving cursor whose name a live one shows hides its pill at once (PR #211 review 4), and none is promoted from CSS', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+    const rule = css.match(/^\.agent-cursor\[data-taken='true'\] \.agent-cursor__label \{([^}]*)\}/m);
+    expect(rule?.[1]).toMatch(/visibility: hidden;/);
+    expect(rule?.[1]).not.toMatch(/transition/);
+    // will-change comes from the layer, only while a cursor flies (r10 item 1).
+    expect(css).not.toMatch(/will-change\s*:/);
+  });
+
+  it("the pill box matches agentCursor.css: the label's offset and the pill's height", () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+    const label = css.match(/^\.agent-cursor__label \{([^}]*)\}/m)![1];
+    expect(label).toMatch(new RegExp(`left: ${AGENT_CURSOR_PILL.left}px;`));
+    expect(label).toMatch(new RegExp(`top: ${AGENT_CURSOR_PILL.top}px;`));
+    const pill = css.match(/^\.agent-cursor__name \{([^}]*)\}/m)![1];
+    const pad = Number(pill.match(/padding: (\d+)px/)![1]);
+    const line = Number(pill.match(/line-height: (\d+)px/)![1]);
+    expect(line + 2 * pad).toBe(AGENT_CURSOR_PILL.height);
+    expect(AGENT_CURSOR_STACK.downPx).toBe(AGENT_CURSOR_PILL.height + 4);
   });
 
   it('paints the most recently active cursor on top (last)', () => {

@@ -189,4 +189,43 @@ describe('GM r29 item 3: the hold follows the server', () => {
     expect(heard).toEqual(['proposalSync', 'socketDemoted']);
     wsClient.disconnect();
   });
+
+  it('a token forgotten before the reconnect: no hello, so the socket demotes as on a refused one (review 4, LOW-2)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
+    const { session, wsClient } = await fresh();
+    const heard: string[] = [];
+    wsClient.subscribe((event) => { heard.push(event.type); });
+    const first = await open(wsClient);
+    expect(hellos(first)).toHaveLength(1);
+    promote(first);
+    // The backend restarted with a new token; a second 401 forgot the link
+    // inside the socket's 3 s reconnect delay.
+    act(() => { first.readyState = 3; first.onclose?.(); });
+    session.forgetPersonCredential();
+    await act(async () => { vi.advanceTimersByTime(3100); });
+    await vi.waitFor(() => expect(sockets.length).toBe(2));
+    sockets[1].onopen?.();
+    await vi.waitFor(() => expect(heard.filter((type) => type === 'socketDemoted')).toHaveLength(1));
+    expect(hellos(sockets[1])).toHaveLength(0);
+    wsClient.disconnect();
+  });
+
+  it("a refusal on a socket that's no longer the tab's own doesn't demote the tab (review 4, NIT-2)", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
+    const { wsClient } = await fresh();
+    const heard: string[] = [];
+    wsClient.subscribe((event) => { heard.push(event.type); });
+    const first = await open(wsClient);
+    act(() => { first.readyState = 3; first.onclose?.(); });
+    await act(async () => { vi.advanceTimersByTime(3100); });
+    await vi.waitFor(() => expect(sockets.length).toBe(2));
+    sockets[1].onopen?.();
+    await vi.waitFor(() => expect(hellos(sockets[1])).toHaveLength(1));
+    promote(sockets[1]);
+    frame(first, { type: 'personRequired', message: 'x' });
+    expect(heard).not.toContain('socketDemoted');
+    wsClient.disconnect();
+  });
 });

@@ -383,7 +383,9 @@ export function isMoving(m: CursorMotion, zoom: number): boolean {
 }
 
 /** One fixed step. Mutates the motion in place: no allocation per step. */
-function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number): { handedOff: boolean; arrived: boolean } {
+function substep(
+  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point,
+): { handedOff: boolean; arrived: boolean } {
   let handedOff = false;
   const plan = m.plan;
   if (plan) {
@@ -419,8 +421,10 @@ function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityT
     const k = AGENT_CURSOR_LAND_SPRING.stiffness;
     const c = AGENT_CURSOR_LAND_SPRING.damping;
     const mass = AGENT_CURSOR_LAND_SPRING.mass;
-    const aimX = live.x;
-    const aimY = live.y;
+    // It comes to rest on whole device pixels (`rest`, see stepMotion), so
+    // drawing it there at rest moves nothing.
+    const aimX = live.x + rest.x;
+    const aimY = live.y + rest.y;
     // Damping acts on the speed relative to the target (feed-forward), so a
     // target that keeps moving (a node being dragged) is caught with no
     // steady lag: the tip can arrive on it while it moves (GM - Design,
@@ -484,14 +488,22 @@ export function stepMotion(
      *  moves the spot off it. Its motion carries a riding tip; the spot
      *  moving on it (de-stacking) is a short landing. Default: the target. */
     carrier?: Point;
-    /** The person is dragging the target's node. A tip already there rides
-     *  it at any speed: a move past AGENT_CURSOR_REPLAN_PX in one frame is
-     *  their hand (or a late frame), not a sync to fly to again. */
+    /** Where on the target the tip comes to rest, as an offset from it (flow
+     *  px): the layer's whole-device-pixel snap of the target, so a landing
+     *  settles exactly where the cursor is drawn at rest, with no jump as it
+     *  comes off its own layer (GM - Design, PR #211 r10 item 1). Default 0. */
+    restOffset?: Point;
+    /** The person is moving the target's node (a drag, a keyboard nudge,
+     *  Arrange). A tip already there rides it at any speed: a move past
+     *  AGENT_CURSOR_REPLAN_PX in one frame is their hand (or a late frame),
+     *  not a sync to fly to again. A tip still flying to it holds its action
+     *  from the first jump, and fires it once the node holds still. */
     dragged?: boolean;
   },
 ): StepResult {
   const { zoom, reduced, opacityTarget } = opts;
   const carrier = opts.carrier ?? live;
+  const rest = opts.restOffset ?? { x: 0, y: 0 };
   const rel = { x: live.x - carrier.x, y: live.y - carrier.y };
   const finish = (arrived: boolean): StepResult => {
     m.awaiting = false;
@@ -521,15 +533,17 @@ export function stepMotion(
   // place to fly to; anything less is a target moving (a drag), which the
   // arc's end and the land spring track as it goes.
   const prevLive = m.lastLive;
-  const jumpPx = prevLive ? dist(live, prevLive) * zoom : 0;
+  // The target's own motion is its carrier's: a de-stack shift isn't speed,
+  // and isn't a jump (a step aside is 26 px, past the re-plan distance; it
+  // lands on the land spring, below).
+  const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
+  const jumpPx = prevCarrier ? dist(carrier, prevCarrier) * zoom : 0;
   const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
   // The spot moved on its node (a de-stack), not with it.
   const relShifted = m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01;
   // Where the target was a frame ago, when it is moving: the steps in this
   // frame see it move from there to here, as it did, not hold still and jump.
   const glideFrom = prevLive && !jumped && jumpPx > 0 ? { x: prevLive.x, y: prevLive.y } : null;
-  // The target's own motion is its carrier's: a de-stack shift isn't speed.
-  const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
   const wasMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
   m.liveVel = prevCarrier && !jumped && dtSeconds > 0
     ? { x: (carrier.x - prevCarrier.x) / dtSeconds, y: (carrier.y - prevCarrier.y) / dtSeconds }
@@ -541,7 +555,9 @@ export function stepMotion(
   m.stillFor = jumpPx > 0 ? 0 : m.stillFor + Math.max(0, dtSeconds);
   let arrived = false;
   if ((m.plan || m.landing) && jumped) {
-    const held = m.held || (m.awaiting && m.chase >= 2);
+    // The person's own drag latches it on its first jump: input that lands
+    // every other frame never makes two in a row (review 4, L2).
+    const held = m.held || (m.awaiting && (Boolean(opts.dragged) || m.chase >= 2));
     planMove(m, live, { zoom, pointer });
     // A target jumping every frame (a fling): the tip can't arrive, so the
     // action is held, but no later than the drag's end (below).
@@ -591,7 +607,7 @@ export function stepMotion(
       at.x = glideFrom.x + (live.x - glideFrom.x) * f;
       at.y = glideFrom.y + (live.y - glideFrom.y) * f;
     }
-    const step = substep(m, at, h, zoom, opacityTarget);
+    const step = substep(m, at, h, zoom, opacityTarget, rest);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
   }
@@ -602,4 +618,40 @@ export function stepMotion(
     m.opacity = { x: opacityTarget, v: 0 };
   }
   return { arrived, handedOff, atRest };
+}
+
+/**
+ * One frame of a cursor's exit (GM - Design, PR #211 review 4: every
+ * removal). It stops where it is and fades to 0 on the same opacity spring
+ * idle dimming uses, which also brings the lean to rest; the tip, the pill
+ * and the say pill fade together, as one element. True once it is out (or
+ * when the frame gap says the tab was hidden or stalled: it went unseen).
+ * A cursor that comes back mid-exit reverses from here on stepMotion, with
+ * the spring's opacity and speed as they are.
+ */
+export function stepExit(m: CursorMotion, dtSeconds: number): boolean {
+  m.plan = null;
+  m.landing = null;
+  m.attached = null;
+  m.awaiting = false;
+  m.held = false;
+  m.vel.x = 0;
+  m.vel.y = 0;
+  if (dtSeconds > AGENT_CURSOR_STALE_GAP_SECONDS) {
+    m.opacity = { x: 0, v: 0 };
+    m.carry = 0;
+    return true;
+  }
+  m.carry += Math.max(0, dtSeconds);
+  const h = AGENT_CURSOR_STEP_SECONDS;
+  for (; m.carry >= h - 1e-9; m.carry -= h) {
+    stepSpring1(m.opacity, 0, AGENT_CURSOR_FADE_SPRING, h);
+    stepSpring1(m.lean, 0, AGENT_CURSOR_LEAN_SPRING, h);
+  }
+  m.carry = Math.max(0, m.carry);
+  if (m.opacity.x < 0.002 && Math.abs(m.opacity.v) < 0.01) {
+    m.opacity = { x: 0, v: 0 };
+    return true;
+  }
+  return false;
 }

@@ -419,6 +419,10 @@ class WebSocketClient {
     void personTokenForSocket(url).then((personToken) => {
       if (!personToken) {
         reportPersonRequired();
+        // No hello, so this socket gets the agents' form: numbered cursors
+        // from before (a token forgotten after a second 401) leave, as on a
+        // refused hello (GM - Design, PR #211 review 4, item 4).
+        if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
         return;
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {

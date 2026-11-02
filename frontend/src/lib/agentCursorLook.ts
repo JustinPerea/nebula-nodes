@@ -19,8 +19,13 @@ export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const
  * otherwise the offset is not used. No fill is ever pure white.
  */
 export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, clampGap: 0.07 } as const;
-/** A later cursor whose target is this close to an earlier one's lands this far down-right. */
-export const AGENT_CURSOR_STACK = { radiusPx: 16, offsetPx: 10 } as const;
+/** The name pill's box from the tip, in screen px (agentCursor.css: the
+ *  label's left and top, and the pill's 16 px line plus 2 px above and below). */
+export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20 } as const;
+/** A later cursor whose target is within `radiusPx` of an earlier one's lands
+ *  `offsetPx` right and one pill height plus 4 px down (GM - Design, PR #211
+ *  r10 item 3), so neither tip nor name pill covers the other's pill. */
+export const AGENT_CURSOR_STACK = { radiusPx: 16, offsetPx: 10, downPx: AGENT_CURSOR_PILL.height + 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
 /** A chat title in a cursor's name is cut to this many characters. */
@@ -271,25 +276,27 @@ interface StackEntry {
 }
 
 /**
- * Where each cursor lands so no tip covers another's. Cursors are placed in
- * the order they came to their spots. Each starts at its target; while it is
- * within 16 screen px of an earlier cursor's placed tip and not already at
- * least 10 px down and right of it, it steps 10 px down and right. So a
- * second cursor on a spot lands 10 px down-right of the first, a third past
- * both, and one aimed up-left of an earlier tip never lands on it. Targets
- * and results are in flow coordinates.
+ * Where each cursor lands so no tip or name pill covers another's. Cursors
+ * are placed in the order they came to their spots. Each starts at its
+ * target; while it is within 16 screen px of an earlier cursor's placed tip
+ * and not already a full step (10 px right, 24 px down) past it, it takes
+ * that step. So a second cursor on a spot lands a step from the first, its
+ * pill 4 px under the first's, a third a step past both, and one aimed
+ * up-left of an earlier tip never lands on it. Targets and results are in
+ * flow coordinates.
  */
 export function deStack(cursors: readonly StackEntry[], zoom: number): Map<string, Point> {
   const radius = AGENT_CURSOR_STACK.radiusPx / zoom;
-  const offset = AGENT_CURSOR_STACK.offsetPx / zoom;
+  const right = AGENT_CURSOR_STACK.offsetPx / zoom;
+  const down = AGENT_CURSOR_STACK.downPx / zoom;
   const placed = new Map<string, Point>();
   const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const eps = 1e-9;
   for (const cursor of ordered) {
     let at = { ...cursor.target };
     const blocked = () => [...placed.values()].some((p) => Math.hypot(p.x - at.x, p.y - at.y) < radius
-      && !(at.x >= p.x + offset - eps && at.y >= p.y + offset - eps));
-    for (let i = 0; i <= 2 * placed.size + 2 && blocked(); i += 1) at = { x: at.x + offset, y: at.y + offset };
+      && !(at.x >= p.x + right - eps && at.y >= p.y + down - eps));
+    for (let i = 0; i <= 2 * placed.size + 2 && blocked(); i += 1) at = { x: at.x + right, y: at.y + down };
     placed.set(cursor.key, at);
   }
   return placed;

@@ -544,7 +544,8 @@ class AgentPresence:
         session: str | None,
         shown: str | None = None,
         in_place: bool = False,
-    ) -> dict[str, Any]:
+        live_only: bool = False,
+    ) -> dict[str, Any] | None:
         """The person tabs' copy of ``event`` (the agent form point returned).
 
         It adds ``session`` ({key, ordinal}), the plain cursor's too: the
@@ -556,11 +557,23 @@ class AgentPresence:
         ``in_place`` (a line said with no target), the target is this
         session's own cursor, else the middle of the view, never another
         session's cursor. The result is kept on the slot for ``replay``.
+
+        With ``live_only`` (an accept, main._accepted_person_form) it lands
+        only on a cursor this session already has, live, and returns None
+        otherwise: no slot is made, and an agent past the agent cap gets no
+        click either (GM - Design, PR #211 review 4: an unnumbered cursor
+        can't be tied to the session). Liveness and the slot are read at one
+        time, so a cursor whose TTL runs out between two reads never comes
+        back (review 4, NIT-1).
         """
         if "target" not in event:
             return event  # the Agent log only: no cursor, no session
         raw = session if session is not None and _valid_session(session) else ""
         now = self._clock()
+        if live_only:
+            kept = (self._slots.get(identity.id) or {}).get(raw)
+            if kept is None or now - kept.last_t > PRESENCE_TTL_SECONDS:
+                return None
         slot = self._slot(identity.id, raw, now)
         person = dict(event)
         if shown is not None and shown in ACTIONS:
