@@ -113,7 +113,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       followScan(resumed, () => !cancelled, showScan);
       return () => { cancelled = true; };
     }
-    api.get().then((value) => { if (!cancelled) setBatch(value); }, (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Blind labeling.", { reload: true }); })
+    api.get().then((value) => { if (!cancelled) { setBatch(value); setError(''); } }, (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Blind labeling.", { reload: true }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [resumed, showScan, setBatch, loadEpoch, line]);
@@ -196,7 +196,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
   if (!answered) return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}</header>
-    <CommonsErrorLine line={error} />
+    {/* Round 18f (GM r35 4): its "Try again" reads it again. */}
+    <CommonsErrorLine line={error} onRetry={loadAgain} />
   </section>;
   const count = batch?.items.filter((item) => evaluationComplete(item, batch)).length ?? 0;
   return <section className="commons-evaluation" aria-labelledby={headingId}>
@@ -275,7 +276,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
       objectUrl = URL.createObjectURL(blob);
       const image = new Image();
       image.onload = () => { if (!controller.signal.aborted && canvas.current) {
-        canvas.current.getContext('2d')?.drawImage(image, 0, 0); setUrl(objectUrl);
+        canvas.current.getContext('2d')?.drawImage(image, 0, 0); setUrl(objectUrl); setImageError('');
       } };
       image.onerror = () => { if (!controller.signal.aborted) setImageError("Couldn’t show this reference. Reload to try again."); };
       image.src = objectUrl;
@@ -301,7 +302,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef }: {
     <div className="evaluation-image">
       <h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
       {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
-      {shownImageError && <CommonsErrorLine line={shownImageError} />}
+      {shownImageError && <CommonsErrorLine line={shownImageError} onRetry={imageAgain} />}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
         <canvas ref={canvas} width={item.width} height={item.height} tabIndex={0}

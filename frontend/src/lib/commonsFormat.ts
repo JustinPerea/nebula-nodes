@@ -1,4 +1,4 @@
-import type { AnalysisState } from './commonsTypes';
+import type { AnalysisState, Collection } from './commonsTypes';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
   held: 'held', queued: 'queued', analyzing: 'analyzing', analysis_failed: 'failed', ready: 'ready',
@@ -27,4 +27,10 @@ export function folderName(path: string): string {
 /** GM r33, verbatim: the notice after a folder is linked; its full path goes in the title. */
 export function linkedFolderNotice(path: string): string {
   return `Linked “${folderName(path)}”. Scanning it now.`;
+}
+
+/** PR #204 round 18f (review 15 MEDIUM-1, logic lens): a collection made while the list's re-read
+ * failed joins the kept list (once), so Add to can show it. */
+export function withCollection(list: readonly Collection[], created: Collection): Collection[] {
+  return list.some((c) => c.id === created.id) ? [...list] : [...list, created];
 }

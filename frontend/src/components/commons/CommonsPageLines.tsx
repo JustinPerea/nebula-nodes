@@ -13,8 +13,10 @@ import { PAGE_LINES_ATTR } from '../../lib/lineAttrs';
  * Round 14 (GM r22): `line` may be several, one per failed load (useCommonsLoadLines), each in
  * its own line box, in the page's order; Add's line comes after all of them.
  */
-export function CommonsPageLines({ line, lock, children, more = false }: {
+export function CommonsPageLines({ line, lock, children, more = false, onRetry }: {
   line: string | readonly string[] | null | undefined;
+  /** Round 18f (GM r35 4): reads the page's loads again (a load line's "Try again"). */
+  onRetry?: () => void;
   lock: PersonLock;
   /** Whether `children` has anything to show (the row renders only with something in it). */
   more?: boolean;
@@ -24,7 +26,7 @@ export function CommonsPageLines({ line, lock, children, more = false }: {
   if (lines.length === 0 && !lock.shown && !more) return null;
   return (
     <div className="commons-messages" {...{ [PAGE_LINES_ATTR]: '' }}>
-      {lines.map((each) => <CommonsErrorLine key={each} line={each} />)}
+      {lines.map((each) => <CommonsErrorLine key={each} line={each} onRetry={onRetry} />)}
       <PersonLockLine lock={lock} place="page" className="commons-messages__lock-line" />
       {children}
     </div>

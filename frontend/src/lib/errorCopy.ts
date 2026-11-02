@@ -243,6 +243,15 @@ export function isLoadLine(text: string): boolean {
   return /^(?:Saved\. )?Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
 }
 
+/** PR #204 round 18f (GM r35 4): the words before a load line's closing "Try again.", for the
+ * "Try again" button that ends it (components/commons/CommonsErrorLine), or null when the line
+ * isn't a load's or doesn't end so ("…then try again." asks to check Nebula first; "Try again in
+ * a moment." asks to wait). The button keeps the sentence: "… Try again." reads the same. */
+export function retryStem(line: string): string | null {
+  if (!isLoadLine(line) || !line.endsWith(' Try again.')) return null;
+  return line.slice(0, -' Try again.'.length);
+}
+
 /**
  * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
  * retries on the promote).

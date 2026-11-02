@@ -54,9 +54,11 @@ async function until(check: () => unknown, max = 3000): Promise<void> {
 /** The line shows, and (round 18, GM r28 1) in the neutral look: a load that got no answer
  * destroys nothing. Read through the app's stylesheets. */
 async function shows(words: string): Promise<void> {
-  await until(() => screen.getByText(words));
+  // Round 18f (GM r35 4): a line ending "Try again." ends in its button, so the words span it.
+  const find = () => [...document.querySelectorAll('[data-commons-line]')].find((el) => el.textContent === words);
+  await until(() => expect(find(), words).toBeTruthy());
   // Round 18b (GM r29 1): every load line is neutral, whatever its reason.
-  const line = [...document.querySelectorAll('[data-commons-line]')].find((el) => el.textContent === words)!;
+  const line = find()!;
   expect(line.hasAttribute('data-line-neutral'), words).toBe(true);
   expect(lineLook(line), words).toEqual(NEUTRAL);
 }
@@ -115,7 +117,9 @@ describe('each pane load, no answer, verbatim', () => {
 
 describe('a failed settings read shows no form (GM r29: only the heading and the line)', () => {
   /** Every field and control the settings pane draws. */
-  const controls = () => [...document.querySelectorAll('.commons-settings :is(button, input, select, textarea, form, fieldset, [role="button"])')];
+  // Round 18f (GM r35 4): the line's own "Try again" is part of the line, not the form.
+  const controls = () => [...document.querySelectorAll('.commons-settings :is(button, input, select, textarea, form, fieldset, [role="button"])')]
+    .filter((el) => !el.closest('[data-commons-line]'));
   for (const failing of ['/api/commons/settings', '/api/commons/folders', '/api/commons/vocabulary/candidates']) {
     it(`no Save, Link folder, field or maintenance action while it has failed (${failing.slice('/api/commons/'.length)})`, async () => {
       state.failing = failing;

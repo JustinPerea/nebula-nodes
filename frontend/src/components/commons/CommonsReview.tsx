@@ -154,7 +154,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
   if (!answered) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}</header>
-    <CommonsErrorLine line={error} />
+    {/* Round 18f (GM r35 4): its "Try again" reads it again. */}
+    <CommonsErrorLine line={error} onRetry={loadAgain} />
   </section>;
   const reviewed = batch?.items.filter((i) => i.reviewed_at).length ?? 0;
   const ready = batch?.items.filter((i) => i.status === 'ready').length ?? 0;
@@ -208,13 +209,13 @@ function ReferenceImage({ item }: { item: ReviewItem }) {
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
     commonsEvaluationApi.image(item.position, controller.signal).then((blob) => {
-      if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); }
+      if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); setError(''); }
     }, (e: unknown) => { if (!controller.signal.aborted) line.show(e, "Couldn’t load this reference.", { reload: true }); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position, loadEpoch, line]);
   return <div className="evaluation-image"><h3 className="evaluation-step">Reference {String(item.position + 1).padStart(2, '0')}</h3>
     {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
-    {shownError ? <CommonsErrorLine line={shownError} /> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
+    {shownError ? <CommonsErrorLine line={shownError} onRetry={loadAgain} /> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
 }

@@ -91,12 +91,13 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<FolderLink[]> => {
     const [f, s, c] = await Promise.all([commonsApi.folders(), commonsApi.settings(), commonsApi.candidates()]);
     setFolders(f);
     setSettings(s);
     setCandidates(c);
     setLoaded(true);
+    return f;
   }, []);
 
   useEffect(() => {
@@ -108,15 +109,21 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setSettings(s);
         setCandidates(c);
         setLoaded(true);
+        // Round 18f (GM r35 4): read again by its "Try again": the line goes with the failure.
+        setError(null);
       },
       (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the Commons settings.", { reload: true }); },
     );
     return () => { cancelled = true; };
   }, [loadEpoch, line]);
 
-  const run = useCallback(async (work: () => Promise<unknown>, done?: string, doneTitle?: string) => {
+  /** `readBack` words the message again from what the write answered and the folders read back
+   * (round 18f: a linked folder's own name). */
+  const run = useCallback(async <T,>(work: () => Promise<T>, done?: string, doneTitle?: string,
+    readBack?: (result: T, read: FolderLink[]) => void) => {
+    let result: T;
     try {
-      await work();
+      result = await work();
     } catch (e) {
       // Refused offline before it was sent: the banner says why (round 16, L4).
       if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the settings.");
@@ -125,7 +132,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     setError(null);
     if (done) { setMessage(done); setMessageTitle(doneTitle); }
     try {
-      await load();
+      const read = await load();
+      readBack?.(result, read);
     } catch (e) {
       // Round 18d (review 14 LOW-1, GM r32 3): the write landed and only reading it back failed.
       // A load's failure, neutral, in GM's words, with no "Try again" that would send the write
@@ -162,7 +170,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
       {/* Round 18d (GM r32 5): the one loading look, under the heading. */}
-      {error ? <CommonsErrorLine line={error} /> : <CommonsLoadingLine text="Loading settings…" />}
+      {error ? <CommonsErrorLine line={error} onRetry={loadAgain} /> : <CommonsLoadingLine text="Loading settings…" />}
     </section>
   );
   return (
@@ -187,7 +195,14 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             const submittedPath = linkPath;
             linkingRef.current = true;
             setLinking(true);
-            void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path).then((saved) => {
+            // Round 18f (GM r35 3): the typed text until the read-back has the folder, then the
+            // folder's own name (the backend resolves "~" or ".."); a failed read-back keeps it.
+            void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path, (link, read) => {
+              const row = read.find((folder) => folder.id === link?.id);
+              if (!row) return;
+              setMessage(linkedFolderNotice(row.path));
+              setMessageTitle(row.path);
+            }).then((saved) => {
               if (saved) setLinkPath((current) => current === submittedPath ? '' : current);
             }).finally(() => {
               linkingRef.current = false;

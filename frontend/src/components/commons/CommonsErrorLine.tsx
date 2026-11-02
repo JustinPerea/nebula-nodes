@@ -1,9 +1,27 @@
+import { useLayoutEffect, useRef } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
-import { isLoadLine } from '../../lib/errorCopy';
+import { isLoadLine, retryStem } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useBackendOffline } from '../../lib/useBackendOffline';
+
+/** Round 18f (GM r35 4): a load line's "Try again". Once a read succeeds its line goes, and focus
+ * on it goes to the page's heading "Commons" rather than dropping to the page (GM r19 2's rule). */
+function RetryButton({ onRetry }: { onRetry: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const button = ref.current;
+    // Runs while the button is still in the page, as its line goes.
+    return () => {
+      if (!button || document.activeElement !== button) return;
+      const heading = button.closest('.commons-view')?.querySelector<HTMLElement>('[data-workspace-heading]')
+        ?? document.querySelector<HTMLElement>('.commons-view [data-workspace-heading]');
+      queueMicrotask(() => { if (heading?.isConnected && (!document.activeElement || document.activeElement === document.body)) heading.focus({ preventScroll: true }); });
+    };
+  }, []);
+  return <button ref={ref} type="button" className="commons-retry" onClick={onRetry}>Try again</button>;
+}
 
 /**
  * A Commons screen's failure line (GM r12 (2), PR #204 round 9). A refusal because this tab
@@ -13,10 +31,13 @@ import { useBackendOffline } from '../../lib/useBackendOffline';
  * Its words register (components/LineText), so a because line sends the general notice away
  * while it shows.
  */
-export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }: {
+export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry }: {
   line: string | null | undefined; className?: string;
   /** Round 18: `span` where a block can't go (inside a tile or a phrase). */
   as?: 'p' | 'span';
+  /** Round 18f (GM r35 4): how a load reads again. A load's line that ends "Try again." ends in a
+   * "Try again" button that does it (retryStem). Never an action's: that would send it again. */
+  onRetry?: () => void;
 }) {
   const line = useOfflineFirstBecause(given);
   const offline = useBackendOffline();
@@ -31,6 +52,7 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }:
   // 1): a load that failed for any reason (errorCopy isLoadLine).
   // Round 18c (GM r30 1): and a because line, so the two share one look, the bare rail.
   const neutral = person || isLoadLine(line);
+  const stem = onRetry ? retryStem(line) : null;
   return (
     <Tag className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
       role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}
@@ -40,7 +62,13 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }:
       {...(neutral ? { 'data-line-neutral': '' } : {})}
       // Round 11 (GM r19 2): a not-connected line can take focus when a demote removes the control.
       {...(person ? { tabIndex: -1, [FOCUS_LINE_ATTR]: '' } : {})}>
-      <LineText text={line} />
+      {stem === null ? <LineText text={line} /> : (
+        <LineText text={line}>
+          <span className="commons-notice__text">
+            {stem} <RetryButton onRetry={onRetry!} />.
+          </span>
+        </LineText>
+      )}
     </Tag>
   );
 }

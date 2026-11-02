@@ -437,6 +437,28 @@ body.app-slava-restraint .commons-notice--error {
   color: var(--sr-error);
 }
 
+/* Round 18f (GM r35 4): a load line's "Try again", inline at the end of its sentence, in the
+   line's own neutral ink (CommonsErrorLine). The words stay one sentence, so they wrap as text. */
+body.app-slava-restraint .commons-notice__text {
+  min-width: 0;
+}
+
+body.app-slava-restraint .commons-retry {
+  /* A button lays out inline-block whatever its display: the words before it wrap as text. */
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .commons-retry:hover {
+  color: var(--sr-ink-bold);
+}
+
 body.app-slava-restraint .commons-notice--proposal {
   justify-content: space-between;
   color: var(--sr-ink);
@@ -1134,12 +1156,27 @@ body.app-slava-restraint .commons-prompt__card > .person-lock-line {
   to { opacity: 1; transform: none; }
 }
 
+/* Round 18f (GM r35 5): the Commons opening from its off view (after a reconnect, or when it
+   comes back mid-visit): the sections and the page below the header spring in on the Commons'
+   spring; the header's way back and title stay put. */
+body.app-slava-restraint .commons-view[data-commons-opening] > :not(.commons-toolbar),
+body.app-slava-restraint .commons-view[data-commons-opening] > .commons-toolbar > .workspace-header__actions {
+  animation: commons-open 220ms var(--commons-spring) both;
+}
+
+@keyframes commons-open {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
 @keyframes commons-pop {
   from { transform: scale(0.85); }
   to { transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .commons-view[data-commons-opening] > :not(.commons-toolbar),
+  body.app-slava-restraint .commons-view[data-commons-opening] > .commons-toolbar > .workspace-header__actions,
   body.app-slava-restraint .commons-detail,
   body.app-slava-restraint .commons-add__menu,
   body.app-slava-restraint .commons-prompt__card,

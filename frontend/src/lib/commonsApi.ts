@@ -5,7 +5,7 @@ import { CommonsRequestError } from './commonsRequestError';
 import { noteCommonsAnswered, noteCommonsOff } from './commonsOff';
 import {
   COMMONS_OFF_COPY, COMMONS_OFF_DETAIL, CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, detailText,
-  REFUSED_FALLBACK_COPY, commonsNotConnected, copyForStatus, isNoAnswer, readDetail, requestSucceeded,
+  REFUSED_FALLBACK_COPY, commonsNotConnected, copyForStatus, isBackendUnreachable, isNoAnswer, readDetail, requestSucceeded,
   warnFailure, type FailureCopy,
 } from './errorCopy';
 import {
@@ -109,6 +109,9 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
     // person session) and an agent token's refusal keep it.
     session = null;
     const detail = await readDetail(response);
+    // Round 18f (GM r35 2, review 15 LOW-1): a refusal from a Commons route is the Commons
+    // answering (activation_dep runs first), so the off line gives way to this one.
+    noteCommonsAnswered();
     if (detail === INVALID_PERSON_TOKEN_DETAIL) dropRefusedPersonToken(sentWith.get(response) ?? null);
     warnFailure(heading, 401, 'no person session');
     throw sessionLost(heading, sentAt);
@@ -126,7 +129,13 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
       noteCommonsOff();
       throw new CommonsRequestError(COMMONS_OFF_COPY, response.status, { detail, heading });
     }
-    throw new CommonsRequestError(copyForStatus(response.status, detail), response.status, { detail, heading });
+    const failure = new CommonsRequestError(copyForStatus(response.status, detail), response.status, { detail, heading });
+    // Round 18f (GM r35 2, review 15 LOW-1): any other answer proves the Commons is on (every
+    // Commons route sits behind activation_dep), so the off line gives way to the real one: a
+    // 500's load line, say. Only a gateway's answer with no reason of the backend's says nothing
+    // about it (the dev proxy's 502 for a backend that isn't there), as no answer doesn't.
+    if (!isBackendUnreachable(failure)) noteCommonsAnswered();
+    throw failure;
   }
   noteCommonsAnswered();
   requestSucceeded(heading);

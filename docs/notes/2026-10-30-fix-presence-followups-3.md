@@ -2848,7 +2848,8 @@ GM r33 on #204: two copy fixes and one shot.
   - The name is never empty.
 - The Re-analyze and Import notices clear the title.
 - Agent wording: only a person can link a folder (the backend's `link_folder` route is
-  person-only and answers `{"status": "scanning"}`). No MCP tool or CLI command links a folder, so
+  person-only and answers with the link, its path resolved; corrected in round 18f, which had
+  said `{"status": "scanning"}`, Rescan's answer). No MCP tool or CLI command links a folder, so
   there's no agent-facing string to match.
 
 ### Left alone
@@ -2872,3 +2873,132 @@ GM r33 on #204: two copy fixes and one shot.
   - Nothing reached a blocked host.
 - Shots at 1440 are in the scratchpad (`fu3r/shots-r18e`): M after a reload, M mid-visit, and
   S the linked notice. md5 `uniq -d` was empty and each shot was opened.
+
+## Round 18f
+
+Review 15 (one MEDIUM and one LOW) and GM r35's answers on #204.
+
+### Focus when the Commons turns off mid-visit (review 15 MEDIUM-1, GM r35 1)
+- The off state is now part of CommonsView's handover key (`{ view, offline, off }`), so turning
+  off hands focus on by the same rule as a demote or going offline. A section tab, a Settings
+  field or the detail's Close moves to the heading "Commons", not `<body>`. The off line is
+  announced through the existing polite region.
+
+### A collection made while the list's re-read failed (review 15 logic MEDIUM-1, probe P6)
+- `loadCollections` now says whether it read the list. After New collection…, a failed re-read
+  merges the created collection into the kept list (`withCollection` in `lib/commonsFormat.ts`,
+  added once) before `setTarget`. The select's shown option and the POST's `collection_id` now
+  always agree.
+
+### What clears the off line (GM r35 2, review 15 LOW-1)
+- Only a 404 "Commons is disabled" sets it.
+- Any other answer from a Commons route proves the Commons is on, because `activation_dep` runs
+  first, so it clears the off line: a 500, a 401 (cleared before the token rule runs), a 403, a
+  plain 404, even a 500 or 409 carrying the words "Commons is disabled".
+- No answer, or a gateway 502–504 with no reason of the backend's (`isBackendUnreachable`), says
+  nothing, so the off line stays.
+- The real line then replaces the off line: the load's neutral line on a 500, the not-connected
+  line on a 401.
+
+### The linked folder's own name (GM r35 3, review 15 NIT-2)
+- Settings' `run` takes a `readBack(result, read)` step. Link folder finds the new link (by the id
+  the POST answered) in the folders read back and words the notice from its resolved path:
+  Linked “~” becomes Linked “home”, with the resolved path in the title.
+- Until the read-back answers, the notice shows the typed text. If the read-back fails, the typed
+  text stays.
+- Re-analyze and Import clearing the title are now pinned (NIT-2's surviving mutant).
+- The 18e notes said linking answers `{"status": "scanning"}`. That is Rescan's answer; linking
+  answers with the link. Corrected above.
+
+### "Try again" as a button (GM r35 4)
+- One shared pattern: `CommonsErrorLine` takes `onRetry`. A load line (`isLoadLine`) that ends
+  " Try again." renders its words up to there, a `commons-retry` text button "Try again", and the
+  period, so the line reads exactly as before and stays one sentence.
+  - `retryStem` in `lib/errorCopy.ts` decides this.
+  - The button takes the line's own neutral ink, underlined, and wraps with the text.
+  - Chrome lays out any `<button>` as inline-block, so the CSS doesn't set a display.
+- No timer re-reads. The line goes once a re-read succeeds. Focus on its button then goes to the
+  heading "Commons" (the button hands it on as its line unmounts), so it never drops to the page.
+- The page row's load lines (collections, status, references) re-read through `reloadAll`, and
+  only when the row shows load lines, never an action's line. The reconnect re-read was already
+  there (`useOfflineHiddenNotice`) and is now pinned.
+- The other load lines on the Commons page that end "Try again." get the same button:
+  - the Settings pane;
+  - Agent review;
+  - Blind labeling;
+  - a reference's detail;
+  - Agent review's and Blind labeling's reference images.
+
+  Each one's success now clears its line (Settings, Blind labeling and both image lines didn't
+  clear it before, because nothing re-read them).
+- Lines without the button, and why:
+  - "…the server isn’t answering. Check that Nebula is running, then try again." This asks the
+    person to check Nebula first. It shows only until the banner says Nebula is offline, and the
+    reconnect re-reads by itself.
+  - "…the server is busy. Try again in a moment." This asks the person to wait.
+  - `CommonsMedia`'s line. It renders inside a grid tile, which is a `<button>`, and a button
+    can't sit inside a button. The tile's detail re-reads when it opens.
+  - Any action's line. Pressing it would send the action again.
+
+### The capability on reconnect (GM r35 5, review 15 NIT-1)
+- While the off view shows, `useCommonsCapability` re-reads `/api/capabilities/commons` once each
+  time Nebula comes back from offline. It never polls.
+- If the answer is on, the off view opens into the Commons with no reload:
+  - The project this tab loaded opens (a reload lands on the Projects home with the project
+    loaded but not shown).
+  - The Commons is enabled and entered in the same update.
+  - The view springs its sections and page in on the Commons' spring (`data-commons-opening`,
+    `commons-open`, 220 ms; off under reduced motion). The header's way back and title stay put.
+- Focus goes to the heading, or to "← Canvas" when it was on "← Projects". `lib/commonsOpening`
+  carries the mark. It is read as the view renders and cleared after it commits, so a render
+  React drops while part of the view loads can't lose it.
+- With no project to show it over, the Commons coming back leaves for the Projects home, as
+  "← Projects" would.
+- The Commons coming back mid-visit springs the sections back in the same way.
+
+### Review 15 NIT-3's survivors
+- M1/M14: a 500 or 409 carrying "Commons is disabled" proves the Commons is on (pinned).
+- M13: App's off route with the Commons enabled shows the Commons.
+- M15: the standalone Settings pane, with a read-back refused off, shows no "Saved…" line.
+- M17: the loading line leaves no timer behind.
+- M19: a project loaded but not shown (always so after a reload) reads "← Projects".
+
+All five are pinned and killed.
+
+### Gates
+- tsc and eslint are clean; the inline-style and Slava CSS guards pass.
+- vitest on two workers, 360 listed files (359 run): every test that reads `src/` or `styles/`,
+  every Commons, capability, App and presence test, and the two new 18f files. 4,809 of 4,810
+  passed. The one failure was `clearsOnPromote.ratchet`'s route scan timing out at 30 s under
+  load; alone it passes 9 of 9 in 7 s.
+- New tests: `presenceRound18f.commons` (30) and `presenceRound18f.commonsReconnect` (8). Both
+  now take a 30 s test timeout and 10 s waits for the views loaded on demand, because a cold first
+  render under the mutation run took more than 5 s. Three runs in a row, alone: 38 of 38.
+  `presenceRound15.paneLoads` reads a line by its text across the button, and doesn't count the
+  line's own button as a form control.
+- `vite build` plus the budget check: 471,025 B raw / 145,152 B gzip.
+- Mutations: 33 of 33 killed (25 new guards, including the Try again focus hand-off, the five
+  NIT-3 survivors, and the detail's and Agent review's buttons).
+  - The mutation library keeps the first 8 matching lines of vitest output, and React Flow's own
+    error lines from the App tests filled them. The runs for the App-level mutants were therefore
+    repeated with those lines filtered out.
+- Live (8951/5951, backend only through `harness/serve_isolated.py` with the token on stdin,
+  canaries first, every restart through the harness with the same token): 13 of 13.
+  - Linked “~” while the read-back was held, then Linked “home” with the resolved path.
+  - The collections line's Try again: neutral, inside the line. Pressed while still failing, the
+    list was read again and the line stayed. Pressed once it answered, the line went.
+  - Off mid-visit (the backend restarted without the flag) from a focused Inbox tab: focus on the
+    heading.
+  - Back on with the status, collections and search at 500: the neutral "…the server hit an
+    error. Try again." replaced the off line. Its Try again, once answered, cleared it.
+  - A reload with the Commons off showed "← Projects". The backend then restarted with the flag,
+    and the off view opened into the Commons: same document, `#commons` kept, the opening mark
+    seen, focus on the heading.
+  - Nothing reached a blocked host; `blocked.log` holds only canary lines.
+  - The puppeteer cache's Chrome had been removed since 18e, so the run used the installed Chrome
+    with a throwaway profile in the run's state dir.
+- Shots at 1440 (`fu3r/shots-r18f`): M off then 500, N collections Try again, R off opens into
+  Commons, S1 Linked “~”, S2 Linked “home”. md5 `uniq -d` empty; each opened.
+
+### Left alone
+- The meter's "resets …" copy (queued for the wording batch).

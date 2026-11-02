@@ -249,7 +249,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
             load line takes (CommonsErrorLine: neutral when it got no answer or for a because
             line). Hidden offline when it is a because line, as before. Round 18d (GM r32 5): the one
             loading look until then. */}
-        {error ? <CommonsErrorLine line={error} /> : <CommonsLoadingLine text="Loading details…" />}
+        {error ? <CommonsErrorLine line={error} onRetry={loadAgain} /> : <CommonsLoadingLine text="Loading details…" />}
       </aside>
     );
   }

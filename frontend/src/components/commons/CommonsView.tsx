@@ -10,12 +10,14 @@ import { useDemotedView } from '../../hooks/useTabHeld';
 import { expectBecauseLine, isBecauseLine } from '../../lib/notConnectedLine';
 import { isCommonsOff, type FailureCopy } from '../../lib/errorCopy';
 import { useCommonsOff } from '../../lib/commonsOff';
+import { clearCommonsOpening, peekCommonsOpening } from '../../lib/commonsOpening';
 import { CommonsOffLine } from './CommonsOffView';
 import { clearCommonsHash } from '../../lib/commonsRoute';
 import { ADD_NOT_CONNECTED, ADD_NOT_LOADED, ADD_TO_NOT_CONNECTED, ADD_TO_NOT_LOADED } from '../../lib/commonsAddCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
 import { pickFiles } from '../../lib/commonsFiles';
+import { withCollection } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { CommonsDetail } from './CommonsDetail';
 import { CommonsFilters } from './CommonsFilters';
@@ -335,7 +337,10 @@ export function CommonsView() {
   const root = useRef<HTMLDivElement>(null);
   // Round 14 (GM r23 3): going offline hides the lock lines, so it moves focus on as a demote does.
   const offlineNow = useBackendOffline();
-  const handoverChange = useMemo(() => ({ view, offline: offlineNow }), [view, offlineNow]);
+  // Round 18f (review 15 MEDIUM-1, GM r35 1): the Commons turning off takes every section's
+  // controls away too, so it hands focus on by the same rule: to the heading.
+  const offNow = useCommonsOff();
+  const handoverChange = useMemo(() => ({ view, offline: offlineNow, off: offNow }), [view, offlineNow, offNow]);
   const handover = useFocusHandover(handoverChange, () => root.current,
     () => root.current?.querySelector<HTMLElement>('[data-workspace-heading]') ?? null);
   return (
@@ -372,6 +377,17 @@ function CommonsViewBody({ view }: {
   const [opened, setOpened] = useState<Tab[]>([]);
   if ((tab === 'labeling' || tab === 'review') && !opened.includes(tab)) setOpened([...opened, tab]);
   const backRef = useRef<HTMLButtonElement>(null);
+  // Round 18f (GM r35 5): opened from the Commons-off view after a reconnect: focus goes to the
+  // heading, or stays on the way back, and the sections spring in (commons.css). Taken once.
+  const [opening] = useState(peekCommonsOpening);
+  const [springing, setSpringing] = useState(opening !== null);
+  useEffect(() => {
+    if (opening === null) return;
+    clearCommonsOpening();
+    const to = opening === 'back' ? backRef.current
+      : backRef.current?.closest('.commons-view')?.querySelector<HTMLElement>('[data-workspace-heading]');
+    to?.focus({ preventScroll: true });
+  }, [opening]);
   const leave = useCommonsLeave(backRef);
   const [busyAt, setBusyAt] = useState<'back' | 'home' | null>(null);
   // A leave waiting on a save in progress marks its control; a later one takes the mark over.
@@ -522,7 +538,8 @@ function CommonsViewBody({ view }: {
   // Round 18d (review 14 LOW-1, GM r32 3): after New collection… or Import moodboards landed, the
   // list is read again; that read failing is a load's failure (its neutral line, the last good
   // list kept), never the action's.
-  const loadCollections = useCallback(async () => {
+  // Round 18f (review 15 MEDIUM-1 of the logic lens): it says whether it read the list.
+  const loadCollections = useCallback(async (): Promise<boolean> => {
     loadStarted('collections');
     try {
       const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
@@ -530,8 +547,10 @@ function CommonsViewBody({ view }: {
       setTarget((current) => current || list[0]?.id || '');
       noteAnswered('collections', true);
       loadsClear('collections');
+      return true;
     } catch (e) {
       loadFailed('collections', e, "Couldn’t load the collections.");
+      return false;
     }
   }, [noteAnswered, loadStarted, loadsClear, loadFailed]);
 
@@ -621,7 +640,9 @@ function CommonsViewBody({ view }: {
     if (!name || !name.trim()) return;
     try {
       const created = await commonsApi.createCollection(name.trim());
-      await loadCollections();
+      // A failed re-read keeps the last good list: the new collection joins it, so Add to shows
+      // what Add sends to (the select never shows one collection while Add files into another).
+      if (!(await loadCollections())) setCollections((current) => withCollection(current, created));
       setTarget(created.id);
     } catch (e) {
       fail(e);
@@ -743,9 +764,10 @@ function CommonsViewBody({ view }: {
       setPage(null);
     } else {
       // A Commons read answered: the Commons is back, so every load reads again (their off
-      // lines go with them).
+      // lines go with them), and the sections spring back in (round 18f, GM r35 5).
       loads.clear();
       reloadAll();
+      setSpringing(true);
     }
   }
   // Round 14 (GM r23 1): Add locks at once; its line waits for the page's because line, so the
@@ -767,7 +789,9 @@ function CommonsViewBody({ view }: {
       : 'No matches. Drop images or videos here, or use Add.';
 
   return (
-    <div className={`commons-view commons-scope${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
+    <div className={`commons-view commons-scope${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}
+      {...(springing && !commonsOff ? { 'data-commons-opening': '' } : {})}
+      onAnimationEnd={(event) => { if (event.animationName === 'commons-open') setSpringing(false); }}>
       <WorkspaceHeader title="Commons" backLabel={workspaceLabel(returnView)} className="commons-toolbar" backRef={backRef}
         onBack={() => request({ anchor: backRef.current, go: exitCommons, busy: busyFor('back') }, true)}
         backBusy={busyAt === 'back'} homeBusy={busyAt === 'home'}
@@ -872,7 +896,7 @@ function CommonsViewBody({ view }: {
       {/* Round 18d (GM r31 layout M): the Commons off says only that, in the page row. */}
       {commonsOff ? <CommonsOffLine /> : (
       /* Round 12 (GM r20 1): the banner row holds Add's lock line too, under the because line. */
-      <CommonsPageLines line={shownError} lock={addLine} more={Boolean(notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0)}>
+      <CommonsPageLines line={shownError} lock={addLine} onRetry={error ? undefined : reloadAll} more={Boolean(notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0)}>
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert" data-line-box="">
               <span className="commons-notice__list">
