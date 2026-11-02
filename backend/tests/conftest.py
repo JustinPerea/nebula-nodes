@@ -451,13 +451,20 @@ pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 #   carrying ``session``, its key and number, or an ``agentPresenceReplay``)
 #   may reach a socket that isn't the person's canvas. Checked on the real
 #   senders, on every instance-level stand-in a test puts on main.manager,
-#   and on the sockets themselves (Starlette's WebSocket.send_text and
-#   send_json), so the replay sent on a verified hello is checked too.
+#   and on the sockets themselves (Starlette's WebSocket.send_text,
+#   send_json and send_bytes), so the replay sent on a verified hello is
+#   checked too.
 #
 # Either one fails the test. The check is installed before any fixture runs
 # (pytest_runtest_setup, tryfirst, and every monkeypatch.setattr), and a
 # sender left on the manager instance by a fixture's undo is dropped before
 # and after each test, so a patched sender can't blind it (review 5, M3).
+# A stand-in, a Mock included, is wrapped in a proxy that checks each call
+# and forwards everything else to it (review 6, MEDIUM-1). It is a check for
+# the ways the suite patches senders (monkeypatch.setattr on the manager),
+# not a wall: a test that patches the class, uses mock.patch.object or
+# sends from a thread after the call phase can still go around it (review 6,
+# LOW-1); the AST guards read main.py for those.
 
 _PRESENCE_ROUTE: contextvars.ContextVar[bool] = contextvars.ContextVar("nebula_presence_route", default=False)
 # Where the checks record a stray event while a test runs; None between tests.
@@ -472,8 +479,8 @@ def _targeted_cursor(data: object) -> bool:
 def person_only_frame(data: object) -> bool:
     """A frame only the person's canvas may get: a cursor event in the person
     form (it carries ``session``) or the replay of the live cursors."""
-    if isinstance(data, (str, bytes)):
-        text = data.decode("utf-8", "replace") if isinstance(data, bytes) else data
+    if isinstance(data, (str, bytes, bytearray)):
+        text = bytes(data).decode("utf-8", "replace") if isinstance(data, (bytes, bytearray)) else data
         if "agentPresence" not in text:
             return False
         import json
@@ -531,16 +538,16 @@ def _install_cursor_route_check() -> None:
 
     from starlette.websockets import WebSocket
 
-    for send_name in ("send_text", "send_json"):
+    for send_name in ("send_text", "send_json", "send_bytes"):
         send = WebSocket.__dict__.get(send_name)
-        if send is not None and not getattr(send, "_nebula_cursor_route", False):
+        if send is not None and getattr(send, "_nebula_cursor_route", False) is not True:
             setattr(WebSocket, send_name, _socket_check(send))
     main = sys.modules.get("main")
     manager_class = getattr(main, "ConnectionManager", None)
     route = getattr(main, "_broadcast_presence", None)
     if manager_class is None or route is None:
         return
-    if not getattr(route, "_nebula_cursor_route", False):
+    if getattr(route, "_nebula_cursor_route", False) is not True:
         @functools.wraps(route)
         async def routed(*args, **kwargs):  # type: ignore[no-untyped-def]
             token = _PRESENCE_ROUTE.set(True)
@@ -553,7 +560,7 @@ def _install_cursor_route_check() -> None:
         main._broadcast_presence = routed
     for name in _SENDERS:
         sender = manager_class.__dict__.get(name)
-        if sender is None or getattr(sender, "_nebula_cursor_route", False):
+        if sender is None or getattr(sender, "_nebula_cursor_route", False) is True:
             continue
 
         def checked(sender=sender, name=name):  # type: ignore[no-untyped-def]
@@ -574,7 +581,6 @@ def _check_instance_senders() -> None:
     a bound copy of the class's own sender, checked or not, which a
     monkeypatch undo leaves behind, is dropped; any other stand-in is
     wrapped so both checks see what it is sent."""
-    import functools
     import sys
 
     main = sys.modules.get("main")
@@ -593,19 +599,35 @@ def _check_instance_senders() -> None:
                 func is real or func is getattr(real, "__wrapped__", None)):
             del own[name]  # (a bound method reads its function's marker, so this goes first)
             continue
-        if getattr(value, "_nebula_cursor_route", False):
+        # ``is True``: a Mock makes up any attribute it is asked for, the
+        # marker included (review 6, MEDIUM-1).
+        if getattr(value, "_nebula_cursor_route", False) is True:
             continue
+        own[name] = _CheckedStandIn(value, name)
 
-        def stand_in(fake=value, name=name):  # type: ignore[no-untyped-def]
-            @functools.wraps(fake)
-            def send(data, *args, **kwargs):  # type: ignore[no-untyped-def]
-                if _STRAY_CURSORS is not None:
-                    _check_send(name, data, kwargs.get("others"), stand_in=True)
-                return fake(data, *args, **kwargs)
-            send._nebula_cursor_route = True  # type: ignore[attr-defined]
-            return send
 
-        own[name] = stand_in()
+class _CheckedStandIn:
+    """A stand-in for a sender, checked: each call goes through both checks,
+    then to the stand-in; every attribute is the stand-in's own, read when
+    asked (a Mock's ``await_args``, a capture's ``sent``), so the test reads
+    it as if nothing were in between (review 6, MEDIUM-1 and N4)."""
+
+    _nebula_cursor_route = True
+
+    def __init__(self, fake: object, name: str) -> None:
+        object.__setattr__(self, "_fake", fake)
+        object.__setattr__(self, "_name", name)
+
+    def __call__(self, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if _STRAY_CURSORS is not None:
+            _check_send(self._name, data, kwargs.get("others"), stand_in=True)
+        return self._fake(data, *args, **kwargs)  # type: ignore[operator]
+
+    def __getattr__(self, attr: str):  # type: ignore[no-untyped-def]
+        return getattr(object.__getattribute__(self, "_fake"), attr)
+
+    def __setattr__(self, attr: str, value: object) -> None:
+        setattr(self._fake, attr, value)
 
 
 @contextlib.contextmanager

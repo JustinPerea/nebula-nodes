@@ -554,3 +554,91 @@ Review 5 (boundary and exit; motion, look and live) and GM's answers (r12, r13).
   - With a say in the middle: steps of 24 and 47, the glide over 16 in-between frames (3.7 px per frame at most), and back to 24 when the say ends.
   - Near targets 10 px apart: one column, step 24.
   - Exit strip: as above.
+
+## Round 4d
+
+GM's r14 (the step) and r15 (answers to review 6), and review 6's findings. The spec's "Rulings from #211 review 6" section and line 66 are the source.
+
+### The step (r14)
+
+- The later arrow's painted top (stroke included) sits 4 px (`AGENT_CURSOR_STACK.gapPx`) under the bottom of the earlier cursor's whole label block. The block is the name pill with its 1 px ring, plus the say pill while one shows. All of it is computed from `AGENT_CURSOR_PILL` and the arrow's points. That gives 42 px below a name and 65 px below a name and a say.
+- GM wrote "about 39 and about 65". The 39 measures from the tip point (1.5) instead of the painted top (0.8), and leaves out the ring. Measured consistently, both numbers come from one rule: the painted arrow top sits 4 px under the painted block bottom.
+- The 2 px painted check stays as the floor.
+
+### No foreign overlap anywhere (r15 item 1, review 6 HIGH-2 and LOW-2)
+
+- **Joining.** `deStackLayout` places cursors in arrival order, in screen px. A cursor joins a column when either holds:
+  - its target is within 16 px of a member's target (targets only; the tip clause is gone);
+  - its shape at its own target meets any placed cursor (`cursorsMeet`): painted closer than 2 px, or either arrow inside what the other owns. A cursor owns the box from its arrow's top to 4 px under its label block, across its arrow and pills. An arrow in there reads as that label's owner.
+- **Placement.** It goes straight below the column's lowest label block. If that spot meets another placed cursor, that cursor's column joins this one and the cursor steps on past it. Each step moves down past the cursor it met, so the loop ends.
+- **Pill widths.** Widths come from text metrics on an `OffscreenCanvas`, with no layout read: the name's and say's text in the CSS font, the padding, and 2 px of margin. Where there's no canvas (jsdom), they're estimated on the wide side. Live, the estimates came out 2.5 to 5 px over the measured widths.
+- **Review cases.** (0,19) and (0,30,15) now step 42/42. (0,60,0,0) puts the later two under the 60 px cursor. A target on another cursor's name pill to the right joins that column.
+- **Fuzz.** 160 random sets of 2 to 5 cursors, at zooms 0.25 to 3, with random arrival order and says. Checked apart from the module (signed distances and the CSS numbers): no pair comes within 2 px, and no arrow sits inside a foreign unit.
+
+### Nothing jumps (r15 item 2)
+
+- Each spot carries a signature: the members it sits under, with their says. When the signature changes (a say, a join, a leave), the layer passes `shifted` to `stepMotion` and the cursor glides on the land spring.
+- When a chain splits, every cursor that has to move glides together. A test covers the four-member chain from review 6 with its second member leaving. The two below glide 42 px, the step between them never closes, and no frame moves 12 px.
+- A middle member leaving closes up under its fading self, as GM ruled.
+
+### Zoom (r15 item 4, review 6 MEDIUM-1)
+
+- Steps are screen px. With the signature unchanged, the spot moving on its carrier (a zoom, the column's head carried by its node) carries the tip kinematically.
+- A resting cursor is placed in the zoom's own frame. The store subscription runs the loop right away when the zoom changed, instead of waking it for the next frame. Live, the first build without this showed steps of 37 to 53 px while zooming, one frame late.
+- A cursor carried by a node with a new stamp joins on `targetsMeet` (the same rule), not the old 16 px.
+
+### Says (r15 item 3, review 6 LOW-1)
+
+- **Appearing.** A new say pill mounts hidden (`data-say-wait`; CSS sets `animation: none; opacity: 0`). The loop keeps running until the room under it is clear: no resting or landing cursor meets the cursor with its say, measured at their drawn positions. Then the attribute goes and the say fades in on its own animation.
+  - There's a 600 ms cap.
+  - Cursors that are flying don't count. That exclusion has no test: the F24 mutant survives.
+  - Live, the say waited 13 to 14 frames (about 230 ms), and showed when the cursor below was 64.4 of its 65 px down.
+- **Leaving.** A say that goes fades out first; the cursors below close up after.
+- **Reduced motion.** Everything is instant: no wait.
+- A say waiting through a hidden tab, or through a snap, shows on the next frame.
+
+### The conftest guard (review 6 MEDIUM-1, LOW-1, N1, N4); tests only
+
+- Markers are read with `is True`. A Mock makes up the marker attribute, so 16 files' AsyncMock stand-ins used to pass as already checked.
+- Stand-ins are wrapped in `_CheckedStandIn`, a proxy:
+  - a call runs both checks, then the stand-in;
+  - attribute reads and writes go to the stand-in, so `await_args` and `assert_awaited_once_with` still work.
+- `send_bytes` is wrapped, and bytes are decoded.
+- The header no longer claims the check can't be blinded. LOW-1's other routes (a class patch, `mock.patch.object`, a thread after the call phase) are named as gaps, with the AST guards covering `main.py`.
+- **AST (LOW-2, N2).** `person_only_sends` now also reads:
+  - a dict with a `"session"` key built from presence (a literal `agentPresence` type, or a spread);
+  - `e["session"] = ...` on a bound name;
+  - `dict(type="agentPresenceReplay", ...)`;
+  - either branch of an `if`;
+  - a loop over a list of person-only frames;
+  - `self.x`;
+  - `functools.partial(sender, ...)` and `getattr(manager, "<sender>")`.
+
+  There are 12 new person-only shapes and 3 new allowed shapes. `main.py` still has exactly one person-only send, the replay after `promote`.
+- **personNodeMoves (LOW-3).** A test for each clear (a replacing sync, an agent's clear, a project load), and a y-only undo.
+- The backend boundary is unchanged: no diff in `main.py`, `services/`, `person_gate.py`, `scene_keys.py` or `person_session.py`.
+
+### Checks (round 4d)
+
+- `tsc -b` exit 0; `npm run lint` exit 0.
+- **Focused vitest.** `--maxWorkers=2`, 143 files in four explicit arrays: every test that reads `src/` or `styles/`, plus the cursor, move and promote files. 731 + 369 + 624 + 614 = 2,338 passed. The cursor files were rerun after the last layer change: 272 passed.
+- **Isolated pytest.**
+  - 125 focused files: 4,346 passed and 1 failed. The failure is `test_cli_apply::test_arrange_from_the_builder_and_in_the_reply`, an order flake after `test_canvas_pins::test_websocket_sends_pins_after_graph_sync`. It fails 1 run in 4 with main's own conftest and tests too, so it isn't from this PR. A socket closed mid-send seems to leave `websocket_endpoint` without its `disconnect`. That's in `main.py`, which is out of scope here, so it's noted, not fixed.
+  - Each cursor file alone: sessions 53, review2 29, round4 40, round4c 42, canvas_pins 39.
+  - The 16 AsyncMock files: 1,110 passed.
+- **Build budget.** Pass: 443,707 B raw and 136,226 gzip. The cursor chunk is 29,081 B (4c: 25,104).
+- **Mutation checks.**
+  - Frontend: 30 run.
+    - Caught: all but two. That includes P3 to P6 (review 6's survivors) and the same-frame zoom carry.
+    - F10 (no merge on hit) was equivalent, so I removed that code.
+    - Not caught: F9 (no arrow-to-arrow distance) and F24 (flying cursors count for a say's room). F9 is equivalent: the pills hang right-below every arrow, so two arrows can't come close without a pill or an owned box meeting first. F24 has no test.
+  - Backend: 18, all caught. They include review 6's C15 (bytes decode), A2 and A5, the proxy, the `is True` marker and every new AST reader.
+  - N3's four redundant conftest layers are equivalent mutants (review 6 agreed) and weren't re-run.
+- **Live at 1440, Restraint, on 8780 and 5780.**
+  - The canary blocked 8000, 8005, 5173, 8840 and outside. `blocked.log` holds only canary lines, and there were 0 page errors.
+  - Three cursors: steps of 42 and 42, dx 0, least painted gap 4.8 px, 0 pairs meeting. The same through 67 drag frames.
+  - Zoom: from 1 to 0.5 the steps were 41.999 to 42.001 px over 41 frames; from 0.5 to 2 the same.
+  - A say on the top cursor: hidden for 13 to 14 frames while the second glided to 65, then faded in.
+  - A say on the middle cursor: steps of 42 and 65, with the glide over 17 in-between frames at 2.67 px per frame at most. Back to 42 and 42 after.
+  - Near targets 10 px apart: one column, step 42. (0,30,15): steps of 42 and 42.
+  - The node library panel a new project opens with still covers the node's left side in shots 3 and 5.

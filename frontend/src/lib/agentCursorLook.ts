@@ -34,11 +34,13 @@ export const AGENT_CURSOR_ARROW_STROKE = 1.4;
  *  pill, the same height. A name pill can carry a 1 px edge ring outside it
  *  (pillEdge); the say pill's hairline is inset. */
 export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 1 } as const;
-/** A cursor whose target is within `radiusPx` of a live cursor's tip joins
- *  that cursor's column, straight below it, never to the right; the step is
- *  the smallest that leaves `clearPx` between the painted shapes (GM -
- *  Design, PR #211 r12 and r13; stackStepPx). */
-export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2 } as const;
+/** A cursor whose target is within `radiusPx` of a column member's target
+ *  (or whose shape at its target meets a placed cursor) joins that column,
+ *  straight below it, never to the right. Its arrow's painted top sits
+ *  `gapPx` under the earlier label block; `clearPx` is the least painted
+ *  gap between any two cursors (GM - Design, PR #211 r14 and review 6;
+ *  stackStepPx, deStackLayout). */
+export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2, gapPx: 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
 /** A chat title in a cursor's name is cut to this many characters. */
@@ -288,7 +290,14 @@ interface StackEntry {
   since: number;
   /** Its say pill shows (or is fading out): its label block is name plus say. */
   say?: boolean;
+  /** Its pills' widths in screen px (labelWidths); a default when unknown. */
+  nameW?: number;
+  sayW?: number;
 }
+
+/** Pill widths assumed when a caller doesn't know them. */
+const DEFAULT_NAME_W = 4 * AGENT_CURSOR_PILL.height;
+const DEFAULT_SAY_W = 8 * AGENT_CURSOR_PILL.height;
 
 /** An axis-aligned box. */
 interface Box { left: number; top: number; right: number; bottom: number }
@@ -302,7 +311,8 @@ function pointToBox(p: Point, b: Box): number {
 function pointToSegment(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  const len = dx * dx + dy * dy;
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len));
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
 }
 
@@ -337,48 +347,127 @@ function segmentToBox(a: Point, b: Point, box: Box): number {
   return Math.min(pointToBox(a, box), pointToBox(b, box), ...corners.map((c) => pointToSegment(c, a, b)));
 }
 
+function cross(o: Point, a: Point, b: Point): number {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+/** Distance between segments a-b and c-d: 0 when they cross. */
+function segmentToSegment(a: Point, b: Point, c: Point, d: Point): number {
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+  return Math.min(pointToSegment(a, c, d), pointToSegment(b, c, d), pointToSegment(c, a, b), pointToSegment(d, a, b));
+}
+
 function boxToBox(a: Box, b: Box): number {
   return Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
 }
 
 /** A painted pill: its core segment's box (the pill less its round ends'
- *  radius) and that radius, edge ring included. Width doesn't matter
- *  stacked straight down from the same left, as long as the ends are round. */
+ *  radius) and that radius, edge ring included. */
 interface Pill { core: Box; radius: number }
 
-function pill(top: number, ring: number, dy = 0): Pill {
+function pill(top: number, ring: number, dy = 0, width = DEFAULT_NAME_W, dx = 0): Pill {
   const { left, height } = AGENT_CURSOR_PILL;
   const r = height / 2;
-  const width = 4 * height;
-  return { core: { left: left + r, right: left + width - r, top: top + r + dy, bottom: top + r + dy }, radius: r + ring };
+  const w = Math.max(width, height);
+  return { core: { left: left + r + dx, right: left + w - r + dx, top: top + r + dy, bottom: top + r + dy }, radius: r + ring };
 }
 
 /** The earlier cursor's painted label block: its name pill (edge ring
  *  included) and, while one shows, its say pill. */
 export function labelBlockPills(say: boolean): Pill[] {
   const { top, height, gap, ring } = AGENT_CURSOR_PILL;
-  return say ? [pill(top, ring), pill(top + height + gap, 0)] : [pill(top, ring)];
+  return say ? [pill(top, ring), pill(top + height + gap, 0, 0, DEFAULT_SAY_W)] : [pill(top, ring)];
 }
+
+/** The bottom of a cursor's painted label block below its origin, in screen
+ *  px: the name pill's ring, or the say pill under it. */
+export function labelBlockBottomPx(say: boolean): number {
+  const { top, height, gap, ring } = AGENT_CURSOR_PILL;
+  return say ? Math.max(top + height + ring, top + 2 * height + gap) : top + height + ring;
+}
+
+/** The top of the arrow's painted path below the cursor's origin (stroke included). */
+export const AGENT_CURSOR_ARROW_TOP = Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) - AGENT_CURSOR_ARROW_STROKE / 2;
 
 /**
  * How far apart, in screen px, a later cursor `dy` px straight below an
  * earlier one paints from the earlier one's label block: its arrow's
  * painted path (stroke included) and its own name pill (edge ring
  * included) against the earlier name pill (ring included) and say pill.
- * Negative when they overlap.
+ * Negative when they overlap. The floor under stackStepPx.
  */
 export function stackClearancePx(dy: number, earlierSay: boolean): number {
-  const block = labelBlockPills(earlierSay);
+  return cursorClearancePx(cursorShape({ x: 0, y: 0 }, earlierSay), cursorShape({ x: 0, y: dy }, false));
+}
+
+/** A cursor as painted, in screen px: its arrow's corners (the path at the
+ *  tip, stroke not included) and its pills. */
+export interface CursorShape {
+  arrow: Point[];
+  pills: Pill[];
+  /** Arrow and pills. */
+  bounds: Box;
+  /** The arrow's painted box. */
+  arrowBox: Box;
+  /** What the cursor owns: from its arrow's top to gapPx under its label
+   *  block, across arrow and pills. Another arrow in here reads as this
+   *  label's owner (GM - Design, PR #211 r14). */
+  unit: Box;
+}
+
+export function cursorShape(origin: Point, say: boolean, nameW = DEFAULT_NAME_W, sayW = DEFAULT_SAY_W): CursorShape {
+  const { top, height, gap, ring, left } = AGENT_CURSOR_PILL;
+  const arrow = AGENT_CURSOR_ARROW_POINTS.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y }));
+  const pills = [pill(top, ring, origin.y, nameW, origin.x)];
+  if (say) pills.push(pill(top + height + gap, 0, origin.y, sayW, origin.x));
   const half = AGENT_CURSOR_ARROW_STROKE / 2;
-  const points = AGENT_CURSOR_ARROW_POINTS.map((p) => ({ x: p.x, y: p.y + dy }));
-  const own = pill(AGENT_CURSOR_PILL.top, AGENT_CURSOR_PILL.ring, dy);
+  const bounds = {
+    left: origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half,
+    right: origin.x + Math.max(Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half, left + Math.max(nameW, height) + ring, say ? left + Math.max(sayW, height) : 0),
+    top: origin.y + AGENT_CURSOR_ARROW_TOP,
+    bottom: origin.y + labelBlockBottomPx(say),
+  };
+  const arrowBox = {
+    left: bounds.left,
+    right: origin.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half,
+    top: bounds.top,
+    bottom: origin.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) + half,
+  };
+  return { arrow, pills, bounds, arrowBox, unit: { ...bounds, bottom: bounds.bottom + AGENT_CURSOR_STACK.gapPx } };
+}
+
+/** Do two cursors meet: painted closer than clearPx, or either's arrow
+ *  inside what the other owns (beside its label)? */
+export function cursorsMeet(a: CursorShape, b: CursorShape): boolean {
+  const inside = (box: Box, unit: Box) => box.left < unit.right && box.right > unit.left && box.top < unit.bottom && box.bottom > unit.top;
+  return inside(a.arrowBox, b.unit) || inside(b.arrowBox, a.unit) || cursorClearancePx(a, b) < AGENT_CURSOR_STACK.clearPx - 1e-9;
+}
+
+/**
+ * The painted gap between two cursors, in screen px: every arrow against
+ * the other arrow (both strokes) and the other's pills, and pill against
+ * pill. Negative when they overlap.
+ */
+export function cursorClearancePx(a: CursorShape, b: CursorShape): number {
+  const far = boxToBox(a.bounds, b.bounds);
+  if (far > AGENT_CURSOR_STACK.clearPx + 1) return far;
+  const half = AGENT_CURSOR_ARROW_STROKE / 2;
   let clear = Infinity;
-  for (const p of block) {
-    for (let i = 0; i < points.length; i += 1) {
-      clear = Math.min(clear, segmentToBox(points[i], points[(i + 1) % points.length], p.core) - p.radius - half);
-    }
-    clear = Math.min(clear, boxToBox(own.core, p.core) - own.radius - p.radius);
+  const n = AGENT_CURSOR_ARROW_POINTS.length;
+  for (let i = 0; i < n; i += 1) {
+    const a0 = a.arrow[i];
+    const a1 = a.arrow[(i + 1) % n];
+    for (let j = 0; j < n; j += 1) clear = Math.min(clear, segmentToSegment(a0, a1, b.arrow[j], b.arrow[(j + 1) % n]) - 2 * half);
+    for (const p of b.pills) clear = Math.min(clear, segmentToBox(a0, a1, p.core) - p.radius - half);
+    const b0 = b.arrow[i];
+    const b1 = b.arrow[(i + 1) % n];
+    for (const p of a.pills) clear = Math.min(clear, segmentToBox(b0, b1, p.core) - p.radius - half);
   }
+  for (const p of a.pills) for (const q of b.pills) clear = Math.min(clear, boxToBox(p.core, q.core) - p.radius - q.radius);
   return clear;
 }
 
@@ -386,52 +475,151 @@ const stepCache = new Map<boolean, number>();
 
 /**
  * The step down, in whole screen px, from an earlier cursor to the one
- * stacked below it: the smallest that leaves AGENT_CURSOR_STACK.clearPx
- * between the later cursor's painted arrow and name pill and the earlier
- * cursor's painted label block (GM - Design, PR #211 r13 items 1 and 2).
- * 24 below a name; 47 below a name and a say pill.
+ * stacked below it (GM - Design, PR #211 r14): the later arrow's painted
+ * top sits AGENT_CURSOR_STACK.gapPx below the bottom of the earlier
+ * cursor's whole label block (name pill and ring, plus the say pill while
+ * one shows), so each arrow sits by its own label only. 42 below a name;
+ * 65 below a name and a say. The painted check (clearPx between arrow,
+ * pills and the earlier block) is the floor.
  */
 export function stackStepPx(earlierSay: boolean): number {
   const cached = stepCache.get(earlierSay);
   if (cached !== undefined) return cached;
-  let dy = 0;
-  while (stackClearancePx(dy, earlierSay) < AGENT_CURSOR_STACK.clearPx - 1e-9) dy += 1;
+  let floor = 0;
+  while (stackClearancePx(floor, earlierSay) < AGENT_CURSOR_STACK.clearPx - 1e-9) floor += 1;
+  const owned = Math.ceil(labelBlockBottomPx(earlierSay) + AGENT_CURSOR_STACK.gapPx - AGENT_CURSOR_ARROW_TOP - 1e-9);
+  const dy = Math.max(floor, owned);
   stepCache.set(earlierSay, dy);
   return dy;
 }
 
+/** Where a cursor lands, and what put it there: `sig` names the column
+ *  members it is stacked under (with their says), so a change in it is a
+ *  change of layout (a say, a join, a leave), and anything else moving the
+ *  spot is a ride (a node carried, a zoom). `above` lists those members. */
+export interface StackSpot { at: Point; sig: string; above: readonly string[] }
+
 /**
- * Where each cursor lands so no arrow or pill covers another's (GM - Design,
- * PR #211 r12 and r13). Cursors are placed in the order they came to their
- * spots. A cursor whose target is within 16 screen px of an earlier
- * cursor's placed tip (or its target) joins that cursor's column: it lands
- * straight below the column's last cursor, never to the right, by
- * stackStepPx of that cursor's label block (name, plus its say pill while
- * one shows). Joining is transitive, so near and identical targets make one
- * column, ordered by arrival. Only live cursors are passed in: a leaving
- * one doesn't count. Targets and results are in flow coordinates.
+ * Where each cursor lands so no arrow sits beside or over a label or arrow
+ * that isn't its own (GM - Design, PR #211 r14 and review 6). Cursors are
+ * placed in the order they came to their spots. A cursor joins a column
+ * when its target is within 16 screen px of a member's target, or when its
+ * arrow and label at its own target would come within clearPx of any
+ * placed cursor: it lands straight below the column, never to the right, a
+ * stackStepPx under the lowest member's label block. Should that spot meet
+ * another placed cursor, that cursor's column joins this one and it steps
+ * on below it. Joining on targets is transitive, so near and identical
+ * targets make one column, ordered by arrival. Only live cursors are passed
+ * in: a leaving one doesn't count. Targets and results are in flow
+ * coordinates; every distance and step is in screen px at `zoom`.
  */
-export function deStack(cursors: readonly StackEntry[], zoom: number): Map<string, Point> {
-  const radius = AGENT_CURSOR_STACK.radiusPx / zoom;
-  const placed = new Map<string, Point>();
+export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
+  const { radiusPx } = AGENT_CURSOR_STACK;
   const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) <= radius + 1e-9;
-  const columns: { x: number; members: { tip: Point; target: Point; say: boolean }[] }[] = [];
+  interface Placed { key: string; tip: Point; target: Point; say: boolean; shape: CursorShape; column: number; sig: string; above: string[] }
+  const placed: Placed[] = [];
+  // Each column's x (its head's) and its members; a merged column points on.
+  const columns: { x: number; members: Placed[]; into: number | null }[] = [];
+  const root = (c: number): number => {
+    let at = c;
+    while (columns[at].into !== null) at = columns[at].into!;
+    return at;
+  };
+  const result = new Map<string, StackSpot>();
   for (const cursor of ordered) {
     const say = Boolean(cursor.say);
-    const column = columns.find((c) => c.members.some((m) => near(cursor.target, m.tip) || near(cursor.target, m.target)));
-    let at: Point;
-    if (!column) {
-      at = { ...cursor.target };
-      columns.push({ x: at.x, members: [{ tip: at, target: cursor.target, say }] });
-    } else {
-      const last = column.members[column.members.length - 1];
-      at = { x: column.x, y: last.tip.y + stackStepPx(last.say) / zoom };
-      column.members.push({ tip: at, target: cursor.target, say });
+    const nameW = cursor.nameW ?? DEFAULT_NAME_W;
+    const sayW = cursor.sayW ?? DEFAULT_SAY_W;
+    const target = { x: cursor.target.x * zoom, y: cursor.target.y * zoom };
+    const own = cursorShape(target, say, nameW, sayW);
+    const hit = new Set<number>();
+    for (const p of placed) {
+      if (Math.hypot(p.target.x - target.x, p.target.y - target.y) <= radiusPx + 1e-9 || cursorsMeet(own, p.shape)) {
+        hit.add(root(p.column));
+      }
     }
-    placed.set(cursor.key, at);
+    let entry: Placed;
+    if (hit.size === 0) {
+      entry = { key: cursor.key, tip: target, target, say, shape: own, column: columns.length, sig: '', above: [] };
+      columns.push({ x: target.x, members: [entry], into: null });
+    } else {
+      // The oldest column it meets takes it; any other column its spot
+      // then meets joins that one (below), so it goes under that one too.
+      const first = Math.min(...hit);
+      const join = (c: number) => {
+        columns[first].members.push(...columns[c].members);
+        columns[c].members = [];
+        columns[c].into = first;
+      };
+      const x = columns[first].x;
+      for (;;) {
+        let under = columns[first].members[0];
+        for (const m of columns[first].members) {
+          if (m.tip.y + stackStepPx(m.say) > under.tip.y + stackStepPx(under.say)) under = m;
+        }
+        const tip = { x, y: under.tip.y + stackStepPx(under.say) };
+        const shape = cursorShape(tip, say, nameW, sayW);
+        const meets = placed.find((p) => root(p.column) !== first && cursorsMeet(shape, p.shape));
+        if (meets) {
+          join(root(meets.column));
+          continue;
+        }
+        const head = columns[first].members[0];
+        entry = {
+          key: cursor.key, tip, target, say, shape, column: first,
+          sig: `${under.sig || head.key}>${under.key}${under.say ? '+' : ''}`,
+          above: [...under.above, under.key],
+        };
+        columns[first].members.push(entry);
+        break;
+      }
+    }
+    placed.push(entry);
+    result.set(cursor.key, { at: { x: entry.tip.x / zoom, y: entry.tip.y / zoom }, sig: entry.sig, above: entry.above });
   }
-  return placed;
+  return result;
+}
+
+/** Would these two cursors, each on its own target, join one column: the
+ *  targets within the join radius, or the shapes meeting (deStackLayout)? */
+export function targetsMeet(a: StackEntry, b: StackEntry, zoom: number): boolean {
+  const ta = { x: a.target.x * zoom, y: a.target.y * zoom };
+  const tb = { x: b.target.x * zoom, y: b.target.y * zoom };
+  if (Math.hypot(ta.x - tb.x, ta.y - tb.y) <= AGENT_CURSOR_STACK.radiusPx + 1e-9) return true;
+  return cursorsMeet(cursorShape(ta, Boolean(a.say), a.nameW, a.sayW), cursorShape(tb, Boolean(b.say), b.nameW, b.sayW));
+}
+
+/** Each cursor's spot (deStackLayout), in flow coordinates. */
+export function deStack(cursors: readonly StackEntry[], zoom: number): Map<string, Point> {
+  return new Map([...deStackLayout(cursors, zoom)].map(([key, spot]) => [key, spot.at]));
+}
+
+/** Text widths for the pills, without a layout read: the canvas's text
+ *  metrics where there is one, else an estimate on the wide side. */
+let textContext: { font: string; measureText(text: string): { width: number } } | null | undefined;
+function textWidthPx(text: string, weight: number): number {
+  if (textContext === undefined) {
+    try {
+      textContext = typeof OffscreenCanvas !== 'undefined'
+        ? (new OffscreenCanvas(1, 1).getContext('2d') as unknown as typeof textContext) ?? null
+        : null;
+    } catch {
+      textContext = null;
+    }
+  }
+  if (!textContext) return text.length * 7;
+  textContext.font = `${weight} 11px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  // letter-spacing 0.01em on the name.
+  return textContext.measureText(text).width + 0.11 * text.length;
+}
+
+/** The name and say pills' widths in screen px (agentCursor.css: 7 px and
+ *  9 px of padding, the say pill at most 260 px), 2 px on the wide side. */
+export function labelWidths(name: string, say: string | null | undefined): { nameW: number; sayW: number } {
+  return {
+    nameW: Math.ceil(textWidthPx(name, 600) + 14 + 2),
+    sayW: say ? Math.min(260, Math.ceil(textWidthPx(say, 500) + 18 + 2)) : 0,
+  };
 }
 
 /** Keys in paint order: the most recently active cursor last, so it's on top. */

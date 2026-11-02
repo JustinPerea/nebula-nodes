@@ -145,6 +145,15 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   animation: agent-cursor-say-out var(--agent-cursor-say-fade) both;
 }
 
+/* A say pill just shown waits, hidden, while the cursors below glide out of
+   its way, then fades in: its animation starts when the attribute goes (GM -
+   Design, PR #211 review 6, item 3). The layer never sets it under reduced
+   motion. */
+.agent-cursor[data-say-wait='true'] .agent-cursor__say {
+  animation: none;
+  opacity: 0;
+}
+
 /* A leaving cursor's pills keep their layout and fade only with the tip, on
    the opacity spring set from JS: no pill runs a curve of its own (GM -
    Design, PR #211 review 5, item 4). A say pill's own fade in or out stops

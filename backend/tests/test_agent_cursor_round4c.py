@@ -182,6 +182,72 @@ def test_an_instance_level_stand_in_is_checked_too(sockets, monkeypatch):
     assert capture.sent[-1] == person  # still delivered to the stand-in
 
 
+def test_an_asyncmock_stand_in_is_checked_and_still_reads_as_the_mock(sockets, monkeypatch):
+    """Review 6, MEDIUM-1: a Mock makes up any attribute, the check's marker
+    too, so it used to pass as checked and go unwrapped (16 files patch a
+    sender with AsyncMock). It is wrapped now, and the test still reads the
+    mock's own attributes through the wrapper."""
+    from unittest.mock import AsyncMock
+
+    api = sockets
+    event, person = _person(api.main.agent_presence)
+    fake = AsyncMock()
+    monkeypatch.setattr(api.main.manager, "broadcast_raw", fake)
+    wrapped = vars(api.main.manager)["broadcast_raw"]
+    assert wrapped is not fake and getattr(wrapped, "_nebula_cursor_route", None) is True
+    with watch_cursor_routes() as stray:
+        asyncio.run(api.main.manager.broadcast_raw(person))  # the person form to every socket
+    # Both checks: it went around the route with a target, and it is person-only.
+    assert [line.split(":")[0] for line in stray] == ["broadcast_raw (a stand-in)"] * 2, stray
+    assert "a person-only frame for the other sockets" in stray[1], stray
+    # The mock got it, and reads as itself: await_args, assert_awaited_once_with.
+    assert api.main.manager.broadcast_raw.await_args.args == (person,)
+    api.main.manager.broadcast_raw.assert_awaited_once_with(person)
+    # A stand-in that rebinds an attribute later is read as it is now (N4).
+    fake.calls = ["later"]
+    assert api.main.manager.broadcast_raw.calls == ["later"]
+    # And one set through it lands on the stand-in.
+    api.main.manager.broadcast_raw.marker = 1
+    assert fake.marker == 1
+
+
+def test_a_magicmock_stand_in_sent_the_agent_form_is_left_alone(sockets, monkeypatch):
+    from unittest.mock import MagicMock
+
+    api = sockets
+    event, _ = _person(api.main.agent_presence)
+    fake = MagicMock()
+    monkeypatch.setattr(api.main.manager, "broadcast_browser", fake)
+    with watch_cursor_routes() as stray:
+        api.main.manager.broadcast_browser({"type": "graphSync"})
+    assert stray == [] and fake.call_args.args == ({"type": "graphSync"},)
+
+
+def test_the_socket_check_reads_bytes_too():
+    """Review 6, N1: send_bytes is wrapped, and a frame sent as bytes is read."""
+    import main
+    from starlette.websockets import WebSocket
+
+    assert getattr(WebSocket.send_bytes, "_nebula_cursor_route", False) is True
+
+    class Sink(WebSocket):
+        def __init__(self) -> None:
+            self.frames: list[object] = []
+
+        async def send(self, message):  # type: ignore[no-untyped-def]
+            self.frames.append(message)
+
+    other = Sink()
+    assert person_only_frame(b'{"type": "agentPresenceReplay", "cursors": []}')
+    assert not person_only_frame(b'{"type": "agentPresence", "target": null}')
+    with watch_cursor_routes() as stray:
+        asyncio.run(other.send_bytes(b'{"type": "agentPresence", "target": null}'))
+        assert stray == []
+        asyncio.run(other.send_bytes(b'{"type": "agentPresence", "session": {"key": "k", "ordinal": 1}}'))
+    assert [line.split(":")[0] for line in stray] == ["send_bytes"], stray
+    assert main.manager is not None and len(other.frames) == 2
+
+
 def test_the_starlette_socket_check_reads_the_frame_and_the_socket():
     """The replay goes out on the socket itself (websocket_endpoint, after a
     verified hello): a person-only frame on a socket that isn't the person's
@@ -248,6 +314,20 @@ PERSON_SHAPES = {
     "replay literal": "await ws.send_text(json.dumps({'type': 'agentPresenceReplay', 'cursors': []}))",
     "copy": "p = _person_form(e, i, h)\n    await manager.broadcast_raw(dict(p))",
     "from another function": "await manager.broadcast_raw(build())",
+    # Review 6, N2.
+    "nested in a dict": "await manager.broadcast_others({'cursor': _person_form(e, i, h)})",
+    "sender alias": "send = manager.broadcast_others\n    await send(_person_form(e, i, h))",
+    # Review 6, LOW-2: built by hand, or sent another way.
+    "hand-built, a target": "await manager.broadcast_raw({'type': 'agentPresence', 'target': t, 'session': tag})",
+    "hand-built, no target": "await manager.broadcast_others({'type': 'agentPresence', 'target': None, 'say': 'x', 'session': tag})",
+    "spread plus session": "await manager.broadcast_raw({**agent_presence.point(i, target=None, say='x'), 'session': agent_presence.session_tag(i, s)})",
+    "session set on a name": "e = agent_presence.point(i, target=None, say='x')\n    e['session'] = agent_presence.session_tag(i, s)\n    await manager.broadcast_raw(e)",
+    "dict() replay": "await manager.broadcast_others(dict(type='agentPresenceReplay', cursors=agent_presence.replay()))",
+    "either branch": "p = _person_form(e, i, h)\n    await manager.broadcast_others(p if ok else e)",
+    "partial": "p = _person_form(e, i, h)\n    await functools.partial(manager.broadcast_others, p)()",
+    "getattr": "p = _person_form(e, i, h)\n    await getattr(manager, 'broadcast_raw')(p)",
+    "loop over a list": "p = _person_form(e, i, h)\n    for x in [p]:\n        await manager.broadcast_others(x)",
+    "on self": "self.p = _person_form(e, i, h)\n    await manager.broadcast_others(self.p)",
 }
 
 
@@ -263,7 +343,10 @@ def test_the_person_only_guard_catches_each_shape(shape):
     "p = _accepted_person_form(e, q)\n    await _broadcast_presence(e, p)",
     "await manager.broadcast_raw(_point(i, target=None, say='x'))",
     "await manager.broadcast_browser({'type': 'graphSync'})",
-], ids=["the route", "the route, named", "agent log", "not presence"])
+    "await manager.broadcast_raw({'type': 'graphSync', 'session': s})",
+    "await manager.broadcast_raw(dict(type='graphSync', session=s))",
+    "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(e if ok else {**e})",
+], ids=["the route", "the route, named", "agent log", "not presence", "another kind's session", "dict() of another kind", "agent forms either way"])
 def test_the_person_only_guard_lets_the_route_through(shape):
     assert person_only_sends(f"async def f():\n    {shape}\n") == []
 

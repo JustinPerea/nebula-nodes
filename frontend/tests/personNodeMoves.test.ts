@@ -113,6 +113,48 @@ describe('the person moves a node', () => {
     expect(placed('n1')).toBe(false);
   });
 
+  // Review 6, LOW-3: each replacement forgets the record itself. New nodes
+  // couldn't match it anyway, so these ask about the very move recorded.
+  it('a replacing sync (graphReplaced) forgets the record', async () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
+    const spot = position('n1')!;
+    expect(placedByPerson('n1', spot)).toBe(true);
+    await layoutSaved();
+    const event = { type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [node('n1', 20, 0)], edges: [], empty: false, graphReplaced: true } as unknown as ExecutionEvent;
+    for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
+    expect(placedByPerson('n1', spot)).toBe(false);
+  });
+
+  it("an agent's clear (a cleared sync) forgets the record", async () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
+    const spot = position('n1')!;
+    await layoutSaved();
+    const event = { type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true, cleared: true,
+      edit: { id: 'ed_clear', actor: { kind: 'agent', name: 'Codex' } } } as unknown as ExecutionEvent;
+    for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
+    expect(placedByPerson('n1', spot)).toBe(false);
+  });
+
+  it('opening a project (loadProjectGraph) forgets the record', async () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
+    const spot = position('n1')!;
+    await layoutSaved();
+    expect(useGraphStore.getState().loadProjectGraph([{ ...node('n1', 0, 0), position: spot }], [], [])).toBe(true);
+    expect(placedByPerson('n1', spot)).toBe(false);
+  });
+
+  it('an undo that moves a node along y only is recorded too', () => {
+    useGraphStore.setState({ nodes: [node('n1', 0, 0), node('n2', 0, 900)] });
+    useGraphStore.getState().autoLayout();
+    const arranged = position('n2')!;
+    expect(arranged.x).toBe(0);
+    expect(arranged.y).not.toBe(900);
+    forgetPersonPlaced();
+    useGraphStore.getState().undo();
+    expect(position('n2')).toEqual({ x: 0, y: 900 });
+    expect(placed('n2')).toBe(true);
+  });
+
   it('remembers a bounded number of nodes, the least recently moved going first', () => {
     const spots = Array.from({ length: PERSON_NODE_MOVES_MAX + 1 }, (_, i) => ({ x: i, y: 0 }));
     notePersonPlaced({ k0: spots[0] });

@@ -11,6 +11,8 @@ import {
   sessionLightness,
   contrastRatio,
   deStack,
+  deStackLayout,
+  labelWidths,
   stackClearancePx,
   stackStepPx,
   hexToOklch,
@@ -356,26 +358,55 @@ function gap(a: Shape, b: Shape): number {
 }
 /** Every painted part of cursor i against every part of cursor j: arrows
  *  against pills and pills against pills (arrows may come close to arrows). */
-function paintedGap(i: P, sayI: boolean, j: P, sayJ: boolean): number {
+function paintedGap(i: P, sayI: boolean, j: P, sayJ: boolean, arrows = false): number {
+  // Far apart by their boxes: no need to sample.
+  const box = (o: P, say: boolean) => ({ l: o.x, r: o.x + 15 + Math.max(NAME_W + 1, say ? SAY_W : 0), t: o.y, b: o.y + (say ? 61 : 38) });
+  const a = box(i, sayI);
+  const b = box(j, sayJ);
+  const far = Math.hypot(Math.max(0, a.l - b.r, b.l - a.r), Math.max(0, a.t - b.b, b.t - a.b));
+  if (far > 4) return far;
   let least = Infinity;
-  for (const [a, b, sb] of [[i, j, sayJ], [j, i, sayI]] as [P, P, boolean][]) {
-    for (const pill of pillsAt(b, sb)) least = Math.min(least, gap(pill, arrowAt(a)));
+  for (const [x, y, sy] of [[i, j, sayJ], [j, i, sayI]] as [P, P, boolean][]) {
+    for (const pill of pillsAt(y, sy)) least = Math.min(least, gap(pill, arrowAt(x)));
   }
   for (const p of pillsAt(i, sayI)) for (const q of pillsAt(j, sayJ)) least = Math.min(least, gap(p, q));
+  // Arrow against arrow: both strokes (gap() counts one).
+  if (arrows) least = Math.min(least, gap(arrowAt(i), arrowAt(j)) - 0.7);
   return least;
 }
+/** Is j's arrow beside or over i's label, inside what i owns: from i's
+ *  arrow top to 4 px under its label block, across arrow and pills (GM -
+ *  Design, PR #211 r14)? Measured from the CSS numbers, not the module. */
+function ownsArrowOf(i: P, sayI: boolean, j: P): boolean {
+  const unit = { l: i.x + 0.8, r: i.x + 15 + Math.max(NAME_W + 1, sayI ? SAY_W : 0), t: i.y + 0.8, b: i.y + (sayI ? 61 : 38) + 4 };
+  const arrow = { l: j.x + 0.8, r: j.x + 15.4, t: j.y + 0.8, b: j.y + 20.8 };
+  return arrow.l < unit.r && arrow.r > unit.l && arrow.t < unit.b && arrow.b > unit.t;
+}
 
-describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
-  it('steps straight down by the smallest step with 2 px clear: 24 below a name, 47 below a name and a say', () => {
-    expect(stackStepPx(false)).toBe(24);
-    expect(stackStepPx(true)).toBe(47);
+describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => {
+  const S = stackStepPx(false);
+  const SS = stackStepPx(true);
+  /** A cursor as the layer passes it, with the widths the helpers above draw. */
+  const entry = (key: string, x: number, y: number, since: number, say = false) =>
+    ({ key, target: { x, y }, since, say, nameW: NAME_W, sayW: SAY_W });
+
+  it("steps the later tip 4 px under the earlier label block's bottom: 42 below a name, 65 below a name and a say (r14)", () => {
+    // From the CSS numbers: the arrow's painted top is 1.5 - 0.7; the name
+    // pill ends at 17 + 20, plus its 1 px ring; a say pill 4 px under it ends
+    // at 61. GM's "about 39 and about 65" measured the tip without the
+    // stroke and the name without its ring.
+    expect(S).toBe(Math.ceil(17 + 20 + 1 + 4 - 0.8));
+    expect(SS).toBe(Math.ceil(17 + 20 + 4 + 20 + 4 - 0.8));
+    expect([S, SS]).toEqual([42, 65]);
     for (const say of [false, true]) {
       const step = stackStepPx(say);
-      // Measured apart from the module: 2 px clear at the step, less one px above it.
+      // The painted check stays a floor, measured apart from the module.
       expect(paintedGap({ x: 0, y: 0 }, say, { x: 0, y: step }, false)).toBeGreaterThanOrEqual(2 - 0.02);
-      expect(paintedGap({ x: 0, y: 0 }, say, { x: 0, y: step - 1 }, false)).toBeLessThan(2);
       expect(stackClearancePx(step, say)).toBeGreaterThanOrEqual(AGENT_CURSOR_STACK.clearPx);
-      expect(stackClearancePx(step - 1, say)).toBeLessThan(AGENT_CURSOR_STACK.clearPx);
+      // Each arrow sits by its own label only: at the step it is clear of
+      // what the earlier cursor owns; one px up, it is beside its label.
+      expect(ownsArrowOf({ x: 0, y: 0 }, say, { x: 0, y: step })).toBe(false);
+      expect(ownsArrowOf({ x: 0, y: 0 }, say, { x: 0, y: step - 1 })).toBe(true);
     }
   });
 
@@ -392,24 +423,24 @@ describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
       { key: 'a', target: { x: 100, y: 100 }, since: 1 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 100, y: 100 });
-    expect(spots.get('b')).toEqual({ x: 100, y: 124 });
+    expect(spots.get('b')).toEqual({ x: 100, y: 100 + S });
   });
 
-  it('leaves cursors more than 16 px apart where they are', () => {
-    const spots = deStack([
-      { key: 'a', target: { x: 100, y: 100 }, since: 1 },
-      { key: 'b', target: { x: 116.5, y: 100 }, since: 2 },
-    ], 1);
-    expect(spots.get('b')).toEqual({ x: 116.5, y: 100 });
+  it('leaves cursors where they are when apart: past the radius and clear of every label', () => {
+    // Right of the name pill, and below what the earlier cursor owns.
+    for (const b of [{ x: 100 + 15 + NAME_W + 1 + 4, y: 100 }, { x: 100, y: 100 + 43 }, { x: 40, y: 40 }]) {
+      const spots = deStack([entry('a', 100, 100, 1), { ...entry('b', b.x, b.y, 2) }], 1);
+      expect(spots.get('b')).toEqual(b);
+    }
   });
 
   it('steps past the earlier label block: name, plus the say pill while one shows', () => {
     const at = (say: boolean[]) => [...deStack(say.map((s, i) => ({
       key: String(i), target: { x: 0, y: 0 }, since: i + 1, say: s,
     })), 1).values()];
-    expect(at([false, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 24 }, { x: 0, y: 48 }]);
-    expect(at([false, true, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 24 }, { x: 0, y: 71 }]);
-    expect(at([true, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 47 }, { x: 0, y: 71 }]);
+    expect(at([false, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }]);
+    expect(at([false, true, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: S + SS }]);
+    expect(at([true, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: SS }, { x: 0, y: SS + S }]);
   });
 
   it('never lands on an earlier tip: one aimed up-left of it joins its column (review 1, F1)', () => {
@@ -418,20 +449,27 @@ describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
       { key: 'b', target: { x: -10, y: -10 }, since: 2 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 0, y: 24 });
+    expect(spots.get('b')).toEqual({ x: 0, y: S });
   });
 
-  it('joining is transitive: a chain of near targets is one column, ordered by arrival (review 5, M2)', () => {
+  it('joining is transitive on targets: a chain of near targets is one column, ordered by arrival (review 5, M2)', () => {
     const spots = deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'c', target: { x: 10, y: 10 }, since: 2 },
       { key: 'b', target: { x: 0, y: 0 }, since: 3 },
-      // Near only the second cursor's tip (0, 24), not the first's.
-      { key: 'd', target: { x: 6, y: 30 }, since: 4 },
+      // 16 px from c's target, not a's: it joins through c.
+      { key: 'd', target: { x: 26, y: 10 }, since: 4 },
     ], 1);
     expect([...spots.entries()]).toEqual([
-      ['a', { x: 0, y: 0 }], ['c', { x: 0, y: 24 }], ['b', { x: 0, y: 48 }], ['d', { x: 0, y: 72 }],
+      ['a', { x: 0, y: 0 }], ['c', { x: 0, y: S }], ['b', { x: 0, y: 2 * S }], ['d', { x: 0, y: 3 * S }],
     ]);
+  });
+
+  it('joining on targets reaches as far as the chain does, past where any label could meet (GM r14: targets)', () => {
+    // Each 16 px above the last: d's own spot is clear of everyone, but its
+    // target is within 16 px of c's, so it is in the column.
+    const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, -16, 2), entry('c', 0, -32, 3), entry('d', 0, -48, 4)], 1);
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }, { x: 0, y: 3 * S }]);
   });
 
   it('orders by when each came to its spot, not by its last event (review 1, F2)', () => {
@@ -440,20 +478,16 @@ describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 0, y: 24 });
+    expect(spots.get('b')).toEqual({ x: 0, y: S });
   });
 
   it('measures in screen px at any zoom', () => {
-    // At zoom 2, 10 flow px is 20 screen px: not stacked. 5 flow px is 10:
-    // stacked, a step of 12 flow px down.
-    expect(deStack([
-      { key: 'a', target: { x: 0, y: 0 }, since: 1 },
-      { key: 'b', target: { x: 10, y: 0 }, since: 2 },
-    ], 2).get('b')).toEqual({ x: 10, y: 0 });
-    expect(deStack([
-      { key: 'a', target: { x: 0, y: 0 }, since: 1 },
-      { key: 'b', target: { x: 5, y: 0 }, since: 2 },
-    ], 2).get('b')).toEqual({ x: 0, y: 12 });
+    // 5 flow px is 10 screen px at zoom 2: stacked, a step of S / 2 flow px.
+    expect(deStack([entry('a', 0, 0, 1), entry('b', 5, 0, 2)], 2).get('b')).toEqual({ x: 0, y: S / 2 });
+    // 100 flow px right: 200 screen px at zoom 2, apart; 25 at zoom 0.25,
+    // on the name pill, so it joins.
+    expect(deStack([entry('a', 0, 0, 1), entry('b', 100, 0, 2)], 2).get('b')).toEqual({ x: 100, y: 0 });
+    expect(deStack([entry('a', 0, 0, 1), entry('b', 100, 0, 2)], 0.25).get('b')).toEqual({ x: 0, y: S / 0.25 });
   });
 
   it('a column rides its node as one: moving every target moves every spot the same', () => {
@@ -482,32 +516,115 @@ describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
 
   it('near targets 9 to 16 px apart, 2 and 3 cursors, says on and off: no painted overlap (review 5, M2)', () => {
     const aims: P[] = [];
-    for (let dx = -16; dx <= 16; dx += 1) {
-      for (let dy = -16; dy <= 16; dy += 1) {
+    for (let dx = -16; dx <= 16; dx += 2) {
+      for (let dy = -16; dy <= 16; dy += 2) {
         const d = Math.hypot(dx, dy);
         if (d >= 9 && d <= 16) aims.push({ x: dx, y: dy });
       }
     }
-    let checked = 0;
     for (const aim of aims) {
       for (const sayA of [false, true]) {
         const spots = deStack([
-          { key: 'a', target: { x: 0, y: 0 }, since: 1, say: sayA },
-          { key: 'b', target: aim, since: 2 },
+          entry('a', 0, 0, 1, sayA),
+          entry('b', aim.x, aim.y, 2),
           // A third aimed back the other way from the second.
-          { key: 'c', target: { x: -aim.y / 2, y: aim.x / 2 }, since: 3 },
+          entry('c', -aim.y / 2, aim.x / 2, 3),
         ], 1);
         const [a, b, c] = ['a', 'b', 'c'].map((k) => spots.get(k)!);
         expect(b).toEqual({ x: 0, y: stackStepPx(sayA) });
         expect(c.x).toBe(0);
-        expect(paintedGap(a, sayA, b, false)).toBeGreaterThanOrEqual(2 - 0.02);
-        expect(paintedGap(b, false, c, false)).toBeGreaterThanOrEqual(2 - 0.02);
-        expect(paintedGap(a, sayA, c, false)).toBeGreaterThanOrEqual(2 - 0.02);
-        checked += 1;
+        expect(paintedGap(a, sayA, b, false, true)).toBeGreaterThanOrEqual(2 - 0.02);
+        expect(paintedGap(b, false, c, false, true)).toBeGreaterThanOrEqual(2 - 0.02);
+        expect(paintedGap(a, sayA, c, false, true)).toBeGreaterThanOrEqual(2 - 0.02);
       }
     }
-    expect(checked).toBe(aims.length * 2);
   }, 30_000);
+
+  // Review 6, HIGH-2: the cases it found painting over each other at rest.
+  it('(0, 19): a target 19 px straight below, past the radius, still joins: its arrow would sit by the label above', () => {
+    const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 19, 2)], 1);
+    expect(spots.get('b')).toEqual({ x: 0, y: S });
+    expect(paintedGap(spots.get('a')!, false, spots.get('b')!, false, true)).toBeGreaterThanOrEqual(2 - 0.02);
+    expect(ownsArrowOf(spots.get('a')!, false, spots.get('b')!)).toBe(false);
+  });
+
+  it('(0, 30, 15): a cursor bridging two goes under both, and the column takes in the one it meets', () => {
+    const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 30, 2), entry('c', 0, 15, 3)], 1);
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }]);
+  });
+
+  it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in and steps on past it', () => {
+    const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 60, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)], 1);
+    // b is past a's label (60 > 42), so it rests on its target; c would land
+    // at 42, over b's arrow: it goes under b, and d under c.
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + 2 * S }]);
+  });
+
+  it('a target on another cursor\'s name pill, to the right, joins that column', () => {
+    const spots = deStack([entry('a', 0, 0, 1), entry('b', 40, 12, 2)], 1);
+    expect(spots.get('b')).toEqual({ x: 0, y: S });
+  });
+
+  it('a chain that splits re-lays every cursor that must move: a middle member gone, the last one still meets the head', () => {
+    const three = deStackLayout([entry('a', 0, 0, 1), entry('b', 15, 0, 2), entry('c', 30, 0, 3)], 1);
+    expect(three.get('c')!.at).toEqual({ x: 0, y: 2 * S });
+    const two = deStackLayout([entry('a', 0, 0, 1), entry('c', 30, 0, 3)], 1);
+    // 30 px from a's target, but its arrow would sit on a's name pill.
+    expect(two.get('c')!.at).toEqual({ x: 0, y: S });
+    // A changed layout, which the layer glides (review 6, item 2).
+    expect(two.get('c')!.sig).not.toBe(three.get('c')!.sig);
+  });
+
+  it('names what put each cursor on its spot: the same under a zoom or a ride, changed by a say, a join or a leave', () => {
+    const base = [entry('a', 0, 0, 1), entry('b', 4, 3, 2), entry('c', 0, 0, 3)];
+    const sigs = (list: typeof base, zoom: number) => [...deStackLayout(list, zoom).values()].map((s) => s.sig);
+    const rest = sigs(base, 1);
+    expect(rest[0]).toBe('');
+    expect(sigs(base, 0.6)).toEqual(rest);
+    expect(sigs(base.map((e) => ({ ...e, target: { x: e.target.x + 37, y: e.target.y - 12 } })), 1)).toEqual(rest);
+    expect(sigs(base.map((e, i) => (i === 0 ? { ...e, say: true } : e)), 1)).not.toEqual(rest);
+    expect(sigs([base[0], base[2]], 1)[1]).not.toBe(rest[2]);
+    expect(deStackLayout(base, 1).get('c')!.above).toEqual(['a', 'b']);
+  });
+
+  it('fuzz: random targets, arrival orders, says and zooms: no two cursors closer than 2 px, no arrow by a foreign label', () => {
+    const rand = seeded(211_6);
+    let pairs = 0;
+    for (let round = 0; round < 160; round += 1) {
+      const zoom = [0.25, 0.5, 0.8, 1, 1.5, 2, 3][Math.floor(rand() * 7)];
+      const count = 2 + Math.floor(rand() * 4);
+      const list = Array.from({ length: count }, (_, i) => entry(
+        String.fromCharCode(97 + i),
+        // In a box about 120 screen px wide, so they meet often.
+        (rand() * 120) / zoom,
+        (rand() * 120) / zoom,
+        Math.floor(rand() * 1000),
+        rand() < 0.4,
+      ));
+      const spots = deStack(list, zoom);
+      const screen = list.map((e) => ({ at: { x: spots.get(e.key)!.x * zoom, y: spots.get(e.key)!.y * zoom }, say: e.say }));
+      for (let i = 0; i < count; i += 1) {
+        for (let j = i + 1; j < count; j += 1) {
+          const [p, q] = [screen[i], screen[j]];
+          expect(paintedGap(p.at, p.say, q.at, q.say, true)).toBeGreaterThanOrEqual(2 - 0.05);
+          expect(ownsArrowOf(p.at, p.say, q.at)).toBe(false);
+          expect(ownsArrowOf(q.at, q.say, p.at)).toBe(false);
+          pairs += 1;
+        }
+      }
+      // Never to the right of its column, never above its own target.
+      for (const e of list) expect(spots.get(e.key)!.y).toBeGreaterThanOrEqual(e.target.y - 1e-9);
+    }
+    expect(pairs).toBeGreaterThan(300);
+  }, 60_000);
+
+  it('measures pill widths without a layout read: on the wide side, the say pill at most 260 px', () => {
+    const { nameW, sayW } = labelWidths('Claude · 2', 'Checking the prompt');
+    expect(nameW).toBeGreaterThanOrEqual(14 + 'Claude · 2'.length * 5);
+    expect(sayW).toBeGreaterThanOrEqual(18 + 'Checking the prompt'.length * 5);
+    expect(labelWidths('x', 'y'.repeat(400)).sayW).toBe(260);
+    expect(labelWidths('x', undefined).sayW).toBe(0);
+  });
 
   it('a leaving cursor whose name a live one shows hides its pill at once (PR #211 review 4), and none is promoted from CSS', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');

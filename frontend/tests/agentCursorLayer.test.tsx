@@ -49,7 +49,13 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
-import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, inkFor, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
+import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
+
+/** The column step below a name, and below a name and a say (GM - Design, PR #211 r14). */
+const S = stackStepPx(false);
+const SS = stackStepPx(true);
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AGENT_CURSOR_IDLE_MS, AGENT_SAY_FADE_MS, AGENT_SAY_MS } from '../src/store/agentPresenceStore';
 import { forgetPersonPlaced, notePersonPlaced } from '../src/lib/personNodeMoves';
 
@@ -207,7 +213,7 @@ describe('one cursor per session', () => {
     flush();
     expect(cursors().map((el) => el.dataset.session)).toEqual(['aaaaaaaaaaaa', 'bbbbbbbbbbbb']);
     expect(cursors()[0].style.transform).toBe('translate(500px, 344px) scale(1)');
-    expect(cursors()[1].style.transform).toBe('translate(500px, 368px) scale(1)');
+    expect(cursors()[1].style.transform).toBe(`translate(500px, ${344 + S}px) scale(1)`);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, say: 'Back again' }));
     flush();
     expect(cursors().map((el) => el.dataset.session)).toEqual(['bbbbbbbbbbbb', 'aaaaaaaaaaaa']);
@@ -294,7 +300,7 @@ describe('two cursors on one spot keep their places (review 1, F2)', () => {
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, el.style.transform]));
     const before = where();
     expect(before.aaaaaaaaaaaa).toBe('translate(500px, 344px) scale(1)');
-    expect(before.bbbbbbbbbbbb).toBe('translate(500px, 368px) scale(1)');
+    expect(before.bbbbbbbbbbbb).toBe(`translate(500px, ${344 + S}px) scale(1)`);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, action: 'look' }));
     flush();
     expect(where()).toEqual(before);
@@ -313,14 +319,14 @@ describe('a cursor that shifts a little on its spot keeps its place in the stack
     send(event({ session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, target: { x: 300, y: 300 } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, el.style.transform]));
-    expect(where().bbbbbbbbbbbb).toBe('translate(300px, 324px) scale(1)');
+    expect(where().bbbbbbbbbbbb).toBe(`translate(300px, ${300 + S}px) scale(1)`);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, target: { x: 304, y: 300 } }));
     flush();
     // a came first: it is never pushed off its own target. b's target is
-    // still within 16 px of a's tip, so b stays in a's column, straight
+    // still within 16 px of a's target, so b stays in a's column, straight
     // below it (GM - Design, PR #211 r13 item 3).
     expect(where().aaaaaaaaaaaa).toBe('translate(304px, 300px) scale(1)');
-    expect(where().bbbbbbbbbbbb).toBe('translate(304px, 324px) scale(1)');
+    expect(where().bbbbbbbbbbbb).toBe(`translate(304px, ${300 + S}px) scale(1)`);
   });
 });
 
@@ -366,6 +372,8 @@ describe('a tab that hears an event while hidden snaps (GM - Design, PR #211 r2)
     expect(cursors()[0].style.transform).toBe('translate(1000px, 344px) scale(1)');
     flush();
     expect(cursors()[0].querySelector('.agent-cursor__say')?.textContent).toBe('Still here');
+    // Its say doesn't wait on a snap: nothing below it is moving (review 6, item 3).
+    expect(cursors()[0].dataset.sayWait).toBeUndefined();
   });
 });
 
@@ -859,7 +867,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     flush();
     const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
     expect(byKey.bbbbbbbbbbbb).toEqual({ x: 1000, y: 344 });
-    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 1000, y: 368 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 1000, y: 344 + S });
   });
 
   it('while both are on their way, the one due to land first aims at the spot: it never lands aside and hops back', () => {
@@ -893,7 +901,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     send(event({ ...B, target: { x: 300, y: 300 } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    expect(where().bbbbbbbbbbbb).toEqual({ x: 300, y: 348 }); // straight down 24 screen px at zoom 0.5
+    expect(where().bbbbbbbbbbbb).toEqual({ x: 300, y: 300 + S / 0.5 }); // straight down S screen px at zoom 0.5
     // A shifts 20 flow px: 10 screen px, inside the radius. It keeps its
     // stamp, so it is never pushed off its own target.
     send(event({ ...A, target: { x: 320, y: 300 } }));
@@ -925,7 +933,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
     // B was there first: it keeps (800, 344); A, arriving on the dragged node, steps aside.
     expect(byKey.bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
-    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 800, y: 368 });
+    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 800, y: 344 + S });
   });
 });
 
@@ -955,7 +963,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     flush();
     send(event({ ...second, target: { nodeId: 'n1' } }));
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: spotOf('n1'), aaaaaaaaaaaa: { x: 500, y: 368 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spotOf('n1'), aaaaaaaaaaaa: { x: 500, y: 344 + S } });
     const frames300 = Math.round(300 / perFrame);
     for (let i = 0; i < frames300; i += 1) {
       // The person's drag (React Flow's dragging flag): carried at any speed.
@@ -964,19 +972,19 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
       const spot = spotOf('n1');
       // Carried: on their spots every frame, the second never on the first's.
       expect(where().bbbbbbbbbbbb).toEqual(spot);
-      expect(where().aaaaaaaaaaaa).toEqual({ x: spot.x, y: spot.y + 24 });
+      expect(where().aaaaaaaaaaaa).toEqual({ x: spot.x, y: spot.y + S });
     }
     moveNode('n1', 0, 0, false);
     flush();
     const spot = spotOf('n1');
-    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x, y: spot.y + 24 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x, y: spot.y + S } });
     // And again, back the other way.
     for (let i = 0; i < frames300; i += 1) {
       moveNode('n1', -perFrame, 0);
       tickFrames(1);
     }
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 500, y: 368 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 500, y: 344 + S } });
   });
 
   it.each([5, 20])('keeps their order when the second one\'s frame runs first, dragged %s px a frame', (perFrame) => {
@@ -1018,7 +1026,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     }
     flush();
     const spot = spotOf('n1');
-    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x, y: spot.y + 24 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: spot, aaaaaaaaaaaa: { x: spot.x, y: spot.y + S } });
   });
 
   it('a cursor set aside goes back onto its spot on the land spring when the other leaves, not in one jump', () => {
@@ -1029,7 +1037,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     flush();
     send(event({ ...second, target: { nodeId: 'n1' } }));
     flush();
-    expect(where().aaaaaaaaaaaa).toEqual({ x: 500, y: 368 });
+    expect(where().aaaaaaaaaaaa).toEqual({ x: 500, y: 344 + S });
     // The first moves off to n2: the second's spot is the node's own again.
     send(event({ ...first, target: { nodeId: 'n2' } }));
     let last = where().aaaaaaaaaaaa;
@@ -1111,7 +1119,7 @@ describe('a view whose effects reconnect keeps its place (round 4: StrictMode in
     send(pair('bbbbbbbbbbbb', 2));
     flush();
     const before = where();
-    expect(before).toEqual({ claude: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 500, y: 368 }, bbbbbbbbbbbb: { x: 500, y: 392 } });
+    expect(before).toEqual({ claude: { x: 500, y: 344 }, aaaaaaaaaaaa: { x: 500, y: 344 + S }, bbbbbbbbbbbb: { x: 500, y: 344 + 2 * S } });
     send(pair('aaaaaaaaaaaa', 1, 'look'));
     flush();
     expect(where()).toEqual(before);
@@ -1251,7 +1259,7 @@ describe('the presence exit, for every removal (GM - Design, PR #211 review 4)',
     send(event({ ...session('b', 3), target: { nodeId: 'n1' } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    expect(where()).toEqual({ aaaaaaaaaaaa: { x: 500, y: 344 }, bbbbbbbbbbbb: { x: 500, y: 368 } });
+    expect(where()).toEqual({ aaaaaaaaaaaa: { x: 500, y: 344 }, bbbbbbbbbbbb: { x: 500, y: 344 + S } });
     // a's session leaves (a takeover of its number by another agent's tab is
     // the same): b takes the spot while a still fades.
     act(() => {
@@ -1410,7 +1418,7 @@ describe('the pill step (GM - Design, PR #211 r10 item 3, r12 and r13)', () => {
       flush();
     }
     const steps = cursors().map((el) => ({ x: at(el).x - 500, y: at(el).y - 344 }));
-    expect(steps).toEqual([{ x: 0, y: 0 }, { x: 0, y: 24 }, { x: 0, y: 48 }].slice(0, count));
+    expect(steps).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }].slice(0, count));
     noOverlap();
     for (let i = 0; i < 30; i += 1) {
       drag(12);
@@ -1433,7 +1441,7 @@ describe('a cursor carried beside one that is not on its node keeps its order (r
     send(event({ session: { key: 'cccccccccccc', ordinal: 2 }, target: { x: 500, y: 344 } }));
     flush();
     const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, cccccccccccc: { x: 500, y: 368 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 500, y: 344 }, cccccccccccc: { x: 500, y: 344 + S } });
     for (let i = 1; i <= 3; i += 1) {
       const next = new Map(lookupRef.current) as Map<string, Entry>;
       const node = next.get('n1')!;
@@ -1442,11 +1450,11 @@ describe('a cursor carried beside one that is not on its node keeps its order (r
       notifyStore();
       tickFrames(1);
       // C stays second, below B: its target is in B's column (r13 item 3).
-      expect(where().cccccccccccc.y).toBe(368);
+      expect(where().cccccccccccc.y).toBe(344 + S);
       expect(where().bbbbbbbbbbbb.y).toBe(344);
     }
     flush();
-    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 506, y: 344 }, cccccccccccc: { x: 506, y: 368 } });
+    expect(where()).toEqual({ bbbbbbbbbbbb: { x: 506, y: 344 }, cccccccccccc: { x: 506, y: 344 + S } });
   });
 });
 
@@ -1465,16 +1473,16 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
         send(event({ ...session(key, i + 1), target: { nodeId: 'n1' } }));
         flush();
       }
-      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 368 }, c: { x: 500, y: 392 } });
+      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, c: { x: 500, y: 344 + 2 * S } });
       send(event({ ...session('b', 2), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
       const glide: number[] = [];
-      for (let i = 0; i < 400 && where().c.y !== 368 + stackStepPx(true); i += 1) {
+      for (let i = 0; i < 400 && where().c.y !== 344 + S + SS; i += 1) {
         tickFrames(1);
         glide.push(where().c.y);
       }
-      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 368 }, c: { x: 500, y: 415 } });
+      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, c: { x: 500, y: 344 + S + SS } });
       // A glide, not a jump: several frames between, none moving 12 px or more.
-      expect(glide.filter((y) => y > 392 && y < 415).length).toBeGreaterThan(3);
+      expect(glide.filter((y) => y > 344 + 2 * S && y < 344 + S + SS).length).toBeGreaterThan(3);
       for (let i = 1; i < glide.length; i += 1) expect(Math.abs(glide[i] - glide[i - 1])).toBeLessThan(12);
       // Says stay visible in the stack.
       const b = cursors().find((el) => el.dataset.session === 'b'.repeat(12))!;
@@ -1484,15 +1492,15 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
       act(() => { vi.advanceTimersByTime(AGENT_SAY_MS + 10); });
       tickFrames(2);
       expect(b.querySelector('.agent-cursor__say--leaving')).not.toBeNull();
-      expect(where().c.y).toBe(415);
+      expect(where().c.y).toBe(344 + S + SS);
       act(() => { vi.advanceTimersByTime(AGENT_SAY_FADE_MS + 10); });
       const back: number[] = [];
-      for (let i = 0; i < 400 && where().c.y !== 392; i += 1) {
+      for (let i = 0; i < 400 && where().c.y !== 344 + 2 * S; i += 1) {
         tickFrames(1);
         back.push(where().c.y);
       }
-      expect(where().c).toEqual({ x: 500, y: 392 });
-      expect(back.filter((y) => y > 392 && y < 415).length).toBeGreaterThan(3);
+      expect(where().c).toEqual({ x: 500, y: 344 + 2 * S });
+      expect(back.filter((y) => y > 344 + 2 * S && y < 344 + S + SS).length).toBeGreaterThan(3);
     } finally {
       vi.useRealTimers();
     }
@@ -1512,7 +1520,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     flush();
     send(event({ ...session('b', 2), target: { x: 308, y: 306 } }));
     flush();
-    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 324 } });
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S } });
   });
 
   it.each([2, 3])('%i peers leaving together: every pill keeps its layout, only the tip opacity falls (review 5, M1)', (count) => {
@@ -1662,3 +1670,216 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     });
   });
 });
+
+describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait their turn, zoom rides (GM r14 and r15, review 6)', () => {
+  type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
+  const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
+  const byKey = (k: string) => cursors().find((el) => el.dataset.session === k.repeat(12))!;
+  const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session!.slice(0, 1), at(el)]));
+  /** A cursor as drawn this frame, in screen px: its say counts once it shows (not while it waits). */
+  const shapeOf = (el: HTMLElement) => {
+    const p = at(el);
+    const [tx, ty, z] = pane.transform;
+    const name = el.querySelector('.agent-cursor__name')!.textContent!;
+    const say = el.querySelector('.agent-cursor__say');
+    const w = labelWidths(name, say?.textContent);
+    return cursorShape({ x: p.x * z + tx, y: p.y * z + ty }, say !== null && el.dataset.sayWait !== 'true', w.nameW, w.sayW);
+  };
+  const leastClear = () => {
+    const shapes = cursors().filter((el) => el.dataset.leaving !== 'true').map(shapeOf);
+    let least = Infinity;
+    for (const [i, a] of shapes.entries()) for (const b of shapes.slice(i + 1)) least = Math.min(least, cursorClearancePx(a, b));
+    return least;
+  };
+  const drag = (id: string, dx: number) => {
+    const next = new Map(lookupRef.current) as Map<string, Entry>;
+    const node = next.get(id)!;
+    next.set(id, { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: {
+      x: node.internals.positionAbsolute.x + dx, y: node.internals.positionAbsolute.y } } });
+    lookupRef.current = next as never;
+    notifyStore();
+  };
+  const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  const column = () => {
+    for (const [i, key] of ['a', 'b', 'c'].entries()) {
+      send(event({ ...session(key, i + 1), target: { nodeId: 'n1' } }));
+      flush();
+    }
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, c: { x: 500, y: 344 + 2 * S } });
+  };
+
+  it.each([
+    ['(0, 19)', [19]],
+    ['(0, 30, 15)', [30, 15]],
+  ])('%s: 2 px clear and no arrow by a foreign label, at rest and through a drag of the head', (_name, below) => {
+    render(<AgentCursorLayer />);
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' } }));
+    flush();
+    for (const [i, dy] of below.entries()) {
+      send(event({ ...session('bc'[i], i + 2), target: { x: 500, y: 344 + dy } }));
+      flush();
+    }
+    expect(Object.values(where()).map((p) => p.x)).toEqual(Array(below.length + 1).fill(500));
+    expect(leastClear()).toBeGreaterThanOrEqual(2 - 1e-6);
+    for (let i = 0; i < 40; i += 1) {
+      drag('n1', 6);
+      tickFrames(1);
+      expect(leastClear()).toBeGreaterThanOrEqual(2 - 1e-6);
+    }
+    drag('n1', 0);
+    flush();
+    expect(leastClear()).toBeGreaterThanOrEqual(2 - 1e-6);
+  });
+
+  it.each([[1, 0.5], [0.5, 2]])('a zoom from %s to %s carries the column at its screen-px steps every frame: no spring, 2 px clear', (from, to) => {
+    pane.transform = [0, 0, from];
+    render(<AgentCursorLayer />);
+    for (const [i, key] of ['a', 'b', 'c'].entries()) {
+      send(event({ ...session(key, i + 1), target: { nodeId: 'n1' } }));
+      flush();
+    }
+    const steps = () => {
+      const z = pane.transform[2];
+      const ys = ['a', 'b', 'c'].map((k) => at(byKey(k)).y * z);
+      return [ys[1] - ys[0], ys[2] - ys[1]];
+    };
+    expect(steps().map((d) => Math.round(d))).toEqual([S, S]);
+    for (let f = 1; f <= 18; f += 1) {
+      pane.transform = [0, 0, from + ((to - from) * f) / 18];
+      notifyStore();
+      // Carried in the zoom's own frame, not the next one (live, round 4d).
+      for (const d of steps()) expect(d).toBeCloseTo(S, 6);
+      tickFrames(1);
+      for (const d of steps()) expect(d).toBeCloseTo(S, 6);
+      expect(leastClear()).toBeGreaterThanOrEqual(2 - 1e-6);
+    }
+  });
+
+  it('a chain that splits: every cursor that must move glides there on the land spring, together, nothing jumps (review 6, item 2)', () => {
+    render(<AgentCursorLayer />);
+    // a, b, c and d each 15 px below the last: one column by targets.
+    for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
+      send(event({ ...session(key, i + 1), target: { x: 300, y: 300 + 15 * i } }));
+      flush();
+    }
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S }, d: { x: 300, y: 300 + 3 * S } });
+    // b goes elsewhere: c, 30 px from a, still meets a's label, and d meets c.
+    send(event({ ...session('b', 2), target: { nodeId: 'n2' } }));
+    const path: { c: number; d: number }[] = [];
+    for (let i = 0; i < 200 && (where().c.y !== 300 + S || where().d.y !== 300 + 2 * S); i += 1) {
+      tickFrames(1);
+      path.push({ c: where().c.y, d: where().d.y });
+    }
+    expect(where().c).toEqual({ x: 300, y: 300 + S });
+    expect(where().d).toEqual({ x: 300, y: 300 + 2 * S });
+    expect(path.filter((p) => p.c > 300 + S && p.c < 300 + 2 * S).length).toBeGreaterThan(3);
+    for (let i = 1; i < path.length; i += 1) {
+      expect(Math.abs(path[i].c - path[i - 1].c)).toBeLessThan(12);
+      expect(Math.abs(path[i].d - path[i - 1].d)).toBeLessThan(12);
+      // Together: the step between them never closes.
+      expect(path[i].d - path[i].c).toBeGreaterThanOrEqual(S - 1e-6);
+    }
+  });
+
+  it('a say on the top cursor: the cursors below glide first, the say fades in once the room is clear, and never over an arrow (review 6, item 3)', () => {
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    const a = byKey('a');
+    const frames: { waiting: boolean; b: number; clear: number }[] = [];
+    for (let i = 0; i < 120 && where().c.y !== 344 + SS + S; i += 1) {
+      tickFrames(1);
+      frames.push({ waiting: a.dataset.sayWait === 'true', b: where().b.y, clear: leastClear() });
+    }
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + SS + S } });
+    // It waited while b moved, then showed, and never hid again.
+    expect(frames[0].waiting).toBe(true);
+    const shownAt = frames.findIndex((f) => !f.waiting);
+    expect(shownAt).toBeGreaterThan(2);
+    expect(frames.slice(shownAt).every((f) => !f.waiting)).toBe(true);
+    // b had all but finished its glide: its arrow clear of a's say block.
+    expect(frames[shownAt].b).toBeGreaterThan(344 + SS - 1);
+    // The say counts in every frame it shows: never within 2 px of an arrow.
+    for (const f of frames) expect(f.clear).toBeGreaterThanOrEqual(2 - 1e-6);
+    expect(a.querySelector('.agent-cursor__say')?.textContent).toBe('Checking the prompt');
+  });
+
+  it('a say that goes fades out first, then the cursors below close up', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column();
+      send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+      flush();
+      expect(where().b.y).toBe(344 + SS);
+      act(() => { vi.advanceTimersByTime(AGENT_SAY_MS + 10); });
+      tickFrames(3);
+      expect(byKey('a').querySelector('.agent-cursor__say--leaving')).not.toBeNull();
+      expect(where().b.y).toBe(344 + SS);
+      act(() => { vi.advanceTimersByTime(AGENT_SAY_FADE_MS + 10); });
+      expect(byKey('a').querySelector('.agent-cursor__say')).toBeNull();
+      const up: number[] = [];
+      for (let i = 0; i < 200 && where().b.y !== 344 + S; i += 1) {
+        tickFrames(1);
+        up.push(where().b.y);
+      }
+      expect(up.filter((y) => y > 344 + S && y < 344 + SS).length).toBeGreaterThan(3);
+      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, c: { x: 500, y: 344 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a say still waiting when the tab is hidden shows on return, the cursors below landed', () => {
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    tickFrames(2);
+    expect(byKey('a').dataset.sayWait).toBe('true');
+    const visibility = (state: string) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    };
+    try {
+      visibility('hidden');
+      clock += 1500;
+      visibility('visible');
+      flush();
+    } finally {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    }
+    expect(where().b).toEqual({ x: 500, y: 344 + SS });
+    expect(byKey('a').dataset.sayWait).toBeUndefined();
+  });
+
+  it("a long name's pill counts at its width: a target on it, past the default width, joins its column", () => {
+    render(<AgentCursorLayer />);
+    send(event({ agent: { id: 'long', name: 'A rather long agent name', color: '#3FC1A5', verified: false }, ...session('a', 1), target: { x: 300, y: 300 } }));
+    flush();
+    // 120 px right, 10 down: on that name pill (about 190 px wide), past a
+    // default 80 px one.
+    send(event({ ...session('b', 2), target: { x: 420, y: 310 } }));
+    flush();
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S } });
+  });
+
+  it('under reduced motion a say shows at once and the cursors below are there on the next frame', () => {
+    reduceMotion(true);
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    tickFrames(1);
+    expect(byKey('a').dataset.sayWait).toBeUndefined();
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + SS + S } });
+  });
+
+  it('a waiting say is hidden by CSS and fades in when the wait ends; never under reduced motion', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+    const rule = css.match(/^\.agent-cursor\[data-say-wait='true'\] \.agent-cursor__say \{([^}]*)\}/m);
+    expect(rule?.[1]).toMatch(/animation: none;/);
+    expect(rule?.[1]).toMatch(/opacity: 0;/);
+    const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    expect(layer).toMatch(/!prefersReducedMotion\(\) && el\) \{\n\s+sayWaitSince\.current = performance\.now\(\);/);
+  });
+});
+

@@ -499,6 +499,13 @@ export function stepMotion(
      *  not a sync to fly to again. A tip still flying to it holds its action
      *  from the first jump, and fires it once the node holds still. */
     dragged?: boolean;
+    /** Whether the spot moved on its carrier because the layout changed (a
+     *  say, a join, a leave): it lands there on the land spring. When the
+     *  caller says no, the spot's moves on the carrier (a zoom changing the
+     *  flow size of a screen-px step, the column's head carried) carry the
+     *  tip kinematically (GM - Design, PR #211 review 6, item 4). Default:
+     *  any move of the spot on its carrier is a re-layout. */
+    shifted?: boolean;
   },
 ): StepResult {
   const { zoom, reduced, opacityTarget } = opts;
@@ -534,13 +541,13 @@ export function stepMotion(
   // arc's end and the land spring track as it goes.
   const prevLive = m.lastLive;
   // The target's own motion is its carrier's: a de-stack shift isn't speed,
-  // and isn't a jump (a step down the column is 24 px or more, the re-plan
-  // distance; it lands on the land spring, below).
+  // and isn't a jump (a step down the column is 42 px or more, past the
+  // re-plan distance; it lands on the land spring, below).
   const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
   const jumpPx = prevCarrier ? dist(carrier, prevCarrier) * zoom : 0;
   const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
   // The spot moved on its node (a de-stack), not with it.
-  const relShifted = m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01;
+  const relShifted = opts.shifted ?? (m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01);
   // Where the target was a frame ago, when it is moving: the steps in this
   // frame see it move from there to here, as it did, not hold still and jump.
   const glideFrom = prevLive && !jumped && jumpPx > 0 ? { x: prevLive.x, y: prevLive.y } : null;
