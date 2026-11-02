@@ -435,10 +435,17 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     const to = getViewportForBounds(bounds, inside.width, inside.height, MIN_ZOOM, 1, FIT_PADDING);
     return { x: to.x + inside.x, y: to.y + inside.y, zoom: to.zoom };
   }, [viewInsets]);
-  /** The whole-board fit in a column this size, or null when there are no cards. */
-  const fitFor = useCallback((width: number, height: number): Viewport | null => (
-    nodesRef.current.length === 0 ? null : frame(getNodesBounds(nodesRef.current), width, height)
-  ), [frame, getNodesBounds]);
+  /**
+   * The whole-board fit in a column this size: the one fit computation, for
+   * Fit, the fit on open and the follower alike. Held spots count, as cards
+   * on their way in (GM r8 answer 4; GM r11 2: a Fit with a held spot is a
+   * fit, and follows its column). Null only when there are no cards and no
+   * held spots.
+   */
+  const fitFor = useCallback((width: number, height: number): Viewport | null => {
+    const all = [...nodesRef.current, ...heldNodesRef.current];
+    return all.length === 0 ? null : frame(getNodesBounds(all), width, height);
+  }, [frame, getNodesBounds]);
   const fitForRef = useRef(fitFor);
   fitForRef.current = fitFor;
   // A whole-board fit's refit while its column resizes (#209): `follow` knows
@@ -499,10 +506,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     // React Flow can measure the board before its camera exists; the fit on
     // open waits for it (it can't move a camera that isn't there yet).
     if (instant && !panZoom) return false;
-    // Held spots count: a placeholder is a card on its way in (GM r8 answer 4).
-    const held = heldNodesRef.current;
-    const to = held.length === 0 ? fitFor(width, height)
-      : frame(getNodesBounds([...nodesRef.current, ...held]), width, height);
+    const to = fitFor(width, height);
     if (!to) return false;
     if (!instant) {
       springTo(to);
@@ -512,7 +516,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     moveCamera(to);
     useBoardCanvasStore.getState().setViewport(boardKey, to, true);
     return true;
-  }, [flowStore, fitFor, frame, getNodesBounds, springTo, moveCamera, boardKey]);
+  }, [flowStore, fitFor, springTo, moveCamera, boardKey]);
   fitRef.current = fit;
   // Cards that arrive after the board mounts (it opens before they load) get
   // the fit on open once there are some.

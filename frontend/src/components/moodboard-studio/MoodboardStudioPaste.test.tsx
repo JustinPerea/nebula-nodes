@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../../types';
@@ -77,9 +77,11 @@ vi.mock('./BoardCanvas', async () => {
 });
 
 import { MoodboardStudioView } from './MoodboardStudioView';
-import { resetBoardAdds, useBoardAddStore } from './boardAdds';
+import { keepWaitingSend, resetBoardAdds, useBoardAddStore } from './boardAdds';
+import { OfflineRefusal, isBackendOffline, noteBackendConnection } from '../../lib/backendConnection';
+import { RequestFailedError } from '../../lib/errorCopy';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, reloadLostLine, uriListLinks, webLinks } from './pasteImages';
-import { placeTiles } from '../../lib/boardPlacement';
+import { placeTiles, respot } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
@@ -167,7 +169,7 @@ beforeEach(() => {
   try { window.sessionStorage.removeItem('nebula:moodboard-adds-in-flight'); } catch { /* jsdom */ }
   setOpenProject(['p1', 'Project']);
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); noteBackendConnection('online'); });
 
 async function openStudio(view: 'list' | 'board' = 'list') {
   useBoardCanvasStore.setState({ view });
@@ -2468,5 +2470,839 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await load.open();
     await screen.findByText('“river.png” wasn’t added because the page reloaded while it uploaded. Paste it again.');
     expect(records()).toEqual([]);
+  });
+
+  // Review 7 (round 6c), GM r11 1: a board New just saved keeps Undo like any saved board.
+  const undoServer = (made: ReturnType<typeof madeServer>, holdMade: { on: boolean; gate: Promise<void> }) => {
+    const madeEdit = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], base?: number) => {
+      if (id === 'made1' && holdMade.on) await holdMade.gate;
+      if (id === 'made1') {
+        for (const op of ops) {
+          if (op.op === 'remove') {
+            made.edits.push(ops);
+            made.board = { ...made.board!, images: made.board!.images.filter((img) => !op.images.includes(img.id)), version: made.board!.version + 1 };
+            return { board: clone(made.board), version: made.board.version, applied: [], undo: { ops: [] } };
+          }
+        }
+      }
+      const result = await madeEdit(id, ops, base);
+      if (id !== 'made1') return result;
+      const added = ops.flatMap((op) => (op.op === 'add' ? op.images.map((img) => img.id!) : []));
+      return { ...result, undo: { ops: added.length ? [{ op: 'remove', images: added }] : [] } };
+    });
+  };
+
+  it('R7-U1: an add on the saved board while the queued send is out keeps its Undo', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    const holdMade = { on: false, gate: editGate.held };
+    undoServer(made, holdMade);
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    holdMade.on = true;
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    // The person opens the board New just saved, from the rail, and pastes on it.
+    await toBoard('made1');
+    paste(clipboard({ files: [png('lake.png', 20)] }));
+    await waitFor(() => expect(urlsOf(madeKey)).toHaveLength(2));
+    holdMade.on = false;
+    await editGate.open();
+    await waitFor(() => expect(made.board?.images).toHaveLength(2));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    const epoch = store().entries[madeKey].epoch;
+    const steps = useBoardUndoStore.getState().history(madeKey, epoch).done;
+    expect(steps).toHaveLength(1);
+    expect(steps[0].state).toBe('saved');
+    press('z', { metaKey: true });
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
+  });
+
+  it('R7-U1 control: the same paste after the queued send has landed keeps its Undo (persist sends it)', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    undoServer(made, { on: false, gate: editGate.held });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    await toBoard('made1');
+    paste(clipboard({ files: [png('lake.png', 20)] }));
+    await waitFor(() => expect(made.board?.images).toHaveLength(2));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    press('z', { metaKey: true });
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
+  });
+
+  it('R7-U1 conflict: a paste on the saved board while the queued send replays a 409 is still its own step, with its Undo', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    const holdMade = { on: false, gate: editGate.held };
+    undoServer(made, holdMade);
+    const undoing = api.editMoodboard.getMockImplementation()!;
+    let conflicted = false;
+    api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], base?: number) => {
+      if (id === 'made1' && !conflicted && ops.some((op) => op.op === 'add')) {
+        await editGate.held;
+        conflicted = true;
+        made.board = { ...made.board!, version: made.board!.version + 1 };
+        throw new MoodboardVersionConflict(clone(made.board));
+      }
+      return undoing(id, ops, base);
+    });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    await toBoard('made1');
+    paste(clipboard({ files: [png('lake.png', 20)] }));
+    await waitFor(() => expect(urlsOf(madeKey)).toHaveLength(2));
+    await editGate.open();
+    await waitFor(() => expect(made.board?.images).toHaveLength(2));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    // The replay sent river alone; lake went on its own, with its Undo.
+    expect(made.edits.filter((ops) => ops.some((op) => op.op === 'add')).map((ops) => ops.length)).toEqual([1, 1]);
+    press('z', { metaKey: true });
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
+  });
+
+  it('R7-U1 a field the send owns, changed again on the saved board: the send takes its own value, the change is its own step', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    const holdMade = { on: false, gate: editGate.held };
+    undoServer(made, holdMade);
+    const madePut = api.updateMoodboard.getMockImplementation()!;
+    const puts: Record<string, unknown>[] = [];
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      const before = made.board?.notes;
+      const saved = await madePut(id, body);
+      if (id !== 'made1') return saved;
+      puts.push(body);
+      return { ...saved, undo: { ops: [{ op: 'restore', slices: [{ part: 'fields', notes: before }] }] } };
+    });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'warm light' })); });
+    holdMade.on = true;
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    await toBoard('made1');
+    const notes = screen.getByDisplayValue('warm light');
+    fireEvent.focus(notes);
+    fireEvent.change(notes, { target: { value: 'warmer' } });
+    fireEvent.blur(notes);
+    holdMade.on = false;
+    await editGate.open();
+    await waitFor(() => expect(made.board?.notes).toBe('warmer'));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    expect(puts.map((body) => body.notes)).toEqual(['warm light', 'warmer']);
+    const steps = useBoardUndoStore.getState().history(madeKey, store().entries[madeKey].epoch).done;
+    expect(steps.map((step) => step.state)).toEqual(['saved']);
+  });
+
+  it('R7-U1 fields: a rename on the saved board while the queued send is out keeps its Undo', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    const holdMade = { on: false, gate: editGate.held };
+    undoServer(made, holdMade);
+    const madePut = api.updateMoodboard.getMockImplementation()!;
+    const puts: Record<string, unknown>[] = [];
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      const before = made.board?.name;
+      const saved = await madePut(id, body);
+      if (id !== 'made1') return saved;
+      puts.push(body);
+      return { ...saved, undo: { ops: [{ op: 'restore', slices: [{ part: 'fields', name: before }] }] } };
+    });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    holdMade.on = true;
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    await toBoard('made1');
+    const name = screen.getByDisplayValue(made.board!.name);
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: 'Rivers' } });
+    fireEvent.blur(name);
+    holdMade.on = false;
+    await editGate.open();
+    await waitFor(() => expect(made.board?.name).toBe('Rivers'));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    // Sent by the Studio's autosave, on its own PUT, with its Undo kept.
+    expect(puts).toHaveLength(1);
+    const steps = useBoardUndoStore.getState().history(madeKey, store().entries[madeKey].epoch).done;
+    expect(steps).toHaveLength(1);
+    expect(steps[0].state).toBe('saved');
+    expect(steps[0].undo).toEqual([{ op: 'restore', slices: [{ part: 'fields', name: 'Untitled Moodboard' }] }]);
+  });
+
+  it('R7 LOW-1: the queued send\'s 409 replay moves the add off a tile another tab put at its spot (GM r11 3)', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const at = (ops.find((op) => op.op === 'add') as Extract<MoodboardOp, { op: 'add' }>).at!;
+      spots.push(at);
+      // Tab 2 pasted lake.png on made1 first, exactly there.
+      made.board = { ...made.board!, version: 2, images: [...made.board!.images,
+        image('lake', { url: '/api/outputs/lake.png', placements: [{ ...card('lake', at.x, at.y), w: 294, h: 441 }] })] };
+      throw new MoodboardVersionConflict(clone(made.board));
+    }).mockImplementation(send);
+    await create.open();
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual(['/api/outputs/lake.png', river]));
+    const [w, h] = sizeFor(1, 1.5);
+    const sent = (made.edits.at(-1)!.find((op) => op.op === 'add') as Extract<MoodboardOp, { op: 'add' }>).at!;
+    expect(sent).not.toEqual(spots[0]);
+    expect(sent).toEqual(respot({ ...spots[0], width: w, height: h }, [{ ...spots[0], width: 294, height: 441 }], board.view));
+    expect(keepsGap({ ...sent, width: w, height: h }, { ...spots[0], width: 294, height: 441 })).toBe(true);
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
+  });
+
+  it('R7-U1 away: a change on the saved board while no Studio has it open goes by the queued send', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const editGate = gate();
+    const holdMade = { on: false, gate: editGate.held };
+    undoServer(made, holdMade);
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    holdMade.on = true;
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    // A change lands on made1's draft while the person stays on the fresh board.
+    act(() => { store().edit(madeKey, (draft) => ({ ...(draft as object), name: 'Elsewhere' })); });
+    holdMade.on = false;
+    await editGate.open();
+    await waitFor(() => expect(made.board?.name).toBe('Elsewhere'));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+  });
+});
+
+describe('round 6c: offline background sends, review 7\'s surviving mutants, the record cap, the reload line (GM r11 4)', () => {
+  const store = () => useAssetStudioDraftStore.getState();
+  const newKey = JSON.stringify(['moodboard', 'global', 'new']);
+  const madeKey = JSON.stringify(['moodboard', 'global', 'made1']);
+  const river = '/api/outputs/chat-uploads/river.png';
+  const PENDING = 'nebula:moodboard-adds-in-flight';
+  const WAITING = 'nebula:moodboard-sends-waiting';
+  type Waiting = { board: string; ops: MoodboardOp[]; fields: Record<string, unknown>; page: string; at: number };
+  const waiting = () => JSON.parse(window.sessionStorage.getItem(WAITING) ?? '[]') as Waiting[];
+  const records = () => JSON.parse(window.sessionStorage.getItem(PENDING) ?? '[]') as Array<{ id: string; board: string; name: string; page: string; at: number }>;
+  const urlsOf = (key: string) => ((store().entries[key]?.draft as { images?: MoodboardImage[] } | undefined)?.images ?? []).map((img) => img.url);
+  const fresh = (name = 'Untitled Moodboard') => ({ name, notes: '', mode: 'look', strength: 0.7, images: [], analysis: null });
+  const clickNew = () => act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+  const gate = () => {
+    let open: () => void = () => {};
+    const held = new Promise<void>((done) => { open = done; });
+    return { held, open: () => act(async () => { open(); await held; }) };
+  };
+  /** made1, created by New; its edits refused while Nebula is offline, as apiFetch refuses a write then. */
+  const madeServer = (hold?: Promise<void>, projectId?: string) => {
+    const made = { board: null as Moodboard | null, edits: [] as MoodboardOp[][], creates: [] as Partial<Moodboard>[],
+      puts: [] as Record<string, unknown>[], fail: null as unknown, editsTried: 0 };
+    api.createMoodboard.mockImplementation(async (body: Partial<Moodboard>) => {
+      if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards');
+      made.creates.push(clone(body));
+      if (hold) await hold;
+      made.board = { ...clone(server.board), id: 'made1', name: body.name ?? '', version: 1, projectId: projectId ?? undefined, thumbnail: '',
+        images: (body.images ?? []).map((img) => image(img.id, { url: img.url, placements: img.placements ?? [card(img.id)] })) } as Moodboard;
+      return clone(made.board);
+    });
+    const g1Edit = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], base?: number) => {
+      if (id !== 'made1') return g1Edit(id, ops, base);
+      if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards/made1/edit');
+      made.editsTried += 1;
+      if (made.fail) throw made.fail;
+      made.edits.push(ops);
+      for (const op of ops) {
+        if (op.op === 'add') made.board!.images = [...made.board!.images, ...op.images.map((img) => image(img.id!, { url: img.url,
+          placements: 'at' in op && op.at ? [card(img.id!, op.at.x, op.at.y)] : [card(img.id!)] }))];
+      }
+      made.board = { ...made.board!, version: made.board!.version + 1, thumbnail: `/api/outputs/made1-v${made.board!.version + 1}.png` };
+      return { board: clone(made.board), version: made.board.version, applied: [], undo: { ops: [] } };
+    });
+    const g1Put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      if (id !== 'made1') return g1Put(id, body);
+      if (isBackendOffline()) throw new OfflineRefusal('PUT', '/api/moodboards/made1');
+      made.puts.push(clone(body));
+      const fields = { ...body };
+      delete fields.baseVersion;
+      // The server cleans what it's sent: a direction is trimmed.
+      if (typeof fields.direction === 'string') fields.direction = fields.direction.trim();
+      made.board = { ...made.board!, ...fields, version: made.board!.version + 1 } as Moodboard;
+      return clone(made.board);
+    });
+    api.fetchMoodboard.mockImplementation(async (id: string) => (id === 'made1' ? clone(made.board) : id === server.board.id ? clone(server.board) : null));
+    return made;
+  };
+  const openNew = async (scope: 'global' | 'project' = 'global') => {
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', scope); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByTestId('board-canvas');
+  };
+  const toBoard = async (id: string) => {
+    act(() => { useUIStore.getState().enterMoodboardEditor(id, 'global'); });
+    await screen.findByTestId('board-canvas');
+  };
+  /** New with an add that lands in the unsaved board while New's create is out. */
+  const newWithAdd = async (made: ReturnType<typeof madeServer>) => {
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+  };
+  const offline = () => act(() => { noteBackendConnection('offline'); });
+  const online = () => act(async () => { noteBackendConnection('online'); await Promise.resolve(); });
+
+  it('offline: the queued send is refused, nothing shows, it is kept for a reload; back online it is sent once and the record goes', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true, saveState: 'draft', saveError: null }));
+    expect(made.edits).toEqual([]);
+    expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', fields: {},
+      ops: [expect.objectContaining({ op: 'add', images: [expect.objectContaining({ url: river })] })] })]);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(made.editsTried).toBe(0);
+    await online();
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved', saveError: null }));
+    expect(made.edits).toHaveLength(1);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('offline, then back online, and the resend fails: the board says why, verbatim, and Retry sends it again', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true }));
+    made.fail = new RequestFailedError("Couldn't save the board.", 429, { reason: "Nebula didn't respond. Try again." });
+    await online();
+    await waitFor(() => expect(made.editsTried).toBe(1));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error', retry: 'save',
+      saveError: { heading: '', reason: 'Nebula couldn’t save the board because the server is busy. Try again.' } }));
+    // Sent again once, not more.
+    await new Promise((done) => setTimeout(done, 50));
+    expect(made.editsTried).toBe(1);
+    // The line on that board, with its Retry.
+    await toBoard('made1');
+    await screen.findByText('Nebula couldn’t save the board because the server is busy. Try again.');
+    made.fail = null;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveError: null }));
+    expect(screen.queryByText(/couldn’t save the board/)).toBeNull();
+    expect(waiting()).toEqual([]);
+  });
+
+  it('a reload with a send waiting: the board\'s next open in this tab takes it back and sends it; nothing is said for what was kept', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(waiting()).toHaveLength(1));
+    // The reload: an earlier page's record, and nothing in memory.
+    window.sessionStorage.setItem(WAITING, JSON.stringify(waiting().map((it) => ({ ...it, page: 'the page before the reload' }))));
+    cleanup();
+    useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
+    resetBoardAdds();
+    await online();
+    expect(made.editsTried).toBe(0);
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    expect(made.edits).toHaveLength(1);
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveError: null }));
+    expect(waiting()).toEqual([]);
+    expect(document.body.textContent).not.toContain('page reloaded');
+    // Opened again: nothing sent twice.
+    await toBoard('g1');
+    await toBoard('made1');
+    await new Promise((done) => setTimeout(done, 50));
+    expect(made.edits).toHaveLength(1);
+  });
+
+  it('a reload with a send waiting whose image only that page held: the reload line names it; the rest is sent', async () => {
+    const made = madeServer();
+    made.board = { ...clone(server.board), id: 'made1', images: [], version: 1 } as Moodboard;
+    keepWaitingSend('made1', [
+      { op: 'add', images: [{ id: 'kept', url: '/api/outputs/kept.png' }], at: { x: 2000, y: 0 } },
+      { op: 'add', images: [{ id: 'only', url: 'blob:http://localhost/only-here.png' }], at: { x: 2600, y: 0 } },
+    ], { notes: 'warm light' });
+    expect(waiting()[0].ops).toHaveLength(1);
+    window.sessionStorage.setItem(WAITING, JSON.stringify(waiting().map((it) => ({ ...it, page: 'before' }))));
+    window.sessionStorage.setItem(PENDING, JSON.stringify(records().map((it) => ({ ...it, page: 'before' }))));
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByText('“only-here.png” wasn’t added because the page reloaded while it uploaded. Paste it again.');
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual(['/api/outputs/kept.png']));
+    await waitFor(() => expect(made.board?.notes).toBe('warm light'));
+    expect(records()).toEqual([]);
+  });
+
+  it('an add that couldn\'t reach the board the person left while offline: no line; back online it goes once', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => {
+      if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards/g1/edit');
+      return send(...args);
+    });
+    offline();
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(g1Key)).toContain(river));
+    expect(store().entries[g1Key]).toMatchObject({ saveError: null, dirty: true });
+    expect(waiting()).toEqual([expect.objectContaining({ board: 'g1' })]);
+    expect(server.edits).toEqual([]);
+    await online();
+    await waitFor(() => expect(server.board.images.map((img) => img.url)).toContain(river));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false, saveError: null }));
+    expect(addOps()).toHaveLength(1);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('an open board\'s own save refused offline: no empty error box; it waits, and goes on reconnect', async () => {
+    await openStudio('board');
+    const send = api.editMoodboard.getMockImplementation()!;
+    let refused = 0;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => {
+      if (isBackendOffline()) { refused += 1; throw new OfflineRefusal('POST', '/api/moodboards/g1/edit'); }
+      return send(...args);
+    });
+    offline();
+    paste(clipboard({ files: [png('river.png')] }));
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    await waitFor(() => expect(urlsOf(g1Key)).toContain(river));
+    await new Promise((done) => setTimeout(done, 700));
+    expect(store().entries[g1Key]).toMatchObject({ saveError: null, dirty: true, pendingSaveId: null });
+    expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull();
+    // Refused once; the autosave doesn't try again while offline.
+    expect(refused).toBe(1);
+    await online();
+    await waitFor(() => expect(server.board.images.map((img) => img.url)).toContain(river));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false }));
+  });
+
+  it('an add that saves an unsaved board the person left, refused offline: no line; back online the board is saved once, with it', async () => {
+    const made = madeServer();
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('g1');
+    await screen.findByDisplayValue('Global board');
+    offline();
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+    await new Promise((done) => setTimeout(done, 30));
+    expect(store().entries[newKey]).toMatchObject({ saveError: null, pendingSaveId: null, savedId: null });
+    expect(made.creates).toEqual([]);
+    await online();
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    expect(made.creates).toHaveLength(1);
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveError: null }));
+  });
+
+  it('a waiting send whose add the board already holds (it landed as the tab reloaded): nothing is sent twice', async () => {
+    const made = madeServer();
+    made.board = { ...clone(server.board), id: 'made1', version: 2,
+      images: [image('r1', { url: river, placements: [card('r1')] })] } as Moodboard;
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'r1', url: river }], at: { x: 0, y: 0 } }], {});
+    window.sessionStorage.setItem(WAITING, JSON.stringify(waiting().map((it) => ({ ...it, page: 'before' }))));
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await waitFor(() => expect(store().entries[madeKey]?.loaded).toBe(true));
+    await new Promise((done) => setTimeout(done, 700));
+    expect(made.editsTried).toBe(0);
+    expect(made.board?.images).toHaveLength(1);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('a waiting send older than a day isn\'t taken back', async () => {
+    const made = madeServer();
+    made.board = { ...clone(server.board), id: 'made1', images: [], version: 1 } as Moodboard;
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'old', url: '/api/outputs/old.png' }], at: { x: 0, y: 0 } }], {});
+    window.sessionStorage.setItem(WAITING, JSON.stringify(waiting().map((it) => ({ ...it, page: 'before', at: Date.now() - 25 * 60 * 60 * 1000 }))));
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await waitFor(() => expect(store().entries[madeKey]?.loaded).toBe(true));
+    await new Promise((done) => setTimeout(done, 700));
+    expect(made.editsTried).toBe(0);
+    expect(urlsOf(madeKey)).toEqual([]);
+  });
+
+  it('U4: a queued PUT that conflicts sends only the fields it was for: an outside change of another field stays', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'warm light' })); });
+    const put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockImplementationOnce(async () => {
+      // Someone set made1's direction first.
+      made.board = { ...made.board!, direction: 'cool', version: made.board!.version + 1 } as Moodboard;
+      throw new MoodboardVersionConflict(clone(made.board));
+    }).mockImplementation(put);
+    await create.open();
+    await waitFor(() => expect(made.board?.notes).toBe('warm light'));
+    expect(made.board?.direction).toBe('cool');
+    expect(made.puts.at(-1)).not.toHaveProperty('direction');
+  });
+
+  // Review 7, LOW-3: the queued send's and New's and a delete's mutants that survived.
+  it('X3: a queued send that keeps conflicting stops after three tries, with the board\'s line', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    let tries = 0;
+    api.editMoodboard.mockImplementation(async (id: string) => {
+      if (id !== 'made1') throw new Error('unexpected');
+      tries += 1;
+      made.board = { ...made.board!, version: made.board!.version + 1 };
+      throw new MoodboardVersionConflict(clone(made.board));
+    });
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error' }));
+    expect(tries).toBe(3);
+  });
+
+  it('X6: a field the server cleans (a trimmed direction) is the person\'s as sent: the draft doesn\'t read it as a change', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), direction: 'warm dusk ' })); });
+    await create.open();
+    await waitFor(() => expect(made.puts).toHaveLength(1));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
+    const draft = store().entries[madeKey].draft as { direction: string; base: { direction: string } };
+    expect(made.board?.direction).toBe('warm dusk');
+    expect(draft.base.direction).toBe(draft.direction);
+  });
+
+  it('X7: a project board\'s queued PUT names its project', async () => {
+    const create = gate();
+    const made = madeServer(create.held, 'p1');
+    const uploads = holdUploads();
+    await openNew('project');
+    const projectNew = JSON.stringify(['moodboard', 'project', 'p1', 'new']);
+    await waitFor(() => expect(store().entries[projectNew]?.loaded).toBe(true));
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    clickNew();
+    await waitFor(() => expect(made.creates).toHaveLength(1));
+    await uploads.open();
+    act(() => { store().edit(projectNew, (draft) => ({ ...(draft as object), notes: 'warm light' })); });
+    await create.open();
+    await waitFor(() => expect(made.puts).toHaveLength(1));
+    expect(made.puts[0]).toMatchObject({ notes: 'warm light', projectId: 'p1' });
+  });
+
+  it('X8: the queued send keeps the thumbnail its edit answered', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
+    expect(store().entries[madeKey].thumbnail).toBe('/api/outputs/made1-v2.png');
+  });
+
+  it('X2: a board deleted while its queued send is out: the send stops, and nothing lands in the draft that replaced it', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    const edit = gate();
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => { await edit.held; return send(...args); });
+    act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'warm light' })); });
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    // made1 goes; its key holds a fresh draft now.
+    act(() => { store().reset(madeKey, fresh()); store().patch(madeKey, { loaded: true }); });
+    await edit.open();
+    await new Promise((done) => setTimeout(done, 30));
+    expect(urlsOf(madeKey)).toEqual([]);
+    expect(made.puts).toEqual([]);
+  });
+
+  it('X9: a delete whose save of an unsaved board fails keeps that board\'s draft', async () => {
+    madeServer();
+    removeAsset.fn = async () => true;
+    await openStudio('board');
+    act(() => {
+      store().reset(newKey, { ...fresh('Kept'), images: [image('k1', { url: '/api/outputs/kept.png', placements: [card('k1')] })] });
+      store().patch(newKey, { loaded: true });
+    });
+    api.createMoodboard.mockRejectedValue(new RequestFailedError("Couldn't save the board.", 500, { reason: "Nebula didn't respond. Try again." }));
+    act(() => { screen.getByRole('button', { name: 'Delete' }).click(); });
+    await waitFor(() => expect(api.createMoodboard).toHaveBeenCalledTimes(1));
+    await new Promise((done) => setTimeout(done, 30));
+    expect(urlsOf(newKey)).toEqual(['/api/outputs/kept.png']);
+  });
+
+  it('X10: New\'s save out while the person opens the new board of another scope: they stay there', async () => {
+    const create = gate();
+    madeServer(create.held);
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(store().entries[newKey]?.dirty || (store().entries[madeKey]?.savedId ?? null) !== null).toBe(true));
+    clickNew();
+    await waitFor(() => expect(api.createMoodboard).toHaveBeenCalled());
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'project'); });
+    await create.open();
+    await new Promise((done) => setTimeout(done, 30));
+    expect(useUIStore.getState()).toMatchObject({ moodboardEditorId: 'new', moodboardEditorScope: 'project' });
+  });
+
+  it('NIT-4: the cap drops earlier page loads\' records first, never this page\'s adds still on their way', async () => {
+    const earlier = Array.from({ length: 60 }, (_, i) => ({ id: `old-${i}`, board: 'g9', name: `old-${i}.png`, page: 'before', at: Date.now() }));
+    window.sessionStorage.setItem(PENDING, JSON.stringify(earlier));
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(records().some((it) => it.name === 'river.png')).toBe(true));
+    expect(records()).toHaveLength(50);
+    expect(records().filter((it) => it.page === 'before').map((it) => it.id)).toEqual(earlier.slice(11).map((it) => it.id));
+    await uploads.open();
+  });
+
+  it('NIT-4: past the cap with this page\'s own adds, every one of them is kept', async () => {
+    window.sessionStorage.setItem(PENDING, JSON.stringify([{ id: 'old', board: 'g9', name: 'old.png', page: 'before', at: Date.now() }]));
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: Array.from({ length: 52 }, (_, i) => png(`f${i}.png`)) }));
+    await waitFor(() => expect(records().filter((it) => it.page !== 'before')).toHaveLength(52));
+    expect(records().some((it) => it.page === 'before')).toBe(false);
+    await uploads.open();
+  });
+
+  it('NIT-1: the reload line goes when the person leaves its board; a quick return doesn\'t show it again', async () => {
+    window.sessionStorage.setItem(PENDING, JSON.stringify([{ id: 'r', board: 'g1', name: 'river.png', page: 'before', at: Date.now() }]));
+    await openStudio('board');
+    const line = '“river.png” wasn’t added because the page reloaded while it uploaded. Paste it again.';
+    await screen.findByText(line);
+    await toBoard('new');
+    await toBoard('g1');
+    await screen.findByDisplayValue('Global board');
+    await new Promise((done) => setTimeout(done, 30));
+    expect(screen.queryByText(line)).toBeNull();
+  });
+});
+
+describe('round 6c: an add replayed after a 409 (GM r11 3)', () => {
+  type Add = Extract<MoodboardOp, { op: 'add' }>;
+  const rect = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
+  /** The first edit answers 409: meanwhile another tab put a tile `w` x `h` exactly where the add was going. */
+  const tileAtTheAdd = (w = 480, h = 270) => {
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const add = ops.find((op): op is Add => op.op === 'add')!;
+      spots.push(add.at!);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('other', { placements: [{ ...card('other', add.at!.x, add.at!.y), w, h }] })] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    return spots;
+  };
+
+  it('a paste on the open board: the replay moves the add to the nearest free spot, off the other tab\'s tile', async () => {
+    await openStudio('board');
+    const spots = tileAtTheAdd();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const [replayed] = addOps();
+    const [w, h] = sizeFor(1, 1.5);
+    const other = { x: spots[0].x, y: spots[0].y, width: 480, height: 270 };
+    const taken = server.board.images.filter((img) => img.id !== replayed.images[0].id).flatMap((img) => (img.placements ?? []).map(rect));
+    expect(replayed.at).toEqual(respot({ ...spots[0], width: w, height: h }, taken, board.view));
+    expect(replayed.at).not.toEqual(spots[0]);
+    for (const tile of taken) expect(keepsGap({ ...replayed.at!, width: w, height: h }, tile)).toBe(true);
+    expect(keepsGap({ ...replayed.at!, width: w, height: h }, other)).toBe(true);
+    // On the server once, where it was sent; its Undo step still knows it.
+    await waitFor(() => expect(useAssetStudioDraftStore.getState().entries[JSON.stringify(['moodboard', 'global', 'g1'])]).toMatchObject({ dirty: false }));
+    const placed = server.board.images.find((img) => img.url === '/api/outputs/chat-uploads/river.png')!;
+    expect(placed.placements![0]).toMatchObject(replayed.at!);
+    const key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const steps = useBoardUndoStore.getState().history(key, useAssetStudioDraftStore.getState().entries[key].epoch).done;
+    expect(steps.map((step) => step.state)).toEqual(['saved']);
+  });
+
+  it('a drop above the toolbar: the replay starts from the spot moved up off the band, as the drop did', async () => {
+    await openStudio('board');
+    const view = { x: 0, y: 0, width: 1400, height: 700 };
+    const spots = tileAtTheAdd(480, 160);
+    act(() => { board.onDropFiles!([png('low.png')], { at: { x: 1100, y: 650 }, view, aim: true, band: true } as never); });
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const [replayed] = addOps();
+    const [w, h] = sizeFor(1, 1.5);
+    const taken = server.board.images.filter((img) => img.id !== replayed.images[0].id).flatMap((img) => (img.placements ?? []).map(rect));
+    expect(replayed.at).toEqual(respot({ ...spots[0], width: w, height: h }, taken, view, true));
+    for (const tile of taken) expect(keepsGap({ ...replayed.at!, width: w, height: h }, tile)).toBe(true);
+    // In the view the person dropped it in, above the toolbar.
+    expect(replayed.at!.y + h).toBeLessThanOrEqual(view.y + view.height);
+    expect(replayed.at!.x).toBeGreaterThanOrEqual(view.x);
+  });
+
+  it('an add the board left alone keeps its spot through the replay', async () => {
+    await openStudio('board');
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      spots.push(ops.find((op): op is Add => op.op === 'add')!.at!);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('far', { placements: [card('far', -900, -900)] })] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(addOps()[0].at).toEqual(spots[0]);
+  });
+
+  const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+  const [w, h] = sizeFor(1, 1.5);
+
+  it('the replay keeps off spots other uploads still hold', async () => {
+    await openStudio('board');
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    let held: { x: number; y: number; width: number; height: number } | null = null;
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const at = ops.find((op): op is Add => op.op === 'add')!.at!;
+      spots.push(at);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('other', { placements: [{ ...card('other', at.x, at.y), w, h }] })] };
+      // Where the replay would go, another paste's upload holds a spot.
+      const taken = server.board.images.flatMap((img) => (img.placements ?? []).map(rect));
+      const spot = respot({ ...at, width: w, height: h }, taken, board.view);
+      held = { ...spot, width: w, height: h };
+      const ref = useBoardAddStore.getState().held[0].board;
+      useBoardAddStore.setState((state) => ({ held: [...state.held, { id: 'placeholder-lake', ...held!,
+        source: { kind: 'file' as const, name: 'lake.png' }, board: ref }] }));
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const at = addOps()[0].at!;
+    expect(keepsGap({ ...at, width: w, height: h }, held!)).toBe(true);
+    expect(keepsGap({ ...at, width: w, height: h }, { ...spots[0], width: w, height: h })).toBe(true);
+  });
+
+  it('an add placed partly out of its view, left alone by the concurrent write, keeps its spot', async () => {
+    await openStudio('board');
+    const view = { x: 0, y: 0, width: 1000, height: 600 };
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      spots.push(ops.find((op): op is Add => op.op === 'add')!.at!);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('far', { placements: [card('far', -3000, -3000)] })] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    act(() => { board.onDropFiles!([png('edge.png')], { at: { x: 980, y: 450 }, view, aim: true } as never); });
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(spots[0].x + w).toBeGreaterThan(view.width);
+    expect(addOps()[0].at).toEqual(spots[0]);
+  });
+
+  /** A view with no room for a tile, above the toolbar's band: a drop there ends up under the band. */
+  const tightView = { x: 0, y: 0, width: 1000, height: 300 };
+
+  it('a drop with no room in view, then a 409 takes its spot: the replay starts off the band', async () => {
+    await openStudio('board');
+    const spots = tileAtTheAdd(w, h);
+    act(() => { board.onDropFiles!([png('tight.png')], { at: { x: 500, y: 280 }, view: tightView, aim: true, band: true } as never); });
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const [replayed] = addOps();
+    const taken = server.board.images.filter((img) => img.id !== replayed.images[0].id).flatMap((img) => (img.placements ?? []).map(rect));
+    const withBand = respot({ ...spots[0], width: w, height: h }, taken, tightView, true);
+    expect(withBand).not.toEqual(respot({ ...spots[0], width: w, height: h }, taken, tightView, false));
+    expect(replayed.at).toEqual(withBand);
+  });
+
+  it('a held spot the board took, from a drop with no room in view: it starts off the band too', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    act(() => { board.onDropFiles!([png('tight.png')], { at: { x: 500, y: 280 }, view: tightView, aim: true, band: true } as never); });
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const spot = { x: board.placeholders[0].x, y: board.placeholders[0].y, width: w, height: h };
+    act(() => { useAssetStudioDraftStore.getState().edit(g1Key, (draft) => ({ ...(draft as { images: MoodboardImage[] }),
+      images: [...(draft as { images: MoodboardImage[] }).images, image('x', { placements: [{ ...card('x', spot.x, spot.y), w, h }] })] })); });
+    const taken = ((useAssetStudioDraftStore.getState().entries[g1Key].draft as { images: MoodboardImage[] }).images)
+      .flatMap((img) => (img.placements ?? []).map(rect));
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    const withBand = respot(spot, taken, tightView, true);
+    expect(withBand).not.toEqual(respot(spot, taken, tightView, false));
+    expect(addOps()[0].at).toEqual(withBand);
   });
 });

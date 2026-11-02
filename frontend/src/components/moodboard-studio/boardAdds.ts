@@ -126,9 +126,16 @@ function readPending(): PendingAdd[] {
       && now - it.at < PENDING_MAX_AGE) : [];
   } catch { return []; }
 }
+/** The list within the cap: earlier page loads' records go first, oldest
+ *  first; this page's never do, since their uploads are still running
+ *  (review 7, NIT-4). */
+function capped<T extends { page: string }>(list: T[], cap: number): T[] {
+  let drop = list.length - Math.max(cap, list.filter((it) => it.page === PAGE).length);
+  return drop <= 0 ? list : list.filter((it) => it.page === PAGE || (drop -= 1) < 0);
+}
 function writePending(list: PendingAdd[]) {
   try {
-    if (list.length) window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-PENDING_CAP)));
+    if (list.length) window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(capped(list, PENDING_CAP)));
     else window.sessionStorage.removeItem(PENDING_KEY);
   } catch { /* no storage: nothing kept */ }
 }
@@ -179,6 +186,74 @@ export function takeReloadLost(board: string): string[] {
   const lost = list.filter((it) => it.board === board && it.page !== PAGE);
   if (lost.length) writePending(list.filter((it) => !lost.includes(it)));
   return lost.map((it) => it.name);
+}
+
+/**
+ * A board's background send waiting for Nebula to come back (GM r11 4): the
+ * queued send of a board New just saved, or an add that couldn't reach a
+ * board the person had left, refused while offline. It waits and is sent
+ * again on reconnect; meanwhile it is kept in this tab's session storage
+ * beside the adds on their way, so a reload of the tab doesn't lose it: the
+ * board's next open in this tab takes it back into its draft, which sends
+ * it. An image only this page holds (not uploaded yet) can't be kept: the
+ * reload line names it, as for an upload a reload cut short.
+ */
+const WAITING_KEY = 'nebula:moodboard-sends-waiting';
+interface WaitingSend { board: string; ops: MoodboardOp[]; fields: Record<string, unknown>; page: string; at: number }
+function readWaiting(): WaitingSend[] {
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(WAITING_KEY) ?? '[]') as unknown;
+    const now = Date.now();
+    return Array.isArray(parsed) ? parsed.filter((it): it is WaitingSend => typeof it?.board === 'string' && Array.isArray(it?.ops)
+      && typeof it?.fields === 'object' && it.fields !== null && typeof it?.page === 'string' && typeof it?.at === 'number'
+      && now - it.at < PENDING_MAX_AGE) : [];
+  } catch { return []; }
+}
+function writeWaiting(list: WaitingSend[]) {
+  try {
+    if (list.length) window.sessionStorage.setItem(WAITING_KEY, JSON.stringify(capped(list, PENDING_CAP)));
+    else window.sessionStorage.removeItem(WAITING_KEY);
+  } catch { /* no storage: nothing kept */ }
+}
+/** An image a later page load can still add: one on Nebula's server. */
+const storableUrl = (url: string) => !/^(blob|data):/i.test(url);
+const nameOf = (url: string) => {
+  const last = url.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? url;
+  try { return decodeURIComponent(last); } catch { return last; }
+};
+const lostId = (board: string) => `waiting:${board}:`;
+/** The saved board `board`'s send waits for Nebula: kept for a reload of this tab, in place of what was kept for it before. */
+export function keepWaitingSend(board: string, ops: readonly MoodboardOp[], fields: Record<string, unknown>) {
+  const kept: MoodboardOp[] = [];
+  const lost: string[] = [];
+  for (const op of ops) {
+    if (op.op === 'add' && op.images.some((image) => !storableUrl(image.url))) lost.push(...op.images.map((image) => nameOf(image.url)));
+    else kept.push(op);
+  }
+  const at = Date.now();
+  writeWaiting([...readWaiting().filter((it) => !(it.board === board && it.page === PAGE)),
+    ...(kept.length || Object.keys(fields).length ? [{ board, ops: kept, fields, page: PAGE, at }] : [])]);
+  const prefix = lostId(board);
+  writePending([...readPending().filter((it) => !(it.page === PAGE && it.id.startsWith(prefix))),
+    ...lost.map((name, index) => ({ id: `${prefix}${index}`, board, name, page: PAGE, at }))]);
+}
+/** `board`'s waiting send went (or there is nothing to send any more). */
+export function dropWaitingSend(board: string) {
+  const list = readWaiting();
+  const kept = list.filter((it) => !(it.board === board && it.page === PAGE));
+  if (kept.length !== list.length) writeWaiting(kept);
+  const prefix = lostId(board);
+  const pending = readPending();
+  const left = pending.filter((it) => !(it.page === PAGE && it.id.startsWith(prefix)));
+  if (left.length !== pending.length) writePending(left);
+}
+/** What an earlier page load of this tab left waiting for `board`, taken once: its ops in order, and its fields. */
+export function takeWaitingSend(board: string): { ops: MoodboardOp[]; fields: Record<string, unknown> } | null {
+  const list = readWaiting();
+  const mine = list.filter((it) => it.board === board && it.page !== PAGE);
+  if (!mine.length) return null;
+  writeWaiting(list.filter((it) => !mine.includes(it)));
+  return { ops: mine.flatMap((it) => it.ops), fields: Object.assign({}, ...mine.map((it) => it.fields)) as Record<string, unknown> };
 }
 
 interface BoardAddsState {
@@ -247,6 +322,10 @@ let openBoard: OpenBoard | null = null;
 
 export function setOpenBoard(board: OpenBoard) { openBoard = board; }
 export function clearOpenBoard(board: OpenBoard) { if (openBoard === board) openBoard = null; }
+/** The open Studio is on the board `key` names (an alias resolves to it). */
+export function isOpenBoard(key: string): boolean {
+  return openBoard !== null && resolve(openBoard.key) === resolve(key);
+}
 /** The open board, if it is the board `ref` names. */
 export function openBoardFor(ref: BoardRef): OpenBoard | null {
   return openBoard && isBoard(ref, openBoard.key) ? openBoard : null;

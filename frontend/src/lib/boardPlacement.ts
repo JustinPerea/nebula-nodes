@@ -352,3 +352,18 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, band = fals
   });
   return { spots, outside };
 }
+
+/**
+ * A spot the board took meanwhile: a held spot when the board changed under
+ * it, or a queued add replayed after a 409 (GM r11 3: exactly the same
+ * rule). It moves to the nearest free spot, in the view the person had when
+ * they added it, starting from the spot moved up off the toolbar's band, as
+ * a drop there is (`band`: that view's bottom edge was the toolbar's top).
+ * With no view, the nearest free spot anywhere.
+ */
+export function respot(rect: NodeRect, occupied: ReadonlyArray<NodeRect>, view: NodeRect | null, band = false,
+  gap = DROP_GAP): { x: number; y: number } {
+  const start = band && view ? offBand(rect, view) : rect;
+  return placeTiles({ at: { x: start.x + start.width / 2, y: start.y + start.height / 2 },
+    sizes: [[rect.width, rect.height]], occupied, view, gap }).spots[0];
+}

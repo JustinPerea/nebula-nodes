@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insideView, nearestFreeAnywhere, placeTiles } from './boardPlacement';
+import { insideView, nearestFreeAnywhere, placeTiles, respot } from './boardPlacement';
 import type { NodeRect } from './nodePlacement';
 
 // Where new tiles go on the Board view (GM - Design, #210 rulings): one helper
@@ -471,5 +471,28 @@ describe('big boards', () => {
     expect(tall.placed).toEqual(plain.placed);
     expect(plain.placed).toEqual({ spots: [{ x: 2200, y: 2594 }], outside: [0] });
     expect(tall.work).toBeLessThan(plain.work * 1.25);
+  });
+});
+
+describe('a spot the board took meanwhile (respot: a held spot, or an add replayed after a 409; GM r11 3)', () => {
+  const view = { x: 0, y: 0, width: 1000, height: 600 };
+  const occupied = [{ x: 200, y: 320, width: 500, height: 160 }, { x: 0, y: 0, width: 1000, height: 60 }];
+  const spot = { x: 400, y: 480, width: 200, height: 200 };
+
+  it('a free spot stays where it is', () => {
+    expect(respot({ x: 750, y: 100, width: 200, height: 100 }, occupied, view)).toEqual({ x: 750, y: 100 });
+  });
+
+  it('a taken spot moves to the nearest free one in the view', () => {
+    expect(respot(spot, occupied, view)).toEqual({ x: 724, y: 400 });
+  });
+
+  it('above the toolbar\'s band, it starts from the spot moved up off the band, as a drop there does', () => {
+    expect(respot(spot, occupied, view, true)).toEqual({ x: 400, y: 96 });
+  });
+
+  it('with no view, the nearest free spot anywhere', () => {
+    const placed = respot(spot, occupied, null, true);
+    expect(placeTiles({ at: { x: 500, y: 580 }, sizes: [[200, 200]], occupied, view: null }).spots[0]).toEqual(placed);
   });
 });

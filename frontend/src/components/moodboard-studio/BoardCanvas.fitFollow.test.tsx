@@ -1151,3 +1151,57 @@ describe('the close keep\'s flag (review 2 R9)', () => {
     expect(camera()).toEqual(fitViewport(430, 851));
   });
 });
+
+describe('review 7 (saveaway-merge-logic-r6b): Fit with held spots after the #213 merge', () => {
+  const held = [{ id: 'placeholder-1', x: 4000, y: 100, width: 300, height: 200, source: { kind: 'file' as const, name: 'a.png' } }];
+  it('R7-F1: Fit with a held spot is a fit: a resize refits it, and it is kept fitted', () => {
+    render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={held} />);
+    flow.setViewport.mockClear();
+    notch();
+    act(() => { fitButton().click(); });
+    runFrames();
+    const fitCam = camera();
+    resize(430, 851);
+    runFrames();
+    expect(camera()).not.toEqual(fitCam);
+    expect(kept().fitted).toBe(true);
+  });
+  it('R7-F2: a fitted board, a paste held, a resize: still fitted after the spot has gone', () => {
+    const wide = [{ id: 'placeholder-1', x: 3000, y: 400, width: 300, height: 200, source: { kind: 'file' as const, name: 'a.png' } }];
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} />);
+    expect(kept().fitted).toBe(true);
+    view.rerender(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={wide} />);
+    resize(600, 851);
+    runFrames();
+    view.rerender(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} />);
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851));
+  });
+
+  it('a placeholder outside the cards, then Fit: fitted to the cards and the spot; a narrower column refits to both; only a person\'s move unfits it', () => {
+    render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={held} />);
+    notch();
+    act(() => { fitButton().click(); });
+    runFrames();
+    // The mock board is 2000 wide for cards ending at x 1040; the spot at x 4000 widens it.
+    expect(camera()).toEqual(fitViewport(870, 851, 4960));
+    expect(kept().fitted).toBe(true);
+    resize(430, 851);
+    runFrames();
+    expect(camera()).toEqual(fitViewport(430, 851, 4960));
+    expect(kept().fitted).toBe(true);
+    // A person's pan unfits it: a resize then keeps their view.
+    act(() => {
+      flow.props!.onMoveStart!(new MouseEvent('mousedown'), camera());
+      flow.camera.x += 120;
+      flow.props!.onMove!(new MouseEvent('mousemove', { clientX: 120 }), camera());
+      flow.props!.onMoveEnd!(new MouseEvent('mouseup'), camera());
+    });
+    expect(kept().fitted).toBe(false);
+    flow.setViewport.mockClear();
+    resize(600, 851);
+    runFrames();
+    expect(flow.setViewport).not.toHaveBeenCalled();
+  });
+});

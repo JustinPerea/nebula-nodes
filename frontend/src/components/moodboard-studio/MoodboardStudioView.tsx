@@ -16,6 +16,9 @@ import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTras
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage } from '../../lib/errorCopy';
+import { isOfflineRefusal, waitUntilOnline } from '../../lib/backendConnection';
+import { useBackendOffline } from '../../lib/useBackendOffline';
+import { boardNotSavedLine } from './boardSaveLine';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -46,7 +49,8 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
 import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
-import { insideView, placeTiles, spotFree } from '../../lib/boardPlacement';
+import { insideView, placeTiles, respot, spotFree } from '../../lib/boardPlacement';
+import type { NodeRect } from '../../lib/nodePlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
 import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
@@ -55,7 +59,7 @@ import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages, reloadLostLine } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
 import { addHeld, addsInFlight, boardImages, clearPending, recordPending, takeReloadLost, boardStanding, changeHeld, claimFiles, clearOpenBoard, heldOn, nextHolderId,
-  openBoardFor, releaseFilled, releaseHeld, setOpenBoard, trackBoard, untrackBoard, useBoardAddStore,
+  dropWaitingSend, isOpenBoard, keepWaitingSend, openBoardFor, releaseFilled, releaseHeld, setOpenBoard, takeWaitingSend, trackBoard, untrackBoard, useBoardAddStore,
   type BoardRef, type OpenBoard } from './boardAdds';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
@@ -205,7 +209,7 @@ function whenNotSaving(key: string): Promise<void> {
  * rail, and its draft moves to the saved key. Returns the board's id, or
  * null if the save failed (its line is on that board's draft).
  */
-async function saveAway(key: string): Promise<string | null> {
+async function saveAway(key: string, away: 'background' | 'resend' | null = null): Promise<string | null> {
   await whenNotSaving(key);
   const store = useAssetStudioDraftStore.getState();
   const at = resolveAssetStudioDraftKey(store, key);
@@ -234,7 +238,17 @@ async function saveAway(key: string): Promise<string | null> {
     }
     return result.id;
   } catch (err) {
-    store.failSave(at, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+    if (isOfflineRefusal(err)) {
+      // Not sent: nothing shows (GM r11 4). New stays on the board; an add
+      // that saved a board the person had left sends it again on reconnect,
+      // unless the person is back on it (its autosave sends it then).
+      if (useAssetStudioDraftStore.getState().entries[at]?.pendingSaveId === attempt.id) {
+        store.patch(at, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+      }
+      if (away) void waitUntilOnline().then(() => { if (!isOpenBoard(at)) void saveAway(at, 'resend'); });
+      return null;
+    }
+    store.failSave(at, attempt.id, away === 'resend' ? boardNotSavedLine(err) : failureCopy(err, { heading: SAVE_BOARD }));
     return null;
   }
 }
@@ -249,7 +263,72 @@ async function saveAway(key: string): Promise<string | null> {
  * changed meanwhile goes on a PUT. The draft is clean once the server holds
  * it all; a failure is that board's line, with Retry.
  */
-async function sendQueued(key: string, savedId: string): Promise<void> {
+/** The view each Board add was made in, and its card's size (a rebase
+ *  sizes a queued add's card without its aspect), for a replay that has to move it. */
+const addViews = new WeakMap<MoodboardOp, { view: NodeRect | null; band: boolean; size: [number, number] }>();
+
+/**
+ * After a 409 the draft is rebased onto the board as the server has it now,
+ * its queued ops replayed. A queued add whose spot a concurrent write took
+ * (another tab's add, an agent's) moves to the nearest free spot: exactly a
+ * held spot's rule when the board changes under it, with the band's up-nudge
+ * (GM r11 3; lib/boardPlacement `respot`). The op moves in place, so its Undo
+ * step and the send that owns it still know it. `draft` is the rebased
+ * draft; true when an add moved, so the caller rebases again.
+ */
+function freeQueuedAdds(draft: MoodboardDraft, key: string): boolean {
+  const adds = (draft.pendingOps ?? []).filter((op): op is Extract<MoodboardOp, { op: 'add' }> =>
+    op.op === 'add' && Boolean(op.at) && op.images.length === 1 && Boolean(op.images[0].id));
+  if (adds.length === 0) return false;
+  const queued = new Set(adds.map((op) => op.images[0].id));
+  const rectOf = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
+  // The board's tiles, the person's cards with their queued moves, and the
+  // spots adds still uploading hold; each add is counted once it has its spot.
+  const taken = [...draft.images.filter((image) => !queued.has(image.id)).flatMap((image) => (image.placements ?? []).map(rectOf)),
+    ...heldOn(useBoardAddStore.getState().held, key).filter((holder) => !holder.listOnly && !holder.filled)];
+  let moved = false;
+  for (const op of adds) {
+    const seen = addViews.get(op);
+    const card = draft.images.find((image) => image.id === op.images[0].id)?.placements?.[0];
+    const [width, height] = seen?.size ?? (card ? [card.w, card.h] : [0, 0]);
+    if (!width || !height) continue;
+    const rect = { x: op.at!.x, y: op.at!.y, width, height };
+    if (!spotFree(rect, taken)) {
+      const spot = respot(rect, taken, seen?.view ?? null, seen?.band);
+      op.at = spot;
+      Object.assign(rect, spot);
+      moved = true;
+    }
+    taken.push(rect);
+  }
+  return moved;
+}
+
+/**
+ * A background send Nebula refused while offline (GM r11 4): it isn't sent
+ * yet, so it is no failure. Nothing shows (the banner says Nebula is
+ * offline); the save is let go with the draft still to send, kept for a
+ * reload of this tab, and sent again once on reconnect (`resend`).
+ */
+function waitToResend(key: string, savedId: string, attemptId: string, resend: () => void) {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (entry?.pendingSaveId !== attemptId) return;
+  store.patch(at, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+  const draft = entry.draft as MoodboardDraft;
+  keepWaitingSend(savedId, draft.pendingOps ?? [], unsentFields(draft));
+  void waitUntilOnline().then(resend);
+}
+
+/** The board fields the draft changed that aren't on the server yet. */
+function unsentFields(draft: MoodboardDraft): Record<string, unknown> {
+  const fields: Record<string, unknown> = draft.base ? fieldChanges(trimmedName(draft.base), trimmedName(draft)) : {};
+  delete fields.images;
+  return fields;
+}
+
+async function sendQueued(key: string, savedId: string, resend = false): Promise<void> {
   const store = useAssetStudioDraftStore.getState();
   const entryNow = () => {
     const state = useAssetStudioDraftStore.getState();
@@ -263,6 +342,12 @@ async function sendQueued(key: string, savedId: string): Promise<void> {
     const now = entryNow();
     if (now) store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), board, sent, asSent), thumbnail: board.thumbnail });
   };
+  // What this send is for: the ops and fields the draft held when it began.
+  // A change made after that (on the board, open in the Studio now) is its
+  // own step, which the Studio's autosave sends with that step's Undo.
+  const start = attempt.entry.draft as MoodboardDraft;
+  const owned = new Set(start.pendingOps ?? []);
+  const ownedFields = new Set(start.base ? Object.keys(fieldChanges(trimmedName(start.base), trimmedName(start))) : []);
   try {
     let thumbnail = attempt.entry.thumbnail;
     for (let tries = 0; ; tries += 1) {
@@ -270,7 +355,7 @@ async function sendQueued(key: string, savedId: string): Promise<void> {
       if (!draft) return;
       try {
         let version = draft.version;
-        const ops = draft.pendingOps ?? [];
+        const ops = (draft.pendingOps ?? []).filter((op) => owned.has(op));
         if (ops.length) {
           const edited = await editMoodboard(savedId, sendableBatch(ops), version);
           moveOn(edited.board, new Set(ops));
@@ -278,14 +363,15 @@ async function sendQueued(key: string, savedId: string): Promise<void> {
           thumbnail = edited.board.thumbnail;
         }
         const after = entryNow()?.draft as MoodboardDraft | undefined;
-        const fields: Partial<Record<BoardFieldKey, unknown>> = after?.base ? fieldChanges(trimmedName(after.base), trimmedName(after)) : {};
+        const drafted = start as Partial<Record<BoardFieldKey, unknown>>;
+        const fields: Partial<Record<BoardFieldKey, unknown>> = Object.fromEntries(Object.entries(
+          after?.base ? fieldChanges(trimmedName(after.base), trimmedName(drafted)) : {}).filter(([field]) => ownedFields.has(field)));
         delete (fields as { images?: unknown }).images;
         if (after && Object.keys(fields).length) {
           const saved = await updateMoodboard(savedId, {
             ...(fields as Parameters<typeof updateMoodboard>[1]),
             ...(after.projectId ? { projectId: after.projectId } : {}),
             ...(version === undefined ? {} : { baseVersion: version }) });
-          const drafted = after as Partial<Record<BoardFieldKey, unknown>>;
           moveOn(saved, undefined, Object.fromEntries(Object.keys(fields).filter((field) => field !== 'analysis')
             .map((field) => [field, drafted[field as BoardFieldKey]])));
           thumbnail = saved.thumbnail;
@@ -294,12 +380,23 @@ async function sendQueued(key: string, savedId: string): Promise<void> {
       } catch (err) {
         if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
         moveOn(err.board);
+        const rebased = entryNow()?.draft as MoodboardDraft | undefined;
+        if (rebased && freeQueuedAdds(rebased, key)) moveOn(err.board);
       }
     }
-    // Another add landed while this send was out: it goes the same way.
-    if (store.finishSave(key, attempt.id, attempt.revision, savedId, thumbnail) && entryNow()?.dirty) void sendQueued(key, savedId);
+    // Another change landed while this send was out. On a board open in the
+    // Studio, its autosave sends it (once this save is off the entry), one
+    // batch per step with each step's Undo (GM r11 1: a board New just saved
+    // keeps Undo like any saved board). On a board no Studio has open, it
+    // goes the same way as this one.
+    if (store.finishSave(key, attempt.id, attempt.revision, savedId, thumbnail)) {
+      dropWaitingSend(savedId);
+      if (entryNow()?.dirty && !isOpenBoard(key)) void sendQueued(key, savedId);
+    }
   } catch (err) {
-    store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+    if (isOfflineRefusal(err)) waitToResend(key, savedId, attempt.id, () => { void sendQueued(key, savedId, true); });
+    // Sent again on reconnect and failed: the board says why (GM r11 4).
+    else store.failSave(key, attempt.id, resend ? boardNotSavedLine(err) : failureCopy(err, { heading: SAVE_BOARD }));
   }
 }
 
@@ -362,7 +459,7 @@ async function landAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
         return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
           pendingOps: queueOps(current.pendingOps, ops) };
       });
-      if (await saveAway(board.key) === null) throw new AwayWriteFailed(null);
+      if (await saveAway(board.key, 'background') === null) throw new AwayWriteFailed(null);
       return true;
     }
     const savedId = board.savedId!;
@@ -398,16 +495,27 @@ function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   const key = resolveAssetStudioDraftKey(store, board.key);
   const entry = store.entries[key];
   if (!entry || !(entry.epoch === board.epoch || (board.savedId && entry.savedId === board.savedId))) return;
-  if (entry.loaded && board.savedId) {
+  const savedId = board.savedId;
+  if (entry.loaded && savedId) {
     store.edit(key, (draft) => {
       const current = draft as MoodboardDraft;
       const images = applyOps(current.images, ops, { aspects });
       return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
         pendingOps: queueOps(current.pendingOps, ops) };
     });
+    // Refused while offline (GM r11 4): nothing shows; kept for a reload of
+    // this tab, and the board's send goes again once on reconnect.
+    if (isOfflineRefusal(err)) {
+      const draft = useAssetStudioDraftStore.getState().entries[key].draft as MoodboardDraft;
+      keepWaitingSend(savedId, draft.pendingOps ?? [], unsentFields(draft));
+      void waitUntilOnline().then(() => sendQueued(key, savedId, true));
+      return;
+    }
   }
   // An unsaved board's failed save has its line already (saveAway).
-  if (err !== null) store.patch(key, { saveState: 'error', saveError: failureCopy(err, { heading: SAVE_BOARD }), retry: 'save' });
+  if (err !== null && !isOfflineRefusal(err)) {
+    store.patch(key, { saveState: 'error', saveError: failureCopy(err, { heading: SAVE_BOARD }), retry: 'save' });
+  }
 }
 
 /** A new board's first save: everything but the checked-edit bookkeeping. */
@@ -559,6 +667,12 @@ export function MoodboardStudioView() {
     setToast(toastNow.current);
   }, [key]);
   const dismissToast = useCallback(() => { toastNow.current = null; setToast(null); }, []);
+  // An info line (no action: the reload line, "Undid…") says something about
+  // the board it was on, once: leaving that board ends it, so a quick return
+  // doesn't show (or read) it again (review 7, NIT-1).
+  useEffect(() => {
+    if (toastNow.current && toastNow.current.key !== key && !toastNow.current.action) dismissToast();
+  }, [key, dismissToast]);
   // A polite announcement with no line on screen: the live region is
   // emptied, then given its words, so the same words twice are read twice.
   const [spoken, setSpoken] = useState('');
@@ -827,6 +941,8 @@ export function MoodboardStudioView() {
           } catch (err) {
             if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
             moveDraft(err.board);
+            const rebased = draftNow();
+            if (rebased && freeQueuedAdds(rebased, key)) moveDraft(err.board);
           }
         }
       }
@@ -844,8 +960,17 @@ export function MoodboardStudioView() {
         }
       }
       if (announced.current > (draftNow()?.version ?? 0)) void follow();
+      dropWaitingSend(id);
       return id;
     } catch (err) {
+      // Refused while offline: not sent, so no failure (GM r11 4: never an
+      // empty error box). It waits; the autosave sends it on reconnect.
+      if (isOfflineRefusal(err)) {
+        if (useAssetStudioDraftStore.getState().entries[key]?.pendingSaveId === attempt.id) {
+          store.patch(key, { pendingSaveId: null, dirty: true, saveState: 'draft' });
+        }
+        return null;
+      }
       store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
       return null;
     }
@@ -857,11 +982,14 @@ export function MoodboardStudioView() {
     if (entry?.dirty && !entry.pendingSaveId && canSave) void persist();
   };
 
+  // Not while Nebula is offline: a write would be refused. Back online, what
+  // waited goes.
+  const offline = useBackendOffline();
   useEffect(() => {
-    if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
+    if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error' || offline) return;
     const timer = window.setTimeout(() => { void persist(); }, urgent.current ? 0 : 600);
     return () => window.clearTimeout(timer);
-  }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist]);
+  }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist, offline]);
 
   /** Undo steps belong to a saved board: a new board's first save has no undo. */
   const canRecord = Boolean(savedId) && !isDraftId;
@@ -1047,8 +1175,7 @@ export function MoodboardStudioView() {
           const blocked = holders.filter((holder, index) => live[index] && !spotFree(rect(holder), taken));
           for (const holder of holders) if (live[holders.indexOf(holder)] && !blocked.includes(holder)) taken.push(rect(holder));
           for (const holder of blocked) {
-            const [spot] = placeTiles({ at: { x: holder.x + holder.width / 2, y: holder.y + holder.height / 2 },
-              sizes: [[holder.width, holder.height]], occupied: taken, view: target.view }).spots;
+            const spot = respot(rect(holder), taken, target.view, target.band);
             moved.set(holder.id, spot);
             taken.push({ ...rect(holder), ...spot });
           }
@@ -1065,6 +1192,8 @@ export function MoodboardStudioView() {
         const ops: MoodboardOp[] = target
           ? placed.map((item) => ({ op: 'add', images: [{ id: item.imageId, url: item.url }], at: item.at }))
           : [{ op: 'add', images: placed.map((item) => ({ id: item.imageId, url: item.url })) }];
+        if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, band: Boolean(target.band),
+          size: [placed[index].holder.width, placed[index].holder.height] }));
         const count = images.length;
         const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
         // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
@@ -1423,6 +1552,19 @@ export function MoodboardStudioView() {
   // Adds a reload lost on their way here (GM r8 answer 5): said once, on this board's next open.
   useEffect(() => {
     if (!loaded || !savedId) return;
+    // A send that waited for Nebula when this tab reloaded (GM r11 4): back
+    // in the draft, which sends it. An add the board holds already went.
+    const waiting = takeWaitingSend(savedId);
+    if (waiting) {
+      useAssetStudioDraftStore.getState().edit(key, (stored) => {
+        const current = stored as MoodboardDraft;
+        const has = new Set(current.images.flatMap((image) => [image.id, image.url]));
+        const ops = waiting.ops.filter((op) => op.op !== 'add' || !op.images.some((image) => has.has(image.url) || (image.id && has.has(image.id))));
+        const images = applyOps(current.images, ops);
+        return { ...current, ...(waiting.fields as Partial<MoodboardDraft>), images,
+          coverImageId: coverAfter(current.coverImageId ?? null, ops, images), pendingOps: queueOps(current.pendingOps, ops) };
+      });
+    }
     const lost = takeReloadLost(savedId);
     if (lost.length) showInfoLine(reloadLostLine(lost));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open of the board
