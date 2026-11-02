@@ -228,12 +228,78 @@ async function saveAway(key: string): Promise<string | null> {
       store.patch(at, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), result, sent, asSent), thumbnail: result.thumbnail });
     }
     if (store.finishSave(at, attempt.id, attempt.revision, result.id, result.thumbnail)) {
-      store.copyTo(at, assetStudioDraftKey('moodboard', result.projectId ? 'project' : 'global', result.id, result.projectId));
+      const savedKey = assetStudioDraftKey('moodboard', result.projectId ? 'project' : 'global', result.id, result.projectId);
+      store.copyTo(at, savedKey);
+      void sendQueued(savedKey, result.id);
     }
     return result.id;
   } catch (err) {
     store.failSave(at, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
     return null;
+  }
+}
+
+/**
+ * What a new board's draft took while saveAway's create was out (an add
+ * that landed on the open board meanwhile), sent as the open Studio's save
+ * sends it (review 6, MEDIUM-1). saveAway's board is one the person may not
+ * be on any more (New opened a fresh draft over it), so no Studio's autosave
+ * sends it: the image ops go as one checked edit on the version the create
+ * answered (a conflict reads the board and replays), then any board field
+ * changed meanwhile goes on a PUT. The draft is clean once the server holds
+ * it all; a failure is that board's line, with Retry.
+ */
+async function sendQueued(key: string, savedId: string): Promise<void> {
+  const store = useAssetStudioDraftStore.getState();
+  const entryNow = () => {
+    const state = useAssetStudioDraftStore.getState();
+    const entry = state.entries[resolveAssetStudioDraftKey(state, key)];
+    return entry?.savedId === savedId ? entry : undefined;
+  };
+  if (!entryNow()?.dirty) return;
+  const attempt = store.beginSave(key);
+  if (!attempt) return;
+  const moveOn = (board: Moodboard, sent?: ReadonlySet<MoodboardOp>, asSent?: Partial<Record<BoardFieldKey, unknown>>) => {
+    const now = entryNow();
+    if (now) store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), board, sent, asSent), thumbnail: board.thumbnail });
+  };
+  try {
+    let thumbnail = attempt.entry.thumbnail;
+    for (let tries = 0; ; tries += 1) {
+      const draft = entryNow()?.draft as MoodboardDraft | undefined;
+      if (!draft) return;
+      try {
+        let version = draft.version;
+        const ops = draft.pendingOps ?? [];
+        if (ops.length) {
+          const edited = await editMoodboard(savedId, sendableBatch(ops), version);
+          moveOn(edited.board, new Set(ops));
+          version = edited.board.version;
+          thumbnail = edited.board.thumbnail;
+        }
+        const after = entryNow()?.draft as MoodboardDraft | undefined;
+        const fields: Partial<Record<BoardFieldKey, unknown>> = after?.base ? fieldChanges(trimmedName(after.base), trimmedName(after)) : {};
+        delete (fields as { images?: unknown }).images;
+        if (after && Object.keys(fields).length) {
+          const saved = await updateMoodboard(savedId, {
+            ...(fields as Parameters<typeof updateMoodboard>[1]),
+            ...(after.projectId ? { projectId: after.projectId } : {}),
+            ...(version === undefined ? {} : { baseVersion: version }) });
+          const drafted = after as Partial<Record<BoardFieldKey, unknown>>;
+          moveOn(saved, undefined, Object.fromEntries(Object.keys(fields).filter((field) => field !== 'analysis')
+            .map((field) => [field, drafted[field as BoardFieldKey]])));
+          thumbnail = saved.thumbnail;
+        }
+        break;
+      } catch (err) {
+        if (!(err instanceof MoodboardVersionConflict) || tries >= 2) throw err;
+        moveOn(err.board);
+      }
+    }
+    // Another add landed while this send was out: it goes the same way.
+    if (store.finishSave(key, attempt.id, attempt.revision, savedId, thumbnail) && entryNow()?.dirty) void sendQueued(key, savedId);
+  } catch (err) {
+    store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
   }
 }
 
@@ -249,10 +315,12 @@ function unsavedWithContent(key: string): boolean {
 
 /** Before New (or a delete) opens a fresh draft at the unsaved key `key`:
  *  an unsaved board with content is saved first, so New never drops a paste
- *  (GM r8 answer 1). False if that save failed: keep the draft. */
-async function keepUnsaved(key: string): Promise<boolean> {
-  if (!unsavedWithContent(key)) return true;
-  return (await saveAway(key)) !== null;
+ *  (GM r8 answer 1). `kept` is false if that save failed: keep the draft.
+ *  `savedId` is the board it saved, if it saved one. */
+async function keepUnsaved(key: string): Promise<{ kept: boolean; savedId: string | null }> {
+  if (!unsavedWithContent(key)) return { kept: true, savedId: null };
+  const savedId = await saveAway(key);
+  return { kept: savedId !== null, savedId };
 }
 
 /** A failed write of an add to a board the person isn't on (review 5, LOW-4). */
@@ -424,7 +492,10 @@ export function MoodboardStudioView() {
   // while its step is still that one (round 3; else it is hidden).
   const nextUndoId = useBoardUndoStore((state) => state.history(key, epoch).done.at(-1)?.id ?? null);
   const nextRedoId = useBoardUndoStore((state) => state.history(key, epoch).undone.at(-1)?.id ?? null);
-  const draft = withBriefFields(storedDraft);
+  // One object per stored draft: the autosave waits 600 ms from the draft's
+  // last change, and a new object on every render would restart that wait on
+  // any re-render (a held spot, an upload row), so a save could wait forever.
+  const draft = useMemo(() => withBriefFields(storedDraft), [storedDraft]);
   const loading = !loaded;
   // Tiles the last add placed outside the view: the board's edge chip (GM, #210).
   const [outsideTiles, setOutsideTiles] = useState<OutsideTiles | null>(null);
@@ -862,10 +933,17 @@ export function MoodboardStudioView() {
   // came back (boardAdds.ts).
   const landHere = useRef<OpenBoard['commit']>(() => false);
   useLayoutEffect(() => {
-    // Taken only if the step was (review 5, M17): a Studio still drawn but
-    // no longer current (left mid-render, its project changing) takes
-    // nothing, so the add lands through the draft store instead of being lost.
-    landHere.current = (ops, label, aspects, now) => commitOps(ops, label, { now, aspects }) !== null;
+    // Taken only if the ops were applied (review 5, M17): a Studio still
+    // drawn but no longer current (left mid-render, its project changing)
+    // takes nothing, so the add lands through the draft store instead of
+    // being lost. Applied, not "an undo step recorded": an unsaved board
+    // records none, and its add mustn't also go the away path (review 6,
+    // MEDIUM-1).
+    landHere.current = (ops, label, aspects, now) => {
+      if (ops.length === 0 || !isCurrent()) return false;
+      commitOps(ops, label, { now, aspects });
+      return true;
+    };
   });
   useLayoutEffect(() => {
     if (!loaded) return undefined;
@@ -925,8 +1003,9 @@ export function MoodboardStudioView() {
         const holders = held;
         all = holders;
         addHeld(holders);
-        // A reload from here on loses these: the board's next open says so (GM r8 answer 5).
-        if (board.savedId) recordPending(board.savedId, holders.map((holder, index) => ({ id: holder.id, name: files[index].name })));
+        // A reload from here on loses these: the board's next open says so
+        // (GM r8 answer 5), once it has an id (review 6, LOW-3).
+        recordPending(board, holders.map((holder, index) => ({ id: holder.id, name: files[index].name })));
         if (outside.length > 0 && here()) {
           outsideSeq.current += 1;
           chip = outsideSeq.current;
@@ -1491,11 +1570,27 @@ export function MoodboardStudioView() {
     if (!draft.analysis) void runAnalyze();
   };
 
+  /** Where the person is in the Studio now (null: not in it). */
+  const routeNow = () => {
+    const ui = useUIStore.getState();
+    return mounted.current && ui.viewMode === 'moodboard-editor' ? { id: ui.moodboardEditorId, scope: ui.moodboardEditorScope } : null;
+  };
+  /** True while the person is still where they were at `route`, or on the
+   *  board `savedId` that a draft open there was just saved as (the Studio
+   *  follows a first save). New and a delete await a save; if the person
+   *  picked another board or left meanwhile, they aren't pulled back
+   *  (review 6, NIT-5). */
+  const stillOn = (route: ReturnType<typeof routeNow>, savedId: string | null) => {
+    const now = routeNow();
+    return route !== null && now !== null && now.scope === route.scope
+      && (now.id === route.id || (savedId !== null && now.id === savedId));
+  };
   const deleting = useAssetDelete('moodboard');
   const deleteBoard = async () => {
     if (!savedId || !isCurrent()) return;
     const scope = moodboardEditorScope;
     const deletedKey = key;
+    const route = routeNow();
     // Save edits made since the last autosave first, so Undo and Restore
     // bring back what the person last saw. If that save fails, don't delete.
     if (dirty && canSave) {
@@ -1513,9 +1608,11 @@ export function MoodboardStudioView() {
     const openProjectId = currentProject()?.id ?? null;
     const newKey = assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId);
     // Another unsaved board with content is saved first, as New does (GM r8 answer 1).
-    if (await keepUnsaved(newKey)) {
+    const kept = await keepUnsaved(newKey);
+    if (kept.kept) {
       store.reset(newKey, scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
     }
+    if (!stillOn(route, kept.savedId)) return;
     setRailScope(scope);
     enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
@@ -1619,12 +1716,10 @@ export function MoodboardStudioView() {
           // An unsaved board with content (an add on its way counts) is saved
           // first: New never drops a paste (GM r8 answer 1). If that save
           // fails, the board stays open with its line.
-          if (!await keepUnsaved(newKey)) {
-            setRailScope(scope);
-            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
-            return;
-          }
-          useAssetStudioDraftStore.getState().reset(newKey, emptyDraft());
+          const route = routeNow();
+          const kept = await keepUnsaved(newKey);
+          if (kept.kept) useAssetStudioDraftStore.getState().reset(newKey, emptyDraft());
+          if (!stillOn(route, kept.savedId)) return;
           setRailScope(scope);
           enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
         }}

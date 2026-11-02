@@ -264,9 +264,9 @@ The rule under GM's r8 answers: a paste the person made is never lost silently.
 - Live, Fit didn't make the chip go at first. Fit framed into the whole column, so a held spot at the bottom of the bounds sat in the 16 px inset above the toolbar, which the chip (and placement) count as outside.
 - Fit, an Update's Show and the chip's press now frame into `viewRect`'s area through `frameFor`: the column less the inset and the toolbar. A tile they bring in is in view by placement's rule, and never under the toolbar.
 - `BoardCanvas.fitFollow.test.tsx`'s expected fit is updated to match (#209's tests), and a new test checks Fit clears a toolbar.
-- For #213: `frameFor` is the one place a framing reads the insets, next to `viewRect`.
+- For #213: `frameFor` is the one place a framing reads the insets, next to `viewRect`. (Round 6b: both now read #213's `lib/boardViewInsets`, and `frameFor` became #213's `frame`.)
 
-**GM 5: a reload mid-upload.** Adds on their way to a saved board are recorded in `localStorage` (`nebula:moodboard-adds-in-flight`): holder id, board id, file name, and a page-load id. Each record goes when its add lands or fails. On a board's open, records from an earlier page load are taken once and said in one neutral line:
+**GM 5: a reload mid-upload.** Adds on their way to a saved board are recorded in `localStorage` (round 6b moved them to `sessionStorage`, per tab; see below) (`nebula:moodboard-adds-in-flight`): holder id, board id, file name, and a page-load id. Each record goes when its add lands or fails. On a board's open, records from an earlier page load are taken once and said in one neutral line:
 - one file: “river.png” wasn’t added because the page reloaded while it uploaded. Paste it again.
 - two or three: named, "… weren’t added because the page reloaded while they uploaded. Paste them again."
 - four or more: "N images weren’t added because …".
@@ -339,6 +339,82 @@ A test-harness fix: holder ids now keep counting across tests, as they do in a p
 - Focused vitest over 141 files, two workers: 2234 of 2235 passed. The one miss was a 120 s timeout in `agentPresenceFollowups.ratchet.test.ts` under load, and it passed alone (50 of 50).
 - The build passes, and the budget is 444,301 B raw of 512,000.
 
+## Round 6b (review 6, GM r10)
+
+Merged origin/main twice: e51f789f (#215) at the start (local merge 5fbd749a), then 53318ca6 (#213) once it landed (local merge c5f7c362). #210 lands second, so it takes #213's shared insets.
+
+**One view for every framing and placement (#213's insets).** `BoardCanvas` no longer has its own 16 px inset or `frameFor`.
+- Fit, an Update's Show and the chip's press all go through #213's `frame()`, the column inside `lib/boardViewInsets` (the control bar's band at the bottom, measured from the bar, `BOARD_BAR_BAND_PX` when it can't be).
+- `viewRect()` (placement's view for paste, drop and Add images, and the chip's "in view") is that same area, in board coordinates.
+- Fit still counts held spots (GM r8 answer 4): with spots held it frames cards and spots; with none it is #213's `fitFor`, so its person-intent rules (the fitted flag read from the camera, a move end with a source event, the relative zoom tolerance) are unchanged.
+- The merge conflicted in `BoardCanvas.tsx` and its two test files; `boardFitFollow.ts` merged cleanly. #213's side was kept whole; #210's held-spot Fit, `BOTTOM_BAR_ATTR` on the bar and the chip's framing were laid on it.
+- Placement's view lost the 16 px inset: #213's rule (GM) is the column less the insets. A tile can now land flush with the column's side edges; the 24 px gap still keeps it off other tiles.
+- A new test in `BoardCanvas.test.tsx` lays out a 1000 x 700 column with the bar's top 50 px up and checks that Fit, Show and the chip's press spring to the same camera, and that placement's view and the chip's view are that same area. The view expectations in the placement tests now read the insets.
+
+**Autosave waits from the draft's change, not the last render.** Found through a flaky R6-E: the Studio's `draft` was `withBriefFields(storedDraft)`, a new object every render, and it is an autosave dependency, so any re-render inside the 600 ms wait (a held spot changing, an upload row) restarted it. In the full test file, timers left by earlier tests re-rendered the Studio often enough that the List add's save never went. It's on main too. The draft is now memoized on the stored draft, and a test re-renders the Studio every 200 ms and checks the save still goes (it fails without the fix).
+
+**MEDIUM-1: the open board's commit reports what it applied.** Round 6's M17 fix made `commit` report `commitOps(...) !== null`. But `commitOps` returns the undo step, which is null on an unsaved board (no undo there), so every Board add on a new board also went the away path: a second, unversioned edit of the same image, and its spots marked `away` on the board the person was on.
+- `commit` now returns true whenever the ops were applied: the Studio is current and there were ops. A Studio no longer current still takes nothing (M17 holds).
+- Fixing that alone loses an add (review 6's R6-A): New pressed with an add in flight, the upload ends while New's create is out, the open unsaved board takes the add, the create answers without it, the draft moves to the saved key dirty, and New opens a fresh draft. Nothing sent the saved board's draft.
+- `saveAway` now ends as the Studio's own save does: after the draft moves to the saved key, `sendQueued` sends what the draft took meanwhile. The image ops go as one checked edit on the version the create answered, a 409 reads the board and replays (three tries), and a board field changed meanwhile goes on a PUT after. The draft is clean once the server holds it all. A change made while that send is out goes the same way when it lands. A failure is the saved board's own line, "Couldn't save the board.", with Retry, and the image stays in its draft.
+- No undo steps are made: an unsaved board records none, and the person may be on a fresh draft by then.
+
+**MEDIUM-2 (GM r10 2): reload records are per tab.** They live in `sessionStorage`, which is per tab and survives a reload of that tab, the case the line names. Another tab never sees or takes them, so tab 2 opening a board no longer says tab 1's live add was lost (and no longer deletes tab 1's record). The page-load id stays: after a reload, holder ids restart at 1, and an add of the new page must not clear the old page's record with the same id (R8, now tested). Follow-up, not this round: Duplicate Tab copies session storage, so the copy could say the original's add was lost while it still lands (per-page id plus a BroadcastChannel "still open?" ping).
+
+**LOW-3 (GM r10 1): the line shows on its own board.** New's empty board stays (GM: the person pressed New). An add on an unsaved board is recorded in memory against its board ref, and written under the board's id when the ref gets one (`follow()` in `boardAdds.ts`, as the first save lands). That covers New saving the board mid-upload and an away landing saving it while another add still uploads. The record says the board id, so the next open of that board says the line, and an open of any other board says nothing. An add that ends first leaves no record.
+
+**NIT-5.** New and a delete await saving the unsaved board. Afterwards they still reset the `new` key (that's right whatever the person did), but they navigate to the fresh draft only if the person is still where they started, or on the board that save just made (the Studio follows a first save). Not `isCurrent()`: after the save moves the draft to its saved key, the Studio's own `isCurrent()` is false (its key's entry moved), which would skip New's navigation every time. A delete takes its route before its own awaits.
+
+**NIT-6.** Each record carries its time. Records older than 24 h are dropped when read, and the list keeps the newest 50.
+
+**LOW-4: review 6's 14 surviving mutants.**
+- Now killed by new tests:
+  - R3 and R5: an unsaved draft discarded mid-upload, then the same image pasted on the fresh draft (a later epoch). It is its own add: it shows, isn't refused as "already being added", and lands.
+  - R8: an add that ends clears only its own page load's record, not an earlier load's record with the same holder id.
+  - R12 and R13: New while the open new board's own first save is out waits for it and keeps that board: one create, and a fresh draft.
+  - R14: a failed away write for a board whose draft was reset meanwhile writes nothing into the fresh draft.
+  - R16: away spots on a board being read again wait for the load before they fade in.
+  - R17: the reload line waits for its board to load.
+  - R21: Show frames in the same view as Fit (the one-view test).
+- Equivalent, or gone:
+  - R6 (`follow` re-files any instance on an alias): a re-filed ref of another instance never matches. `isBoard`, `boardStanding` and the saved-id pickup all check the epoch, and epochs only rise along an alias chain (`reset` bumps from the resolved entry, `copyTo` keeps it). Kept as a guard.
+  - R11 (the unsaved-content check without `at !== key`): an aliased key resolves to a saved entry, which the saved-id test already returns on. The reviewer marked it equivalent too.
+  - R18 (`landAway`'s draft patch without the saved-id check): the draft at the ref's key is loaded with a null saved id only for an unsaved board, whose adds take the draft path, never this one. A saved board's reset draft isn't loaded. Kept as a guard.
+  - R20 (`frameFor`'s degenerate-view fallback): gone with the merge. #213's `insideInsets` keeps at least 1 px each way, so a framing never gets a negative area.
+  - R23 (the upload-failure line through `here()`): `isCurrent()` is the paste-time render's check, tied to that board's key and epoch, so when it holds, the open board is the add's board. The two branches then write the same entry.
+
+**MCP.** No tool changed. `sendQueued` uses `POST /api/moodboards/{id}/edits` and `PUT /api/moodboards/{id}` as the person, the same routes as the Studio's save, so agents see the board and its image as soon as the server holds it. Reload records are client-only. `docs/MCP-SETUP.md` is unchanged.
+
+**Mutants, round 6b.** Scratchpad `paste/mutate-r6b.py` (the round 6 list with its strings brought up to date, review 6's R1-R24, and the new ones). 64 were run: round 6 mutants whose code changed (A4, A10, A11, V1, V1b, V2, V19, V25, B2-B6), review 6's R mutants, and the new ones: the commit report and the queued send (C1-C9), the records (S1-S8), NIT-5 (N5a-N5e), the insets (I1-I3) and the autosave (D1). 58 are killed.
+- Six survive, each equivalent or a guard:
+  - R6, R11, R18 and R23 (see LOW-4).
+  - S7: an add that ends leaves its in-memory record of an unsaved board. Its ref is untracked as it ends, so `follow()` never writes it; the only cost is the entry staying in memory, which is what the cleanup prevents.
+  - N5d swapped the delete's route snapshot for the same values read another way. N5e, which takes the route after the delete's awaits, is killed by a new test (the person picks another board while the trash move is out).
+
+**Gates, round 6b.**
+- tsc 0, and `npm run lint` 0.
+- Focused vitest, two workers, over 145 files: round 6's 141 plus #213's `BoardCanvas.unmount`, `boardViewInsets`, `useScrollPanel` and `useTextCut` tests. 2372 of 2372 passed. Before the #213 merge, 141 files: 2256 of 2256.
+- The build passes, and the budget is 444,782 B raw of 512,000.
+
+**Live, round 6b.** Scratchpad `paste/live6/drive6b.mjs`, at 1440 x 900, on 8797/5797, after the #213 merge (Vite restarted on it):
+- Setup:
+  - The backend ran through `serve_isolated.py` with a fresh person token on stdin. Its blocked log holds only canary lines.
+  - The browser blocked 8000-8010, 5173, 8840, 5840 and outside hosts, canary first. No request left the lane.
+  - Only `/api/uploads` was held (CDP Fetch).
+- Final run (run3): 19 of 19.
+- New with an add in flight, then a reload:
+  - While the board was unsaved, its add had no record.
+  - New saved it as an empty "Untitled Moodboard", and the record appeared in session storage under that board's id, with nothing in local storage.
+  - The reload cut the upload and landed on the projects screen (an unsaved board has no URL to come back to).
+  - Opening another board first: no line, and the record stayed.
+  - Opening the saved board: “river.png” wasn’t added because the page reloaded while it uploaded. Paste it again. The record was taken, and the empty board stays in the rail.
+- Two tabs on one board:
+  - Tab 1 pasted with the upload held, and its record went to its own session storage.
+  - Tab 2 opened the same board: no line, no record seen.
+  - Released, tab 1's add landed (server 2), its record went, and tab 2 never showed a line.
+- Earlier runs failed in the driver, not the app. After the reload, it waited for a board on the projects screen, and the next scenario then ran in a half-open page. The driver now opens the other board by URL after the reload.
+- Shots: scratchpad `paste/shots6b/` (9), each opened. md5 `uniq -d` finds no repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -352,6 +428,7 @@ A test-harness fix: holder ids now keep counting across tests, as they do in a p
 - Round 4: `boardPlaceholder.ts` (new, with a test), `boardNodes.ts` (`BoardFillContext`), `BoardCardNode.tsx`, `lib/viewportSpring.ts` (`springProgress`, with a new test), `BoardUndoToast.tsx`.
 - `frontend/tests/focusRingCss.test.ts`: the placeholder's ring is listed with the card's.
 - Round 5: `boardAdds.ts` (new: adds held per board, the open board), `MoodboardListView.tsx` (uploading rows), `OutsideChip.tsx`, `styles/moodboard-studio.css` (the uploading row).
+- Round 6b: `MoodboardStudioView.tsx` (the commit report, `sendQueued`, `keepUnsaved`'s saved id, the route check after New and a delete, the memoized draft), `boardAdds.ts` (records in session storage, written under the saved id when a ref gets one, aged and capped), `BoardCanvas.tsx` (the merge onto `lib/boardViewInsets`), and their tests.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

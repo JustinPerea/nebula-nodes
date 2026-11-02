@@ -74,7 +74,11 @@ function follow() {
       if (to !== ref.key && entry?.epoch === ref.epoch) { ref.key = to; moved = true; }
       // Its first save landed: the board has an id now.
       const here = state.entries[ref.key];
-      if (here && here.epoch === ref.epoch && here.savedId && here.savedId !== ref.savedId) { ref.savedId = here.savedId; moved = true; }
+      if (here && here.epoch === ref.epoch && here.savedId && here.savedId !== ref.savedId) {
+        ref.savedId = here.savedId;
+        moved = true;
+        recordSaved(ref);
+      }
     }
     // The held spots read their refs: redraw.
     if (moved) useBoardAddStore.setState((current) => ({ held: [...current.held] }));
@@ -96,30 +100,58 @@ export function addsInFlight(key: string): boolean {
 }
 
 /**
- * Adds on their way, by board, in browser storage (GM r8 answer 5): a reload
- * mid-upload loses them, so the next open of that board says so, once. Each
- * entry goes when its add lands or fails; one left by an earlier page load
- * is one the reload lost. With no storage, nothing is kept and nothing said.
+ * Adds on their way, by board, in this tab's session storage (GM r8 answer
+ * 5, r10 answer 2): a reload mid-upload loses them, so the next open of that
+ * board in this tab says so, once. Session storage is per tab and lives
+ * through a reload of it, so another tab never sees or takes them (review 6,
+ * MEDIUM-2). Each entry goes when its add lands or fails; one left by an
+ * earlier page load is one the reload lost. An add on a board not saved yet
+ * is kept here in memory and written under the board's id once its first
+ * save gives it one (review 6, LOW-3; GM r10 answer 1): the line shows on
+ * that board, and only there. Entries older than a day are dropped when
+ * read, and the list is capped (review 6, NIT-6). With no storage, nothing
+ * is kept and nothing said.
  */
 const PENDING_KEY = 'nebula:moodboard-adds-in-flight';
+const PENDING_MAX_AGE = 24 * 60 * 60 * 1000;
+const PENDING_CAP = 50;
 const PAGE = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random());
-interface PendingAdd { id: string; board: string; name: string; page: string }
+interface PendingAdd { id: string; board: string; name: string; page: string; at: number }
 function readPending(): PendingAdd[] {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(PENDING_KEY) ?? '[]') as unknown;
+    const parsed = JSON.parse(window.sessionStorage.getItem(PENDING_KEY) ?? '[]') as unknown;
+    const now = Date.now();
     return Array.isArray(parsed) ? parsed.filter((it): it is PendingAdd => typeof it?.id === 'string' && typeof it?.board === 'string'
-      && typeof it?.name === 'string' && typeof it?.page === 'string') : [];
+      && typeof it?.name === 'string' && typeof it?.page === 'string' && typeof it?.at === 'number'
+      && now - it.at < PENDING_MAX_AGE) : [];
   } catch { return []; }
 }
 function writePending(list: PendingAdd[]) {
   try {
-    if (list.length) window.localStorage.setItem(PENDING_KEY, JSON.stringify(list));
-    else window.localStorage.removeItem(PENDING_KEY);
+    if (list.length) window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-PENDING_CAP)));
+    else window.sessionStorage.removeItem(PENDING_KEY);
   } catch { /* no storage: nothing kept */ }
 }
-/** Files on their way to the saved board `board`, by holder id. */
-export function recordPending(board: string, files: Array<{ id: string; name: string }>) {
-  if (files.length) writePending([...readPending(), ...files.map((file) => ({ ...file, board, page: PAGE }))]);
+// Adds on boards not saved yet, by board, until the board has an id.
+const unsavedPending = new Map<BoardRef, Array<{ id: string; name: string; at: number }>>();
+/** Files on their way to the board `board` names, by holder id. */
+export function recordPending(board: BoardRef, files: Array<{ id: string; name: string }>) {
+  if (!files.length) return;
+  const at = Date.now();
+  if (board.savedId) {
+    const id = board.savedId;
+    writePending([...readPending(), ...files.map((file) => ({ ...file, board: id, page: PAGE, at }))]);
+  } else {
+    unsavedPending.set(board, [...(unsavedPending.get(board) ?? []), ...files.map((file) => ({ ...file, at }))]);
+  }
+}
+/** `ref`'s board has its id now: its adds on their way are written under it. */
+function recordSaved(ref: BoardRef) {
+  const files = unsavedPending.get(ref);
+  if (!files || !ref.savedId) return;
+  unsavedPending.delete(ref);
+  const id = ref.savedId;
+  writePending([...readPending(), ...files.map((file) => ({ ...file, board: id, page: PAGE }))]);
 }
 // A page going away (a reload, a close) cuts its uploads short, and the
 // browser can still run their failure on the way out: those adds didn't
@@ -133,6 +165,10 @@ if (typeof window !== 'undefined') {
 export function clearPending(ids: Iterable<string>) {
   if (leaving) return;
   const gone = new Set(ids);
+  for (const [ref, files] of unsavedPending) {
+    const kept = files.filter((file) => !gone.has(file.id));
+    if (kept.length) unsavedPending.set(ref, kept); else unsavedPending.delete(ref);
+  }
   const list = readPending();
   const kept = list.filter((it) => !(gone.has(it.id) && it.page === PAGE));
   if (kept.length !== list.length) writePending(kept);
@@ -164,6 +200,7 @@ export function nextHolderId(): string {
 export function resetBoardAdds() {
   openBoard = null;
   refs.clear();
+  unsavedPending.clear();
   claims.length = 0;
   turn = Promise.resolve();
   useBoardAddStore.setState({ held: [] });
