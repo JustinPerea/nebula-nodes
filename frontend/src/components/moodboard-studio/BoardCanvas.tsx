@@ -494,8 +494,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, uploading = false }:
     outsideMove(true, event);
   }, [outsideMove]);
   const onCameraMove = useCallback((event: unknown) => outsideMove(false, event), [outsideMove]);
-  const onCameraMoveEnd = useCallback(() => {
-    press.current = null;
+  // Only a move end the person made (d3's end carries their mouseup or
+  // wheel) ends a press (GM r5). React Flow also ends a gesture on a 150 ms
+  // timer, with no source event, after the camera's own moves (each spring
+  // frame is one), and that timer can fire while a press is still held: it
+  // keeps the camera, but the press goes on.
+  const onCameraMoveEnd = useCallback((event: unknown) => {
+    if (event) press.current = null;
     keepCamera();
   }, [keepCamera]);
   // The view closes (List, another board, another screen). A gesture's

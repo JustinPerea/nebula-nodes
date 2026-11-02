@@ -48,7 +48,7 @@ export function WorkspaceHeader({ title, onBack, backLabel = 'Canvas', backDisab
           <span className={navigation ? 'workspace-header__navigation-label' : undefined}>{backBusy ? 'Saving…' : backLabel}</span>
         </button>}
         <h1 className={`workspace-header__title${navigation ? ' workspace-header__navigation-label' : ''}`} data-workspace-heading tabIndex={-1}
-          ref={titleRef} title={cut ? title : undefined}>{title}</h1>
+          ref={titleRef} title={cut && !navigation ? title : undefined}>{title}</h1>
         {navigation}
       </div>
       {children && <div className="workspace-header__actions">{children}</div>}

@@ -832,6 +832,19 @@ describe('a press that jitters within the click distance (#213 review 1 LOW-1)',
     expect(kept()).toEqual({ viewport: fit, fitted: true });
   });
 
+  it('a pinch at the press point while the press is held is a zoom, not jitter (review 2 R5)', () => {
+    mounted();
+    const fit = camera();
+    pressMiddle();
+    act(() => {
+      Object.assign(flow.camera, { x: fit.x - 10, y: fit.y - 6, zoom: fit.zoom * 1.1 });
+      flow.props!.onMove!(new WheelEvent('wheel', { ctrlKey: true, deltaY: -20, clientX: 300, clientY: 200 }), camera());
+    });
+    expect(camera().zoom).toBeCloseTo(fit.zoom * 1.1, 10);
+    act(() => { flow.props!.onMoveEnd!(new MouseEvent('mouseup', { button: 1 }), camera()); });
+    expect(kept().fitted).toBe(false);
+  });
+
   it('the click distance is React Flow\'s pane click distance, passed to it', async () => {
     const { PANE_CLICK_DISTANCE } = await import('./BoardCanvas');
     mounted();
@@ -895,14 +908,14 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     ['x 0.51 px off', { x: -0.51 }, false],
     ['y 0.5 px off', { y: -0.5 }, true],
     ['y 0.51 px off', { y: 0.51 }, false],
-    ['zoom 0.0009 off', { zoom: 0.0009 }, true],
-    ['zoom 0.0011 off', { zoom: -0.0011 }, false],
+    ['zoom 0.09% off', { zoom: 0.0009 }, true],
+    ['zoom 0.11% off', { zoom: -0.0011 }, false],
   ];
   for (const [name, off, fitted] of edges) {
     it(`a camera ${name} the fit is ${fitted ? '' : 'not '}fitted`, () => {
       mounted();
       const fit = fitViewport(870, 851);
-      autopan({ x: fit.x + (off.x ?? 0), y: fit.y + (off.y ?? 0), zoom: fit.zoom + (off.zoom ?? 0) });
+      autopan({ x: fit.x + (off.x ?? 0), y: fit.y + (off.y ?? 0), zoom: fit.zoom * (1 + (off.zoom ?? 0)) });
       expect(kept().fitted).toBe(fitted);
       flow.setViewport.mockClear();
       resize(430, 851);
@@ -1078,5 +1091,63 @@ describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
     resize(430, 851);
     runFrames();
     expect(camera()).toEqual(fitViewport(430, 851, 2520));
+  });
+});
+
+// Review 2 LOW-2 and NIT-2: the band measured in a browser, and the close keep's flag.
+describe('the measured control-bar band (review 2 LOW-2)', () => {
+  /** Lay out the board 851 tall and its bar `band` px from the bottom; `on` false is no layout (the view closing). */
+  const layout = (band: number) => {
+    const state = { on: true };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const at = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 870, width: 870, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+      if (!state.on) return at(0, 0);
+      if (this.classList.contains('moodboard-board__controls')) return at(flow.state.height - band, 38);
+      if (this.classList.contains('moodboard-board')) return at(0, flow.state.height);
+      return at(0, 0);
+    });
+    return state;
+  };
+  const fitAbove = (width: number, height: number, band: number) =>
+    getViewportForBounds({ x: 0, y: 0, width: 2000, height: 1000 }, width, height - band, 0.02, 1, 0.12);
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('a wrapped bar (a 91 px band): Fit frames the cards above it', () => {
+    layout(91);
+    mounted();
+    notch();
+    act(() => { fitButton().click(); });
+    runFrames();
+    expect(camera()).toEqual(fitAbove(870, 851, 91));
+  });
+
+  it('with no layout to measure, the last measured band is used, not the fallback', () => {
+    const state = layout(91);
+    mounted();
+    expect(camera()).toEqual(fitAbove(870, 851, 91));
+    state.on = false;
+    notch();
+    act(() => { fitButton().click(); });
+    runFrames();
+    expect(camera()).toEqual(fitAbove(870, 851, 91));
+  });
+});
+
+describe('the close keep\'s flag (review 2 R9)', () => {
+  it('a pan back onto the fit, closed before it is kept: kept fitted, so it reopens fitted to its column then', () => {
+    const view = mounted();
+    act(() => {
+      flow.camera.x -= 90;
+      flow.props!.onMove!(wheel(), camera());
+    });
+    act(() => {
+      Object.assign(flow.camera, fitViewport(870, 851));
+      flow.props!.onMove!(wheel(), camera());
+    });
+    view.unmount();
+    expect(kept()).toEqual({ viewport: fitViewport(870, 851), fitted: true });
+    flow.state.width = 430;
+    mount();
+    expect(camera()).toEqual(fitViewport(430, 851));
   });
 });

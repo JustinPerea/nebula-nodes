@@ -39,18 +39,19 @@ export interface FitCamera {
 }
 
 /**
- * GM, #213 round 3: "about 0.5 px and 0.001 zoom, so rounding doesn't break
- * it". Half a screen pixel in x and y is less than anyone can see (one
- * mouse-wheel notch pans about 50 px) and absorbs floating-point rounding on
- * the way through d3; the zoom within 0.001 of the fit's (a zoom-button step
- * is 1.2x, far beyond it).
+ * GM, #213 round 3 and r5: half a screen pixel in x and y, and the zoom
+ * within 0.1% of the second camera's (the fit's: 0.001 at zoom 1). Half a
+ * pixel is less than anyone can see (one mouse-wheel notch pans about 50 px)
+ * and absorbs floating-point rounding on the way through d3. The zoom is
+ * relative so it means the same at every zoom: an absolute 0.001 at the
+ * board's minimum zoom (0.02) would count a 5% pinch as the fit.
  */
 export const FIT_TOLERANCE_PX = 0.5;
 export const FIT_TOLERANCE_ZOOM = 0.001;
 
 export function sameCamera(a: FitCamera, b: FitCamera): boolean {
   return Math.abs(a.x - b.x) <= FIT_TOLERANCE_PX && Math.abs(a.y - b.y) <= FIT_TOLERANCE_PX
-    && Math.abs(a.zoom - b.zoom) <= FIT_TOLERANCE_ZOOM;
+    && Math.abs(a.zoom - b.zoom) <= FIT_TOLERANCE_ZOOM * b.zoom;
 }
 
 export interface BoardFitFollow {
@@ -139,8 +140,11 @@ export function createBoardFitFollow({ fitted, camera, fitFor, refit, requestFra
     taken() {
       heading = false;
       openFit = false;
+      // One tolerance whether a move was reported or not (GM r5): a move
+      // that stays within sameCamera of the anchor keeps it.
       const now = camera();
-      anchor = onFitAt(now, before ?? size) ? now : null;
+      if (onFitAt(now, before ?? size)) anchor = now;
+      else if (anchor !== null && !sameCamera(now, anchor)) anchor = null;
     },
     ready: open,
     reopen() {

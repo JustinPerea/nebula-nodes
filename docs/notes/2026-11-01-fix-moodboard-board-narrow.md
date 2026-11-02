@@ -329,3 +329,81 @@ GM's ruling on round 3 (2026-11-01): the 40vh cap is right as built (the panel i
 - `tsc -b --noEmit`: clean. `npm run lint`: clean.
 - Focused vitest, `--maxWorkers=2`, from a non-empty zsh array (round 3's 113 files): 113 files, 1,495 tests passed, none timed out.
 - `npm run build` with the budget check: passed, 444,562 bytes raw / 136,501 gzip (the same raw size as round 3).
+
+## Round 3c: review 2, and GM's answers to it
+
+GM's rule for this round: "fitted" and the panel's scroll position follow what the person did, never what the app did to them.
+
+### A held press (BoardCanvas)
+
+- A press follows the 1 px click rule however long it's held. Only a move end that carries the person's own event (d3's mouseup or wheel) ends the press. React Flow also ends a gesture on a 150 ms timer with no source event after the camera's own moves (each spring frame is one). Before this round that timer cleared the press, so a press held through a refit spring, then jittered by 1 px, counted as a pan. `onCameraMoveEnd` now clears the press only `if (event)`.
+- Tests, on React Flow's real store (`BoardCanvas.unmount.test.tsx`): Fit, then a middle press held 30, 200 and 400 ms while the spring runs, with 1 px of jitter. Each lands on the fit, still fitted.
+
+### The zoom tolerance is relative (boardFitFollow)
+
+- Zoom: 0.1% of the fit's zoom (`FIT_TOLERANCE_ZOOM * b.zoom`, 0.001 at zoom 1). Pan stays at 0.5 screen px. At MIN_ZOOM 0.02 the old absolute 0.001 was a 5% pinch, and it counted as on the fit.
+- Tests: the 0.09% and 0.11% edges at zoom 1 and in the stand-in board. At the minimum zoom (2500×22000 in 719×402 clamps to 0.02), ×1.05 and ×1.0495 both unfit; the absolute form would have kept the second.
+
+### One tolerance, reported or not (review 2 NIT-1)
+
+- `taken()` keeps the anchor when the camera stays within `sameCamera` of it, and clears it only beyond that. Before, a reported 0.3 px move cleared the fit, while the same move unreported kept it.
+- Tests: after a card is added (so the board is fitted by the anchor alone), 0.3 px of drift stays fitted, unreported and then reported. 0.6 px unfits either way. A pan off the fit, a card added, then a pan back to exactly the old camera is not fitted.
+
+### The panel's scroll follows the person (layout LOW-1, useScrollPanel)
+
+- Where the person scrolled is the intent. At each size the panel sits as close to it as it can: 0 beside the board, 55 under a short board that can reach only 55, and 120 again once 120 is reachable.
+- A scroll that lands on that target is the app's (the browser's clamp or drop to 0 at a size change, or the hook's own restore) and is ignored. Any other position is the person's, clamped or not, and becomes the intent. That includes 0.
+- Tests: 120, then a short layout (55), then back gives 120. 120, then across 970, then short, then back gives 0, 55, 120. A scroll to 30 while clamped stays 30 at full size. A scroll to the end (55) while short stays 55. Content that grows while clamped brings it back to 120.
+
+### Hidden titles and the font (WorkspaceHeader, useTextCut)
+
+- A screen-reader-only h1 (a header with `navigation`: Creator Studio and Canvas) gets no `title`. Its visually hidden 1 px box always measured as cut, so it had the tooltip. Only a visible title that is actually cut gets one.
+- useTextCut measures again when the web font loads (`document.fonts.ready`, plus `loadingdone` for later faces), because the font changes the text's width without resizing its box (review 2 layout NIT-1).
+- Tests: the Canvas h1 (`CanvasTabs`), the Creator Studio h1 (`CreateView`) and a header with navigation have no title, even cut. A title the font widens gets its tooltip once the font has loaded, with no resize, and loses it when a narrower face loads. The ResizeObserver stand-in now runs only observers that observe something.
+
+### The measured view insets (review 2 logic LOW-2, NIT-2)
+
+- New unit test `src/lib/boardViewInsets.test.ts` covers:
+  - the band is the board's bottom minus the bar's top (53 for the 38 px bar 15 px up, 91 when wrapped);
+  - no layout (a 0-height board or bar, or none) gives null;
+  - the band is clamped to the board and floored at 0;
+  - the fallback;
+  - `insideInsets` and its 1 px floor.
+- Stand-in board: the board's and the bar's rects are stubbed to a 91 px band, and Fit frames the cards above it. With layout gone later (rects 0), Fit still uses the last measured band, not the 53 px fallback.
+- Close-keep flag (R9): a pan back onto the fit, closed before it's kept, is kept as `fitted: true` and reopens fitted to its new column.
+- Real store (R3, R4):
+  - a ctrl-wheel pinch, a middle drag released after close, a Fit spring mid-run at close, and a pan → Fit → close before landing → reopen on the fit;
+  - StrictMode: opens fitted, keeps a pan after mount and at close, and reopens on it. A board switch keeps b1's pan and opens b2 fitted.
+- R5: a pinch at the press point while the press is held is a zoom, not jitter.
+
+### Mutants (round 3c)
+
+`scratchpad/boardnarrow/mutate3c.py`: 42 mutants of the round's changes plus review 2's set, rewritten for the current code. 36 are killed: 33 in the first run, then N9, R5 and T6 after the tests above were added. The 6 survivors are equivalent:
+
+- **N2** (no move end clears the press): d3 starts every gesture the person makes with a start event, and `onCameraMoveStart` sets or clears the press there. A stale press never meets a later gesture's mousemove, so clearing it at the end is the stated rule but changes nothing reachable.
+- **N4** (relative to the camera's zoom instead of the fit's): the two bounds differ by 0.001 × |a − b|, about 1e-6 of the zoom at the edge.
+- **S7** (restore only when below the target): the browser never leaves `scrollTop` past the reach, and it's above the intent only after a person's scroll, which sets the intent first. At a measure, `scrollTop > target` doesn't occur.
+- **R1** (no `closed` guard in outsideMove): after close, `keepCamera` has the same guard, so nothing is kept. BoardCanvas is keyed on the board, so a close is an unmount and its refs and follower go with it. A reopen (or StrictMode's re-run) reads the camera and the follower fresh.
+- **R2** (no spring stop in the layout cleanup): the passive cleanup stops it in the same commit, before any animation frame can run, and the key makes a board switch an unmount too.
+- **R11** (reopen without cancel): a resize frame still waiting runs after the open fit has landed, with the board fitted at the same size, so it refits to the same fit.
+
+Review 2's 14 survivors: R3, R4, R9, R5, R14-R19 are killed here; R10 is N10 against the rewritten `taken()`, killed; R1, R2 and R11 are explained above. Its other mutants (R6-R8, R12, R13, R20, R21) were killed in its own run.
+
+### Live (8794/5794, serve_isolated.py, canary first)
+
+- `scratchpad/boardnarrow/live3c.mjs` with `ONLY=1`: 17/17 (`live3c.log`). This is GM's case in a real browser.
+- A reference was selected at 969×640 and its panel scrolled to 120.
+- Beside the board at 970×640, the panel reaches only 55 and sits at 55. Back under the board, it is at 120 again.
+- At 969×1400 (reach 100) it sits at 100, then returns to 120 at 640.
+- Scrolled to 30 while clamped, it stays at 30 back at 640.
+- The canary passed, and no request left the two ports.
+- No new shots. Nothing on screen changes except the panel's scroll offset, and at 1440 the panel sits beside the board and doesn't scroll.
+
+### Gates (round 3c)
+
+- The worktree has `origin/main` (e51f789f) merged with `--no-commit --no-ff`, staged and not committed. It was a clean auto-merge, and only test and notes files came from main.
+- `tsc -b --noEmit`: clean. `npm run lint`: clean.
+- Focused vitest, `--maxWorkers=2`, from a non-empty zsh array. That is 118 files: round 3's 113 plus every moodboard-studio test and `lib/boardViewInsets.test.ts`. There is no `boardPlacement` test on this branch; it is #210's.
+  - 1,554 of 1,555 tests passed.
+  - `tests/agentPresenceFollowups.ratchet.test.ts` (a source-scan ratchet) timed out at 120 s under load from the other lanes on this Mac. Run alone it passes 50/50 in 19 s.
+- `npm run build` with the budget check: passed, 444,726 bytes raw / 136,549 gzip.

@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import type { MoodboardImage } from '../../types';
 
 // #213 review 1 MEDIUM-1: React Flow's REAL store and d3 pan-zoom, not the
@@ -147,5 +147,135 @@ describe('a middle press that jitters 1 px on React Flow\'s real d3 (#213 review
     mouse(window, 'mouseup', { button: 1, clientX: 340, clientY: 200 });
     await act(async () => { await sleep(200); }); // React Flow's move end (150 ms with pan-on-scroll)
     expect(kept('drag')).toEqual({ viewport: panned, fitted: false });
+  });
+});
+
+// GM r5 (review 2 MEDIUM-1): a press follows the 1 px click rule however long
+// it's held. React Flow ends each spring frame's gesture on a 150 ms timer
+// with no source event; that end used to clear the press, so a press held
+// past it lost the rule.
+describe('a press held during a Fit spring, with 1 px of jitter (GM r5)', () => {
+  const click = (name: string) => act(() => { (screen.getByRole('button', { name }) as HTMLButtonElement).click(); });
+  async function pressDuringFitSpring(key: string, holdMs: number) {
+    await open(key);
+    const fit = flowCamera();
+    scrollPan();
+    await act(async () => { await sleep(250); });
+    expect(flowCamera()).not.toEqual(fit);
+    click('Fit the board');
+    await act(async () => { await sleep(40); }); // a couple of spring frames
+    const mid = flowCamera();
+    const pane = document.querySelector('.react-flow__pane')!;
+    mouse(pane, 'mousedown', { button: 1, buttons: 4, clientX: 300, clientY: 200 });
+    await act(async () => { await sleep(holdMs); });
+    mouse(window, 'mousemove', { buttons: 4, clientX: 301, clientY: 200 });
+    mouse(window, 'mouseup', { button: 1, clientX: 301, clientY: 200 });
+    await act(async () => { await sleep(1500); });
+    return { fit, mid, end: flowCamera(), kept: kept(key) };
+  }
+  for (const hold of [30, 200, 400]) {
+    it(`held ${hold} ms: the spring carries on to the fit, and the board is kept fitted`, async () => {
+      const r = await pressDuringFitSpring(`hold${hold}`, hold);
+      expect(r.mid).not.toEqual(r.fit);
+      expect(r.end.x).toBeCloseTo(r.fit.x, 3);
+      expect(r.end.y).toBeCloseTo(r.fit.y, 3);
+      expect(r.kept.fitted).toBe(true);
+    });
+  }
+});
+
+// Review 2's close probes on the real store (NIT-2: R3, R4).
+describe('closing mid-gesture, more cases (review 2)', () => {
+  const click = (name: string) => act(() => { (screen.getByRole('button', { name }) as HTMLButtonElement).click(); });
+  it('mid pinch (ctrl wheel): the pinch is kept', async () => {
+    const view = await open('pinch');
+    const pane = document.querySelector('.react-flow__renderer')!;
+    for (const dy of [-10, -10, -10]) {
+      act(() => { pane.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, ctrlKey: true, clientX: 400, clientY: 300, bubbles: true, cancelable: true })); });
+    }
+    const camera = flowCamera();
+    expect(camera.zoom).not.toBe(1);
+    view.unmount();
+    await act(async () => { await sleep(300); });
+    expect(kept('pinch')).toEqual({ viewport: camera, fitted: false });
+  });
+
+  it('mid middle drag, released after the close: the drag so far is kept', async () => {
+    const view = await open('mdrag');
+    const pane = document.querySelector('.react-flow__pane')!;
+    mouse(pane, 'mousedown', { button: 1, buttons: 4, clientX: 300, clientY: 200 });
+    mouse(window, 'mousemove', { buttons: 4, clientX: 360, clientY: 230 });
+    const camera = flowCamera();
+    view.unmount();
+    expect(kept('mdrag')).toEqual({ viewport: camera, fitted: false });
+    mouse(window, 'mousemove', { buttons: 4, clientX: 400, clientY: 230 });
+    mouse(window, 'mouseup', { button: 1, clientX: 400, clientY: 230 });
+    await act(async () => { await sleep(300); });
+    expect(kept('mdrag')).toEqual({ viewport: camera, fitted: false });
+  });
+
+  it('mid Fit spring: the fit is kept, fitted', async () => {
+    const view = await open('fitspring');
+    const fit = flowCamera();
+    scrollPan();
+    await act(async () => { await sleep(250); });
+    click('Fit the board');
+    await act(async () => { await sleep(50); });
+    expect(flowCamera()).not.toEqual(fit);
+    view.unmount();
+    await act(async () => { await sleep(300); });
+    expect(kept('fitspring')).toEqual({ viewport: fit, fitted: true });
+  });
+
+  it('a scroll pan, Fit, closed before the spring lands, reopened: it opens on the fit (R3)', async () => {
+    const view = await open('re');
+    const fit = flowCamera();
+    scrollPan();
+    click('Fit the board');
+    view.unmount();
+    await act(async () => { await sleep(300); });
+    expect(kept('re')).toEqual({ viewport: fit, fitted: true });
+    await open('re');
+    expect(flowCamera()).toEqual(fit);
+  });
+});
+
+// main.tsx renders under StrictMode: in development React mounts, unmounts
+// and mounts again, so the close must not leave the view closed (R4).
+describe('under StrictMode on the real store (review 2)', () => {
+  async function openStrict(key: string) {
+    const view = render(<StrictMode><BoardCanvas boardKey={key} images={images} onMove={() => {}} onDropFiles={() => {}} /></StrictMode>);
+    await screen.findAllByLabelText(/^Reference #\d/);
+    await act(async () => { await sleep(50); });
+    return view;
+  }
+  it('opens fitted, keeps a pan closed mid-gesture, and reopens on it', async () => {
+    const plain = await open('plain');
+    const plainFit = flowCamera();
+    plain.unmount();
+    const view = await openStrict('strict');
+    expect(flowCamera()).toEqual(plainFit);
+    expect(kept('strict')).toEqual({ viewport: plainFit, fitted: true });
+    const camera = scrollPan();
+    await act(async () => { await sleep(300); });
+    expect(kept('strict')).toEqual({ viewport: camera, fitted: false }); // kept after mount, not only at close
+    const again = scrollPan();
+    view.unmount();
+    expect(kept('strict')).toEqual({ viewport: again, fitted: false });
+    await act(async () => { await sleep(300); });
+    await openStrict('strict');
+    expect(flowCamera()).toEqual(again);
+  });
+
+  it('a board switch mid-pan keeps the first board\'s pan; the second opens fitted', async () => {
+    const view = render(<StrictMode><BoardCanvas key="b1" boardKey="b1" images={images} onMove={() => {}} onDropFiles={() => {}} /></StrictMode>);
+    await screen.findAllByLabelText(/^Reference #\d/);
+    await act(async () => { await sleep(50); });
+    const camera = scrollPan();
+    view.rerender(<StrictMode><BoardCanvas key="b2" boardKey="b2" images={images} onMove={() => {}} onDropFiles={() => {}} /></StrictMode>);
+    await act(async () => { await sleep(300); });
+    expect(kept('b1')).toEqual({ viewport: camera, fitted: false });
+    expect(kept('b2').fitted).toBe(true);
+    expect(flowCamera()).toEqual(kept('b2').viewport);
   });
 });

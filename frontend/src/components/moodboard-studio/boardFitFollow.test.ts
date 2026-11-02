@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getViewportForBounds } from '@xyflow/react';
 import { createBoardFitFollow, FIT_TOLERANCE_PX, FIT_TOLERANCE_ZOOM, sameCamera, type BoardFitFollow, type FitCamera } from './boardFitFollow';
 
 // #209, GM (a): refit on a column resize only while the board is fitted.
@@ -303,7 +304,7 @@ describe('fitted means on the fit of the layout the board has now (GM, #213 roun
   });
 });
 
-describe('the tolerance: half a screen pixel, and 0.001 of zoom (GM, #213 round 3)', () => {
+describe('the tolerance: half a screen pixel, and 0.1% of the fit\'s zoom (GM, #213 round 3 and r5)', () => {
   it('is pinned', () => {
     expect(FIT_TOLERANCE_PX).toBe(0.5);
     expect(FIT_TOLERANCE_ZOOM).toBe(0.001);
@@ -316,11 +317,25 @@ describe('the tolerance: half a screen pixel, and 0.001 of zoom (GM, #213 round 
     expect(sameCamera({ ...FIT, y: FIT.y + 0.51 }, FIT)).toBe(false);
   });
 
-  it('zoom: 0.0009 off is the fit, 0.0011 off is not, at any zoom', () => {
-    expect(sameCamera({ ...FIT, zoom: FIT.zoom + 0.0009 }, FIT)).toBe(true);
-    expect(sameCamera({ ...FIT, zoom: FIT.zoom - 0.0011 }, FIT)).toBe(false);
+  it('zoom, relative to the fit\'s: 0.09% off is the fit, 0.11% off is not', () => {
+    expect(sameCamera({ ...FIT, zoom: FIT.zoom * 1.0009 }, FIT)).toBe(true);
+    expect(sameCamera({ ...FIT, zoom: FIT.zoom * 0.9989 }, FIT)).toBe(false);
+    // 0.001 at zoom 1.
     expect(sameCamera({ x: 0, y: 0, zoom: 1.0009 }, { x: 0, y: 0, zoom: 1 })).toBe(true);
-    expect(sameCamera({ x: 0, y: 0, zoom: 0.0511 }, { x: 0, y: 0, zoom: 0.05 })).toBe(false);
+    expect(sameCamera({ x: 0, y: 0, zoom: 1.0011 }, { x: 0, y: 0, zoom: 1 })).toBe(false);
+  });
+
+  it('at the board\'s minimum zoom (0.02), a 5% pinch about the fit\'s own origin is not the fit (review 2 LOW-1)', () => {
+    // A 300-reference board (about 2,500 x 22,000 board px) in a 719 x 402 column clamps to the minimum zoom.
+    const fit = getViewportForBounds({ x: 0, y: 0, width: 2500, height: 22000 }, 719, 402, 0.02, 1, 0.12);
+    expect(fit.zoom).toBe(0.02);
+    expect(sameCamera({ x: fit.x, y: fit.y, zoom: fit.zoom * 1.05 }, fit)).toBe(false);
+    // The reviewer's 4.95%: an absolute 0.001 called it the fit (0.00099 is under 0.001).
+    const pinched = { x: fit.x, y: fit.y, zoom: fit.zoom * 1.0495 };
+    expect(Math.abs(pinched.zoom - fit.zoom)).toBeLessThan(0.001);
+    expect(sameCamera(pinched, fit)).toBe(false);
+    // 0.09% of it still is the fit.
+    expect(sameCamera({ ...fit, zoom: fit.zoom * 1.0009 }, fit)).toBe(true);
   });
 });
 
@@ -395,5 +410,53 @@ describe('cards change while fitted (GM, #213 round 3b)', () => {
     follow.reopen();
     expect(follow.fitted).toBe(false);
     expect(camera).toEqual(FIT);
+  });
+});
+
+// GM r5: one tolerance whether a move was reported or not (review 2 NIT-1).
+describe('a move within the tolerance keeps the anchor, reported or not (GM r5)', () => {
+  it('fitted, a card added (fitted by the anchor), then 0.3 px of drift: still fitted, unreported or reported', () => {
+    const { follow, camera, opened, board } = harness();
+    opened();
+    board.wider = 1;
+    camera.x += 0.3; // unreported
+    expect(follow.fitted).toBe(true);
+    follow.taken(); // the same, reported
+    expect(follow.fitted).toBe(true);
+    camera.x += 0.3; // 0.6 px from the anchor now
+    follow.taken();
+    expect(follow.fitted).toBe(false);
+  });
+
+  it('0.6 px of unreported drift from the anchor is not fitted (the anchor has the tolerance, not more)', () => {
+    const { follow, camera, opened, board } = harness();
+    opened();
+    board.wider = 1;
+    camera.y -= 0.6;
+    expect(follow.fitted).toBe(false);
+  });
+
+  it('a move that lands on the old column\'s fit while a refit waits sets the anchor: a card added before the frame still refits (review 2 R10)', () => {
+    const { follow, refit, flush, camera, opened, resize, board } = harness();
+    opened();
+    resize(430, 851); // the frame waits
+    camera.x += 50;
+    follow.taken();
+    Object.assign(camera, FIT); // back onto the fit of the column before the resize
+    follow.taken();
+    board.wider = 1; // a card added before the frame runs: the camera is on no fit now
+    flush();
+    expect(refit).toHaveBeenCalledWith(false);
+  });
+
+  it('a pan off the fit, a card added, then a pan back to exactly where it was fitted: not fitted (the pan let the fit go)', () => {
+    const { follow, camera, opened, board } = harness();
+    opened();
+    camera.x += 50;
+    follow.taken();
+    board.wider = 1; // the fit moves on
+    Object.assign(camera, FIT); // back on the old fit, which isn't the fit now
+    follow.taken();
+    expect(follow.fitted).toBe(false);
   });
 });
