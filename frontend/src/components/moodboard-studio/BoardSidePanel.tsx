@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
+import { useScrollPanel } from '../../hooks/useScrollPanel';
 import type { MoodboardAnalysis, MoodboardImage } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { overviewThumbnailUrl } from '../../lib/canvasOverview';
@@ -29,8 +30,12 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
   const picked = images.flatMap((image, index) => (selected.includes(image.id) ? [{ image, number: index + 1 }] : []));
   const title = picked.length === 0 ? 'Board' : picked.length === 1 ? `Reference #${picked[0].number}`
     : `${picked.length} references`;
+  // A tab stop while it scrolls (under the board in a narrow window), and its
+  // scroll position kept across the size where it doesn't (#213 round 3).
+  const panelRef = useRef<HTMLElement>(null);
+  const scrolls = useScrollPanel(panelRef);
   return (
-    <aside className="moodboard-board-panel" aria-labelledby={titleId}>
+    <aside ref={panelRef} className="moodboard-board-panel" aria-labelledby={titleId} tabIndex={scrolls ? 0 : undefined}>
       <div className="moodboard-board-panel__head">
         <h2 id={titleId} className="moodboard-board-panel__title">{title}</h2>
         {picked.length === 1 && <span className="moodboard-board-panel__sub">{referenceLine(picked[0].image)}</span>}

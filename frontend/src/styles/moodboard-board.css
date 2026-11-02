@@ -32,18 +32,30 @@
    the List view's (moodboard-studio.css) is :not(.moodboard-studio-view--board),
    so nothing has to outrank anything (fix/moodboard-board-layout; a generic template in
    workspace-header.css once outranked this one and dropped the canvas and
-   the panel into implicit tracks; tests/studioGridAreas.test.ts). */
+   the panel into implicit tracks; tests/studioGridAreas.test.ts).
+
+   It is also the query container the side panel's fold reads (below): its
+   width is the studio's. The `under` area under the board is empty, so 0
+   tall, until the panel moves into it; the third column is `auto`, so it is
+   the panel's width while the panel is in it and 0 once it has moved. */
 .moodboard-studio-view.moodboard-studio-view--board {
+  --mb-board-rail-w: 250px;
+  --mb-board-panel-w: 320px;
+  /* The board keeps at least this much height in a short window (GM, #213
+     round 3): the panel under it gives up room first (see the fold below). */
+  --mb-board-min-h: 300px;
+  container: moodboard-board / inline-size;
   position: fixed;
   inset: 0;
   z-index: 50;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-columns: 250px minmax(0, 1fr) 320px;
+  grid-template-rows: auto auto minmax(var(--mb-board-min-h), 1fr) minmax(0, auto);
+  grid-template-columns: var(--mb-board-rail-w) minmax(0, 1fr) auto;
   grid-template-areas:
     "toolbar toolbar toolbar"
     "offline offline offline"
-    "rail board panel";
+    "rail board panel"
+    "rail under under";
   background: var(--mb-board-bg);
   color: var(--mb-board-ink);
   font-family: var(--mb-board-font);
@@ -270,6 +282,8 @@
 /* The side panel. */
 .moodboard-board-panel {
   grid-area: panel;
+  box-sizing: border-box;
+  width: var(--mb-board-panel-w);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -279,6 +293,74 @@
   padding: 16px 16px 40px;
   border-left: 1px solid var(--mb-board-edge-strong);
   background: var(--mb-board-panel);
+}
+
+/* The panel is a tab stop while it scrolls (BoardSidePanel), so the
+   keyboard can scroll it: inside its edge, since the studio clips what
+   passes its own. */
+.moodboard-board-panel:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid var(--mb-board-select));
+  outline-offset: calc(-1 * var(--sr-focus-offset, 2px));
+}
+
+/* A narrow window (GM, #209 NIT-1 (b), round 2): the board keeps a usable column.
+   - The side panel moves under the board whenever side by side would leave
+     the board's column under 400 px. Side by side the column is the studio's
+     width less the rail and the panel:
+       board = width - rail (250) - panel (320) >= 400
+       <=> width >= 250 + 400 + 320 = 970 px.
+     So at 970 the board is exactly 400 wide beside the panel, and at 969 the
+     panel goes under it. The query is on the studio (the container above),
+     not the window, and the calc() names each term; container queries can't
+     read var(), so the 250 and 320 are --mb-board-rail-w and
+     --mb-board-panel-w written out (tests/studioGridAreas.test.ts checks
+     they agree).
+   - Under the board the panel is an in-flow section the width of the board's
+     column (no drawer: a drawer hides the settings and adds an open/closed
+     state). It scrolls inside itself past 40% of the window height, so the
+     board keeps the rest. In a short window it gives up that 40% too: the
+     board's row keeps --mb-board-min-h (300 px, GM #213 round 3), and the
+     panel's row, minmax(0, auto), takes only what is left, down to 0.
+   - At 760 px and under (the List view's breakpoint, moodboard-studio.css)
+     the rail folds above the board the same way the List view's does, and
+     the board takes the full width. The panel stays under the board at every
+     width up to 760, though the board alone is 400 wide from 720 (GM, #213
+     round 3: one fold at a time); so the rail's fold can stay on the window
+     (@media): the studio is the window (position: fixed, inset 0).
+   The board, then the panel, at every width: the screen order is the DOM's,
+   so focus follows it. A fitted board refits into its new column, as on any
+   resize (boardFitFollow: React Flow measures the board itself). */
+@container moodboard-board (width < calc(250px + 400px + 320px)) {
+  .moodboard-board-panel {
+    grid-area: under;
+    width: auto;
+    max-height: 40vh;
+    border-top: 1px solid var(--mb-board-edge-strong);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .moodboard-studio-view.moodboard-studio-view--board {
+    grid-template-rows: auto auto auto minmax(var(--mb-board-min-h), 1fr) minmax(0, auto);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "toolbar"
+      "offline"
+      "rail"
+      "board"
+      "under";
+  }
+
+  /* Slava's own List rule (body.app-slava-restraint .moodboard-studio-view__rail,
+     moodboard-studio.css) outranks the plain one, so the board's has its
+     Slava twin: the folded board rail's edge is the board's in both skins. */
+  .moodboard-studio-view--board > .moodboard-studio-view__rail,
+  body.app-slava-restraint .moodboard-studio-view--board > .moodboard-studio-view__rail {
+    max-height: 150px;
+    border-right: 0;
+    border-bottom: 1px solid var(--mb-board-edge-strong);
+  }
 }
 
 /* The board's Mode and Strength stack in the narrow panel. */
