@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { failureCopy, failureMessage, failureUnder, NO_RESPONSE_COPY, noResponseBecause, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 
 /** The heading the request itself carries (lib/commonsApi: each call names itself). */
@@ -53,9 +53,9 @@ export function useCommonsLine<T extends string | null>(
     // failed, and no answer is the because form too: "Nebula couldn’t load Agent review because
     // it didn’t respond. Try again."
     const what = /^Couldn['’]t (.+)\.$/.exec((options.reload ? heading : '') || requestHeading(error) || heading)?.[1];
-    const noResponse = options.reload === true && failureCopy(error).reason === NO_RESPONSE_COPY;
+    // Round 18b (GM r29 1): a load says every reason in the because form (loadFailedLine).
     const line = (isPersonRefusal(error) && what ? notConnectedBecause(what)
-      : noResponse && what ? noResponseBecause(what) : failureMessage(error, heading)) as T;
+      : options.reload && what ? loadFailedLine(what, failureCopy(error).reason) : failureMessage(error, heading)) as T;
     setLine(line);
     register(error, line);
     if (options.reload && reloadKey && reload) retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.reload-retry
@@ -72,6 +72,7 @@ export function useReloadEpoch(): [number, () => void] {
 
 /** GM r22 (PR #204 round 14): the page's own words, for a line that covers every load. */
 export const COMMONS_PAGE_HEADING = 'Couldn’t load the Commons.';
+const COMMONS_PAGE_WHAT = 'load the Commons';
 
 /** One load's failure: its own line, the page line it would share, and whether it was refused
  * only because this tab isn't connected as you. */
@@ -151,12 +152,13 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
     // under the page's (GM r22).
     const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
     // Round 15 (GM r24 c): no answer's reason is the because form too, one sentence for one cause.
-    const noResponse = failureCopy(error).reason === NO_RESPONSE_COPY;
+    // Round 18b (GM r29 1): and every other reason too (loadFailedLine).
+    const reason = failureCopy(error).reason;
     const line = isPersonRefusal(error) && what ? notConnectedBecause(what)
-      : noResponse && what ? noResponseBecause(what) : failureMessage(error, heading);
+      : what ? loadFailedLine(what, reason) : failureMessage(error, heading);
     // The page's own words over the failure's reason (the request names only itself).
     const page = isPersonRefusal(error) ? notConnectedBecause('load the Commons')
-      : noResponse ? noResponseBecause('load the Commons') : failureUnder(error, COMMONS_PAGE_HEADING) || line;
+      : loadFailedLine(COMMONS_PAGE_WHAT, reason) || line;
     setFailure(load, line, page, isPersonRefusal(error));
     settle(load);
     register(load, error, line);

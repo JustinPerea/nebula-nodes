@@ -95,8 +95,8 @@ describe('review 12 NIT-5: the because rule reads each line, not one per block',
 
   it('the hook\'s own two lines are read (it isn\'t skipped)', () => {
     const hook = sources().find(({ name }) => name.endsWith(join('commons', 'useCommonsLine.ts')))!;
-    const broken = hook.text.replace('const line = isPersonRefusal(error) && what ? notConnectedBecause(what)\n      : noResponse',
-      'const line = isPersonRefusal(error) && what ? failureMessage(error, heading)\n      : noResponse');
+    const broken = hook.text.replace('const line = isPersonRefusal(error) && what ? notConnectedBecause(what)\n      : what ? loadFailedLine',
+      'const line = isPersonRefusal(error) && what ? failureMessage(error, heading)\n      : what ? loadFailedLine');
     expect(broken).not.toBe(hook.text);
     expect(refusalLinesWithoutBecause([{ name: hook.name, text: broken }])).toHaveLength(1);
   });

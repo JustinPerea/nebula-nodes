@@ -83,7 +83,7 @@ describe('Commons comment submissions', () => {
     fireEvent.change(input, { target: { value: 'Committed comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the reference. Read-back offline.");
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load this reference. Read-back offline.');
     expect(api.comment).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -94,7 +94,8 @@ describe('Commons linked-folder submissions', () => {
     api.linkFolder.mockRejectedValueOnce(new RequestFailedError("Couldn't link the folder.", 403, { reason: 'Folder is not allowed.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    const input = screen.getByRole('textbox', { name: 'Folder path' });
+    // Round 18b (GM r29): the form shows once the settings read answers.
+    const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/references' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
@@ -114,7 +115,8 @@ describe('Commons linked-folder submissions', () => {
     const pending = deferred<unknown>(); api.linkFolder.mockReturnValueOnce(pending.promise);
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    const input = screen.getByRole('textbox', { name: 'Folder path' });
+    // Round 18b (GM r29): the form shows once the settings read answers.
+    const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/first' } });
     const submit = screen.getByRole('button', { name: 'Link folder' });
@@ -132,7 +134,8 @@ describe('Commons linked-folder submissions', () => {
     api.folders.mockResolvedValueOnce([]).mockRejectedValue(new RequestFailedError("Couldn't load the folders.", 409, { reason: 'Folder refresh offline.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    const input = screen.getByRole('textbox', { name: 'Folder path' });
+    // Round 18b (GM r29): the form shows once the settings read answers.
+    const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/committed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));

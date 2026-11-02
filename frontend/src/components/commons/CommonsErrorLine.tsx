@@ -1,5 +1,5 @@
 import { isBecauseLine } from '../../lib/notConnectedLine';
-import { isNoResponseLine } from '../../lib/errorCopy';
+import { isLoadLine } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
@@ -22,8 +22,9 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }:
   // A not-connected refusal (a because line, the general words, or a dev setup's line).
   const person = isBecauseLine(line);
   // Round 18 (GM r28 1): a load that got no answer destroys nothing either: neutral, in the same
-  // one style as a because line (styles/becauseLine.css `data-line-neutral`).
-  const neutral = !person && isNoResponseLine(line);
+  // one style as a because line (styles/becauseLine.css `data-line-neutral`). Round 18b (GM r29
+  // 1): a load that failed for any reason (errorCopy isLoadLine).
+  const neutral = !person && isLoadLine(line);
   return (
     <Tag className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
       role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}

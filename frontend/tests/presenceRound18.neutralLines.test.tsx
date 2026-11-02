@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { lineLook, NEUTRAL } from './helpers/lineLook';
 
 const { CommonsErrorLine } = await import('../src/components/commons/CommonsErrorLine');
-const { isNoResponseLine, noResponseBecause, notConnectedBecause } = await import('../src/lib/errorCopy');
+const { ACCESS_LOST_COPY, CONNECTION_LOST_COPY, isLoadLine, LOAD_BECAUSE, loadFailedLine, NO_RESPONSE_COPY, noResponseBecause, notConnectedBecause } = await import('../src/lib/errorCopy');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 
 /** Every load line #204 draws in the no-answer form, by where it shows. */
@@ -30,12 +30,30 @@ const ERROR_TOKENS = /--sr-(?:error|danger|warning|accent)\b/;
 beforeEach(() => { document.body.className = 'app-slava-restraint'; });
 afterEach(() => { cleanup(); resetLinesForTests(); document.body.className = ''; });
 
-describe('the no-answer form is a load\'s, and only it is marked neutral', () => {
-  it('isNoResponseLine reads noResponseBecause\'s form, and nothing else', () => {
-    for (const line of Object.values(LOAD_LINES)) expect(isNoResponseLine(line), line).toBe(true);
-    expect(isNoResponseLine(notConnectedBecause('load the Commons', false))).toBe(false);
-    expect(isNoResponseLine('Couldn’t load Agent review. The review set is closed.')).toBe(false);
-    expect(isNoResponseLine("Nebula didn't respond. Try again.")).toBe(false);
+describe('a load line, whatever its reason, and only a load line, is marked neutral (GM r29 1)', () => {
+  it('isLoadLine reads a load\'s line, and not an action\'s', () => {
+    for (const line of Object.values(LOAD_LINES)) expect(isLoadLine(line), line).toBe(true);
+    expect(isLoadLine(notConnectedBecause('load the Commons', false))).toBe(true);
+    expect(isLoadLine('Nebula couldn’t load Agent review. The review set is closed.')).toBe(true);
+    expect(isLoadLine('Couldn’t save the settings. That setting isn’t available.')).toBe(false);
+    expect(isLoadLine("Nebula didn't respond. Try again.")).toBe(false);
+  });
+  it('each mapped reason reads as a clause after "because"; "Try again." only where it can help', () => {
+    expect(loadFailedLine('load Agent review', NO_RESPONSE_COPY)).toBe(noResponseBecause('load Agent review'));
+    expect(loadFailedLine('load this reference', "That reference isn't there anymore. Reload to get the latest references."))
+      .toBe('Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.');
+    expect(loadFailedLine('load this reference', "That reference isn't in this held-out set. Reload to get the latest references."))
+      .toBe('Nebula couldn’t load this reference because it isn’t in this held-out set. Reload to get the latest references.');
+    expect(loadFailedLine('load the references', "Those filters didn't work. Clear them and try again."))
+      .toBe('Nebula couldn’t load the references because those filters didn’t work. Clear them and try again.');
+    expect(loadFailedLine('load the Commons settings', ACCESS_LOST_COPY))
+      .toBe('Nebula couldn’t load the Commons settings because you don’t have access to this anymore. Reload to sign in again.');
+    for (const clause of LOAD_BECAUSE.values()) expect(clause).toMatch(/^[a-z]/);
+  });
+  it('a reason with no clause: "Nebula couldn’t load X." and the reason as it is; offline nothing', () => {
+    expect(loadFailedLine('load Agent review', 'Commons is disabled')).toBe('Nebula couldn’t load Agent review. Commons is disabled');
+    expect(loadFailedLine('load the Commons', CONNECTION_LOST_COPY)).toBe(`Nebula couldn’t load the Commons. ${CONNECTION_LOST_COPY}`);
+    expect(loadFailedLine('load the Commons', '')).toBe('');
   });
 });
 
@@ -57,8 +75,19 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
     expect(lineLook(load)).toEqual(lineLook(because));
   });
 
-  it('a failure with a reason the backend wrote keeps the error look', () => {
-    const view = render(<CommonsErrorLine line="Couldn’t load Agent review. The review set is closed." />);
+  it('a load that failed for a reason the backend wrote is neutral too (GM r29 1)', () => {
+    for (const line of ['Nebula couldn’t load Agent review. The review set is closed.',
+      'Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.']) {
+      const view = render(<CommonsErrorLine line={line} />);
+      const box = view.container.querySelector('[data-commons-line]')!;
+      expect(box.hasAttribute('data-line-neutral'), line).toBe(true);
+      expect(lineLook(box), line).toEqual(NEUTRAL);
+      view.unmount();
+    }
+  });
+
+  it('an action\'s failure keeps the error look', () => {
+    const view = render(<CommonsErrorLine line="Couldn’t save the settings. That setting isn’t available. Reload to get the latest settings." />);
     const box = view.container.querySelector('[data-commons-line]')!;
     expect(box.hasAttribute('data-line-neutral')).toBe(false);
     expect(lineLook(box).color).toBe('var(--sr-error)');

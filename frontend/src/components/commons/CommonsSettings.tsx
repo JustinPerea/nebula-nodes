@@ -78,7 +78,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
-  // yet.") only once they were read: before that, or when the load failed, nothing was.
+  // yet.") only once they were read: before that, or when the load failed, nothing was. Round 18b
+  // (GM r29): the whole form waits for it too (see the early return below).
   const [loaded, setLoaded] = useState(false);
   // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
@@ -142,6 +143,15 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   // Round 16 (L4): offline the Commons is read-only like the canvas. Its
   // writes sit in disabled fieldsets; reading and Export zip stay.
   const readOnly = useBackendOffline();
+  // Round 18b (GM r29): until the settings read answers, or after it failed, only the heading and
+  // the line, as Agent review and Blind labeling do. No field or action shows over values nothing
+  // read: a Save there could overwrite the person's limits.
+  if (!loaded) return (
+    <section className="commons-settings" aria-labelledby={headingId}>
+      <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
+      <CommonsErrorLine line={error} />
+    </section>
+  );
   return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
@@ -154,7 +164,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         <ul className="commons-folders">
           {folders.map((link) => <FolderRow key={link.id} link={link} run={run} />)}
         </ul>
-        {loaded && folders.length === 0 && <p className="commons-meta">No folders linked. Linked folders are read, never written.</p>}
+        {folders.length === 0 && <p className="commons-meta">No folders linked. Linked folders are read, never written.</p>}
         <form
           className="commons-detail__row"
           onSubmit={(event) => {
@@ -221,7 +231,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       <section className="commons-detail__section" aria-label="Vocabulary candidates">
         <h3 className="commons-heading">Vocabulary candidates</h3>
         {candidates.length === 0 ? (
-          loaded && <p className="commons-meta">No new terms proposed yet.</p>
+          <p className="commons-meta">No new terms proposed yet.</p>
         ) : (
           <ul className="commons-list">
             {candidates.map((c) => (

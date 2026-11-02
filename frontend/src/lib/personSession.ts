@@ -363,13 +363,19 @@ function setPersonGateHeld(held: boolean): void {
   personGateAnsweredNow = true;
   if (settleTimer !== null) clearTimeout(settleTimer);
   settleTimer = null;
-  if (held && typeof window !== 'undefined') {
-    settleTimer = setTimeout(() => {
-      settleTimer = null;
-      personGateListeners.forEach((listener) => listener());
-    }, Math.max(0, PERSON_HELD_SETTLE_MS - (Date.now() - (personHeldSince ?? Date.now()))));
-  }
+  if (held && typeof window !== 'undefined') settleWhenDue();
   personGateListeners.forEach((listener) => listener());
+}
+/** Tells the subscribers once the hold has lasted the 150 ms. A timer can fire up to a
+ * millisecond before Date.now shows its full delay (the timer and Date.now round different
+ * clocks), and personHeldSettled reads Date.now: so when it isn't settled yet, wait the rest
+ * rather than tell no one and leave every held view unswitched (PR #204 round 18b, CI). */
+function settleWhenDue(): void {
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    if (personGateHeldNow && !personHeldSettled()) { settleWhenDue(); return; }
+    personGateListeners.forEach((listener) => listener());
+  }, Math.max(1, PERSON_HELD_SETTLE_MS - (Date.now() - (personHeldSince ?? Date.now()))));
 }
 /** Held for at least the held rule's 150 ms, counted from the hold (not a view's mount). */
 export const personHeldSettled = (): boolean =>

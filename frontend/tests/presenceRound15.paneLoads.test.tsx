@@ -51,7 +51,7 @@ async function until(check: () => unknown, max = 3000): Promise<void> {
  * destroys nothing. Read through the app's stylesheets. */
 async function shows(words: string): Promise<void> {
   await until(() => screen.getByText(words));
-  if (!words.includes('didn’t respond')) return; // the 409 case keeps its own words and look
+  // Round 18b (GM r29 1): every load line is neutral, whatever its reason.
   const line = [...document.querySelectorAll('[data-commons-line]')].find((el) => el.textContent === words)!;
   expect(line.hasAttribute('data-line-neutral'), words).toBe(true);
   expect(lineLook(line), words).toEqual(NEUTRAL);
@@ -95,15 +95,49 @@ describe('each pane load, no answer, verbatim', () => {
   }
 });
 
-describe('another cause keeps its own words', () => {
-  it('a refusal with a reason the backend wrote is not a no-answer line', async () => {
+describe('a failed settings read shows no form (GM r29: only the heading and the line)', () => {
+  /** Every field and control the settings pane draws. */
+  const controls = () => [...document.querySelectorAll('.commons-settings :is(button, input, select, textarea, form, fieldset, [role="button"])')];
+  for (const failing of ['/api/commons/settings', '/api/commons/folders', '/api/commons/vocabulary/candidates']) {
+    it(`no Save, Link folder, field or maintenance action while it has failed (${failing.slice('/api/commons/'.length)})`, async () => {
+      state.failing = failing;
+      render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={vi.fn()} />);
+      await shows(SETTINGS);
+      expect(controls().map((el) => el.outerHTML.slice(0, 60))).toEqual([]);
+      for (const name of [/^Save$/, /^Link folder$/, /Re-analyze/, /Import moodboards/, /Export zip/]) {
+        expect(screen.queryByRole('button', { name })).toBeNull();
+      }
+      expect(screen.queryByLabelText('Folder path')).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy();
+    });
+  }
+  it('before the read answers, no form either; once it answers, the form', async () => {
     state.failing = '';
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const path = new URL(String(input instanceof Request ? input.url : input)).pathname;
-      return path === '/api/commons/review' ? json({ detail: 'The review set is closed.' }, 409) : backend(input);
-    }));
+    render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={vi.fn()} />);
+    expect(controls()).toEqual([]);
+    await until(() => screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('button', { name: 'Link folder' })).toBeTruthy();
+  });
+});
+
+describe('another cause: the because form where its reason has a clause, else the reason as it is (GM r29 1)', () => {
+  const answer = (failing: string, status: number, detail: string) => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input instanceof Request ? input.url : input)).pathname;
+    return path === failing ? json({ detail }, status) : backend(input);
+  }));
+  it('a reason with no clause yet: "Nebula couldn’t load X." and the reason as it is, neutral, no "Try again."', async () => {
+    state.failing = '';
+    answer('/api/commons/review', 409, 'The review set is closed.');
     render(<CommonsReview />);
-    await shows('Couldn’t load Agent review. The review set is closed.');
+    await shows('Nebula couldn’t load Agent review. The review set is closed.');
     expect(document.body.textContent).not.toContain('didn’t respond');
+  });
+  it('the reference detail\'s 404: the because form, "Reload …" not "Try again."', async () => {
+    state.failing = '';
+    answer('/api/commons/assets/ast_1', 404, "That reference isn't there anymore. Reload to get the latest references.");
+    render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+    await shows('Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.');
+    // As the settings: nothing to edit over a reference nothing read, only Close.
+    expect([...document.querySelectorAll('.commons-detail :is(button, input, select, textarea, form)')].map((el) => el.textContent)).toEqual(['Close']);
   });
 });

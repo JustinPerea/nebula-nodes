@@ -49,7 +49,22 @@ const CATALOG = { agent: 'claude', status: 'ready', auth: { mode: 'claudeai' }, 
 
 const flush = () => act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
 const pastFirstMoment = () => act(() => new Promise<void>((resolve) => { setTimeout(resolve, HELD_LOOK_DELAY_MS + 20); }));
-const hold = async () => { act(() => session.reportPersonRequired()); await pastFirstMoment(); await flush(); };
+/** Holds the tab and waits for what the views wait on: the hold settled (the held rule's 150 ms,
+ * personHeldSettled) and its render committed. Round 18b (CI): a fixed wait raced the settle. */
+const hold = async () => {
+  act(() => session.reportPersonRequired());
+  await pastFirstMoment();
+  for (let waited = 0; !session.personHeldSettled(); waited += 10) {
+    if (waited > 2000) throw new Error('the hold never settled');
+    await act(() => new Promise<void>((resolve) => { setTimeout(resolve, 10); }));
+  }
+  await flush();
+};
+/** The frame the line first shows in: the agents are gone in it too (no 150 ms with both). */
+const lineFrame = async () => {
+  act(() => session.reportPersonRequired());
+  await flush();
+};
 
 /** The picker as the chat panel hands it its agents (ChatPanel: agentsHeld = usePersonView held). */
 function Picker() {
@@ -114,6 +129,17 @@ describe('the chat agent picker on a tab not connected as the person (GM r23 ans
     await flush();
     expect(agentButton()).not.toBeNull();
     await hold();
+    expect(pickerLine()).not.toBeNull();
+    expect(agentButton()).toBeNull();
+  });
+
+  it('the line and the agents change in one frame: never the line with the agents still listed', async () => {
+    act(() => session.notePersonPromoted());
+    openPicker();
+    await flush();
+    expect(agentButton()).not.toBeNull();
+    await lineFrame();
+    expect(session.personHeldSettled()).toBe(false);
     expect(pickerLine()).not.toBeNull();
     expect(agentButton()).toBeNull();
   });

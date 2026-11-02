@@ -175,7 +175,10 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
           aria-pressed={agent === item.id} onClick={() => { if (item.id !== agent) onAgentChange(item.id); }}>
           {item.label}
         </button>)}
-        {(agentsHeld ? [] : personalAgents).filter((item) => item.status === 'ready').map((item) => {
+        {/* Round 18b (CI): the line and the list go together. The line shows the moment the tab is
+            held (usePersonLock), while agentsHeld waits the held rule's 150 ms: without its own
+            check there were 150 ms where the line said the agents weren't listed and they were. */}
+        {(agentsHeld || agentsLock.shown ? [] : personalAgents).filter((item) => item.status === 'ready').map((item) => {
           const id: ChatAgentId = `personal:${item.id}`;
           return <button key={id} type="button" data-chat-provider={id} aria-pressed={agent === id}
             onClick={() => { if (id !== agent) onAgentChange(id); }}>

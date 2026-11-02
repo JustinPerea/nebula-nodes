@@ -136,11 +136,45 @@ export function noResponseBecause(what: string): string {
   return `Nebula couldn’t ${what} because it didn’t respond. Try again.`;
 }
 
-/** PR #204 round 18 (GM r28 1): a line in noResponseBecause's form. Only a load says it (the
- * Commons page and its panes), and a load that failed destroys nothing, so it is drawn neutral,
- * as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
-export function isNoResponseLine(text: string): boolean {
-  return /^Nebula couldn’t .+ because it didn’t respond\. Try again\.$/.test(text);
+/**
+ * PR #204 round 18b (GM r29 1): a load's reason, as the clause after "because". A load that failed
+ * destroys nothing, so every reason says it in the because form with Nebula the subject:
+ * "Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest
+ * references." Each clause is the backend's (or GM's) own line with only its subject turned to
+ * fit; "Try again." stays only where trying again can help. A reason with no clause that reads
+ * well isn't reworded here: it is in the notes' list for GM's wording batch, and says
+ * "Nebula couldn’t load X." with the reason as it is (loadFailedLine).
+ */
+export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
+  // 401 or 403 with no reason (GM's line).
+  [ACCESS_LOST_COPY, 'you don’t have access to this anymore. Reload to sign in again.'],
+  // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
+  ["That reference isn't there anymore. Reload to get the latest references.",
+    'it isn’t there anymore. Reload to get the latest references.'],
+  // A labeling image's position that isn't in the set (backend evaluation.REFERENCE_GONE).
+  ["That reference isn't in this held-out set. Reload to get the latest references.",
+    'it isn’t in this held-out set. Reload to get the latest references.'],
+  // The references' search with filters the backend can't read (backend person_copy.BAD_FILTERS).
+  ["Those filters didn't work. Clear them and try again.", 'those filters didn’t work. Clear them and try again.'],
+]);
+
+/** A load's failure line (GM r24 c, r29 1): `what` is what Nebula was doing ("load the
+ * references"), `reason` the failure's reason (failureCopy). No answer is noResponseBecause's
+ * form; a reason in LOAD_BECAUSE its clause; any other reason "Nebula couldn’t X." and the
+ * reason as it is. Empty when the reason is (a request refused offline says nothing). */
+export function loadFailedLine(what: string, reason: string): string {
+  if (!reason) return '';
+  if (reason === NO_RESPONSE_COPY) return noResponseBecause(what);
+  const clause = LOAD_BECAUSE.get(reason);
+  return clause ? `Nebula couldn’t ${what} because ${clause}` : headedLine(`Nebula couldn’t ${what}.`, reason);
+}
+
+/** PR #204 round 18 (GM r28 1), widened in round 18b (GM r29 1): a load's failure line, whatever
+ * its reason. Only a load says "Nebula couldn’t load …" or "Nebula couldn’t check …" (an
+ * action's line says "Couldn’t save …"), and a load that failed destroys nothing, so it is drawn
+ * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
+export function isLoadLine(text: string): boolean {
+  return /^Nebula couldn’t (?:load|check) /.test(text);
 }
 
 /**

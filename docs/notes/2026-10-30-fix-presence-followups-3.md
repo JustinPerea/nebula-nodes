@@ -2488,3 +2488,109 @@ GM's three fixes; with them the PR is signed off on design.
     (panel 70..416; region 424..1016), Assets, History, Settings (panel 70..470; region
     478..962), Chat (1050..1424; region 399..1041) and the Agent log open. No overlap in any.
   - Shots at 1440 in the scratchpad (`fu3r/shots-r18`), md5 `uniq -d` empty, opened.
+
+## Round 18b (GM r29; CI on d3c9e79e; base d3c9e79e)
+
+### 1. A failed settings read shows no form
+- Commons settings rendered its whole form under a failed read: the Folder path field and Link
+  folder, the Meter's empty fields and Save, Re-analyze stale, Import moodboards, Export zip. Now,
+  until the read answers (or after it failed), it renders only its heading and the line, as Agent
+  review and Blind labeling do. `loaded` was already set only by a read that answered; the empty
+  states' own `loaded &&` checks went with it.
+- Before the read answers the pane is the heading alone, as the panes are; it was the empty form.
+- The other Commons surfaces with fields or actions, checked:
+  - The reference detail: a failed read already shows only Close and the line (now pinned in
+    `paneLoads`). A failed re-read after a write keeps the reference that was read.
+  - The search and filters: they are the read itself (BAD_FILTERS tells the person to clear them),
+    nothing writes over what wasn't read.
+  - The collections: after a failed collections read the Add to select has no rows and
+    "New collection…"; Add asks for a target ("Pick or create a collection first."), so nothing is
+    written over unread values. Not changed; listed for GM (the select's wording when the
+    collections didn't load is copy).
+- Tests: `presenceRound15.paneLoads` (no button, input, select, textarea, form or fieldset in the
+  pane while any of its three reads failed, and none before the read answers; the form once it
+  does). `commonsDrafts` waits for the form.
+
+### 2. Every load line is the because form, neutral
+- `errorCopy.loadFailedLine(what, reason)`: no answer is `noResponseBecause`; a reason in
+  `LOAD_BECAUSE` reads "Nebula couldn’t X because <clause>"; any other reason "Nebula couldn’t X."
+  and the reason as it is (through `headedLine`). The panes' loads (`useCommonsLine` with
+  `reload`) and the page's (`useCommonsLoadLines`, the line and the page line) use it.
+- `isLoadLine` (was `isNoResponseLine`): a line that starts "Nebula couldn’t load " or
+  "Nebula couldn’t check " is a load's, whatever its reason; CommonsErrorLine marks it neutral. An
+  action's line ("Couldn’t save the settings. …") keeps the error look.
+- Every reason a Commons load can get, read from `backend/routes/commons.py` (GET status,
+  collections, assets/{id}, blobs, folders, settings, vocabulary/candidates, evaluation,
+  evaluation/items/{n}/image, review; POST search), and how it reads now (X is the load's words):
+
+  | Reason (code) | Where | Line |
+  |---|---|---|
+  | No answer: 5xx, 408, 429 | any | Nebula couldn’t X because it didn’t respond. Try again. |
+  | Not connected as you (403 `person_required`) | any | Nebula couldn’t X because this tab isn’t connected as you. Open the link Nebula printed when it started. (as before) |
+  | 404 "That reference isn't there anymore. Reload to get the latest references." | reference detail | Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references. |
+  | 409 "That reference isn't in this held-out set. Reload to get the latest references." | a labeling image | Nebula couldn’t load this reference because it isn’t in this held-out set. Reload to get the latest references. |
+  | 422 "Those filters didn't work. Clear them and try again." | the references (search) | Nebula couldn’t load the references because those filters didn’t work. Clear them and try again. |
+  | 401/403 with no reason ("You don't have access to this anymore. Reload to sign in again.") | any | Nebula couldn’t X because you don’t have access to this anymore. Reload to sign in again. |
+
+  "Try again." stays only where it can help (no answer; filters the person can clear).
+
+- **For GM's wording batch** (no clause that reads well; each says "Nebula couldn’t X." and the
+  backend's message as it is, neutral):
+
+  | Reason (code) | Where | Line now |
+  |---|---|---|
+  | 404 "Commons is disabled" | every load, when the Commons is off | Nebula couldn’t X. Commons is disabled |
+  | 404 "not found" | a reference's image or video (blobs) | Nebula couldn’t load this reference. not found |
+  | 401 "no UI session: open Nebula from the desktop app or use the dev link" | any | Nebula couldn’t X. no UI session: … |
+  | 401 "invalid UI session token" | any | Nebula couldn’t X. invalid UI session token |
+  | 403 "only the human UI session can do this" | folders, settings, candidates, evaluation, review | Nebula couldn’t X. only the human UI session can do this |
+  | 4xx with no readable reason (FastAPI field errors): "Try again, or reload if it keeps happening." | any | Nebula couldn’t X. Try again, or reload if it keeps happening. |
+  | No answer at all (ConnectionLost): "Nebula's server isn't answering. Make sure it's running, then try again." | any, when not already offline | Nebula couldn’t X. Nebula's server isn't answering. Make sure it's running, then try again. |
+
+  GM's example, "the review set is closed", isn't a load's reason: the backend says
+  "This held-out set is closed, so the agent can't grade it again." only for a grade request
+  (review/propose), an action. The tests use it as an unmapped reason.
+
+### 3. The header slot
+- Unchanged, as GM ruled: empty and hidden.
+
+### CI on d3c9e79e: `presenceRound14.pickerLine`, "a stored token the backend no longer takes"
+- Not round 18: the test renders only the picker (no notice region, no side panels).
+- Cause, a race in `lib/personSession`: the held rule's settle timer told the views once, after
+  150 ms, and the views read `personHeldSettled()`, which measures with Date.now. A Node timer can
+  fire up to a millisecond before Date.now shows its full delay (the timer's clock and Date.now
+  round different clocks: 2 of 800 20 ms timers in a probe). Then the views read "not settled",
+  nothing told them again, and a held view stayed unswitched: the agents stayed listed under the
+  line. Fix: the timer waits the rest when it isn't settled yet (`settleWhenDue`). Test:
+  `presenceRound18b.heldSettle` runs Date.now a millisecond behind the timers.
+- The product also had a 150 ms frame with the line and the agents both showing: the line shows
+  the moment the tab is held (usePersonLock), the list waited the held rule. The picker now hides
+  the agents whenever the line shows too. Test: "the line and the agents change in one frame".
+- The test's `hold()` waits on `personHeldSettled()` and a flush, not a fixed time.
+- Mutations: the early timer told no one (killed), the agents back behind the line (killed).
+- Loop: the picker test and the settle test, 50 runs in a row, 50 of 50, with six CPU-bound
+  node processes beside them for the first 15 minutes of the run (they had a 15-minute cap and
+  ended before the last runs).
+
+### Gates
+- tsc and eslint clean; check:inline-styles and check:slava-css-scope pass.
+- vitest on two workers, an explicit zsh array of 350 files (round 18's set, plus every test
+  naming CommonsSettings, useCommonsLine, personSession or ChatModelPicker): 350 of 350,
+  4,647 of 4,647, Errors 0, no timeouts.
+- `npm run build` with the budget check: 458,350 B raw / 141,247 B gzip.
+- Mutations (rsync copy): 15 run, 15 killed. Settings: the form back on a failed read, a
+  maintenance action in the held pane. Lines: the gone clause dropped, clauses never used, the
+  pane load back to the heading line, the page line back to failureUnder, the page's own line back
+  to the heading line, neutral only for no answer, a line offline, neutral for actions too, the
+  access, filters and held-out clauses dropped. CI: the early timer telling no one, the agents
+  back behind the line.
+- Live (8951/5951, backend only through `harness/serve_isolated.py` with the person token on
+  stdin; canaries first; `blocked.log` holds only canary lines): 9 of 9.
+  - F-settings-500: the pane holds only its h2 and the line; no button, input, select, form or
+    fieldset.
+  - A real backend reason: the references' search sent with filters the backend can't read; the
+    backend answered 422 with its own line, shown as "Nebula couldn’t load the references because
+    those filters didn’t work. Clear them and try again.", neutral (ink and rule
+    rgba(255,255,255,0.55), as the because line).
+  - Agent review, Blind labeling and the page line stay neutral.
+  - Shots at 1440 in the scratchpad (`fu3r/shots-r18b`), md5 `uniq -d` empty, opened.

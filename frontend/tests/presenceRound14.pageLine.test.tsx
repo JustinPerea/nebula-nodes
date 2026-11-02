@@ -162,7 +162,8 @@ describe('a connected tab (GM r22, confirmed)', () => {
     await until(() => expect(shownLines()).toHaveLength(2));
     const [first, second] = shownLines();
     expect(first).toBe('Nebula couldn’t check the Commons status because it didn’t respond. Try again.');
-    expect(second).toMatch(/^Couldn’t load the references\. /);
+    // Round 18b (GM r29 1): a load's other reason is a Nebula-subject load line too.
+    expect(second).toMatch(/^Nebula couldn’t load the references[. ]/);
     expect(second).not.toMatch(/respond/);
   });
 });
