@@ -38,7 +38,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 
 type Failure = 'network' | 503 | 500 | 429 | 'detail-409' | 'bare-400' | 'bare-403' | 'bare-413' | 'field-list' | 'conflict';
-const state: { edits: Failure | null; put: Failure | null; load: Failure | null; analyze: Failure | null } = { edits: null, put: null, load: null, analyze: null };
+const state: { edits: Failure | null; put: Failure | null; load: Failure | null; analyze: Failure | null; create: (() => Response) | null } = { edits: null, put: null, load: null, analyze: null, create: null };
 
 const board = (): Moodboard => ({
   id: 'g1', name: 'Global board', version: 1, notes: '', mode: 'look', strength: 0.7,
@@ -73,6 +73,7 @@ async function backend(input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (url.pathname === '/api/moodboards/g1/analyze' && method === 'POST' && state.analyze) return fail(state.analyze);
   if (url.pathname === '/api/moodboards/g1/analyze' && method === 'POST') return json(board());
   if (url.pathname === '/api/moodboards/g1' && method === 'GET') return state.load ? fail(state.load) : json(board());
+  if (url.pathname === '/api/moodboards' && method === 'POST' && state.create) return state.create();
   if (url.pathname === '/api/moodboards' && method === 'GET') return json(url.searchParams.get('scope') === 'global' ? [board()] : []);
   return json({});
 }
@@ -82,6 +83,7 @@ beforeEach(() => {
   state.put = null;
   state.load = null;
   state.analyze = null;
+  state.create = null;
   vi.stubGlobal('fetch', vi.fn(backend));
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   setOpenProject(['p1', 'Project']);
@@ -261,5 +263,35 @@ describe('a save still owed under another failure', () => {
     await waitFor(() => expect(sent().slice(before).some((call) =>
       call === 'POST /api/moodboards/g1/edits' || call === 'PUT /api/moodboards/g1')).toBe(true));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+  });
+});
+
+// Round 6f (GM r14): a new board's create goes through the real lib/api here, so its heading and line are
+// what the person reads. Nothing is lost when it fails: r12's neutral line, never "create".
+describe('a new board\'s save (its create) that fails', () => {
+  const openNewWithName = async () => {
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    render(<MoodboardStudioView />);
+    await screen.findByDisplayValue('Untitled Moodboard');
+    // An image on the unsaved board: New saves it first (GM r8 answer 1).
+    act(() => { useAssetStudioDraftStore.getState().edit(JSON.stringify(['moodboard', 'global', 'new']),
+      (draft) => ({ ...(draft as object), images: board().images })); });
+    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+  };
+
+  it('with no answer: the neutral save line and the "Not saved" chip, as a background save says it', async () => {
+    state.create = () => { throw new TypeError('Failed to fetch'); };
+    await openNewWithName();
+    const line = await screen.findByText('Nebula couldn’t save the board because the server isn’t answering. Try again.');
+    expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--neutral');
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Not saved');
+    expect(document.body.textContent).not.toMatch(/Couldn.t create/);
+  });
+
+  it('a 422 refusing the create\'s id: the error look under the save heading, never "create"', async () => {
+    state.create = () => json({ detail: "requestId must be 8 to 128 letters, digits, '-' or '_'" }, 422);
+    await openNewWithName();
+    expect(lines(await notice())).toEqual([SAVE, "requestId must be 8 to 128 letters, digits, '-' or '_'"]);
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
   });
 });

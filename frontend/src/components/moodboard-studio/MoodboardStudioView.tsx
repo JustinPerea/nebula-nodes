@@ -18,7 +18,7 @@ import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, isBackendUnreachable } from '../../lib/errorCopy';
 import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { useBackendOffline } from '../../lib/useBackendOffline';
-import { boardNotSavedLine, isBoardNotSavedLine } from './boardSaveLine';
+import { boardSaveFailure, isBoardNotSavedLine } from './boardSaveLine';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -256,14 +256,15 @@ async function saveAway(key: string, away: 'background' | 'resend' | null = null
       if (away) void waitUntilOnline().then(() => { if (!isOpenBoard(at)) void saveAway(at, 'resend'); });
       return null;
     }
-    store.failSave(at, attempt.id, away === 'resend' ? boardNotSavedLine(err) : failureCopy(err, { heading: SAVE_BOARD }));
+    // Nothing is lost: the draft keeps it and Retry sends it again (GM r14).
+    store.failSave(at, attempt.id, boardSaveFailure(err));
     return null;
   }
 }
 
 /** The view each Board add was made in, and its card's size (a rebase
  *  sizes a queued add's card without its aspect), for a replay that has to move it. */
-const addViews = new WeakMap<MoodboardOp, { view: NodeRect | null; band: boolean; size: [number, number] }>();
+const addViews = new WeakMap<MoodboardOp, { view: NodeRect | null; seen?: NodeRect | null; band: boolean; size: [number, number] }>();
 
 /**
  * After a 409 the draft is rebased onto the board as the server has it now,
@@ -476,7 +477,7 @@ async function sendQueued(key: string, savedId: string, resend: SendOwns | null 
   } catch (err) {
     if (await notSentYet(err, resend ? 'resend' : 'background')) waitToResend(key, savedId, attempt.id, owns);
     // Sent again on reconnect and failed: the board says why (GM r11 4).
-    else store.failSave(key, attempt.id, resend ? boardNotSavedLine(err) : failureCopy(err, { heading: SAVE_BOARD }));
+    else store.failSave(key, attempt.id, boardSaveFailure(err));
   }
 }
 
@@ -577,7 +578,7 @@ function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   if (!entry || !(entry.epoch === board.epoch || (board.savedId && entry.savedId === board.savedId))) return;
   const savedId = board.savedId;
   const failed = () => {
-    store.patch(key, { saveState: 'error', saveError: failureCopy(err, { heading: SAVE_BOARD }), retry: 'save' });
+    store.patch(key, { saveState: 'error', saveError: boardSaveFailure(err), retry: 'save' });
   };
   if (entry.loaded && savedId) {
     store.edit(key, (draft) => {
@@ -980,7 +981,7 @@ export function MoodboardStudioView() {
       const seen = addViews.get(op);
       if (!seen?.view || !op.at) return [];
       const rect = { x: op.at.x, y: op.at.y, width: seen.size[0], height: seen.size[1] };
-      return outsideForChip(rect, seen.view) ? [{ rect, thumb: op.images[0]?.url ?? null }] : [];
+      return outsideForChip(rect, seen.seen ?? seen.view) ? [{ rect, thumb: op.images[0]?.url ?? null }] : [];
     });
     if (outside.length === 0) return;
     outsideSeq.current += 1;
@@ -1104,7 +1105,9 @@ export function MoodboardStudioView() {
         }
         return null;
       }
-      store.failSave(key, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+      // A new board's create says r12's line (GM r14), as its background save
+      // does; a saved board's own save keeps the Studio's save line.
+      store.failSave(key, attempt.id, attempt.entry.savedId ? failureCopy(err, { heading: SAVE_BOARD }) : boardSaveFailure(err));
       return null;
     }
   }, [key, epoch, isCurrent, verifyProject, enterMoodboardEditor, moveDraft, draftNow, follow, forgetUnsentSteps, fieldSteps, chipMovedAdds]);
@@ -1253,7 +1256,7 @@ export function MoodboardStudioView() {
           // The board's tiles and the spots earlier adds still hold.
           const occupied = [...boardImages(board.key).flatMap((image) => (image.placements ?? []).map(rectOf)),
             ...heldOn(useBoardAddStore.getState().held, board.key).filter((holder) => !holder.listOnly)];
-          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim, band: target.band });
+          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, seen: target.seen, aim: target.aim, band: target.band });
           outside = placed.outside;
           held = placed.spots.map((spot, index) => ({ id: nextHolderId(), ...spot, width: sizes[index][0], height: sizes[index][1],
             source: { kind: 'file' as const, name: files[index].name }, board }));
@@ -1325,7 +1328,7 @@ export function MoodboardStudioView() {
         const ops: MoodboardOp[] = target
           ? placed.map((item) => ({ op: 'add', images: [{ id: item.imageId, url: item.url }], at: item.at }))
           : [{ op: 'add', images: placed.map((item) => ({ id: item.imageId, url: item.url })) }];
-        if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, band: Boolean(target.band),
+        if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, seen: target.seen, band: Boolean(target.band),
           size: [placed[index].holder.width, placed[index].holder.height] }));
         const count = images.length;
         const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
@@ -1405,7 +1408,7 @@ export function MoodboardStudioView() {
       const aimedOut = !(target.aim && index === 0)
         || rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= bottom || rect.y + rect.height <= view.y
         || Boolean(target.band && rect.y + rect.height > bottom);
-      return aimedOut && outsideForChip(rect, view) ? [rect] : [];
+      return aimedOut && outsideForChip(rect, target.seen ?? view) ? [rect] : [];
     });
     if (chip !== null) {
       setOutsideTiles((current) => (current?.id !== chip ? current
@@ -1671,7 +1674,8 @@ export function MoodboardStudioView() {
     let tries = 0;
     const chipFor = () => {
       frame = 0;
-      const shownView = pasteTarget.current?.().view ?? null;
+      const shown = pasteTarget.current?.();
+      const shownView = shown?.seen ?? shown?.view ?? null;
       if (!shownView) {
         if (tries++ < 60) frame = window.requestAnimationFrame(chipFor);
         return;

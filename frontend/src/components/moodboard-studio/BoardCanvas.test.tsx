@@ -274,7 +274,9 @@ describe('where a paste lands (Cmd+V)', () => {
 
   it('carries the view at paste time (the board inside the view insets: no bar measured, so the fallback band), and is not aimed', () => {
     const { pasteTarget } = mountWithPoint();
-    expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 694 }, aim: false });
+    // No bar and no notice band on screen: the seen area is the whole view (the window's foot is below it).
+    expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 694 },
+      seen: { x: 20, y: 40, width: 1200, height: 694 }, aim: false });
   });
 
   it('is gone once the board unmounts, so the List view never places a paste', () => {
@@ -300,15 +302,35 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     const drop = createEvent.drop(wrapper, { dataTransfer: { files: [file], types: ['Files'] } });
     Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
     fireEvent(wrapper, drop);
-    // Screen (10, 20)-(610, 370), doubled by the stand-in screenToFlowPosition.
-    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 20, y: 40, width: 1200, height: 700 }, aim: true, band: true }]);
+    // Screen (10, 20)-(610, 370), doubled by the stand-in screenToFlowPosition. The seen area stops at the
+    // chip's floor, the bar's top less its gap (362 on screen, 724 on the board; round 6f).
+    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 20, y: 40, width: 1200, height: 700 },
+      seen: { x: 20, y: 40, width: 1200, height: 684 }, aim: true, band: true }]);
   });
 
   it('Add images follows the free-spot rule from the middle of the view', () => {
     const view = mount();
     sized(view);
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-    expect(targets).toEqual([{ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 700 }, aim: false }]);
+    expect(targets).toEqual([{ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 700 },
+      seen: { x: 20, y: 40, width: 1200, height: 684 }, aim: false }]);
+  });
+
+  it('the seen area leaves out the notice band above the toolbar, the chip\'s own floor (round 6f, GM r14)', () => {
+    const view = mount();
+    sized(view);
+    // The notice region's reserved band: 60 px tall, so the floor is 370 - 8 - 60 = 302 on screen, 604 on the board.
+    const band = document.createElement('div');
+    band.setAttribute('data-notice-band', '');
+    band.getBoundingClientRect = () => ({ left: 100, top: 302, right: 500, bottom: 362, width: 400, height: 60 }) as DOMRect;
+    document.body.appendChild(band);
+    try {
+      fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+      expect(targets[0].view).toEqual({ x: 20, y: 40, width: 1200, height: 700 });
+      expect(targets[0].seen).toEqual({ x: 20, y: 40, width: 1200, height: 564 });
+    } finally {
+      band.remove();
+    }
   });
 
   it('the toolbar is the board\'s bottom bar: the notice stack sits the gap above its measured top', () => {
@@ -345,7 +367,9 @@ describe('one view for every framing and placement (#213\'s shared insets)', () 
     // Placement's view is that same screen area, (0, 0)-(1000, 650), in board coordinates (the stand-in doubles).
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
     expect(targets[0].view).toEqual({ x: 0, y: 0, width: 2000, height: 1300 });
-    expect(chip.props!.viewOf()).toEqual(targets[0].view);
+    // The chip judges by the seen area, placement's too: the view above the floor (642 on screen; round 6f).
+    expect(targets[0].seen).toEqual({ x: 0, y: 0, width: 2000, height: 1284 });
+    expect(chip.props!.viewOf()).toEqual(targets[0].seen);
   });
 });
 
@@ -371,8 +395,8 @@ describe('the outside-the-view chip on the board', () => {
     const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
     bar.getBoundingClientRect = () => ({ left: 25, top: 370, right: 250, bottom: 405, width: 225, height: 35 }) as DOMRect;
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-    expect(chip.props!.viewOf()).toEqual({ x: 20, y: 40, width: 1200, height: 700 });
-    expect(chip.props!.viewOf()).toEqual(targets[0].view);
+    expect(chip.props!.viewOf()).toEqual({ x: 20, y: 40, width: 1200, height: 684 });
+    expect(chip.props!.viewOf()).toEqual(targets[0].seen);
   });
 
   it('a press from the keyboard sends focus to the board, then to the first tile once drawn, then to its card', async () => {

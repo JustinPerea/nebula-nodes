@@ -108,6 +108,31 @@ describe('no room in view', () => {
   });
 });
 
+describe('the seen area (round 6f, GM r14)', () => {
+  it('a tile placed where the notice band covers the view is not seen: the chip points at it', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    // The notice band covers the view's foot, 600 down: the seen area stops there (the chip's own floor).
+    const seen = { x: 0, y: 0, width: 1000, height: 600 };
+    const crowd = [{ x: 0, y: 0, width: 1000, height: 600 }];
+    const placed = placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 80]], occupied: crowd, view, seen, gap: 10 });
+    const rect = { ...placed.spots[0], width: 200, height: 80 };
+    expect(insideView(rect, view)).toBe(true);
+    expect(rect.y).toBe(610);
+    expect(placed.outside).toEqual([0]);
+    // Judged by the whole view, the same spot would be seen.
+    expect(placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 80]], occupied: crowd, view, gap: 10 }).outside).toEqual([]);
+  });
+
+  it('a drop aimed into the notice band\'s strip keeps its aim with no chip: the person put it there', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    const seen = { x: 0, y: 0, width: 1000, height: 600 };
+    // No toolbar band (the drop keeps its aim), wholly in the view but under the notice band.
+    const kept = placeTiles({ at: { x: 500, y: 650 }, sizes: [[200, 80]], occupied: [], view, seen, aim: true });
+    expect(kept.spots).toEqual([{ x: 400, y: 610 }]);
+    expect(kept.outside).toEqual([]);
+  });
+});
+
 describe('a drop', () => {
   it('aimed under the toolbar band, moves up out of it by the least, wholly in view, with no chip (GM r7 answer 2)', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };

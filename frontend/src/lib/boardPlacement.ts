@@ -51,6 +51,9 @@ export interface PlaceRequest {
   /** The view's bottom edge is the toolbar's top: an aimed tile reaching
    *  under that band moves up out of it (GM r7 answer 2). */
   band?: boolean;
+  /** The part of `view` a tile is seen in, for the chip (GM r14: the view
+   *  less the notice band); left out, the view. Placement itself uses `view`. */
+  seen?: NodeRect | null;
   gap?: number;
   /** Counts the rows and spans the search read (the speed bound's test). */
   work?: PlacementWork;
@@ -354,7 +357,7 @@ function offBand(rect: NodeRect, view: NodeRect): NodeRect {
   return { ...rect, y: Math.min(rect.y, Math.floor(bottom - rect.height)) };
 }
 
-export function placeTiles({ at, sizes, occupied, view, aim = false, band = false, gap = DROP_GAP, work }: PlaceRequest): Placed {
+export function placeTiles({ at, sizes, occupied, view, aim = false, band = false, seen = null, gap = DROP_GAP, work }: PlaceRequest): Placed {
   const taken: NodeRect[] = [...occupied];
   const spots: Array<{ x: number; y: number }> = [];
   const outside: number[] = [];
@@ -376,7 +379,7 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, band = fals
     // would be hidden by the toolbar, so reaching into the band counts too
     // (no free spot in view to nudge it to): the chip points at it. Either
     // way, only while less than half of it is in view (GM r13).
-    if (view && (!aimed || whollyOutside(rect, view) || (band && underBand(rect, view))) && outsideForChip(rect, view)) outside.push(index);
+    if (view && (!aimed || whollyOutside(rect, view) || (band && underBand(rect, view))) && outsideForChip(rect, seen ?? view)) outside.push(index);
     taken.push(rect);
     spots.push({ x: spot.x, y: spot.y });
   });

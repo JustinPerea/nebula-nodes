@@ -782,7 +782,8 @@ export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
  *  again: the same id answers with the board the first send made, marked
  *  `repeated`, as it is now, instead of making a second one. */
 export async function createMoodboard(body: MoodboardCreateInput & { requestId?: string }): Promise<Moodboard & { repeated?: boolean }> {
-  const response = await apiRequest("Couldn't create the board.", '/api/moodboards', {
+  // The save heading: a create is the board's first save, and the person never reads "create" (GM r14).
+  const response = await apiRequest(SAVE_BOARD, '/api/moodboards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

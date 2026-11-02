@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
-import { boardNotSavedLine, boardSaveCause, isBoardNotSavedLine } from './boardSaveLine';
+import { boardNotSavedLine, boardSaveCause, boardSaveFailure, isBoardNotSavedLine, isCreateIdRefusal } from './boardSaveLine';
 
 const failed = (status: number, detail?: unknown) => new RequestFailedError("Couldn't save the board.", status, { reason: 'x', detail });
 
@@ -35,5 +35,29 @@ describe('which line is the neutral one (GM r12 1)', () => {
     expect(isBoardNotSavedLine({ heading: '', reason: '' })).toBe(false);
     expect(isBoardNotSavedLine('Nebula couldn’t save the board because the server is busy. Try again.')).toBe(false);
     expect(isBoardNotSavedLine(null)).toBe(false);
+  });
+});
+
+describe('a failed create (round 6f, GM r14)', () => {
+  it('is the save line: the same words, never "create"', () => {
+    for (const error of [new ConnectionLostError(new TypeError('Failed to fetch')), failed(429), failed(500), failed(503, 'Busy'),
+      failed(400, 'Bad board'), failed(422, 'name must be a string'), failed(401), new Error('offline')]) {
+      expect(boardSaveFailure(error)).toEqual(boardNotSavedLine(error));
+      expect(isBoardNotSavedLine(boardSaveFailure(error))).toBe(true);
+      expect(JSON.stringify(boardSaveFailure(error))).not.toMatch(/creat/i);
+    }
+  });
+
+  it('keeps the error look for a 422 that refused the create\'s id: sent again, it fails the same way', () => {
+    const refusal = failed(422, "requestId must be 8 to 128 letters, digits, '-' or '_'");
+    expect(isCreateIdRefusal(refusal)).toBe(true);
+    expect(isBoardNotSavedLine(boardSaveFailure(refusal))).toBe(false);
+    expect(boardSaveFailure(refusal)).toMatchObject({ heading: "Couldn't save the board." });
+    // FastAPI's own field list naming it counts too; a 422 on anything else, or another status naming it, doesn't.
+    expect(isCreateIdRefusal(failed(422, [{ loc: ['body', 'requestId'], msg: 'bad' }]))).toBe(true);
+    expect(isCreateIdRefusal(failed(422, 'name must be a string'))).toBe(false);
+    expect(isCreateIdRefusal(failed(400, 'requestId is wrong'))).toBe(false);
+    expect(isCreateIdRefusal(failed(422, 'requestIdentity'))).toBe(false);
+    expect(isCreateIdRefusal(new Error('requestId'))).toBe(false);
   });
 });

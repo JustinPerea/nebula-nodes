@@ -1,4 +1,5 @@
-import { RequestFailedError, isBackendUnreachable, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
+import { RequestFailedError, failureCopy, isBackendUnreachable, isNoAnswer, type FailureCopy } from '../../lib/errorCopy';
+import { SAVE_BOARD } from '../../lib/api';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 
 /**
@@ -18,6 +19,32 @@ export function boardNotSavedLine(error: unknown): FailureCopy {
 }
 
 const NOT_SAVED_OPENING = 'Nebula couldn’t save the board because ';
+
+/**
+ * The line for a board write that failed with nothing lost (GM r12 1, r14):
+ * a new board's create (New's save, its Retry, the autosave's, the save of an
+ * unsaved board an add landed on) and the paste flow's background writes (the
+ * queued send of a board New just saved, an add that couldn't reach a board
+ * the person had left). The draft keeps all of it and Retry sends it again
+ * (a create carries its id, so a Retry after a lost answer makes no second
+ * board), so every cause gets boardNotSavedLine: neutral, the header chip
+ * "Not saved", the header's Retry. It never says "create": after a lost
+ * answer the server may have made the board.
+ *
+ * Kept out: a 422 refusing the create's id (`isCreateIdRefusal`). The draft's
+ * id is one Nebula made, so this only happens if the id itself is broken;
+ * sending again sends the same id and fails the same way, so "Try again"
+ * would be wrong. It keeps the error look and the save heading.
+ */
+export function boardSaveFailure(error: unknown): FailureCopy {
+  return isCreateIdRefusal(error) ? failureCopy(error, { heading: SAVE_BOARD }) : boardNotSavedLine(error);
+}
+
+/** A create refused for its `requestId` (the backend's 422 names the field). */
+export function isCreateIdRefusal(error: unknown): boolean {
+  if (!(error instanceof RequestFailedError) || error.status !== 422) return false;
+  return /\brequestId\b/.test(typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail ?? ''));
+}
 
 /**
  * Whether `failure` is boardNotSavedLine's line (GM r12 1): nothing is lost
