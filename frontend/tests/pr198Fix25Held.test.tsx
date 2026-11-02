@@ -123,23 +123,51 @@ function record() {
   return { events, stop: () => observer.disconnect() };
 }
 
+/**
+ * From the click on, the 150 ms rule runs on fake timers: setTimeout,
+ * clearTimeout, performance.now() and Date move only when the test moves
+ * them, so the hold, the grey's timer and the record's stamps share one clock.
+ * (On real timers the MutationObserver stamped the hold after the click had
+ * armed the timer, and Node can fire a timer about 1 ms early against
+ * performance.now(): CI saw 148.3 ms.) Promises and the observer's callbacks
+ * are not faked, so `step` flushes them after each move.
+ */
+function fakeClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
+}
+/** Move the fake clock by `ms` and let what that sets off settle. */
+const step = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
 describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
   it('no answer for 150 ms: held at once with no grey (data-held-pending), grey only once 150 ms pass, gone with the answer', async () => {
     const { h, button } = await stoppedLine();
     h.heal();
     const release = h.hold();
+    fakeClock();
     const log = record();
     act(() => { fireEvent.click(button()!); });
-    await vi.waitFor(() => expect(button()?.hasAttribute('data-held-look')).toBe(true), { timeout: 3000, interval: 5 });
+    await step(0);
     const held = log.events.find((event) => event.held)!;
-    const grey = log.events.find((event) => event.grey)!;
     expect(held.pending).toBe(true);
     expect(held.grey).toBe(false);
-    expect(grey.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
+    // 1 ms short of the rule: held and pending, no grey yet.
+    await step(HELD_LOOK_DELAY_MS - 1);
+    expect(button()?.hasAttribute('data-held-pending')).toBe(true);
+    expect(button()?.hasAttribute('data-held-look')).toBe(false);
+    expect(log.events.some((event) => event.grey)).toBe(false);
+    // At 150 ms with no answer, the grey shows.
+    await step(1);
+    expect(button()?.hasAttribute('data-held-look')).toBe(true);
+    const grey = log.events.find((event) => event.grey)!;
+    expect(grey.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS);
     expect(grey.pending).toBe(false);
     // Every moment between: held and pending, never grey.
     for (const event of log.events.slice(log.events.indexOf(held), log.events.indexOf(grey))) expect([event.held, event.pending, event.grey]).toEqual([true, true, false]);
+    await step(10);
     release();
+    await step(0);
     await vi.waitFor(() => expect(button()).toBeNull(), { timeout: 3000, interval: 5 });
     log.stop();
     expect(h.timing.answered).toBeGreaterThan(grey.at);
@@ -147,20 +175,30 @@ describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
 
   it('an answer inside 150 ms: never grey; whatever the machine, a grey only ever follows 150 ms with no answer', async () => {
     const { h, button } = await stoppedLine();
+    const release = h.hold();
+    fakeClock();
     const log = record();
     act(() => { fireEvent.click(button()!); });
-    // The try fails again (500): the line comes back with a live [Try again].
-    await vi.waitFor(() => expect(log.events.some((event) => event.held)).toBe(true), { timeout: 3000, interval: 5 });
-    await vi.waitFor(() => expect(button()?.hasAttribute('aria-disabled')).toBe(false), { timeout: 3000, interval: 5 });
-    await sleep(HELD_LOOK_DELAY_MS * 2);
-    log.stop();
+    await step(0);
     const held = log.events.find((event) => event.held)!;
-    const answeredIn = h.timing.answered - held.at;
+    expect(held.pending).toBe(true);
+    // 1 ms short of the rule: no grey yet.
+    await step(HELD_LOOK_DELAY_MS - 1);
+    expect(button()?.hasAttribute('data-held-look')).toBe(false);
+    // The answer lands at 149 ms: the try fails again (500), and the line
+    // comes back with a live [Try again].
+    release();
+    await step(0);
+    await vi.waitFor(() => expect(button()?.hasAttribute('aria-disabled')).toBe(false), { timeout: 3000, interval: 5 });
+    expect(h.timing.answered - held.at).toBeLessThan(HELD_LOOK_DELAY_MS);
+    // Well past 150 ms from the hold, still no grey ever.
+    await step(HELD_LOOK_DELAY_MS * 2);
+    log.stop();
     for (const event of log.events.filter((one) => one.grey)) {
-      expect(event.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS - 1);
+      expect(event.at - held.at).toBeGreaterThanOrEqual(HELD_LOOK_DELAY_MS);
       expect(h.timing.answered).toBeGreaterThan(event.at);
     }
-    if (answeredIn < HELD_LOOK_DELAY_MS - 10) expect(log.events.some((event) => event.grey)).toBe(false);
+    expect(log.events.some((event) => event.grey)).toBe(false);
     expect(button()?.hasAttribute('data-held-pending')).toBe(false);
     expect(button()?.hasAttribute('data-held-look')).toBe(false);
   });
