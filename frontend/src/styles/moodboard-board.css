@@ -340,6 +340,17 @@
   cursor: default;
 }
 
+/* Add images while Nebula is offline (GM r12 2): paused, as the List view's Add Images is. */
+.moodboard-board__control--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.moodboard-board__control--disabled:hover,
+.moodboard-board__control--disabled:focus-within {
+  background: none;
+}
+
 .moodboard-board__empty {
   position: absolute;
   top: 50%;

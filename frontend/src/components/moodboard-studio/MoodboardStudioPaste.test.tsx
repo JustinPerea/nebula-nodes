@@ -26,6 +26,7 @@ const board = vi.hoisted(() => ({
   filledDone: null as null | ((ids: string[]) => void),
   onDropFiles: null as null | ((files: File[], target: { at: { x: number; y: number };
     view: { x: number; y: number; width: number; height: number } | null; aim: boolean }) => void),
+  offline: false,
 }));
 vi.mock('../../lib/api', () => api);
 vi.mock('../../lib/graphFile', () => ({ saveToFile: vi.fn(), loadFromFile: vi.fn() }));
@@ -59,8 +60,10 @@ vi.mock('./BoardCanvas', async () => {
       outside?: typeof board.outside;
       placeholders?: typeof board.placeholders;
       onPlaceholdersFilled?: (ids: string[]) => void;
+      offline?: boolean;
     }) => {
       board.onDropFiles = props.onDropFiles;
+      board.offline = props.offline ?? false;
       board.filledDone = props.onPlaceholdersFilled ?? null;
       board.outside = props.outside ?? null;
       board.placeholders = props.placeholders ?? [];
@@ -77,9 +80,12 @@ vi.mock('./BoardCanvas', async () => {
 });
 
 import { MoodboardStudioView } from './MoodboardStudioView';
-import { keepWaitingSend, resetBoardAdds, useBoardAddStore } from './boardAdds';
-import { OfflineRefusal, isBackendOffline, noteBackendConnection } from '../../lib/backendConnection';
-import { RequestFailedError } from '../../lib/errorCopy';
+import { dropWaitingSend, keepWaitingSend, resetBoardAdds, useBoardAddStore } from './boardAdds';
+import { OfflineRefusal, isBackendOffline, noteBackendConnection, noteProbeAnswer, startHealthProbe,
+  subscribeHealthProbeRequests } from '../../lib/backendConnection';
+import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, reloadLostLine, uriListLinks, webLinks } from './pasteImages';
 import { placeTiles, respot } from '../../lib/boardPlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
@@ -167,6 +173,7 @@ beforeEach(() => {
   useBoardCanvasStore.setState({ view: 'list', selection: {}, viewports: {}, studioBoard: null, showRequest: null, frameRequest: null });
   try { window.localStorage.removeItem(MOODBOARD_VIEW_KEY); } catch { /* jsdom */ }
   try { window.sessionStorage.removeItem('nebula:moodboard-adds-in-flight'); } catch { /* jsdom */ }
+  try { window.sessionStorage.removeItem('nebula:moodboard-sends-waiting'); } catch { /* jsdom */ }
   setOpenProject(['p1', 'Project']);
 });
 afterEach(() => { cleanup(); noteBackendConnection('online'); });
@@ -2846,9 +2853,21 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     // Sent again once, not more.
     await new Promise((done) => setTimeout(done, 50));
     expect(made.editsTried).toBe(1);
-    // The line on that board, with its Retry.
+    // The line on that board: neutral, colour included (GM r12 1), with the
+    // header's Retry its one retry and the chip "Not saved", not "Error".
     await toBoard('made1');
-    await screen.findByText('Nebula couldn’t save the board because the server is busy. Try again.');
+    const sentence = await screen.findByText('Nebula couldn’t save the board because the server is busy. Try again.');
+    const notice = sentence.closest('.moodboard-studio__notice')!;
+    expect(notice.className).toContain('moodboard-studio__notice--neutral');
+    expect(notice.className).not.toContain('--error');
+    expect(notice.hasAttribute('data-line-neutral')).toBe(true);
+    expect(notice.querySelector('button')).toBeNull();
+    expect(notice.textContent).toBe('Nebula couldn’t save the board because the server is busy. Try again.');
+    const chip = document.querySelector('.moodboard-studio-toolbar__state')!;
+    expect(chip.textContent).toBe('Not saved');
+    expect(chip.className).toContain('moodboard-studio-toolbar__state--not-saved');
+    expect(chip.className).not.toContain('--error');
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
     made.fail = null;
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
@@ -3002,6 +3021,39 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(urlsOf(madeKey)).toEqual([]);
   });
 
+  it('R8-A: offline queued send, the saved board opened and renamed while offline, then reconnect: the rename keeps its Undo', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const madePut = api.updateMoodboard.getMockImplementation()!;
+    const puts: Record<string, unknown>[] = [];
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      const before = made.board?.name;
+      const saved = await madePut(id, body);
+      if (id !== 'made1') return saved;
+      puts.push(body);
+      return { ...saved, undo: { ops: [{ op: 'restore', slices: [{ part: 'fields', name: before }] }] } };
+    });
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true, saveError: null }));
+    // Still offline: the person opens the board New saved and renames it (a field step).
+    await toBoard('made1');
+    const name = screen.getByDisplayValue(made.board!.name);
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: 'Rivers' } });
+    fireEvent.blur(name);
+    await new Promise((done) => setTimeout(done, 30));
+    expect(puts).toEqual([]);
+    await online();
+    await waitFor(() => expect(made.board?.name).toBe('Rivers'));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    await new Promise((done) => setTimeout(done, 700));
+    const steps = useBoardUndoStore.getState().history(madeKey, store().entries[madeKey].epoch).done;
+    expect(steps).toHaveLength(1);
+    expect(steps[0].state).toBe('saved');
+  });
+
   it('U4: a queued PUT that conflicts sends only the fields it was for: an outside change of another field stays', async () => {
     const create = gate();
     const made = madeServer(create.held);
@@ -3143,6 +3195,428 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     await waitFor(() => expect(records().filter((it) => it.page !== 'before')).toHaveLength(52));
     expect(records().some((it) => it.page === 'before')).toBe(false);
     await uploads.open();
+  });
+
+  // Round 6d (review 8, MEDIUM-1): a resend owns what the refused send owned.
+  it('R8-O1: a rename on the saved board while its queued send waits offline: the resend sends only the add, the rename goes as its own step', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    const madePut = api.updateMoodboard.getMockImplementation()!;
+    const puts: Record<string, unknown>[] = [];
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      const before = made.board?.name;
+      const saved = await madePut(id, body);
+      if (id !== 'made1') return saved;
+      puts.push(body);
+      return { ...saved, undo: { ops: [{ op: 'restore', slices: [{ part: 'fields', name: before }] }] } };
+    });
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true }));
+    // The record kept for a reload is what the refused send owned: the add.
+    expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', fields: {}, ops: [expect.objectContaining({ op: 'add' })] })]);
+    await toBoard('made1');
+    const name = screen.getByDisplayValue(made.board!.name);
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: 'Rivers' } });
+    fireEvent.blur(name);
+    await new Promise((done) => setTimeout(done, 50));
+    await online();
+    await waitFor(() => expect(made.board?.name).toBe('Rivers'));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    await new Promise((done) => setTimeout(done, 800));
+    expect(made.edits.map((ops) => ops.map((op) => op.op))).toEqual([['add']]);
+    expect(puts).toEqual([expect.objectContaining({ name: 'Rivers' })]);
+    const steps = useBoardUndoStore.getState().history(madeKey, store().entries[madeKey].epoch).done;
+    expect(steps.map((step) => [step.label, step.state])).toEqual([['Name', 'saved']]);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('R8-B: an away add refused offline, the person back on that board renames it offline, then reconnect: the resend sends only the add; the rename keeps its Undo', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => {
+      if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards/g1/edit');
+      return send(...args);
+    });
+    const put = api.updateMoodboard.getMockImplementation()!;
+    api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+      if (isBackendOffline()) throw new OfflineRefusal('PUT', '/api/moodboards/g1');
+      const before = server.board.name;
+      const saved = await put(id, body);
+      return { ...saved, undo: { ops: [{ op: 'restore', slices: [{ part: 'fields', name: before }] }] } };
+    });
+    offline();
+    await uploads.open();
+    await waitFor(() => expect(urlsOf(g1Key)).toContain(river));
+    await toBoard('g1');
+    const name = screen.getByDisplayValue('Global board');
+    fireEvent.focus(name);
+    fireEvent.change(name, { target: { value: 'Rivers' } });
+    fireEvent.blur(name);
+    // The board's own save of the rename is refused while still offline,
+    // so on reconnect the away add's resend goes first (deterministic).
+    await new Promise((done) => setTimeout(done, 50));
+    expect(store().entries[g1Key]).toMatchObject({ pendingSaveId: null, dirty: true });
+    await online();
+    await waitFor(() => expect(server.board.name).toBe('Rivers'));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    await new Promise((done) => setTimeout(done, 700));
+    expect(server.edits.map((ops) => ops.map((op) => op.op))).toEqual([['add']]);
+    expect(server.puts).toEqual([expect.objectContaining({ name: 'Rivers' })]);
+    const steps = useBoardUndoStore.getState().history(g1Key, store().entries[g1Key].epoch).done;
+    expect(steps.map((step) => [step.label, step.state])).toEqual([['Name', 'saved']]);
+  });
+
+  // Round 6d (review 8, MEDIUM-2): a background send cut off by a network drop.
+  /** The banner's health probe, as BackendConnectionStatus answers one asked for: `answer`. */
+  const probeAnswers = (answer: 'online' | 'offline') => {
+    const asked = { count: 0 };
+    const stop = subscribeHealthProbeRequests(() => {
+      asked.count += 1;
+      act(() => { noteProbeAnswer(startHealthProbe(), answer); });
+    });
+    return { asked, stop };
+  };
+  /** What apiFetch throws for a request that got no answer (lib/backend). */
+  const dropped = () => new ConnectionLostError(new TypeError('Failed to fetch'));
+
+  it('a queued send cut off by a network drop, and the probe finds Nebula offline: no line, it waits, and goes once on reconnect', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    made.fail = dropped();
+    const probe = probeAnswers('offline');
+    try {
+      await create.open();
+      await waitFor(() => expect(made.editsTried).toBe(1));
+      await waitFor(() => expect(isBackendOffline()).toBe(true));
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true, saveState: 'draft', saveError: null }));
+      expect(probe.asked.count).toBe(1);
+      expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', ops: [expect.objectContaining({ op: 'add' })] })]);
+      made.fail = null;
+    } finally { probe.stop(); }
+    await online();
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved', saveError: null }));
+    expect(made.editsTried).toBe(2);
+    expect(made.edits).toHaveLength(1);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('a queued send cut off while the probe finds Nebula online: the board\'s line, in the error look, and nothing kept', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    made.fail = dropped();
+    const probe = probeAnswers('online');
+    try {
+      await create.open();
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error', retry: 'save' }));
+      expect(probe.asked.count).toBe(1);
+    } finally { probe.stop(); }
+    expect(store().entries[madeKey].saveError).toMatchObject({ heading: "Couldn't save the board." });
+    expect(waiting()).toEqual([]);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(made.editsTried).toBe(1);
+    await toBoard('made1');
+    await screen.findByText("Couldn't save the board.");
+    expect(document.querySelector('.moodboard-studio__notice--error')).not.toBeNull();
+    expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Error');
+  });
+
+  it('a resend on reconnect cut off by a drop is a failure: the board\'s neutral line says why, without waiting on a probe', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    offline();
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true }));
+    made.fail = dropped();
+    const probe = probeAnswers('offline');
+    try {
+      await online();
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveState: 'error',
+        saveError: { heading: '', reason: 'Nebula couldn’t save the board because the server isn’t answering. Try again.' } }));
+      expect(probe.asked.count).toBe(0);
+    } finally { probe.stop(); }
+  });
+
+  it('an add that couldn\'t reach the board the person left, cut off by a drop with Nebula then offline: no line; back online it goes once', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const send = api.editMoodboard.getMockImplementation()!;
+    let cut = true;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => {
+      if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards/g1/edit');
+      if (cut) { cut = false; throw dropped(); }
+      return send(...args);
+    });
+    const probe = probeAnswers('offline');
+    try {
+      await uploads.open();
+      await waitFor(() => expect(urlsOf(g1Key)).toContain(river));
+      await waitFor(() => expect(isBackendOffline()).toBe(true));
+      await waitFor(() => expect(waiting()).toEqual([expect.objectContaining({ board: 'g1', fields: {} })]));
+      expect(store().entries[g1Key]).toMatchObject({ saveError: null, dirty: true });
+    } finally { probe.stop(); }
+    expect(server.edits).toEqual([]);
+    await online();
+    await waitFor(() => expect(server.board.images.map((img) => img.url)).toContain(river));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false, saveError: null }));
+    expect(addOps()).toHaveLength(1);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('an add that couldn\'t reach the board the person left, cut off with Nebula still online: that board says why', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    api.editMoodboard.mockImplementation(async () => { throw dropped(); });
+    const probe = probeAnswers('online');
+    try {
+      await uploads.open();
+      await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ saveState: 'error', retry: 'save',
+        saveError: expect.objectContaining({ heading: "Couldn't save the board." }) }));
+      expect(probe.asked.count).toBe(1);
+    } finally { probe.stop(); }
+    expect(waiting()).toEqual([]);
+  });
+
+  it('an add that saves an unsaved board the person left, its create cut off with Nebula then offline: no line; back online the board is saved once', async () => {
+    const made = madeServer();
+    const create = api.createMoodboard.getMockImplementation()!;
+    let cut = true;
+    api.createMoodboard.mockImplementation(async (body: Partial<Moodboard>) => {
+      if (!isBackendOffline() && cut) { cut = false; throw dropped(); }
+      return create(body);
+    });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('g1');
+    await screen.findByDisplayValue('Global board');
+    const probe = probeAnswers('offline');
+    try {
+      await uploads.open();
+      await waitFor(() => expect(isBackendOffline()).toBe(true));
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveError: null, pendingSaveId: null, savedId: null, dirty: true }));
+    } finally { probe.stop(); }
+    expect(made.creates).toEqual([]);
+    await online();
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+    expect(made.creates).toHaveLength(1);
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ saveError: null }));
+  });
+
+  it('a queued send the dev proxy answers 502 (the backend gone), with the probe then offline: no line, it waits', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    made.fail = new RequestFailedError("Couldn't save the board.", 502, {});
+    const probe = probeAnswers('offline');
+    try {
+      await create.open();
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true, saveState: 'draft', saveError: null }));
+      expect(probe.asked.count).toBe(1);
+    } finally { probe.stop(); }
+    expect(waiting()).toHaveLength(1);
+  });
+
+  it('New\'s own save cut off by a drop fails as before: the line, no probe (it is the person\'s, not a background send)', async () => {
+    madeServer();
+    api.createMoodboard.mockImplementation(async () => { throw dropped(); });
+    const probe = probeAnswers('offline');
+    try {
+      await openNew();
+      paste(clipboard({ files: [png('river.png')] }));
+      await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+      clickNew();
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error',
+        saveError: expect.objectContaining({ heading: "Couldn't save the board." }) }));
+      expect(probe.asked.count).toBe(0);
+    } finally { probe.stop(); }
+  });
+
+  it('an away add cut off while the probe is slow, sent meanwhile by the board\'s own save (the person came back): no line after all', async () => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('new');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const send = api.editMoodboard.getMockImplementation()!;
+    let cut = true;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof send>) => {
+      if (cut) { cut = false; throw dropped(); }
+      return send(...args);
+    });
+    let answer: () => void = () => {};
+    const stop = subscribeHealthProbeRequests(() => { answer = () => act(() => { noteProbeAnswer(startHealthProbe(), 'online'); }); });
+    try {
+      await uploads.open();
+      await waitFor(() => expect(urlsOf(g1Key)).toContain(river));
+      await toBoard('g1');
+      await waitFor(() => expect(server.board.images.map((img) => img.url)).toContain(river));
+      await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false, pendingSaveId: null }));
+      answer();
+      await new Promise((done) => setTimeout(done, 30));
+      expect(store().entries[g1Key]).toMatchObject({ saveError: null, saveState: 'saved' });
+    } finally { stop(); }
+  });
+
+  // Round 6d (review 8, LOW-2): the attempt guards, the fields-only record, the lost records.
+  it('Y10: a refusal that comes back after the board was deleted (its key reset) leaves the fresh draft alone', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    const edit = gate();
+    api.editMoodboard.mockImplementation(async () => { await edit.held; throw new OfflineRefusal('POST', '/api/moodboards/made1/edit'); });
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    act(() => { store().reset(madeKey, fresh()); store().patch(madeKey, { loaded: true }); });
+    offline();
+    await edit.open();
+    await new Promise((done) => setTimeout(done, 30));
+    expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null });
+    expect(waiting()).toEqual([]);
+  });
+
+  it('Y27: a refused create that comes back after its draft was reset leaves the fresh draft alone', async () => {
+    madeServer();
+    const create = gate();
+    api.createMoodboard.mockImplementation(async () => { await create.held; throw new OfflineRefusal('POST', '/api/moodboards'); });
+    const uploads = holdUploads();
+    await openNew();
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    await toBoard('g1');
+    await screen.findByDisplayValue('Global board');
+    await uploads.open();
+    await waitFor(() => expect(store().entries[newKey]?.pendingSaveId).toBeTruthy());
+    act(() => { store().reset(newKey, fresh()); store().patch(newKey, { loaded: true }); });
+    offline();
+    await create.open();
+    await new Promise((done) => setTimeout(done, 30));
+    expect(store().entries[newKey]).toMatchObject({ dirty: false, pendingSaveId: null });
+  });
+
+  it('Y19: the open board\'s refused save coming back after its draft was reset leaves the fresh draft alone', async () => {
+    await openStudio('board');
+    const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+    const edit = gate();
+    api.editMoodboard.mockImplementation(async () => { await edit.held; throw new OfflineRefusal('POST', '/api/moodboards/g1/edit'); });
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(store().entries[g1Key]?.pendingSaveId).toBeTruthy());
+    act(() => { store().reset(g1Key, fresh()); store().patch(g1Key, { loaded: true }); });
+    offline();
+    await edit.open();
+    await new Promise((done) => setTimeout(done, 30));
+    expect(store().entries[g1Key]).toMatchObject({ dirty: false, pendingSaveId: null });
+  });
+
+  it('Y11: a queued send left with only a field to send when Nebula went offline keeps it for a reload', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'warm light' })); });
+    // The edit lands; Nebula goes offline before the PUT.
+    const edit = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementation(async (...args: Parameters<typeof edit>) => {
+      const answer = await edit(...args);
+      noteBackendConnection('offline');
+      return answer;
+    });
+    await create.open();
+    await waitFor(() => expect(made.edits).toHaveLength(1));
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true, saveError: null }));
+    expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', ops: [], fields: { notes: 'warm light' } })]);
+    await online();
+    await waitFor(() => expect(made.board?.notes).toBe('warm light'));
+    expect(waiting()).toEqual([]);
+  });
+
+  it('D5: the record kept for a reload is what the refused send owned, not what the draft gained while it was out', async () => {
+    const create = gate();
+    const made = madeServer(create.held);
+    await newWithAdd(made);
+    const edit = gate();
+    api.editMoodboard.mockImplementation(async () => { await edit.held; throw new OfflineRefusal('POST', '/api/moodboards/made1/edit'); });
+    await create.open();
+    await waitFor(() => expect(store().entries[madeKey]?.pendingSaveId).toBeTruthy());
+    // A change while the send is out: not the send's.
+    act(() => { store().edit(madeKey, (draft) => ({ ...(draft as object), notes: 'later' })); });
+    offline();
+    await edit.open();
+    await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ pendingSaveId: null, dirty: true }));
+    expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', fields: {}, ops: [expect.objectContaining({ op: 'add' })] })]);
+  });
+
+  it('NIT-4: a record left with nothing once its malformed ops are dropped isn\'t written back', () => {
+    window.sessionStorage.setItem(WAITING, JSON.stringify([{ board: 'x', page: 'before', at: Date.now(), fields: {}, ops: [{}] }]));
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'k', url: '/api/outputs/k.png' }], at: { x: 0, y: 0 } }], {});
+    expect(waiting().map((it) => it.board)).toEqual(['made1']);
+  });
+
+  it('Y13: a send that landed takes its unstorable images\' reload records with it', () => {
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'b', url: 'blob:http://localhost/only-here.png' }], at: { x: 0, y: 0 } }], {});
+    expect(records()).toEqual([expect.objectContaining({ board: 'made1', name: 'only-here.png' })]);
+    dropWaitingSend('made1');
+    expect(records()).toEqual([]);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('Y23: a data: image is no image a reload can add: it isn\'t stored, and the reload line names it', () => {
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'd', url: 'data:image/png;base64,iVBORw0KGgo=' }], at: { x: 0, y: 0 } }], {});
+    expect(waiting()).toEqual([]);
+    expect(records()).toHaveLength(1);
+    expect(window.sessionStorage.getItem(WAITING) ?? '').not.toContain('data:image');
+  });
+
+  it('Y15: a waiting add the board holds under another id (same image) isn\'t sent again', async () => {
+    const made = madeServer();
+    made.board = { ...clone(server.board), id: 'made1', version: 2,
+      images: [image('server-id', { url: river, placements: [card('server-id')] })] } as Moodboard;
+    keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'client-id', url: river }], at: { x: 0, y: 0 } }], {});
+    window.sessionStorage.setItem(WAITING, JSON.stringify(waiting().map((it) => ({ ...it, page: 'before' }))));
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await waitFor(() => expect(store().entries[madeKey]?.loaded).toBe(true));
+    await new Promise((done) => setTimeout(done, 700));
+    expect(made.editsTried).toBe(0);
+    expect(made.board?.images).toHaveLength(1);
+  });
+
+  it('NIT-4 (review 8): a waiting record\'s op that isn\'t an op Nebula makes is dropped; the rest is sent', async () => {
+    const made = madeServer();
+    made.board = { ...clone(server.board), id: 'made1', images: [], version: 1 } as Moodboard;
+    const good = { op: 'add', images: [{ id: 'kept', url: '/api/outputs/kept.png' }], at: { x: 0, y: 0 } };
+    window.sessionStorage.setItem(WAITING, JSON.stringify([{ board: 'made1', page: 'before', at: Date.now(), fields: {},
+      ops: [{}, { op: 'add' }, { op: 'add', images: [{ id: 'x' }] }, { op: 'place', placement: 'p', x: 'far', y: 0 },
+        { op: 'drop-table' }, null, good] },
+    { board: 'made1', page: 'before', at: Date.now(), fields: {}, ops: [{ op: 'weight', image: 'kept' }] }]));
+    expect(waiting()).toHaveLength(2);
+    useBoardCanvasStore.setState({ view: 'board' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('made1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual(['/api/outputs/kept.png']));
+    expect(made.edits).toEqual([[expect.objectContaining({ op: 'add', images: [expect.objectContaining({ url: '/api/outputs/kept.png' })] })]]);
+    expect(waiting()).toEqual([]);
   });
 
   it('NIT-1: the reload line goes when the person leaves its board; a quick return doesn\'t show it again', async () => {
@@ -3304,5 +3778,243 @@ describe('round 6c: an add replayed after a 409 (GM r11 3)', () => {
     const withBand = respot(spot, taken, tightView, true);
     expect(withBand).not.toEqual(respot(spot, taken, tightView, false));
     expect(addOps()[0].at).toEqual(withBand);
+  });
+});
+
+describe('round 6d: the offline board, the chip, review 8\'s replay and toast gaps', () => {
+  const store = () => useAssetStudioDraftStore.getState();
+  const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
+  const offline = () => act(() => { noteBackendConnection('offline'); });
+  const online = () => act(async () => { noteBackendConnection('online'); await Promise.resolve(); });
+  const hint = 'Drag images here or add files.';
+  type Add = Extract<MoodboardOp, { op: 'add' }>;
+  const rect = (placement: MoodboardPlacement) => ({ x: placement.x, y: placement.y, width: placement.w, height: placement.h });
+  const [w, h] = sizeFor(1, 1.5);
+
+  it('GM r12 2, the List: offline, Add Images is off with the offline reason and the drop hint goes; back online both come back', async () => {
+    await openStudio('list');
+    const input = screen.getByLabelText('Add Images') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    expect(screen.getByText(hint)).toBeTruthy();
+    offline();
+    expect(input.disabled).toBe(true);
+    const wrap = input.closest('label')!;
+    expect(wrap.title).toBe('You can add images when Nebula reconnects.');
+    expect(wrap.hasAttribute('data-offline-disabled')).toBe(true);
+    expect(wrap.className).toContain('moodboard-dropzone__file-wrap--disabled');
+    expect(screen.queryByText(hint)).toBeNull();
+    await online();
+    expect(input.disabled).toBe(false);
+    expect(wrap.title).toBe('');
+    expect(wrap.hasAttribute('data-offline-disabled')).toBe(false);
+    expect(screen.getByText(hint)).toBeTruthy();
+  });
+
+  it('GM r12 2, the Board: the Studio tells the board it is offline, and that it is back', async () => {
+    await openStudio('board');
+    expect(board.offline).toBe(false);
+    offline();
+    expect(board.offline).toBe(true);
+    await online();
+    expect(board.offline).toBe(false);
+  });
+
+  it('a paste refused while offline (its upload not sent) shows no empty line and holds no spot', async () => {
+    await openStudio('board');
+    offline();
+    backend.apiFetch.mockImplementation(async () => { throw new OfflineRefusal('POST', '/api/uploads'); });
+    paste(clipboard({ files: [png('river.png')] }));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(store().entries[g1Key].saveError).toBeNull();
+    expect(document.querySelector('.moodboard-studio__notice')).toBeNull();
+    expect(board.placeholders).toEqual([]);
+    expect(api.editMoodboard).not.toHaveBeenCalled();
+  });
+
+  /** A paste with no room in the view: its tile lands outside it, with the chip; the add lands and its spot's fade ends. */
+  const pasteOutside = async () => {
+    board.view = { x: 0, y: 0, width: 1000, height: 270 };
+    board.point = { x: 500, y: 135 };
+    paste(clipboard({ files: [png('away.png')] }));
+    await waitFor(() => expect(board.outside).not.toBeNull());
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false }));
+    act(() => { board.filledDone?.(board.placeholders.map((holder) => holder.id)); });
+    await waitFor(() => expect(board.placeholders).toEqual([]));
+    expect(board.outside).not.toBeNull();
+  };
+
+  it('LOW-1 (review 8): Undo of an add placed outside the view takes its chip with it', async () => {
+    await openStudio('board');
+    await pasteOutside();
+    press('z', { metaKey: true });
+    await waitFor(() => expect(urls()).toEqual(['/api/outputs/i1.png', '/api/outputs/i2.png']));
+    await waitFor(() => expect(board.outside).toBeNull());
+  });
+
+  it('LOW-1 (review 8): a remove of that add takes the chip too; one of two keeps the chip on the other', async () => {
+    await openStudio('board');
+    board.view = { x: 0, y: 0, width: 1000, height: 270 };
+    board.point = { x: 500, y: 135 };
+    paste(clipboard({ files: [png('a.png'), png('b.png')] }));
+    await waitFor(() => expect(board.outside?.rects).toHaveLength(2));
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false }));
+    act(() => { board.filledDone?.(board.placeholders.map((holder) => holder.id)); });
+    await waitFor(() => expect(board.placeholders).toEqual([]));
+    const [first, second] = addOps();
+    const removeImage = (id: string) => act(() => {
+      store().edit(g1Key, (draft) => ({ ...(draft as { images: MoodboardImage[] }),
+        images: (draft as { images: MoodboardImage[] }).images.filter((img) => img.id !== id) }));
+    });
+    removeImage(first.images[0].id!);
+    await waitFor(() => expect(board.outside?.rects).toEqual([{ ...second.at!, width: w, height: h }]));
+    removeImage(second.images[0].id!);
+    await waitFor(() => expect(board.outside).toBeNull());
+  });
+
+  it('NIT-3 (review 8): an add a 409 replay moves out of the view it was made in gets the edge chip', async () => {
+    await openStudio('board');
+    board.view = { x: 3000, y: 0, width: w + 60, height: h + 60 };
+    board.point = { x: 3000 + (w + 60) / 2, y: (h + 60) / 2 };
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const at = ops.find((op): op is Add => op.op === 'add')!.at!;
+      spots.push(at);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('other', { placements: [{ ...card('other', at.x, at.y), w, h }] })] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    // Made inside the view: no chip then.
+    expect(spots[0].x).toBeGreaterThanOrEqual(3000);
+    const moved = { ...addOps()[0].at!, width: w, height: h };
+    expect(moved).not.toMatchObject(spots[0]);
+    await waitFor(() => expect(board.outside?.rects).toEqual([moved]));
+    expect(board.outside?.thumb).toBe('/api/outputs/chat-uploads/river.png');
+  });
+
+  it('NIT-3: a replay move that stays in the view gets no chip', async () => {
+    await openStudio('board');
+    const spots: Array<{ x: number; y: number }> = [];
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const at = ops.find((op): op is Add => op.op === 'add')!.at!;
+      spots.push(at);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('other', { placements: [{ ...card('other', at.x, at.y), w, h }] })] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    expect(addOps()[0].at).not.toEqual(spots[0]);
+    await new Promise((done) => setTimeout(done, 30));
+    expect(board.outside).toBeNull();
+  });
+
+  it('Y3 (review 8): a List add still uploading holds no spot on the Board: the replay leaves the add where it was', async () => {
+    server.board = { ...server.board, images: [image('i1', { placements: [card('i1', 3000, 0)] }), image('i2', { placements: [card('i2', 3520, 0)] })] };
+    await openStudio('board');
+    board.point = { x: 0, y: 0 };
+    const send = api.editMoodboard.getMockImplementation()!;
+    const spots: Array<{ x: number; y: number }> = [];
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      spots.push(ops.find((op): op is Add => op.op === 'add')!.at!);
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, image('far', { placements: [card('far', -3000, -3000)] })] };
+      // A List add on this board, still uploading: a row, with no spot on the board.
+      const ref = useBoardAddStore.getState().held[0].board;
+      useBoardAddStore.setState((state) => ({ held: [...state.held, { id: 'placeholder-row', x: 0, y: 0, width: 0, height: 0, listOnly: true,
+        source: { kind: 'file' as const, name: 'row.png' }, board: ref }] }));
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    // The add covers the row's (meaningless) corner, and still keeps its spot.
+    expect(spots[0].x).toBeLessThan(0);
+    expect(spots[0].y).toBeLessThan(0);
+    expect(addOps()[0].at).toEqual(spots[0]);
+  });
+
+  it('Y4 (review 8): two adds a 409 replay moves land on spots of their own, a gap apart', async () => {
+    await openStudio('board');
+    // A view with one free spot left once the other tab's tiles are in: both
+    // adds' nearest; the first takes it, the second goes on.
+    board.view = { x: 3000, y: 0, width: 1380, height: 354 };
+    board.point = { x: 3690, y: 177 };
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      const adds = ops.filter((op): op is Add => op.op === 'add');
+      server.board = { ...server.board, version: server.board.version + 1,
+        images: [...server.board.images, ...adds.map((add, index) => image(`other${index}`, { placements: [{ ...card(`other${index}`, add.at!.x, add.at!.y), w, h }] }))] };
+      throw new MoodboardVersionConflict(clone(server.board));
+    }).mockImplementation(send);
+    paste(clipboard({ files: [png('a.png'), png('b.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(2));
+    const [a, b] = addOps().map((op) => ({ ...op.at!, width: w, height: h }));
+    expect(keepsGap(a, b)).toBe(true);
+    const others = server.board.images.filter((img) => img.id.startsWith('other') || img.id === 'i1' || img.id === 'i2')
+      .flatMap((img) => (img.placements ?? []).map(rect));
+    for (const tile of others) {
+      expect(keepsGap(a, tile)).toBe(true);
+      expect(keepsGap(b, tile)).toBe(true);
+    }
+  });
+
+  it('Y20 (review 8): an Undo toast (it has an action) is still there back on its board', async () => {
+    const raf = immediateFrames();
+    await openStudio('list');
+    act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
+    await screen.findByRole('button', { name: 'Undo' });
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
+    expect(screen.queryByText('Removed #1')).toBeNull();
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    await screen.findByDisplayValue('Global board');
+    expect(screen.getByText('Removed #1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
+    raf.mockRestore();
+  });
+
+  it('Y21 (review 8): an info line about the board the person is on stays: an Undo answered just as they come back to its board', async () => {
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    await waitFor(() => expect(store().entries[g1Key]).toMatchObject({ dirty: false }));
+    // The undo's answer is held, and puts nothing back to redo: its line has no action.
+    let answer: (value: unknown) => void = () => {};
+    let ready: Promise<unknown> = Promise.resolve();
+    const send = api.editMoodboard.getMockImplementation()!;
+    api.editMoodboard.mockImplementationOnce((...args: Parameters<typeof send>) => {
+      ready = send(...args).then((edited: object) => ({ ...edited, undo: { ops: [] } }));
+      return new Promise((done) => { answer = done; });
+    });
+    press('z', { metaKey: true });
+    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalledTimes(2));
+    const value = await ready;
+    act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
+    await waitFor(() => expect(screen.queryByDisplayValue('Global board')).toBeNull());
+    // Back on the board, and its undo answers in the same turn: the line
+    // comes before the Studio has drawn the board again (outside act, as in
+    // the page, so React draws on its own microtask, after the answer's).
+    answer(value);
+    useUIStore.getState().enterMoodboardEditor('g1', 'global');
+    await act(async () => { await Promise.resolve(); });
+    await screen.findByDisplayValue('Global board');
+    expect(screen.getByText('Undid: Added #3')).toBeTruthy();
+  });
+
+  it('GM r12 1: the neutral line\'s look is #204\'s neutral tokens, not the error colour', () => {
+    const css = readFileSync(resolve(__dirname, '../../styles/moodboard-studio.css'), 'utf8');
+    const rule = (selector: string) => css.match(new RegExp(`${selector.replace(/[.-]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`))?.[1] ?? '';
+    const line = rule('body.app-slava-restraint .moodboard-studio__notice--neutral');
+    expect(line).toContain('color: var(--sr-ink-light)');
+    expect(line).toContain('border-left-color: var(--sr-edge-strong)');
+    expect(line).toContain('background: var(--sr-surface-control)');
+    expect(rule('body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved')).toContain('color: var(--sr-ink-light)');
+    expect(css).not.toMatch(/--neutral[^{]*,[^{]*\{[^}]*#e0796b/);
+    expect(css).not.toMatch(/--not-saved[^{]*,[^{]*\{[^}]*#e0796b/);
   });
 });

@@ -7,6 +7,8 @@ import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { ImageColors } from './MoodboardColors';
 import { isSetAside, setAsidePatch } from './steering';
 import { placeholderLabel, type BoardPlaceholder } from './boardPlaceholder';
+import { offlineMark } from '../../lib/useBackendOffline';
+import { offlineDisabledReason } from '../../lib/errorCopy';
 
 // The backend's cap on a private note (services/moodboard_store.py).
 export const PRIVATE_NOTE_LIMIT = 2000;
@@ -23,7 +25,7 @@ export const PRIVATE_NOTE_LIMIT = 2000;
  * stays live, and the toolbar has no status.
  */
 export function MoodboardListView({ images, analysis, cover, uploads = [], onFiles, onDrop, onRemove, onUpdate,
-  onSetCover, onTextDone }: {
+  onSetCover, onTextDone, offline = false }: {
   images: MoodboardImage[];
   analysis: MoodboardAnalysis | null;
   /** The image the board opens on (the chosen one, else #1). */
@@ -38,6 +40,9 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
   onSetCover: (id: string | null) => void;
   /** A note lost focus: send it now. */
   onTextDone: () => void;
+  /** Nebula is offline (GM r12 2): Add Images is disabled with the offline
+   *  reason, and the drop hint goes until it reconnects. */
+  offline?: boolean;
 }) {
   return (
     <section
@@ -48,15 +53,17 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
       <div className="moodboard-dropzone__head">
         <div>
           <span className="moodboard-dropzone__label">Images ({images.length})</span>
-          <span className="moodboard-dropzone__hint">Drag images here or add files.</span>
+          {!offline && <span className="moodboard-dropzone__hint">Drag images here or add files.</span>}
         </div>
-        <label className="moodboard-dropzone__file-wrap">
+        <label className={`moodboard-dropzone__file-wrap${offline ? ' moodboard-dropzone__file-wrap--disabled' : ''}`}
+          {...(offline ? { title: offlineDisabledReason('add images') } : {})} {...offlineMark(offline)}>
           <span className="moodboard-dropzone__file-button">Add Images</span>
           <input
             className="moodboard-dropzone__file-input"
             type="file"
             accept="image/*"
             multiple
+            disabled={offline}
             aria-label="Add Images"
             onChange={(event) => {
               onFiles(event.target.files);

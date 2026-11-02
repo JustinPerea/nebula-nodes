@@ -14,7 +14,19 @@ import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
  * says once at its end.
  */
 export function boardNotSavedLine(error: unknown): FailureCopy {
-  return { heading: '', reason: `Nebula couldn’t save the board because ${boardSaveCause(error)}. Try again.` };
+  return { heading: '', reason: `${NOT_SAVED_OPENING}${boardSaveCause(error)}. Try again.` };
+}
+
+const NOT_SAVED_OPENING = 'Nebula couldn’t save the board because ';
+
+/**
+ * Whether `failure` is boardNotSavedLine's line (GM r12 1): nothing is lost
+ * (the send waits in the draft and in this tab's session storage), so it is
+ * neutral, colour included, as PR #204's because lines are, and the header
+ * chip reads "Not saved", not "Error". Its one retry is the header's Retry.
+ */
+export function isBoardNotSavedLine(failure: FailureCopy | string | null | undefined): boolean {
+  return typeof failure === 'object' && failure !== null && !failure.heading && failure.reason.startsWith(NOT_SAVED_OPENING);
 }
 
 /** The clause after "because" for a board's send that failed. */

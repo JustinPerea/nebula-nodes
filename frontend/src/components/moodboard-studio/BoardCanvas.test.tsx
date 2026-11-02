@@ -1012,6 +1012,55 @@ describe('the Add images button', () => {
   });
 });
 
+describe('an empty board while Nebula is offline (GM r12 2)', () => {
+  const hint = 'Drop images here. They land where you drop them.';
+  const board = (offline: boolean) => <BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={(files, target) => {
+    drops.push({ files, at: target.at }); }} offline={offline} />;
+
+  it('shows only "No references yet", and Add images is off with the offline reason; back online the hint and the button come back', () => {
+    const view = render(board(true));
+    const input = view.getByLabelText('Add images') as HTMLInputElement;
+    expect(view.container.querySelector('.moodboard-board__empty')!.textContent).toBe('No references yet');
+    expect(view.queryByText(hint)).toBeNull();
+    expect(input.disabled).toBe(true);
+    const label = input.closest('label')!;
+    expect(label.title).toBe('You can add images when Nebula reconnects.');
+    expect(label.hasAttribute('data-offline-disabled')).toBe(true);
+    expect(label.className).toContain('moodboard-board__control--disabled');
+    view.rerender(board(false));
+    expect(view.getByText(hint)).toBeTruthy();
+    expect(input.disabled).toBe(false);
+    expect(label.title).toBe('Add images to the middle of the view');
+    expect(label.hasAttribute('data-offline-disabled')).toBe(false);
+    expect(label.className).not.toContain('--disabled');
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+    expect(drops).toHaveLength(1);
+  });
+
+  it('Y24 (review 8): Fit on a board with no cards but a held spot frames the spot; with neither it does nothing', () => {
+    spring.calls.length = 0;
+    flow.getNodesBounds.mockClear();
+    const held = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
+    fireEvent.click(held.getByLabelText('Fit the board'));
+    expect(spring.calls).toHaveLength(1);
+    expect(flow.getNodesBounds).toHaveBeenCalledWith([expect.objectContaining({ position: { x: 40, y: 60 } })]);
+    held.unmount();
+    spring.calls.length = 0;
+    const empty = render(board(false));
+    fireEvent.click(empty.getByLabelText('Fit the board'));
+    expect(spring.calls).toHaveLength(0);
+  });
+
+  it('going offline on an empty board takes the hint away', () => {
+    const view = render(board(false));
+    expect(view.getByText(hint)).toBeTruthy();
+    view.rerender(board(true));
+    expect(view.queryByText(hint)).toBeNull();
+    expect((view.getByLabelText('Add images') as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
 describe('the camera', () => {
   it('fits the board with Fit and with Shift+1, on a spring', () => {
     spring.calls = [];

@@ -204,10 +204,37 @@ function readWaiting(): WaitingSend[] {
   try {
     const parsed = JSON.parse(window.sessionStorage.getItem(WAITING_KEY) ?? '[]') as unknown;
     const now = Date.now();
-    return Array.isArray(parsed) ? parsed.filter((it): it is WaitingSend => typeof it?.board === 'string' && Array.isArray(it?.ops)
-      && typeof it?.fields === 'object' && it.fields !== null && typeof it?.page === 'string' && typeof it?.at === 'number'
-      && now - it.at < PENDING_MAX_AGE) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((it): it is WaitingSend => typeof it?.board === 'string' && Array.isArray(it?.ops)
+      && typeof it?.fields === 'object' && it.fields !== null && !Array.isArray(it.fields) && typeof it?.page === 'string'
+      && typeof it?.at === 'number' && now - it.at < PENDING_MAX_AGE)
+      // Each op is checked too (review 8, NIT-4): one that isn't an op Nebula
+      // makes is dropped, never applied and sent; a record left with nothing goes.
+      .map((it) => ({ ...it, ops: it.ops.filter(isOpShape) }))
+      .filter((it) => it.ops.length > 0 || Object.keys(it.fields).length > 0);
   } catch { return []; }
+}
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isOptional = (value: unknown, check: (value: unknown) => boolean) => value === undefined || check(value);
+const isString = (value: unknown): value is string => typeof value === 'string';
+/** Whether `op` has the shape of a MoodboardOp (lib/moodboardEdits). */
+function isOpShape(op: unknown): op is MoodboardOp {
+  if (!isRecord(op)) return false;
+  switch (op.op) {
+    case 'add':
+      return Array.isArray(op.images) && op.images.length > 0
+        && op.images.every((image) => isRecord(image) && isString(image.url) && isOptional(image.id, isString))
+        && isOptional(op.at, (at) => isRecord(at) && isNumber(at.x) && isNumber(at.y));
+    case 'remove': return Array.isArray(op.images) && op.images.every(isString);
+    case 'weight': return isString(op.image) && isNumber(op.value);
+    case 'setAside': return isString(op.image) && typeof op.value === 'boolean';
+    case 'note': return isString(op.image) && isOptional(op.notes, isString) && isOptional(op.privateNote, isString);
+    case 'place': return isString(op.placement) && isNumber(op.x) && isNumber(op.y);
+    case 'cover': return op.image === null || isString(op.image);
+    case 'restore': return Array.isArray(op.slices) && op.slices.every(isRecord);
+    default: return false;
+  }
 }
 function writeWaiting(list: WaitingSend[]) {
   try {

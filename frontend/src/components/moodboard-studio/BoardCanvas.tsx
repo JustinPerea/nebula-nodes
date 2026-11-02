@@ -17,6 +17,8 @@ import type { NodeRect } from '../../lib/nodePlacement';
 import { useBottomBarClearance } from '../../hooks/useBottomBarClearance';
 import { BOTTOM_BAR_ATTR } from '../../lib/bottomBar';
 import { OutsideChip } from './OutsideChip';
+import { offlineMark } from '../../lib/useBackendOffline';
+import { offlineDisabledReason } from '../../lib/errorCopy';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { createBoardFitFollow, type BoardFitFollow } from './boardFitFollow';
 import { BOARD_FALLBACK_INSETS, insideInsets, measureBoardViewInsets, type ViewInsets } from '../../lib/boardViewInsets';
@@ -51,6 +53,9 @@ export interface BoardCanvasProps {
   onOutsideDone?: () => void;
   /** Filled placeholders whose image has finished fading in: the Studio drops them. */
   onPlaceholdersFilled?: (ids: string[]) => void;
+  /** Nebula is offline (GM r12 2): editing is paused, so Add images is
+   *  disabled with the offline reason and an empty board shows no drop hint. */
+  offline?: boolean;
 }
 
 /** Where new tiles go: the point they gather around and the visible board, in
@@ -190,7 +195,7 @@ function BoardDots() {
 }
 
 function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTargetRef,
-  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled }: BoardCanvasProps) {
+  placeholders = NO_PLACEHOLDERS, outside = null, onOutsideDone, onPlaceholdersFilled, offline = false }: BoardCanvasProps) {
   const { screenToFlowPosition, getViewport, setViewport, getNodesBounds } = useReactFlow();
   const flowStore = useStoreApi();
   const selection = useBoardSelection(boardKey);
@@ -977,9 +982,10 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
             <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={() => fit(false)}
               aria-label="Fit the board" title="Fit the board (Shift+1)">Fit</button>
             {/* Live while files upload (GM): each upload is its own placeholder, so the toolbar has no status. */}
-            <label className="moodboard-board__control moodboard-board__control--text" title="Add images to the middle of the view">
+            <label className={`moodboard-board__control moodboard-board__control--text${offline ? ' moodboard-board__control--disabled' : ''}`}
+              title={offline ? offlineDisabledReason('add images') : 'Add images to the middle of the view'} {...offlineMark(offline)}>
               <span aria-hidden="true">Add images</span>
-              <input className="moodboard-board__file" type="file" accept="image/*" multiple
+              <input className="moodboard-board__file" type="file" accept="image/*" multiple disabled={offline}
                 aria-label="Add images" onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} />
             </label>
           </Panel>
@@ -993,7 +999,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       {nodes.length === 0 && held.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>
-          <span className="moodboard-board__empty-hint">Drop images here. They land where you drop them.</span>
+          {/* Not while offline (GM r12 2): a drop is paused then; the hint comes back on reconnect. */}
+          {!offline && <span className="moodboard-board__empty-hint">Drop images here. They land where you drop them.</span>}
         </div>
       )}
     </div>

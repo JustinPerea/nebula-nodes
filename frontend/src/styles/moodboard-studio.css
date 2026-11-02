@@ -174,6 +174,20 @@ body.app-slava-restraint .moodboard-studio__notice--warn {
   color: #d9a441;
 }
 
+/* GM r12 1 (PR #210): a board's send that failed on reconnect lost nothing
+   (it waits in the draft), so its line is neutral, colour included: PR #204's
+   because-line look (neutral ink, control fill, strong edge). The header chip
+   reads "Not saved" in the same neutral ink. */
+body.app-slava-restraint .moodboard-studio__notice--neutral {
+  color: var(--sr-ink-light);
+  border-left-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .moodboard-def {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
