@@ -81,9 +81,10 @@ const chip = vi.hoisted(() => ({ props: null as null | { tiles: unknown; viewOf:
 vi.mock('./OutsideChip', () => ({
   OutsideChip: (props: NonNullable<typeof chip.props>) => { chip.props = props; return <button type="button">chip</button>; },
 }));
-import { BoardCanvas, FILL_DECODE_WAIT_MS, type BoardMove, type BoardTarget } from './BoardCanvas';
+import { BoardCanvas, FILL_DECODE_WAIT_MS, KEY_MOVE_SETTLE_MS, type BoardMove, type BoardTarget } from './BoardCanvas';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { getViewportForBounds } from '@xyflow/react';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { useGraphStore } from '../../store/graphStore';
@@ -194,6 +195,24 @@ describe('a drag', () => {
     act(() => { vi.advanceTimersByTime(600); });
     expect(moves).toEqual([[{ placement: 'c2', x: 530, y: 0 }]]);
   });
+
+  // #209 review 4 LOW-2: a drag's end resets the drag, or every arrow-key
+  // move after the first mouse drag would show and never be sent.
+  for (const how of ['a card drag', 'a selection drag'] as const) {
+    it(`after ${how} ends, arrow keys still send their move`, () => {
+      vi.useFakeTimers();
+      mount();
+      act(() => props().onNodesChange([{ type: 'position', id: 'c1', position: { x: 40, y: 0 }, dragging: true }]));
+      act(() => {
+        if (how === 'a card drag') props().onNodeDragStop({}, nodeById('c1'), [nodeById('c1')]);
+        else props().onSelectionDragStop!({}, [nodeById('c1')]);
+      });
+      expect(moves).toEqual([[{ placement: 'c1', x: 40, y: 0 }]]);
+      act(() => props().onNodesChange([{ type: 'position', id: 'c2', position: { x: 525, y: 0 }, dragging: false }]));
+      act(() => { vi.advanceTimersByTime(KEY_MOVE_SETTLE_MS); });
+      expect(moves).toEqual([[{ placement: 'c1', x: 40, y: 0 }], [{ placement: 'c2', x: 525, y: 0 }]]);
+    });
+  }
 });
 
 describe('selection', () => {
@@ -253,9 +272,9 @@ describe('where a paste lands (Cmd+V)', () => {
     expect(pastePoint.current?.()).toEqual({ x: 620, y: 440 });
   });
 
-  it('carries the view at paste time (the board less the inset), and is not aimed', () => {
+  it('carries the view at paste time (the board inside the view insets: no bar measured, so the fallback band), and is not aimed', () => {
     const { pasteTarget } = mountWithPoint();
-    expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 52, y: 72, width: 1136, height: 736 }, aim: false });
+    expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 694 }, aim: false });
   });
 
   it('is gone once the board unmounts, so the List view never places a paste', () => {
@@ -274,22 +293,22 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     return { wrapper, bar };
   };
 
-  it('a drop is aimed; its view is the board less the inset and the toolbar', () => {
+  it('a drop is aimed; its view is the board less the toolbar\'s band (lib/boardViewInsets)', () => {
     const view = mount();
     const { wrapper } = sized(view);
     const file = new File(['x'], 'ref.png', { type: 'image/png' });
     const drop = createEvent.drop(wrapper, { dataTransfer: { files: [file], types: ['Files'] } });
     Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
     fireEvent(wrapper, drop);
-    // Screen (26, 36)-(594, 354), doubled by the stand-in screenToFlowPosition.
-    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: true, band: true }]);
+    // Screen (10, 20)-(610, 370), doubled by the stand-in screenToFlowPosition.
+    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 20, y: 40, width: 1200, height: 700 }, aim: true, band: true }]);
   });
 
   it('Add images follows the free-spot rule from the middle of the view', () => {
     const view = mount();
     sized(view);
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-    expect(targets).toEqual([{ at: { x: 620, y: 440 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: false }]);
+    expect(targets).toEqual([{ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 700 }, aim: false }]);
   });
 
   it('the toolbar is the board\'s bottom bar: the notice stack sits the gap above its measured top', () => {
@@ -302,6 +321,31 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     expect(css).toMatch(/bottom: calc\(var\(--bottom-bar-clearance[^;]*\) \+ var\(--notice-gap\)\);/);
     view.unmount();
     expect(document.documentElement.style.getPropertyValue('--bottom-bar-clearance')).toBe('');
+  });
+});
+
+describe('one view for every framing and placement (#213\'s shared insets)', () => {
+  it('Fit, an Update\'s Show, the chip\'s press and placement all use the column less the toolbar\'s band', async () => {
+    const tiles = { id: 1, rects: [{ x: 0, y: 0, width: 100, height: 100 }], thumb: null };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={(_f, target) => { targets.push(target); }}
+      outside={tiles} onOutsideDone={() => {}} />);
+    // The column React Flow measures (1000 x 700), its bar's top 50 px above the bottom.
+    const wrapper = view.container.querySelector('.moodboard-board') as HTMLDivElement;
+    wrapper.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 700, width: 1000, height: 700 }) as DOMRect;
+    const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
+    bar.getBoundingClientRect = () => ({ left: 15, top: 650, right: 300, bottom: 688, width: 285, height: 38 }) as DOMRect;
+    // Every framing here frames the same 100 x 100 bounds, into 1000 x 650 at the column's top left.
+    const framed = getViewportForBounds({ x: 0, y: 0, width: 100, height: 100 }, 1000, 650, 0.02, 1, 0.12);
+    spring.calls = [];
+    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    act(() => useBoardCanvasStore.getState().requestFrame('k1', ['c2']));
+    await vi.waitFor(() => expect(spring.calls).toHaveLength(2));
+    act(() => { chip.props!.onShow(tiles.rects, false); });
+    expect(spring.calls.map((call) => call.to)).toEqual([framed, framed, framed]);
+    // Placement's view is that same screen area, (0, 0)-(1000, 650), in board coordinates (the stand-in doubles).
+    fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
+    expect(targets[0].view).toEqual({ x: 0, y: 0, width: 2000, height: 1300 });
+    expect(chip.props!.viewOf()).toEqual(targets[0].view);
   });
 });
 
@@ -318,7 +362,7 @@ describe('the outside-the-view chip on the board', () => {
     expect(done).toHaveBeenCalledTimes(1);
   });
 
-  it('judges "in view" by placement\'s own view: the board less the inset and the toolbar (review 2, M2)', () => {
+  it('judges "in view" by placement\'s own view: the board less the toolbar\'s band (review 2, M2)', () => {
     const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={(_f, target) => { targets.push(target); }}
       outside={tiles} onOutsideDone={() => {}} />);
@@ -327,7 +371,7 @@ describe('the outside-the-view chip on the board', () => {
     const bar = view.container.querySelector('[data-bottom-bar]') as HTMLElement;
     bar.getBoundingClientRect = () => ({ left: 25, top: 370, right: 250, bottom: 405, width: 225, height: 35 }) as DOMRect;
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-    expect(chip.props!.viewOf()).toEqual({ x: 52, y: 72, width: 1136, height: 636 });
+    expect(chip.props!.viewOf()).toEqual({ x: 20, y: 40, width: 1200, height: 700 });
     expect(chip.props!.viewOf()).toEqual(targets[0].view);
   });
 
