@@ -224,7 +224,10 @@ export interface ProposalView {
     ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
   }>;
   edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
-  params: Array<{ nodeId: string; name: string; changes: Record<string, { from: unknown; to: unknown }> }>;
+  /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
+   * card's words, "Hero shot" and "Krea 2" (no id). */
+  params: Array<{ nodeId: string; name: string; title?: string; model?: string;
+    changes: Record<string, { from: unknown; to: unknown }> }>;
   run: string[];
   cost: {
     paidRuns: number;
@@ -232,7 +235,10 @@ export interface ProposalView {
     estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
-    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string }>;
+    /** Each run node; `name`, `model` and `billedTo` ("your Krea plan") are
+     * the plan line's words (backend canvas_proposals.plan_line). */
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null; missing?: string;
+      name?: string; model?: string; billedTo?: string | null }>;
     /** Run nodes that can't run here as set up, when the proposal was made
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
@@ -245,6 +251,10 @@ export interface ProposalView {
   reason: string | null;
   idMap: Record<string, string> | null;
   runNodeIds: string[] | null;
+  /** The card's plan line under the note, by node name: "Changes and runs
+   * “Hero shot” · Krea 2 on your Krea plan · no list price" (backend
+   * canvas_proposals.plan_line; agents read the same words). */
+  plan?: string;
 }
 
 /**

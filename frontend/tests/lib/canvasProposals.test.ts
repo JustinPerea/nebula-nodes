@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { proposalChanges } from '../../src/lib/canvasProposals';
+import { changeCount, proposalChanges } from '../../src/lib/canvasProposals';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {
@@ -43,8 +43,26 @@ describe('proposalChanges', () => {
   it('names the model beside a name the agent gave a new node, so the person sees what Accept adds', () => {
     const named = view();
     named.nodes[0] = { ...named.nodes[0], name: 'Lake hero', model: 'Krea 2' };
-    expect(proposalChanges(named)[0].title).toBe('New Lake hero (+k, Krea 2)');
-    // An unnamed node's name is already the model's.
-    expect(proposalChanges(view())[0].title).toBe('New Krea 2 (+k)');
+    expect(proposalChanges(named)[0].title).toBe('New “Lake hero” · Krea 2');
+    // An unnamed node's name is already the model's. No ref anywhere a person
+    // reads (GM - Design, 2026-11-01).
+    expect(proposalChanges(view())[0].title).toBe('New “Krea 2”');
+  });
+
+  it('titles a changed node by its name and model, never its id', () => {
+    const titled = view();
+    titled.params[0] = { ...titled.params[0], title: 'Hero shot', model: 'Krea 2' };
+    expect(proposalChanges(titled)[1].title).toBe('“Hero shot” · Krea 2');
+    titled.params[0] = { ...titled.params[0], title: 'Krea 2', model: 'Krea 2' };
+    expect(proposalChanges(titled)[1].title).toBe('“Krea 2”');
+  });
+
+  it('counts every value Accept writes for the disclosure row', () => {
+    const groups = proposalChanges(view(), {
+      nodes: { '+k': { _provider: 'replicate' } },
+      params: { n1: { _provider: { from: null, to: 'bfl' } } },
+    });
+    expect(changeCount(groups)).toBe('2 changes');
+    expect(changeCount(groups.slice(0, 1))).toBe('1 change');
   });
 });

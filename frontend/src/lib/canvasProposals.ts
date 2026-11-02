@@ -224,34 +224,13 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
   return row.person?.trim() || row.missing;
 }
 
-/** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
-export function proposalSummary(view: ProposalView): string {
-  const parts: string[] = [];
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
-  if (view.nodes.length) parts.push(`Adds ${plural(view.nodes.length, 'node')}`);
-  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'connection')}`);
-  if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
-  if (view.run.length) {
-    const { paidRuns, freeRuns, upTo, providers } = view.cost;
-    if (paidRuns > 0) {
-      const who = providers.length ? ` (${providers.join(', ')})` : '';
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
-      const amount = proposalEstimateLabel(view);
-      if (amount) parts.push(amount);
-    } else if (runsNothing(view)) {
-      // Its whole run waits on agents' placeholders, which it skips (GM - Design,
-      // round 4, verbatim), counting the placeholders themselves (review 4, M2).
-      const { count, placeholders, agents } = view.cost.pendingSkipped!;
-      const who = agents.length === 1 && agents[0] ? `${agents[0]} finishes` : 'agents finish';
-      parts.push(`runs nothing until ${who} ${plural(placeholders ?? count, 'node')}`);
-    } else {
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
-    }
-  } else {
-    parts.push('nothing runs until you choose');
-  }
-  const text = parts.join(' · ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
+/** The card's plan line under the note (GM - Design, 2026-11-01): what
+ * Accept changes and runs, by node name; the model and who pays for a single
+ * paid run; the run chip's price. The backend writes it (services/
+ * canvas_proposals.plan_line), so agents read the same words in `nebula
+ * proposal` and MCP. */
+export function proposalPlan(view: ProposalView): string {
+  return view.plan ?? '';
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing
@@ -274,10 +253,11 @@ export function runsNothing(view: ProposalView): boolean {
 /** The primary button's words. "Accept" when accepting runs nothing (GM -
  * Design, round 5, item 3): Accept starts no run for it (it would skip every
  * node: backend main._skip_placeholders), and nothing is queued for when the
- * agent finishes. */
+ * agent finishes. The paid count left the label (GM - Design, 2026-11-01):
+ * the plan line right above it says what's paid. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
-  return view.cost.paidRuns > 0 ? `Accept & run (${view.cost.paidRuns} paid)` : 'Accept & run';
+  return 'Accept and run';
 }
 
 /** "3:05" until the proposal expires. */
@@ -347,8 +327,9 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const params = values?.nodes[node.ref] ?? node.params ?? {};
     groups.push({
       id: node.ref,
-      // A name the agent gave it (`rename`) shows with the model it is.
-      title: `New ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref})`,
+      // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
+      // the agent gave it (`rename`) shows with the model it is.
+      title: `New “${node.name}”${node.model ? ` · ${node.model}` : ''}`,
       kind: 'new',
       lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });
@@ -358,12 +339,22 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const entries = Object.entries(exact ?? change.changes);
     groups.push({
       id: change.nodeId,
-      title: change.name,
+      // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
+      // node's id for agents; a backend without `title` falls back to it.
+      title: change.title
+        ? `“${change.title}”${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
+        : change.name,
       kind: 'edit',
       lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
     });
   }
   return groups;
+}
+
+/** "2 changes", "1 change": every value Accept will write, for the disclosure row. */
+export function changeCount(groups: ChangeGroup[]): string {
+  const count = groups.reduce((sum, group) => sum + group.lines.length, 0);
+  return `${count} change${count === 1 ? '' : 's'}`;
 }
 
 /** "value: a → b; seed: 1 → 2" for the ring around a changed node. */

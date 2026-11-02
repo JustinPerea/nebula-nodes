@@ -189,6 +189,7 @@ from services.canvas_proposals import (
     ProposalError,
     ProposalSpec,
     agent_wording,
+    billed_to,
     canvas_proposals,
     clean_note,
     clean_positions,
@@ -5897,6 +5898,13 @@ def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
     return node_route.node_name(definition, node.get("label"), str(node.get("definitionId") or node_id))
 
 
+def _node_model(node_id: str, graph: CLIGraph | None = None) -> str:
+    """A node's model as the canvas titles it ("Krea 2"), whatever its label."""
+    node = (graph or cli_graph).nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
+    return node_route.canvas_title(definition) if definition else str(node.get("definitionId") or "")
+
+
 def _run_node_name(node_id: str, run_nodes: Mapping[str, GraphNode]) -> str:
     """A node's name in a run, from the run's own nodes, for a refusal: the
     label it carries (a run's node has none today: GraphNode keeps no label),
@@ -7775,12 +7783,18 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             # The input ports wired into it: a Krea-only one keeps the run on Krea (cost_for).
             wired = {str(edge.get("targetHandle")) for edge in graph_edges
                      if str(edge.get("target")) == node_id and edge.get("targetHandle")}
+            params = candidate.nodes[node_id].get("params") or {}
+            entry = cost_for(definition, params, definitions, api_keys, wired=wired)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys,
-                           wired=wired),
+                **entry,
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
+                # The plan line's words (canvas_proposals.plan_line): the node
+                # by its name, its model, and who pays for its run.
+                "name": _node_label(node_id, candidate),
+                "model": node_route.canvas_title(definition) or str(definition.get("id") or ""),
+                "billedTo": billed_to(definition, params, entry, wired=wired),
             })
         if estimate:
             estimate = {
@@ -7954,6 +7968,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     existing = {
         node_id: {
             "name": f"{_node_label(node_id)} ({node_id})",
+            # The person's words for it (the card names nodes, never ids).
+            "title": _node_label(node_id),
+            "model": _node_model(node_id),
             "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
         }
         for node_id in spec.references

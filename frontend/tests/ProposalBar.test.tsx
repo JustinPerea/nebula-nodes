@@ -99,26 +99,39 @@ describe('ProposalBar', () => {
     }
   });
 
-  it('shows who, what and the paid run label', () => {
-    open(proposal('p_a'));
+  // GM - Design, 2026-11-01 (the card redesign): one header line (the name
+  // truncates, its full form in `title`), the note, the backend's plan line,
+  // then a footer; the countdown moved up to the header.
+  it('shows who, the note, the plan line and the countdown in the header', () => {
+    const plan = 'Changes “Text” and runs “Nano Banana” · Nano Banana on your Google key · no list price';
+    open(proposal('p_a', { plan, agent: { id: 'pa', name: 'Portable Agent - Brand', color: '#d4ff7a', verified: true } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Codex')).toBeTruthy();
+    const name = screen.getByText('Portable Agent - Brand');
+    expect(name.getAttribute('title')).toBe('Portable Agent - Brand');
+    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+:\d\d$/);
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
-    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google)')).toBeTruthy();
-    expect(screen.getByText(/No list price ·/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeTruthy();
+    expect(screen.getByText(plan).className).toBe('proposal-bar__plan');
+    // Nothing above the disclosure names a node by id (the details fall back
+    // to `name` only for a backend without `title`).
+    for (const part of ['.proposal-bar__head', '.proposal-bar__plan', '.proposal-bar__footer']) {
+      expect(document.querySelector(part)?.textContent).not.toMatch(/\bn1\b|\+up/);
+    }
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeTruthy();
   });
 
-  it('adds the list-price estimate to the summary when the run has one', () => {
-    open(proposal('p_a', { cost: { paidRuns: 1, freeRuns: 0, upTo: true, providers: ['google'], nodes: [], note: '',
+  it('keeps "List prices, not a quote" for the first line of the details when the run is priced', () => {
+    open(proposal('p_a', { plan: 'Runs “Nano Banana” · ~$0.07', cost: { paidRuns: 1, freeRuns: 0, upTo: true,
+      providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    expect(screen.getByText('Adds 1 node · 1 connection · changes n1 · runs up to 1 paid model (google) · ~$0.07')).toBeTruthy();
-    expect(screen.getByText(/List prices, not a quote ·/)).toBeTruthy();
+    expect(screen.getByText('Runs “Nano Banana” · ~$0.07').getAttribute('title')).toBe('List prices, not a quote');
+    const details = screen.getByLabelText('What Accept writes');
+    expect(details.firstElementChild?.textContent).toBe('List prices, not a quote');
   });
 
-  it('says nothing runs and offers a plain Accept when no run is requested', () => {
-    open(proposal('p_a', { run: [], cost: { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '' } }));
+  it('offers a plain Accept when no run is requested', () => {
+    open(proposal('p_a', { plan: 'Changes “Text” · nothing runs until you choose', run: [],
+      cost: { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '' } }));
     render(<ProposalBar />);
     expect(screen.getByText(/nothing runs until you choose/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
@@ -133,7 +146,7 @@ describe('ProposalBar', () => {
     }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     const [path, init] = net.apiFetch.mock.calls[0];
     expect(path).toBe('/api/canvas/proposals/p_a/accept');
@@ -153,7 +166,7 @@ describe('ProposalBar', () => {
     net.apiFetch.mockResolvedValue(respond(200, { idMap: {}, runNodeIds: ['n7', 'n8'], nodes: [], edges: [], updatedNodes: [] }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect([...graph.state.executeCluster.mock.calls[0][0]].sort()).toEqual(['n1', 'n7', 'n8']);
@@ -166,7 +179,7 @@ describe('ProposalBar', () => {
     // The offer is a notice in the app's notice region (NoticeRegion), beside the bar.
     render(<><ProposalBar /><DeferredRunNotice /></>);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(graph.state.executeNode).not.toHaveBeenCalled();
     expect(screen.getByText(/Run them when the current run finishes/)).toBeTruthy();
@@ -190,14 +203,14 @@ describe('ProposalBar', () => {
     net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'This proposal no longer fits the canvas: n1 is no longer on the canvas' }));
     render(<ProposalBar />);
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(screen.getByRole('alert').textContent).toContain('no longer fits the canvas');
     expect(graph.state.executeNode).not.toHaveBeenCalled();
 
     net.apiFetch.mockResolvedValueOnce(respond(403, { detail: 'nope' }));
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
   });
@@ -247,7 +260,7 @@ describe('ProposalBar', () => {
     expect(screen.getByText('from Codex')).toBeTruthy();
     expect(screen.getByText(/1 of 2/)).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     });
     const [path, init] = net.apiFetch.mock.calls[0];
     expect(path).toBe('/api/canvas/proposals/p_a/accept');
@@ -264,7 +277,7 @@ describe('ProposalBar', () => {
       useCanvasProposalsStore.getState().close({ proposalId: 'p_a', status: 'withdrawn' });
     });
     expect(screen.getByText('second')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Accept & run (1 paid)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Accept and run' }));
     expect(net.apiFetch).not.toHaveBeenCalled();
   });
 
@@ -275,13 +288,45 @@ describe('ProposalBar', () => {
       params: { n1: { value: { from: 'a', to: 'b' } } },
     });
     render(<ProposalBar />);
-    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
+    const row = screen.getByRole('button', { name: /^What Accept writes/ });
+    // A real disclosure: its label never changes; aria-expanded and the
+    // chevron carry the state, and it names the panel it controls.
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(row.textContent).toBe('What Accept writes4 changes');
+    const panel = document.getElementById(row.getAttribute('aria-controls')!)!;
+    expect(panel.getAttribute('data-open')).toBe('false');
+    expect(panel.hasAttribute('inert')).toBe(true);
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(row.textContent).toBe('What Accept writes4 changes');
+    expect(panel.getAttribute('data-open')).toBe('true');
+    expect(panel.hasAttribute('inert')).toBe(false);
     const details = screen.getByLabelText('What Accept writes');
-    expect(details.textContent).toContain('New Nano Banana (+up)');
+    expect(details.textContent).toContain('New “Nano Banana”');
     expect(details.textContent).toContain('num_images8');
     expect(details.textContent).toContain(long);
     expect(details.textContent).toContain('Text (n1)');
     expect(details.textContent).toContain('a → b');
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('titles a changed node by its name and model once the backend sends them', () => {
+    open(proposal('p_a', { params: [{ nodeId: 'n1', name: 'Hero shot (n1)', title: 'Hero shot', model: 'Krea 2',
+      changes: { aspect_ratio: { from: '16:9', to: '1:1' } } }] }));
+    render(<ProposalBar />);
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    const titles = [...document.querySelectorAll('.proposal-bar__group-title')].map((el) => el.textContent);
+    expect(titles).toEqual(['New “Nano Banana”', '“Hero shot” · Krea 2']);
+  });
+
+  it('closes the disclosure when the person pages to another proposal', () => {
+    open(proposal('p_a', { createdAt: 1 }));
+    open(proposal('p_b', { createdAt: 2 }));
+    render(<ProposalBar />);
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next proposal' }));
+    expect(screen.getByRole('button', { name: /^What Accept writes/ }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it("names the run's nodes that can't run here, and leaves Accept as the Run button is", () => {
@@ -299,7 +344,7 @@ describe('ProposalBar', () => {
     expect(list.textContent).toContain('GPT Image 2 (+img) needs OPENAI_API_KEY in Settings > Providers');
     // The canvas Run button stays enabled for a node without its key: the
     // backend refuses that node before anything is spent. Accept does the same.
-    const accept = screen.getByRole('button', { name: 'Accept & run (1 paid)' }) as HTMLButtonElement;
+    const accept = screen.getByRole('button', { name: 'Accept and run' }) as HTMLButtonElement;
     expect(accept.disabled).toBe(false);
 
     // The person adds the key while the proposal is open: the line goes.
@@ -318,12 +363,23 @@ describe('ProposalBar', () => {
     expect(list.querySelectorAll('li')).toHaveLength(4);
     expect(list.textContent).toContain("+a: FLUX 3 can't run on BFL");
     expect(list.textContent).toContain('and 1 more in the details');
-    fireEvent.click(screen.getByRole('button', { name: 'See what Accept writes' }));
+    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
     expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
   });
 
-  it("wraps the agent's note and offers the rest in the details", () => {
-    // jsdom lays nothing out: the note reports more height than its three lines show.
+  it('with no change lines, the row reads "Every node that can’t run" with the count', () => {
+    const many = proposal('p_a', { params: [], nodes: [{ ...proposal('p_a').nodes[0], params: {} }] });
+    many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
+      ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
+    open(many);
+    useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
+    render(<ProposalBar />);
+    const row = screen.getByRole('button', { name: /^Every node that can’t run/ });
+    expect(row.textContent).toBe('Every node that can’t run4 nodes');
+  });
+
+  it('reads the whole note first: past six lines it clamps, and "Show all" opens it in place', () => {
+    // jsdom lays nothing out: the note reports more height than its six lines show.
     vi.stubGlobal('ResizeObserver', class {
       constructor(private readonly report: () => void) {}
       observe() { this.report(); }
@@ -340,9 +396,17 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     const shown = document.querySelector('.proposal-bar__note')!;
     expect(shown.textContent).toBe(note);
-    fireEvent.click(screen.getByRole('button', { name: 'Read the whole note' }));
-    expect(screen.getByLabelText('Details').textContent).toContain(note);
-    expect(screen.getByRole('button', { name: 'Hide the note' })).toBeTruthy();
+    expect(shown.getAttribute('data-long')).toBe('true');
+    const more = screen.getByRole('button', { name: 'Show all' });
+    expect(more.getAttribute('aria-controls')).toBe(shown.id);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    expect(shown.getAttribute('data-open')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
+    // The note never goes into the details again.
+    expect(screen.queryByRole('button', { name: /What Accept writes|Read the whole note/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+    expect(shown.hasAttribute('data-open')).toBe(false);
     heights.mockRestore();
     client.mockRestore();
   });
@@ -357,7 +421,7 @@ describe('ProposalBar while Nebula is offline', () => {
     open(proposal('p_a'));
     render(<ProposalBar />);
     act(() => noteBackendConnection('offline'));
-    const accept = screen.getByRole('button', { name: 'Accept & run (1 paid)' });
+    const accept = screen.getByRole('button', { name: 'Accept and run' });
     const reject = screen.getByRole('button', { name: /^Reject/ });
     for (const button of [accept, reject]) {
       expect(button).toBeDisabled();
@@ -369,7 +433,7 @@ describe('ProposalBar while Nebula is offline', () => {
     });
     expect(net.apiFetch).not.toHaveBeenCalled();
     act(() => noteBackendConnection('online'));
-    expect(screen.getByRole('button', { name: 'Accept & run (1 paid)' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Accept and run' })).toBeEnabled();
     resetBackendConnectionForTests();
   });
 });

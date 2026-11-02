@@ -1,14 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import {
   PROPOSAL_GATE_COPY,
   acceptLabel,
+  changeCount,
   countdown,
   ghostBoxes,
   notReadyLine,
   proposalChanges,
-  proposalSummary,
+  proposalEstimateLabel,
+  proposalPlan,
 } from '../../lib/canvasProposals';
 import { useProposalNotReady } from '../../hooks/useProposalReadiness';
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
@@ -28,21 +30,22 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * Whether the note's three-line clamp hides some of it, so the bar can
- * offer the whole note in its details. Measured when the note changes (a
- * new observer reports at once) and whenever the bar's width does.
+ * Whether the note is longer than its six-line clamp, so the card offers
+ * "Show all" (GM - Design, 2026-11-01). Measured while the note is clamped,
+ * when it changes (a new observer reports at once) and whenever the card's
+ * width does; while it is open the last answer stands.
  */
-function useClamped(note: string | undefined): [RefObject<HTMLParagraphElement | null>, boolean] {
+function useLongNote(note: string | undefined, open: boolean): [RefObject<HTMLParagraphElement | null>, boolean] {
   const ref = useRef<HTMLParagraphElement | null>(null);
-  const [clamped, setClamped] = useState(false);
+  const [long, setLong] = useState(false);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el || typeof ResizeObserver !== 'function') return;
-    const observer = new ResizeObserver(() => setClamped(el.scrollHeight > el.clientHeight + 1));
+    if (!el || open || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(() => setLong(el.scrollHeight > el.clientHeight + 1));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [note]);
-  return [ref, clamped && Boolean(note)];
+  }, [note, open]);
+  return [ref, long && Boolean(note)];
 }
 
 /** Ticks once a second while something is counting down. */
@@ -88,7 +91,11 @@ export function ProposalBar() {
   // arrives while the person is reading another must not take its place
   // under the Accept button.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // What the person opened, by proposal: paging to another starts closed.
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const noteId = useId();
+  const detailsId = useId();
   const shownId = useRef<string | null>(null);
   const pagedTo = useRef<string | null>(null);
   const guarding = useRef(false);
@@ -108,7 +115,10 @@ export function ProposalBar() {
   const currentId = live?.view.id ?? null;
   const position = live ? open.indexOf(live) : 0;
   const notReady = useProposalNotReady(current);
-  const [noteRef, noteClamped] = useClamped(current?.view.note);
+  const shownViewId = current?.view.id ?? null;
+  const detailsOpen = shownViewId !== null && detailsFor === shownViewId;
+  const noteOpen = shownViewId !== null && noteFor === shownViewId;
+  const [noteRef, noteLong] = useLongNote(current?.view.note, noteOpen);
 
   useEffect(() => {
     pruneExpired(now);
@@ -150,12 +160,17 @@ export function ProposalBar() {
   const changes = current ? proposalChanges(current.view, current.values) : [];
   const hasChangeLines = changes.some((group) => group.lines.length > 0);
   const moreNotReady = notReady.length > READINESS_LINES;
-  const hasDetails = hasChangeLines || noteClamped || moreNotReady;
-  const detailsLabel = hasChangeLines
-    ? (detailsOpen ? 'Hide what Accept writes' : 'See what Accept writes')
-    : noteClamped
-      ? (detailsOpen ? 'Hide the note' : 'Read the whole note')
-      : (detailsOpen ? 'Hide the list' : "See every node that can't run");
+  const hasDetails = hasChangeLines || moreNotReady;
+  // The label never changes (GM - Design, 2026-11-01): the chevron and
+  // aria-expanded carry the state.
+  const detailsLabel = hasChangeLines ? 'What Accept writes' : 'Every node that can\u2019t run';
+  const detailsCount = hasChangeLines
+    ? changeCount(changes)
+    : `${notReady.length} node${notReady.length === 1 ? '' : 's'}`;
+  const priced = current.view.run.length > 0 && current.view.cost.paidRuns > 0
+    && proposalEstimateLabel(current.view) !== null;
+  const plan = proposalPlan(current.view);
+  const pendingKind = pending[current.view.id];
 
   const show = (entry: ProposalEntry) => {
     const { view } = entry;
@@ -188,33 +203,59 @@ export function ProposalBar() {
         style={{ ['--agent-color' as string]: current.view.agent.color }}
         {...leave.props}
       >
-        <div className="proposal-bar__main">
-          <div className="proposal-bar__who">
+        <div className="proposal-bar__body">
+          <div className="proposal-bar__head">
             <span className="proposal-bar__dot" aria-hidden="true" />
-            <span className="proposal-bar__agent">{current.view.agent.name}</span>
+            {/* One line: a long name truncates; the region's label has it whole. */}
+            <span className="proposal-bar__agent" title={current.view.agent.name}>{current.view.agent.name}</span>
             <span className="proposal-bar__proposes">proposes</span>
-            {open.length > 1 && (
-              <span className="proposal-bar__pager">
-                <button
-                  type="button"
-                  aria-label="Previous proposal"
-                  onClick={() => page(-1)}
-                >
-                  <ChevronLeft size={12} aria-hidden="true" />
-                </button>
-                {position + 1} of {open.length}
-                <button
-                  type="button"
-                  aria-label="Next proposal"
-                  onClick={() => page(1)}
-                >
-                  <ChevronRight size={12} aria-hidden="true" />
-                </button>
-              </span>
-            )}
+            <span className="proposal-bar__aside">
+              {open.length > 1 && (
+                <span className="proposal-bar__pager">
+                  <button
+                    type="button"
+                    aria-label="Previous proposal"
+                    onClick={() => page(-1)}
+                  >
+                    <ChevronLeft size={12} aria-hidden="true" />
+                  </button>
+                  {position + 1} of {open.length}
+                  <button
+                    type="button"
+                    aria-label="Next proposal"
+                    onClick={() => page(1)}
+                  >
+                    <ChevronRight size={12} aria-hidden="true" />
+                  </button>
+                </span>
+              )}
+              <span className="proposal-bar__expires">Expires in {countdown(current.view.expiresAt, now)}</span>
+            </span>
           </div>
-          <p ref={noteRef} className="proposal-bar__note">{current.view.note}</p>
-          <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
+          {/* The whole note reads first: up to six lines, then "Show all". */}
+          <p
+            ref={noteRef}
+            id={noteId}
+            className="proposal-bar__note"
+            data-long={noteLong ? 'true' : undefined}
+            data-open={noteOpen ? 'true' : undefined}
+          >
+            {current.view.note}
+          </p>
+          {noteLong && (
+            <button
+              type="button"
+              className="proposal-bar__more"
+              aria-expanded={noteOpen}
+              aria-controls={noteId}
+              onClick={() => setNoteFor(noteOpen ? null : current.view.id)}
+            >
+              {noteOpen ? 'Show less' : 'Show all'}
+            </button>
+          )}
+          {plan && (
+            <p className="proposal-bar__plan" title={priced ? 'List prices, not a quote' : undefined}>{plan}</p>
+          )}
           {notReady.length > 0 && (
             // Accept stays as the Run button does for a node without its
             // key: the run is refused at that node, before anything is spent.
@@ -232,102 +273,107 @@ export function ProposalBar() {
               )}
             </ul>
           )}
-          <p className="proposal-bar__meta">
-            {current.view.run.length > 0 && current.view.cost.paidRuns > 0
-              ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
-              : ''}
-            expires in {countdown(current.view.expiresAt, now)}
-          </p>
           {hasDetails && (
             <button
               type="button"
-              className="proposal-bar__details-toggle"
+              className="proposal-bar__disclosure"
               aria-expanded={detailsOpen}
-              onClick={() => setDetailsOpen((value) => !value)}
+              aria-controls={detailsId}
+              onClick={() => setDetailsFor(detailsOpen ? null : current.view.id)}
             >
-              <ChevronDown size={12} aria-hidden="true" className="proposal-bar__chevron" />
-              {detailsLabel}
+              <ChevronRight size={14} aria-hidden="true" className="proposal-bar__chevron" />
+              <span className="proposal-bar__disclosure-label">{detailsLabel}</span>
+              <span className="proposal-bar__disclosure-count">{detailsCount}</span>
             </button>
           )}
-          {detailsOpen && hasDetails && (
-            <div className="proposal-bar__details" aria-label={hasChangeLines ? 'What Accept writes' : 'Details'}>
-              {noteClamped && (
-                <section className="proposal-bar__group">
-                  <h3 className="proposal-bar__group-title">Note</h3>
-                  <p className="proposal-bar__note-full">{current.view.note}</p>
-                </section>
-              )}
-              {moreNotReady && (
-                <section className="proposal-bar__group">
-                  <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
-                  {notReady.map((row) => (
-                    <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
-                  ))}
-                </section>
-              )}
-              {hasChangeLines && changes.map((group) => (
-                <section key={group.id} className="proposal-bar__group">
-                  <h3 className="proposal-bar__group-title">{group.title}</h3>
-                  {group.lines.length === 0 ? (
-                    <p className="proposal-bar__line">default settings</p>
-                  ) : (
-                    <dl className="proposal-bar__lines">
-                      {group.lines.map((line) => (
-                        <div key={line.key} className="proposal-bar__line">
-                          <dt>{line.key}</dt>
-                          <dd>
-                            {line.from !== undefined && (
-                              <>
-                                <span className="proposal-bar__from">{line.from}</span>
-                                <span className="proposal-bar__arrow" aria-label="becomes"> → </span>
-                              </>
-                            )}
-                            <span className="proposal-bar__to">{line.to}</span>
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
-                </section>
-              ))}
+          {hasDetails && (
+            // Mounted closed, so it opens in place on the layout spring
+            // (interpolate-size) and aria-controls always names it.
+            <div
+              id={detailsId}
+              className="proposal-bar__details-wrap"
+              data-open={detailsOpen ? 'true' : 'false'}
+              inert={!detailsOpen}
+            >
+              <div className="proposal-bar__details" aria-label={detailsLabel}>
+                {priced && <p className="proposal-bar__quote">List prices, not a quote</p>}
+                {moreNotReady && (
+                  <section className="proposal-bar__group">
+                    <h3 className="proposal-bar__group-title">Can&apos;t run here</h3>
+                    {notReady.map((row) => (
+                      <p key={row.ref} className="proposal-bar__line">{notReadyLine(row)}</p>
+                    ))}
+                  </section>
+                )}
+                {hasChangeLines && changes.map((group) => (
+                  <section key={group.id} className="proposal-bar__group">
+                    <h3 className="proposal-bar__group-title">{group.title}</h3>
+                    {group.lines.length === 0 ? (
+                      <p className="proposal-bar__line">default settings</p>
+                    ) : (
+                      <dl className="proposal-bar__lines">
+                        {group.lines.map((line) => (
+                          <div key={line.key} className="proposal-bar__line">
+                            <dt>{line.key}</dt>
+                            <dd>
+                              {line.from !== undefined && (
+                                <>
+                                  <span className="proposal-bar__from">{line.from}</span>
+                                  <span className="proposal-bar__arrow" aria-label="becomes"> → </span>
+                                </>
+                              )}
+                              <span className="proposal-bar__to">{line.to}</span>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </section>
+                ))}
+              </div>
             </div>
           )}
           {errorLeave.shown && (
             <p className="proposal-bar__error" role="alert" {...errorLeave.props}>{errorLeave.shown}</p>
           )}
         </div>
-        <div className="proposal-bar__actions">
+        {/* The footer: always at the card's foot, never centred against the text. */}
+        <div className="proposal-bar__footer">
           <button
             type="button"
-            className="proposal-bar__button"
+            className="proposal-bar__button proposal-bar__button--show"
+            aria-label="Show"
             onClick={() => show(current)}
           >
             <Eye size={13} aria-hidden="true" />
-            Show
+            <span className="proposal-bar__show-label">Show</span>
           </button>
-          <button
-            type="button"
-            className="proposal-bar__button"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
-            onClick={() => {
-              if (settled()) void reject(current.view.id);
-            }}
-          >
-            <X size={13} aria-hidden="true" />
-            {pending[current.view.id] === 'reject' ? 'Rejecting…' : 'Reject'}
-          </button>
-          <button
-            type="button"
-            className="proposal-bar__button proposal-bar__button--primary"
-            {...lock.act({ disabled: Boolean(pending[current.view.id]) || gateHeld,
-              title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
-            onClick={() => {
-              if (settled()) void accept(current.view.id);
-            }}
-          >
-            {pending[current.view.id] === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
-          </button>
+          <span className="proposal-bar__decide">
+            <button
+              type="button"
+              className="proposal-bar__button"
+              {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
+                title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
+              onClick={() => {
+                if (settled()) void reject(current.view.id);
+              }}
+            >
+              {pendingKind === 'reject' ? 'Rejecting…' : 'Reject'}
+            </button>
+            {/* The app's one primary button, never the agent's colour: it is
+                the person's decision (GM - Design, 2026-11-01). */}
+            <button
+              type="button"
+              className="proposal-bar__button proposal-bar__button--primary"
+              {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
+                title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
+              onClick={() => {
+                if (settled()) void accept(current.view.id);
+              }}
+            >
+              {pendingKind === 'accept' ? 'Accepting…' : acceptLabel(current.view)}
+            </button>
+          </span>
         </div>
       </div>
     </InNoticeRegion>

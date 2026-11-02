@@ -599,6 +599,138 @@ def summarize_cost(
     }
 
 
+# -- the plan line (GM - Design, 2026-11-01, the proposal card redesign) ------
+# One line under the agent's note saying what Accept changes and costs, with
+# node names, never ids: "Changes and runs “Hero shot” · Krea 2 on your Krea
+# plan · no list price". The view carries it as `plan`, so the card, the CLI
+# and MCP read the same words.
+
+# Up to this many names; from one more, a count ("Changes 4 nodes").
+PLAN_NAMES = 3
+NOTHING_RUNS = "nothing runs until you choose"
+PLAN_NO_PRICE = "no list price"
+
+
+def billed_to(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+              cost: Mapping[str, Any], *, wired: Any = ()) -> str | None:
+    """Who pays for a paid run, in the person's words: "your Krea plan",
+    "your Krea API token", "your OpenAI key", "your Nous account". None for a
+    free run, or when no provider can take it as set (cost_for's
+    ``unavailable``): the not-ready line says why."""
+    from services import node_route
+
+    if cost.get("kind") != "paid" or not definition:
+        return None
+    if node_route.uses_krea_plan(definition, node_route.with_wired_blockers(definition, params or {}, wired or ())):
+        return "your Krea plan"
+    provider = str(cost.get("provider") or "")
+    if not provider or provider == "utility" or provider not in node_route.PROVIDER_LABELS:
+        return None
+    if provider == "krea":
+        return "your Krea API token"
+    label = node_route.provider_label(provider)
+    keyed = provider in set(node_route.KEY_PROVIDERS.values())
+    return f"your {label} {'key' if keyed else 'account'}"
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def _quoted(names: list[str | None], noun: str = "node") -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C”; from four (or any unnamed), "4 nodes"."""
+    if not names:
+        return ""
+    if len(names) > PLAN_NAMES or not all(names):
+        return _plural(len(names), noun)
+    quoted = [f"“{name}”" for name in names]
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
+def _join_clauses(clauses: list[str]) -> str:
+    if len(clauses) < 2:
+        return "".join(clauses)
+    last = ", and " if any(" and " in clause for clause in clauses[:-1]) else " and "
+    return f"{', '.join(clauses[:-1])}{last}{clauses[-1]}"
+
+
+def plan_line(view: Mapping[str, Any]) -> str:
+    """What Accept changes and costs, in one line of segments joined by " · ":
+    what happens, with node names; for exactly one paid run its model and
+    who pays ("Krea 2 on your Krea plan"), for more the count ("3 paid
+    runs"), for free runs "free"; then the run chip's price ("~$0.03", "Up
+    to $0.43", "$0.07 + unpriced") or "no list price". With no run it says
+    nothing runs until the person chooses; a run that waits on agents'
+    placeholders says so, as before."""
+    from services import money
+
+    nodes = [node for node in view.get("nodes") or [] if isinstance(node, Mapping)]
+    changes = [change for change in view.get("params") or [] if isinstance(change, Mapping)]
+    edges = list(view.get("edges") or [])
+    run = [str(target) for target in view.get("run") or []]
+    cost = view.get("cost") or {}
+    entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, Mapping)]
+    names: dict[str, str | None] = {}
+    for entry in entries:
+        names[str(entry.get("ref"))] = entry.get("name") or None
+    for change in changes:
+        names[str(change.get("nodeId"))] = change.get("title") or names.get(str(change.get("nodeId")))
+    for node in nodes:
+        names[str(node.get("ref"))] = node.get("name") or None
+
+    paid = int(cost.get("paidRuns") or 0)
+    free = int(cost.get("freeRuns") or 0)
+    pending = cost.get("pendingSkipped") or None
+    runs_nothing = bool(run) and paid == 0 and free == 0 and bool(pending and pending.get("count"))
+    added = [str(node.get("ref")) for node in nodes]
+    changed = [str(change.get("nodeId")) for change in changes]
+
+    clauses: list[str] = []
+    runs_added = bool(run) and not runs_nothing and not changed and set(run) == set(added)
+    runs_changed = bool(run) and not runs_nothing and not added and set(run) == set(changed)
+    if added or edges:
+        what = _quoted([names.get(ref) for ref in added]) if added else ""
+        if edges:
+            what = f"{what} and {_plural(len(edges), 'connection')}" if what else _plural(len(edges), "connection")
+        if runs_added:
+            what += f" and runs {'it' if len(added) == 1 else 'them'}"
+        clauses.append(f"adds {what}")
+    if changed:
+        verb = "changes and runs" if runs_changed else "changes"
+        clauses.append(f"{verb} {_quoted([names.get(node_id) for node_id in changed])}")
+    if run and not runs_nothing and not (runs_added or runs_changed):
+        clauses.append(f"runs {_quoted([names.get(target) for target in run])}")
+    segments = [_join_clauses(clauses)] if clauses else []
+    if not run:
+        segments.append(NOTHING_RUNS)
+    elif runs_nothing:
+        # Its whole run waits on agents' placeholders, which it skips (GM -
+        # Design, round 4), counting the placeholders themselves (review 4, M2).
+        count = int(pending.get("placeholders") or pending.get("count") or 0)
+        agents = [str(agent) for agent in pending.get("agents") or []]
+        who = f"{agents[0]} finishes" if len(agents) == 1 and agents[0] else "agents finish"
+        segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
+    else:
+        up_to = "up to " if cost.get("upTo") else ""
+        paid_entries = [entry for entry in entries if entry.get("kind") == "paid"]
+        if paid == 1 and len(paid_entries) == 1:
+            entry = paid_entries[0]
+            model = str(entry.get("model") or entry.get("name") or "1 paid run")
+            segments.append(f"{model} on {entry['billedTo']}" if entry.get("billedTo") else model)
+        elif paid > 0:
+            segments.append(f"{up_to}{_plural(paid, 'paid run')}")
+        else:
+            segments.append("free")
+        if paid > 0:
+            estimate = cost.get("estimate")
+            if estimate and estimate.get("high") is not None:
+                segments.append(money.chip_label(estimate.get("low"), estimate.get("high"), bool(estimate.get("open"))))
+            else:
+                segments.append(PLAN_NO_PRICE)
+    text = " · ".join(segment for segment in segments if segment)
+    return text[:1].upper() + text[1:]
+
+
 # Where each surface's agent finds a node that runs here. The HTTP answer
 # names the route; propose_change (MCP) and `nebula propose` (CLI) word the
 # warning again from cost.notReady for their own reader (agent_wording). The CLI names
@@ -1080,6 +1212,11 @@ class ProposalBook:
             params.append({
                 "nodeId": change.node_id,
                 "name": (proposal.existing.get(change.node_id) or {}).get("name") or change.node_id,
+                # The card's words: the node's name and model, never its id.
+                **({"title": proposal.existing[change.node_id]["title"]}
+                   if (proposal.existing.get(change.node_id) or {}).get("title") else {}),
+                **({"model": proposal.existing[change.node_id]["model"]}
+                   if (proposal.existing.get(change.node_id) or {}).get("model") else {}),
                 "changes": {
                     key: {
                         "from": safe_value(before.get(key), key=key),
@@ -1088,7 +1225,7 @@ class ProposalBook:
                     for key, value in change.params.items()
                 },
             })
-        return {
+        view = {
             "id": proposal.id,
             "status": proposal.status,
             "agent": proposal.agent.as_dict(),
@@ -1107,6 +1244,8 @@ class ProposalBook:
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
             "update": dict(proposal.update) if proposal.update else None,
         }
+        view["plan"] = plan_line(view)
+        return view
 
     def person_values(self, proposal: Proposal) -> dict[str, Any]:
         """The values Accept will apply, for the person's canvas only.

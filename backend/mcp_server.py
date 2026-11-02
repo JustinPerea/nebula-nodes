@@ -785,6 +785,11 @@ def propose_change(
     withdraw_proposal call). While one of yours that can't run is still open,
     the next proposal's answer lists it in `stillOpen` ({id, note,
     withdrawWith}) and says so in `reminder`; nothing is withdrawn for you.
+    `plan` is the line the person reads under your note on the card, word
+    for word: what Accept changes and runs, by node name; the model and who
+    pays for a single paid run ("Krea 2 on your Krea plan"); and the price
+    ("~$0.03", "no list price"). `cost.nodes` entries carry the same `name`,
+    `model` and `billedTo`.
     Then call get_proposal(id, wait_seconds=...).
     """
     body: dict[str, Any] = {"note": note}

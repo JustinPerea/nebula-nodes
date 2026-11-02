@@ -22,7 +22,13 @@ const ITEM_ROOTS = [
   'proposal-bar', 'proposal-bar--notice', 'person-required', 'project-switch-toast', 'project-home__toast',
   'canvas-pin-toast', 'moodboard-board-toast', 'asset-trash__toast', 'canvas-undo-notice',
 ];
-const WIDTH_PROPS = ['width', 'max-width', '--proposal-bar-w'];
+const WIDTH_PROPS = ['width', 'max-width', '--proposal-bar-w', '--proposal-bar-max-w'];
+
+/** The proposal card's own cap (GM - Design, 2026-11-01, the card redesign:
+ * "Width: min(600px, the region's width) ... 600 is the cap so the note keeps
+ * a reading measure"). The one item allowed past 560; its run-later notice
+ * stays at the region's cap. */
+const PROPOSAL_CARD_CAP = '600px';
 
 function files(dir: string, ext: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -58,6 +64,8 @@ function targetsItemRoot(selector: string): boolean {
 /** A width that can never exceed the cap: the token, a min() whose px are all within it, or a content size. */
 function withinCap(value: string): boolean {
   if (value.includes('var(--notice-max-w')) return true;
+  // Checked on its own below: only the card sets it, to 600 px.
+  if (value.startsWith('min(var(--proposal-bar-max-w)')) return true;
   if (/^(max-content|min-content|fit-content|auto|100%|none)$/.test(value)) return false;
   const pixels = [...value.matchAll(/(\d+(?:\.\d+)?)px/g)].map((match) => Number(match[1]));
   return value.startsWith('min(') && pixels.length > 0 && pixels.some((px) => px <= 560)
@@ -84,11 +92,20 @@ describe('notices are capped at 560 px', () => {
           // `width: var(--proposal-bar-w)` reads the custom property checked on its own.
           if (prop === 'width' && /^var\(--proposal-bar-w\)$/.test(value)) continue;
           if (prop === 'width' && value === 'max-content') continue;
+          if (prop === '--proposal-bar-max-w' && selector === '.proposal-bar' && value === PROPOSAL_CARD_CAP) continue;
           if (!withinCap(value)) wide.push(`${relative(SRC, file)}: ${selector} { ${prop}: ${value} }`);
         }
       }
     }
     expect(wide).toEqual([]);
+  });
+
+  it('the proposal card alone is capped at 600 px, and its run-later notice at the region\'s cap', () => {
+    const css = readFileSync(join(SRC, 'styles/canvasProposals.css'), 'utf8');
+    const card = rules(css).find(([selector]) => selector === '.proposal-bar')?.[1] ?? '';
+    expect(declarations(card)).toContainEqual(['--proposal-bar-max-w', PROPOSAL_CARD_CAP]);
+    const notice = rules(css).find(([selector]) => selector === '.proposal-bar--notice')?.[1] ?? '';
+    expect(declarations(notice)).toContainEqual(['--proposal-bar-max-w', 'var(--notice-max-w, 560px)']);
   });
 
   it("the band doesn't grow: still one notice (--notice-h, 46 px) plus its gap", () => {

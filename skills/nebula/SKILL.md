@@ -346,7 +346,9 @@ the ghost shows the name and accepting applies it), `--run`, `--file`,
 `--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
 `--unwire` or `--arrange`, or a rename of a node already on the canvas
 (use `nebula rename`). The person accepts or rejects it on the canvas; you
-can't accept it. Each proposal also posts an Update the person sees on
+can't accept it. Its output's `card` line is what the person reads under
+your note, word for word (what changes and runs by node name, the model and
+who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on
 every screen ("Codex proposes 3 changes on the canvas", with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,

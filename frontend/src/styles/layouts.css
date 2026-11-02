@@ -279,7 +279,7 @@ body.agent-log-reserved .canvas-navigation.react-flow__panel {
 
 body.agent-log-reserved .proposal-bar {
   --proposal-bar-room: calc(100vw - 2 * (var(--page-gutter) + var(--col-right-w) + var(--stack-gap-sm)));
-  --proposal-bar-w: min(var(--notice-max-w, 560px), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
+  --proposal-bar-w: min(var(--proposal-bar-max-w, var(--notice-max-w, 560px)), calc(100vw - 32px), max(420px, var(--proposal-bar-room)));
   width: var(--proposal-bar-w);
   translate: min(0px, calc((var(--proposal-bar-room) - var(--proposal-bar-w)) / 2));
 }

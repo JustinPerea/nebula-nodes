@@ -1653,8 +1653,12 @@ Rules:
 An agent can propose a change instead of making it: new nodes, connections, param
 changes on existing nodes, and which nodes to run. The person sees ghost
 nodes and dashed connections in the agent's colour and a bar at the bottom of the
-canvas with **Show**, **Reject** and **Accept** (or **Accept & run (N
-paid)**). They can drag ghosts before accepting; the nodes land where they
+canvas: your note, then a line saying what Accept changes and runs, by node
+name, with the model and who pays for a single paid run and the price
+("Changes and runs “Hero shot” · Krea 2 on your Krea plan · no list price"),
+then **Show**, **Reject** and **Accept** (or **Accept and run**). The view's
+`plan` is that line word for word, and `nebula proposal` prints it as
+`card`. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
@@ -1853,7 +1857,7 @@ is in no environment, argv or file the backend gives them. Codex can read the
 browser's storage on disk but its shell has no network to use it with (see
 "In-app agents use this server").
 
-Before the click, the bar's "See what Accept writes" list shows every value
+Before the click, the card's "What Accept writes" disclosure shows every value
 Accept will write: new nodes' params and `from → to` for changed params, in
 full (up to 4,000 characters per value, with a marker beyond that). These
 values reach only the browser (`personValues` in `proposalOpened` /
