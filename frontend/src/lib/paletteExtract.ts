@@ -2,33 +2,16 @@
  * reference" (the 'palette' param: a string[] of `#rrggbb`). Client-side
  * k-means on the image reduced to 96 px, so it needs no backend endpoint.
  *
- * When nothing comes out it says why, when it knows (GM - Design,
- * 2026-10-24): "If the two cases can't be told apart, use only the heading.
- * Don't guess the reason." */
-import { quoted } from './canvasFileDrop';
+ * When nothing comes out it says why (``paletteNotice``). */
+import type { PaletteFailure } from './paletteNotice';
 
-/** Why an image gave no colours: the browser couldn't decode it, no pixel
- * is opaque enough to count (clear or faint alike, GM r5 on #208), or
- * something else (no 2d context, a canvas error, no pixels at all). */
-export type PaletteFailure = 'decode' | 'transparent' | 'other';
+export type { PaletteFailure } from './paletteNotice';
+
 export type PaletteResult = { ok: true; colors: string[]; mixed?: MixedCluster[] } | { ok: false; reason: PaletteFailure };
 
 /** A big cluster whose own nearest pixel is over ``MIXED_DELTA_E`` from its
  *  mean: possibly two areas mixed (GM r15's detector; it changes nothing). */
 export type MixedCluster = { mean: string; shown: string; deltaE: number };
-
-/** GM's copy: a heading naming the file, then the reason on its own line for
- * the two cases Nebula can tell; the heading alone for the rest. */
-const REASONS: Partial<Record<PaletteFailure, string>> = {
-  decode: "Nebula can't read this image. Try a PNG or JPEG.",
-  transparent: 'This image is too transparent to pull colors from.',
-};
-
-export function paletteNotice(fileName: string, reason: PaletteFailure): string {
-  const heading = `Couldn't find colors in ${quoted(fileName)}.`;
-  const line = REASONS[reason];
-  return line ? `${heading}\n${line}` : heading;
-}
 
 /** The backend's rule (cinema/color.py ``ALPHA_MIN``): a pixel under this
  *  alpha (of 255) isn't counted, and the rest count by alpha / 255, so a
@@ -321,11 +304,15 @@ function ownPixels(
   members: number[],
   footprint: NonNullable<EdgeEvidence['footprint']>,
   withInside: boolean,
-): { near: FullPixel[]; own: FullPixel[]; claims: number[] } {
+): { near: FullPixels; own: FullPixels; claims: number[] } {
   const claimer = new Map<number, number>();
   const claims = new Array(refs.length).fill(0);
-  const near: FullPixel[] = [];
-  const own: FullPixel[] = [];
+  // One entry per colour (and inside or not), weighing its pixels, in the
+  // order first seen: the same answers as one entry a pixel, without an
+  // object for each of millions of pixels.
+  const entry = new Map<number, FullPixel>();
+  const near: FullPixels = { list: [], count: 0 };
+  const own: FullPixels = { list: [], count: 0 };
   footprint(members, (r, g, b, inside) => {
     const key = (r << 16) | (g << 8) | b;
     let by = claimer.get(key);
@@ -346,21 +333,33 @@ function ownPixels(
       claims[by]++;
       return;
     }
-    const p = { rgb: [r, g, b], weight: 1, inside: withInside && inside() };
-    own.push(p);
-    if (by === -2) near.push(p);
+    const isInside = withInside && inside();
+    const at = key * 2 + (isInside ? 1 : 0);
+    let p = entry.get(at);
+    if (!p) {
+      p = { rgb: [r, g, b], weight: 0, inside: isInside };
+      entry.set(at, p);
+      own.list.push(p);
+      if (by === -2) near.list.push(p);
+    }
+    p.weight++;
+    own.count++;
+    if (by === -2) near.count++;
   });
   return { near, own, claims };
 }
 
+/** A colour of a footprint and how many of its pixels have it. */
 type FullPixel = { rgb: number[]; weight: number; inside: boolean };
+/** Pixels by colour (``list``), ``count`` of them in all. */
+type FullPixels = { list: FullPixel[]; count: number };
 
 /** Whether swatch ``s`` has a solid core of its own at full resolution: a
  *  pixel of its own (``ownPixels``) inside a flat area. A pure antialiased
  *  hairline has none; a keyline a few pixels wide does. */
 function hasCore(refs: number[][], s: number, members: number[], evidence: EdgeEvidence): boolean {
   if (!evidence.footprint) return false;
-  return mine(ownPixels(refs, s, members, evidence.footprint, true)).some((p) => p.inside);
+  return mine(ownPixels(refs, s, members, evidence.footprint, true)).list.some((p) => p.inside);
 }
 
 /** The colour of ``pixels`` nearest ``to`` (squared RGB), or null with none. */
@@ -377,11 +376,23 @@ function nearestTo(pixels: FullPixel[], to: number[]): number[] | null {
   return best && best.map((v) => Math.round(v));
 }
 
+/** The middle pixel (the lower of two) of ``count`` pixels listed by colour
+ *  in order, each colour with its count (``weight``): the pixel one list
+ *  of every pixel would have at ``floor((count - 1) / 2)``. */
+export function medianPixel<T extends { weight: number }>(list: T[], count: number): T | null {
+  let left = Math.floor((count - 1) / 2);
+  for (const p of list) {
+    if (left < p.weight) return p;
+    left -= p.weight;
+  }
+  return null;
+}
+
 /** A swatch's own pixels: those nearest its colour, unless hardly any is
  *  (a thin line whose evidence colour is a mix of it and its neighbours),
  *  and then those no other swatch claims. */
-function mine({ near, own }: { near: FullPixel[]; own: FullPixel[] }): FullPixel[] {
-  return near.length >= CORE_MIN ? near : own;
+function mine({ near, own }: { near: FullPixels; own: FullPixels }): FullPixels {
+  return near.count >= CORE_MIN ? near : own;
 }
 
 /** GM r13 on #208: the evidence (256 px) decides which colours exist; the
@@ -412,28 +423,29 @@ function nameAtFullResolution(out: Swatch[], threshold: number, evidence: EdgeEv
     // A big area: the real pixel of its own nearest its cluster's mean (GM
     // r14), as for a noisy flat; never a lone most-populated tone.
     if (big) {
-      const shown = nearestTo(mine(pixels), c.rgb) ?? c.rgb.map((v) => Math.round(v));
+      const shown = nearestTo(mine(pixels).list, c.rgb) ?? c.rgb.map((v) => Math.round(v));
       evidence.onBigCluster?.(c.rgb, shown);
       return shown;
     }
     const { near, own: all } = pixels;
     if (c.band) {
-      const own = near.length > 0 ? near : all;
-      if (own.length === 0) return null;
-      // Along the run, from one end of its line to the other.
+      const own = near.count > 0 ? near : all;
+      if (own.count === 0) return null;
+      // Along the run, from one end of its line to the other: the median pixel.
       const [a, b] = c.band;
       const ab = b.map((v, n) => v - a[n]);
       const t = (p: number[]) => ab.reduce((sum, v, n) => sum + v * (p[n] - a[n]), 0);
-      own.sort((x, y) => t(x.rgb) - t(y.rgb) || (x.rgb.join() < y.rgb.join() ? -1 : 1));
-      return own[Math.floor((own.length - 1) / 2)].rgb;
+      own.list.sort((x, y) => t(x.rgb) - t(y.rgb) || (x.rgb.join() < y.rgb.join() ? -1 : 1));
+      return medianPixel(own.list, own.count)?.rgb ?? null;
     }
     // Its core among its own pixels (``mine``). A core of a few pixels is
     // noise that happened to repeat, and the swatch is read from all its
     // own pixels instead.
-    const own = mine(pixels);
+    const own = mine(pixels).list;
     const core = own.filter((p) => p.inside);
-    if (core.length >= CORE_MIN) return mostPopulated(core);
-    if (core.length > 0) return mostPopulated(own.map((p) => ({ ...p, inside: false })));
+    const coreCount = core.reduce((sum, p) => sum + p.weight, 0);
+    if (coreCount >= CORE_MIN) return mostPopulated(core);
+    if (coreCount > 0) return mostPopulated(own.map((p) => ({ ...p, inside: false })));
     if (c.black || !small) return mostPopulated(own) ?? c.rgb;
     return null;
   });
@@ -584,8 +596,11 @@ export const MODE_TIE = 0.25;
 export const NOISE_SHARE = 0.1;
 
 /** A swatch's core at full resolution is its colour when it has at least
- *  this many pixels (a 3×3 patch); fewer are noise that happened to repeat. */
-export const CORE_MIN = 9;
+ *  this many pixels (about a 6×6 patch); fewer are noise that happened to
+ *  repeat, and all its own pixels are read instead. 40, not 9 (GM r16 on
+ *  #208, measured): noisy UI bars come out at their true colour, and no
+ *  real image or pinned case changes. */
+export const CORE_MIN = 40;
 
 /** The most populated real colour of ``cells`` (GM r11 on #208: "a palette
  *  never shows a colour the image doesn't contain"): the cells are put in
@@ -1491,13 +1506,33 @@ function fitted(img: HTMLImageElement, maxDim: number): [number, number] {
   return [Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale))];
 }
 
-/** Decode the picked file, read its pixels and find its `k` dominant
- * colours (``paletteFromImageData``). An image with transparency is read at
- * full size (up to ``READ_MAX_DIM``) and reduced here, alpha-weighted, never
- * by the canvas's premultiplied downscale; an opaque one clusters on the
- * canvas's 96 px downscale as before, and reads its evidence at full size. The file is read from the person's own
- * copy, so a failed load is a failed decode, never the network. */
-export async function extractPaletteFromImage(file: Blob, k = 6): Promise<PaletteResult> {
+/** The pixels Extract reads from one image, ready for ``runPaletteJob``:
+ *  the full read (up to ``READ_MAX_DIM``) and, for an opaque image, the
+ *  canvas's 96 px downscale to cluster on (it may be the same array). Plain
+ *  data, so it can go to a worker. */
+export type PaletteJob = {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+  k: number;
+  small: { data: Uint8ClampedArray; width: number };
+};
+
+/** The palette of a read image (``readPaletteJob``). Pure: no DOM, the
+ *  same in a worker, on the main thread and in Node. An image with
+ *  transparency is reduced here, alpha-weighted, never by the canvas's
+ *  premultiplied downscale; an opaque one clusters on the canvas's 96 px
+ *  downscale and reads its evidence at full size. */
+export function runPaletteJob(job: PaletteJob): PaletteResult {
+  const { data, width, height, k, small } = job;
+  if (hasTransparency(data)) return paletteFromImageData(data, width, height, k);
+  return paletteFromImageData(data, width, height, k, small);
+}
+
+/** Decode the picked file and read its pixels for ``runPaletteJob``, or
+ *  why not. The file is read from the person's own copy, so a failed load
+ *  is a failed decode, never the network. */
+export async function readPaletteJob(file: Blob, k = 6): Promise<PaletteJob | Extract<PaletteResult, { ok: false }>> {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement | null>((resolve) => {
@@ -1518,11 +1553,24 @@ export async function extractPaletteFromImage(file: Blob, k = 6): Promise<Palett
     const [w, h] = fitted(img, READ_MAX_DIM);
     const data = sw === w && sh === h ? small : readPixels(img, w, h);
     if (!small || !data) return { ok: false, reason: 'other' };
-    if (hasTransparency(data)) return paletteFromImageData(data, w, h, k);
-    return paletteFromImageData(data, w, h, k, { data: small, width: sw });
+    return { data, width: w, height: h, k, small: { data: small, width: sw } };
   } catch {
     return { ok: false, reason: 'other' };
   } finally {
     URL.revokeObjectURL(url);
+  }
+}
+
+/** Decode the picked file, read its pixels and find its `k` dominant
+ *  colours, all on this thread (``readPaletteJob``, then
+ *  ``runPaletteJob``). The Inspector runs the second half in a worker
+ *  (``paletteWorkerClient``). */
+export async function extractPaletteFromImage(file: Blob, k = 6): Promise<PaletteResult> {
+  const job = await readPaletteJob(file, k);
+  if (!('data' in job)) return job;
+  try {
+    return runPaletteJob(job);
+  } catch {
+    return { ok: false, reason: 'other' };
   }
 }

@@ -1735,9 +1735,8 @@ palette rows). **45 killed, 6 survive.**
   - **core-min-40 is better, not equivalent.** A core of 40 pixels in
     place of 9 names noisy ui-nav bars nearer #dddddd and #333333 on six
     of the 24 seeded cases, where 9 gives tints up to ΔE00 3.9 (#323035
-    for #333333; #dfdada, 2.5), and changes nothing else. Not changed in this PR: GM's number
-    is 9 (about 3 x 3 at 256 px), and a feature with a core of 9 to 39
-    pixels would lose its core reading. For GM.
+    for #333333; #dfdada, 2.5), and changes nothing else. GM r16 had it measured; round 8b
+    pins 40 (below).
 
 ### Live, round 8 (8792/5792, isolated backend through `serve_isolated.py`)
 
@@ -1782,6 +1781,8 @@ palette rows). **45 killed, 6 survive.**
   packed pixel store would cut it further, but the first changes which
   pixels a big area is named from. Extract shows "Extracting..." while it
   runs.
+- Round 8b took the second route (one entry per colour, the same answers)
+  and moved the work to a worker; `FOOTPRINT_SAMPLE` is unchanged.
 
 ### Gates, round 8
 
@@ -1803,3 +1804,173 @@ palette rows). **45 killed, 6 survive.**
   #bbb together; diff150 drops #dddddd (gap 20 opaque, gap 0 by area);
   three-rb loses #3c23aa by area. Guard: anime-cel must not go to 15
   swatches. The detector's list above is the starting point.
+
+## Round 8b (base 1de1cfd4): Extract in a worker, its loading line, core 40
+
+GM r16 signed off round 8's palettes and asked for three things: no
+freeze while Extract works, #204's one loading look while it does, and
+core 40 if measurement allows it.
+
+### A worker, the same colours
+
+- **The split.** `readPaletteJob` reads the pixels on the page exactly as
+  before (the 96 px downscale drawn first, then the full read, up to 4096
+  px). `runPaletteJob` is pure: it works out the palette from those
+  pixels, the same on the page, in a worker and in Node.
+  `extractPaletteFromImage` is the two in a row, on the page, and its
+  tests stand.
+- **The worker** (`paletteWorker.ts`, its own 18 kB chunk) runs
+  `runPaletteJob` on pixels the page transfers (not copies;
+  `transferOf` lists each buffer once, since an image read at 96 px is
+  its own downscale) and sends the result back.
+- **The hand-off** (`paletteWorkerClient.ts`, loaded only when Extract is
+  first used):
+  - Pixels go over only after the worker says it's ready, so a worker
+    that never runs can't take them.
+  - **Fallback:** no worker (it can't be made: a CSP, an old browser; it
+    reports an error; it isn't ready in 3 s), and the palette is worked
+    out on the page, as before. A worker isn't tried again.
+  - A worker that fails mid-job can't give its pixels back: that one
+    reads "Couldn't find colors in ...", and the next runs on the page.
+  - **A later Extract wins:** `extractPaletteLatest(key, file)` resolves
+    null for an earlier extract of the same control (node and param), and
+    the Inspector drops it. In the Inspector the input is disabled while
+    one runs, so this guards a second control or a future path.
+- **The entry bundle doesn't grow:** 444,705 bytes, the base's number. The
+  first build was 39 bytes over: Vite had made `paletteNotice` a shared
+  chunk, listed in the entry's preload map. The notice copy moved to
+  `paletteNotice.ts` (and `quoted` to `quoted.ts`, re-exported by
+  `canvasFileDrop`), and `paletteExtract` no longer re-exports it, so
+  the worker doesn't pull in the canvas store.
+- **Proof, Node:** all 480 probe rows and the 34 real images on Chrome's
+  pixels, each sent as a job by structured clone with its transfer list:
+  514 jobs, 0 different, every buffer transferred.
+- **Proof, Chrome** (the real module worker, on 8792/5792): 16 images (the
+  shots' images, dusk-harbour, pheme_ref_3q, minimal-line-art,
+  neon-alley, studio-product, mark74, strokes, the five new cases, 4K and
+  8K gradients): the worker's result and the page's are byte-identical,
+  pixels transferred. Chrome lists the worker
+  (`paletteWorker.ts?worker_file&type=module`).
+- **8b against round 8:** byte-identical on the 34 real images; on the
+  240 probes, only the three noisy ui-nav probes change (core 40, below).
+
+### Faster: one entry per colour
+
+- Naming read each full-resolution pixel into an object of its own (two
+  allocations a pixel, millions on a 4K image), and garbage collection
+  was most of the time. `ownPixels` now keeps one entry per colour (and
+  inside a flat area or not) with its count, in first-seen order. Every
+  reader gives the same answer: sums of integer weights are exact, the
+  noise rule's first-nearest and `nearestTo` keep first-seen order, and
+  a band's median walks the counts.
+- Node, 4K gradient: 0.6-1.0 s to 0.27-0.29 s.
+- **Chrome** (median of 5, the round 6 test image; round 8 is the page,
+  before the worker):
+
+  | Image | Round 8 | 8b, on the page | 8b, worker |
+  |---|---|---|---|
+  | 4K opaque | 2.0 s | 1.31 s | 1.14 s |
+  | 4K with transparency | 1.5 s | 0.88 s | 0.76 s |
+  | 8K opaque | 2.5 s | 1.48 s | 1.40 s |
+  | 8K with transparency | 2.2 s | 1.41 s | 1.32 s |
+
+  The rest is the read on the page (decode, two draws, `getImageData`),
+  which the brief keeps as it was, and the 256 px reduction.
+- **No freeze.** The longest frame while a 4K palette is worked out: 400
+  ms on the page, 88 ms with the worker (the hand-off). Dragging on the
+  canvas through a whole 4K extract (1.5 s, 115 frames): p95 17 ms, one
+  frame over 50 ms (75 ms, the page's pixel read). The drag on the empty
+  canvas draws a selection box (the shot).
+
+### The loading look (GM r16 1)
+
+- An Extract shows nothing for 300 ms (`PALETTE_PENDING_DELAY_MS`), then
+  "Extracting colors…" (role status), a plain muted line in the Add /
+  Extract row's place, at the row's height, no box. Add and Extract are
+  disabled from the start. The old swatches stay until the new palette
+  replaces them in place; nothing is blanked. No Cancel. A quick extract
+  never shows the line.
+- **Live** (8K reference, CPU slowed 4x so it runs past 1 s): the page is
+  busy reading pixels until 1.23 s, the line is up at 1.33 s over the
+  seven old swatches (the shot), and the five new ones land at 1.58 s. At
+  full speed the line shows from about 0.3 s and the 8K palette lands in
+  about 1 s.
+- **The layout spring.** When a palette with more swatches lands, the
+  floating Inspector grows on a sampled spring (360 ms, the asset-move
+  curve; none with reduced motion). In a 1440 x 1400 window, 530 px to 758
+  px, a 3 px overshoot, settled in about 400 ms. It still never shrinks
+  while its body fits (round 8's rule), and at 1440 x 900 a palette
+  already takes the room there is.
+  - **A bug found live and fixed:** the panel measured its need against
+    the height it was given, so mid-spring the rest of the growth read as
+    more need, and it ran on to all the room (1,116 px for one swatch).
+    It now measures against the height it has on screen, and past the
+    target (the overshoot) the target holds. A test pins both.
+
+### Core 40 (GM r16 2)
+
+- Measured first (`scratchpad/alpha/core40-table.md`): with core 40 no
+  real image (34), no pinned case and no probe outside the noisy ui-nav
+  ones changes. In those, the bars move to their true #dddddd and
+  #333333 (from tints up to ΔE00 5.3), except uinav240-n3-s1 (240 px, a 6
+  px bar, noise 3): #333333 to #323132 (1.22) and #dededd to #dddedd (0.86
+  against 0.59). That case is a noisy UI bar, so GM's rule pins 40; it's
+  in the table.
+- Each swatch is still a real pixel: the core only picks which. A test
+  pins three seeded cases at their true colours (core 9 tinted them).
+
+### Agents
+
+- Extract from reference is frontend-only: the Inspector reads the picked
+  file in the browser, and nothing on the backend, the MCP tools or the
+  CLI calls it. Agents set a palette param as values, or take palettes
+  from `moodboard_analyze` and Commons (the backend's `cinema/color.py`),
+  which this round doesn't touch.
+
+### Mutants, round 8b
+
+28 mutants on the hand-off, the worker, the loading look, the spring,
+core 40 and the per-colour naming. **28 killed.**
+
+- The hand-off: no transfer, each buffer twice, a stale result kept,
+  pixels sent before ready, no ready timeout, waiting jobs dropped on
+  failure, a worker tried again after it failed, no fallback when it
+  can't be made, a mid-job failure that never answers, errors ignored.
+  Four of these are killed by a hang: the extract never answers, which
+  is the defect.
+- The worker module: no ready message, a throwing job passed through.
+- The loading look: the line at 0 ms or at 1 s, Add not waiting, no line,
+  the line hiding the swatches, a dropped result written anyway, "..."
+  for "…", the line without its status role.
+- The spring: measured against the given height (the runaway), or
+  against the overshoot.
+- Core 9; a band's median off by one at a colour boundary; counts not
+  added; the near count not kept; the core counted by colours, not
+  pixels; inside and outside pixels of a colour merged.
+- The first pass had two survivors: the 1 s delay (the test read the
+  constant; it now waits GM's 150 and 400 ms) and the median boundary
+  (now `medianPixel`, tested against a list of every pixel). A first run
+  before that was void: the baseline was red, since the lazily loaded
+  extraction made one old test count its call a tick too early; that
+  test now waits for it.
+
+
+### Gates, round 8b
+
+- `tsc -b --noEmit` and `npm run lint` (inline styles, Slava CSS scope):
+  clean.
+- **Vitest** `--maxWorkers=2`, from an explicit array of 149 files: round
+  8's 121, every other test that reads the changed modules or styles
+  (Inspector, the popover, `canvasFileDrop`, `panels.css`,
+  `slava-restraint.css`), and `paletteWorkerClient`: 2401 of 2401 before
+  the last two pins; on the final code 2401 of 2402, the one failure
+  `agentPresenceFollowups.ratchet` G timing out at 192 s under load (the
+  Mac was busy: 664 s against 299 s for the same list); that file alone
+  passes 50 of 50 in 20 s. It timed out the same way in round 8.
+- **Build budget:** 444,705 bytes raw, the base's (1de1cfd4) to the byte.
+  The worker is its own 18 kB chunk, the client 20 kB, both loaded on
+  first Extract.
+- **Live** on 8792/5792, the backend only through `serve_isolated.py`,
+  the canary first (blocked: 8000, 5173, 8840, the internet; reached: the
+  lane): shots in `shots8b/`, no md5 repeats, each opened.
+- No backend file changed.

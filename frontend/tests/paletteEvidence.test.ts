@@ -16,6 +16,7 @@ import {
   gridFromRgba,
   mergeNearColors,
   MERGE_DELTA_E,
+  medianPixel,
   mostPopulated,
   paletteFromImageData,
   paletteFromPixels,
@@ -997,8 +998,36 @@ describe('noisy flats and soft ramps show a colour their pixels hold (round 8, s
     expect(colors(paletteFromImageData(noisyUiNav(512, 307, 8, 2), 512, 307))).toEqual(['#fdfdfd', '#020202', '#dddddd', '#333333']);
   });
 
+  it('names noisy bars at their true colour with a core of 40 pixels, where 9 tinted them (GM r16, measured)', () => {
+    // Core 9 gave #333233 / #dedddd, #dddddc / #323035 and #dfdada here.
+    expect(colors(paletteFromImageData(noisyUiNav(512, 307, 4, 1), 512, 307))).toEqual(['#fefefe', '#010101', '#333333', '#dddddd']);
+    expect(colors(paletteFromImageData(noisyUiNav(512, 307, 4, 2), 512, 307))).toEqual(['#fefefe', '#010101', '#dddddd', '#333333']);
+    expect(colors(paletteFromImageData(noisyUiNav(1000, 600, 6, 1), 1000, 600))).toEqual(['#fdfdfd', '#020202', '#dddddd', '#333333']);
+  });
+
   it("names a soft ramp's band by its middle, from the pixels nearest the band", () => {
     expect(colors(paletteFromImageData(softRamp(60), 960, 600))).toEqual(['#ffffff', '#000000', '#7b7b7b']);
     expect(colors(paletteFromImageData(softRamp(120), 960, 600))).toEqual(['#fdfdfd', '#000000', '#757575']);
   });
 });
+
+describe('a band is named by its median pixel, counted by colour (round 8b)', () => {
+  // Pixels are kept one entry per colour with its count: the median must be
+  // the one a list of every pixel would give, boundaries included.
+  const expand = (list: { rgb: number; weight: number }[]) => list.flatMap((p) => Array(p.weight).fill(p.rgb));
+  it('gives the same pixel as the full list, at every boundary', () => {
+    const cases = [
+      [{ rgb: 1, weight: 2 }, { rgb: 2, weight: 3 }],
+      [{ rgb: 1, weight: 1 }, { rgb: 2, weight: 1 }],
+      [{ rgb: 1, weight: 3 }, { rgb: 2, weight: 1 }, { rgb: 3, weight: 4 }],
+      [{ rgb: 1, weight: 1 }],
+    ];
+    for (const list of cases) {
+      const all = expand(list);
+      expect(medianPixel(list, all.length)?.rgb).toBe(all[Math.floor((all.length - 1) / 2)]);
+    }
+    expect(medianPixel([{ rgb: 1, weight: 2 }, { rgb: 2, weight: 3 }], 5)?.rgb).toBe(2);
+    expect(medianPixel([], 0)).toBeNull();
+  });
+});
+

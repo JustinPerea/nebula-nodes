@@ -271,11 +271,18 @@ export function NodeInspectorPopover() {
           // the panel keeps the height it has (the spare line too, once taken),
           // so it settles in one frame and never goes back and forth; a new
           // node, or the Inspector opened again, starts from 300 px.
+          // The overflow is read against the height the panel has on screen
+          // while the layout spring (panels.css) runs it up to the height it
+          // was given: against the given one, a panel mid-grow would read
+          // the rest of its growth as more need and run on to all the room
+          // there is. Past it (the spring's overshoot), the given height
+          // stands (round 8b).
           const shown = frameRef.current;
           const overflow = bodyOverflow(popoverRef.current);
           const shownHeight = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
             ? Number(shown.style.height) : null;
-          const panelNeed = shownHeight !== null && overflow !== null ? shownHeight + overflow : null;
+          const onScreen = shownHeight === null ? null : Math.min(shownHeight, popoverRef.current?.offsetHeight || shownHeight);
+          const panelNeed = onScreen !== null && overflow !== null ? onScreen + overflow : null;
           const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed, holdsPalette(popoverRef.current));
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;

@@ -80,6 +80,7 @@ describe('the floating Inspector takes the whole palette before its body scrolls
   // and foot (CHROME); its content is as tall as the test says.
   const CHROME = 115;
   let contentHeight = 0;
+  let animated: number | null = null;
   let callbacks: Map<number, FrameRequestCallback>;
   let nextRaf = 0;
   const placed: HTMLElement[] = [];
@@ -125,10 +126,19 @@ describe('the floating Inspector takes the whole palette before its body scrolls
       return nextRaf;
     });
     vi.stubGlobal('cancelAnimationFrame', (id: number) => callbacks.delete(id));
+    animated = null;
+    // The panel's height on screen: its given height, or where the layout
+    // spring has it (``animated``).
+    const onScreen = (popover: HTMLElement | null) => {
+      const h = parseFloat(popover?.style.height ?? '');
+      return animated ?? (Number.isFinite(h) ? h : 0);
+    };
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('node-inspector-popover') ? onScreen(this) : 0;
+    });
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains('node-inspector-popover__body')) return 0;
-      const h = parseFloat(this.closest<HTMLElement>('.node-inspector-popover')?.style.height ?? '');
-      return Number.isFinite(h) ? Math.max(0, h - CHROME) : 0;
+      return Math.max(0, onScreen(this.closest<HTMLElement>('.node-inspector-popover')) - CHROME);
     });
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains('node-inspector-popover__body')) return 0;
@@ -160,6 +170,23 @@ describe('the floating Inspector takes the whole palette before its body scrolls
     expect(top + height).toBeLessThanOrEqual(700);
     const body = document.querySelector<HTMLElement>('.node-inspector-popover__body')!;
     expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  });
+
+  it('grows to its body on the layout spring, never past it (round 8b)', () => {
+    contentHeight = 420;
+    open(1400);
+    expect(bounds().height).toBe(420 + CHROME);
+    // A palette with more swatches lands: the spring starts from the old height.
+    contentHeight = 600;
+    animated = 420 + CHROME;
+    frames(4);
+    expect(bounds().height).toBe(600 + CHROME);
+    // Mid-way, and past it (the spring's overshoot): the target holds.
+    for (const at of [480, 560, 600 + CHROME + 9, 600 + CHROME]) {
+      animated = at;
+      frames(3);
+      expect(bounds().height).toBe(600 + CHROME);
+    }
   });
 
   it('keeps 300 px and the spare-line rule for a body with no palette', () => {

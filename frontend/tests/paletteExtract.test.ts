@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { extractPaletteFromImage, paletteFromPixels, paletteNotice } from '../src/lib/paletteExtract';
+import { extractPaletteFromImage, paletteFromPixels } from '../src/lib/paletteExtract';
+import { paletteNotice } from '../src/lib/paletteNotice';
 
 // Why an image gave no colours (fix/drop-followups, 2026-10-24). GM: "If the
 // two cases can't be told apart, use only the heading. Don't guess the reason."

@@ -184,6 +184,20 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   display: none;
 }
 
+/* GM r16 on #208: when a new palette changes the swatch count, the floating
+   Inspector grows or shrinks on the layout spring (a sampled spring, as
+   asset-move.css's), not in one jump. */
+.node-inspector-popover:not(.node-inspector-popover--pinned):has(.inspector__palette) {
+  --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-inspector-popover:not(.node-inspector-popover--pinned):has(.inspector__palette) {
+    transition: none;
+  }
+}
+
 .node-inspector-popover--pinned {
   resize: both;
   overflow: hidden;
@@ -663,6 +677,20 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover {
 .inspector__palette-actions .inspector__file-button {
   flex: 1 1 0;
   min-width: 0;
+}
+
+/* GM r16 on #208 (#204's one loading look): a plain line in the Add /
+   Extract row's place, its height, no box. */
+.inspector__palette-pending {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 0;
+  font-size: 12px;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-pending {
+  color: #888;
 }
 
 .inspector__checkbox-row {

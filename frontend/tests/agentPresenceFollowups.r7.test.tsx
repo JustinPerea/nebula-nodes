@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,9 +32,9 @@ vi.mock('../src/lib/apiRequest', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/apiRequest')>(),
   apiRequest: vi.fn(async () => { calls.upload += 1; throw new Error('no backend'); }),
 }));
-vi.mock('../src/lib/paletteExtract', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../src/lib/paletteExtract')>(),
-  extractPaletteFromImage: vi.fn(async () => { calls.extract += 1; return { ok: true, colors: ['#123456'] }; }),
+vi.mock('../src/lib/paletteWorkerClient', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/lib/paletteWorkerClient')>(),
+  extractPaletteLatest: vi.fn(async () => { calls.extract += 1; return { ok: true, colors: ['#123456'] }; }),
 }));
 
 import { PinComposer } from '../src/components/canvas/PinComposer';
@@ -357,12 +357,15 @@ describe('N-2: a locked picker uploads nothing from its own onChange', () => {
     const before = calls.upload; // what the panel loads as it opens
     act(() => setFollowingSwitch(reason));
     pick(screen.getByText('Extract from reference').closest('label')!.querySelector('input')!);
-    await act(async () => { await Promise.resolve(); });
+    // Long enough for the lazily loaded extraction to have been called.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(calls).toEqual({ upload: before, extract: 0 });
     // Unlocked, the same pick goes through.
     act(() => setFollowingSwitch(null));
     pick(screen.getByText('Extract from reference').closest('label')!.querySelector('input')!);
-    await act(async () => { await Promise.resolve(); });
+    // Round 8b: the extraction loads on first use (a dynamic import).
+    await waitFor(() => expect(calls.extract).toBe(1));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(calls.extract).toBe(1);
   });
 });
