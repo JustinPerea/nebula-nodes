@@ -24,13 +24,19 @@ body.app-slava-restraint .workspace-header__identity {
   flex: 0 1 auto;
   min-width: 0;
 }
+/* One line, cut with an ellipsis when the header is narrow: it never breaks
+   inside a word (GM, #210 r1: "Moodbo / ard" at a narrow window). */
 body.app-slava-restraint .workspace-header__title {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: 14px;
   line-height: 1.4;
   font-weight: 600;
   color: var(--sr-ink);
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The current navigation label supplies the visible identity; retain one
    focusable page heading for workspace transitions and assistive technology. */

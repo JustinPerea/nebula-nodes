@@ -4,7 +4,8 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import selectorParser from 'postcss-selector-parser';
 import { readdirSync, statSync } from 'node:fs';
 import {
-  appRules, candidateRules, candidatesIn, cascaded, declarationsOf, indexRules, mediaMatches, parseRules, selectorSpecificity, wins,
+  appRules, candidateRules, candidatesIn, cascaded, containerBreakpoints, containerMatches, containerParts, declarationsOf, indexRules,
+  mediaMatches, parseRules, pxLength, selectorSpecificity, wins,
   type Viewport, type Winner,
 } from './helpers/cssCascade';
 
@@ -135,10 +136,14 @@ function viewports(): Viewport[] {
       if (kind === 'max') { widths.add(at); widths.add(at + 1); } else { widths.add(at - 1); widths.add(at); }
     }
   }
+  // @container widths too (the Board view's panel fold): its containers are full-window roots.
+  const containers = new Set(appRules().flatMap((rule) => rule.container));
+  for (const prelude of containers) for (const n of containerBreakpoints(prelude)) { widths.add(n - 1); widths.add(n); }
   const seen = new Map<string, Viewport>();
   for (const width of [...widths].sort((a, b) => a - b)) {
     const viewport = { width, height: 900 };
-    const key = [...queries].filter((query) => mediaMatches(query, viewport)).sort().join('|');
+    const key = [...[...queries].filter((query) => mediaMatches(query, viewport)),
+      ...[...containers].filter((prelude) => containerMatches(prelude, width)).map((prelude) => `@container ${prelude}`)].sort().join('|');
     if (!seen.has(key)) seen.set(key, viewport);
   }
   return [...seen.values()];
@@ -340,6 +345,218 @@ describe('every studio names its offline row and every child in its own template
         }
       }
     }
+  });
+});
+
+describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () => {
+  const board = STUDIOS.find((studio) => studio.root.includes('--board'))!;
+  const at = (width: number, slava: boolean) => {
+    document.body.className = slava ? 'app-slava-restraint' : '';
+    document.body.innerHTML = '';
+    const root = build(board);
+    const viewport = { width, height: 900 };
+    const { template } = resolveTemplate(root, viewport);
+    const areas = [...(template.areas ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1].trim().split(/\s+/).join(' '));
+    const panel = cascaded(root.querySelector('.moodboard-board-panel')!, undefined, { viewport });
+    return { root, template, areas, panel, area: panel.get('|grid-area')?.value };
+  };
+  const px = (value: string | undefined) => pxLength(value ?? '');
+  /** The rail and panel widths the Board root's own tokens give, and the fold's threshold. */
+  const widths = () => {
+    const { root } = at(1440, true);
+    const own = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });
+    const fold = appRules().filter((rule) => rule.container.length && rule.selector === '.moodboard-board-panel');
+    return { rail: px(own.get('|--mb-board-rail-w')?.value), panel: px(own.get('|--mb-board-panel-w')?.value), fold };
+  };
+  const BOARD_MIN = 400;
+  const GRID = ['toolbar toolbar toolbar', 'offline offline offline', 'rail board panel', 'rail under under'];
+  const FOLDED = ['toolbar', 'offline', 'rail', 'board', 'under'];
+
+  it('the fold reads the studio container, and its threshold is rail + 400 + panel, from the root\'s own widths', () => {
+    const { rail, panel, fold } = widths();
+    expect([rail, panel]).toEqual([250, 320]);
+    expect(fold).toHaveLength(1);
+    const [prelude] = fold[0].container;
+    expect(containerParts(prelude).name).toBe('moodboard-board');
+    // Each term of the calc, in order: the rail, the board's minimum, the panel.
+    const terms = /calc\(([^)]*)\)/.exec(prelude)![1].split('+').map((term) => pxLength(term));
+    expect(terms).toEqual([rail, BOARD_MIN, panel]);
+    expect(containerBreakpoints(prelude)).toEqual([rail + BOARD_MIN + panel]);
+    // The template uses the same tokens, so the column the query reasons about is the one laid out.
+    const { root, template } = at(1440, true);
+    expect(template.columns).toBe('var(--mb-board-rail-w) minmax(0, 1fr) auto');
+    const container = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });
+    expect(container.get('|container')?.value).toBe('moodboard-board / inline-size');
+    // The helper takes the container's width as the window's: the root is the whole window.
+    expect(container.get('|position')?.value).toBe('fixed');
+    expect(container.get('|inset')?.value).toBe('0');
+  });
+
+  for (const slava of SKINS) {
+    const skin = slava ? 'Slava' : 'no skin';
+    it(`${skin}: the panel is beside the board while that leaves the board 400 px or more, and under it below that`, () => {
+      const { rail, panel } = widths();
+      const crossing = rail + BOARD_MIN + panel;
+      // The last width side by side: the board column is exactly 400.
+      for (const width of [crossing, 1000, 1100, 1440]) {
+        const now = at(width, slava);
+        expect(now.areas, `${width}`).toEqual(GRID);
+        expect(now.area, `${width}`).toBe('panel');
+        expect(px(now.panel.get('|width')?.value.replace(/var\(--mb-board-panel-w\)/, `${panel}px`)), `${width}`).toBe(panel);
+        expect(width - rail - panel, `${width}`).toBeGreaterThanOrEqual(BOARD_MIN);
+      }
+      expect(crossing - rail - panel).toBe(BOARD_MIN);
+      // The first width folded, and down to the rail fold.
+      for (const width of [crossing - 1, 900, 761]) {
+        const now = at(width, slava);
+        expect(now.areas, `${width}`).toEqual(GRID);
+        expect(now.area, `${width}`).toBe('under');
+        expect(now.panel.get('|width')?.value, `${width}`).toBe('auto');
+      }
+    });
+
+    it(`${skin}: at 760 and under (the List view's breakpoint) the rail folds above the board, which takes the full width`, () => {
+      for (const width of [760, 700]) {
+        const now = at(width, slava);
+        expect(now.areas, `${width}`).toEqual(FOLDED);
+        expect(now.template.columns, `${width}`).toBe('minmax(0, 1fr)');
+        expect(now.area, `${width}`).toBe('under');
+        const rail = cascaded(now.root.querySelector('.moodboard-studio-view__rail')!, undefined, { viewport: { width, height: 900 } });
+        expect(rail.get('|max-height')?.value).toBe('150px');
+        expect(rail.get('|border-right')?.value).toBe('0');
+      }
+      expect(at(761, slava).areas).toEqual(GRID);
+    });
+
+    // #213 review 1 LOW-1 and GM round 3: the row sizes and the panel's box.
+    it(`${skin}: the board's row keeps at least --mb-board-min-h (300 px); the panel's row takes what is left, down to 0`, () => {
+      const { root } = at(1440, slava);
+      const own = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });
+      expect(own.get('|--mb-board-min-h')?.value).toBe('300px');
+      const BOARD_ROW = 'minmax(var(--mb-board-min-h), 1fr)';
+      const PANEL_ROW = 'minmax(0, auto)';
+      for (const width of [1440, 1100, 1000, 970, 969, 900, 761]) {
+        const now = at(width, slava);
+        expect(now.template.rows, `${width}`).toBe(`auto auto ${BOARD_ROW} ${PANEL_ROW}`);
+        // The board's row is the board's, and the panel's row is `under`.
+        expect(now.areas[2].split(' '), `${width}`).toContain('board');
+        expect(now.areas[3].split(' '), `${width}`).toContain('under');
+      }
+      for (const width of [760, 700]) {
+        const now = at(width, slava);
+        expect(now.template.rows, `${width}`).toBe(`auto auto auto ${BOARD_ROW} ${PANEL_ROW}`);
+        expect(now.areas[3], `${width}`).toBe('board');
+        expect(now.areas[4], `${width}`).toBe('under');
+      }
+    });
+
+    it(`${skin}: beside the board, the panel's width is its whole box (border-box), so the board column is exactly what is left`, () => {
+      for (const width of [970, 1000, 1100]) {
+        const { panel } = at(width, slava);
+        expect(panel.get('|width')?.value, `${width}`).toBe('var(--mb-board-panel-w)');
+        expect(panel.get('|box-sizing')?.value, `${width}`).toBe('border-box');
+      }
+    });
+
+    it(`${skin}: the panel, a tab stop while it scrolls, shows the token focus ring inside its edge (#213 review 1 NIT-5)`, () => {
+      const { root } = at(969, slava);
+      const panel = root.querySelector('.moodboard-board-panel')!;
+      const ring = appRules().filter((rule) => rule.state.includes('focus-visible') && rule.decls.some((decl) => decl.prop === 'outline')
+        && (() => { try { return panel.matches(rule.base); } catch { return false; } })());
+      expect(ring.map((rule) => rule.selector)).toEqual(['.moodboard-board-panel:focus-visible']);
+      const decls = Object.fromEntries(ring[0].decls.map((decl) => [decl.prop, decl.value]));
+      expect(decls.outline).toBe('var(--sr-focus-outline, 2px solid var(--mb-board-select))');
+      expect(decls['outline-offset']).toBe('calc(-1 * var(--sr-focus-offset, 2px))');
+    });
+
+    it(`${skin}: the folded rail's edges come from the Board's own rule (#213 review 1 NIT-3)`, () => {
+      for (const width of [760, 700]) {
+        const { root } = at(width, slava);
+        const rail = root.querySelector('.moodboard-studio-view__rail')!;
+        const viewport = { width, height: 900 };
+        expect(cascaded(rail, undefined, { viewport }).get('|border-bottom')?.value, `${width}`).toBe('1px solid var(--mb-board-edge-strong)');
+        const winner = declarationsOf(rail, 'border-bottom', { viewport }).at(-1)!;
+        expect(winner.selector, `${width}`).toContain('.moodboard-studio-view--board > .moodboard-studio-view__rail');
+        expect(winner.file, `${width}`).toMatch(/moodboard-board\.css$/);
+      }
+    });
+
+    it(`${skin}: the panel under the board has a top edge, not a left one, and scrolls inside itself`, () => {
+      for (const width of [969, 700]) {
+        const { panel } = at(width, slava);
+        expect(panel.get('|border-left')?.value, `${width}`).toBe('0');
+        expect(panel.get('|border-top')?.value, `${width}`).toMatch(/^1px solid/);
+        expect(panel.get('|max-height')?.value, `${width}`).toBe('40vh');
+        expect(panel.get('|overflow-y')?.value, `${width}`).toBe('auto');
+      }
+      for (const width of [970, 1000, 1100]) {
+        const { panel } = at(width, slava);
+        expect(panel.get('|max-height'), `${width}`).toBeUndefined();
+        expect(panel.get('|border-left')?.value, `${width}`).toMatch(/^1px solid/);
+      }
+    });
+  }
+
+  it('the board comes before the panel in the DOM at every width, so focus follows the screen', () => {
+    const view = source('components/moodboard-studio/MoodboardStudioView.tsx');
+    const boardView = view.slice(view.indexOf('className="moodboard-studio-view moodboard-studio-view--board"'));
+    const where = (needle: string) => boardView.indexOf(needle);
+    expect(where('{rail}')).toBeGreaterThan(0);
+    expect(where('className="moodboard-studio-view__board"')).toBeGreaterThan(where('{rail}'));
+    expect(where('<BoardSidePanel')).toBeGreaterThan(where('className="moodboard-studio-view__board"'));
+    // On screen: the panel's area is right of the board, or below it.
+    for (const areas of [GRID, FOLDED]) {
+      const rowOf = (name: string) => areas.findIndex((row) => row.split(' ').includes(name));
+      const colOf = (name: string) => areas[rowOf(name)].split(' ').indexOf(name);
+      for (const name of ['panel', 'under'].filter((n) => rowOf(n) >= 0)) {
+        expect(rowOf(name) > rowOf('board') || (rowOf(name) === rowOf('board') && colOf(name) > colOf('board'))).toBe(true);
+      }
+    }
+  });
+});
+
+describe('helpers/cssCascade reads @container', () => {
+  it('reads width conditions, calc() sums and the container\'s name', () => {
+    const prelude = 'moodboard-board (width < calc(250px + 400px + 320px))';
+    expect(containerParts(prelude)).toEqual({ name: 'moodboard-board', condition: '(width < calc(250px + 400px + 320px))' });
+    expect(containerMatches(prelude, 969)).toBe(true);
+    expect(containerMatches(prelude, 970)).toBe(false);
+    expect(containerMatches('(min-width: 400px)', 400)).toBe(true);
+    expect(containerMatches('(width >= 400px)', 399)).toBe(false);
+    expect(containerMatches('(height < 400px)', 10)).toBe(false);
+    expect(containerBreakpoints('(width <= 600px)')).toEqual([601]);
+    expect(pxLength('calc(1000px - 30px + 5px)')).toBe(975);
+    expect(pxLength('10px 20px')).toBeNaN();
+  });
+
+  it('applies an @container rule only inside a container of that name, at the width it holds for', () => {
+    const rules = parseRules('.c { container: box / inline-size; } @container box (width < 500px) { .x { color: red; } } @container other (width < 500px) { .x { width: 1px; } }');
+    expect(rules.find((rule) => rule.selector === '.x')!.container).toEqual(['box (width < 500px)']);
+    document.body.innerHTML = '<div class="c"><i class="x"></i></div><i class="x" id="outside"></i>';
+    const css = '.c { container: box / inline-size; } @container box (width < 500px) { .x { color: red; } } @container other (width < 500px) { .x { width: 1px; } }';
+    const inside = document.querySelector('.c .x')!;
+    expect(cascaded(inside, css, { viewport: { width: 400, height: 900 } }).get('|color')?.value).toBe('red');
+    expect(cascaded(inside, css, { viewport: { width: 400, height: 900 } }).get('|width')).toBeUndefined();
+    expect(cascaded(inside, css, { viewport: { width: 500, height: 900 } }).get('|color')).toBeUndefined();
+    expect(cascaded(document.getElementById('outside')!, css, { viewport: { width: 400, height: 900 } }).get('|color')).toBeUndefined();
+    document.body.innerHTML = '';
+  });
+});
+
+describe('the Studio header title (GM, #210 r1)', () => {
+  it('cuts with an ellipsis on one line, and never breaks inside a word', () => {
+    document.body.className = 'app-slava-restraint';
+    document.body.innerHTML = '<header class="workspace-header workspace-header--updates-slot"><div class="workspace-header__identity">'
+      + '<h1 class="workspace-header__title">Moodboard</h1></div></header>';
+    const title = document.querySelector('.workspace-header__title')!;
+    const own = cascaded(title, undefined, { viewport: { width: 700, height: 900 } });
+    expect(own.get('|white-space')?.value).toBe('nowrap');
+    expect(own.get('|text-overflow')?.value).toBe('ellipsis');
+    expect(own.get('|overflow')?.value).toBe('hidden');
+    expect(own.get('|min-width')?.value).toBe('0');
+    expect(own.get('|overflow-wrap')).toBeUndefined();
+    const identity = cascaded(document.querySelector('.workspace-header__identity')!, undefined, { viewport: { width: 700, height: 900 } });
+    expect(identity.get('|min-width')?.value).toBe('0');
   });
 });
 
@@ -559,11 +776,14 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
       '.a.b { --t: 16; }', '.b, .a { --t: 17; }', '* { --t: 18; }', '.\\31 23 { --t: 19; }', '.x :focus-visible { --t: 20; }',
       '.a[data-x] { --t: 21; }', '.x ~ .y { --t: 22; }', '.x + .y { --t: 23; }', ':where(.a) .y { --t: 24; }', '.y:is(.a) { --t: 25; }',
     ].join('\n'));
-    expect(rules.length).toBeGreaterThanOrEqual(25);
+    // 25 rules, 26 selectors (`.b, .a` is two): a selector the parser dropped would shrink the table quietly (review 4 NIT-A).
+    expect(rules.length).toBe(26);
+    expect(rules.map((rule) => rule.selector)).toEqual(expect.arrayContaining(['.md\\:grid', '.a\\.b', '.\\31 23', '.b', '.a']));
     const index = indexRules(rules);
     document.body.className = 'app';
     document.body.innerHTML = '<div class="x"><div class="Foo"></div><div class="foo y"></div><div class="md:grid"></div>'
-      + '<div class="a.b"></div><div id="id" class="b a" data-x=""></div><div class="123 y a"></div><div class="FOO A"></div></div>';
+      + '<div class="a.b"></div><div id="id" class="b a" data-x=""></div><div class="123 y a"></div><div class="FOO A"></div>'
+      + '<i id="tie" class="a b"></i></div>';
     const matches = (selector: string, el: Element) => { try { return el.matches(selector); } catch { return false; } };
     const differ: string[] = [];
     for (const el of [document.documentElement, document.body, ...document.body.querySelectorAll('*')]) {
@@ -575,10 +795,14 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
         }
       }
     }
-    // A tie between two selectors of one rule (.b, .a on class="b a") reports the later one, as a full scan does.
-    const tied = document.getElementById('id')!;
-    expect(candidatesIn(index, tied).filter((rule) => rule.order === rules.find((r) => r.selector === '.b')!.order)
-      .map((rule) => rule.selector)).toEqual(['.b', '.a']);
+    // A tie between two selectors of one rule (.b, .a) comes in selector-list order whatever the
+    // element's class order, as a full scan meets them. class="a b" is the case that tells the two
+    // apart: its class buckets come .a first (review 4 LOW-A; sorting by rule.order would keep that).
+    const tieOrder = rules.find((r) => r.selector === '.b')!.order;
+    for (const id of ['id', 'tie']) {
+      expect(candidatesIn(index, document.getElementById(id)!).filter((rule) => rule.order === tieOrder)
+        .map((rule) => rule.selector), id).toEqual(['.b', '.a']);
+    }
     document.body.className = '';
     document.body.innerHTML = '';
     expect(differ).toEqual([]);
@@ -633,8 +857,10 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     const widths = VIEWPORTS.map((viewport) => viewport.width);
     const queries = [...new Set(appRules().flatMap((rule) => rule.media))];
     // Every distinct set of width queries the app can be in is checked once.
-    for (const width of [699, 701, 759, 760, 761, 999, 1001, 1279, 1281, 1358, 1359, 1360, 1399, 1400, 1401, 1439, 1441, 1599, 1601]) {
-      const key = (w: number) => queries.filter((query) => mediaMatches(query, { width: w, height: 900 })).sort().join('|');
+    for (const width of [699, 701, 759, 760, 761, 969, 970, 999, 1001, 1279, 1281, 1358, 1359, 1360, 1399, 1400, 1401, 1439, 1441, 1599, 1601]) {
+      const containers = [...new Set(appRules().flatMap((rule) => rule.container))];
+      const key = (w: number) => [...queries.filter((query) => mediaMatches(query, { width: w, height: 900 })),
+        ...containers.filter((prelude) => containerMatches(prelude, w)).map((prelude) => `@container ${prelude}`)].sort().join('|');
       expect(widths.some((w) => key(w) === key(width)), `${width}`).toBe(true);
     }
   });
