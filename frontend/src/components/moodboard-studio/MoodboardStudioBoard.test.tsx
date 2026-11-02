@@ -444,37 +444,73 @@ describe('an agent on the board', () => {
   });
 });
 
+/**
+ * /edits under the test's hand (#209 review 4 NIT-B): each call waits until
+ * the test answers it, and the test waits for each call itself, so nothing
+ * here sleeps or polls (under load the polling version ran past 5 s).
+ * `called(n)` resolves once call n (from 0) has been made; `answer(n)` lets
+ * the server answer it and resolves once the Studio has taken the answer.
+ */
+function editsByHand() {
+  const real = api.editMoodboard.getMockImplementation()!;
+  const calls: Array<{ ops: MoodboardOp[]; answer: () => Promise<void> }> = [];
+  const waiting = new Map<number, () => void>();
+  api.editMoodboard.mockImplementation((...args: Parameters<typeof real>) => new Promise((resolve, reject) => {
+    let taken!: () => void;
+    const done = new Promise<void>((settle) => { taken = settle; });
+    calls.push({
+      ops: args[1],
+      answer: async () => {
+        void real(...args).then(resolve, reject).finally(() => { setTimeout(taken, 0); });
+        await done;
+      },
+    });
+    waiting.get(calls.length - 1)?.();
+  }));
+  return {
+    calls,
+    called: (n: number) => act(() => (calls[n] ? Promise.resolve() : new Promise<void>((settle) => { waiting.set(n, settle); }))),
+    answer: (n: number) => act(() => calls[n].answer()),
+  };
+}
+const restoreOf = (tag: string) => [{ op: 'restore', slices: [{ part: 'tag', tag }] }];
+
 describe('Undo pressed while a step is still saving', () => {
   it('waits for the step to land, then undoes it', async () => {
     await openStudio({ view: 'board' });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const real = api.editMoodboard.getMockImplementation()!;
-    api.editMoodboard.mockImplementationOnce(async (...args: Parameters<typeof real>) => { await gate; return real(...args); });
+    const edits = editsByHand();
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
-    await waitFor(() => expect(api.editMoodboard).toHaveBeenCalledTimes(1));
+    await edits.called(0); // the step is saving
     press('z', { metaKey: true });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    release();
-    await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
-    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
+    await act(() => new Promise((settle) => { setTimeout(settle, 0); }));
+    expect(edits.calls).toHaveLength(1); // the undo waits for it
+    await edits.answer(0);
+    await edits.called(1);
+    expect(edits.calls[1].ops).toEqual(restoreOf('u1'));
+    await edits.answer(1);
+    expect(screen.getByText('card #1 at 0,0')).toBeTruthy();
   });
 
   it('two quick presses undo the last two steps, one after the other', async () => {
     await openStudio({ view: 'board' });
+    const edits = editsByHand();
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
-    await waitFor(() => expect(server.edits).toHaveLength(1));
+    await edits.called(0);
+    await edits.answer(0);
     act(() => board.props!.onMove([{ placement: 'c-i2', x: 900, y: 40 }]));
-    await waitFor(() => expect(server.edits).toHaveLength(2));
-    await waitFor(() => expect(entry()?.pendingSaveId).toBeFalsy());
+    await edits.called(1);
+    await edits.answer(1);
+    expect(entry()?.pendingSaveId).toBeFalsy();
     press('z', { metaKey: true });
     press('z', { metaKey: true });
-    await waitFor(() => expect(server.edits).toHaveLength(4));
-    expect(server.edits.slice(2)).toEqual([
-      [{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }],
-      [{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }],
-    ]);
-    expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
+    await edits.called(2);
+    expect(edits.calls[2].ops).toEqual(restoreOf('u2'));
+    await edits.answer(2);
+    await edits.called(3);
+    expect(edits.calls[3].ops).toEqual(restoreOf('u1'));
+    await edits.answer(3);
+    expect(edits.calls).toHaveLength(4);
+    expect(screen.getByText('card #1 at 0,0')).toBeTruthy();
     expect(screen.getByText('card #2 at 520,0')).toBeTruthy();
   });
 });

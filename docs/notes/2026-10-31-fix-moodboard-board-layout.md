@@ -200,7 +200,7 @@ CI's Frontend tests part 1 timed out two studioGridAreas tests at 5 s. With brea
 - **Index.** helpers/cssCascade now records, for each rule, one class its subject must carry (a class written directly in the last compound, not inside a pseudo), or none. `candidateRules(element)` returns the rules keyed by the element's classes plus the unkeyed ones. The index is built once with the parsed sheets, and `cascaded` and `declarationsOf` go through it. A rule with no key is tried on every element, so the index can only skip rules that cannot match.
 - **Once, before the tests.** A `beforeAll` resolves every studio at every checked width and skin. VIEWPORTS already holds one width per distinct set of matching @media queries, so each layout is resolved once. Each studio's `it()` only reads its result.
 - **Timings on this Mac.** Before: 24–39 s for the file (tests 38.3 s on the run measured), with single studio tests of several seconds. After: about 3 s for the file (tests about 2 s, mostly the `beforeAll`), and every test under 1 s (the slowest, the index check, 340–720 ms).
-- **No timeout raised**, and no per-file backstop needed.
+- **No timeout raised** in this round, and no per-file backstop needed. (Round 4 later set an explicit 60 s on the `beforeAll` and the index check; see its NIT-2. Corrected in fix/moodboard-board-narrow.)
 - **A new check** confirms that each rule's key is a class its subject requires, and that the index finds the same rules as a full scan on the Board view's and Commons' DOM. Its mutant (keying a rule by an ancestor's class) is killed.
 - **Mutants re-run after the speedup**, all killed: M1, M2, M3, M7, M9, M10, M11, M12, M13, M13b, M15, M16, M17, M18 and M19.
 - **Found, not changed.** For a selector whose subject is only a state or a pseudo-element, the helper's `base` loses its trailing `*`: `sel.toString().trim()` drops the space before the check that would add it. So `.commons-evaluation :focus-visible` is matched as `.commons-evaluation:focus-visible`. This affects six rules: two in commons-evaluation.css, and four `::-webkit-scrollbar` rules in slava-restraint.css. It predates this PR and doesn't touch the studio ratchet.
@@ -309,9 +309,9 @@ CI's Frontend tests part 1 timed out two studioGridAreas tests at 5 s. With brea
 
 ### Equivalent mutants and R9
 
+- **R9 is killed now** (corrected in fix/moodboard-board-narrow; review 4 NIT-1). Round 3's R9 was clearing `springTarget` on the spring's last frame, which is P21 in round 4, and P21 is killed (see the list below).
 - **Four guards are equivalent, and kept on purpose.**
-  - Every camera move reaches onMoveStart or onMove, and that ends "heading". So "heading" ending on a spring's landing (P22, round 3's R9) and the instant open fit setting `heading = false` (P23) only matter for a move React Flow didn't report.
-  - The review 3 argument that R9 isn't equivalent rested on a focus autopan after a landing being dropped. That can't happen now: an outside move clears the spring target itself.
+  - Every camera move reaches onMoveStart or onMove, and that ends "heading". So "heading" ending on a spring's landing (P22) and the instant open fit setting `heading = false` (P23) only matter for a move React Flow didn't report. That holds in @xyflow/system 0.0.76 (review 4 checked pan-on-scroll, d3's start/zoom/end, panBy/setViewportConstrained and setCenter).
   - `reopen()` clearing the old target (Q9): the next open fit replaces it, and until then the camera sits at React Flow's default, not on it.
   - `cameraMade` ignoring a camera it already knows (Q10): the store's subscription only reports a change, and the effect re-runs only with a new camera.
   - All four are kept so the state stays true to what happened, with no caller relying on React Flow reporting every move.
