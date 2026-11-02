@@ -146,6 +146,13 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
+/** Said by this client, never the backend: the server refused this socket's
+ *  hello (its `personRequired` frame), so it gets the agents' form from now
+ *  on. Person-only state the tab drew (numbered cursors) goes. */
+export interface SocketDemotedEvent {
+  type: 'socketDemoted';
+}
+
 /** A saved moodboard, character or Style changed (backend main.py
  *  _broadcast_stored_asset), so a card or list that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
@@ -364,6 +371,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | AgentPresenceReplayEvent
+  | SocketDemotedEvent
   | AgentStatusEvent
   | AgentRunEvent
   | CanvasPinsEvent
@@ -471,6 +479,7 @@ class WebSocketClient {
               // The server refused this socket's hello: demoted (GM r29 item 3).
               if (this.promoted === socket) this.promoted = null;
               reportPersonRequired();
+              if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
               return;
             }
             // GM r29 item 3: the person-only proposalSync comes on promote

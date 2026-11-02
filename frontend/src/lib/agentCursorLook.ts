@@ -225,6 +225,24 @@ export function inkFor(fillHex: string): string {
 }
 
 /**
+ * The name pill's edge (GM - Design, PR #211 r9 item 4): a pill whose fill is
+ * under 3:1 against the canvas gets a 1 px edge, white at 0.4 (about 3.7:1 on
+ * #000), the same rule in both skins. Slava's canvas is #000 (--sr-canvas),
+ * the classic skin's #111 (canvas.css). The arrow needs none: its 1.4 px
+ * white stroke already reads.
+ */
+export const AGENT_CURSOR_PILL_EDGE = { minContrast: 3, slavaCanvas: '#000000', classicCanvas: '#111111' } as const;
+
+/** Which canvases this fill's name pill needs the edge on: both, the classic
+ *  skin's only (#111 is lighter, so it needs it whenever #000 does), or none. */
+export function pillEdge(fillHex: string): 'both' | 'classic' | null {
+  const { minContrast, slavaCanvas, classicCanvas } = AGENT_CURSOR_PILL_EDGE;
+  if (contrastRatio(fillHex, slavaCanvas) < minContrast) return 'both';
+  if (contrastRatio(fillHex, classicCanvas) < minContrast) return 'classic';
+  return null;
+}
+
+/**
  * With two or more agent cursors on the canvas the name always shows, moving
  * too. A lone cursor hides its name while it moves, and shows it while the
  * person's pointer is over it and for a moment on a first sighting.

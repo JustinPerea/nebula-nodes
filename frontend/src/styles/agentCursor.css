@@ -98,6 +98,16 @@
   transition: opacity var(--agent-cursor-say-fade);
 }
 
+/* GM - Design, PR #211 r9 item 4: a name pill whose fill is under 3:1
+   against the canvas (lib/agentCursorLook.ts pillEdge) gets a 1px edge,
+   white at 0.4, outside the pill so it sits on the canvas: about 3.7:1 on
+   Slava's #000. The classic skin's #111 is lighter, so it also takes the
+   edge for the fills that clear 3:1 on #000 only. */
+.agent-cursor[data-edge='both'] .agent-cursor__name,
+body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor__name {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.4), 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
 .agent-cursor__say {
   /* GM - Design, round 20 (A): a solid dark neutral pill just under the name
      tag, the same height (11px text on a 16px line, 2px above and below) and

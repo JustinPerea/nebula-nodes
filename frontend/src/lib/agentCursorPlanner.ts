@@ -72,6 +72,14 @@ export const AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX = 2;
 export const AGENT_CURSOR_CROSS_PX = 24;
 /** The fixed motion step. */
 export const AGENT_CURSOR_STEP_SECONDS = 1 / 120;
+/**
+ * A drag has ended once its target has held still this long (s): two frames
+ * at 60 Hz, so one frame with no pointer event mid-drag doesn't count. An
+ * action held by a fling (a target jumping further than
+ * AGENT_CURSOR_REPLAN_PX every frame, so the tip can't arrive) fires then,
+ * at the tip, wherever it is (GM - Design, PR #211 r9 item 5).
+ */
+export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
 
 /** A frame gap longer than this (a backgrounded tab) finishes the move at once. */
 /**
@@ -123,14 +131,29 @@ export interface CursorMotion {
   carry: number;
   /** A planned move whose tip hasn't arrived yet (StepResult.arrived is still to come). */
   awaiting: boolean;
-  /** The live target last step, and its velocity (flow px/s): the land
-   *  spring follows a target that keeps moving with no lag (feed-forward). */
+  /** The live target last step, and its carrier's velocity (flow px/s):
+   *  the land spring follows a target that keeps moving with no lag
+   *  (feed-forward). */
   lastLive: Point | null;
   liveVel: Point;
-  /** After arrival, where the tip sits relative to the target: it stays
-   *  attached at this offset, riding along a drag, until its next event
-   *  (GM - Design, PR #211 r5). */
+  /** The live target's offset from its carrier (the node's own point, before
+   *  de-stacking) last step: when it changes, the spot moved on the node. */
+  lastRel: Point | null;
+  /**
+   * Riding: the tip is carried with its target at this offset, kinematically,
+   * with no spring, so it stops dead when the target stops (GM - Design,
+   * PR #211 r9 item 2). Set when a resting tip's target is carried (the
+   * person drags the node, a sync nudges it), or when a landing settles onto
+   * a target that is still moving. It is the offset the tip already had, 0
+   * after any landing: a ride never takes a new offset (review 3, N1). The
+   * agent's next action ends it (planMove), and that flies on the planner.
+   */
   attached: Point | null;
+  /** Consecutive frames the target has moved; a fling (an action held by a
+   *  target that jumps every frame) and how long the target has held still. */
+  chase: number;
+  held: boolean;
+  stillFor: number;
 }
 
 export interface StepResult {
@@ -159,7 +182,11 @@ export function createMotion(at: Point, opacity = 0): CursorMotion {
     awaiting: false,
     lastLive: null,
     liveVel: { x: 0, y: 0 },
+    lastRel: null,
     attached: null,
+    chase: 0,
+    held: false,
+    stillFor: 0,
   };
 }
 
@@ -272,6 +299,7 @@ export function planMove(
   // A new event (or a re-plan) ends the ride along the last target, and
   // `to` is where the target is now: its next move is measured from here.
   m.attached = null;
+  m.held = false;
   m.lastLive = { x: to.x, y: to.y };
   m.liveVel = { x: 0, y: 0 };
   if (d * zoom < AGENT_CURSOR_ARRIVE_PX) {
@@ -380,12 +408,19 @@ function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityT
       handedOff = true;
     }
   }
+  if (!m.plan && !m.landing && m.attached) {
+    // Riding: carried with the target, no spring, so nothing to overshoot.
+    m.pos.x = live.x + m.attached.x;
+    m.pos.y = live.y + m.attached.y;
+    m.vel.x = 0;
+    m.vel.y = 0;
+  }
   if (m.landing) {
     const k = AGENT_CURSOR_LAND_SPRING.stiffness;
     const c = AGENT_CURSOR_LAND_SPRING.damping;
     const mass = AGENT_CURSOR_LAND_SPRING.mass;
-    const aimX = live.x + (m.attached?.x ?? 0);
-    const aimY = live.y + (m.attached?.y ?? 0);
+    const aimX = live.x;
+    const aimY = live.y;
     // Damping acts on the speed relative to the target (feed-forward), so a
     // target that keeps moving (a node being dragged) is caught with no
     // steady lag: the tip can arrive on it while it moves (GM - Design,
@@ -397,25 +432,26 @@ function substep(m: CursorMotion, live: Point, h: number, zoom: number, opacityT
     m.vel.y += ((-k * (m.pos.y - (aimY - m.liveVel.y * h)) - c * (m.vel.y - m.liveVel.y)) / mass) * h;
     m.pos.x += m.vel.x * h;
     m.pos.y += m.vel.y * h;
-    const targetStill = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom < REST_SPEED_PX;
-    if (targetStill && Math.hypot(m.vel.x, m.vel.y) * zoom < REST_SPEED_PX
+    // Settled onto the target, still or moving (speed relative to it): on a
+    // moving one the tip rides from here, at 0 px.
+    const targetMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+    if (Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
       && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX) {
       m.pos.x = aimX;
       m.pos.y = aimY;
       m.vel.x = 0;
       m.vel.y = 0;
       m.landing = null;
+      m.attached = targetMoving && !m.awaiting ? { x: 0, y: 0 } : null;
     }
   }
   let arrived = false;
   if (m.awaiting && !m.plan && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
     m.awaiting = false;
     arrived = true;
-    // Fired at first arrival, within 2 px of where the target is now. On a
-    // target still moving, the tip keeps this offset and rides along until
-    // its next event; on a still one it settles onto the target.
-    const moving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
-    m.attached = moving ? { x: m.pos.x - live.x, y: m.pos.y - live.y } : null;
+    // Fired at first arrival, within 2 px of where the target is now. The
+    // land spring then settles the tip onto the target, still or moving; on
+    // a moving one it rides from there at 0 px (no offset taken here).
   }
   const speedPx = Math.hypot(m.vel.x, m.vel.y) * zoom;
   stepSpring1(m.lean, leanTarget(m.vel.x * zoom, speedPx), AGENT_CURSOR_LEAN_SPRING, h);
@@ -439,13 +475,32 @@ export function stepMotion(
   m: CursorMotion,
   live: Point,
   dtSeconds: number,
-  opts: { zoom: number; reduced: boolean; opacityTarget: number; pointer?: Point | null },
+  opts: {
+    zoom: number;
+    reduced: boolean;
+    opacityTarget: number;
+    pointer?: Point | null;
+    /** What carries the target: the node's own point, before de-stacking
+     *  moves the spot off it. Its motion carries a riding tip; the spot
+     *  moving on it (de-stacking) is a short landing. Default: the target. */
+    carrier?: Point;
+    /** The person is dragging the target's node. A tip already there rides
+     *  it at any speed: a move past AGENT_CURSOR_REPLAN_PX in one frame is
+     *  their hand (or a late frame), not a sync to fly to again. */
+    dragged?: boolean;
+  },
 ): StepResult {
   const { zoom, reduced, opacityTarget } = opts;
+  const carrier = opts.carrier ?? live;
+  const rel = { x: live.x - carrier.x, y: live.y - carrier.y };
   const finish = (arrived: boolean): StepResult => {
     m.awaiting = false;
     m.attached = null;
+    m.held = false;
+    m.chase = 0;
+    m.stillFor = 0;
     m.lastLive = { ...live };
+    m.lastRel = rel;
     m.liveVel = { x: 0, y: 0 };
     m.pos = { ...live };
     m.vel = { x: 0, y: 0 };
@@ -465,30 +520,65 @@ export function stepMotion(
   // distance in one step (a node synced or moved elsewhere at once) is a new
   // place to fly to; anything less is a target moving (a drag), which the
   // arc's end and the land spring track as it goes.
-  const jumpPx = m.lastLive ? dist(live, m.lastLive) * zoom : 0;
-  const jumped = jumpPx > replanPx;
+  const prevLive = m.lastLive;
+  const jumpPx = prevLive ? dist(live, prevLive) * zoom : 0;
+  const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
+  // The spot moved on its node (a de-stack), not with it.
+  const relShifted = m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01;
   // Where the target was a frame ago, when it is moving: the steps in this
   // frame see it move from there to here, as it did, not hold still and jump.
-  const glideFrom = m.lastLive && !jumped && jumpPx > 0 ? { x: m.lastLive.x, y: m.lastLive.y } : null;
-  m.liveVel = m.lastLive && !jumped && dtSeconds > 0
-    ? { x: (live.x - m.lastLive.x) / dtSeconds, y: (live.y - m.lastLive.y) / dtSeconds }
+  const glideFrom = prevLive && !jumped && jumpPx > 0 ? { x: prevLive.x, y: prevLive.y } : null;
+  // The target's own motion is its carrier's: a de-stack shift isn't speed.
+  const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
+  const wasMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+  m.liveVel = prevCarrier && !jumped && dtSeconds > 0
+    ? { x: (carrier.x - prevCarrier.x) / dtSeconds, y: (carrier.y - prevCarrier.y) / dtSeconds }
     : { x: 0, y: 0 };
   m.lastLive = { x: live.x, y: live.y };
+  m.lastRel = rel;
+  const movingNow = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
+  m.chase = jumpPx > 0 ? m.chase + 1 : 0;
+  m.stillFor = jumpPx > 0 ? 0 : m.stillFor + Math.max(0, dtSeconds);
+  let arrived = false;
   if ((m.plan || m.landing) && jumped) {
+    const held = m.held || (m.awaiting && m.chase >= 2);
     planMove(m, live, { zoom, pointer });
+    // A target jumping every frame (a fling): the tip can't arrive, so the
+    // action is held, but no later than the drag's end (below).
+    m.held = held;
   } else if (m.plan) {
     m.plan.aimed = { x: live.x, y: live.y };
   } else if (m.landing) {
     m.landing = { x: live.x, y: live.y };
+    // The target stopped under a tip that already arrived and was settling
+    // onto it: it stops dead with it (GM - Design, PR #211 r9 item 2).
+    if (!m.awaiting && wasMoving && !movingNow && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
+      m.pos.x = live.x;
+      m.pos.y = live.y;
+      m.vel.x = 0;
+      m.vel.y = 0;
+      m.landing = null;
+      m.attached = null;
+    }
   } else {
-    // At rest and the target moved: a jump flies there; a drag rides along.
-    const aim = { x: live.x + (m.attached?.x ?? 0), y: live.y + (m.attached?.y ?? 0) };
-    const away = dist(m.pos, aim) * zoom;
+    // At rest. A jump flies there. The spot moving on its node (a de-stack)
+    // lands there on the land spring. Anything else carries the tip with its
+    // target, kinematically, at the offset it already has.
+    const offset = m.attached ?? (prevLive ? { x: m.pos.x - prevLive.x, y: m.pos.y - prevLive.y } : { x: 0, y: 0 });
+    const away = dist(m.pos, { x: live.x + offset.x, y: live.y + offset.y }) * zoom;
     if (jumped && away > replanPx) planMove(m, live, { zoom, pointer });
-    else if (away >= REST_DISTANCE_PX) m.landing = { ...live };
+    else if (relShifted) {
+      m.attached = null;
+      m.landing = { ...live };
+    } else if (away > 0) m.attached = offset;
+  }
+  if (m.held && m.awaiting && m.stillFor >= AGENT_CURSOR_DRAG_END_SECONDS - 1e-9) {
+    // The fling ended: the held action fires now, at the tip.
+    m.held = false;
+    m.awaiting = false;
+    arrived = true;
   }
 
-  let arrived = false;
   let handedOff = false;
   m.carry += Math.max(0, dtSeconds);
   const h = AGENT_CURSOR_STEP_SECONDS;

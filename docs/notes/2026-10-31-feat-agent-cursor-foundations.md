@@ -395,3 +395,46 @@ Each mutant changed one line and ran the focused tests. All 21 were caught.
   - A rename stays `click` for Phase 1 (GM, round 2); any param value change is `type`.
   - A refused run shows `error`. GM's error row describes exactly that event.
   - Neither looks any different until Phase 2.
+
+## Round 4
+
+Review 3 (boundary and replay; motion, look and live) and GM's answers to it.
+
+### Backend
+
+- **Pin reply and accept go through `_broadcast_presence` (MEDIUM-1).** The pin resolve reply now sends the person form on the agent's own session, so a session's pin reply lands on that session's cursor, is counted for its number and is replayed to a later tab. Accepting a proposal lands on the cursor of the session that proposed it: the proposal keeps `presence_session` (person-side only, `repr=False`), and `_accepted_person_form` sends the person form only while that session is still live. If it has left, no person frame goes out (no stray cursor is revived); the agent form still goes to agent sockets as before.
+- **The proposing session never leaves the person side.** A test reads every agent surface after a session-scoped proposal (agent socket, agent HTTP reads, `_proposal_view`, the journal, the listener and `repr`) and finds no session key.
+- **Guard.** An AST test fails if any cursor event outside the helper calls `broadcast_raw(_point(...))` with a target. The two left (`target=None`, Agent log only) are counted.
+- **B24.** The replay ages `did.secondsAgo` by the time since the event (pinned at 42.5 s).
+- **NIT-1, NIT-3.** The hello comment now says what the replay holds (every event built before it, same key and number, so nothing doubles); `SESSION_IDLE_SECONDS` says it's pinned by tests and read by nothing here.
+- **NIT-2.** Past the cap the oldest session is dropped from the replay; documented and pinned by a test rather than changed.
+- `person_gate.py`, `scene_keys.py`, `person_session.py` and the read boundaries are untouched.
+
+### Motion
+
+- **Kinematic attach (M1).** A cursor resting on a moving node rides it: its position is the node's live position plus a fixed offset, with zero velocity of its own, so it can't overshoot. The settle test uses speed relative to the node. A landing during a drag aims at the node's live spot, not a predicted one, and stops dead when the node stops within 2 px. Measured in tests: 0 px past the stop at 4, 12 and 20 px a frame and on a 20 px nudge; live, 0 px at 5, 12 and 20 px a frame, rest offset exact (110, 44).
+- **A person's drag is never a jump.** The layer reads React Flow's `dragging` flag on the anchor node and passes `dragged`, so 12 and 20 px a frame no longer re-plan as jumps (live caught this: frames add up past the jump threshold). A non-person jump (a sync, an undo) still flies.
+- **Fling (held action).** A cursor that's still flying when the person lets go fires its held action no later than the drag's end (`AGENT_CURSOR_DRAG_END_SECONDS = 0.03`, two still frames), at the cursor's tip on the node.
+- **Two cursors on one dragged node keep their order (L1).** Cursors anchored to the same node move together, and a carried cursor keeps its stamp, so the de-stack order can't swap mid-drag. It loses the stamp only if the ride brings it onto a cursor that isn't on that node. Live: Pair at +10, Pair · 2 at +20 before, after "first speaks again" and through 4 and 12 px a frame drags.
+- **StrictMode.** In dev the layer's effect mounts twice; the first unmount used to forget every cursor, so the next event swapped two cursors. The layer now releases on unmount and forgets only at the next read if nothing claimed it again. A test renders under StrictMode.
+
+### Look
+
+- **Name pill edge.** When the pill's fill is under 3:1 against the canvas (Slava `#000`, classic `#111`), it gets a 1 px white ring at 0.4 (`data-edge="both"` or `"classic"`; `pillEdge` in `agentCursorLook.ts`). The 0.35 lightness floor is kept.
+- **Finding for GM.** Live, the ring renders anti-aliased because the cursor has `will-change: transform` (its own composited layer): it peaks at 69 on `#000` (2.19:1) and 74 on `#111` (2.13:1). With `will-change` off it is crisp: 102 (3.66:1) and 111 (3.76:1). Out of scope for this round, so not changed.
+
+### Tabs and startup
+
+- **Demoted tab (LOW-1).** When a tab loses the person seat (`personRequired`), `wsClient` dispatches `socketDemoted` and the store drops every session cursor, as if those agents left. Only unnumbered cursors stay, and later events bring in unnumbered cursors (one per name). Live: 7 cursors before, after the refusal only Ink, then Claude, Ink and Pair, no numbers.
+- **Startup (LOW-2, N3).** A small entry module, `store/agentPresenceFeed.ts`, subscribes at load and holds presence, replay, demote and graph-clear events (with receive time, at most 64) until the deferred store attaches. A replay clears what was held. The store itself moved to the deferred chunk.
+- **LOW-3 / F05.** `secondsAgo` is clamped at zero on receipt. F03 stays as it was (GM).
+- Entry: 445,406 → 443,057 B raw (−2,349), 136,800 → 136,044 gzip. `wsClient` chunk 2,448 → 2,499 B; cursor layer chunk 18,565 → 20,435 B; the deferred store 3,112 B.
+
+### Checks (round 4)
+
+- `tsc -b` 0; eslint 0; `check:inline-styles` (255 files) and `check:slava-css-scope` (4 files) pass.
+- Focused vitest, `--maxWorkers=2`, 130 files in four runs: 524 + 339 + 606 + 552 = 2,021 passed, 0 failed, no timeouts.
+- Isolated pytest over the cursor, presence, pin and proposal files: 573 passed (28 files, 10 new in `test_agent_cursor_round4.py`).
+- Build and `check-build-budget.mjs` pass (443,057 B raw).
+- Mutation checks: backend 8, all caught. Frontend 30 on the first pass, 25 caught; the five survivors got tests or proved equivalent (attaching at arrival, which the settle overwrites). Second pass 6, 3 caught; the two real survivors (co-node shift, no carrier) caught after new tests, one equivalent (carried keyed on node only, same result for node-centre anchors). Third pass 4 (dragged flag, release and claim), all caught.
+- Live at 1440 on isolated ports: pin plain and lane 200, propose 201, accept 200; tabs A, B and a later C show the same three cursors (Claude, Claude · 2, Claude · 3), none doubled. Network canary blocked 8000, 8005, 5173, 8840 and outside; 0 page errors.

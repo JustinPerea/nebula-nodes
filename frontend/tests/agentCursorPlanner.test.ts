@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_CURSOR_ARRIVE_PX,
   AGENT_CURSOR_CROSS_PX,
+  AGENT_CURSOR_DRAG_END_SECONDS,
   AGENT_CURSOR_ENTRANCE_PX,
   AGENT_CURSOR_FADE_SPRING,
   AGENT_CURSOR_IDLE_OPACITY,
@@ -397,7 +398,7 @@ describe('screen px at any zoom (review 2, L4)', () => {
 
 describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
   const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
-  it('fires at first arrival on the target where it is now, then rides along at that offset until the next event', () => {
+  it('fires at first arrival on the target where it is now, then rides along on it at 0 px until the next event', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
     let target = { x: 600, y: 0 };
     planMove(m, target, { zoom: 1, pointer: null });
@@ -413,10 +414,10 @@ describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
         firedOffset = Math.hypot(m.pos.x - target.x, m.pos.y - target.y);
       }
       if (firedAt !== null && i / 60 > firedAt + 0.5) {
-        // Riding along at the offset it fired at (within half a px), not left behind.
-        const off = { x: m.pos.x - target.x, y: m.pos.y - target.y };
-        expect(Math.hypot(off.x - m.attached!.x, off.y - m.attached!.y)).toBeLessThan(0.5);
-        expect(Math.hypot(m.attached!.x, m.attached!.y)).toBeLessThanOrEqual(AGENT_CURSOR_ARRIVE_PX);
+        // Settled onto the target and riding it kinematically, at 0 px (round 4,
+        // N1: an arrival never leaves a 1-2 px offset), not left behind.
+        expect(m.attached).toEqual({ x: 0, y: 0 });
+        expect(m.pos).toEqual(target);
       }
     }
     // It fired while the drag was still going (it never stops in this test).
@@ -648,9 +649,9 @@ describe('re-planning mid-flight', () => {
   it('follows a target that moves after it has landed', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
     expect(step(m, { x: 0, y: 0 }).atRest).toBe(true);
+    // Carried with it, kinematically (round 4): no spring, so on it at once.
     step(m, { x: 10, y: 0 });
-    expect(m.landing).not.toBeNull();
-    for (let i = 0; i < 400 && !step(m, { x: 10, y: 0 }).atRest; i += 1);
+    expect(m.landing).toBeNull();
     expect(m.pos).toEqual({ x: 10, y: 0 });
     step(m, { x: 300, y: 0 });
     expect(m.plan).not.toBeNull();
@@ -718,5 +719,232 @@ describe('reduced motion', () => {
     expect(isMoving(m, 1)).toBe(false);
     stepMotion(m, { x: 500, y: 0 }, 1 / 60, { zoom: 1, reduced: true, opacityTarget: AGENT_CURSOR_IDLE_OPACITY });
     expect(m.opacity.x).toBe(AGENT_CURSOR_IDLE_OPACITY);
+  });
+});
+
+describe('riding a dragged node stops dead with it (GM - Design, PR #211 r9 item 2; review 3, M1 and N1)', () => {
+  const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
+  const rest = (at: Point) => {
+    const m = createMotion(at, 1);
+    stepMotion(m, at, 1 / 60, opts);
+    return m;
+  };
+  /** Drag the target `perFrame` px a frame for `frames`, stop, and report the
+   *  most the tip ever went past the target along the drag, and after the stop. */
+  const dragAndStop = (m: CursorMotion, from: Point, perFrame: number, frames = 40) => {
+    let target = { ...from };
+    let pastDuring = -Infinity;
+    for (let i = 1; i <= frames; i += 1) {
+      target = { x: from.x + perFrame * i, y: from.y };
+      stepMotion(m, target, 1 / 60, opts);
+      pastDuring = Math.max(pastDuring, m.pos.x - target.x);
+    }
+    let pastAfter = -Infinity;
+    for (let i = 0; i < 120; i += 1) {
+      stepMotion(m, target, 1 / 60, opts);
+      pastAfter = Math.max(pastAfter, m.pos.x - target.x);
+    }
+    return { pastDuring, pastAfter, target };
+  };
+
+  it.each([4, 12, 20])('a resting cursor on a node dragged %s px a frame stops 0 px past it', (perFrame) => {
+    const m = rest({ x: 100, y: 50 });
+    const { pastDuring, pastAfter, target } = dragAndStop(m, { x: 100, y: 50 }, perFrame);
+    expect(pastDuring).toBe(0);
+    expect(pastAfter).toBe(0);
+    expect(m.pos).toEqual(target);
+    expect(m.plan).toBeNull();
+    expect(m.landing).toBeNull();
+  });
+
+  it.each([40, 80])('the person dragging the node %s px a frame: a resting tip rides it every frame and stops dead (no re-plan)', (perFrame) => {
+    const m = rest({ x: 0, y: 0 });
+    let target = { x: 0, y: 0 };
+    for (let i = 1; i <= 30; i += 1) {
+      target = { x: perFrame * i, y: 0 };
+      stepMotion(m, target, 1 / 60, { ...opts, dragged: true });
+      expect(m.plan).toBeNull();
+      expect(m.pos).toEqual(target);
+    }
+    for (let i = 0; i < 60; i += 1) {
+      stepMotion(m, target, 1 / 60, opts);
+      expect(m.pos).toEqual(target);
+    }
+    // Not the person's drag (a sync), a jump that size flies there again.
+    const synced = rest({ x: 0, y: 0 });
+    stepMotion(synced, { x: perFrame, y: 0 }, 1 / 60, opts);
+    expect(synced.plan).not.toBeNull();
+  });
+
+  it('a single 20 px nudge of a resting target: 0 px past it', () => {
+    const m = rest({ x: 0, y: 0 });
+    let past = -Infinity;
+    stepMotion(m, { x: 20, y: 0 }, 1 / 60, opts);
+    for (let i = 0; i < 120; i += 1) {
+      stepMotion(m, { x: 20, y: 0 }, 1 / 60, opts);
+      past = Math.max(past, m.pos.x - 20);
+    }
+    expect(past).toBe(0);
+    expect(m.pos).toEqual({ x: 20, y: 0 });
+  });
+
+  it.each([4, 12, 20])('a cursor that lands on a node while it is dragged %s px a frame rides it at 0 px and stops dead', (perFrame) => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    const from = { x: 500, y: 0 };
+    planMove(m, from, { zoom: 1, pointer: null });
+    // The drag starts as the flight does and lasts long enough to land on it.
+    let arrivedAt = -1;
+    let target = { ...from };
+    for (let i = 1; i <= 90; i += 1) {
+      target = { x: from.x + perFrame * i, y: 0 };
+      if (stepMotion(m, target, 1 / 60, opts).arrived) arrivedAt = i;
+    }
+    expect(arrivedAt).toBeGreaterThan(0);
+    expect(m.attached).toEqual({ x: 0, y: 0 });
+    expect(m.pos).toEqual(target);
+    let past = -Infinity;
+    for (let i = 0; i < 120; i += 1) {
+      stepMotion(m, target, 1 / 60, opts);
+      past = Math.max(past, m.pos.x - target.x);
+    }
+    expect(past).toBe(0);
+  });
+
+  it('a drag that stops while the tip is still settling after its arrival: it stops with the node, never past it', () => {
+    // Arrive on a node moving 12 px a frame, then stop the drag 2 frames later.
+    for (const extra of [1, 2, 4]) {
+      const m = createMotion({ x: 0, y: 0 }, 1);
+      planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+      let target = { x: 400, y: 0 };
+      let i = 0;
+      let left = -1;
+      for (; i < 200; i += 1) {
+        target = { x: 400 + 12 * (i + 1), y: 0 };
+        if (stepMotion(m, target, 1 / 60, opts).arrived) left = extra;
+        if (left >= 0 && (left -= 1) < 0) break;
+      }
+      let past = -Infinity;
+      for (let k = 0; k < 120; k += 1) {
+        stepMotion(m, target, 1 / 60, opts);
+        past = Math.max(past, m.pos.x - target.x);
+      }
+      expect(past).toBeLessThanOrEqual(0);
+      expect(m.pos).toEqual(target);
+    }
+  });
+
+  it('after a drag a resting cursor sits exactly on its spot, with no new offset (N1)', () => {
+    const m = rest({ x: 110, y: 44 });
+    for (let k = 0; k < 4; k += 1) {
+      const back = k % 2 === 1;
+      for (let i = 1; i <= 60; i += 1) stepMotion(m, { x: 110 + (back ? 300 - 5 * i : 5 * i), y: 44 }, 1 / 60, opts);
+      for (let i = 0; i < 30; i += 1) stepMotion(m, { x: back ? 110 : 410, y: 44 }, 1 / 60, opts);
+      expect(m.pos).toEqual({ x: back ? 110 : 410, y: 44 });
+    }
+  });
+
+  it('rides at the de-stack offset its spot has on the node, and a de-stack shift lands on the spring, not a jump', () => {
+    const node = { x: 200, y: 100 };
+    const spot = { x: 210, y: 110 };
+    const m = createMotion(spot, 1);
+    stepMotion(m, spot, 1 / 60, { ...opts, carrier: node });
+    // The node is dragged: the tip is carried at its spot.
+    for (let i = 1; i <= 30; i += 1) {
+      stepMotion(m, { x: spot.x + 12 * i, y: spot.y }, 1 / 60, { ...opts, carrier: { x: node.x + 12 * i, y: node.y } });
+      expect(m.pos).toEqual({ x: spot.x + 12 * i, y: spot.y });
+    }
+    // The other cursor leaves: the spot moves back onto the node. That is a
+    // short landing on the land spring, not a jump.
+    const still = { x: node.x + 360, y: node.y };
+    stepMotion(m, still, 1 / 60, { ...opts, carrier: still });
+    expect(m.landing).not.toBeNull();
+    expect(dist(m.pos, still)).toBeGreaterThan(5);
+    // The shift is the spot's, not the node's speed: no kick, so it lands
+    // like any short landing from rest (under 0.3 px past).
+    const along = { x: -10 / Math.SQRT2 / 10, y: -10 / Math.SQRT2 / 10 };
+    let past = 0;
+    for (let i = 0; i < 200 && !stepMotion(m, still, 1 / 60, { ...opts, carrier: still }).atRest; i += 1) {
+      past = Math.max(past, (m.pos.x - still.x) * along.x + (m.pos.y - still.y) * along.y);
+    }
+    expect(past).toBeLessThan(0.3);
+    expect(m.pos).toEqual(still);
+  });
+
+  it("the agent's next action releases the ride and flies on the planner", () => {
+    const m = rest({ x: 0, y: 0 });
+    dragAndStop(m, { x: 0, y: 0 }, 12);
+    expect(m.attached).not.toBeNull();
+    planMove(m, { x: 900, y: 0 }, { zoom: 1, pointer: null });
+    expect(m.attached).toBeNull();
+    expect(m.plan).not.toBeNull();
+  });
+});
+
+describe('a fling holds the action no later than the drag\'s end (GM - Design, PR #211 r9 item 5)', () => {
+  const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
+
+  it('fires at the tip within the drag-end time after a 30 px-a-frame drag stops, once', () => {
+    expect(AGENT_CURSOR_DRAG_END_SECONDS).toBe(0.03);
+    for (const perFrame of [30, 60]) {
+      const m = createMotion({ x: 0, y: 0 }, 1);
+      planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+      let arrivals = 0;
+      let target = { x: 400, y: 0 };
+      for (let i = 1; i <= 40; i += 1) {
+        target = { x: 400 + perFrame * i, y: 0 };
+        if (stepMotion(m, target, 1 / 60, opts).arrived) arrivals += 1;
+      }
+      // Held all through the fling: the tip never caught a target jumping 30 px a frame.
+      expect(arrivals).toBe(0);
+      expect(m.held).toBe(true);
+      let firedFrame = -1;
+      let firedAt: Point | null = null;
+      for (let i = 1; i <= 120; i += 1) {
+        if (stepMotion(m, target, 1 / 60, opts).arrived) {
+          arrivals += 1;
+          if (firedFrame < 0) {
+            firedFrame = i;
+            firedAt = { ...m.pos };
+          }
+        }
+      }
+      // The drag ended at frame 0: it fires by the second still frame (0.033 s).
+      expect(firedFrame).toBe(2);
+      expect(arrivals).toBe(1);
+      // At the tip, wherever it was: still on its way, not at the node.
+      expect(dist(firedAt!, target)).toBeGreaterThan(AGENT_CURSOR_ARRIVE_PX);
+      // The tip still lands on the node, with no second arrival.
+      expect(m.pos).toEqual(target);
+    }
+  });
+
+  it('a one-frame jump mid-flight (a sync) is no fling: the action fires on arrival at the target', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+    for (let i = 0; i < 10; i += 1) stepMotion(m, { x: 400, y: 0 }, 1 / 60, opts);
+    let firedFar = false;
+    let arrivals = 0;
+    for (let i = 0; i < 200; i += 1) {
+      const r = stepMotion(m, { x: 400, y: 300 }, 1 / 60, opts);
+      if (r.arrived) {
+        arrivals += 1;
+        if (dist(m.pos, { x: 400, y: 300 }) > AGENT_CURSOR_ARRIVE_PX) firedFar = true;
+      }
+    }
+    expect(firedFar).toBe(false);
+    expect(arrivals).toBe(1);
+  });
+
+  it('a slow drag (under the re-plan distance a frame) is no fling: it arrives on the moving target', () => {
+    const m = createMotion({ x: 0, y: 0 }, 1);
+    planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
+    let target = { x: 400, y: 0 };
+    let arrivedOn = false;
+    for (let i = 1; i <= 120; i += 1) {
+      target = { x: 400 + 12 * i, y: 0 };
+      if (stepMotion(m, target, 1 / 60, opts).arrived) arrivedOn = dist(m.pos, target) <= AGENT_CURSOR_ARRIVE_PX;
+    }
+    expect(m.held).toBe(false);
+    expect(arrivedOn).toBe(true);
   });
 });

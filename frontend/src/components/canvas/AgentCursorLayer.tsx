@@ -32,6 +32,7 @@ import {
   labelLayout,
   nameVisible,
   paintOrder,
+  pillEdge,
   sessionFill,
   sessionName,
 } from '../../lib/agentCursorLook';
@@ -68,11 +69,22 @@ function cursorSpringVars(): Record<`--${string}`, string> {
  * lands beside an earlier one rather than on it, and the person's pointer,
  * for the arc's side and the name on hover.
  */
+interface FieldEntry {
+  target: Point;
+  /** When it visibly landed on its spot (de-stacking order), Infinity while
+   *  it is still on its way. */
+  since: number;
+  /** The spot it was stamped at. */
+  at: Point | null;
+  /** The node its event anchors to, and that event (seq): the same pair on
+   *  a later report means the node moved, not the agent. */
+  node: string | null;
+  seq: number;
+}
+
 class CursorField {
-  /** Each cursor's resolved target; when it visibly landed on that spot
-   *  (de-stacking order, Infinity while it is still on its way); and the
-   *  spot it was stamped at. */
-  readonly targets = new Map<string, { target: Point; since: number; at: Point | null }>();
+  /** Each cursor's resolved target and its place in the stack. */
+  readonly targets = new Map<string, FieldEntry>();
   /** Each cursor's motion, so a new flight can see the others still under way. */
   readonly motions = new Map<string, CursorMotion>();
   readonly wakers = new Map<string, () => void>();
@@ -87,18 +99,53 @@ class CursorField {
   visibilityEpoch = 0;
   private arrivals = 0;
 
-  report(key: string, target: Point, zoom: number): void {
+  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0): void {
+    this.purge();
     const before = this.targets.get(key);
-    if (before && before.target.x === target.x && before.target.y === target.y) return;
-    // A cursor keeps its place in the stack while it stays within the stack
-    // radius of the spot it landed on (not of its last report, so a node
-    // dragged slowly carries no stamp along: review 2, L2). Further than
-    // that, it is on its way to a new spot and is stamped again on landing.
-    const anchor = before?.at ?? null;
-    const stays = before && anchor
-      && Math.hypot(anchor.x - target.x, anchor.y - target.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
-    this.targets.set(key, stays ? { target, since: before.since, at: anchor } : { target, since: Infinity, at: null });
+    if (before && before.target.x === target.x && before.target.y === target.y) {
+      if (before.node !== node || before.seq !== seq) this.targets.set(key, { ...before, node, seq });
+      return;
+    }
+    const carried = before !== undefined && before.node === node && before.seq === seq && node !== null;
+    this.place(key, before, target, zoom, node, seq);
+    if (carried) {
+      // The node moved, so it carried every cursor on it the same way: move
+      // them now, so the stack is read from where they all are this frame,
+      // whichever cursor's frame runs first.
+      const dx = target.x - before.target.x;
+      const dy = target.y - before.target.y;
+      for (const [other, o] of this.targets) {
+        if (other === key || o.node !== node) continue;
+        this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq);
+      }
+    }
     for (const [other, wake] of this.wakers) if (other !== key) wake();
+  }
+
+  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number): void {
+    const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
+    if (before && node !== null && before.node === node && before.seq === seq) {
+      // Carried by its node with no event of its own (a person's drag, a
+      // sync): it keeps its stamp, so the cursors one node carries keep
+      // their order all the way (GM - Design, PR #211 r9 item 3). Unless the
+      // node carries it onto a cursor the node doesn't carry: that one was
+      // there first, so this one arrives now and is stamped on landing
+      // (review 2, L2).
+      const meets = [...this.targets].some(([other, o]) => other !== key && o.node !== node
+        && near(o.target, target) && !near(o.target, before.target));
+      const dx = target.x - before.target.x;
+      const dy = target.y - before.target.y;
+      this.targets.set(key, meets
+        ? { target, since: Infinity, at: null, node, seq }
+        : { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
+      return;
+    }
+    // A new event keeps its place in the stack while it stays within the
+    // stack radius of the spot it landed on. Further than that, it is on its
+    // way to a new spot and is stamped again on landing.
+    const anchor = before?.at ?? null;
+    const stays = before && anchor && near(anchor, target);
+    this.targets.set(key, stays ? { ...before, target, node, seq } : { target, since: Infinity, at: null, node, seq });
   }
 
   /** The cursor visibly landed: it takes its place in the stack now, so the
@@ -112,6 +159,7 @@ class CursorField {
   }
 
   spot(key: string, zoom: number): Point | undefined {
+    this.purge();
     if (this.targets.size < 2) return this.targets.get(key)?.target;
     // Cursors still on their way come after every landed one, the one due to
     // land soonest first.
@@ -130,6 +178,7 @@ class CursorField {
 
   /** Other cursors' flights still under way. */
   flightsBesides(key: string) {
+    this.purge();
     return [...this.motions].filter(([k, m]) => k !== key && m.plan).map(([, m]) => m.plan!);
   }
 
@@ -142,6 +191,28 @@ class CursorField {
     this.pane = null;
     this.layoutEpoch += 1;
   };
+
+  private released = new Set<string>();
+
+  /** A view for this key is mounted (again): a release still pending is off. */
+  claim(key: string): void {
+    this.released.delete(key);
+  }
+
+  /** Its view unmounted: the cursor is forgotten before any cursor next reads
+   *  the field, unless a view for the key mounts again first. React's
+   *  StrictMode reconnects a view's effects in dev when it moves in the paint
+   *  order; forgetting at once lost its stamp, so it landed again as the
+   *  newest (round 4, live). The others wake to take the room it leaves. */
+  release(key: string): void {
+    this.released.add(key);
+    for (const [other, wake] of this.wakers) if (other !== key) wake();
+  }
+
+  private purge(): void {
+    for (const key of this.released) this.forget(key);
+    this.released.clear();
+  }
 
   forget(key: string): void {
     this.targets.delete(key);
@@ -326,7 +397,7 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
       if (!resolved) return; // Node not drawn yet; the store subscription wakes us.
       const z = zoomRef.current;
-      field.report(cursor.key, resolved, z);
+      field.report(cursor.key, resolved, z, 'nodeId' in cursor.target ? cursor.target.nodeId : null, cursor.seq);
       const target = field.spot(cursor.key, z) ?? resolved;
       const goal = phase.current === 'pickup' && start ? start : target;
       const pointer = pointerInFlow();
@@ -384,9 +455,18 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
       seenVisibility = field.visibilityEpoch;
       const dt = lastTime.current === null ? 1 / 60 : wasHidden ? Infinity : (time - lastTime.current) / 1000;
       lastTime.current = time;
-      const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer });
+      // What carries the goal: the node's own point (de-stacking moves the
+      // spot off it), so a ride follows the node and a de-stack shift lands.
+      const carrier = goal === target ? resolved : goal;
+      // The person's own drag of the node it rests on: it rides at any speed.
+      const dragged = goal === target && 'nodeId' in cursor.target
+        && Boolean((lookup.get(cursor.target.nodeId) as { dragging?: boolean } | undefined)?.dragging);
+      const fromX = m.pos.x;
+      const fromY = m.pos.y;
+      const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer, carrier, dragged });
       let arrivedNow = false;
-      if (m.plan || m.landing) movedSinceBoxes = true;
+      // A flight, a landing, or a ride carried by its node.
+      if (m.plan || m.landing || m.pos.x !== fromX || m.pos.y !== fromY) movedSinceBoxes = true;
 
       if (result.caughtUp) {
         // The tab was hidden, throttled or stalled mid-move: the tip lands,
@@ -462,11 +542,14 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
   // cursor leaving in the same commit wakes it (forget), and a tick run after
   // its cleanup would stamp its old spot again, a ghost that pushes the next
   // cursor there aside (live, after a backend restart's empty replay).
-  useEffect(() => () => {
-    wake.current = () => {};
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    frame.current = null;
-    field.forget(cursor.key);
+  useEffect(() => {
+    field.claim(cursor.key);
+    return () => {
+      wake.current = () => {};
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+      field.release(cursor.key);
+    };
   }, [field, cursor.key]);
 
   // Idle dims on the fade spring, and the say pill's own timers change the label.
@@ -497,6 +580,7 @@ function AgentCursorView({ cursor, zoom, peers, field }: {
         data-agent={cursor.id}
         data-session={cursor.session?.key}
         data-action={cursor.action}
+        data-edge={pillEdge(fill) ?? undefined}
         data-idle={idle ? 'true' : undefined}
         role="status"
         aria-label={`${name}${cursor.say ? `: ${cursor.say}` : ''}`}

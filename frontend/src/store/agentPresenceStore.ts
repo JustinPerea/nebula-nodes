@@ -1,11 +1,7 @@
 import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
-import {
-  wsClient,
-  type AgentCursorAnchor,
-  type AgentPresenceEvent,
-  type AgentPresenceSession,
-} from '../lib/wsClient';
+import type { AgentCursorAnchor, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
+import { attachPresenceSink } from './agentPresenceFeed';
 
 /** Cursors dim after this long without news, and disappear after AGENT_CURSOR_EXPIRE_MS. */
 export const AGENT_CURSOR_IDLE_MS = 20_000;
@@ -64,6 +60,10 @@ interface AgentPresenceState {
    *  replace what the tab had, so a reconnect never doubles a cursor. */
   replay: (cursors: readonly AgentPresenceEvent[], now?: number) => void;
   prune: (now?: number) => void;
+  /** The server refused this tab's hello (a demoted tab): its numbered
+   *  cursors are person-only and go, as any cursor leaves; the agents' form
+   *  draws unnumbered cursors as events arrive (GM - Design, PR #211 r9 item 6). */
+  demote: () => void;
   /** Drop node anchors when the whole graph is cleared or replaced: ids restart per graph. */
   forgetGraph: () => void;
   clear: () => void;
@@ -197,6 +197,10 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
     );
     return Object.keys(kept).length === Object.keys(state.agents).length ? state : { agents: kept };
   }),
+  demote: () => set((state) => {
+    const kept = Object.fromEntries(Object.entries(state.agents).filter(([, cursor]) => cursor.session === null));
+    return Object.keys(kept).length === Object.keys(state.agents).length ? state : { agents: kept };
+  }),
   forgetGraph: () => set((state) => {
     const kept: Record<string, AgentCursor> = {};
     for (const [key, cursor] of Object.entries(state.agents)) {
@@ -210,10 +214,13 @@ export const useAgentPresenceStore = create<AgentPresenceState>((set) => ({
   clear: () => set({ agents: {} }),
 }));
 
-wsClient.subscribe((event) => {
-  if (event.type === 'agentPresence') useAgentPresenceStore.getState().apply(event);
-  else if (event.type === 'agentPresenceReplay') useAgentPresenceStore.getState().replay(event.cursors);
-  else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) {
-    useAgentPresenceStore.getState().forgetGraph();
-  }
+// The socket feed (agentPresenceFeed, in the startup entry) held whatever
+// came before this chunk loaded; it hands that over now, with each event's
+// receive time, then each event as it comes.
+attachPresenceSink((event, receivedAt) => {
+  const store = useAgentPresenceStore.getState();
+  if (event.type === 'agentPresence') store.apply(event, receivedAt);
+  else if (event.type === 'agentPresenceReplay') store.replay(event.cursors, receivedAt);
+  else if (event.type === 'socketDemoted') store.demote();
+  else if (event.type === 'graphSync' && (event.graphReplaced || event.empty)) store.forgetGraph();
 });

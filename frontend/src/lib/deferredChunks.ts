@@ -278,4 +278,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   // The agent cursor's motion and look, only in the cursor layer's chunk.
   'lib/agentCursorPlanner.ts',
   'lib/agentCursorLook.ts',
+  // Its store: the normalising and the replay load with their readers; the
+  // entry keeps only the socket feed (store/agentPresenceFeed.ts).
+  'store/agentPresenceStore.ts',
 ];

@@ -4069,8 +4069,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # Every live cursor, person form, for this tab only (GM -
                 # Design, PR #211 r3): numbers match across tabs because each
                 # shows the backend's. Built here, after the other syncs, so
-                # it holds every cursor event already sent to this socket; a
-                # later event arrives after it.
+                # every cursor event built before it is reflected in it. An
+                # event built before it can still reach this tab after it
+                # (broadcast_raw picks each socket's form at send time); it
+                # carries the same key and number, so nothing doubles.
                 await websocket.send_text(json.dumps({"type": "agentPresenceReplay",
                                                       "cursors": agent_presence.replay()}))
             else:
@@ -5419,6 +5421,23 @@ async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any] | No
         await manager.broadcast_raw(event)
     else:
         await manager.broadcast_raw(person, others=event)
+
+
+def _accepted_person_form(event: dict[str, Any], proposal: Proposal) -> dict[str, Any] | None:
+    """The person tabs' copy of the "Accepted" click: on the cursor of the
+    session that proposed it (GM - Design, PR #211 r9 item 1). The request
+    is the person's, so the session is the one recorded on the proposal when
+    it was made (``Proposal.presence_session``, person side only). When that
+    session's cursor has left by now, None: the person's tabs get no click
+    (a cursor coming back for an ended session would be false; the node's
+    run state shows what happened), and agents still get the agent form."""
+    session = proposal.presence_session
+    try:
+        if agent_presence.session_tag(proposal.agent, session) is None:
+            return None
+    except Exception:  # noqa: BLE001 - no click is better than a wrong cursor
+        return None
+    return _person_form(event, proposal.agent, {"X-Nebula-Cursor-Session": session} if session else None)
 
 
 async def _show_agent(
@@ -7193,8 +7212,12 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         )
         target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
         node = target.get("nodeId")
-        await manager.broadcast_raw(_point(identity, target=target, action="click", say=reply,
-                                           did=_did("Replied on", node) if node else {"verb": "Replied"}))
+        event = _point(identity, target=target, action="click", say=reply,
+                       did=_did("Replied on", node) if node else {"verb": "Replied"})
+        # The resolving request's own session's cursor on the person's tabs,
+        # kept for the replay (PR #211 review 3, MEDIUM-1); agents read the
+        # agent form, as before.
+        await _broadcast_presence(event, _person_form(event, identity, current_request_headers()))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
@@ -8033,6 +8056,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     # The canvas it was made on, in the step that made it (review 20 L-3).
     proposal.canvas_revision = _canvas_revision()
+    # Which of the agent's cursors proposed it, for the "Accepted" click on
+    # the person's tabs only (_accepted_person_form; never in a view).
+    proposal.presence_session = presence_session(headers)
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
@@ -8375,7 +8401,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         try:
             event = _point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted",
                            did=_did("Proposed", focus))
-            await manager.broadcast_raw(event)
+            await _broadcast_presence(event, _accepted_person_form(event, proposal))
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
     return {

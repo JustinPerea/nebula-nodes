@@ -57,7 +57,7 @@ MAX_SNAPSHOT_NODES = 300
 
 # One cursor per agent session, on the person's tabs (person_form).
 SESSIONS_PER_AGENT = 8          # live slots per agent; the frontend caps at the same number
-SESSION_IDLE_SECONDS = 20.0     # = the frontend's AGENT_CURSOR_IDLE_MS (the cap's idle, see _slot)
+SESSION_IDLE_SECONDS = 20.0     # the tab's idle time (AGENT_CURSOR_IDLE_MS), pinned by tests; nothing here reads it
 SESSION_AGENT_MEMORY = 256      # agents whose live sessions are kept (least recently seen go first)
 SESSION_KEY_CHARS = 12
 # Where a request's session id may come from, besides an agent token's own

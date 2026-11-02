@@ -177,4 +177,16 @@ describe('GM r29 item 3: the hold follows the server', () => {
     expect(session.personGateHeld()).toBe(false);
     wsClient.disconnect();
   });
+
+  it('a refused hello also tells the socket\'s subscribers (PR #211 r4: a demoted tab drops its numbered cursors)', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
+    const { wsClient } = await fresh();
+    const heard: string[] = [];
+    wsClient.subscribe((event) => { heard.push(event.type); });
+    const socket = await open(wsClient);
+    promote(socket);
+    frame(socket, { type: 'personRequired', message: 'x' });
+    expect(heard).toEqual(['proposalSync', 'socketDemoted']);
+    wsClient.disconnect();
+  });
 });
