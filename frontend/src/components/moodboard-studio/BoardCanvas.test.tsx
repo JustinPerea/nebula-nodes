@@ -282,7 +282,7 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
     fireEvent(wrapper, drop);
     // Screen (26, 36)-(594, 354), doubled by the stand-in screenToFlowPosition.
-    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: true }]);
+    expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 52, y: 72, width: 1136, height: 636 }, aim: true, band: true }]);
   });
 
   it('Add images follows the free-spot rule from the middle of the view', () => {
@@ -468,6 +468,18 @@ describe('the outside-the-view chip on the board', () => {
       return seen;
     };
 
+    it('a placeholder whose provisional and saved cards are drawn in one commit hands focus to the saved one (review 5, M20)', async () => {
+      let view = draw(null, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      act(() => { node(view, 'placeholder-1')!.focus(); });
+      const seen = landed(view);
+      const both = image('i4', [card('new-c4', 3000, 100, { w: 300, h: 200 }), card('c4', 3000, 100, { w: 300, h: 200 })], { url });
+      view = draw(view, [...images, both], [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
+      await settle();
+      expect(document.activeElement).toBe(node(view, 'c4'));
+      // Straight there: no stop on the provisional card on the way.
+      expect(seen).toEqual(['c4']);
+    });
+
     it('a provisional card swapped for its saved card in one commit goes straight to it, with no stop on the board', async () => {
       let view = draw(null, [...images, newCard], []);
       act(() => { node(view, 'new-c4')!.focus(); });
@@ -620,6 +632,20 @@ describe('the outside-the-view chip on the board', () => {
     act(() => { chip.props!.focusBoard(); });
     expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
   });
+
+  it('a board that can\'t take focus (hidden) hands it to the view switch, never the body (review 5, NIT-6)', () => {
+    const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={() => {}} />);
+    (view.container.querySelector('.moodboard-board') as HTMLElement).focus = () => {};
+    const viewSwitch = document.createElement('button');
+    viewSwitch.className = 'moodboard-view-switch__option';
+    viewSwitch.setAttribute('aria-checked', 'true');
+    document.body.appendChild(viewSwitch);
+    try {
+      act(() => { chip.props!.focusBoard(); });
+      expect(document.activeElement).toBe(viewSwitch);
+    } finally { viewSwitch.remove(); }
+  });
 });
 
 describe('placeholder tiles (GM r4 answer 1)', () => {
@@ -628,7 +654,9 @@ describe('placeholder tiles (GM r4 answer 1)', () => {
       placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
     const node = props().nodes.find((item) => item.id === 'placeholder-1')!;
     expect(node).toMatchObject({ type: 'placeholder', position: { x: 40, y: 60 }, width: 300, height: 200,
-      draggable: false, selectable: false, focusable: true, ariaLabel: 'Adding an image' });
+      draggable: false, selectable: false, focusable: true, ariaLabel: 'a.png, uploading' });
+    // Not selectable, movable or deletable: React Flow's description of those keys is dropped (GM r8 answer 6).
+    expect(node.domAttributes).toEqual({ 'aria-describedby': undefined });
     expect(view.container.querySelector('.moodboard-board__empty')).toBeNull();
   });
 
@@ -949,6 +977,16 @@ describe('the camera', () => {
     act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true })); });
     expect(spring.calls).toHaveLength(2);
     expect(spring.calls[1].to).toEqual(spring.calls[0].to);
+  });
+
+  it('Fit frames the held spots too: a placeholder is a card on its way in (GM r8 answer 4)', () => {
+    spring.calls = [];
+    const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
+      placeholders={[{ id: 'placeholder-1', x: 4000, y: 100, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } },
+        { id: 'placeholder-2', x: 0, y: 0, width: 0, height: 0, listOnly: true, source: { kind: 'file', name: 'b.png' } }]} />);
+    flow.getNodesBounds.mockClear();
+    fireEvent.click(view.getByRole('button', { name: 'Fit the board' }));
+    expect((flow.getNodesBounds.mock.calls[0][0] as Node[]).map((node) => node.id)).toEqual(['c1', 'c2', 'c3', 'placeholder-1']);
   });
 
   it('a new move stops the one still running, so two springs never pull the view', () => {

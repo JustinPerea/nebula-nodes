@@ -22,6 +22,15 @@ export const LINKS_NOT_ADDED = 'Nebula can’t add images from links. Copy the i
 /** Announced (politely, nothing on screen) when the backstop drops a file still being added (GM r4 answer 7). */
 export const ALREADY_BEING_ADDED = 'That image is already being added.';
 
+/** Adds a reload lost on their way to a board, said on its next open (GM r8
+ *  answer 5): one file, or two or three, named; from four, a count. */
+export function reloadLostLine(names: readonly string[]): string {
+  const quoted = names.map((name) => `“${name}”`);
+  if (quoted.length === 1) return `${quoted[0]} wasn’t added because the page reloaded while it uploaded. Paste it again.`;
+  const who = quoted.length <= 3 ? `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}` : `${quoted.length} images`;
+  return `${who} weren’t added because the page reloaded while they uploaded. Paste them again.`;
+}
+
 /** A file the drop path would take: an image type (BoardCanvas onDrop, MoodboardStudioView handleDrop). */
 const isImageFile = (file: File | null): file is File => file !== null && file.type.startsWith('image/');
 

@@ -17,7 +17,11 @@ import type { NodeRect } from './nodePlacement';
  *   overlaps nothing; if it would overlap a tile it takes the nearest free
  *   spot, even one partly past the view (GM r4 answer 4). That tile is
  *   reported only when it is wholly out of view (GM r4 answers 3 and 4). Its
- *   other files fan out by the free-spot rule.
+ *   other files fan out by the free-spot rule. Aimed under the toolbar band
+ *   (`band`), it moves up out of it by the smallest move that puts it wholly
+ *   in view, then off any tile as before, so it isn't hidden there and gets
+ *   no chip (GM r7 answer 2). If no free spot in view is left for it and it
+ *   still reaches into the band, it is reported, so the chip points at it.
  *
  * Exact, on any board size (review 2, M1). A tile's top-left may not sit in
  * the open rectangle each other tile rules out (its own box grown by the gap
@@ -42,6 +46,9 @@ export interface PlaceRequest {
   view: NodeRect | null;
   /** A drop: the first tile keeps its aim unless it would overlap a tile. */
   aim?: boolean;
+  /** The view's bottom edge is the toolbar's top: an aimed tile reaching
+   *  under that band moves up out of it (GM r7 answer 2). */
+  band?: boolean;
   gap?: number;
   /** Counts the rows and spans the search read (the speed bound's test). */
   work?: PlacementWork;
@@ -66,6 +73,9 @@ export const insideView = (rect: NodeRect, view: NodeRect) =>
   rect.x >= view.x && rect.y >= view.y && rect.x + rect.width <= view.x + view.width && rect.y + rect.height <= view.y + view.height;
 
 /** True when `rect` and `view` share no area. */
+/** `rect` reaches past the view's bottom edge, into the toolbar band, while still partly in view. */
+const underBand = (rect: NodeRect, view: NodeRect) =>
+  rect.y < view.y + view.height && rect.y + rect.height > view.y + view.height;
 const whollyOutside = (rect: NodeRect, view: NodeRect) =>
   rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= view.y + view.height || rect.y + rect.height <= view.y;
 
@@ -307,7 +317,15 @@ export function nearestFreeAnywhere(wish: NodeRect, occupied: ReadonlyArray<Node
   return found;
 }
 
-export function placeTiles({ at, sizes, occupied, view, aim = false, gap = DROP_GAP, work }: PlaceRequest): Placed {
+/** `rect` moved up out of the band under the view's bottom edge, when it
+ *  reaches into it and fits in the view (GM r7 answer 2); else as it is. */
+function offBand(rect: NodeRect, view: NodeRect): NodeRect {
+  const bottom = view.y + view.height;
+  if (rect.y + rect.height <= bottom || rect.height > view.height) return rect;
+  return { ...rect, y: Math.min(rect.y, Math.floor(bottom - rect.height)) };
+}
+
+export function placeTiles({ at, sizes, occupied, view, aim = false, band = false, gap = DROP_GAP, work }: PlaceRequest): Placed {
   const taken: NodeRect[] = [...occupied];
   const spots: Array<{ x: number; y: number }> = [];
   const outside: number[] = [];
@@ -315,11 +333,20 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, gap = DROP_
     const wish: NodeRect = { x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2), width: w, height: h };
     const aimed = aim && index === 0;
     let spot: { x: number; y: number } | null = null;
-    if (aimed) spot = free(wish, taken, gap) ? { x: wish.x, y: wish.y } : nearestFreeAnywhere(wish, taken, gap, work);
+    if (aimed) {
+      const start = band && view ? offBand(wish, view) : wish;
+      if (free(start, taken, gap)) spot = { x: start.x, y: start.y };
+      // Moved off the band: kept in view if it can be, near its aim.
+      else if (start !== wish) spot = nearestFree(start, taken, view, gap, work);
+      spot ??= nearestFreeAnywhere(start, taken, gap, work);
+    }
     else if (view) spot = nearestFree(wish, taken, view, gap, work);
     spot ??= nearestFreeAnywhere(wish, taken, gap, work);
     const rect = { x: spot.x, y: spot.y, width: w, height: h };
-    if (view && (aimed ? whollyOutside(rect, view) : !insideView(rect, view))) outside.push(index);
+    // Aimed, it is reported only when wholly out of view; under the band it
+    // would be hidden by the toolbar, so reaching into the band counts too
+    // (no free spot in view to nudge it to): the chip points at it.
+    if (view && (aimed ? whollyOutside(rect, view) || (band && underBand(rect, view)) : !insideView(rect, view))) outside.push(index);
     taken.push(rect);
     spots.push({ x: spot.x, y: spot.y });
   });

@@ -20,10 +20,14 @@ export function nearestEdge(point: { x: number; y: number }, width: number, heig
   return dy < 0 ? 'top' : 'bottom';
 }
 
-/** A tile is plainly seen when it is wholly in view, or (one bigger than the
- *  view) when it covers the view's centre (GM r4 answer 9). */
+/** A tile is plainly seen when it is wholly in view, or (only one bigger
+ *  than the view, which can never be wholly in it) when it covers the view's
+ *  centre (GM r4 answer 9, r7 answer 1). Any other tile is either wholly in
+ *  view or, for the chip, still outside it. */
 export const seenIn = (rect: NodeRect, view: NodeRect) => {
+  if (insideView(rect, view)) return true;
+  if (rect.width <= view.width && rect.height <= view.height) return false;
   const cx = view.x + view.width / 2;
   const cy = view.y + view.height / 2;
-  return insideView(rect, view) || (rect.x <= cx && cx <= rect.x + rect.width && rect.y <= cy && cy <= rect.y + rect.height);
+  return rect.x <= cx && cx <= rect.x + rect.width && rect.y <= cy && cy <= rect.y + rect.height;
 };

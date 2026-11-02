@@ -5,20 +5,152 @@ import type { MoodboardOp } from '../../lib/moodboardEdits';
 import type { BoardPlaceholder } from './boardPlaceholder';
 
 /**
- * Adds in flight, kept per board rather than in the open Studio (GM's ruling
- * on review 4: an add whose person left the board mid-upload isn't dropped,
- * it lands on that board). A board's held spots and List rows live here, by
- * the board's draft key, so they outlive a board switch or the Studio
- * closing: placement still counts them, and they show again when the person
- * comes back while the upload runs. Client-only: never in a draft, never
- * saved, never sent.
+ * Adds in flight, kept per board rather than in the open Studio (GM on
+ * review 4: an add whose person left the board mid-upload isn't dropped, it
+ * lands on that board). Client-only: never in a draft, never saved, never sent.
+ *
+ * A board is named by its draft instance, not its draft key (review 5,
+ * MEDIUM-1): every unsaved board shares the key "new", and New or a delete
+ * resets that key for a fresh draft. So each add holds a `BoardRef`: the key,
+ * the draft's epoch (a reset bumps it, a copy keeps it) and, once the board
+ * is saved, its id. When a draft is copied to another key (its first save,
+ * a move) the ref follows it at once, so a later reset of the old key can't
+ * send the add to the fresh draft.
  */
-interface BoardAddsState {
-  /** By the board's draft key as it was when the add started (read through its aliases). */
-  held: Record<string, BoardPlaceholder[]>;
+export interface BoardRef {
+  key: string;
+  epoch: number;
+  savedId: string | null;
 }
 
-export const useBoardAddStore = create<BoardAddsState>(() => ({ held: {} }));
+const draftState = () => useAssetStudioDraftStore.getState();
+const resolve = (key: string) => resolveAssetStudioDraftKey(draftState(), key);
+
+/** The board the draft at `key` is now. */
+export function boardRefOf(key: string): BoardRef {
+  const resolved = resolve(key);
+  const entry = draftState().entries[resolved];
+  return { key: resolved, epoch: entry?.epoch ?? 0, savedId: entry?.savedId ?? null };
+}
+
+/** True when the draft at `key` is the board `ref` names: the same draft
+ *  instance, or (a saved board, reopened after its draft was reset, as after
+ *  an undone delete) the same saved board. */
+export function isBoard(ref: BoardRef | undefined, key: string): boolean {
+  if (!ref) return false;
+  const resolved = resolve(key);
+  if (resolved !== ref.key) return false;
+  const entry = draftState().entries[resolved];
+  if (!entry) return false;
+  return entry.epoch === ref.epoch || (ref.savedId !== null && entry.savedId === ref.savedId);
+}
+
+/** True when two refs name one board. */
+export function sameBoard(a: BoardRef, b: BoardRef): boolean {
+  return a.key === b.key && (a.epoch === b.epoch || (a.savedId !== null && a.savedId === b.savedId));
+}
+
+/** Where `ref`'s board stands: its draft is still here (`draft`), only its
+ *  saved board is left (`saved`), or it is gone (a discarded unsaved draft). */
+export function boardStanding(ref: BoardRef): 'draft' | 'saved' | 'gone' {
+  const entry = draftState().entries[resolve(ref.key)];
+  if (entry && entry.epoch === ref.epoch) return 'draft';
+  return ref.savedId ? 'saved' : 'gone';
+}
+
+// Every ref an add or a held spot holds, followed as drafts move.
+const refs = new Set<BoardRef>();
+let following = false;
+function follow() {
+  if (following) return;
+  following = true;
+  useAssetStudioDraftStore.subscribe((state) => {
+    let moved = false;
+    const held = useBoardAddStore.getState().held.flatMap((holder) => (holder.board ? [holder.board] : []));
+    for (const ref of new Set([...refs, ...held])) {
+      const to = resolveAssetStudioDraftKey(state, ref.key);
+      const entry = state.entries[to];
+      // Copied on (an alias appeared): the same draft, at its new key.
+      if (to !== ref.key && entry?.epoch === ref.epoch) { ref.key = to; moved = true; }
+      // Its first save landed: the board has an id now.
+      const here = state.entries[ref.key];
+      if (here && here.epoch === ref.epoch && here.savedId && here.savedId !== ref.savedId) { ref.savedId = here.savedId; moved = true; }
+    }
+    // The held spots read their refs: redraw.
+    if (moved) useBoardAddStore.setState((current) => ({ held: [...current.held] }));
+  });
+}
+
+/** A ref for an add made now on the board at `key`, followed until `drop`ped. */
+export function trackBoard(key: string): BoardRef {
+  follow();
+  const ref = boardRefOf(key);
+  refs.add(ref);
+  return ref;
+}
+export function untrackBoard(ref: BoardRef) { refs.delete(ref); }
+
+/** True while an add is on its way to the board the draft at `key` is now. */
+export function addsInFlight(key: string): boolean {
+  return [...refs].some((ref) => isBoard(ref, key) && boardStanding(ref) === 'draft');
+}
+
+/**
+ * Adds on their way, by board, in browser storage (GM r8 answer 5): a reload
+ * mid-upload loses them, so the next open of that board says so, once. Each
+ * entry goes when its add lands or fails; one left by an earlier page load
+ * is one the reload lost. With no storage, nothing is kept and nothing said.
+ */
+const PENDING_KEY = 'nebula:moodboard-adds-in-flight';
+const PAGE = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random());
+interface PendingAdd { id: string; board: string; name: string; page: string }
+function readPending(): PendingAdd[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PENDING_KEY) ?? '[]') as unknown;
+    return Array.isArray(parsed) ? parsed.filter((it): it is PendingAdd => typeof it?.id === 'string' && typeof it?.board === 'string'
+      && typeof it?.name === 'string' && typeof it?.page === 'string') : [];
+  } catch { return []; }
+}
+function writePending(list: PendingAdd[]) {
+  try {
+    if (list.length) window.localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+    else window.localStorage.removeItem(PENDING_KEY);
+  } catch { /* no storage: nothing kept */ }
+}
+/** Files on their way to the saved board `board`, by holder id. */
+export function recordPending(board: string, files: Array<{ id: string; name: string }>) {
+  if (files.length) writePending([...readPending(), ...files.map((file) => ({ ...file, board, page: PAGE }))]);
+}
+// A page going away (a reload, a close) cuts its uploads short, and the
+// browser can still run their failure on the way out: those adds didn't
+// end, so their records stay for the next load to say (GM r8 answer 5).
+let leaving = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => { leaving = true; });
+  window.addEventListener('pageshow', () => { leaving = false; });
+}
+/** The adds `ids` name have ended (landed, failed or cancelled). */
+export function clearPending(ids: Iterable<string>) {
+  if (leaving) return;
+  const gone = new Set(ids);
+  const list = readPending();
+  const kept = list.filter((it) => !(gone.has(it.id) && it.page === PAGE));
+  if (kept.length !== list.length) writePending(kept);
+}
+/** The names of `board`'s adds an earlier page load left on their way (lost to a reload), taken once. */
+export function takeReloadLost(board: string): string[] {
+  const list = readPending();
+  const lost = list.filter((it) => it.board === board && it.page !== PAGE);
+  if (lost.length) writePending(list.filter((it) => !lost.includes(it)));
+  return lost.map((it) => it.name);
+}
+
+interface BoardAddsState {
+  /** Every spot and List row held, each with its board. */
+  held: BoardPlaceholder[];
+}
+
+export const useBoardAddStore = create<BoardAddsState>(() => ({ held: [] }));
 
 /** Held spots' ids, unique across every board. */
 let holderSeq = 0;
@@ -27,48 +159,44 @@ export function nextHolderId(): string {
   return `placeholder-${holderSeq}`;
 }
 
-/** Nothing held, ids from 1 again (tests). */
+/** Nothing held (tests). Ids keep counting, as in a page: a fade's late
+ *  release left by one test can never take a later test's spot. */
 export function resetBoardAdds() {
-  holderSeq = 0;
   openBoard = null;
-  useBoardAddStore.setState({ held: {} });
+  refs.clear();
+  claims.length = 0;
+  turn = Promise.resolve();
+  useBoardAddStore.setState({ held: [] });
 }
 
-const resolve = (key: string) => resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key);
-
-/** Every spot and row held for the board `key` names (a key that was copied to another counts as that one). */
-export function heldOn(held: Record<string, BoardPlaceholder[]>, key: string): BoardPlaceholder[] {
-  const board = resolve(key);
-  const lists = Object.entries(held).filter(([from]) => from === board || resolve(from) === board).map(([, list]) => list);
-  return lists.length === 1 ? lists[0] : lists.flat();
+/** Every spot and row held on the board `key` names now. */
+export function heldOn(held: readonly BoardPlaceholder[], key: string): BoardPlaceholder[] {
+  return held.filter((holder) => isBoard(holder.board, key));
 }
 
-/** Change the held spots of the board `key` names. */
-export function changeHeld(key: string, change: (current: BoardPlaceholder[]) => BoardPlaceholder[]) {
-  const board = resolve(key);
-  useBoardAddStore.setState((state) => {
-    const next = change(heldOn(state.held, board));
-    const held = Object.fromEntries(Object.entries(state.held).filter(([from]) => from !== board && resolve(from) !== board));
-    if (next.length) held[board] = next;
-    return { held };
-  });
+/** Hold `holders` (each with its board). */
+export function addHeld(holders: BoardPlaceholder[]) {
+  if (holders.length) useBoardAddStore.setState((state) => ({ held: [...state.held, ...holders] }));
 }
 
-/** The holders `ids` name, gone from whichever board holds them. */
+/** Change the held spots `ids` name. */
+export function changeHeld(ids: Iterable<string>, change: (holder: BoardPlaceholder) => BoardPlaceholder) {
+  const which = new Set(ids);
+  if (which.size === 0) return;
+  useBoardAddStore.setState((state) => ({ held: state.held.map((holder) => (which.has(holder.id) ? change(holder) : holder)) }));
+}
+
+/** The holders `ids` name, gone. */
 export function releaseHeld(ids: Iterable<string>) {
   const gone = new Set(ids);
   if (gone.size === 0) return;
-  useBoardAddStore.setState((state) => ({ held: Object.fromEntries(Object.entries(state.held)
-    .map(([key, list]) => [key, list.filter((holder) => !gone.has(holder.id))] as const)
-    .filter(([, list]) => list.length > 0)) }));
+  useBoardAddStore.setState((state) => ({ held: state.held.filter((holder) => !gone.has(holder.id)) }));
 }
 
 /** Of the holders `ids` name, the filled ones (their image has faded in), gone. */
 export function releaseFilled(ids: Iterable<string>) {
   const gone = new Set(ids);
-  useBoardAddStore.setState((state) => ({ held: Object.fromEntries(Object.entries(state.held)
-    .map(([key, list]) => [key, list.filter((holder) => !(gone.has(holder.id) && holder.filled))] as const)
-    .filter(([, list]) => list.length > 0)) }));
+  useBoardAddStore.setState((state) => ({ held: state.held.filter((holder) => !(gone.has(holder.id) && holder.filled)) }));
 }
 
 /** The board open in the Studio now, and how it takes an add as its own
@@ -82,13 +210,43 @@ let openBoard: OpenBoard | null = null;
 
 export function setOpenBoard(board: OpenBoard) { openBoard = board; }
 export function clearOpenBoard(board: OpenBoard) { if (openBoard === board) openBoard = null; }
-/** The open board, if it is the one `key` names. */
-export function openBoardFor(key: string): OpenBoard | null {
-  return openBoard && resolve(openBoard.key) === resolve(key) ? openBoard : null;
+/** The open board, if it is the board `ref` names. */
+export function openBoardFor(ref: BoardRef): OpenBoard | null {
+  return openBoard && isBoard(ref, openBoard.key) ? openBoard : null;
 }
 
 /** The images of the board `key` names, as its draft holds them. */
 export function boardImages(key: string): MoodboardImage[] {
-  const draft = useAssetStudioDraftStore.getState().entries[resolve(key)]?.draft as { images?: MoodboardImage[] } | undefined;
+  const draft = draftState().entries[resolve(key)]?.draft as { images?: MoodboardImage[] } | undefined;
   return draft?.images ?? [];
+}
+
+/**
+ * The paste backstop (GM r4 answer 7), per board (GM r8 answer 3): a file
+ * identical (by size, type and bytes hash) to one still being added to the
+ * same board is ignored there; the same image on another board goes. Kept
+ * here, not in the Studio, so it holds across a board switch or the Studio
+ * closing and opening again. Adds take turns: each one's files are checked
+ * only after the add before it has claimed its own.
+ */
+const claims: Array<{ signature: string; board: BoardRef }> = [];
+let turn: Promise<unknown> = Promise.resolve();
+
+/** Claims `signatures` for `board` in turn; resolves to which of them were free (already being added there: false). */
+export function claimFiles(board: BoardRef, signatures: () => Promise<string[]>): Promise<{ free: boolean[]; release: () => void }> {
+  const claim = turn.then(async () => {
+    const list = await signatures();
+    const taken = (signature: string) => claims.some((it) => it.signature === signature && sameBoard(it.board, board));
+    const mine: Array<{ signature: string; board: BoardRef }> = [];
+    const free = list.map((signature) => {
+      if (taken(signature)) return false;
+      mine.push({ signature, board });
+      return true;
+    });
+    claims.push(...mine);
+    const release = () => { for (const it of mine) { const at = claims.indexOf(it); if (at >= 0) claims.splice(at, 1); } };
+    return { free, release };
+  });
+  turn = claim.catch(() => undefined);
+  return claim;
 }

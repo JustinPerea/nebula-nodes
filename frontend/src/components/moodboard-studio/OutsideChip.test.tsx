@@ -178,6 +178,14 @@ describe('a tile bigger than the view', () => {
     expect(seenIn({ x: 400, y: 300, width: 3000, height: 3000 }, view)).toBe(true);
     expect(seenIn({ x: 600, y: 300, width: 3000, height: 3000 }, view)).toBe(false);
   });
+
+  it('seenIn: the centre rule is only for a tile bigger than the view (GM r7 answer 1)', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    // Smaller than the view, over its centre, but cut by its top edge: still outside.
+    expect(seenIn({ x: 400, y: -100, width: 300, height: 600 }, view)).toBe(false);
+    // Taller than the view, over its centre: seen.
+    expect(seenIn({ x: 400, y: -100, width: 300, height: 900 }, view)).toBe(true);
+  });
 });
 
 // GM r4 answer 6: focus never falls to the page body.

@@ -1,3 +1,4 @@
+import type { BoardRef } from './boardAdds';
 /**
  * Placeholder tiles on the Board view (GM, #210 r4 answer 1 and r5): a spot
  * held for a tile still on its way. Today that is a file uploading; a pasted
@@ -33,6 +34,10 @@ export interface BoardPlaceholder {
   source: PlaceholderSource;
   filled?: PlaceholderFill;
   listOnly?: boolean;
+  /** The board the spot is held on (boardAdds.ts): its draft instance, and its saved id once it has one. */
+  board?: BoardRef;
+  /** Filled while the person was away from its board: it fades in, with the chip if outside the view, when they come back. */
+  away?: boolean;
 }
 
 /** The most characters (grapheme clusters) a label shows before its ellipsis. */
@@ -46,6 +51,11 @@ export function clipGraphemes(text: string, max = PLACEHOLDER_LABEL_MAX): string
   const clusters = Segmenter ? Array.from(new Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment)
     : Array.from(text);
   return clusters.length <= max ? text : `${clusters.slice(0, max - 1).join('')}…`;
+}
+
+/** The placeholder's spoken name (GM r8 answer 6): "river.png, uploading", or a link's "example.com, uploading". */
+export function placeholderSpokenName(source: PlaceholderSource): string {
+  return `${source.kind === 'file' ? source.name : source.host}, uploading`;
 }
 
 /** The label in a placeholder's top-left corner: the file's name, or a link's host. */

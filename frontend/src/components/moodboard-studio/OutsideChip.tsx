@@ -92,8 +92,8 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   // Whether the chip has focus, kept as state so the render can keep the
   // button drawn while it does (review 4, MEDIUM-3).
   const [focused, setFocused] = useState(false);
-  // Gone: the person's own pan or zoom brought the tiles into view, or the
-  // board has no size. With focus on the chip, the board takes focus first,
+  // Gone: any camera move brought the tiles into view (the person's pan or
+  // zoom, Fit, a refit as the column resizes), or the board has no size. With focus on the chip, the board takes focus first,
   // while the button is still on the page, so focus never drops to the body
   // (review 4, MEDIUM-3); a layout effect, so it happens before paint.
   const gone = inView || !view;

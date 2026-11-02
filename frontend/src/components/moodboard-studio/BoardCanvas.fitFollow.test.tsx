@@ -122,9 +122,13 @@ const resize = (width: number, height: number) => act(() => flow.resize(width, h
 const lastViewport = () => flow.setViewport.mock.calls.at(-1)?.[0] as View | undefined;
 /** Run the frames waiting now (one spring step) at time `t`. */
 const step = (t: number) => act(() => { frames.splice(0).forEach((cb) => cb(t)); });
-/** The whole fit for the 2000 x 1000 board in a column this size. */
-const fitViewport = (width: number, height: number) =>
-  getViewportForBounds({ x: 0, y: 0, width: 2000, height: 1000 }, width, height, 0.02, 1, 0.12);
+/** The whole fit for the 2000 x 1000 board in a column this size: framed in
+ *  the view placement reads, the column less a 16 px inset (jsdom draws no
+ *  toolbar, so there is no band to clear). */
+const fitViewport = (width: number, height: number) => {
+  const to = getViewportForBounds({ x: 0, y: 0, width: 2000, height: 1000 }, width - 32, height - 32, 0.02, 1, 0.12);
+  return { ...to, x: to.x + 16, y: to.y + 16 };
+};
 const fitButton = () => document.querySelector<HTMLButtonElement>('[aria-label="Fit the board"]')!;
 const press = (label: string) => act(() => { document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click(); });
 const wheel = () => new WheelEvent('wheel', { deltaY: 100 });
@@ -326,6 +330,25 @@ describe('a fitted board follows its column', () => {
     expect(frames).toHaveLength(1);
     runFrames();
     expect(camera()).toEqual(fitViewport(430, 851));
+  });
+
+  it('Fit frames the board clear of the toolbar, in the view placement and the chip read (GM r8 answer 4)', () => {
+    const rect = (top: number, bottom: number) => ({ x: 0, y: top, top, bottom, left: 0, right: 430, width: 430, height: bottom - top, toJSON: () => ({}) }) as DOMRect;
+    const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function box(this: HTMLElement) {
+      if (this.classList.contains('moodboard-board__controls')) return rect(800, 838);
+      if (this.classList.contains('moodboard-board')) return rect(0, 851);
+      return rect(0, 0);
+    });
+    try {
+      mounted();
+      resize(430, 851);
+      runFrames();
+      act(() => { fitButton().click(); });
+      runFrames();
+      // The column less the 16 px inset and the 51 px the toolbar takes at the bottom.
+      const to = getViewportForBounds({ x: 0, y: 0, width: 2000, height: 1000 }, 430 - 32, 851 - 51 - 32, 0.02, 1, 0.12);
+      expect(camera()).toEqual({ ...to, x: to.x + 16, y: to.y + 16 });
+    } finally { boxes.mockRestore(); }
   });
 
   it('Fit on an empty board does nothing', () => {

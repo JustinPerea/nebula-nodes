@@ -91,6 +91,27 @@ describe('no room in view', () => {
 });
 
 describe('a drop', () => {
+  it('aimed under the toolbar band, moves up out of it by the least, wholly in view, with no chip (GM r7 answer 2)', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    const { spots, outside } = placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 100]], occupied: [], view, aim: true, band: true });
+    expect(spots).toEqual([{ x: 400, y: 600 }]);
+    expect(outside).toEqual([]);
+    // A tile where it would go: the nearest free spot in view, near the aim.
+    const tile = { x: 350, y: 560, width: 300, height: 140 };
+    const off = placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 100]], occupied: [tile], view, aim: true, band: true });
+    expect(insideView({ ...off.spots[0], width: 200, height: 100 }, view)).toBe(true);
+    expect(off.outside).toEqual([]);
+    // With no band (the board's own edge), the aim is kept, partly past the view.
+    expect(placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 100]], occupied: [], view, aim: true }).spots).toEqual([{ x: 400, y: 640 }]);
+    // No free spot in view left for it: if it still reaches into the band, it is reported, so the chip points at it.
+    const full = placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 100]], occupied: [{ x: 0, y: 0, width: 1000, height: 650 }], view, aim: true, band: true });
+    const lands = { ...full.spots[0], width: 200, height: 100 };
+    expect(lands.y < 700 && lands.y + 100 > 700).toBe(true);
+    expect(full.outside).toEqual([0]);
+    // A tile taller than the view can't be wholly in it: it keeps the aim rather than climbing past the view's top.
+    expect(placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 900]], occupied: [], view, aim: true, band: true }).spots).toEqual([{ x: 400, y: 240 }]);
+  });
+
   it('lands where aimed when that is free, even partly past the view, with no chip (GM r4 answer 3)', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     const { spots, outside } = placeTiles({ at: { x: 990, y: 350 }, sizes: [[200, 100]], occupied: [], view, aim: true });

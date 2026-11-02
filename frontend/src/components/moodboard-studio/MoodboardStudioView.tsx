@@ -52,10 +52,11 @@ import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../.
 import { BoardCanvas, type BoardMove, type BoardPlaceholder, type BoardTarget, type OutsideTiles } from './BoardCanvas';
 import { BoardSidePanel } from './BoardSidePanel';
 import { BoardUndoToast, type BoardToast } from './BoardUndoToast';
-import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages } from './pasteImages';
+import { ALREADY_BEING_ADDED, LINKS_NOT_ADDED, NOTHING_TO_PASTE, fileSignature, isStudioPasteTarget, readClipboardImages, reloadLostLine } from './pasteImages';
 import { MoodboardListView } from './MoodboardListView';
-import { boardImages, changeHeld, clearOpenBoard, heldOn, nextHolderId, openBoardFor, releaseFilled, releaseHeld, setOpenBoard, useBoardAddStore,
-  type OpenBoard } from './boardAdds';
+import { addHeld, addsInFlight, boardImages, clearPending, recordPending, takeReloadLost, boardStanding, changeHeld, claimFiles, clearOpenBoard, heldOn, nextHolderId,
+  openBoardFor, releaseFilled, releaseHeld, setOpenBoard, trackBoard, untrackBoard, useBoardAddStore,
+  type BoardRef, type OpenBoard } from './boardAdds';
 import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
@@ -181,37 +182,164 @@ function trimmedName<D extends Partial<Record<BoardFieldKey, unknown>>>(fields: 
   return typeof fields.name === 'string' ? { ...fields, name: fields.name.trim() } : fields;
 }
 
+/** Resolves once the draft at `key` has no save out. */
+function whenNotSaving(key: string): Promise<void> {
+  return new Promise((done) => {
+    let stop: (() => void) | null = null;
+    const check = () => {
+      const store = useAssetStudioDraftStore.getState();
+      if (store.entries[resolveAssetStudioDraftKey(store, key)]?.pendingSaveId) return false;
+      stop?.();
+      done();
+      return true;
+    };
+    if (!check()) stop = useAssetStudioDraftStore.subscribe(() => { check(); });
+  });
+}
+
+/**
+ * A board not saved yet, saved where the person isn't (GM r8 answers 1 and
+ * 2): its add landed while they were away, or New is about to open a fresh
+ * draft over it. It is created as the open Studio's first save creates it
+ * (under its name, or the default one if it has none), so it shows in the
+ * rail, and its draft moves to the saved key. Returns the board's id, or
+ * null if the save failed (its line is on that board's draft).
+ */
+async function saveAway(key: string): Promise<string | null> {
+  await whenNotSaving(key);
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (!entry) return null;
+  if (entry.savedId) return entry.savedId;
+  const named = entry.draft as MoodboardDraft;
+  if (!named.name.trim()) store.patch(at, { draft: { ...named, name: emptyDraft().name } });
+  const attempt = store.beginSave(at);
+  if (!attempt) return null;
+  const sending = attempt.entry.draft as MoodboardDraft;
+  try {
+    const sent = new Set(sending.pendingOps ?? []);
+    const result = await createMoodboard(createBody(sending));
+    const now = useAssetStudioDraftStore.getState().entries[at];
+    if (now) {
+      const drafted = sending as Partial<Record<BoardFieldKey, unknown>>;
+      const asSent = Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
+        .map((field) => [field, drafted[field]]));
+      store.patch(at, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), result, sent, asSent), thumbnail: result.thumbnail });
+    }
+    if (store.finishSave(at, attempt.id, attempt.revision, result.id, result.thumbnail)) {
+      store.copyTo(at, assetStudioDraftKey('moodboard', result.projectId ? 'project' : 'global', result.id, result.projectId));
+    }
+    return result.id;
+  } catch (err) {
+    store.failSave(at, attempt.id, failureCopy(err, { heading: SAVE_BOARD }));
+    return null;
+  }
+}
+
+/** True when the unsaved draft at `key` holds something of the person's:
+ *  images, or an add still on its way (GM r8 answer 1: it counts as content). */
+function unsavedWithContent(key: string): boolean {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const entry = store.entries[at];
+  if (!entry || entry.savedId || at !== key) return false;
+  return (entry.draft as MoodboardDraft).images.length > 0 || addsInFlight(key);
+}
+
+/** Before New (or a delete) opens a fresh draft at the unsaved key `key`:
+ *  an unsaved board with content is saved first, so New never drops a paste
+ *  (GM r8 answer 1). False if that save failed: keep the draft. */
+async function keepUnsaved(key: string): Promise<boolean> {
+  if (!unsavedWithContent(key)) return true;
+  return (await saveAway(key)) !== null;
+}
+
+/** A failed write of an add to a board the person isn't on (review 5, LOW-4). */
+class AwayWriteFailed extends Error {
+  readonly failure: unknown;
+  constructor(failure: unknown) { super('away write failed'); this.failure = failure; }
+}
+
 /**
  * An add whose person left its board while it uploaded (GM on review 4: it's
  * their paste, so it isn't dropped). It lands on that board, never the one
  * open now, written through the draft store:
  * - a saved board: the add goes to the server as an edit of that board (no
  *   base version, so it lands on the board as it is now, at the spot it
- *   held). If its draft holds nothing unsent, the draft takes the saved
- *   board at once; otherwise the next open reads it (follow), as any outside
- *   edit;
- * - a board not saved yet: the add waits in its draft, which is saved with it.
+ *   held). Its draft takes the board once no save of it is out, if it
+ *   holds nothing unsent; otherwise the send or the next open reads it
+ *   (review 5, LOW-3);
+ * - a board not saved yet: the add goes in its draft, and the board is saved
+ *   now, so it shows in the rail (GM r8 answer 2);
+ * - a board deleted meanwhile (its edit answers 404), or an unsaved draft
+ *   discarded: the add is cancelled, silently (GM r8 answer 1).
  * There's no undo step: the board's undo history went when the person left it.
+ * Resolves to whether it landed; a failed write throws AwayWriteFailed.
  */
-async function landElsewhere(boardKey: string, ops: MoodboardOp[], aspects: Record<string, number>): Promise<void> {
-  const store = useAssetStudioDraftStore.getState();
-  const key = resolveAssetStudioDraftKey(store, boardKey);
-  const entry = store.entries[key];
-  if (entry?.savedId) {
-    const edited = await editMoodboard(entry.savedId, sendableBatch(ops));
+async function landAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>): Promise<boolean> {
+  for (;;) {
+    const standing = boardStanding(board);
+    if (standing === 'gone') return false;
+    const store = useAssetStudioDraftStore.getState();
+    if (standing === 'draft' && !board.savedId) {
+      // Its first save is out: once it lands, the board has an id.
+      if (store.entries[board.key]?.pendingSaveId) {
+        await whenNotSaving(board.key);
+        continue;
+      }
+      store.edit(board.key, (draft) => {
+        const current = draft as MoodboardDraft;
+        const images = applyOps(current.images, ops, { aspects });
+        return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+          pendingOps: queueOps(current.pendingOps, ops) };
+      });
+      if (await saveAway(board.key) === null) throw new AwayWriteFailed(null);
+      return true;
+    }
+    const savedId = board.savedId!;
+    let edited: Awaited<ReturnType<typeof editMoodboard>>;
+    try {
+      edited = await editMoodboard(savedId, sendableBatch(ops));
+    } catch (err) {
+      // Deleted meanwhile (in the trash, or gone): cancelled.
+      if ((err as { status?: unknown }).status === 404) return false;
+      throw new AwayWriteFailed(err);
+    }
+    // The board's draft takes it if it is behind it. A save of the board out
+    // now is waited out first: one that reached the server after the add
+    // holds it already (a newer version). Edits not sent yet wait for their
+    // own send, which rebases them on the board as it is; a draft not loaded
+    // reads the board when it loads; a kept draft reads it again when the
+    // board next opens (follow).
+    await whenNotSaving(board.key);
+    const key = resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), board.key);
     const now = useAssetStudioDraftStore.getState().entries[key];
-    if (now?.loaded && !now.dirty && !now.pendingSaveId) {
+    if (now?.loaded && now.savedId === savedId && !now.dirty && !now.pendingSaveId
+      && ((now.draft as MoodboardDraft).version ?? 0) < edited.board.version) {
       store.patch(key, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), edited.board), thumbnail: edited.board.thumbnail });
     }
-    return;
+    return true;
   }
-  if (!entry) return;
-  store.edit(key, (draft) => {
-    const current = draft as MoodboardDraft;
-    const images = applyOps(current.images, ops, { aspects });
-    return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
-      pendingOps: queueOps(current.pendingOps, ops) };
-  });
+}
+
+/** A failed away write keeps the image (review 5, LOW-4): its add waits in
+ *  that board's draft, which the next save sends, and the board says why. */
+function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<string, number>, err: unknown) {
+  const store = useAssetStudioDraftStore.getState();
+  const key = resolveAssetStudioDraftKey(store, board.key);
+  const entry = store.entries[key];
+  if (!entry || !(entry.epoch === board.epoch || (board.savedId && entry.savedId === board.savedId))) return;
+  if (entry.loaded && board.savedId) {
+    store.edit(key, (draft) => {
+      const current = draft as MoodboardDraft;
+      const images = applyOps(current.images, ops, { aspects });
+      return { ...current, images, coverImageId: coverAfter(current.coverImageId ?? null, ops, images),
+        pendingOps: queueOps(current.pendingOps, ops) };
+    });
+  }
+  // An unsaved board's failed save has its line already (saveAway).
+  if (err !== null) store.patch(key, { saveState: 'error', saveError: failureCopy(err, { heading: SAVE_BOARD }), retry: 'save' });
 }
 
 /** A new board's first save: everything but the checked-edit bookkeeping. */
@@ -308,8 +436,9 @@ export function MoodboardStudioView() {
   // (boardAdds.ts), so an add outlives leaving the board and still lands on it.
   const heldAll = useBoardAddStore((state) => state.held);
   const aliases = useAssetStudioDraftStore((state) => state.aliases);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- aliases change which keys name this board
-  const placeholders = useMemo(() => heldOn(heldAll, key), [heldAll, key, aliases]);
+  // Which spots are this board's reads the draft's key, epoch and saved id (a fresh draft at the same key holds none).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- aliases, epoch and savedId change which board this is
+  const placeholders = useMemo(() => heldOn(heldAll, key), [heldAll, key, aliases, epoch, savedId]);
   // The List shows each file still uploading as its own row (GM): a filled one is its image's row already.
   const listUploads = useMemo(() => placeholders.filter((holder) => !holder.filled), [placeholders]);
   /** Filled placeholders whose image has faded in (or ran out of time): gone. */
@@ -733,11 +862,10 @@ export function MoodboardStudioView() {
   // came back (boardAdds.ts).
   const landHere = useRef<OpenBoard['commit']>(() => false);
   useLayoutEffect(() => {
-    landHere.current = (ops, label, aspects, now) => {
-      if (!isCurrent()) return false;
-      commitOps(ops, label, { now, aspects });
-      return true;
-    };
+    // Taken only if the step was (review 5, M17): a Studio still drawn but
+    // no longer current (left mid-render, its project changing) takes
+    // nothing, so the add lands through the draft store instead of being lost.
+    landHere.current = (ops, label, aspects, now) => commitOps(ops, label, { now, aspects }) !== null;
   });
   useLayoutEffect(() => {
     if (!loaded) return undefined;
@@ -761,18 +889,17 @@ export function MoodboardStudioView() {
    *  person leaves the board while it uploads (another board, or out of the
    *  Studio), it still lands on that board, placed as if they had stayed,
    *  and written through the draft store, never to the board open now. */
-  const addFiles = (files: File[], target: BoardTarget | null): Promise<void> => {
+  const addFiles = (files: File[], target: BoardTarget | null, board: BoardRef = trackBoard(key)): Promise<void> => {
     if (files.length === 0) return Promise.resolve();
-    // The board the add was made on, for good.
-    const boardKey = key;
-    // Still this Studio on that board (the chip and the toast are this view's).
-    const here = () => isCurrent() && openBoardFor(boardKey) !== null;
+    // Still this Studio on the add's board (the chip and the toast are this view's).
+    const here = () => isCurrent() && openBoardFor(board) !== null;
     // Each new add replaces the last one's chip.
     if (target) setOutsideTiles(null);
     const uploads = uploadFiles(files);
     // Read once the spots are held; until then a refusal waits here.
     uploads.catch(() => {});
     let held: BoardPlaceholder[] = [];
+    let all: BoardPlaceholder[] = [];
     let chip: number | null = null;
     const release = () => {
       releaseHeld(held.map((holder) => holder.id));
@@ -785,18 +912,21 @@ export function MoodboardStudioView() {
         let outside: number[] = [];
         if (target) {
           // The board's tiles and the spots earlier adds still hold.
-          const occupied = [...boardImages(boardKey).flatMap((image) => (image.placements ?? []).map(rectOf)),
-            ...heldOn(useBoardAddStore.getState().held, boardKey).filter((holder) => !holder.listOnly)];
-          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim });
+          const occupied = [...boardImages(board.key).flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, board.key).filter((holder) => !holder.listOnly)];
+          const placed = placeTiles({ at: target.at, sizes, occupied, view: target.view, aim: target.aim, band: target.band });
           outside = placed.outside;
           held = placed.spots.map((spot, index) => ({ id: nextHolderId(), ...spot, width: sizes[index][0], height: sizes[index][1],
-            source: { kind: 'file' as const, name: files[index].name } }));
+            source: { kind: 'file' as const, name: files[index].name }, board }));
         } else {
           held = files.map((file) => ({ id: nextHolderId(), x: 0, y: 0, width: 0, height: 0, listOnly: true,
-            source: { kind: 'file' as const, name: file.name } }));
+            source: { kind: 'file' as const, name: file.name }, board }));
         }
         const holders = held;
-        changeHeld(boardKey, (current) => [...current, ...holders]);
+        all = holders;
+        addHeld(holders);
+        // A reload from here on loses these: the board's next open says so (GM r8 answer 5).
+        if (board.savedId) recordPending(board.savedId, holders.map((holder, index) => ({ id: holder.id, name: files[index].name })));
         if (outside.length > 0 && here()) {
           outsideSeq.current += 1;
           chip = outsideSeq.current;
@@ -816,6 +946,14 @@ export function MoodboardStudioView() {
         const batch = new Set(holders.map((holder) => holder.id));
         // A file the server gave no image for holds nothing from here on.
         const live = holders.map((_, index) => Boolean(urls[index]));
+        // The board as it is now. A saved board that isn't open is read from
+        // the server: its draft is as the person left it, and someone may
+        // have added to it since (review 5, LOW-5).
+        let images = boardImages(board.key);
+        if (target && !openBoardFor(board) && boardStanding(board) !== 'gone' && board.savedId) {
+          const fresh = await fetchMoodboard(board.savedId).catch(() => null);
+          if (fresh) images = fresh.images;
+        }
         // The board may have changed under a held spot meanwhile (an Undo, an
         // agent's add, a drag): a spot now on a tile moves to the nearest free
         // one, in the view the person had (review 3, LOW-2; GM: move). The
@@ -824,8 +962,8 @@ export function MoodboardStudioView() {
         // (review 4, LOW-2).
         const moved = new Map<string, { x: number; y: number }>();
         if (target) {
-          const taken = [...boardImages(boardKey).flatMap((image) => (image.placements ?? []).map(rectOf)),
-            ...heldOn(useBoardAddStore.getState().held, boardKey).filter((holder) => !batch.has(holder.id) && !holder.listOnly)];
+          const taken = [...images.flatMap((image) => (image.placements ?? []).map(rectOf)),
+            ...heldOn(useBoardAddStore.getState().held, board.key).filter((holder) => !batch.has(holder.id) && !holder.listOnly)];
           const rect = (holder: BoardPlaceholder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height });
           const blocked = holders.filter((holder, index) => live[index] && !spotFree(rect(holder), taken));
           for (const holder of holders) if (live[holders.indexOf(holder)] && !blocked.includes(holder)) taken.push(rect(holder));
@@ -848,20 +986,21 @@ export function MoodboardStudioView() {
         const ops: MoodboardOp[] = target
           ? placed.map((item) => ({ op: 'add', images: [{ id: item.imageId, url: item.url }], at: item.at }))
           : [{ op: 'add', images: placed.map((item) => ({ id: item.imageId, url: item.url })) }];
-        const count = boardImages(boardKey).length;
+        const count = images.length;
         const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
         // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
         const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
-        const open = openBoardFor(boardKey);
+        // Each uploaded image takes its spot: its placeholder stays under it
+        // while it fades in (the board drops it then, `dropFilled`).
+        const fills = new Map(placed.map((item) => [item.holder.id, item] as const));
+        const fill = (away: boolean) => changeHeld(fills.keys(), (holder) => {
+          const item = fills.get(holder.id)!;
+          return { ...holder, ...item.at, filled: { imageId: item.imageId, url: item.url }, away };
+        });
+        const open = openBoardFor(board);
         if (open && target) {
-          // Each uploaded image takes its spot: its placeholder stays under it
-          // while it fades in (the board drops it then, `dropFilled`). If no
-          // board is drawn to run the fade (List meanwhile), it goes anyway.
-          const fills = new Map(placed.map((item) => [item.holder.id, item] as const));
-          changeHeld(boardKey, (current) => current.map((holder) => {
-            const item = fills.get(holder.id);
-            return item ? { ...holder, ...item.at, filled: { imageId: item.imageId, url: item.url } } : holder;
-          }));
+          fill(false);
+          // If no board is drawn to run the fade (List meanwhile), it goes anyway.
           window.setTimeout(() => releaseFilled([...fills.keys()]), FILL_FALLBACK_MS);
         }
         // A Board add is sent at once; a List add waits for the List's usual save.
@@ -872,16 +1011,36 @@ export function MoodboardStudioView() {
           return;
         }
         // Not open here any more: it lands on its own board (GM on review 4).
-        release();
-        await landElsewhere(boardKey, ops, aspectsOf);
+        if (!target) release();
+        try {
+          if (!await landAway(board, ops, aspectsOf)) return;
+        } catch (err) {
+          if (!(err instanceof AwayWriteFailed)) throw err;
+          keepFailedAway(board, ops, aspectsOf, err.failure);
+          return;
+        }
+        // Landed: its spots wait, filled, for the person to come back to the
+        // board, where the images fade in with the chip if outside the view
+        // (GM r8, review 5 LOW-3). If they're on it again already, now.
+        if (target) {
+          fill(true);
+          held = [];
+        }
       })
       .catch((err: unknown) => {
         const line = failureCopy(err, { heading: "Couldn't upload the image." });
         // On the board the add was made on, wherever the person is now.
         if (here()) patch({ saveError: line });
-        else useAssetStudioDraftStore.getState().patch(boardKey, { saveError: line });
+        else if (boardStanding(board) !== 'gone') {
+          const store = useAssetStudioDraftStore.getState();
+          store.patch(resolveAssetStudioDraftKey(store, board.key), { saveError: line });
+        }
       })
-      .finally(release);
+      .finally(() => {
+        release();
+        clearPending(all.map((holder) => holder.id));
+        untrackBoard(board);
+      });
   };
 
   /** The chip after a held spot moved (review 4, LOW-3): it points at where
@@ -895,9 +1054,12 @@ export function MoodboardStudioView() {
     const rects = holders.flatMap((holder, index) => {
       if (!live[index]) return [];
       const rect = { ...spotOf(holder), width: holder.width, height: holder.height };
-      // An aimed tile counts as outside only when wholly out of view (GM r4 answers 3 and 4).
+      // An aimed tile counts as outside only when wholly out of view (GM r4
+      // answers 3 and 4), or reaching into the toolbar band (lib/boardPlacement).
+      const bottom = view.y + view.height;
       const out = target.aim && index === 0
-        ? rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= view.y + view.height || rect.y + rect.height <= view.y
+        ? rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= bottom || rect.y + rect.height <= view.y
+          || Boolean(target.band && rect.y + rect.height > bottom)
         : !insideView(rect, view);
       return out ? [rect] : [];
     });
@@ -1127,37 +1289,65 @@ export function MoodboardStudioView() {
   // and separate presses always add.
   const heldPaste = useRef(false);
   // The backstop if the shell's key events aren't reliable: files still
-  // being added from an earlier paste, by size, type and bytes hash. A paste
-  // of an identical file meanwhile is ignored, silently on screen with a
-  // polite announcement (GM r4 answer 7); a different one goes. Pastes take
-  // their turn: each one's files are hashed and checked only after the paste
-  // before it has claimed its own, so two quick presses can't both pass.
-  const pasteAdding = useRef(new Set<string>());
-  const pasteTurn = useRef<Promise<unknown>>(Promise.resolve());
+  // being added to this board from an earlier add, by size, type and bytes
+  // hash. An identical file meanwhile is ignored, silently on screen with a
+  // polite announcement (GM r4 answer 7); a different one goes, and so does
+  // the same image on another board (GM r8 answer 3). Kept per board in
+  // boardAdds.ts, so it holds across a board switch and the Studio closing.
   const addFilesOnce = (files: File[], target: BoardTarget | null) => {
-    const claim = pasteTurn.current.then(async () => {
-      const signatures = await Promise.all(files.map(fileSignature));
-      const fresh: File[] = [];
-      const mine: string[] = [];
-      files.forEach((file, index) => {
-        if (pasteAdding.current.has(signatures[index])) return;
-        fresh.push(file);
-        mine.push(signatures[index]);
-      });
-      for (const signature of mine) pasteAdding.current.add(signature);
+    const board = trackBoard(key);
+    return claimFiles(board, () => Promise.all(files.map(fileSignature))).then(async ({ free, release }) => {
+      const fresh = files.filter((_, index) => free[index]);
       if (fresh.length < files.length) announce(ALREADY_BEING_ADDED);
-      return { fresh, mine };
-    });
-    pasteTurn.current = claim.catch(() => undefined);
-    return claim.then(async ({ fresh, mine }) => {
-      if (fresh.length === 0) return;
       try {
-        await addFiles(fresh, target);
+        if (fresh.length > 0) await addFiles(fresh, target, board);
       } finally {
-        for (const signature of mine) pasteAdding.current.delete(signature);
+        release();
+        if (fresh.length === 0) untrackBoard(board);
       }
     });
   };
+  // Back on a board an add landed on while the person was away (GM r8,
+  // review 5 LOW-3): the new images fade in over their spots as any arrival
+  // does, with the edge chip for those outside the view. No new line. (A
+  // kept draft reads its board again on each open, so a landing its draft
+  // couldn't take shows then.)
+  const awayHere = useMemo(() => placeholders.filter((holder) => holder.away), [placeholders]);
+  useEffect(() => {
+    if (!loaded || awayHere.length === 0) return undefined;
+    const ids = awayHere.map((holder) => holder.id);
+    changeHeld(ids, (holder) => ({ ...holder, away: false }));
+    // The List has no fade: they go. On the Board, the fade drops them, or this does if it can't run.
+    if (view !== 'board') {
+      releaseFilled(ids);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => releaseFilled(ids), FILL_FALLBACK_MS);
+    let frame = 0;
+    let tries = 0;
+    const chipFor = () => {
+      frame = 0;
+      const shownView = pasteTarget.current?.().view ?? null;
+      if (!shownView) {
+        if (tries++ < 60) frame = window.requestAnimationFrame(chipFor);
+        return;
+      }
+      const rects = awayHere.map((holder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height }))
+        .filter((rect) => !insideView(rect, shownView));
+      if (rects.length === 0) return;
+      outsideSeq.current += 1;
+      setOutsideTiles({ id: outsideSeq.current, rects, thumb: awayHere[0].filled?.url ?? null });
+    };
+    chipFor();
+    return () => { window.clearTimeout(timer); if (frame) window.cancelAnimationFrame(frame); };
+  }, [loaded, awayHere, view]);
+  // Adds a reload lost on their way here (GM r8 answer 5): said once, on this board's next open.
+  useEffect(() => {
+    if (!loaded || !savedId) return;
+    const lost = takeReloadLost(savedId);
+    if (lost.length) showInfoLine(reloadLostLine(lost));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open of the board
+  }, [loaded, savedId]);
   useLayoutEffect(() => {
     pasteHandler.current = (event: ClipboardEvent) => {
       if (event.defaultPrevented || loading || !isCurrent() || !isStudioPasteTarget(event.target)) return;
@@ -1321,8 +1511,11 @@ export function MoodboardStudioView() {
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
     const openProjectId = currentProject()?.id ?? null;
-    store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId),
-      scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
+    const newKey = assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId);
+    // Another unsaved board with content is saved first, as New does (GM r8 answer 1).
+    if (await keepUnsaved(newKey)) {
+      store.reset(newKey, scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
+    }
     setRailScope(scope);
     enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
@@ -1415,15 +1608,23 @@ export function MoodboardStudioView() {
           setRailScope(scope);
           enterMoodboardEditor(id, scope);
         }}
-        onNew={(scope) => {
+        onNew={async (scope) => {
           if (!isCurrent()) return;
           const project = scope === 'project' ? currentProject() : null;
           if (scope === 'project' && !project) {
             patch({ saveError: NO_PROJECT_OPEN });
             return;
           }
-          useAssetStudioDraftStore.getState().reset(
-            assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id), emptyDraft());
+          const newKey = assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id);
+          // An unsaved board with content (an add on its way counts) is saved
+          // first: New never drops a paste (GM r8 answer 1). If that save
+          // fails, the board stays open with its line.
+          if (!await keepUnsaved(newKey)) {
+            setRailScope(scope);
+            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+            return;
+          }
+          useAssetStudioDraftStore.getState().reset(newKey, emptyDraft());
           setRailScope(scope);
           enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
         }}

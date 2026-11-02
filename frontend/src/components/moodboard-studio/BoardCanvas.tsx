@@ -8,7 +8,7 @@ import '@xyflow/react/dist/style.css';
 import type { MoodboardImage } from '../../types';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { springProgress, springViewport } from '../../lib/viewportSpring';
-import { placeholderLabel, type BoardPlaceholder } from './boardPlaceholder';
+import { placeholderLabel, placeholderSpokenName, type BoardPlaceholder } from './boardPlaceholder';
 import { useBoardCanvasStore, useBoardSelection } from '../../store/boardCanvasStore';
 import { BoardCardNode } from './BoardCardNode';
 import { BoardFillContext, BoardWideContext, createBoardNodeBuilder, isProvisionalCard, wideFrom, type BoardFill } from './boardNodes';
@@ -58,6 +58,8 @@ export interface BoardTarget {
   at: { x: number; y: number };
   view: NodeRect | null;
   aim: boolean;
+  /** The view's bottom edge is the toolbar's top (lib/boardPlacement `band`). */
+  band?: boolean;
 }
 
 export type { BoardPlaceholder } from './boardPlaceholder';
@@ -202,6 +204,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   movingRef.current = moving;
   const dragging = useRef(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // The toolbar (its panel), for the view and the framings that clear it.
+  const controlsRef = useRef<HTMLDivElement>(null);
   // The zoom, as `--mb-board-zoom` on the board, so the placeholder's edge and
   // label keep their screen size (the CSS divides by it). Written on the
   // element as the zoom changes, so a zoom frame re-renders nothing.
@@ -231,6 +235,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     .sort((a, b) => a - b), [images]);
   const wide = useStore(useCallback((state: { transform: [number, number, number] }) => wideFrom(widths, state.transform[2]), [widths]));
   const nodesRef = useRef(nodes);
+  // The held spots' nodes, for Fit (set where they are made, below).
+  const heldNodesRef = useRef<Node[]>([]);
   nodesRef.current = nodes;
   // The placeholders, then the cards over them (a filled spot's image fades
   // in on top of its placeholder). Not selectable, not dragged. A List add
@@ -239,8 +245,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const shown = useMemo<Node[]>(() => (held.length === 0 ? nodes : [...held.map((spot) => ({
     id: spot.id, type: 'placeholder', position: { x: spot.x, y: spot.y }, width: spot.width, height: spot.height,
     measured: { width: spot.width, height: spot.height }, draggable: false, selectable: false, focusable: true,
-    ariaLabel: 'Adding an image', data: { label: placeholderLabel(spot.source), fillId: spot.filled?.imageId } satisfies PlaceholderData,
+    // Its spoken name says what is coming (GM r8 answer 6). It can't be
+    // selected, moved or deleted, so React Flow's description of those keys
+    // (aria-describedby) is dropped.
+    ariaLabel: placeholderSpokenName(spot.source), domAttributes: { 'aria-describedby': undefined },
+    data: { label: placeholderLabel(spot.source), fillId: spot.filled?.imageId } satisfies PlaceholderData,
   })), ...nodes]), [nodes, held]);
+  heldNodesRef.current = shown.length === nodes.length ? [] : shown.slice(0, shown.length - nodes.length);
   // Images taking their spot: each fades in over its placeholder on the
   // board's spring (GM r5, corrected: a spring, not a timed fade), written
   // straight to the card's opacity per frame; reduced motion swaps at once.
@@ -423,6 +434,21 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     follow.current?.dispose();
   }, []);
 
+  /** The camera that frames `bounds` in the view placement and the chip read
+   *  (`viewRect`: the column less the inset and the toolbar), so a tile that
+   *  Fit or the chip brings in is in view by their rule too and never under
+   *  the toolbar (GM r8 answer 4). */
+  const frameFor = useCallback((bounds: NodeRect, width: number, height: number) => {
+    const box = wrapperRef.current?.getBoundingClientRect();
+    const bar = controlsRef.current?.getBoundingClientRect();
+    const clear = box && bar && bar.height > 0 ? Math.max(0, box.bottom - bar.top) : 0;
+    const w = width - 2 * VIEW_INSET;
+    const h = height - clear - 2 * VIEW_INSET;
+    if (w <= 0 || h <= 0) return getViewportForBounds(bounds, width, height, MIN_ZOOM, 1, FIT_PADDING);
+    const to = getViewportForBounds(bounds, w, h, MIN_ZOOM, 1, FIT_PADDING);
+    return { ...to, x: to.x + VIEW_INSET, y: to.y + VIEW_INSET };
+  }, []);
+
   /** Fit the whole board to its column: on the spring, or at once (on open). False when there is nothing to fit. */
   const fit = useCallback((instant = false) => {
     const { width, height, panZoom } = flowStore.getState();
@@ -430,7 +456,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     // React Flow can measure the board before its camera exists; the fit on
     // open waits for it (it can't move a camera that isn't there yet).
     if (instant && !panZoom) return false;
-    const to = getViewportForBounds(getNodesBounds(nodesRef.current), width, height, MIN_ZOOM, 1, FIT_PADDING);
+    // Held spots count: a placeholder is a card on its way in (GM r8 answer 4).
+    const to = frameFor(getNodesBounds([...nodesRef.current, ...heldNodesRef.current]), width, height);
     if (!instant) {
       springTo(to, true);
       return true;
@@ -440,7 +467,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     moveCamera(to);
     useBoardCanvasStore.getState().setViewport(boardKey, to, true);
     return true;
-  }, [flowStore, getNodesBounds, springTo, moveCamera, boardKey]);
+  }, [flowStore, getNodesBounds, springTo, moveCamera, boardKey, frameFor]);
   fitRef.current = fit;
   // Cards that arrive after the board mounts (it opens before they load) get
   // the fit on open once there are some.
@@ -503,11 +530,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       const wanted = new Set(frameRequest.placementIds);
       const targets = nodesRef.current.filter((node) => wanted.has(node.id));
       if (!width || !height || targets.length === 0) return;
-      springTo(getViewportForBounds(getNodesBounds(targets), width, height, MIN_ZOOM, 1, FIT_PADDING));
+      springTo(frameFor(getNodesBounds(targets), width, height));
     };
     frame = window.requestAnimationFrame(attempt);
     return () => { if (frame) window.cancelAnimationFrame(frame); };
-  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo]);
+  }, [frameRequest, boardKey, flowStore, getNodesBounds, springTo, frameFor]);
 
   const zoomBy = useCallback((factor: number) => {
     const { width, height } = flowStore.getState();
@@ -566,7 +593,6 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
 
   // The toolbar is the board's bottom bar: the app's notices stack above it
   // (lib/bottomBar.ts, GM #210 item 6), and new tiles land above it.
-  const controlsRef = useRef<HTMLDivElement>(null);
   useBottomBarClearance([controlsRef]);
 
   /** The board the person can see, in board coordinates, less a small inset
@@ -607,7 +633,13 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [pasteTargetRef]);
 
   /** Focus on the board itself (GM r4 answer 6: never the page body). */
-  const focusBoard = useCallback(() => { wrapperRef.current?.focus({ preventScroll: true }); }, []);
+  // The board takes focus; if it can't (hidden, or with no size), the view
+  // switch does, so focus never falls to the page body (review 5, NIT-6).
+  const focusBoard = useCallback(() => {
+    wrapperRef.current?.focus({ preventScroll: true });
+    if (document.activeElement && document.activeElement !== document.body) return;
+    document.querySelector<HTMLElement>('.moodboard-view-switch__option[aria-checked="true"]')?.focus({ preventScroll: true });
+  }, []);
 
   // After a chip press from the keyboard, focus follows the first pasted
   // tile (GM r4 answer 6): onto it once it is drawn in view, and onto it
@@ -743,7 +775,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     const y = Math.min(...rects.map((r) => r.y));
     const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x,
       height: Math.max(...rects.map((r) => r.y + r.height)) - y };
-    springTo(getViewportForBounds(bounds, width, height, MIN_ZOOM, 1, FIT_PADDING));
+    springTo(frameFor(bounds, width, height));
     if (!focus) return;
     // The board holds focus until the tile is drawn (it is culled until in view).
     focusBoard();
@@ -754,7 +786,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       window.requestAnimationFrame(tick);
     };
     window.requestAnimationFrame(tick);
-  }, [flowStore, springTo, focusBoard, focusFollowed]);
+  }, [flowStore, springTo, focusBoard, focusFollowed, frameFor]);
 
   const [dropping, setDropping] = useState(false);
   const carriesFiles = (event: ReactDragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -774,7 +806,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (!carriesFiles(event) && files.length === 0) return;
     event.preventDefault();
     if (files.length === 0) return;
-    onDropFiles(files, { at: screenToFlowPosition({ x: event.clientX, y: event.clientY }), view: viewRect(), aim: true });
+    const bar = controlsRef.current?.getBoundingClientRect();
+    onDropFiles(files, { at: screenToFlowPosition({ x: event.clientX, y: event.clientY }), view: viewRect(), aim: true,
+      band: Boolean(bar && bar.height > 0) });
   };
 
   return (
