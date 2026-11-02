@@ -1425,6 +1425,10 @@ exact grid the light 256 px mixes have pixels, so they no longer fold as
 - **Real images: cinematic-noir changes**, #070808 to #010101. #070808 was
   the blacks' mean; #010101 is the most populated. It is the only real
   image that changes in round 7. GM to confirm.
+  - **Corrected in round 8 (review 6):** those are PIL's pixels. In
+    Chrome, which Extract reads, 3 of the 29 change: cinematic-noir
+    (#070707 live, not #070808, to #010101), cyberpunk-neon (#020a0b to
+    #01090b) and minimal-line-art (loses #d7d7d7).
 - The 200 noisy-black seeds: see "Checks, round 7".
 
 ### N2 and the surfaces
@@ -1441,7 +1445,9 @@ exact grid the light 256 px mixes have pixels, so they no longer fold as
 - **Real images.** Of the 29 (the 12 presets, the 10 goldens, the 7
   character-smoke images), only cinematic-noir changes: its black goes
   from #070808 to #010101 (GM r11 item 4). The other 28, plus bwgrey and
-  noisyblack, give exactly round 6's swatches.
+  noisyblack, give exactly round 6's swatches. *(Round 8 correction: on
+  PIL's 96 px downscale. On Chrome's decoded pixels, 3 of the 29 change;
+  see "Round 8, the real-image gate".)*
 - **200 noisy-black seeds:** 200 give one black.
 - **4K in Node** (3840 x 2160, `paletteFromImageData` alone, median of 5):
   - opaque 63 ms (round 6: 32);
@@ -1506,3 +1512,294 @@ exact grid the light 256 px mixes have pixels, so they no longer fold as
   records, store and worker, the copy sweep, moodboard analysis, and agent
   MCP registration.
 - **Build budget:** 444,224 bytes raw, unchanged.
+
+## Round 8 (base 2c27284c): the full image names each colour
+
+Review 6 found three verified MEDIUMs in the band rule. GM r13 answered
+them with one rule: **the 256 px read decides which colours exist; full
+resolution decides what each one is.** GM r12's inspector bug (7b) folds
+in.
+
+### M2 and Q5: each swatch is named from its full-resolution footprint
+
+- **Footprint.** Every full-resolution pixel belongs to the 256 px cell
+  its position falls in (the same spans `exactAreaGrid` uses); a swatch's
+  footprint is the pixels under its own 256 px cells
+  (`EdgeEvidence.footprint`, `footprintReader`). Only kept swatches'
+  footprints are read, never the whole image; one bigger than 1,000,000
+  pixels is read on an even grid (`FOOTPRINT_SAMPLE`).
+- **Own pixels (`ownPixels`, `mine`).** A footprint pixel is another
+  swatch's when it is nearer that swatch's colour and within ΔE00 5 of it
+  (`CLAIM_DELTA_E`). The swatch's own pixels are those nearest its colour;
+  when fewer than 9 are (a thin line whose 256 px colour is a mix of it and
+  its neighbours: the 8 px #ddd strip reads #909090, nearer white than any
+  #ddd pixel), the pixels no other swatch claims.
+- **Core.** An own pixel inside a flat area at full resolution (the same
+  `insideFlat` test as at 256 px). A neighbour off the image now counts as
+  different, so a line along the image's border has no interior there
+  (M2's border case); a clear neighbour still counts as the same.
+- **Naming (`nameAtFullResolution`):**
+  - a band (a ramp, a soft edge): the own pixel at the run's median along
+    its line, a real mid-tone;
+  - a small swatch (under 5%), a flat mode, or a merged black: the most
+    populated colour of its core. A core under 9 pixels (`CORE_MIN`) is
+    noise that happened to repeat (a ±8 noisy flat had one lucky pixel
+    inside), and the swatch is read from all its own pixels;
+  - a small swatch with no core folds into the swatch that claims most of
+    its footprint. Missing is milder than invented;
+  - a big area (5% or more): its own pixel nearest its cluster's mean,
+    never the mean and never a lone most-populated tone (GM r14, r15; see
+    "Big areas" below);
+  - swatches then named alike (under ΔE00 3) are one, the heavier one's
+    colour kept.
+- **Folds respect the core.** An edge blend (`foldEdgeBlends`) or a band
+  that is an edge (`foldBands`) folds only when it has no core of its own.
+  So a solid keyline a few pixels wide stays: frames of 3 to 9 px keep
+  #808080 on both paths (round 7 folded 4 to 9 px, and showed the 3 px
+  border as #9d9d9d and #626262).
+- **Noise (`mostPopulated`).** When no 4-level bin holds 10% of the cells
+  (`NOISE_SHARE`), they are noise around one colour: the real colour
+  nearest their mean wins, not a lucky outlier. uinav1000 at ±8 gives
+  #dddddd and #333333 (before: #e4d7e4 and #2d3739). A density-weighted
+  bin pick fixed the same cases but moved the GM-confirmed blacks
+  (cinematic-noir #010101 to #040504), so it isn't used.
+- **Removed:** round 7's L2 recolour (`REAL_COLOUR`, `fewColours`) and the
+  black recolour from the 256 px colour. Both are now the full-resolution
+  naming. L1 (the 75% guard aligned to bins) goes with them.
+- **Cost.** One pass over each named swatch's footprint, with each
+  distinct colour's claim cached. Node, the 34 real images through both
+  paths: about 2 s in all, as round 7. Chrome timing: see "Checks, round
+  8".
+
+### M1 and Q1: n flat modes (`flatModes`)
+
+- Replaces `twoFlats`. Along the run's line, in 32 bins over its inside
+  cells, each peak is kept, heaviest first, when a trough (the lightest
+  bin between, at most 0.25 of the lighter peak) parts it from every kept
+  peak and it is 3 or more bins away. Each peak takes the bins up to the
+  troughs beside it.
+- A peak is a colour when it is flat (60% of its weight within a bin of
+  the peak) and holds 20% of the run's inside weight or has 9 inside cells
+  of its own (M3 below). Two or more colours make the run that many
+  swatches, each named at full resolution; fewer make it a band.
+- Three grey bars on one line give three greys at every gap, 0 to 60 px,
+  on both paths (round 7: one of the three).
+- The :583 pin ("a third flat colour is a run") is now "three greys are
+  three".
+
+### M3 and Q3: an absolute interior, and touching by direct contact
+
+- A mode with 9 inside cells at 256 px (about 3 x 3) counts whatever its
+  share. The 60 x 40 violet tag beside the 300 x 40 pink one keeps
+  #4623a0 at gaps 0, 10, 20, 30, 40 and 60, on both paths (round 7 dropped
+  it at most gaps).
+- Runs link only by direct contact, read on the 256 px labels when both
+  swatches have pixels there (round 7 read the 96 px grid, where the red |
+  blue seam's blend touched both tags and chained them). A member that is
+  itself the edge between the line's two ends (next to both,
+  `EDGE_EVIDENCE_SHARE`) never links two accents: edges group with edges,
+  accents with accents, and a group of edges joins a run only when it
+  touches exactly one group of accents. On every probe and real image this
+  changes nothing beyond the 256 px reading; a unit test pins the chain
+  (pink, seam, violet) that round 7 made one band. Mode swatches never join
+  a later run.
+
+### 7b (GM r12): the inspector shows every swatch
+
+- The palette list never had a height or a scroll of its own. The floating
+  Inspector was 300 px tall (one spare line more at most), so the 4th
+  swatch on and the Add / Extract row sat under its body's fade.
+- Now, when the body holds a palette, the Inspector takes the whole body's
+  height up to the room there is (`holdsPalette`); only then does the body
+  scroll, as one, with the foot row fixed. Other nodes keep 300 px and the
+  spare-line rule.
+- Live at 1440 x 900, six swatches: the Inspector is 616 px, all six rows
+  and the Add / Extract row show, and the rest of the body (Strength,
+  Method) scrolls under the fade.
+- Tests: N from 1 to 12 swatches render N rows with the Add / Extract row
+  right after the last and no container between a row and the body with a
+  height or overflow; no palette rule in the CSS sets one; the Inspector
+  grows past 300 px for a palette, stops at the room, and stays 300 px
+  without one.
+
+### Round 8, the real-image gate (Chrome's decoded pixels)
+
+From this round the 34 images (the 29 plus the 5 other character-smoke
+PNGs) are decoded and drawn in headless Chrome exactly as Extract does
+(plain 2d context, 96 px drawn first, then full size), and both paths run
+on those pixels (`scratchpad/alpha/r8/cdump.mjs`, `real.mjs`). Against
+round 7, 4 change; against round 6, 6.
+
+| Image | Round 6 | Round 7 | Round 8 |
+|---|---|---|---|
+| cinematic-noir | #070707 ... | #010101 ... | as round 7 |
+| cyberpunk-neon | ... #020a0b | ... #01090b | as round 7 |
+| minimal-line-art | #f8f8f8 #d7d7d7 #9c9c9c | #f8f8f8 #9c9c9c | #f8f8f8 |
+| pheme_scene2 | ... #b88a7b | ... #b88a7b | ... #b9897c |
+| pheme_ref_3q (PNG) | ... #21325d | ... #21325d | ... #2d4978 |
+| pheme_ref_front (PNG) | ... #09090f #070aa4 | as round 6 | ... #040409 #110bc1 |
+
+- **minimal-line-art:** the ink has no solid core. Its line pixels are
+  antialiased greys (most common #2f2f2f) and none sits inside a flat area
+  at tolerances 2 to 4, so #9c9c9c (11 exact pixels, a blend) folds. Per
+  GM r13 this is a follow-up note, not a mix: the drawing shows only its
+  paper.
+- **pheme_scene2:** #b88a7b (2 exact pixels) to #b9897c (10), ΔE00 1.13.
+- **pheme_ref_3q:** #21325d (0 pixels, a mean) to #2d4978 (176), ΔE00 7.84,
+  a navy the image holds.
+- **pheme_ref_front:** the black #09090f (3 pixels) to #040409 (679), ΔE00
+  1.06; the blue of the LEDs behind her, #070aa4 (0 pixels, a mean of
+  blue and dark) to #110bc1, ΔE00 3.91, the LEDs' own blue.
+- The other 28 match round 7 exactly.
+
+### Big areas (GM r14, r15)
+
+- **The rule.** A big cluster shows the full-resolution pixel of its own
+  (`mine`) nearest its cluster's mean (`nearestTo`), as a noisy flat does.
+  There is no fallback to the mean.
+- **The stop.** GM r14 set a ΔE00 2 trigger against round 7. Two big
+  clusters passed it: dusk-harbour #cf6446 to #ca703c (7.47; no pixel of
+  the image is within 7.3 of #cf6446) and anime-cel #252532 to #252731
+  (2.42, the nearest of 35,083 own pixels). GM r15 approved both; the 2 was
+  a trigger to come back, not a pass bar. Every other big cluster of the
+  34 moves under ΔE00 1.3.
+- **A mixed cluster splits (`splitMixedClusters`).** dusk-harbour's #cf6446
+  was a mean of the orange sky and the 12 x 12 #ff285a sign (144 pixels,
+  the image's most common colour). A cluster whose colour is within ΔE00 5
+  (`MIXED_DELTA_E`) of none of its 256 px pixels mixes two areas; each flat
+  colour among them with an interior of 9 cells, itself 5 or more from the
+  mean, becomes its own swatch, and the rest keeps the cluster at its own
+  mean. dusk-harbour now shows the sign (#ff285a) and the sky's own
+  orange, #c77140 (0.85 from GM's approved #ca703c, which was the mixed
+  cluster's pixel): 7 swatches.
+  - Reading the test on flat pixels only would also split three 25 px
+    bars, but it split anime-cel into 16 swatches and risograph-print into
+    11 (GM's guard), so the test reads all of the cluster's pixels.
+- **The detector (GM r15, never a failure).** Each result lists the big
+  clusters whose own nearest pixel is over ΔE00 5 from their mean
+  (`PaletteResult.mixed`: "possibly two areas mixed"); a test prints those
+  of the real-image fixtures. On the 34 real images: none, once
+  dusk-harbour's sign splits out (before, dusk-harbour 7.47). On the
+  probes: three-25 (#9e9e9e to #888888, 7.2; by area #a3a3a3 to #bbbbbb,
+  6.8) and strokes (#959595 / #d9d9d9 to #aaaaaa, 6.5 and 12.1; by area
+  9.4 and 9.6). These feed the "96 px clustering misses" follow-up.
+- **Against round 7, the 34 on Chrome's pixels:** every image but
+  cinematic-noir, ink-wash and risograph-print shows at least one big
+  area's own pixel in place of its mean, under ΔE00 1.3 except anime-cel
+  (2.42). Beyond that, the narrow-scope changes above, dusk-harbour's sign
+  (7 swatches), and pheme_ref_waist 6 to 5: #bfc8d8 and #cbd4e3, named by
+  their pixels, came out alike (under ΔE00 3) and are one.
+- Tests re-pinned on real pixels: the quilt, the gradient, studio-product
+  (#e1e0dc #b99c72), the GM r9 guards, the whites (#fefefe was the 96 px
+  mean, #ffffff the pixel). The alpha contract now checks the weights on
+  the clustering (`kMeansColors`), where they count.
+
+### Mutants, round 8
+
+51 mutants on the round 8 code, every test file that touches the palette
+(the evidence, merge, extract, alpha and ΔE00 contracts, the Inspector
+palette rows). **45 killed, 6 survive.**
+
+- **A timeout is not a kill.** The first pass used vitest's 5 s default,
+  and the 500-520 px sweep had its own 30 s limit: seven "kills" there
+  (35-112 s) were the sweep running out of time. The file now sets 120 s
+  and the sweep 600 s, and every mutant was rerun. claim-0, core-min-40
+  and fold-nearest then survived.
+- **New pins from the survivors.** Seeded noisy ui-nav (512 x 307, noise
+  6 and 8: #dddddd and #333333) kills a core of one pixel, no noise rule,
+  the nearest-to-mean pick first, the whole claim in place of the nearest
+  pixels, and both small-core variants. Two soft ramps (60 and 120 px on
+  960) kill the band's first pixel and the band read from all pixels. A
+  footprint test (640 px on a 64 px grid: 100 pixels a cell) kills
+  rounding a pixel to its nearest cell. flatModes unit tests kill 16 bins,
+  a flat share of 0.9, a trough of 0 and 10 cells (GM's 9 as a number, not
+  the constant). mode-in-run is killed by a hang: the touching-accents
+  test takes 211 s against 23 ms.
+- **The 14 for the big-cluster rule, the split and the detector** (sample
+  1,000, the mean kept, near only, mostPopulated, split off, ΔE 1 and 20,
+  any cell, cell count, rest at the mean, detector off, the old linking,
+  edge joins any, edge joins never): all killed.
+- **Survivors, each with no colour change on the 240 synthetic probes (both paths), the
+  seeded noise and ramp cases, or the 34 real images:**
+  - claim-0 (no other swatch claims a pixel): only the order of a flag's
+    two equal halves on Chrome's box and Lanczos downscales.
+  - fold-nearest (a swatch with no colour folds into the nearest colour,
+    not the one that holds most of its footprint): every folding swatch
+    on the probes has the same answer both ways.
+  - clear-differs (a clear neighbour counts as a different colour): a
+    line along a clear edge still has its other side.
+  - touch-coarse (touching read on the 96 px labels): no probe pair
+    touches at one scale and not the other.
+  - mode-blend (a run's flat colour may fold as an edge blend): no mode
+    swatch is small and on a line between two heavier ones.
+  - **core-min-40 is better, not equivalent.** A core of 40 pixels in
+    place of 9 names noisy ui-nav bars nearer #dddddd and #333333 on six
+    of the 24 seeded cases, where 9 gives tints up to ΔE00 3.9 (#323035
+    for #333333; #dfdada, 2.5), and changes nothing else. Not changed in this PR: GM's number
+    is 9 (about 3 x 3 at 256 px), and a feature with a core of 9 to 39
+    pixels would lose its core reading. For GM.
+
+### Live, round 8 (8792/5792, isolated backend through `serve_isolated.py`)
+
+- Canary first, both in the driver and in the page: 8000, 5173, 8840 and
+  the internet blocked, the lane's backend reached; `blocked.log` holds
+  canary lines only. Shots in `shots8/` at 1440, no md5 repeats.
+- Extract in the floating Inspector, each palette whole with the Add /
+  Extract row below it:
+
+  | Image | Extract |
+  |---|---|
+  | neon-alley-9x16 | GM r9's six (the 6-swatch inspector) |
+  | minimal-line-art | #f8f8f8 (the ink has no solid core; a follow-up) |
+  | pheme_ref_3q | round 7 #21325d, round 8 #2d4978 (176 pixels) |
+  | dusk-harbour-16x9 | round 7 six with #cf6446; round 8 seven with #c77140 and #ff285a |
+  | three greys (15 px bars) | #ffffff #000000 #444444 #bbbbbb #888888 |
+  | 3 px border frame | #000000 #ffffff #808080 |
+  | 8 px #ddd strip | #ffffff #333333 #000000 #dddddd |
+  | violet tag, gap 0 | #1428c8 #dc1428 #aa1950 #4623a0 |
+  | pink-violet-touching | #1428c8 #dc1428 #aa1950 #4623a0 |
+  | strokes | #ffffff #000000 #aaaaaa |
+
+- Round 7's side of the before and after ran on round 7's
+  `paletteExtract.ts` in the same app (round 8's Inspector), then the
+  file was put back and checked byte for byte.
+
+### Time, round 8
+
+- **Chrome, 4K and 8K** (the round 6 test image: a gradient, a #111413
+  disc, a grey bar; the real `extractPaletteFromImage`, median of 5):
+  4K 2.0 s opaque, 1.5 s with transparency; 8K 2.5 s and 2.2 s. Round 6:
+  159 ms and 187 ms at 4K.
+- **Why.** Naming reads every full-resolution pixel under each swatch, up
+  to a million a swatch: on a 4K gradient that is all 8.3 million, each
+  with a nearest-colour test and an object for the pixels a swatch keeps.
+  In Node the 4K read is about 0.6-0.9 s, most of it garbage collection.
+  A closure per pixel (the "inside" reader) is gone, which took 4K from
+  2.3 s to 2.0 s; outputs are identical on the 240 probes (both paths)
+  and the 34 real images.
+- **Not changed, for GM:** a smaller `FOOTPRINT_SAMPLE` (250,000 reads a
+  big area on every other row and column, about 4x fewer pixels) or a
+  packed pixel store would cut it further, but the first changes which
+  pixels a big area is named from. Extract shows "Extracting..." while it
+  runs.
+
+### Gates, round 8
+
+- `tsc -b --noEmit` and `npm run lint`: clean (lint caught an unused
+  destructured name; the list is now built with `flatMap`).
+- **Vitest** `--maxWorkers=2`, round 6's 120 files plus
+  `InspectorPaletteRows`: 1930 passed on the code before the closure
+  change; after it, 1929 passed and one unrelated ratchet test
+  (`agentPresenceFollowups.ratchet`, G) timed out at 126 s under load; that
+  file alone passes 50 of 50 in 18 s.
+- **Build budget:** 444,224 bytes raw, unchanged.
+- No backend file changed this round.
+
+### Follow-ups (GM r15, not this PR)
+
+- **Thin ink with no solid core:** name it from the darkest populated tone
+  along the line's spine (minimal-line-art).
+- **96 px clustering misses:** three 25 px bars show #888888 for #888 and
+  #bbb together; diff150 drops #dddddd (gap 20 opaque, gap 0 by area);
+  three-rb loses #3c23aa by area. Guard: anime-cel must not go to 15
+  swatches. The detector's list above is the starting point.

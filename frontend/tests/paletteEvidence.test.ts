@@ -20,7 +20,10 @@ import {
   paletteFromImageData,
   paletteFromPixels,
   READ_MAX_DIM,
-  twoFlats,
+  flatModes,
+  MIXED_DELTA_E,
+  MODE_MIN_CELLS,
+  NOISE_SHARE,
 } from '../src/lib/paletteExtract';
 
 // PR #208 round 6: review 4 (colour-maths L1, L2, N3, L4; surfaces M3) and
@@ -36,6 +39,10 @@ import {
 // or 255, so the colour comes back straight; clear pixels read as 0,0,0,0).
 
 type Px = [number, number, number, number];
+
+// Full-size probes (1000 px images, several per test) take seconds each on a
+// loaded machine: a timeout here is never a verdict on the palette.
+vi.setConfig({ testTimeout: 120_000 });
 
 function fixture(name: string): Uint8ClampedArray {
   return new Uint8ClampedArray(readFileSync(resolve(__dirname, `fixtures/palette/${name}.rgba`)));
@@ -191,7 +198,7 @@ describe('the evidence is read at 256 px (GM r10, review 4 L2)', () => {
     const out = colors(paletteFromImageData(framed(20), 1000, 1000, 6, { data: small, width: 96 }));
     // Round 5 read the evidence on the 96 px frame, 2 px wide, every pixel
     // next to both, and folded it: ['#000000', '#fefefe'].
-    expect(out).toEqual(['#000000', '#fefefe', '#808080']);
+    expect(out).toEqual(['#000000', '#ffffff', '#808080']);
   });
 
   it('keeps the frame on an image with transparency too, reduced by area', () => {
@@ -223,11 +230,13 @@ describe('soft edges and seams (GM r10, review 4 N3)', () => {
     expect(mid[0]).toBeLessThan(192);
   });
 
-  it('cuts between 2 and 3 px at 256: 1 and 2 px bands fold, 3 px keeps (a 240 px image, read as is)', () => {
+  it('folds a 1 px line and keeps a solid line 2 px wide and up (a 240 px image, read as is; GM r13)', () => {
+    // Round 7 cut between 2 and 3 px at 256. A solid line 2 px wide has a
+    // core at full resolution (the same grey along it and on one side), so
+    // it is a colour of its own; a 1 px line has none and folds.
     const band = (w: number) => image(240, 240, (_, y) => (y < 118 ? [0, 0, 0, 255] : y < 118 + w ? [128, 128, 128, 255] : [255, 255, 255, 255]));
     expect(colors(paletteFromImageData(band(1), 240, 240))).toHaveLength(2);
-    expect(colors(paletteFromImageData(band(2), 240, 240))).toHaveLength(2);
-    expect(colors(paletteFromImageData(band(3), 240, 240))).toEqual(['#000000', '#ffffff', '#808080']);
+    for (const w of [2, 3]) expect(new Set(colors(paletteFromImageData(band(w), 240, 240)))).toEqual(new Set(['#000000', '#ffffff', '#808080']));
   });
 });
 
@@ -319,7 +328,7 @@ describe('extractPaletteFromImage reads the picked image whole (review 4, M3)', 
     // Chrome downscales an image it already drew at full size differently,
     // so the 96 px draw comes first.
     expect(drawn).toEqual([[0, 0, 96, 96], [0, 0, 1000, 1000]]);
-    expect(result).toEqual({ ok: true, colors: ['#000000', '#fefefe', '#808080'] });
+    expect(result).toEqual({ ok: true, colors: ['#000000', '#ffffff', '#808080'] });
   });
 
   it(`reads at most ${READ_MAX_DIM} px on the longest edge`, async () => {
@@ -450,7 +459,7 @@ describe('a band only for a continuous run (GM r11, review 5 M1)', () => {
     const data = pinkVioletTags();
     const out = colors(paletteFromImageData(data, 1000, 600, 6, { data: fixture('pink-violet-touching-96x58'), width: 96 }));
     // Round 6: #1528c7 #dc1428 #781e78, the tags' mean.
-    expect(new Set(out)).toEqual(new Set(['#dc1428', '#1528c7', '#aa1950', '#4623a0']));
+    expect(new Set(out)).toEqual(new Set(['#dc1428', '#1428c8', '#aa1950', '#4623a0']));
     expect(new Set(colors(paletteFromImageData(withClearPixel(data), 1000, 600)))).toEqual(
       new Set(['#dc1428', '#1428c8', '#aa1950', '#4623a0']),
     );
@@ -459,7 +468,7 @@ describe('a band only for a continuous run (GM r11, review 5 M1)', () => {
   it('keeps the 14 px frame as one keyline, in its own grey', () => {
     const out = colors(paletteFromImageData(framed(14), 1000, 1000, 6, { data: fixture('frame-grey-14px-of-1000-96x96'), width: 96 }));
     // Round 6: #6f6f6f.
-    expect(out).toEqual(['#000000', '#fefefe', '#808080']);
+    expect(out).toEqual(['#000000', '#ffffff', '#808080']);
   });
 
   it('reads the band between the heaviest colours first, whatever order the swatches come in', () => {
@@ -479,7 +488,7 @@ describe('a band only for a continuous run (GM r11, review 5 M1)', () => {
       return r < 300 ? [255, 255, 255, 255] : r < 312 ? [110, 110, 110, 255] : [0, 0, 0, 255];
     });
     const out = colors(paletteFromImageData(ring, 1024, 1024, 6, { data: fixture('sticker-ring-12px-of-1024-96x96'), width: 96 }));
-    expect(out).toEqual(['#000000', '#fefefe', '#6e6e6e']);
+    expect(out).toEqual(['#000000', '#ffffff', '#6e6e6e']);
   });
 
   it('takes the longer run first where two runs share a swatch', () => {
@@ -561,37 +570,75 @@ describe('a band only for a continuous run (GM r11, review 5 M1)', () => {
   });
 });
 
-describe('telling two flat colours from a run (twoFlats, mostPopulated)', () => {
+describe('telling flat colours from a run (flatModes, mostPopulated)', () => {
   const cell = (v: number[], inside = true, weight = 1): EvidenceCell => ({ rgb: v, weight, inside });
   const A = [0, 0, 0];
   const B = [255, 255, 255];
   const grey = (v: number, inside = true) => cell([v, v, v], inside);
+  const modes = (cells: EvidenceCell[]) => flatModes(cells, A, B).map((m) => m.rgb[0]);
 
   it('reads two flat greys with nothing between as two', () => {
-    expect(twoFlats([...Array(20).fill(grey(51)), ...Array(20).fill(grey(221))], A, B)).toBe(true);
+    expect(modes([...Array(20).fill(grey(51)), ...Array(20).fill(grey(221))])).toEqual([51, 221]);
   });
 
   it('reads a ramp, one flat colour, or only edge cells as a run', () => {
-    expect(twoFlats(Array.from({ length: 64 }, (_, i) => grey(i * 4)), A, B)).toBe(false);
-    expect(twoFlats(Array(30).fill(grey(128)), A, B)).toBe(false);
+    expect(modes(Array.from({ length: 64 }, (_, i) => grey(i * 4)))).toEqual([]);
+    expect(modes(Array(30).fill(grey(128)))).toEqual([]);
     // Two "modes" made only of cells an edge cuts (none inside) are no evidence.
-    expect(twoFlats([...Array(20).fill(grey(64, false)), ...Array(20).fill(grey(192, false))], A, B)).toBe(false);
+    expect(modes([...Array(20).fill(grey(64, false)), ...Array(20).fill(grey(192, false))])).toEqual([]);
     // A flat colour with its edge cells beside it is one.
-    expect(twoFlats([...Array(30).fill(grey(128)), ...Array(10).fill(grey(64, false))], A, B)).toBe(false);
+    expect(modes([...Array(30).fill(grey(128)), ...Array(10).fill(grey(64, false))])).toEqual([]);
   });
 
-  it('reads a third flat colour between the two as a run, not two flats', () => {
-    expect(twoFlats([...Array(20).fill(grey(51)), ...Array(20).fill(grey(221)), ...Array(8).fill(grey(136))], A, B)).toBe(false);
+  it('reads every flat peak parted by troughs as its own colour: three greys are three (GM r13, review 6 M1)', () => {
+    // Round 7 read the third grey as a run (twoFlats) and showed one of three.
+    expect(modes([...Array(20).fill(grey(51)), ...Array(20).fill(grey(221)), ...Array(12).fill(grey(136))])).toEqual([51, 136, 221]);
+    expect(modes([...Array(20).fill(grey(68)), ...Array(20).fill(grey(136)), ...Array(20).fill(grey(187))])).toEqual([68, 136, 187]);
+    // Peaks closer than 3 bins are one colour's spread, not two.
+    expect(modes([...Array(20).fill(grey(120)), ...Array(20).fill(grey(136))])).toEqual([]);
   });
 
-  it("doesn't read a small second mode as a second colour", () => {
-    expect(twoFlats([...Array(40).fill(grey(51)), ...Array(5).fill(grey(221))], A, B)).toBe(false);
+  it(`counts a mode with an interior of ${MODE_MIN_CELLS} cells (about 3 x 3 at 256 px), whatever its share (GM r13, review 6 M3)`, () => {
+    expect(modes([...Array(40).fill(grey(51)), ...Array(MODE_MIN_CELLS).fill(grey(221))])).toEqual([51, 221]);
+    // Fewer cells and under BAND_MODE.minSide of the run: no colour.
+    expect(modes([...Array(40).fill(grey(51)), ...Array(MODE_MIN_CELLS - 1).fill(grey(221))])).toEqual([]);
+    // Over minSide of the run, a few cells still count.
+    expect(modes([...Array(10).fill(grey(51)), ...Array(5).fill(grey(221))])).toEqual([51, 221]);
+    // GM's number, not the constant's: an interior of 9 cells is a colour.
+    expect(modes([...Array(40).fill(grey(51)), ...Array(9).fill(grey(221))])).toEqual([51, 221]);
+  });
+
+  it('parts two peaks 4 of 32 bins apart (#333 and #555 on a black-to-white run)', () => {
+    expect(modes([...Array(20).fill(grey(51)), ...Array(20).fill(grey(85))])).toEqual([51, 85]);
+  });
+
+  it('parts two flat greys with a thin spread between them: a trough under a quarter of the lighter peak', () => {
+    // One cell in every bin between the two peaks: the trough is 1, not 0.
+    const spread = Array.from({ length: 20 }, (_, i) => grey(Math.round((7 + i + 0.5) * 8)));
+    expect(modes([...Array(40).fill(grey(51)), ...spread, ...Array(40).fill(grey(221))])).toEqual([51, 221]);
+  });
+
+  it("doesn't count a peak that isn't flat (a spread with no 3-bin core)", () => {
+    const spread = Array.from({ length: 20 }, (_, i) => grey(150 + i * 4));
+    expect(modes([...Array(20).fill(grey(30)), ...spread])).toEqual([]);
   });
 
   it('shows the most populated colour, preferring cells inside a flat area', () => {
     expect(mostPopulated([grey(60, false), grey(60, false), grey(60, false), grey(128)])).toEqual([128, 128, 128]);
     expect(mostPopulated([grey(60, false), grey(60, false), grey(128, false)])).toEqual([60, 60, 60]);
     expect(mostPopulated([])).toBeNull();
+  });
+
+  it(`reads noise as noise: when no 4-level bin holds ${NOISE_SHARE * 100}% of the cells, the real colour nearest their mean`, () => {
+    // A flat #dddddd with noise of 8 levels a channel: every value is rare,
+    // and a lucky repeat would otherwise tint the swatch.
+    const noisy: EvidenceCell[] = [];
+    for (let i = 0; i < 400; i++) noisy.push(cell([221 + ((i * 7) % 17) - 8, 221 + ((i * 11) % 17) - 8, 221 + ((i * 13) % 17) - 8], false));
+    noisy.push(cell([229, 213, 229], false), cell([229, 213, 229], false), cell([229, 213, 229], false));
+    const got = mostPopulated(noisy)!;
+    expect(deltaE00(got, [221, 221, 221])).toBeLessThan(3);
+    expect(got).not.toEqual([229, 213, 229]);
+    expect(noisy.some((c) => c.rgb.join() === got.join())).toBe(true);
   });
 
   it("takes a thin line's middle when it and its two edge mixes are about as common", () => {
@@ -619,17 +666,19 @@ describe('the evidence is exactly 256 px (GM r11, review 5 L1)', () => {
     }
   });
 
-  it("keeps a 7 px band and folds a 3 px one at every size from 500 to 520 px, wherever it sits", () => {
+  it("keeps a 7 px and a 3 px band and folds a 1 px line at every size from 500 to 520 px, wherever it sits", () => {
     // Round 6's integer blocks made the grid 256 px up to 512 and 171 px
     // from 513: the 7 px band folded at 513 and up (review 5, L1).
     // Each image is w x 200 (the longest edge sets the scale), to keep it quick.
     for (let w = 500; w <= 520; w++) {
       for (const at of [100, 101, 102, 103]) {
         expect(new Set(colors(paletteFromImageData(band(w, 200, at, 7), w, 200)))).toEqual(new Set(['#ffffff', '#000000', '#808080']));
-        expect(colors(paletteFromImageData(band(w, 200, at, 3), w, 200))).toHaveLength(2);
+        // GM r13: a solid 3 px line has a core at full resolution.
+        expect(new Set(colors(paletteFromImageData(band(w, 200, at, 3), w, 200)))).toEqual(new Set(['#ffffff', '#000000', '#808080']));
+        expect(colors(paletteFromImageData(band(w, 200, at, 1), w, 200))).toHaveLength(2);
       }
     }
-  }, 30_000);
+  }, 600_000);
 
   it('shares a pixel between the cells it overlaps, by area', () => {
     // 3 px to 2 cells: the middle pixel is half in each.
@@ -649,7 +698,7 @@ describe('the evidence is exactly 256 px (GM r11, review 5 L1)', () => {
   });
 });
 
-describe('a small swatch shows its 256 px colour (GM r11, review 5 L2)', () => {
+describe('a small swatch shows its colour at full resolution (GM r11, r13)', () => {
   it('shows a 10 px keyline in its own grey, #808080, not the 96 px smear', () => {
     const out = colors(paletteFromImageData(framed(20), 1000, 1000, 6, { data: fixture('frame-grey-20px-of-1000-96x96'), width: 96 }));
     expect(out[2]).toBe('#808080');
@@ -660,8 +709,8 @@ describe('a small swatch shows its 256 px colour (GM r11, review 5 L2)', () => {
   });
 });
 
-describe('a small swatch of scattered tones keeps its colour (REAL_COLOUR)', () => {
-  it("doesn't jump to a stray pixel when no few colours hold the swatch", () => {
+describe('with no full-resolution pixels to read, a swatch keeps its colour', () => {
+  it("doesn't jump to a stray pixel at the evidence's scale", () => {
     // 40 different tones and 3 pixels of one red: the red is the most
     // populated, but it is 7% of the swatch, a stray.
     const scattered = [
@@ -728,5 +777,228 @@ describe('Extract picks the path by any transparency (review 5, surviving mutant
     const drawn = stubCanvas((w, h) => image(w, h, () => [40, 80, 160, 255]));
     await extractPaletteFromImage(new File([new Uint8Array(8)], 'tall.png', { type: 'image/png' }));
     expect(drawn).toEqual([[0, 0, 96, 58], [0, 0, 1000, 599]]);
+  });
+});
+
+// PR #208 round 8 (GM r13): the 256 px read decides which colours exist;
+// the full image decides what each one is. Each case is the reviewers'
+// probe (review 6, gen.py and gen3.py), clustered on its PIL BILINEAR 96 px
+// fixture (opaque) and by area (one clear pixel).
+describe('the full image names each colour (GM r13, round 8)', () => {
+  const both = (data: Uint8ClampedArray, w: number, h: number, small: string) => [
+    colors(paletteFromImageData(data, w, h, 6, { data: fixture(small), width: 96 })),
+    colors(paletteFromImageData(withClearPixel(data), w, h)),
+  ];
+
+  it('keeps three grey bars on one line as three colours', () => {
+    const three = image(1000, 600, (_, y) => {
+      if (y < 180) return [0, 0, 0, 255];
+      for (const [i, v] of [68, 136, 187].entries()) if (y >= 180 + i * 15 && y < 195 + i * 15) return [v, v, v, 255];
+      return [255, 255, 255, 255];
+    });
+    // Round 7: #ffffff #000000 #bbbbbb (one of the three).
+    for (const out of both(three, 1000, 600, 'three-greys-15px-of-1000-96x58')) {
+      expect(out).toHaveLength(5);
+      expect(out).toEqual(expect.arrayContaining(['#000000', '#444444', '#888888', '#bbbbbb']));
+    }
+  });
+
+  it('shows a 3 px #808080 frame round the image as #808080', () => {
+    const border = image(1000, 1000, (x, y) => {
+      if (x < 3 || y < 3 || x >= 997 || y >= 997) return [128, 128, 128, 255];
+      return y >= 500 ? [255, 255, 255, 255] : [0, 0, 0, 255];
+    });
+    // Round 7: #9d9d9d and #626262, the 256 px cells' mixes.
+    for (const out of both(border, 1000, 1000, 'border-frame-3px-of-1000-96x96')) expect(out).toEqual(['#000000', '#ffffff', '#808080']);
+  });
+
+  it('keeps the real fill of a 5 and a 9 px frame', () => {
+    for (const b of [5, 9]) {
+      const [opaque, area] = both(framed(b), 1000, 1000, `frame-grey-${b}px-of-1000-96x96`);
+      expect(new Set(opaque)).toEqual(new Set(['#000000', '#ffffff', '#808080']));
+      expect(area).toEqual(['#000000', '#ffffff', '#808080']);
+    }
+    // Area path, every width from 4 to 9 px.
+    for (const b of [4, 6, 7, 8]) expect(colors(paletteFromImageData(withClearPixel(framed(b)), 1000, 1000))).toEqual(['#000000', '#ffffff', '#808080']);
+  });
+
+  it('shows an 8 px #ddd strip between #333 and black as #dddddd, never their mix', () => {
+    const strip = image(1000, 600, (_, y) => {
+      if (y < 240) return [51, 51, 51, 255];
+      if (y < 248) return [221, 221, 221, 255];
+      if (y < 308) return [0, 0, 0, 255];
+      return [255, 255, 255, 255];
+    });
+    // Round 7: #909090.
+    for (const out of both(strip, 1000, 600, 'strip-ddd-8px-of-1000-96x58')) {
+      expect(out).toContain('#dddddd');
+      expect(out).toContain('#333333');
+      expect(out).not.toContain('#909090');
+    }
+  });
+
+  it('keeps a 60 x 40 violet tag beside a 300 x 40 pink one at every gap from 0 to 60 px', () => {
+    for (const gap of [0, 10, 20, 30, 40, 60]) {
+      const tags = image(1000, 600, (x, y) => {
+        if (y >= 100 && y < 140 && x >= 200 && x < 500) return [...PINK, 255];
+        if (y >= 100 && y < 140 && x >= 500 + gap && x < 560 + gap) return [...VIOLET, 255];
+        return [...(x < 500 ? RED : BLUE), 255];
+      });
+      // Round 7 dropped the violet at most gaps: the red | blue seam chained the run.
+      for (const out of both(tags, 1000, 600, `violet-tag-60px-gap${gap}-96x58`)) {
+        expect(out).toContain('#aa1950');
+        expect(out).toContain('#4623a0');
+      }
+    }
+  });
+
+  // Vertical strokes 200 px apart on #f8f8f8, each with a #a0a0a0 pixel
+  // either side (antialiasing), as minimal-line-art's ink is drawn.
+  const strokes = (core: number) =>
+    image(1000, 600, (x) => {
+      const d = Math.abs((x % 200) - 100);
+      if (d <= core) return [47, 47, 47, 255];
+      if (d === core + 1) return [160, 160, 160, 255];
+      return [248, 248, 248, 255];
+    });
+
+  it('folds line art whose ink has no solid core: missing, not a mix (minimal-line-art)', () => {
+    // 1 px ink: no ink pixel sits inside a flat area, so the ink folds rather
+    // than show a grey the drawing doesn't have (round 7 showed #9c9c9c).
+    expect(colors(paletteFromImageData(withClearPixel(strokes(0)), 1000, 600))).toEqual(['#f8f8f8']);
+  });
+
+  it('keeps ink with a solid core, in its own colour', () => {
+    // 3 px ink: the middle pixel is inside, and the ink shows as itself.
+    expect(colors(paletteFromImageData(withClearPixel(strokes(1)), 1000, 600))).toEqual(['#f8f8f8', '#2f2f2f']);
+  });
+});
+
+// GM r15 on #208: a big area shows its own full-resolution pixel nearest its
+// cluster's mean, never the mean; a cluster whose colour is in none of its
+// pixels mixes two areas, and a flat accent among them is its own colour.
+describe('big areas show a pixel they hold (GM r15, round 8)', () => {
+  const dusk = () => fixture('dusk-harbour-16x9-96x54');
+
+  it("gives dusk-harbour's 12 x 12 pink-red sign its own swatch, and the sky its own orange", () => {
+    // Round 7 showed #cf6446, the k-means mean of the orange sky and the
+    // #ff285a sign: no pixel of the image is within ΔE00 7 of it. GM r15
+    // approved the sky's own pixel; with the sign split out, that is #c77140.
+    const out = colors(paletteFromImageData(dusk(), 96, 54, 6, { data: dusk(), width: 96 }));
+    expect(out.some((hex) => deltaE00(hexRgb(hex), [255, 40, 90]) < 2)).toBe(true);
+    expect(out).toContain('#c77140');
+    expect(out).not.toContain('#cf6446');
+    // Six clusters, the sign split out of one: seven.
+    expect(out).toHaveLength(7);
+  });
+
+  it(`reports a big cluster whose nearest own pixel is over ΔE00 ${MIXED_DELTA_E} from its mean, and changes nothing for it`, () => {
+    // Three 25 px bars (#444 #888 #bbb): k-means puts #888 and #bbb in one
+    // cluster, #a3a3a3 by area, and the 96 px clustering never parts them
+    // (a follow-up). The detector names it; the swatch is a real pixel.
+    const three = image(1000, 600, (_, y) => {
+      if (y < 180) return [0, 0, 0, 255];
+      for (const [i, v] of [68, 136, 187].entries()) if (y >= 180 + i * 25 && y < 205 + i * 25) return [v, v, v, 255];
+      return [255, 255, 255, 255];
+    });
+    const result = paletteFromImageData(withClearPixel(three), 1000, 600);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.mixed).toEqual([expect.objectContaining({ mean: '#a3a3a3', shown: '#bbbbbb' })]);
+    expect(result.mixed![0].deltaE).toBeGreaterThan(MIXED_DELTA_E);
+    expect(result.colors).toContain('#bbbbbb');
+  });
+
+  it('lists the possibly mixed clusters of the real-image fixtures (a detector, never a failure)', () => {
+    const seen: string[] = [];
+    for (const [name, w, h] of [['cinematic-noir-96x54', 96, 54], ['cyberpunk-neon-96x54', 96, 54], ['editorial-flash-77x96', 77, 96], ['neon-alley-9x16-54x96', 54, 96], ['studio-product-96x96', 96, 96], ['dusk-harbour-16x9-96x54', 96, 54]] as const) {
+      const result = paletteFromImageData(fixture(name), w, h, 6, { data: fixture(name), width: w });
+      if (result.ok) for (const m of result.mixed ?? []) seen.push(`${name}: ${m.mean} -> ${m.shown}, ΔE00 ${m.deltaE.toFixed(1)}`);
+    }
+    if (seen.length > 0) console.info(`possibly two areas mixed:\n${seen.join('\n')}`);
+    expect(Array.isArray(seen)).toBe(true);
+  });
+});
+
+describe('a footprint is read whole up to a million pixels, then on an even grid', () => {
+  const visits = (side: number) => {
+    const g = 64;
+    const labels = new Int32Array(g * g);
+    const pixels = { rgb: new Float64Array(g * g * 3).fill(128), weight: new Float64Array(g * g).fill(1), width: g };
+    const data = new Uint8ClampedArray(side * side * 4).fill(128);
+    const evidence = edgeEvidenceFromLabels(labels, g, undefined, pixels, { data, width: side, height: side });
+    let n = 0;
+    evidence.footprint!([0], () => { n++; });
+    return n;
+  };
+
+  it('reads every pixel of a footprint under the cap', () => {
+    expect(visits(640)).toBe(640 * 640);
+  });
+
+  it('reads a 4 Mpx footprint on every other row and column', () => {
+    expect(visits(2000)).toBe(1000 * 1000);
+  });
+
+  it('gives each evidence pixel the source pixels its square holds, by position (no rounding to the nearest)', () => {
+    // 640 px on a 64 px grid: each cell is 10 x 10 source pixels.
+    const g = 64;
+    const labels = new Int32Array(g * g);
+    labels[0] = 1;
+    labels[g * g - 1] = 2;
+    const pixels = { rgb: new Float64Array(g * g * 3).fill(128), weight: new Float64Array(g * g).fill(1), width: g };
+    const data = new Uint8ClampedArray(640 * 640 * 4).fill(128);
+    const evidence = edgeEvidenceFromLabels(labels, g, undefined, pixels, { data, width: 640, height: 640 });
+    for (const label of [1, 2]) {
+      let n = 0;
+      evidence.footprint!([label], () => { n++; });
+      expect(n).toBe(100);
+    }
+  });
+});
+
+// mulberry32: the same noise on every run.
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// The reviewers' noisy ui-nav (probes gen2.py): a black header, a #333 bar
+// and a #ddd bar on white, each channel moved by up to +-noise.
+function noisyUiNav(w: number, h: number, noise: number, seed: number): Uint8ClampedArray {
+  const top = Math.floor(h * 0.3);
+  const bar = Math.floor((25 * h) / 600);
+  const data = image(w, h, (_, y) => {
+    const v = y < top ? 0 : y < top + bar ? 51 : y < top + 2 * bar ? 221 : 255;
+    return [v, v, v, 255];
+  });
+  const next = seeded(seed);
+  for (let i = 0; i < data.length; i++) if (i % 4 !== 3) data[i] += Math.floor(next() * (2 * noise + 1)) - noise;
+  return data;
+}
+// A soft black-to-white ramp `rw` px wide across a 960 px image (probes gen10.py).
+function softRamp(rw: number): Uint8ClampedArray {
+  return image(960, 600, (x) => {
+    const v = rint(Math.min(1, Math.max(0, (x - (480 - rw / 2)) / rw)) * 255);
+    return [v, v, v, 255];
+  });
+}
+
+describe('noisy flats and soft ramps show a colour their pixels hold (round 8, surviving mutants)', () => {
+  it('names the bars of a noisy ui-nav #dddddd and #333333, not a lucky pixel or a tint', () => {
+    // Round 8's mutation check: a core of one pixel, no noise rule, the
+    // nearest-to-mean pixel picked first, or the swatch's whole claim in
+    // place of its nearest pixels each tint a bar here.
+    expect(colors(paletteFromImageData(noisyUiNav(512, 307, 6, 2), 512, 307))).toEqual(['#fdfdfd', '#020202', '#dddddd', '#333333']);
+    expect(colors(paletteFromImageData(noisyUiNav(512, 307, 8, 2), 512, 307))).toEqual(['#fdfdfd', '#020202', '#dddddd', '#333333']);
+  });
+
+  it("names a soft ramp's band by its middle, from the pixels nearest the band", () => {
+    expect(colors(paletteFromImageData(softRamp(60), 960, 600))).toEqual(['#ffffff', '#000000', '#7b7b7b']);
+    expect(colors(paletteFromImageData(softRamp(120), 960, 600))).toEqual(['#fdfdfd', '#000000', '#757575']);
   });
 });

@@ -87,9 +87,12 @@ describe('Extract from reference shows each distinct colour once', () => {
 
   it("doesn't collapse a gradient", () => {
     const grey = colors(image(96, 60, (x) => { const v = Math.round((x / 95) * 255); return [v, v, v, 255]; }));
-    // Five: k-means's near-blacks are one black (round 4), shown as the
-    // most populated of them, never a mean (GM r11); the rest stay apart.
-    expect(grey).toEqual(['#d0d0d0', '#797979', '#3a3a3a', '#171717', '#030303']);
+    // Five: k-means's near-blacks are one black (round 4), named at full
+    // resolution (GM r13): on an even ramp every value is as common as the
+    // next, so the black is its pixels' middle, #0b0b0b. Each other cluster
+    // is its own pixel nearest its mean (GM r15), all under ΔE00 0.4 from
+    // round 7's means.
+    expect(grey).toEqual(['#d1d1d1', '#797979', '#3b3b3b', '#181818', '#0b0b0b']);
     noNearPair(grey);
     const warm = colors(image(96, 60, (x) => [...mix([30, 90, 200], [230, 90, 40], x / 95), 255] as Px));
     expect(warm.length).toBeGreaterThanOrEqual(3);
@@ -106,7 +109,7 @@ describe('Extract from reference shows each distinct colour once', () => {
     expect(out).toEqual(['#e8593c', '#1e5adc', '#28c846']);
   });
 
-  it('gives an opaque image with no near-identical swatches the colours it gave before', () => {
+  it('gives an opaque image with no near-identical swatches six colours, each a pixel it holds', () => {
     // Computed with paletteExtract.ts at 7886a137: six distinct swatches, unchanged.
     const quilt = image(96, 96, (x, y) => {
       const v = (x * 7 + y * 13) % 256;
@@ -199,7 +202,10 @@ describe('mergeNearColors', () => {
   });
 });
 
-const QUILT_BEFORE = ["#463dc0", "#4dcc96", "#c53892", "#3d5c35", "#c0852b", "#c0a3cd"];
+// Round 8 (GM r15): each cluster shows its own pixel nearest its mean, not
+// the mean (7886a137 gave #463dc0 #4dcc96 #c53892 #3d5c35 #c0852b #c0a3cd;
+// the quilt is a texture, so the nearest pixel is up to ΔE00 3.5 away).
+const QUILT_BEFORE = ["#423dc3", "#4cd6a0", "#c63a96", "#3d5b30", "#ba8b35", "#c69dc7"];
 
 // Review 2 L3: the final population is counted by alpha weight, as the backend
 // counts it, so a big faint area doesn't outrank a smaller opaque one.
@@ -319,15 +325,18 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
   it('keeps the tinted darks and deep violets of three photos as round 5 gave them (GM r9 guards)', () => {
     // An L*-only floor merged a pair in each: C* 4.2 / 1.9 (cyberpunk-neon),
     // 5.0 / 3.0 (editorial-flash) and 22.9 / 15.0 (neon-alley).
-    expect(colors(fixture('cyberpunk-neon', 96))).toEqual(['#214955', '#568090', '#0a262b', '#071315', '#222931', '#020909']);
-    expect(colors(fixture('editorial-flash', 77))).toEqual(['#d6d5ce', '#020802', '#0e140c', '#2a2e23', '#797970']);
-    expect(colors(fixture('neon-alley-9x16', 54))).toEqual(['#291043', '#1f0e37', '#361452', '#170c2b', '#0d071f', '#00ffa0']);
+    // Round 8: the big areas show their own pixel nearest the cluster's mean
+    // (GM r15), under ΔE00 2.8 from round 5's means; every pair stays apart.
+    expect(colors(fixture('cyberpunk-neon', 96))).toEqual(['#214a56', '#56828e', '#0a262b', '#071315', '#232a2e', '#020909']);
+    expect(colors(fixture('editorial-flash', 77))).toEqual(['#d5d6ce', '#020802', '#0e140c', '#2b2f23', '#797a70']);
+    expect(colors(fixture('neon-alley-9x16', 54))).toEqual(['#2a0f43', '#200d36', '#361452', '#170b2b', '#0d061f', '#00ffa0']);
   });
 
   it('gives studio-product.webp three: its two lightest whites merge (GM, round 5)', () => {
     // Round 4 gave #ededee #f9f9f9 #e1e0dd #b49d71; #ededee and #f9f9f9 are
     // ΔE00 2.52 apart and merge into #f2f2f3. #e1e0dd stays (3.5 and 5.5 away).
-    expect(colors(fixture('studio-product', 96))).toEqual(['#f2f2f3', '#e1e0dd', '#b49d71']);
+    // Round 8 (GM r15): #e1e0dd and #b49d71 show their own nearest pixels.
+    expect(colors(fixture('studio-product', 96))).toEqual(['#f2f2f3', '#e1e0dc', '#b99c72']);
   });
 });
 
@@ -466,12 +475,14 @@ describe('the neutral near-black merge', () => {
   });
 
   it('with pixels to read, shows the black most of the group’s pixels have', () => {
-    // Two near-black clusters; the lighter cluster's pixels are mostly #050505.
-    const evidence: EdgeEvidence = {
-      edge: () => 0,
-      touching: () => false,
-      colour: (swatch) => (swatch.includes(0) && swatch.includes(1) ? [5, 5, 5] : null),
+    // Two near-black clusters; at full resolution their pixels are mostly
+    // #050505, in a flat area (GM r13: the full image names the colour).
+    const footprint: EdgeEvidence['footprint'] = (swatch, visit) => {
+      if (!swatch.includes(0) || !swatch.includes(1)) return;
+      for (let i = 0; i < 12; i++) visit(5, 5, 5, () => true);
+      for (let i = 0; i < 4; i++) visit(2, 2, 2, () => true);
     };
+    const evidence: EdgeEvidence = { edge: () => 0, touching: () => false, footprint };
     const out = mergeNearColors([
       { rgb: [2, 2, 2], weight: 6, members: [0] },
       { rgb: [10, 10, 10], weight: 3, members: [1] },
@@ -517,5 +528,56 @@ describe('the neutral near-black merge', () => {
     expect(merged(black, [10, 14, 40])).toHaveLength(2); // navy: L* 4.80 but C* 18.7
     expect(merged(black, [14, 20, 12])).toHaveLength(2); // tinted dark: L* 5.60, C* 5.04
     expect(merged(black, [7, 19, 21])).toHaveLength(2); // cyberpunk-neon's #071315: C* 4.2
+  });
+});
+
+describe('a run links only through accents that touch (GM r13, review 6 M3)', () => {
+  it("doesn't let the edge between the line's ends link two accents into one band", () => {
+    // Red and blue (each under 5%, so the first edge pass leaves this line),
+    // a pink and a violet accent on their line, and the seam blend between
+    // them, which touches both accents and is all edge. Round 7 linked pink,
+    // seam and violet into one run, a band that folded as an edge: both
+    // accents lost.
+    const RED = [220, 20, 40];
+    const BLUE = [20, 40, 200];
+    const evidence: EdgeEvidence = {
+      edge: (swatch) => (swatch.includes(4) ? 1 : 0),
+      touching: (a, b) => {
+        const pair = [a[0], b[0]].sort().join();
+        return pair === '3,4' || pair === '4,5';
+      },
+    };
+    const out = mergeNearColors([
+      { rgb: [128, 128, 128], weight: 1000, members: [0] },
+      { rgb: RED, weight: 40, members: [1] },
+      { rgb: BLUE, weight: 40, members: [2] },
+      { rgb: [170, 25, 80], weight: 5, members: [3] },
+      { rgb: [120, 30, 120], weight: 5, members: [4] },
+      { rgb: [70, 35, 160], weight: 5, members: [5] },
+    ], MERGE_DELTA_E, evidence);
+    const rgbs = out.map((c) => c.rgb.map(Math.round).join());
+    expect(rgbs).toContain('170,25,80');
+    expect(rgbs).toContain('70,35,160');
+    // The seam folds on its own, as an edge.
+    expect(rgbs).not.toContain('120,30,120');
+  });
+
+  it('lets the edge beside one accent join its run, so the accent counts its pixels', () => {
+    // One pink accent with its antialiased edge (all edge) beside it: the
+    // two are one run, a band that is no edge, shown in the accent's colour
+    // with both weights.
+    const evidence: EdgeEvidence = {
+      edge: (swatch) => (swatch.includes(3) ? 0 : 1),
+      touching: (a, b) => [a[0], b[0]].sort().join() === '3,4',
+    };
+    const out = mergeNearColors([
+      { rgb: [128, 128, 128], weight: 1000, members: [0] },
+      { rgb: [220, 20, 40], weight: 40, members: [1] },
+      { rgb: [20, 40, 200], weight: 40, members: [2] },
+      { rgb: [170, 25, 80], weight: 6, members: [3] },
+      { rgb: [145, 27, 100], weight: 4, members: [4] },
+    ], MERGE_DELTA_E, evidence);
+    const pink = out.find((c) => c.rgb.map(Math.round).join() === '170,25,80');
+    expect(pink).toMatchObject({ weight: 10 });
   });
 });

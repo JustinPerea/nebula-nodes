@@ -89,11 +89,22 @@ function bodyOverflow(popover: HTMLElement | null): number | null {
 }
 
 /**
+ * Whether the body holds a palette: every swatch and the Add / Extract row
+ * after the last one show, so the panel takes the whole body's height up to
+ * the room there is, and only then does the body scroll, as one (GM r12 on
+ * #208: "The palette list shows every swatch, no scroll inside the list";
+ * at 300 px the 4th swatch on and the Add row were below the cut).
+ */
+function holdsPalette(popover: HTMLElement | null): boolean {
+  return Boolean(popover?.querySelector('.inspector__palette'));
+}
+
+/**
  * `panelNeed`: the height the panel would need to show its whole body, or
  * null when not yet known. Within one spare line over 300 px, the panel takes
- * it (POPOVER_SPARE_LINE).
+ * it (POPOVER_SPARE_LINE); with `fitsWhole` (a palette), all of it.
  */
-function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null): PopoverFrame {
+function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: number | null = null, fitsWhole = false): PopoverFrame {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -120,10 +131,11 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   // Above the bar across the whole width, and above the Canvas actions panel
   // only where it is over that panel (lib/bottomBar.ts).
   const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width });
-  // Its own height (one spare line more when that is all the body lacks), or
-  // all the room there is: the body scrolls, the foot stays.
-  const own = panelNeed !== null && panelNeed > POPOVER_MAX_HEIGHT && panelNeed <= POPOVER_MAX_HEIGHT + POPOVER_SPARE_LINE
-    ? Math.ceil(panelNeed) : POPOVER_MAX_HEIGHT;
+  // Its own height (one spare line more when that is all the body lacks; the
+  // whole body when it holds a palette), or all the room there is: the body
+  // scrolls as one, the foot stays.
+  const grows = panelNeed !== null && panelNeed > POPOVER_MAX_HEIGHT && (fitsWhole || panelNeed <= POPOVER_MAX_HEIGHT + POPOVER_SPARE_LINE);
+  const own = grows ? Math.ceil(panelNeed) : POPOVER_MAX_HEIGHT;
   const height = Math.max(0, Math.min(own, bottomLimit - topLimit));
   // Beside the node, level with its top, shifted up when that would cross the bottom.
   let top = rect.top - 8;
@@ -264,7 +276,7 @@ export function NodeInspectorPopover() {
           const shownHeight = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
             ? Number(shown.style.height) : null;
           const panelNeed = shownHeight !== null && overflow !== null ? shownHeight + overflow : null;
-          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed);
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed, holdsPalette(popoverRef.current));
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);

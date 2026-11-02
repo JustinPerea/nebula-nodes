@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ALPHA_MIN, paletteFromPixels, pixelWeight } from '../src/lib/paletteExtract';
+import { ALPHA_MIN, kMeansColors, paletteFromPixels, pixelWeight } from '../src/lib/paletteExtract';
 
 /**
  * Alpha counts the same on both sides (PR #208 round 2). The backend
@@ -63,10 +63,12 @@ describe('paletteFromPixels counts alpha as the backend does', () => {
   it('leaves out pixels under the threshold and weighs the rest by alpha', () => {
     // One cluster over opaque red and blue at alpha 64: its centre sits a
     // fifth of the way to blue (64 / (255 + 64)), not half way.
-    const result = paletteFromPixels(px([200, 0, 0, 255], [0, 0, 200, 64], [0, 255, 0, ALPHA_MIN - 1]), 1);
-    const blue = Math.round(200 * 64 / 319);
-    const red = Math.round(200 * 255 / 319);
-    expect(result).toEqual({ ok: true, colors: [`#${red.toString(16).padStart(2, '0')}00${blue.toString(16).padStart(2, '0')}`] });
+    // The clustering is where the weights count (round 8: the swatch shown is
+    // then the cluster's own pixel nearest that centre, GM r15).
+    const rgba = [[200, 0, 0, 255], [0, 0, 200, 64], [0, 255, 0, ALPHA_MIN - 1]];
+    const [centre] = kMeansColors(rgba.map((p) => p.slice(0, 3)), rgba.map((p) => pixelWeight(p[3])), 1);
+    expect(centre.rgb.map(Math.round)).toEqual([Math.round(200 * 255 / 319), 0, Math.round(200 * 64 / 319)]);
+    expect(paletteFromPixels(px(...rgba), 1)).toMatchObject({ ok: true, colors: ['#c80000'] });
   });
 
   it('counts a pixel at the threshold, which the old cut (128) left out', () => {
@@ -76,6 +78,10 @@ describe('paletteFromPixels counts alpha as the backend does', () => {
   it('gives an opaque image the same colours as before', () => {
     // What 1944d052's paletteFromPixels gave for these pixels.
     const data = px([255, 0, 0, 255], [250, 10, 0, 255], [0, 0, 255, 255], [10, 10, 240, 255], [0, 200, 0, 255]);
-    expect(paletteFromPixels(data, 2)).toEqual({ ok: true, colors: ['#a84600', '#0505f8'] });
+    const rgb = [[255, 0, 0], [250, 10, 0], [0, 0, 255], [10, 10, 240], [0, 200, 0]];
+    const hex = (c: number[]) => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+    expect(kMeansColors(rgb, rgb.map(() => 1), 2).map((c) => hex(c.rgb))).toEqual(['#a84600', '#0505f8']);
+    // Shown, each cluster is its own pixel nearest its centre (GM r15).
+    expect(paletteFromPixels(data, 2)).toMatchObject({ ok: true, colors: ['#fa0a00', '#0000ff'] });
   });
 });
