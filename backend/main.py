@@ -204,6 +204,7 @@ from services.asset_proposals import parse_change as parse_asset_change, summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
                                       update_detail as asset_update_detail, update_text as asset_update_text)
 # Each canvas proposal's Update too (Justin's Q112 a).
+from services.canvas_proposals import model_label
 from services.canvas_proposals import plan_name as card_name
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 # Questions an agent asks the person (Q125 item 1), modelled on proposals.
@@ -7931,7 +7932,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 # The plan line's words (canvas_proposals.plan_line): the node
                 # by its name, its model, and who pays for its run.
                 "name": _node_label(node_id, candidate),
-                "model": _plan_model(definition, params, models),
+                "model": model_label(definition, params, models),
                 "billedTo": billed_to(definition, params, entry, wired=wired),
             })
         if estimate:
@@ -7970,19 +7971,6 @@ def _model_reread(change: Any, models: Mapping[tuple[str, str], Any]) -> dict[st
     if not model or model != universal_ports.model_of(definition_id, node.get("params")):
         return None
     return {"key": key, "name": universal_ports.model_name(definition_id, model, models.get((definition_id, model)))}
-
-
-def _plan_model(definition: Mapping[str, Any], params: Mapping[str, Any],
-                models: Mapping[tuple[str, str], Any] | None) -> str:
-    """A run's model in the plan line: the canvas title ("Krea 2"), or for a
-    universal node the model it is set to, by its catalog name (GM - Design,
-    PR #216 r4: "Claude Sonnet 4.5 on your OpenRouter key", never "OpenRouter
-    on your OpenRouter key")."""
-    definition_id = str(definition.get("id") or "")
-    model = universal_ports.model_of(definition_id, params) if universal_ports.is_universal(definition_id) else ""
-    if model:
-        return universal_ports.model_name(definition_id, model, (models or {}).get((definition_id, model)))
-    return node_route.canvas_title(definition) or definition_id
 
 
 def _not_ready_nodes(
@@ -8188,7 +8176,11 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             "name": f"{_node_label(node_id)} ({node_id})",
             # The person's words for it (the card names nodes, never ids).
             "title": _node_label(node_id),
-            "model": _node_model(node_id),
+            # The model it runs after Accept: a universal node's chosen model by
+            # name ("GPT-4o"), never its provider (GM - Design, PR #216 r5).
+            "model": model_label(node_registry.get(str((candidate.nodes.get(node_id) or {}).get("definitionId") or ""))
+                                 or {}, (candidate.nodes.get(node_id) or {}).get("params") or {}, models)
+            or _node_model(node_id),
             "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
         }
         for node_id in spec.references

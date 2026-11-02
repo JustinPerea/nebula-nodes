@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
 import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
 import {
-  TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, type StackPlace,
+  MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
 } from '../lib/noticeStackPlace';
 import '../styles/noticeRegion.css';
 
@@ -51,7 +51,11 @@ export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
  * root's variables (the log docking, moving or being dragged, the bottom
  * bar), the region's own bottom transition ending, and window resizes.
  */
-function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: RefObject<HTMLDivElement | null>): void {
+function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: RefObject<HTMLDivElement | null>): () => void {
+  // The person unfolded the "more notices" row (GM r5 3); it folds again on
+  // its next click, or once the notices fit above the card.
+  const expanded = useRef(false);
+  const replace = useRef<() => void>(() => {});
   useLayoutEffect(() => {
     const region = regionRef.current;
     const stack = stackRef.current;
@@ -69,13 +73,22 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       // A top bar mounted since (the selection toolbar's panel) joins the watch.
       document.querySelectorAll(`[${TOP_BAR_ATTR}]`).forEach(watch);
       stack.querySelectorAll('[data-notice-shrinks], [data-notice-shrinks] [data-notice-shrink-body] > *').forEach(watch);
-      const measured = measureNoticeStack(region, stack, noticeTopLimit(TOP_GUTTER));
-      const next = { place: placeNoticeStack(measured), logTop: measured.logTop, floatTop: measured.floating?.top ?? 0 };
+      const measured = measureNoticeStack(region, stack, noticeTopLimit(TOP_GUTTER), noticeTopLimit(TOP_GUTTER, true));
+      const next = {
+        place: placeNoticeStack(measured, { expanded: expanded.current }),
+        logTop: measured.logTop, floatTop: measured.floating?.top ?? 0,
+      };
+      if (!next.place.expanded) expanded.current = false;
       // A layout switch (above the log or back, the log moved) lands with no
-      // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4).
-      applyNoticeStack(region, stack, next.place, stackJumps(last, next));
+      // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4);
+      // a give-way step glides from where each row was (GM r5).
+      applyNoticeStack(region, stack, next.place, stackJumps(last, next), stepChanged(last?.place ?? null, next.place));
       last = next;
     }
+    replace.current = () => {
+      expanded.current = !expanded.current;
+      place();
+    };
     watch(region);
     watch(stack);
     place();
@@ -98,8 +111,10 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       items?.disconnect();
       region.removeEventListener('transitionend', place);
       window.removeEventListener('resize', place);
+      replace.current = () => {};
     };
   }, [regionRef, stackRef]);
+  return useCallback(() => replace.current(), []);
 }
 
 export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
@@ -111,7 +126,7 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   // Review 15 LOW-B: a replaced notice's focus goes back into the open dialog.
   const regionRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
-  useStackPlace(regionRef, stackRef);
+  const toggleMore = useStackPlace(regionRef, stackRef);
   useEffect(() => {
     window.addEventListener('keydown', noticeKeys, true);
     const region = regionRef.current;
@@ -123,6 +138,10 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
     <div ref={regionRef} className="notice-region" data-notice-region="">
       <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
       <div ref={stackRef} className="notice-region__stack">
+        {/* GM r5 3: the older notices folded into one row when there is no
+            room above the card for them all; its words and aria-expanded
+            are written with the place (lib/noticeStackPlace.ts). */}
+        <button type="button" className="notice-region__more" {...{ [MORE_ATTR]: '' }} hidden onClick={toggleMore} />
         {NOTICE_SLOTS.map((name) => (
           <div key={name} ref={refs[name]} className="notice-region__slot" data-notice-slot={name} />
         ))}

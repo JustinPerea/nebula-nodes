@@ -652,6 +652,24 @@ def _plan_name(name: Any) -> str | None:
 plan_name = _plan_name
 
 
+def model_label(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
+                models: Mapping[tuple[str, str], Any] | None = None) -> str:
+    """The model a node runs, as the card, the plan line, get_proposal, MCP
+    and the CLI name it: the canvas title ("Krea 2"), or for a universal node
+    the model it is set to, by its catalog name (GM - Design, PR #216 r4-r5:
+    "Claude Sonnet 4.5 on your OpenRouter key", "“Second look” · GPT-4o",
+    never "OpenRouter"). ``models`` is _look_up_models' data; without it the
+    pickers' cache, else the model id."""
+    from services import node_route, universal_ports
+
+    definition = definition or {}
+    definition_id = str(definition.get("id") or "")
+    model = universal_ports.model_of(definition_id, params) if universal_ports.is_universal(definition_id) else ""
+    if model:
+        return universal_ports.model_name(definition_id, model, (models or {}).get((definition_id, model)))
+    return node_route.canvas_title(definition) or definition_id
+
+
 def _and_list(words: list[str]) -> str:
     """“A”, “A” and “B”, “A”, “B” and “C”: no serial comma."""
     return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
@@ -1349,7 +1367,7 @@ class ProposalBook:
         names = spec.names
         for node in spec.nodes:
             definition = definitions.get(node.definition_id, {}) if isinstance(definitions, dict) else {}
-            model = str(definition.get("displayName") or node.definition_id)
+            model = model_label(definition, node.params) or node.definition_id
             nodes.append({
                 "ref": node.ref,
                 "definitionId": node.definition_id,

@@ -20,7 +20,7 @@ import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
-import { SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR } from '../../lib/noticeStackPlace';
+import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR } from '../../lib/noticeStackPlace';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -319,7 +319,8 @@ export function ProposalBar() {
                 </button>
               )}
               {plan && (
-                <p className="proposal-bar__plan">
+                // The line the card never gives up (GM r5): the region keeps it in view.
+                <p className="proposal-bar__plan" {...{ [KEEP_ATTR]: '' }}>
                   {priceAt < 0 ? plan : (
                     <>
                       {plan.slice(0, priceAt)}

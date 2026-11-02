@@ -326,11 +326,7 @@
   flex-direction: column;
   box-sizing: border-box;
   min-width: 0;
-  /* Give-way (GM - Design, PR #216 r4 5; lib/noticeStackPlace.ts): while the
-     notices sit over the body's foot, the body keeps their room there and
-     never gets less than it, or one line. 0 otherwise. */
-  min-height: var(--notice-body-floor, 0px);
-  padding-bottom: var(--notice-overlay-pad, 0px);
+  min-height: 0;
   border-radius: 8px;
 }
 

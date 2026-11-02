@@ -1024,3 +1024,27 @@ def test_a_universal_nodes_paid_run_names_its_model(api):
     assert universal_ports.model_name("replicate-universal", "owner/model", {"name": "Ignored"}) == "owner/model"
     model_cache.clear()
     assert universal_ports.model_name("openrouter-universal", "anthropic/claude-sonnet-4.5") == "anthropic/claude-sonnet-4.5"
+
+
+def test_universal_nodes_name_the_chosen_model_everywhere(api):
+    """GM r5 (shot 03): "“Second look” · GPT-4o", never "· OpenRouter", in
+    the panel titles as in the plan line; one helper
+    (canvas_proposals.model_label) feeds both, and get_proposal and the CLI
+    read the same view."""
+    from cli.formatter import format_proposal
+
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    swap = _swap(api, eye, run=[eye]).json()["proposal"]
+    assert swap["params"][0]["model"] == "Claude Sonnet 4.5"
+    assert swap["cost"]["nodes"][0]["model"] == "Claude Sonnet 4.5"
+    again = _swap(api, api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"}), model="openai/gpt-4o")
+    assert again.json()["proposal"]["params"][0]["model"] == "GPT-4o"
+    made = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "a third look",
+        "nodes": [{"ref": "+look", "definitionId": "openrouter-universal", "params": {"model": "openai/gpt-4o"}}],
+        "rename": {"+look": "Third look"}}).json()["proposal"]
+    assert made["nodes"][0]["model"] == "GPT-4o"
+    read = api.client.get(f"/api/canvas/proposals/{swap['id']}", headers=AGENT).json()["proposal"]
+    assert read["params"][0]["model"] == "Claude Sonnet 4.5"
+    assert "Claude Sonnet 4.5 on your OpenRouter key" in format_proposal(read)

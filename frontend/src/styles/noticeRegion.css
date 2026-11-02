@@ -100,16 +100,47 @@
   transition: none;
 }
 
-/* Give-way step 1 (GM - Design, PR #216 r4 5): with no room under the card,
-   the notices sit over the bottom of its body, just above its footer, never
-   over the docked log. The card's body keeps their room at its foot
-   (canvasProposals.css --notice-overlay-pad); each notice moves up by its
-   own --notice-overlay-y, on the stack's spring. */
-.notice-region[data-notice-overlay='true'] .notice-region__slot > :not([data-notice-shrinks]) {
-  position: relative;
-  z-index: 1;
-  translate: 0 var(--notice-overlay-y, 0px);
-  transition: translate 420ms var(--notice-spring);
+/* The give-way steps (GM - Design, PR #216 r5; lib/noticeStackPlace.ts).
+   Step 2: with no room under the card for its note and plan line, the
+   notices move above it, the newest nearest it: the card goes to the
+   stack's end, on its line. Step 3: no room above for them all, the older
+   ones fold into one row ("2 more notices") over the newest. A folded notice
+   stays mounted (its timers and hold go on) but takes no room, no clicks and
+   no focus. A move between steps glides from where each row was (Web
+   Animations, on the stack's spring), never a jump; reduced motion lands
+   it at once. */
+.notice-region:is([data-notice-mode='above'], [data-notice-mode='folded']) .notice-region__slot > [data-notice-shrinks] {
+  order: 1;
+}
+
+.notice-region .notice-region__slot > [data-notice-folded] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The folded notices' one row: one 32 px line, the neutral notice's
+   surface, at the top of the stack; a click (or Enter, Space) unfolds them
+   above the newest and folds them again. */
+.notice-region__more {
+  display: none;
+  box-sizing: border-box;
+  height: 32px;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--notice-neutral-edge);
+  border-radius: var(--sr-radius-pill, 999px);
+  background: var(--notice-neutral-fill);
+  color: var(--notice-neutral-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.notice-region[data-notice-more-shown] .notice-region__more {
+  display: inline-flex;
 }
 
 /* Under 400 px of room beside a docked Agent log, the whole stack sits above
@@ -238,8 +269,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .notice-region,
-  .notice-region__stack,
-  .notice-region[data-notice-overlay='true'] .notice-region__slot > :not([data-notice-shrinks]) {
+  .notice-region__stack {
     transition: none;
   }
 }

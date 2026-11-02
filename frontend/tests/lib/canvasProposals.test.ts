@@ -114,11 +114,14 @@ describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
   it('reads "GPT-4o · inputs updated" for the same model set again (GM r4 8)', () => {
     const again: ProposalView = {
       ...view(),
-      params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', model: 'OpenRouter',
+      // The backend names a universal node by the model it runs
+      // (canvas_proposals.model_label), never its provider (GM r5).
+      params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', model: 'GPT-4o',
         inputsUpdated: { key: 'model', name: 'GPT-4o' },
         changes: { model: { from: 'openai/gpt-4o', to: 'openai/gpt-4o' }, temperature: { from: 1, to: 0.3 } } }],
     };
     const edit = proposalChanges(again).find((group) => group.kind === 'edit')!;
+    expect(edit.title).toBe('“Second take” · GPT-4o');
     expect(edit.lines).toEqual([
       { key: 'model', to: 'GPT-4o · inputs updated' },
       { key: 'temperature', from: '1', to: '0.3' },

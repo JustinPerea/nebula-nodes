@@ -250,3 +250,43 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 | 1440 "inputs updated" | "“Second look” · OpenRouter / model GPT-4o · inputs updated"; 1 change. |
 
 - Found while live: a Vite left running through the mutation run served stale modules (notices didn't render) until it was restarted, as the restart-Vite note warns.
+
+## Round 3c (GM - Design's r5, 2026-11-02)
+
+**The give-way order, replaced (GM r5).** Never covered: the docked log's header and its collapse control; the card's header, plan line and footer. No notice overlaps another; the r4 tuck and the overlay over the body's foot are gone (`--notice-overlay-*`, `--notice-body-floor` and their CSS removed). `placeNoticeStack` (lib/noticeStackPlace.ts) is pure and returns `mode` `under` | `above` | `folded`:
+- 0, `under`: card on top, notices under it, while the body keeps its note and plan line whole (`bodyFloors().full` = plan line's foot + the 16 px fade).
+- 1, GM's "overlay the body's foot while the plan line stays clear": not built. It holds exactly the room of step 0 (the notices and their gaps come out of the same column whether they sit under the footer or over the body's foot), so once step 0 would squeeze the plan line, step 1 would too. **For GM:** the order is effectively under → above → folded. Said in the module's header.
+- 2, `above`: the card goes to the stack's end (`order: 1`), on the stack's line; the notices sit over the canvas under the top line, the newest nearest the card. The body keeps at least the plan line between two fades (`bodyFloors().min`); `keepPlan` makes the region scroll the body so the plan line shows, and the note goes behind the top fade (GM r5 2's "the note clamps or scrolls behind its fade").
+- 3, `folded`: the older notices get `data-notice-folded` (out of flow, hidden, no clicks or focus, still mounted so their timers run) and one row shows above the newest, "1 more notice" / "N more notices": a real `<button>` first in the stack, `aria-expanded`, its words and state written with the place. A click unfolds them above the newest (step 2 with the row on top; the card's body may then go below its floor) and folds them again; it resets once they all fit.
+- 4, last resort, only where step 3 can't fit: the stack first rises into the room the selection toolbar's empty Panel keeps (`topFloor`, from `noticeTopLimit(gutter, true)`, which leaves out top-bar parts with no width), and only past that does the card's foot come down over the log's top edge (`over`).
+- Every step change glides: `applyNoticeStack(…, glide)` keeps each row's last resting layout box (`layoutBox`, its transform taken out), lands the new layout in one frame (`data-notice-jump`), then springs each row and the card from where it was (Web Animations `translateY`, 420 ms, the stack's `--notice-spring`; the card held by its footer, the rows by their tops). Reduced motion lands it at once; a folded row or one with nowhere to come from doesn't glide; a new step's glide takes over from one in flight, and any other place lets it run. Live: under → above at 420×700 started `translateY(-54px)` on the card and `translateY(270px)` on the older notice, on the `linear(…)` spring.
+- The region now measures heights from the layout (`offsetHeight`, and boxes inside the card divided by its scale), never what's on screen: the step in force, the card's entrance scale (0.96) or a glide no longer change the measure. Before this, a notice measured mid-entrance read 44 px instead of 46.
+- The grid test proves the invariants in 210 cells: 7 window sizes × log open, closed or floating in the column × 0–4 notices × the offline banner on or off. In every cell nothing overlaps (card, notices, row), the plan line shows between the card's header and footer, the newest notice is whole, nothing leaves the window, nothing passes the top line except into the spare room, and nothing reaches a floating log except where neither side of it has the room (then the stack sits under it and crosses the 8 px gap, never the log's header). Only the cells in `OVER` cross the docked log's line.
+
+**For GM: where r5 can't all hold.** At 420×560 with the log open, the room between the top line (116, the empty toolbar Panel's 108 + 8) and the log's line (291) is 175 px. The card's fixed rows are 89 and its plan line with two fades 65, so the card alone needs 154. GM's "about 130 px above the card" isn't there: one notice needs 208, two folded 248. Live:
+- 1 notice: step 2, rising 22 px into the toolbar's room (notice at 84, under the tabs at 52 + 8);
+- 2 notices: step 3, the row at 60 and the newest at 100, the card 154–308: its foot crosses the log's line by 16 px, 7 px into the log's header (header 301–338; the collapse chevron's top edge). Listed in `OVER` with 420×560 and 1 notice + banner, 2–4 notices with or without the banner, and 768×600 with the banner and 2–4 notices.
+- The choices for GM: allow that (current); or let the plan line go behind the fades there instead (the body scrolls, the log's header stays clear); or let the empty toolbar Panel not count for the card at all (+56 px everywhere, but a selection would then move the card).
+
+**Universal nodes name the model everywhere (GM r5).** `canvas_proposals.model_label(definition, params, models)` is the one helper: the canvas title, or for a universal node its chosen model by catalog name. It feeds `cost.nodes[].model` (the plan line), the existing nodes' `model` at create (the panel's group titles: "“Second look” · GPT-4o"), new nodes' `model` in `view()`, and so get_proposal, MCP, the CLI and Updates, which all read the view. main's `_plan_model` is gone. Pinned in `test_universal_ports.py` (swap → "Claude Sonnet 4.5" in params and cost; same model → "GPT-4o"; a new node; get_proposal and the CLI) and in `tests/lib/canvasProposals.test.ts` (the fixture said "OpenRouter").
+
+**Not this PR (GM r5):** the "Canvas actions" bar clip at 420 (follow-up: the "…" icon alone, aria-label "Canvas actions"); the wording batch ("Person changed the canvas" naming what changed; the run chip's en dash).
+
+**Checks (round 3c).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, on the round 3b list plus every test file that reads `src/` or styles or names the changed modules (focusRingCss included): 160 files, 2967 tests. The second full run had 3 timeouts under machine load (the ratchet corpus and the money property test, 130 s each); both files pass alone (127 tests). The copy sweep caught `white-space: nowrap` on the new row (removed), and the dialogs' focus test caught the hidden row as a Tab stop (it now carries `hidden`, and folded notices `inert`).
+- Isolated pytest: 1447 passed (plan line, canvas proposals, universal ports, every `test_error_copy_*`, the connected-copy sweep, MCP tools, CLI, node route, reopen).
+- Entry: 451,560 B raw, 138,887 B gzip.
+- Mutation checks: 39 run; 35 caught at first, and the 4 that survived (the floating log's no-room choice and its spare room, the card's glide held by its footer, reduced motion) are pinned now and caught. Runner `scratchpad/proposal-card/mut3c/run.py`, results `out.txt`.
+- **Live** (Restraint; isolated backend on 8798, Vite on 5798, restarted after the mutation run; canaries blocked; nothing accepted or run). Shots in `scratchpad/proposal-card/shots3c/`, `md5 | uniq -d` empty:
+
+| Shot | Result |
+|---|---|
+| 02, 420×560, log open, 2 notices | Step 3 plus the last resort: "1 more notice" at 60–92, the newest whole at 100–146, the card 154–308 with the plan line at 204–237. The card's foot is 16 px past the log's line (log header at 301). |
+| 02b, 420×700, log open, 2 notices | Step 2: both notices above (116–162, 170–216), the card 224–432, plan line 328–361, the log's header at 441 clear. |
+| 04, 420×640, log open, 2 notices | Step 3: the row at 116–148, the newest at 156–202, the card 210–372, plan line 260–293, the log's header at 381 clear. |
+| 05, 04 after a click on the row | Unfolded, `aria-expanded="true"`: the row at 70, both notices, the card 218–372. |
+| 03, 1440 "inputs updated" | "“Second look” · GPT-4o / model GPT-4o · inputs updated". |
+
+- Live glide, under → above at 420×700: the card `translateY(-54px)` → 0 and the older notice `translateY(270px)` → 0, 420 ms on the stack's `linear(…)` spring. The new notice keeps its own entrance.
+- Found while live: the Chrome for Testing 150 build the harness used is gone from `~/.cache/puppeteer` (removed outside this session), so the shots ran on the cached 131 build.
