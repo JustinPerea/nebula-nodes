@@ -4070,6 +4070,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
     except WebSocketDisconnect:
+        pass
+    finally:
+        # Every exit leaves the manager, not only a clean WebSocketDisconnect:
+        # a cancelled task (server shutdown, a client that closes while this
+        # handler is still between sends) or any other error used to leave the
+        # socket counted, and canvas_open() then told agents a canvas was open
+        # when none was (the CI flake of 2026-11-02, test_cli_apply's arrange line).
         manager.disconnect(websocket)
 
 
