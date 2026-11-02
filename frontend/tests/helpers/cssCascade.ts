@@ -45,6 +45,8 @@ export interface SheetRule {
   decls: Array<{ prop: string; value: string; important: boolean }>;
   /** The @media queries the rule sits in, outermost first (none: it always applies). */
   media: string[];
+  /** The @container conditions the rule sits in, outermost first ("name (width < 970px)"). */
+  container: string[];
   /** A class the element must carry for the rule to match it (one of its subject's own
    *  classes, outside any pseudo), or null: what the index looks rules up by. */
   key: string | null;
@@ -148,6 +150,56 @@ export function mediaMatches(params: string, viewport: Viewport): boolean {
   });
 }
 
+/** A `<length>` in px, or a calc() that adds and subtracts px ("calc(250px + 400px + 320px)"); NaN otherwise. */
+export function pxLength(raw: string): number {
+  const text = raw.trim();
+  const calc = /^calc\((.*)\)$/.exec(text);
+  const body = calc ? calc[1] : text;
+  const terms = body.trim().split(/\s+([+-])\s+/);
+  let total = 0;
+  for (let i = 0; i < terms.length; i += 2) {
+    const px = /^(-?\d+(?:\.\d+)?)px$/.exec(terms[i].trim());
+    if (!px || (!calc && terms.length > 1)) return NaN;
+    total += (i > 0 && terms[i - 1] === '-' ? -1 : 1) * Number(px[1]);
+  }
+  return total;
+}
+
+/** An @container prelude: the container's name (if it names one) and its width condition. */
+export function containerParts(prelude: string): { name: string | null; condition: string } {
+  const match = /^\s*([a-zA-Z_][\w-]*)?\s*(\(.*\))\s*$/.exec(prelude);
+  return match ? { name: match[1] ?? null, condition: match[2] } : { name: null, condition: prelude };
+}
+
+/** An @container condition's width tests: `width < N`-style ranges and min-/max-width, as
+ * [operator, px]; null when a part is anything else (height, style queries, `or`, `not`). */
+function widthTests(prelude: string): Array<[string, number]> | null {
+  const { condition } = containerParts(prelude);
+  const tests: Array<[string, number]> = [];
+  for (const part of condition.split(/\s+and\s+/)) {
+    const inner = /^\((.*)\)$/.exec(part.trim())?.[1].trim() ?? '';
+    const range = /^(?:inline-size|width)\s*(<=|>=|<|>)\s*(.+)$/.exec(inner);
+    const minmax = /^(min|max)-(?:inline-size|width)\s*:\s*(.+)$/.exec(inner);
+    const n = pxLength((range ?? minmax)?.[2] ?? '');
+    if (Number.isNaN(n)) return null;
+    tests.push([range ? range[1] : minmax![1] === 'min' ? '>=' : '<=', n]);
+  }
+  return tests;
+}
+
+/** Whether an @container width condition holds for a container `width` px wide. Anything
+ * else (height, style queries, `or`, `not`) reads as not holding. */
+export function containerMatches(prelude: string, width: number): boolean {
+  const tests = widthTests(prelude);
+  return tests !== null && tests.every(([op, n]) => (op === '<' ? width < n : op === '<=' ? width <= n : op === '>' ? width > n : width >= n));
+}
+
+/** The widths an @container condition turns at: the first whole px on its upper side (for
+ * `width < N`, N: N-1 and N are its two sides). */
+export function containerBreakpoints(prelude: string): number[] {
+  return (widthTests(prelude) ?? []).map(([op, n]) => (op === '<' || op === '>=' ? n : n + 1));
+}
+
 let cached: SheetRule[] | null = null;
 
 /** The style rules of one stylesheet, once per selector in its list, ordered from `order`. */
@@ -159,8 +211,10 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
     }
     const media: string[] = [];
+    const container: string[] = [];
     for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
       if (parent.type === 'atrule' && (parent as AtRule).name === 'media') media.unshift((parent as AtRule).params);
+      if (parent.type === 'atrule' && (parent as AtRule).name === 'container') container.unshift((parent as AtRule).params);
     }
     const decls = rule.nodes.flatMap((node) => node.type === 'decl'
       ? [{ prop: node.prop.toLowerCase(), value: node.value.replace(/\s+/g, ' ').trim(), important: Boolean(node.important) }]
@@ -229,7 +283,7 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       } catch {
         loose = base;
       }
-      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls, media, key });
+      rules.push({ file, selector, base, state, loose, specificity, order: order.next, decls, media, container, key });
     }
   });
   return rules;
@@ -306,6 +360,38 @@ export function wins(a: { important: boolean; specificity: [number, number, numb
   return a.order >= b.order;
 }
 
+/**
+ * The query container an @container rule on `element` reads: its nearest
+ * ancestor that the app's sheets make an inline-size (or size) container,
+ * with that name when the rule names one. Null when there is none, and the
+ * rule then never applies, as in a browser.
+ */
+export function queryContainer(element: Element, name: string | null, viewport: Viewport, extraCss?: string): Element | null {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const own = cascaded(parent, extraCss, { viewport });
+    const short = own.get('|container')?.value;
+    const [names = '', type = 'normal'] = short ? short.split('/').map((part) => part.trim()) : [];
+    const typeOf = (own.get('|container-type')?.value ?? (short ? type : 'normal')).trim();
+    const namesOf = (own.get('|container-name')?.value ?? names).split(/\s+/).filter(Boolean);
+    if (!/^(inline-size|size)$/.test(typeOf)) continue;
+    if (name && !namesOf.includes(name)) continue;
+    return parent;
+  }
+  return null;
+}
+
+/**
+ * Whether a rule's @media and @container conditions hold for `element` at
+ * `viewport`. A container's width is taken as the viewport's: the studio
+ * roots that are containers are `position: fixed; inset: 0` (the studio grid
+ * ratchet checks the Board root is), so they are exactly the window wide.
+ */
+function applies(rule: SheetRule, element: Element, viewport: Viewport, extraCss?: string): boolean {
+  if (!rule.media.every((query) => mediaMatches(query, viewport))) return false;
+  return rule.container.every((prelude) => queryContainer(element, containerParts(prelude).name, viewport, extraCss) !== null
+    && containerMatches(prelude, viewport.width));
+}
+
 export type Winner = { value: string; important: boolean; specificity: [number, number, number]; order: number; selector: string; file: string };
 
 /** The rules that match `element` (any state), with the winning declaration per state|property. */
@@ -317,7 +403,7 @@ export function cascaded(element: Element, extraCss?: string,
   for (const rule of [...candidateRules(element), ...extra]) {
     // With a viewport, a rule in an @media block applies only where its query holds; without
     // one, every rule counts, as before.
-    if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
+    if (viewport && !applies(rule, element, viewport, extraCss)) continue;
     let hit = false;
     try { hit = element.matches(loose ? rule.loose : rule.base); } catch { hit = false; }
     if (!hit) continue;
@@ -348,7 +434,7 @@ export function declarationsOf(element: Element, prop: string,
   const out: Winner[] = [];
   for (const rule of rules ? candidatesIn(indexRules(rules), element) : candidateRules(element)) {
     if (rule.state) continue;
-    if (viewport && !rule.media.every((query) => mediaMatches(query, viewport))) continue;
+    if (viewport && !applies(rule, element, viewport)) continue;
     let hit = false;
     try { hit = element.matches(rule.base); } catch { hit = false; }
     if (!hit) continue;

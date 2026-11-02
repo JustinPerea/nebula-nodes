@@ -45,7 +45,7 @@ vi.mock('../../lib/viewportSpring', () => ({
   },
 }));
 
-import { BoardCanvas, type BoardMove } from './BoardCanvas';
+import { BoardCanvas, KEY_MOVE_SETTLE_MS, type BoardMove } from './BoardCanvas';
 import { useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { CANVAS_INTERACTION_PROPS } from '../../lib/canvasNavigation';
 import { useGraphStore } from '../../store/graphStore';
@@ -153,6 +153,24 @@ describe('a drag', () => {
     act(() => { vi.advanceTimersByTime(600); });
     expect(moves).toEqual([[{ placement: 'c2', x: 530, y: 0 }]]);
   });
+
+  // #209 review 4 LOW-2: a drag's end resets the drag, or every arrow-key
+  // move after the first mouse drag would show and never be sent.
+  for (const how of ['a card drag', 'a selection drag'] as const) {
+    it(`after ${how} ends, arrow keys still send their move`, () => {
+      vi.useFakeTimers();
+      mount();
+      act(() => props().onNodesChange([{ type: 'position', id: 'c1', position: { x: 40, y: 0 }, dragging: true }]));
+      act(() => {
+        if (how === 'a card drag') props().onNodeDragStop({}, nodeById('c1'), [nodeById('c1')]);
+        else props().onSelectionDragStop!({}, [nodeById('c1')]);
+      });
+      expect(moves).toEqual([[{ placement: 'c1', x: 40, y: 0 }]]);
+      act(() => props().onNodesChange([{ type: 'position', id: 'c2', position: { x: 525, y: 0 }, dragging: false }]));
+      act(() => { vi.advanceTimersByTime(KEY_MOVE_SETTLE_MS); });
+      expect(moves).toEqual([[{ placement: 'c1', x: 40, y: 0 }], [{ placement: 'c2', x: 525, y: 0 }]]);
+    });
+  }
 });
 
 describe('selection', () => {
