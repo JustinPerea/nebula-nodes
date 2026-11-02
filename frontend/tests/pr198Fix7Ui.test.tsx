@@ -201,6 +201,12 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe(`${1180 - 820 + 8}px`);
     // Its top edge plus the gap, for a proposal card that sits above it (PR #216 r1).
     expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
+    // Hidden: both go (review 1 LOW-6 of PR #216: the notice stack reads them).
+    act(() => { useUIStore.setState({ agentLogEnabled: false } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
+    act(() => { useUIStore.setState({ agentLogEnabled: true } as never); });
+    expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
     unmount();
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
     expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');

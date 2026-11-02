@@ -6728,8 +6728,10 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
         return ANOTHER_PROJECT
     try:
         _refuse_overwriting_later_edits(proposal)
+        dropped: list[dict[str, str]] = []
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(proposal.spec, positions=proposal.positions,
-                                                                models=models)
+                                                                models=models, drops=dropped)
+        _refuse_changed_drops(proposal, dropped)
         _refuse_changed_runs(proposal, candidate, id_map, run_ids)
     except HTTPException as exc:
         return str(exc.detail)
@@ -7502,19 +7504,8 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
     node = graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
     params = node.get("params") or {}
-    definition = node_registry.get(definition_id) or {}
-    inputs = node_ports(definition_id, params, definition, "inputPorts")
-    outputs = node_ports(definition_id, params, definition, "outputPorts")
     configured = universal_ports.stored_ports(definition_id, params) is not None
-    # A node never configured with no declared ports in a direction takes any
-    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
-    def fits(edge: dict[str, Any]) -> bool:
-        if edge.get("source") == node_id and (outputs or configured):
-            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
-        if edge.get("target") == node_id and (inputs or configured):
-            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
-        return True
-    orphans = [edge for edge in graph.edges if not fits(edge)]
+    orphans = _orphaned_wires(graph, node_id)
     if orphans:
         wires = ", ".join(f"{e['source']}.{e['sourceHandle']} → {e['target']}.{e['targetHandle']}" for e in orphans[:6])
         model = universal_ports.model_of(definition_id, params)
@@ -7530,6 +7521,42 @@ def _refuse_orphaned_wires(graph: CLIGraph, node_id: str, name: str | None = Non
             f"{why}: {wires}. Disconnect them in the same edit (`unwire`), or pick a model that takes them."))
 
 
+def _orphaned_wires(graph: CLIGraph, node_id: str) -> list[dict[str, Any]]:
+    """The wires on a node that its ports, as its params now set them, don't
+    take: _refuse_orphaned_wires's test, shared."""
+    node = graph.nodes.get(node_id) or {}
+    definition_id = str(node.get("definitionId") or "")
+    params = node.get("params") or {}
+    definition = node_registry.get(definition_id) or {}
+    inputs = node_ports(definition_id, params, definition, "inputPorts")
+    outputs = node_ports(definition_id, params, definition, "outputPorts")
+    configured = universal_ports.stored_ports(definition_id, params) is not None
+
+    # A node never configured with no declared ports in a direction takes any
+    # handle there (port_contracts.DYNAMIC_PORT_DEFINITION_IDS): Replicate.
+    def fits(edge: dict[str, Any]) -> bool:
+        if edge.get("source") == node_id and (outputs or configured):
+            return edge.get("sourceHandle") in universal_ports.port_ids(outputs)
+        if edge.get("target") == node_id and (inputs or configured):
+            return edge.get("targetHandle") in universal_ports.port_ids(inputs)
+        return True
+    return [edge for edge in graph.edges if not fits(edge)]
+
+
+def _drop_orphaned_wires(graph: CLIGraph, node_id: str, *, keep: set[str]) -> list[dict[str, str]]:
+    """Removes, from a staged graph, the wires already on it (not in `keep`,
+    the ids this proposal made) that ``node_id``'s new model has no port for,
+    and returns them by their ends (_stage_proposal's `drops`)."""
+    dropped: list[dict[str, str]] = []
+    for edge in _orphaned_wires(graph, node_id):
+        if str(edge.get("id") or "") in keep:
+            continue
+        ends = {key: str(edge.get(key) or "") for key in ("source", "sourceHandle", "target", "targetHandle")}
+        if graph.remove_edge(ends["source"], ends["sourceHandle"], ends["target"], ends["targetHandle"]):
+            dropped.append(ends)
+    return dropped
+
+
 def _stage_proposal(
     spec: ProposalSpec,
     *,
@@ -7538,6 +7565,7 @@ def _stage_proposal(
     what: str = "a proposal",
     models: Mapping[tuple[str, str], Any] | None = None,
     report: dict[str, dict[str, Any]] | None = None,
+    drops: list[dict[str, str]] | None = None,
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -7554,6 +7582,14 @@ def _stage_proposal(
     known (no key, unknown model) is refused with the reason. `report`, when
     given, gets `ports` {node id: {model, inputs, outputs}} and `notes`
     {node id: reason} for those nodes.
+
+    `drops`, when given (a canvas proposal: the person sees each one before
+    Accept, GM - Design, PR #216 r3), takes the wires already on the canvas
+    that a model change leaves on ports the new model doesn't have: they are
+    removed from the candidate, as the picker removes them for the person,
+    and listed there. Only when the new model's ports are known; a wire this
+    proposal makes, or ports that can't be read, are still refused. Direct
+    edits never pass it: they stay all or nothing (`unwire`).
     """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
@@ -7628,6 +7664,11 @@ def _stage_proposal(
                     f"Until it can, {name} has {_basic_ports_line(definition_id, node.get('params') or {})}."))
     try:
         edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+        if drops is not None:
+            made = set(edge_ids)
+            for node_id, reason in configured.items():
+                if not reason and node_id not in new_ids:
+                    drops.extend(_drop_orphaned_wires(candidate, node_id, keep=made))
         for node_id, reason in configured.items():
             _refuse_orphaned_wires(candidate, node_id, reason=reason)
     except HTTPException as exc:
@@ -7865,6 +7906,36 @@ def _not_ready_nodes(
     return rows
 
 
+def _wire_words(ends: Mapping[str, Any], graph: CLIGraph, id_map: Mapping[str, str]) -> dict[str, str]:
+    """A wire as the card's panel names it: “Prompt” → “Second take” ·
+    Prompt (GM - Design, PR #216 r3): both nodes by name and the target's
+    port by its label, read on ``graph`` (the staged one for a wire the
+    proposal makes, with its new nodes under ``id_map``; the live one for a
+    wire it removes, whose port the new model drops)."""
+    source = id_map.get(str(ends.get("source")), str(ends.get("source")))
+    target = id_map.get(str(ends.get("target")), str(ends.get("target")))
+    handle = str(ends.get("targetHandle") or "")
+    node = graph.nodes.get(target) or {}
+    definition_id = str(node.get("definitionId") or "")
+    ports = node_ports(definition_id, node.get("params"), node_registry.get(definition_id) or {}, "inputPorts")
+    label = next((str(port.get("label") or handle) for port in ports or []
+                  if isinstance(port, Mapping) and port.get("id") == handle), handle)
+    return {"sourceName": _node_label(source, graph), "targetName": _node_label(target, graph), "targetLabel": label}
+
+
+def _dropped_ends(dropped: Iterable[Mapping[str, Any]]) -> list[tuple[str, str, str, str]]:
+    return sorted((str(e.get("source")), str(e.get("sourceHandle")), str(e.get("target")), str(e.get("targetHandle")))
+                  for e in dropped)
+
+
+def _refuse_changed_drops(proposal: Proposal, dropped: list[dict[str, str]]) -> None:
+    """409 when Accept would now remove other wires than the proposal listed
+    (one was made or removed on that node since): the person decides on the
+    removals the card showed."""
+    if _dropped_ends(dropped) != _dropped_ends(proposal.removed_edges):
+        raise HTTPException(status_code=409, detail="the connections it removes changed after it was proposed")
+
+
 def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
     """The card names nodes in curly quotes (GM - Design, PR #216 r1):
     "“Hero shot” needs your Krea account. Connect it in Settings." A route's
@@ -7872,7 +7943,9 @@ def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> st
     it gets the node's, quoted, the same way."""
     if line.startswith("“"):
         return line
-    for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition), name):
+    # Only the model's own names: a line that starts with neither isn't about
+    # the node by name, so nothing is quoted (review 1 L2).
+    for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition)):
         if lead and line.startswith(f"{lead} "):
             return f"“{name}”{line[len(lead):]}"
     return line
@@ -7966,8 +8039,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
                           before=current.get("params") or {}, must_exist=True)
     models = await _look_up_models(_spec_models_wanted(spec))
     _refuse_if_graph_moved(fence)  # staged on, and made for, the canvas the agent read
+    dropped: list[dict[str, str]] = []
     try:
-        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models)
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec, models=models, drops=dropped)
     except HTTPException as exc:
         # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
@@ -8000,6 +8074,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    # The card's words for its wires, and the wires Accept removes (GM - Design, PR #216 r3).
+    proposal.wires = [_wire_words(edge.as_dict(), candidate, id_map) for edge in spec.edges]
+    proposal.removed_edges = [{**ends, **_wire_words(ends, cli_graph, {})} for ends in dropped]
     # The canvas it was made on, in the step that made it (review 20 L-3).
     proposal.canvas_revision = _canvas_revision()
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
@@ -8262,7 +8339,10 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     with _paid_graph_mutation("accept a proposal"):
         try:
             _refuse_overwriting_later_edits(proposal)
-            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models)
+            dropped: list[dict[str, str]] = []
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions, models=models,
+                                                                   drops=dropped)
+            _refuse_changed_drops(proposal, dropped)
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
@@ -8314,6 +8394,9 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     # Each names the proposal in data: nebula-mcp --channel leaves these out
     # of the person's edits by that field, never by the summary's note.
     _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
+    # The wires its model changes dropped, as the card listed them (GM - Design, PR #216 r3).
+    for ends in dropped:
+        _journal_edge("edge.removed", dict(ends), actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
         before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
         changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})

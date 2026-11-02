@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeCount, proposalChanges } from '../../src/lib/canvasProposals';
+import { changeCountLabel, proposalChangeCount, proposalChanges } from '../../src/lib/canvasProposals';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {
@@ -57,12 +57,35 @@ describe('proposalChanges', () => {
     expect(proposalChanges(titled)[1].title).toBe('“Krea 2”');
   });
 
-  it('counts every value Accept writes for the disclosure row', () => {
+  it('counts operations, one per node group and one per wire, never field lines (GM - Design, PR #216 r2)', () => {
     const groups = proposalChanges(view(), {
-      nodes: { '+k': { _provider: 'replicate' } },
+      nodes: { '+k': { _provider: 'replicate', prompt: 'x', seed: 2 } },
       params: { n1: { _provider: { from: null, to: 'bfl' } } },
     });
-    expect(changeCount(groups)).toBe('2 changes');
-    expect(changeCount(groups.slice(0, 1))).toBe('1 change');
+    expect(proposalChangeCount(view(), groups)).toBe(2);
+    expect(changeCountLabel(2)).toBe('2 changes');
+    expect(changeCountLabel(1)).toBe('1 change');
+  });
+
+  it("reads the backend's changeCount, the Update's and MCP's number (GM - Design, PR #216 r3)", () => {
+    const counted = { ...view(), changeCount: 7 };
+    expect(proposalChangeCount(counted, proposalChanges(counted))).toBe(7);
+  });
+
+  it('lists new and removed connections, by name, with the target port', () => {
+    const wired: ProposalView = {
+      ...view(),
+      edges: [{ source: 'n2', sourceHandle: 'text', target: '+k', targetHandle: 'prompt',
+        sourceName: 'Prompt', targetName: 'Second take', targetLabel: 'Prompt' }],
+      removedEdges: [{ source: 'n3', sourceHandle: 'image', target: 'n1', targetHandle: 'images' }],
+      names: { n3: 'Photo' },
+    };
+    const groups = proposalChanges(wired);
+    expect(groups.map((group) => [group.kind, group.title])).toEqual([
+      ['new', 'New “Krea 2”'], ['edit', 'Krea 2 (n1)'], ['wires', 'New connections'], ['unwired', 'Removed connections']]);
+    expect(groups[2].wires).toEqual([{ id: 'n2.text>+k.prompt', from: '“Prompt”', to: '“Second take”', port: 'Prompt' }]);
+    // A view without names on the wire falls back to the names it has, then the handle.
+    expect(groups[3].wires?.[0]).toMatchObject({ from: '“Photo”', to: '“n1”', port: 'images' });
+    expect(proposalChangeCount(wired, groups)).toBe(4);
   });
 });

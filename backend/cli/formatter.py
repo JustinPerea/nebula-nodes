@@ -941,6 +941,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     for change in view.get("params") or []:
         keys = ", ".join((change.get("changes") or {}).keys())
         lines.append(f"  sets     {change.get('nodeId')}: {keys}")
+    for edge in view.get("removedEdges") or []:
+        # Wires its model change drops: the new model has no port for them.
+        lines.append(f"  removes  {edge.get('source')}.{edge.get('sourceHandle')} → "
+                     f"{edge.get('target')}.{edge.get('targetHandle')}")
     run = view.get("run") or []
     if run:
         lines.append(f"  runs     {', '.join(run)} — {_cost_line(view.get('cost') or {})}")

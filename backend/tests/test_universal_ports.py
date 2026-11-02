@@ -439,6 +439,121 @@ def test_a_proposal_configures_when_the_person_accepts(api):
     assert _ids(_export_node(api, eye)["data"]["dynamicInputPorts"]) == ["messages", "images"]
 
 
+def _proposal_key(api, proposal_id):
+    return next(m["acceptKey"] for m in api.sent
+                if m.get("type") == "proposalOpened" and m["proposal"]["id"] == proposal_id)
+
+
+def _two_photos_on_an_eye(api):
+    photos = [api.graph.add_node("image-input", {}) for _ in range(2)]
+    eye = api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"})
+    ask = api.graph.add_node("text-input", {"value": "hi"})
+    api.graph.set_label(eye, "Second take")
+    for photo in photos:
+        api.graph.connect(photo, "image", eye, "images")
+    api.graph.connect(ask, "text", eye, "messages")
+    configured = api.client.put(f"/api/graph/node/{eye}", headers=AGENT, json={"params": {"model": "openai/gpt-4o"}})
+    assert configured.status_code == 200, configured.text
+    return photos, eye, ask
+
+
+def test_a_proposal_model_swap_lists_the_wires_accept_removes(api):
+    """GM - Design, PR #216 r3 (9): a model change in a proposal drops the
+    wires the new model has no port for, as the picker does for the person;
+    the view lists them, the plan line and the count say so, and Accept
+    removes exactly those."""
+    _warm_openrouter()
+    photos, eye, ask = _two_photos_on_an_eye(api)
+    proposed = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "text only", "params": [{"nodeId": eye, "params": {"model": "anthropic/claude-sonnet-4.5"}}]})
+    assert proposed.status_code == 201, proposed.text
+    view = proposed.json()["proposal"]
+    removed = view["removedEdges"]
+    assert [(edge["source"], edge["targetHandle"]) for edge in removed] == [(photo, "images") for photo in photos]
+    assert {edge["targetName"] for edge in removed} == {"Second take"}
+    assert all(edge["sourceName"] and edge["targetLabel"] for edge in removed)
+    assert view["changeCount"] == 3
+    assert view["plan"] == "Changes “Second take”, removes 2 connections · nothing runs until you choose"
+    # Nothing changes before Accept.
+    assert len(api.graph.edges) == 3
+    # The Update counts the same operations as the card.
+    import main as main_module
+    from services.canvas_proposals import update_text
+
+    assert update_text(main_module.canvas_proposals.get(view["id"])) == "Claude Desktop proposes 3 changes on the canvas"
+    accepted = api.client.post(f"/api/canvas/proposals/{view['id']}/accept",
+                               headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, view["id"])}, json={})
+    assert accepted.status_code == 200, accepted.text
+    assert [(edge["source"], edge["targetHandle"]) for edge in api.graph.edges] == [(ask, "messages")]
+
+
+def test_accept_refuses_when_the_wires_it_removes_changed(api):
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    proposed = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "text only", "params": [{"nodeId": eye, "params": {"model": "anthropic/claude-sonnet-4.5"}}]})
+    view = proposed.json()["proposal"]
+    third = api.graph.add_node("image-input", {})
+    api.graph.connect(third, "image", eye, "images")
+    accepted = api.client.post(f"/api/canvas/proposals/{view['id']}/accept",
+                               headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, view["id"])}, json={})
+    assert accepted.status_code == 409
+    assert "connections it removes changed" in accepted.json()["detail"]
+    assert len(api.graph.edges) == 4
+
+
+def test_accept_refuses_when_a_wire_it_removes_is_gone(api):
+    """The other way round: a listed wire the person removed since (the live
+    graph lost one), so Accept would now remove fewer than the card showed."""
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "text only", "params": [{"nodeId": eye, "params": {"model": "anthropic/claude-sonnet-4.5"}}]}).json()["proposal"]
+    assert api.graph.remove_edge(photos[0], "image", eye, "images")
+    accepted = api.client.post(f"/api/canvas/proposals/{view['id']}/accept",
+                               headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, view["id"])}, json={})
+    assert accepted.status_code == 409
+    assert "connections it removes changed" in accepted.json()["detail"]
+    assert api.graph.nodes[eye]["params"]["model"] == "openai/gpt-4o"
+
+
+def test_a_swap_to_a_model_whose_ports_cant_be_read_is_still_refused(api):
+    """Only known ports drop wires: a model Nebula can't read keeps the
+    basic ports, and the proposal is refused as before, naming `unwire`."""
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    refused = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "unknown", "params": [{"nodeId": eye, "params": {"model": "nobody/not-a-listed-model"}}]})
+    assert refused.status_code == 400, refused.text
+    assert "unwire" in refused.json()["detail"]
+    assert len(api.graph.edges) == 3
+
+
+def test_a_wire_the_proposal_makes_is_never_dropped(api):
+    """A new wire to a port the new model doesn't have is refused, not
+    listed as removed (the person would never see it made). Staging checks
+    new wires against the new ports first, so _drop_orphaned_wires's `keep`
+    is a second guard."""
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    third = api.graph.add_node("image-input", {})
+    refused = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "both", "params": [{"nodeId": eye, "params": {"model": "anthropic/claude-sonnet-4.5"}}],
+        "edges": [{"source": third, "sourceHandle": "image", "target": eye, "targetHandle": "images"}]})
+    assert refused.status_code == 400, refused.text
+    assert "Invalid target handle 'images'" in refused.json()["detail"]
+    assert len(api.graph.edges) == 3
+
+
+def test_a_direct_edit_still_refuses_the_same_swap(api):
+    """Only a proposal, which the person reads first, drops wires."""
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    refused = _apply(api, {"params": [{"nodeId": eye, "params": {"model": "anthropic/claude-sonnet-4.5"}}]})
+    assert refused.status_code == 400
+    assert "unwire" in refused.json()["detail"]
+
+
 # -- the picker asks the backend --------------------------------------------
 
 def test_the_picker_route_configures_the_node_and_prunes_its_wires(api):

@@ -144,23 +144,80 @@ describe('ProposalBar', () => {
     expect(document.querySelector('.proposal-bar__sr-only')).toBeNull();
   });
 
-  // GM - Design, PR #216 r1: under 400 px of room beside the docked Agent
-  // log the card sits above it (canvasProposals.css data-above-log).
-  it('sits above the Agent log when the region beside it leaves under 400 px', () => {
-    let regionWidth = 300;
-    const box = (width: number) => ({ left: 0, right: width, top: 0, bottom: 40, width, height: 40, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
-    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return this.hasAttribute('data-notice-region') ? box(regionWidth) : box(0);
+  // GM - Design, PR #216 r3: the region places the stack; the card marks
+  // itself as the one item that shrinks, and its body as what gives way.
+  it('marks itself as the stack item that shrinks, its body between a fixed header and footer', () => {
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    const card = document.querySelector<HTMLElement>('.proposal-bar')!;
+    expect(card.hasAttribute('data-notice-shrinks')).toBe(true);
+    const parts = [...card.children].map((child) => child.className);
+    expect(parts).toEqual(['proposal-bar__head', 'proposal-bar__scroll', 'proposal-bar__footer']);
+    const scroll = card.querySelector('.proposal-bar__scroll')!;
+    expect(scroll.hasAttribute('data-notice-shrink-body')).toBe(true);
+    // The disclosure and its panel scroll with the note, never over the footer.
+    const body = scroll.querySelector('.proposal-bar__body')!;
+    expect(body.querySelector('.proposal-bar__note')).toBeTruthy();
+    expect(body.querySelector('.proposal-bar__disclosure')).toBeTruthy();
+    expect(body.querySelector('.proposal-bar__details')).toBeTruthy();
+  });
+
+  it('fades the edge that hides content, and is a named tab stop only while it scrolls', () => {
+    const sizes = { scroll: 400, client: 200, top: 0 };
+    const scrollH = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__body') ? sizes.scroll : 0;
+    });
+    const clientH = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('proposal-bar__body') ? sizes.client : 0;
     });
     open(proposal('p_a'));
-    render(<div data-notice-region=""><ProposalBar /></div>);
-    const card = document.querySelector<HTMLElement>('.proposal-bar')!;
-    expect(card.dataset.aboveLog).toBe('true');
-    expect(card.style.getPropertyValue('--proposal-bar-top-line')).toBe('16px');
-    regionWidth = 400;
-    act(() => { window.dispatchEvent(new Event('resize')); });
-    expect(card.dataset.aboveLog).toBeUndefined();
-    spy.mockRestore();
+    render(<ProposalBar />);
+    const body = document.querySelector<HTMLElement>('.proposal-bar__body')!;
+    // At the top: only the bottom hides content.
+    expect(body.dataset.fadeTop).toBeUndefined();
+    expect(body.dataset.fadeBottom).toBe('true');
+    expect(body.getAttribute('tabindex')).toBe('0');
+    expect(body.getAttribute('role')).toBe('region');
+    expect(body.getAttribute('aria-label')).toBe('Proposal details');
+    // Mid-scroll: both.
+    body.scrollTop = 100;
+    act(() => { body.dispatchEvent(new Event('scroll')); });
+    expect(body.dataset.fadeTop).toBe('true');
+    expect(body.dataset.fadeBottom).toBe('true');
+    // At the end: only the top.
+    body.scrollTop = 200;
+    act(() => { body.dispatchEvent(new Event('scroll')); });
+    expect(body.dataset.fadeTop).toBe('true');
+    expect(body.dataset.fadeBottom).toBeUndefined();
+    scrollH.mockRestore();
+    clientH.mockRestore();
+  });
+
+  it('is no tab stop and has no fades when it all fits', () => {
+    open(proposal('p_a'));
+    render(<ProposalBar />);
+    const body = document.querySelector<HTMLElement>('.proposal-bar__body')!;
+    expect(body.hasAttribute('tabindex')).toBe(false);
+    expect(body.hasAttribute('role')).toBe(false);
+    expect(body.dataset.fadeTop).toBeUndefined();
+    expect(body.dataset.fadeBottom).toBeUndefined();
+  });
+
+  it('counts with the backend and lists removed connections struck through', () => {
+    open(proposal('p_a', {
+      nodes: [], edges: [], run: [], changeCount: 3,
+      params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', changes: { model: { from: 'a', to: 'b' } } }],
+      removedEdges: [1, 2].map((i) => ({ source: `n${i}`, sourceHandle: 'image', target: 'n4', targetHandle: 'images',
+        sourceName: `Photo ${i}`, targetName: 'Second take', targetLabel: 'Images' })),
+    }));
+    render(<ProposalBar />);
+    const row = screen.getByRole('button', { name: /^What Accept writes/ });
+    expect(row.textContent).toBe('What Accept writes3 changes');
+    fireEvent.click(row);
+    const removed = document.querySelector('.proposal-bar__wires[data-kind="unwired"]')!;
+    expect(removed.previousElementSibling?.textContent).toBe('Removed connections');
+    expect([...removed.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'Removed: “Photo 1” → “Second take” · Images', 'Removed: “Photo 2” → “Second take” · Images']);
   });
 
   it('offers a plain Accept when no run is requested', () => {
@@ -326,13 +383,15 @@ describe('ProposalBar', () => {
     // A real disclosure: its label never changes; aria-expanded and the
     // chevron carry the state, and it names the panel it controls.
     expect(row.getAttribute('aria-expanded')).toBe('false');
-    expect(row.textContent).toBe('What Accept writes4 changes');
+    // One unit, the operation (GM - Design, PR #216 r2): the new node, the
+    // changed node and the wire, never their field lines.
+    expect(row.textContent).toBe('What Accept writes3 changes');
     const panel = document.getElementById(row.getAttribute('aria-controls')!)!;
     expect(panel.getAttribute('data-open')).toBe('false');
     expect(panel.hasAttribute('inert')).toBe(true);
     fireEvent.click(row);
     expect(row.getAttribute('aria-expanded')).toBe('true');
-    expect(row.textContent).toBe('What Accept writes4 changes');
+    expect(row.textContent).toBe('What Accept writes3 changes');
     expect(panel.getAttribute('data-open')).toBe('true');
     expect(panel.hasAttribute('inert')).toBe(false);
     const details = screen.getByLabelText('What Accept writes');
@@ -341,6 +400,8 @@ describe('ProposalBar', () => {
     expect(details.textContent).toContain(long);
     expect(details.textContent).toContain('Text (n1)');
     expect(details.textContent).toContain('a → b');
+    // Every wire it makes, by name, the target's port muted.
+    expect(details.textContent).toContain('New connections“n1” → “Nano Banana” · Prompt');
     fireEvent.click(row);
     expect(row.getAttribute('aria-expanded')).toBe('false');
   });
@@ -351,7 +412,7 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
     const titles = [...document.querySelectorAll('.proposal-bar__group-title')].map((el) => el.textContent);
-    expect(titles).toEqual(['New “Nano Banana”', '“Hero shot” · Krea 2']);
+    expect(titles).toEqual(['New “Nano Banana”', '“Hero shot” · Krea 2', 'New connections']);
   });
 
   it('closes the disclosure when the person pages to another proposal', () => {
@@ -401,8 +462,8 @@ describe('ProposalBar', () => {
     expect(screen.getByLabelText('What Accept writes').textContent).toContain('(+d)');
   });
 
-  it('with no change lines, the row reads "Every node that can’t run" with the count', () => {
-    const many = proposal('p_a', { params: [], nodes: [{ ...proposal('p_a').nodes[0], params: {} }] });
+  it('with no changes, the row reads "Every node that can’t run" with the count', () => {
+    const many = proposal('p_a', { params: [], nodes: [], edges: [], run: ['n1'] });
     many.cost = { ...many.cost, notReady: ['+a', '+b', '+c', '+d'].map((ref) => ({
       ref, nodeId: null, name: 'FLUX 3', missing: `FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})` })) };
     open(many);

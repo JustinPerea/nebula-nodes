@@ -33,7 +33,7 @@ describe('the proposal card is one column', () => {
     expect(card.display).toBe('flex');
     expect(card['flex-direction']).toBe('column');
     expect(card.padding).toBe('0');
-    expect(rule('.proposal-bar__body')['flex-direction']).toBe('column');
+    expect(rule('.proposal-bar__content')['flex-direction']).toBe('column');
     // The buttons live in the footer, a sibling of the body, never beside the note.
     const body = BAR.slice(BAR.indexOf('className="proposal-bar__body"'), BAR.indexOf('className="proposal-bar__footer"'));
     expect(body).toContain('className="proposal-bar__note"');

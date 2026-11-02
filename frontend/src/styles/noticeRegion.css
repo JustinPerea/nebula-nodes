@@ -40,7 +40,10 @@
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
   position: fixed;
-  left: var(--page-gutter, 16px);
+  /* The left tool rail takes its room as the log does on the right (GM -
+     Design, PR #216 r2 bug 3): WorkspaceRail's footprint plus the gap
+     (workspace-rail.css --notice-left-clearance), the gutter otherwise. */
+  left: max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px));
   /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
      Agent log on the right edge takes its width out of the region
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
@@ -80,7 +83,20 @@
   gap: var(--notice-gap);
   min-width: 0;
   max-width: 100%;
+  /* Lifted as one over a docked Agent log's top edge, never the region (its
+     band stays on the bar's line for the floating panels): NoticeRegion
+     writes it (lib/noticeStackPlace.ts; GM - Design, PR #216 r3). */
+  margin-bottom: var(--notice-stack-lift, 0px);
   pointer-events: none;
+  transition: margin-bottom 420ms var(--notice-spring);
+}
+
+/* Under 400 px of room beside a docked Agent log, the whole stack sits above
+   the log at the region's full width (the card up to 600 px), card on top,
+   notices under it, never a sliver beside it (GM - Design, PR #216 r3). The
+   log never moves. */
+.notice-region[data-above-log='true'] {
+  right: var(--page-gutter, 16px);
 }
 
 /* A slot per kind of item, in one order (lib/noticeSlots.ts). It draws no box
@@ -200,7 +216,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notice-region {
+  .notice-region,
+  .notice-region__stack {
     transition: none;
   }
 }

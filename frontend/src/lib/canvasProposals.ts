@@ -309,11 +309,32 @@ export interface ChangeLine {
   to: string;
 }
 
+/** One wire in the panel: “Prompt” → “Second take” · Prompt, the target's
+ * port muted (GM - Design, PR #216 r2-r3). */
+export interface WireLine {
+  id: string;
+  from: string;
+  to: string;
+  port: string;
+}
+
 export interface ChangeGroup {
   id: string;
   title: string;
-  kind: 'new' | 'edit';
+  /** `wires`: "New connections"; `unwired`: "Removed connections", struck through. */
+  kind: 'new' | 'edit' | 'wires' | 'unwired';
   lines: ChangeLine[];
+  wires?: WireLine[];
+}
+
+function wireLines(edges: ProposalView['edges'] | undefined, names: Record<string, string>,
+  ports: Record<string, string> = {}): WireLine[] {
+  return (edges ?? []).map((edge) => ({
+    id: `${edge.source}.${edge.sourceHandle}>${edge.target}.${edge.targetHandle}`,
+    from: `“${edge.sourceName ?? names[edge.source] ?? edge.source}”`,
+    to: `“${edge.targetName ?? names[edge.target] ?? edge.target}”`,
+    port: edge.targetLabel ?? ports[`${edge.target}.${edge.targetHandle}`] ?? edge.targetHandle,
+  }));
 }
 
 /**
@@ -348,12 +369,37 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
       lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
     });
   }
+  // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).
+  // The backend names both ends on each wire; an older view's own names fill in.
+  const names: Record<string, string> = {
+    ...Object.fromEntries(view.params.filter((change) => change.title).map((change) => [change.nodeId, change.title!])),
+    ...Object.fromEntries(view.nodes.map((node) => [node.ref, node.name])),
+    ...view.names,
+  };
+  const ports = Object.fromEntries(view.nodes.flatMap((node) =>
+    (node.ports?.inputs ?? []).map((port) => [`${node.ref}.${port.id}`, port.label])));
+  const made = wireLines(view.edges, names, ports);
+  if (made.length > 0) groups.push({ id: 'wires', title: 'New connections', kind: 'wires', lines: [], wires: made });
+  const removed = wireLines(view.removedEdges, names);
+  if (removed.length > 0) {
+    groups.push({ id: 'unwired', title: 'Removed connections', kind: 'unwired', lines: [], wires: removed });
+  }
   return groups;
 }
 
-/** "2 changes", "1 change": every value Accept will write, for the disclosure row. */
-export function changeCount(groups: ChangeGroup[]): string {
-  const count = groups.reduce((sum, group) => sum + group.lines.length, 0);
+/**
+ * How many changes Accept makes: the backend's `changeCount`, the one number
+ * the card, the Update and MCP read (GM - Design, PR #216 r3): each new node,
+ * changed node, new wire and removed wire. An older backend's view without it
+ * counts the panel the same way: one per node group, one per wire line.
+ */
+export function proposalChangeCount(view: ProposalView, groups: ChangeGroup[]): number {
+  if (typeof view.changeCount === 'number') return view.changeCount;
+  return groups.reduce((sum, group) => sum + (group.wires ? group.wires.length : 1), 0);
+}
+
+/** "2 changes", "1 change", for the disclosure row. */
+export function changeCountLabel(count: number): string {
   return `${count} change${count === 1 ? '' : 's'}`;
 }
 

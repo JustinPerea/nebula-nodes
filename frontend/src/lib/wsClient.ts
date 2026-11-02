@@ -199,6 +199,16 @@ export interface ProposalNotReady {
 }
 
 /** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
+export interface ProposalEdge {
+  source: string;
+  sourceHandle: string;
+  target: string;
+  targetHandle: string;
+  sourceName?: string;
+  targetName?: string;
+  targetLabel?: string;
+}
+
 export interface ProposalView {
   id: string;
   status: ProposalStatus;
@@ -223,7 +233,17 @@ export interface ProposalView {
     willRun: boolean;
     ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
   }>;
-  edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
+  /** `sourceName`, `targetName` and `targetLabel` are the panel's words for
+   * each wire: “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3). */
+  edges: ProposalEdge[];
+  /** Wires Accept removes: a model change drops the ones its new model has
+   * no port for (backend main._stage_proposal `drops`). */
+  removedEdges?: ProposalEdge[];
+  /** Each node it touches, by id or ref, with its canvas name. */
+  names?: Record<string, string>;
+  /** The backend's one count of changes, for the card, the Update and MCP:
+   * each new node, wire, changed node and removed wire. */
+  changeCount?: number;
   /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
    * card's words, "Hero shot" and "Krea 2" (no id). */
   params: Array<{ nodeId: string; name: string; title?: string; model?: string;

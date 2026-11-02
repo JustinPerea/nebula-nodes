@@ -241,7 +241,11 @@ command for the catalogs yet.
 
 Changing the model of a node with connections on ports the new model lacks (or
 clearing it, or naming one Nebula can't read, which leaves the basic ports)
-is refused: `--unwire` them in the same apply. Without the provider's key the
+is refused: `--unwire` them in the same apply. A `nebula propose` of the same
+change isn't refused when Nebula knows the new model's ports: accepting drops
+those connections, and the proposal lists them (`removes` lines,
+`removedEdges`). If it can't read the new model's ports, the proposal is
+refused the same way. Without the provider's key the
 node keeps its basic ports, and a connection to any other port is refused with the
 reason (only the person can add a key).
 
@@ -345,7 +349,10 @@ person's own graph. Its flags: `--note` (required), `--add`, `--param`,
 the ghost shows the name and accepting applies it), `--run`, `--file`,
 `--wait` and `--json`. It doesn't take `apply`'s `--move`, `--remove`,
 `--unwire` or `--arrange`, or a rename of a node already on the canvas
-(use `nebula rename`). The person accepts or rejects it on the canvas; you
+(use `nebula rename`). A `--set` of a node's model that leaves its
+connections on ports the new model doesn't have isn't refused: accepting
+removes them, as the canvas's model picker does, and the output lists each
+on a `removes` line. The person accepts or rejects it on the canvas; you
 can't accept it. Its output's `card` line is what the person reads under
 your note, word for word (what changes and runs by node name, the model and
 who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on

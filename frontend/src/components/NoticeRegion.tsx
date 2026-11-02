@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
+import { TOP_BAR_ATTR, floatingTopLimit } from '../lib/bottomBar';
+import { TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack } from '../lib/noticeStackPlace';
 import '../styles/noticeRegion.css';
 
 /** What a screen shows in the region besides the toasts. */
@@ -38,6 +40,59 @@ export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
  * backdrop. lib/modalFocus.ts makes it the open dialog's second focus region,
  * and (fix round 18, GM r27) gives Escape on a notice one rule everywhere.
  */
+/**
+ * Keeps the stack placed (lib/noticeStackPlace.ts; GM - Design, PR #216 r3):
+ * beside the docked Agent log or, under 400 px of room, above it as one
+ * stack, and the proposal card's height cap. Measured again whenever any of
+ * its inputs moves: the region or the stack resizing (a notice comes or goes,
+ * the card grows), the app's top bars resizing (the selection toolbar), the
+ * root's variables (the log docking, moving or being dragged, the bottom
+ * bar), the region's own bottom transition ending, and window resizes.
+ */
+function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: RefObject<HTMLDivElement | null>): void {
+  useLayoutEffect(() => {
+    const region = regionRef.current;
+    const stack = stackRef.current;
+    if (!region || !stack) return undefined;
+    const watched = new Set<Element>();
+    const resized = typeof ResizeObserver === 'function' ? new ResizeObserver(() => place()) : null;
+    const watch = (element: Element | null | undefined) => {
+      if (!element || watched.has(element) || !resized) return;
+      watched.add(element);
+      resized.observe(element);
+    };
+    function place() {
+      if (!region || !stack) return;
+      // A top bar mounted since (the selection toolbar's panel) joins the watch.
+      document.querySelectorAll(`[${TOP_BAR_ATTR}]`).forEach(watch);
+      stack.querySelectorAll('[data-notice-shrinks], [data-notice-shrinks] [data-notice-shrink-body] > *').forEach(watch);
+      applyNoticeStack(region, stack, placeNoticeStack(measureNoticeStack(region, stack, floatingTopLimit(TOP_GUTTER))));
+    }
+    watch(region);
+    watch(stack);
+    place();
+    // The log and the bottom bar write their lines on the root.
+    const rootVars = typeof MutationObserver === 'function' ? new MutationObserver(() => place()) : null;
+    rootVars?.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    // An item arriving in or leaving a slot (not the text changing inside one).
+    const items = typeof MutationObserver === 'function'
+      ? new MutationObserver((records) => {
+        if (records.some((record) => (record.target as Element).hasAttribute?.('data-notice-slot'))) place();
+      })
+      : null;
+    items?.observe(stack, { childList: true, subtree: true });
+    region.addEventListener('transitionend', place);
+    window.addEventListener('resize', place);
+    return () => {
+      resized?.disconnect();
+      rootVars?.disconnect();
+      items?.disconnect();
+      region.removeEventListener('transitionend', place);
+      window.removeEventListener('resize', place);
+    };
+  }, [regionRef, stackRef]);
+}
+
 export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   const refs = useMemo(() => Object.fromEntries(NOTICE_SLOTS.map((name) => [
     name, (element: HTMLDivElement | null) => setNoticeSlot(name, element),
@@ -46,6 +101,8 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   // GM r27 item 1: Escape on a notice closes that notice, in every dialog.
   // Review 15 LOW-B: a replaced notice's focus goes back into the open dialog.
   const regionRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
+  useStackPlace(regionRef, stackRef);
   useEffect(() => {
     window.addEventListener('keydown', noticeKeys, true);
     const region = regionRef.current;
@@ -56,7 +113,7 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   return createPortal(
     <div ref={regionRef} className="notice-region" data-notice-region="">
       <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
-      <div className="notice-region__stack">
+      <div ref={stackRef} className="notice-region__stack">
         {NOTICE_SLOTS.map((name) => (
           <div key={name} ref={refs[name]} className="notice-region__slot" data-notice-slot={name} />
         ))}

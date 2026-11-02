@@ -1658,7 +1658,11 @@ name, with the model and who pays for a single paid run and the price
 ("Changes and runs “Hero shot” · Krea 2 on your Krea plan · no list price"),
 then **Show**, **Reject** and **Accept** (or **Accept and run**). The view's
 `plan` is that line word for word, and `nebula proposal` prints it as
-`card`. They can drag ghosts before accepting; the nodes land where they
+`card`; `changeCount` is the count the card and the Update show (each new
+node, connection, changed node and removed connection). A model change that
+leaves existing connections on ports the new model doesn't have removes them
+on Accept, as the model picker does: `removedEdges` lists them, the line says
+"removes 2 connections", and the card lists them struck through. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
@@ -1858,7 +1862,8 @@ browser's storage on disk but its shell has no network to use it with (see
 "In-app agents use this server").
 
 Before the click, the card's "What Accept writes" disclosure shows every value
-Accept will write: new nodes' params and `from → to` for changed params, in
+Accept will write: new nodes' params, `from → to` for changed params, and
+each new and removed connection (“Prompt” → “Second take” · Prompt), in
 full (up to 4,000 characters per value, with a marker beyond that). These
 values reach only the browser (`personValues` in `proposalOpened` /
 `proposalSync`); agents see the shortened, redacted view. If a param the
@@ -3179,7 +3184,10 @@ model's file inputs are its ports. One backend module has the rules
   refused and names them; `unwire` them in the same edit. That covers a new
   model without those ports, and clearing the model or naming one Nebula
   can't read, which leaves the definition's ports. (The person's picker drops
-  them instead, as it always did.)
+  them instead, as it always did, and so does a proposal (`propose_change`,
+  `nebula propose`) when Nebula knows the new model's ports: Accept removes
+  them and the view lists them in `removedEdges`; with unknown ports a
+  proposal is refused the same way.)
 - Replicate: a port per file input (`x-uploadable`, or a `uri` string),
   named as the schema names it, and one output. A file output's schema is a
   plain `uri` string whatever the file is, so its type comes from the

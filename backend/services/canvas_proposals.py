@@ -605,18 +605,24 @@ def summarize_cost(
 # plan · no list price". The view carries it as `plan`, so the card, the CLI
 # and MCP read the same words.
 
-# Up to this many names; from one more, a count ("Changes 4 nodes").
+# Up to this many nodes named in a group; from one more, a count ("Changes 4 nodes").
 PLAN_NAMES = 3
 NOTHING_RUNS = "nothing runs until you choose"
 PLAN_NO_PRICE = "no list price"
+# The groups, in the order the line says them (GM - Design, PR #216 r3): each
+# node once, by what happens to it.
+PLAN_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("adds", "runs"), ("adds",), ("changes", "runs"), ("changes",), ("runs",))
 
 
 def billed_to(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
               cost: Mapping[str, Any], *, wired: Any = ()) -> str | None:
     """Who pays for a paid run, in the person's words: "your Krea plan",
-    "your Krea API token", "your OpenAI key", "your Nous account". None for a
-    free run, or when no provider can take it as set (cost_for's
-    ``unavailable``): the not-ready line says why."""
+    "your Krea API token", "your OpenAI key", "your Nous account". It names
+    the provider the node is routed to even when that provider's key or
+    sign-in is missing (the not-ready line says so). None for a free run, or
+    when the route names no provider the person could hold a key or account
+    for (a utility node, an unknown provider)."""
     from services import node_route
 
     if cost.get("kind") != "paid" or not definition:
@@ -637,80 +643,152 @@ def _plural(count: int, word: str) -> str:
     return f"{count} {word}{'' if count == 1 else 's'}"
 
 
-def _quoted(names: list[str | None], noun: str = "node") -> str:
-    """“A”, “A” and “B”, “A”, “B” and “C”; from four (or any unnamed), "4 nodes"."""
-    if not names:
-        return ""
-    if len(names) > PLAN_NAMES or not all(names):
-        return _plural(len(names), noun)
-    quoted = [f"“{name}”" for name in names]
-    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+_QUOTES = "“”\"'‘’"
 
 
-def _join_clauses(clauses: list[str]) -> str:
-    """Clauses joined as a list, never with a serial comma (GM - Design,
-    PR #216 r1): "A, B and C"; when the clause before the last already has
-    its own "and" (“A” and “B”, "and 2 connections"), a comma alone, so the
-    two "and"s don't run together: "Adds “Second take” and 2 connections,
-    changes and runs “Alt still”"."""
-    if len(clauses) < 2:
-        return "".join(clauses)
-    last = ", " if " and " in clauses[-2] else " and "
-    return f"{', '.join(clauses[:-1])}{last}{clauses[-1]}"
+def _plan_name(name: Any) -> str | None:
+    """A node's name for the line, without quotes of its own (review 1 N1:
+    “Hero” never reads ““Hero””). None when it has none."""
+    text = str(name).strip().strip(_QUOTES).strip() if isinstance(name, str) else ""
+    return text or None
+
+
+def _and_list(words: list[str]) -> str:
+    """“A”, “A” and “B”, “A”, “B” and “C”: no serial comma."""
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+
+def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> str:
+    """One group's nodes (GM - Design, PR #216 r3): up to PLAN_NAMES by name,
+    from one more a count. Nodes are told apart by id, never by name: two in
+    the group with one name read "2 “Image” nodes", and a name an earlier
+    group already said, on another node, reads "another “Image”"."""
+    if len(keys) > PLAN_NAMES:
+        return _plural(len(keys), "node")
+    counts: dict[str | None, int] = {}
+    for key in keys:
+        name = names.get(key)
+        counts[name] = counts.get(name, 0) + 1
+    words: list[str] = []
+    unnamed = counts.pop(None, 0)
+    for name, count in counts.items():
+        if name in said:
+            words.append(f"another “{name}”" if count == 1 else f"{count} other “{name}” nodes")
+        else:
+            words.append(f"“{name}”" if count == 1 else f"{count} “{name}” nodes")
+    if unnamed:
+        # Every node the view names has a name; this is the last resort (review 1 L3:
+        # one without never turns the others into a count).
+        words.append(_plural(unnamed, "more node") if words else _plural(unnamed, "node"))
+    return _and_list(words)
+
+
+def _plan_names(view: Mapping[str, Any]) -> dict[str, str | None]:
+    """Every node the proposal touches, by id or ref, with its name: a new
+    node's, a changed node's title, then the view's `names` (each node it
+    references, by its canvas name), then the run's price items."""
+    names: dict[str, str | None] = {}
+    cost = view.get("cost") or {}
+    for entry in cost.get("nodes") or []:
+        if isinstance(entry, Mapping) and _plan_name(entry.get("name")):
+            names[str(entry.get("ref"))] = _plan_name(entry.get("name"))
+    for key, name in (view.get("names") or {}).items():
+        if _plan_name(name):
+            names[str(key)] = _plan_name(name)
+    for change in view.get("params") or []:
+        if isinstance(change, Mapping) and _plan_name(change.get("title")):
+            names[str(change.get("nodeId"))] = _plan_name(change.get("title"))
+    for node in view.get("nodes") or []:
+        if isinstance(node, Mapping):
+            names[str(node.get("ref"))] = _plan_name(node.get("name"))
+    return names
+
+
+def _runs_nothing(view: Mapping[str, Any]) -> bool:
+    cost = view.get("cost") or {}
+    pending = cost.get("pendingSkipped") or None
+    return (bool(view.get("run")) and int(cost.get("paidRuns") or 0) == 0 and int(cost.get("freeRuns") or 0) == 0
+            and bool(pending and pending.get("count")))
+
+
+def plan_groups(view: Mapping[str, Any]) -> list[str]:
+    """What Accept does, one group per kind of change (GM - Design, PR #216
+    r3): each node once, merged by id, under the verbs that happen to it
+    ("Adds and runs “A”", "changes “B”", "runs “C”"). New connections ride
+    on the group that adds nodes ("and 1 connection" after one name, "plus 1
+    connection" after a merged verb or a list, so no group says "and"
+    twice), or make their own group; wires a model change drops close the
+    line ("removes 2 connections"). A run that waits on placeholders runs
+    nothing yet, so it adds no "runs"."""
+    names = _plan_names(view)
+    verbs: dict[str, list[str]] = {}
+
+    def mark(key: str, verb: str) -> None:
+        verbs.setdefault(key, [])
+        if verb not in verbs[key]:
+            verbs[key].append(verb)
+
+    for node in view.get("nodes") or []:
+        if isinstance(node, Mapping):
+            mark(str(node.get("ref")), "adds")
+    for change in view.get("params") or []:
+        if isinstance(change, Mapping):
+            mark(str(change.get("nodeId")), "changes")
+    if not _runs_nothing(view):
+        for target in view.get("run") or []:
+            mark(str(target), "runs")
+
+    edges = len(view.get("edges") or [])
+    removed = len(view.get("removedEdges") or [])
+    said: set[str] = set()
+    groups: list[str] = []
+    # The group new connections ride on: the plain "adds" one if any, else
+    # "adds and runs"; and whether it says one verb and one name.
+    adds_at: int | None = None
+    adds_single = False
+    for kind in PLAN_GROUPS:
+        keys = [key for key, done in verbs.items() if tuple(done) == kind]
+        if not keys:
+            continue
+        words = _group_names(keys, names, said)
+        said.update(name for name in (names.get(key) for key in keys) if name)
+        if kind[0] == "adds" and (adds_at is None or kind == ("adds",)):
+            adds_at = len(groups)
+            adds_single = len(kind) == 1 and (len(keys) == 1 or len(keys) > PLAN_NAMES)
+        groups.append(f"{' and '.join(kind)} {words}")
+    if edges:
+        connections = _plural(edges, "connection")
+        if adds_at is None:
+            groups.insert(0, f"adds {connections}")
+        else:
+            groups[adds_at] = f"{groups[adds_at]} {'and' if adds_single else 'plus'} {connections}"
+    if removed:
+        groups.append(f"removes {_plural(removed, 'connection')}")
+    return groups
 
 
 def plan_line(view: Mapping[str, Any]) -> str:
     """What Accept changes and costs, in one line of segments joined by " · ":
-    what happens, with node names; for exactly one paid run its model and
-    who pays ("Krea 2 on your Krea plan"), for more the count ("3 paid
-    runs"), for free runs "free"; then the run chip's price ("~$0.03", "Up
-    to $0.43", "$0.07 + unpriced") or "no list price". With no run it says
-    nothing runs until the person chooses; a run that waits on agents'
-    placeholders says so, as before."""
+    what happens, with node names (plan_groups, joined by ", "); for exactly
+    one paid run its model and who pays ("Krea 2 on your Krea plan"), for
+    more the count ("3 paid runs"), for free runs "free"; then the run
+    chip's price ("~$0.03", "Up to $0.43", "$0.07 + unpriced") or "no list
+    price". The chip's "Up to" covers a paid run that may be skipped (GM -
+    Design, PR #216 r3). With no run it says nothing runs until the person
+    chooses; a run that waits on agents' placeholders says so, as before."""
     from services import money
 
-    nodes = [node for node in view.get("nodes") or [] if isinstance(node, Mapping)]
-    changes = [change for change in view.get("params") or [] if isinstance(change, Mapping)]
-    edges = list(view.get("edges") or [])
-    run = [str(target) for target in view.get("run") or []]
+    run = list(view.get("run") or [])
     cost = view.get("cost") or {}
     entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, Mapping)]
-    names: dict[str, str | None] = {}
-    for entry in entries:
-        names[str(entry.get("ref"))] = entry.get("name") or None
-    for change in changes:
-        names[str(change.get("nodeId"))] = change.get("title") or names.get(str(change.get("nodeId")))
-    for node in nodes:
-        names[str(node.get("ref"))] = node.get("name") or None
-
     paid = int(cost.get("paidRuns") or 0)
-    free = int(cost.get("freeRuns") or 0)
     pending = cost.get("pendingSkipped") or None
-    runs_nothing = bool(run) and paid == 0 and free == 0 and bool(pending and pending.get("count"))
-    added = [str(node.get("ref")) for node in nodes]
-    changed = [str(change.get("nodeId")) for change in changes]
 
-    clauses: list[str] = []
-    # The same nodes changed and run read as one clause, "changes and runs",
-    # whatever else it adds (GM - Design, PR #216 r1).
-    runs_changed = bool(run) and not runs_nothing and set(run) == set(changed)
-    runs_added = bool(run) and not runs_nothing and not runs_changed and set(run) == set(added)
-    if added or edges:
-        what = _quoted([names.get(ref) for ref in added]) if added else ""
-        if edges:
-            what = f"{what} and {_plural(len(edges), 'connection')}" if what else _plural(len(edges), "connection")
-        if runs_added:
-            what += f" and runs {'it' if len(added) == 1 else 'them'}"
-        clauses.append(f"adds {what}")
-    if changed:
-        verb = "changes and runs" if runs_changed else "changes"
-        clauses.append(f"{verb} {_quoted([names.get(node_id) for node_id in changed])}")
-    if run and not runs_nothing and not (runs_added or runs_changed):
-        clauses.append(f"runs {_quoted([names.get(target) for target in run])}")
-    segments = [_join_clauses(clauses)] if clauses else []
+    groups = plan_groups(view)
+    segments = [", ".join(groups)] if groups else []
     if not run:
         segments.append(NOTHING_RUNS)
-    elif runs_nothing:
+    elif _runs_nothing(view):
         # Its whole run waits on agents' placeholders, which it skips (GM -
         # Design, round 4), counting the placeholders themselves (review 4, M2).
         count = int(pending.get("placeholders") or pending.get("count") or 0)
@@ -718,14 +796,13 @@ def plan_line(view: Mapping[str, Any]) -> str:
         who = f"{agents[0]} finishes" if len(agents) == 1 and agents[0] else "agents finish"
         segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
     else:
-        up_to = "up to " if cost.get("upTo") else ""
         paid_entries = [entry for entry in entries if entry.get("kind") == "paid"]
         if paid == 1 and len(paid_entries) == 1:
             entry = paid_entries[0]
             model = str(entry.get("model") or entry.get("name") or "1 paid run")
             segments.append(f"{model} on {entry['billedTo']}" if entry.get("billedTo") else model)
         elif paid > 0:
-            segments.append(f"{up_to}{_plural(paid, 'paid run')}")
+            segments.append(_plural(paid, "paid run"))
         else:
             segments.append("free")
         if paid > 0:
@@ -948,6 +1025,15 @@ class Proposal:
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.
     lineage: dict[str, str] = field(default_factory=dict)
+    # The card's words for each wire it makes, one per spec edge, in order:
+    # {sourceName, targetName, targetLabel} (main writes them when it is made).
+    wires: list[dict[str, str]] = field(default_factory=list)
+    # The wires Accept removes: a model change drops the ones on ports the new
+    # model doesn't have, as the picker does for the person (GM - Design,
+    # PR #216 r3). Each is {source, sourceHandle, target, targetHandle,
+    # sourceName, targetName, targetLabel}; Accept refuses when the live
+    # graph would drop any others.
+    removed_edges: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def references(self) -> set[str]:
@@ -1232,6 +1318,24 @@ class ProposalBook:
                     for key, value in change.params.items()
                 },
             })
+        # Each node it touches by its canvas name, by id or ref: the plan line's
+        # and the panel's words (review 1 L3: a run-only node keeps its name).
+        node_names: dict[str, str] = {
+            node_id: str(row["title"]) for node_id, row in sorted(proposal.existing.items())
+            if isinstance(row, Mapping) and row.get("title")}
+        node_names.update({node["ref"]: node["name"] for node in nodes if node.get("name")})
+        new_ports = {node["ref"]: {port["id"]: port["label"] for port in node["ports"]["inputs"]} for node in nodes}
+        edges: list[dict[str, Any]] = []
+        for index, edge in enumerate(spec.edges):
+            words = proposal.wires[index] if index < len(proposal.wires) else {}
+            edges.append({
+                **edge.as_dict(),
+                # “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3).
+                "sourceName": words.get("sourceName") or node_names.get(edge.source) or edge.source,
+                "targetName": words.get("targetName") or node_names.get(edge.target) or edge.target,
+                "targetLabel": (words.get("targetLabel") or new_ports.get(edge.target, {}).get(edge.target_handle)
+                                or edge.target_handle),
+            })
         view = {
             "id": proposal.id,
             "status": proposal.status,
@@ -1241,7 +1345,9 @@ class ProposalBook:
             "createdAt": int(proposal.created_at * 1000),
             "expiresAt": int(proposal.expires_at * 1000),
             "nodes": nodes,
-            "edges": [edge.as_dict() for edge in spec.edges],
+            "edges": edges,
+            "removedEdges": copy.deepcopy(proposal.removed_edges),
+            "names": node_names,
             "params": params,
             "run": list(spec.run),
             "cost": copy.deepcopy(proposal.cost),
@@ -1251,6 +1357,8 @@ class ProposalBook:
             "runNodeIds": list(proposal.run_node_ids) if proposal.run_node_ids else None,
             "update": dict(proposal.update) if proposal.update else None,
         }
+        # One count for the card, the Update and MCP (GM - Design, PR #216 r3).
+        view["changeCount"] = change_count(spec, removed=len(proposal.removed_edges))
         view["plan"] = plan_line(view)
         return view
 
@@ -1326,18 +1434,20 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
 # (Accepted, Rejected, Expired, Closed: Nebula restarted)." main posts it on
 # the project's Updates when the proposal opens and settles it when it ends.
 
-def change_count(spec: ProposalSpec) -> int:
-    """What the Update counts as a change: each new node, each wire and each
-    existing node whose params change (the bar's own groups). A run changes
-    nothing on the canvas, and a name belongs to its new node."""
-    return len(spec.nodes) + len(spec.edges) + len(spec.params)
+def change_count(spec: ProposalSpec, *, removed: int = 0) -> int:
+    """What the Update, the card and MCP count as a change (GM - Design, PR
+    #216 r2-r3: one unit, the operation): each new node, each new wire, each
+    existing node whose params change and each wire Accept removes (the
+    panel's groups and connection lines). A run changes nothing on the
+    canvas, and a name belongs to its new node."""
+    return len(spec.nodes) + len(spec.edges) + len(spec.params) + removed
 
 
 def update_text(proposal: Proposal) -> str:
     """The Update's line, from a fixed template: never the agent's note
     (that is the bar's), as an asset proposal's never is."""
     agent = proposal.agent.name
-    count = change_count(proposal.spec)
+    count = change_count(proposal.spec, removed=len(proposal.removed_edges))
     if count == 0:
         return f"{agent} proposes a run on the canvas"
     return f"{agent} proposes {count} change{'' if count == 1 else 's'} on the canvas"

@@ -249,7 +249,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       const result = await acceptProposal(id, entry.acceptKey, get().drag[id] ?? {});
       accepted = true;
       synced.stop();
-      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen });
+      const unwired = entry.view.removedEdges ?? [];
+      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep, synced: synced.seen,
+        ...(unwired.length > 0 ? { unwired } : {}) });
       // Its nodes are on the canvas: an undo pressed meanwhile acts now, not after the run below.
       useGraphStore.getState().endUndoStep(undoStep);
       get().close({ proposalId: id, status: 'accepted' });

@@ -147,6 +147,17 @@ describe('canvas proposals store', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('accepted');
   });
 
+  it("hands the wires a model change removes to the accept's undo step (PR #216 r3)", async () => {
+    const removedEdges = [{ source: 'n2', sourceHandle: 'image', target: 'n1', targetHandle: 'images' }];
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { removedEdges, run: [] }), acceptKey: 'key-a' });
+    const result = { status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: [],
+      approvalId: null, nodes: [], edges: [], updatedNodes: [] };
+    api.acceptProposal.mockResolvedValue(result);
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result,
+      { undoStep: expect.any(Object), synced: syncs.seen, unwired: removedEdges });
+  });
+
   it('runs several targets with their inputs, or waits while a run is going', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     graph.state.edges = [{ source: 'n1', target: 'n7' }, { source: 'n1', target: 'n8' }];
