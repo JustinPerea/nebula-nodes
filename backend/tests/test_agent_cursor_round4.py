@@ -523,7 +523,8 @@ def test_the_check_fails_a_test_that_sends_a_stray_cursor_event(tmp_path):
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "tests.conftest",
          "--rootdir", str(tmp_path), str(probe)],
         cwd=backend, capture_output=True, text=True, timeout=300,
-        env={**os.environ, "PYTHONPATH": str(backend)},
+        # Without CI's shard split: the probe file is one file and must run whatever shard this is.
+        env={**{k: v for k, v in os.environ.items() if k != "NEBULA_TEST_SHARD"}, "PYTHONPATH": str(backend)},
     )
     assert run.returncode != 0, run.stdout[-2000:]
     assert "other than through main._broadcast_presence" in run.stdout, run.stdout[-2000:]
