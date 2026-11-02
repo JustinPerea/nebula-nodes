@@ -795,7 +795,12 @@ def propose_change(
     A `params` model change that leaves existing connections on ports the
     new model doesn't have isn't refused here: Accept removes them, as the
     canvas's model picker does. `removedEdges` lists them (the same fields
-    as `edges`) and `plan` says so ("removes 2 connections"). `changeCount`
+    as `edges`) and `plan` says so ("removes 2 connections"). Clearing the
+    model, or a model whose ports Nebula can't read, is still refused
+    (`unwire` them with edit_canvas). Setting the model the node already has
+    reads its ports again: `params[].inputsUpdated` {key, name} marks it.
+    Names in the view follow the person's renames while it is open; your
+    note stays as you wrote it. `changeCount`
     is the number of changes the person sees on the card and the Update:
     each new node, connection, changed node and removed connection.
     Then call get_proposal(id, wait_seconds=...).
@@ -841,6 +846,9 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     (ids pa_...) too: those have `kind` and `target`, and when accepted
     `applied` (what was set). Proposals are kept in memory: after Nebula
     restarts, an open one is gone (404), so propose again if you still want it.
+    While it is open, its node names (`plan`, `names`, `params[].title`, the
+    wires' names) are the canvas's names now: the person may have renamed a
+    node since. Ids are what Accept applies; your note stays as you wrote it.
     """
     from urllib.parse import quote
 
@@ -1361,7 +1369,8 @@ def edit_canvas(
     model is cleared or can't be read, leaving the basic ports) is refused:
     disconnect them in the same call (`unwire`). (propose_change differs: a
     proposal drops the connections a known new model can't take, lists them
-    in `removedEdges`, and the person sees them before Accept.)
+    in `removedEdges`, and the person sees them before Accept; one that
+    clears the model is refused the same way.)
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id), a
     summary and `undo` ({token, editId, expiresInSeconds, summary}): pass the
     token to undo_canvas_edit to take this edit back (a steps plan returns

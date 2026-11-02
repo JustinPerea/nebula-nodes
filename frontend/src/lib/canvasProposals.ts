@@ -327,12 +327,27 @@ export interface ChangeGroup {
   wires?: WireLine[];
 }
 
+const QUOTE_MARKS = '“”"\'‘’';
+
+/** A node's name on the card, in curly quotes once: quotes the name carries
+ * itself come off first (review 2 L4; the plan line's rule, backend
+ * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
+export function cardQuoted(name: string): string {
+  let text = name.trim();
+  let start = 0;
+  let end = text.length;
+  while (start < end && QUOTE_MARKS.includes(text[start])) start += 1;
+  while (end > start && QUOTE_MARKS.includes(text[end - 1])) end -= 1;
+  text = text.slice(start, end).trim();
+  return `“${text || name}”`;
+}
+
 function wireLines(edges: ProposalView['edges'] | undefined, names: Record<string, string>,
   ports: Record<string, string> = {}): WireLine[] {
   return (edges ?? []).map((edge) => ({
     id: `${edge.source}.${edge.sourceHandle}>${edge.target}.${edge.targetHandle}`,
-    from: `“${edge.sourceName ?? names[edge.source] ?? edge.source}”`,
-    to: `“${edge.targetName ?? names[edge.target] ?? edge.target}”`,
+    from: cardQuoted(edge.sourceName ?? names[edge.source] ?? edge.source),
+    to: cardQuoted(edge.targetName ?? names[edge.target] ?? edge.target),
     port: edge.targetLabel ?? ports[`${edge.target}.${edge.targetHandle}`] ?? edge.targetHandle,
   }));
 }
@@ -350,7 +365,7 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
       id: node.ref,
       // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
       // the agent gave it (`rename`) shows with the model it is.
-      title: `New “${node.name}”${node.model ? ` · ${node.model}` : ''}`,
+      title: `New ${cardQuoted(node.name)}${node.model ? ` · ${node.model}` : ''}`,
       kind: 'new',
       lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });
@@ -363,10 +378,14 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
       // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
       // node's id for agents; a backend without `title` falls back to it.
       title: change.title
-        ? `“${change.title}”${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
+        ? `${cardQuoted(change.title)}${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
         : change.name,
       kind: 'edit',
-      lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
+      // The same model set again: its inputs are read again, never "X → X"
+      // (GM - Design, PR #216 r4 8: "Krea 2 · inputs updated").
+      lines: entries.map(([key, diff]) => (change.inputsUpdated?.key === key
+        ? { key, to: `${change.inputsUpdated.name} · inputs updated` }
+        : changeLine(key, diff.to, diff.from, true))),
     });
   }
   // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).

@@ -170,3 +170,83 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 | 420×640, 1 notice | top 116, cap 202 | notice under the card, over the log's edge, footer visible |
 | 900, Show all, 2 notices | top 152 (inset 150), bottom 712 | two notices under it, footer visible |
 | 420×560, log dragged up | top 116, cap 149 (60 px body) | foot over the log's top edge; top at the inset |
+
+## Round 3b (GM - Design's r4 answers to review 2, 2026-11-02)
+
+**Plan grammar (GM r4 1–2; review 2 L1, L2).**
+- `plan_groups` now writes the nodes added, then the nodes changed, then the other runs, then the removals.
+- A group with one node keeps its merged verb: "Adds and runs “A” plus 1 connection", "Changes and runs “K”".
+- A group with more than one node names them and then says which of them run:
+  - "Adds “A”, “B” and 1 connection, runs both";
+  - "runs all 3";
+  - "Adds 4 nodes and 1 connection, runs all 4".
+  - Only some running are named: "runs “A”". When a shared name can't tell them apart, it says "runs 1 of them".
+- Changed nodes follow the same rule ("Changes “A” and “B”, runs both"), so no group says "and" twice.
+- New connections close the list of added nodes.
+- The other runs join the last run clause ("runs both plus “C”", "runs “A” and “C”"). After a single merged group they keep their own group, as in r3 ("Changes and runs “Krea 2”, runs “GPT Image 2”").
+- L2: a group adds its names to `said` only when it spoke them (3 or fewer nodes), so a count of 4 is never followed by "another".
+- The group order stays r3's (changes before other runs), so GM's example "Runs 2 “Image” nodes, changes another “Image”" reads "Changes 2 “Image” nodes, runs another “Image”". The test says so; GM can ask for the other order.
+- The combinatorial test no longer rewrites the merged verb, and still passes over more than 1000 mixes.
+
+**Universal nodes name the model (GM r4 3, L3).** `_proposal_cost` passes the looked-up models to `_plan_model`. For a universal node that gives the catalog name without the maker's prefix (`universal_ports.model_name`: "Anthropic: Claude Sonnet 4.5" → "Claude Sonnet 4.5"), read from the lookup or from the pickers' cache, else the model id. The result: "Claude Sonnet 4.5 on your OpenRouter key".
+
+**Names follow renames (GM r4 4, N2).**
+- `view(live=…)` takes the names of the existing nodes on the canvas now (`_proposal_live_names`). These cover:
+  - only open proposals for the open project;
+  - titles, the `params[].name` field, `names`, the names on both new and removed wires, the `cost.nodes` names, and each not-ready row's name and the quoted name that starts its person line.
+- get_proposal and the plan line read them.
+- After every non-replacing graph sync, `_follow_renamed_proposals` re-sends `proposalOpened` to the person's canvases for proposals whose names changed. The store's `open` replaces the view and keeps the drag.
+- The note is never rewritten.
+
+**Cleared model, inputs updated, a failed read at Accept (GM r4 8; review 2 wire-drop MEDIUM-1→LOW, LOW-4).**
+- The drop loop also requires a model, so a proposal that clears it is refused with the `unwire` 400, as the docs say.
+- Setting the model a node already has (`_model_reread`) stores `inputsUpdated` {key, name} on the change. The panel then shows "GPT-4o · inputs updated" instead of "X → X", and any wires the re-read ports drop are listed as removed.
+- A read that fails while a canvas proposal is staged now raises `PortsUnread`, a subclass of the same 400 with the same agent words:
+  - create and reopen answer the agent as before;
+  - Accept catches it and answers 409 with the person's line: "Nebula couldn't read which inputs X takes from OpenRouter's server, so it can't tell which connections “Y” keeps. Try Accept again in a moment." With no key, it says "Add it in Settings".
+  - The proposal stays open, and Accept works once the read does.
+- N1: `proposal.created` journals `removes`.
+- N3 (two fields named `plan`): not renamed. `cost.estimate.plan` is the run estimate's shared shape (pricing, the run chip, other callers), so a rename isn't cheap. Left as is.
+
+**Quotes (L4).**
+- The card's frontend uses `cardQuoted` (the plan line's rule: quote marks are stripped from both ends) for the New title, the edit title and both ends of each wire line.
+- The backend's not-ready name and `_quoted_name_line` use `_card_quoted`.
+
+**Notice stack give-way (GM r4 5–7; review 2 stack MEDIUM-1, LOW-2/3/4, NIT-5).**
+- `placeNoticeStack` follows GM's order, and the docked log's header is covered only in the last step:
+  1. When the notices don't fit under the card, they go over its body's foot. The card sits on the log's line. Its scroll wrapper keeps their room as `padding-bottom` (`--notice-overlay-pad`, with `--notice-body-floor` as its min-height). Each notice moves up by its own `--notice-overlay-y` (`translate`, on the stack's spring, z above the card), and the last one sits 8 px above the footer.
+  2. The body shrinks below 60, down to one line (or, with notices over it, to the newest notice and its gap).
+  3. Only when header, that floor and footer can't fit does the card's foot come down (the lift drops).
+- The header and footer always show.
+- When the body is shorter than the notices, older notices tuck under the newest one, which keeps the button and shows in full. At 420×560 with 2 notices the overlap is 13 px. **For GM:** this is the one place the brief's rules can't all hold (body 87 px, notices 100 px). The alternatives are to cover the log's header, or to cover the card's header.
+- A floating log in the card's column is cleared. AgentLog writes `--agent-log-float-top/bottom/left/right` while it's undocked. The card stays under the log when the stack fits below it, else the stack is lifted above it.
+- The offline banner joins the card's top line only. It carries `data-notice-top-line` and `noticeTopLimit` reads it, so floating panels don't move when Nebula goes offline. While the banner shows it puts `data-offline-banner` on the root, which the region's root watch hears.
+- A layout switch (`aboveLog` flips, `--agent-log-top` or the floating log's top moves) applies the lift with `data-notice-jump` on the region for two frames (`transition: none`). Changes inside the stack keep the spring (`stackJumps`).
+- NIT-5: a body shorter than 60 needs no give-way (pinned).
+- The footer carries `data-notice-shrink-foot`, so the overlaid notices land above it.
+
+**Pins (review 2 LOW-2, L5, L6).** Every mutant named in the reviews now has a test:
+- the re-pointed and moved-handle drops (R1/R2);
+- the reopen misfit's drops (R3/R4, B20);
+- the `edge.removed` journal: 2 events, actor person, `proposalId`, summary (R5–R7, R13, B19);
+- the exact wire words ("Image Input", "Second take", "Images"), including a new wire into a renamed new node (B14/B15/B23, R9);
+- an output-side drop (R10);
+- the CLI's `removes` lines (R11);
+- the undo keeps the original edge id and type (FE6/F12);
+- F7: a wire on the canvas again at Undo stays, and its Redo too.
+
+**Checks.**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, from an explicit array of every test file that names the changed modules or styles (focusRingCss included): 99 files, 1777 passed.
+- Isolated pytest: 1374 passed on plan line, canvas proposals, universal ports, every `test_error_copy_*`, MCP tools, CLI commands, node route and the reopen tests. 97 passed again after the doc edits (MCP tools, CLI, universal ports).
+- Entry: 449,262 B raw, 138,026 B gzip.
+- Mutation checks: 41 run, 41 caught (F7 needed the Redo pin). The runner is `scratchpad/proposal-card/mut3b/run.py`, its results `out.txt`.
+- **Live** (Restraint; isolated backend on 8798 with OpenRouter's rows warmed; Vite on 5798; canaries blocked; nothing accepted or run). The shots are in `scratchpad/proposal-card/shots3b/`, and `md5 | uniq -d` is empty:
+
+| Shot | Result |
+|---|---|
+| 1440 "runs both" | "Adds “Ice prompt”, “Chrome prompt” and 1 connection, runs both · free"; "3 changes" = Update. After a rename of the target, the card read “Ice prompt” → “Alt still (final)” with no reload. |
+| 420×560, log open, 2 notices | Card 116–292, header and footer whole; notices at 151–230 over the body's foot, 8 px above the footer; log header at 301, clear. |
+| 1440 "inputs updated" | "“Second look” · OpenRouter / model GPT-4o · inputs updated"; 1 change. |
+
+- Found while live: a Vite left running through the mutation run served stale modules (notices didn't render) until it was restarted, as the restart-Vite note warns.

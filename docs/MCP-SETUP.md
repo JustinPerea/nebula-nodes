@@ -1662,7 +1662,12 @@ then **Show**, **Reject** and **Accept** (or **Accept and run**). The view's
 node, connection, changed node and removed connection). A model change that
 leaves existing connections on ports the new model doesn't have removes them
 on Accept, as the model picker does: `removedEdges` lists them, the line says
-"removes 2 connections", and the card lists them struck through. They can drag ghosts before accepting; the nodes land where they
+"removes 2 connections", and the card lists them struck through. A
+proposal that clears the model, or names one whose ports Nebula can't read,
+is refused (`unwire` them with `edit_canvas`); setting the model a node
+already has reads its ports again (`params[].inputsUpdated`, "GPT-4o · inputs
+updated" on the card). Names on the card, in `plan` and in get_proposal follow
+the person's renames while the proposal is open; the note stays as written. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
@@ -3186,8 +3191,8 @@ model's file inputs are its ports. One backend module has the rules
   can't read, which leaves the definition's ports. (The person's picker drops
   them instead, as it always did, and so does a proposal (`propose_change`,
   `nebula propose`) when Nebula knows the new model's ports: Accept removes
-  them and the view lists them in `removedEdges`; with unknown ports a
-  proposal is refused the same way.)
+  them and the view lists them in `removedEdges`; with unknown ports, or a
+  cleared model, a proposal is refused the same way.)
 - Replicate: a port per file input (`x-uploadable`, or a `uri` string),
   named as the schema names it, and one output. A file output's schema is a
   plain `uri` string whatever the file is, so its type comes from the

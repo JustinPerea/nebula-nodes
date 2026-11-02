@@ -91,6 +91,27 @@
   transition: margin-bottom 420ms var(--notice-spring);
 }
 
+/* A layout switch (the stack going above the log or back, the log docking,
+   moving or being dragged) lands in its frame with no spring; the spring
+   stays for changes inside the stack, a notice coming or going (review 2
+   MEDIUM-1, GM - Design PR #216 r4). NoticeRegion marks the region for two
+   frames (lib/noticeStackPlace.ts JUMP_ATTR). */
+.notice-region[data-notice-jump] .notice-region__stack {
+  transition: none;
+}
+
+/* Give-way step 1 (GM - Design, PR #216 r4 5): with no room under the card,
+   the notices sit over the bottom of its body, just above its footer, never
+   over the docked log. The card's body keeps their room at its foot
+   (canvasProposals.css --notice-overlay-pad); each notice moves up by its
+   own --notice-overlay-y, on the stack's spring. */
+.notice-region[data-notice-overlay='true'] .notice-region__slot > :not([data-notice-shrinks]) {
+  position: relative;
+  z-index: 1;
+  translate: 0 var(--notice-overlay-y, 0px);
+  transition: translate 420ms var(--notice-spring);
+}
+
 /* Under 400 px of room beside a docked Agent log, the whole stack sits above
    the log at the region's full width (the card up to 600 px), card on top,
    notices under it, never a sliver beside it (GM - Design, PR #216 r3). The
@@ -217,7 +238,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .notice-region,
-  .notice-region__stack {
+  .notice-region__stack,
+  .notice-region[data-notice-overlay='true'] .notice-region__slot > :not([data-notice-shrinks]) {
     transition: none;
   }
 }

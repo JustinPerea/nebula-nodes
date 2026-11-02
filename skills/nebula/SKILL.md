@@ -244,8 +244,12 @@ clearing it, or naming one Nebula can't read, which leaves the basic ports)
 is refused: `--unwire` them in the same apply. A `nebula propose` of the same
 change isn't refused when Nebula knows the new model's ports: accepting drops
 those connections, and the proposal lists them (`removes` lines,
-`removedEdges`). If it can't read the new model's ports, the proposal is
-refused the same way. Without the provider's key the
+`removedEdges`). If it can't read the new model's ports, or the change clears
+the model, the proposal is refused the same way. Setting the model a node
+already has reads its ports again: the card shows "<model> · inputs updated"
+(`params[].inputsUpdated`) and lists any connection that drops. A proposal's
+node names follow the person's renames while it is open (`plan`, `names`,
+`params[].title`); your `note` stays as you wrote it. Without the provider's key the
 node keeps its basic ports, and a connection to any other port is refused with the
 reason (only the person can add a key).
 

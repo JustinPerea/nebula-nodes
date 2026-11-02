@@ -20,7 +20,7 @@ import '../../styles/canvasProposals.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
-import { SHRINK_ATTR, SHRINK_BODY_ATTR } from '../../lib/noticeStackPlace';
+import { SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR } from '../../lib/noticeStackPlace';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -430,7 +430,7 @@ export function ProposalBar() {
           </div>
         </div>
         {/* The footer: always at the card's foot, never centred against the text. */}
-        <div className="proposal-bar__footer">
+        <div className="proposal-bar__footer" {...{ [SHRINK_FOOT_ATTR]: '' }}>
           <button
             type="button"
             className="proposal-bar__button proposal-bar__button--show"

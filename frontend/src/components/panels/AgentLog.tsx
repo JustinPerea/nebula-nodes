@@ -234,12 +234,17 @@ export function AgentLog() {
   // sits above the window's bottom: a proposal card too narrow beside the
   // log sits above it instead (GM - Design, PR #216 r1; canvasProposals.css).
   // The log itself never moves for the card.
+  // Dragged off the dock, its box goes on the root as --agent-log-float-*
+  // (window px): the proposal card clears it when it sits in the card's
+  // column (GM - Design, PR #216 r4 6; lib/noticeStackPlace.ts).
   useEffect(() => {
     const root = document.documentElement;
     const log = logRef.current;
+    const clear = (names: string[]) => names.forEach((name) => root.style.removeProperty(name));
+    const DOCK = ['--agent-log-clearance', '--agent-log-top'];
+    const FLOAT = ['--agent-log-float-top', '--agent-log-float-bottom', '--agent-log-float-left', '--agent-log-float-right'];
     if (!visible || !log) {
-      root.style.removeProperty('--agent-log-clearance');
-      root.style.removeProperty('--agent-log-top');
+      clear([...DOCK, ...FLOAT]);
       return undefined;
     }
     const measure = () => {
@@ -247,11 +252,19 @@ export function AgentLog() {
       const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
       if (docked) {
+        clear(FLOAT);
         root.style.setProperty('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
         root.style.setProperty('--agent-log-top', `${Math.ceil(window.innerHeight - rect.top + AGENT_LOG_GAP_PX)}px`);
       } else {
-        root.style.removeProperty('--agent-log-clearance');
-        root.style.removeProperty('--agent-log-top');
+        clear(DOCK);
+        if (rect.width > 0 && rect.height > 0) {
+          root.style.setProperty('--agent-log-float-top', `${Math.floor(rect.top)}px`);
+          root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(rect.bottom)}px`);
+          root.style.setProperty('--agent-log-float-left', `${Math.floor(rect.left)}px`);
+          root.style.setProperty('--agent-log-float-right', `${Math.ceil(rect.right)}px`);
+        } else {
+          clear(FLOAT);
+        }
       }
     };
     measure();
@@ -261,8 +274,7 @@ export function AgentLog() {
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
-      root.style.removeProperty('--agent-log-clearance');
-      root.style.removeProperty('--agent-log-top');
+      clear([...DOCK, ...FLOAT]);
     };
   }, [visible, open, position]);
 

@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
-import { TOP_BAR_ATTR, floatingTopLimit } from '../lib/bottomBar';
-import { TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack } from '../lib/noticeStackPlace';
+import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
+import {
+  TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, type StackPlace,
+} from '../lib/noticeStackPlace';
 import '../styles/noticeRegion.css';
 
 /** What a screen shows in the region besides the toasts. */
@@ -61,19 +63,26 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       watched.add(element);
       resized.observe(element);
     };
+    let last: { place: StackPlace; logTop: number; floatTop: number } | null = null;
     function place() {
       if (!region || !stack) return;
       // A top bar mounted since (the selection toolbar's panel) joins the watch.
       document.querySelectorAll(`[${TOP_BAR_ATTR}]`).forEach(watch);
       stack.querySelectorAll('[data-notice-shrinks], [data-notice-shrinks] [data-notice-shrink-body] > *').forEach(watch);
-      applyNoticeStack(region, stack, placeNoticeStack(measureNoticeStack(region, stack, floatingTopLimit(TOP_GUTTER))));
+      const measured = measureNoticeStack(region, stack, noticeTopLimit(TOP_GUTTER));
+      const next = { place: placeNoticeStack(measured), logTop: measured.logTop, floatTop: measured.floating?.top ?? 0 };
+      // A layout switch (above the log or back, the log moved) lands with no
+      // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4).
+      applyNoticeStack(region, stack, next.place, stackJumps(last, next));
+      last = next;
     }
     watch(region);
     watch(stack);
     place();
-    // The log and the bottom bar write their lines on the root.
+    // The log and the bottom bar write their lines on the root; the offline
+    // banner marks it while it shows.
     const rootVars = typeof MutationObserver === 'function' ? new MutationObserver(() => place()) : null;
-    rootVars?.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    rootVars?.observe(document.documentElement, { attributes: true, attributeFilter: ['style', BANNER_SHOWN_ATTR] });
     // An item arriving in or leaving a slot (not the text changing inside one).
     const items = typeof MutationObserver === 'function'
       ? new MutationObserver((records) => {

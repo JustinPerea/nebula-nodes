@@ -158,6 +158,14 @@ describe('canvas proposals store', () => {
       { undoStep: expect.any(Object), synced: syncs.seen, unwired: removedEdges });
   });
 
+  it('takes the view a rename re-sends, keeping where the person dragged it (GM - Design, PR #216 r4 4)', () => {
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “Old”' }), acceptKey: 'key-a' });
+    useCanvasProposalsStore.setState((state) => ({ drag: { ...state.drag, p_a: { '+k': { x: 5, y: 6 } } } }));
+    emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “New”' }), acceptKey: 'key-a' });
+    expect(useCanvasProposalsStore.getState().proposals.p_a.view.plan).toBe('Changes “New”');
+    expect(useCanvasProposalsStore.getState().drag.p_a).toEqual({ '+k': { x: 5, y: 6 } });
+  });
+
   it('runs several targets with their inputs, or waits while a run is going', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     graph.state.edges = [{ source: 'n1', target: 'n7' }, { source: 'n1', target: 'n8' }];

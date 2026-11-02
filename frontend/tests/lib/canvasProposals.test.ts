@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeCountLabel, proposalChangeCount, proposalChanges } from '../../src/lib/canvasProposals';
+import { cardQuoted, changeCountLabel, proposalChangeCount, proposalChanges } from '../../src/lib/canvasProposals';
 import type { ProposalView } from '../../src/lib/wsClient';
 
 function view(): ProposalView {
@@ -87,5 +87,45 @@ describe('proposalChanges', () => {
     // A view without names on the wire falls back to the names it has, then the handle.
     expect(groups[3].wires?.[0]).toMatchObject({ from: '“Photo”', to: '“n1”', port: 'images' });
     expect(proposalChangeCount(wired, groups)).toBe(4);
+  });
+});
+
+describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
+  it('quotes a name once, whatever quotes it carries (the plan line\'s rule)', () => {
+    expect(cardQuoted('Hero')).toBe('“Hero”');
+    expect(cardQuoted('“Hero”')).toBe('“Hero”');
+    expect(cardQuoted('"Hero" ')).toBe('“Hero”');
+    expect(cardQuoted("'Hero'")).toBe('“Hero”');
+    const quoted: ProposalView = {
+      ...view(),
+      nodes: [{ ...view().nodes[0], name: '“Krea 2”' }],
+      params: [{ ...view().params[0], title: '"Hero shot"', model: 'Krea 2' }],
+      edges: [{ source: 'n2', sourceHandle: 'text', target: '+k', targetHandle: 'prompt',
+        sourceName: '“Prompt”', targetName: '“Krea 2”', targetLabel: 'Prompt' }],
+      removedEdges: [{ source: 'n3', sourceHandle: 'image', target: 'n1', targetHandle: 'images',
+        sourceName: '“Photo”', targetName: '"Hero shot"', targetLabel: 'Images' }],
+    };
+    const groups = proposalChanges(quoted);
+    expect(groups.map((group) => group.title).slice(0, 2)).toEqual(['New “Krea 2”', '“Hero shot” · Krea 2']);
+    expect(groups[2].wires?.[0]).toMatchObject({ from: '“Prompt”', to: '“Krea 2”' });
+    expect(groups[3].wires?.[0]).toMatchObject({ from: '“Photo”', to: '“Hero shot”' });
+  });
+
+  it('reads "GPT-4o · inputs updated" for the same model set again (GM r4 8)', () => {
+    const again: ProposalView = {
+      ...view(),
+      params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', model: 'OpenRouter',
+        inputsUpdated: { key: 'model', name: 'GPT-4o' },
+        changes: { model: { from: 'openai/gpt-4o', to: 'openai/gpt-4o' }, temperature: { from: 1, to: 0.3 } } }],
+    };
+    const edit = proposalChanges(again).find((group) => group.kind === 'edit')!;
+    expect(edit.lines).toEqual([
+      { key: 'model', to: 'GPT-4o · inputs updated' },
+      { key: 'temperature', from: '1', to: '0.3' },
+    ]);
+    // A real change keeps "from → to".
+    const swap = { ...again, params: [{ ...again.params[0], inputsUpdated: undefined }] };
+    expect(proposalChanges(swap).find((group) => group.kind === 'edit')!.lines[0])
+      .toEqual({ key: 'model', from: 'openai/gpt-4o', to: 'openai/gpt-4o' });
   });
 });

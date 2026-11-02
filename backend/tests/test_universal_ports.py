@@ -774,3 +774,253 @@ def test_a_model_change_that_leaves_only_the_basic_ports_refuses_their_wires(api
     })
     assert cleared.status_code == 200, cleared.text
     assert api.graph.edges == []
+
+
+# -- round 3b (GM - Design, PR #216 r4; review 2 wire-drop and plan pins) ----
+
+def _swap(api, eye, model="anthropic/claude-sonnet-4.5", **extra):
+    return api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "text only", "params": [{"nodeId": eye, "params": {"model": model}}], **extra})
+
+
+def _accept(api, proposal_id):
+    return api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                           headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, proposal_id)}, json={})
+
+
+def test_a_cleared_model_is_refused_with_unwire(api):
+    """GM r4 8: the drop applies only to a swap to a known model; clearing the
+    model keeps the agents' `unwire` refusal (SKILL.md, MCP-SETUP.md, the
+    edit_canvas docstring and the CLI help say so)."""
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    refused = _swap(api, eye, model="")
+    assert refused.status_code == 400, refused.text
+    assert "unwire" in refused.json()["detail"]
+    assert f"{photos[0]}.image → {eye}.images" in refused.json()["detail"]
+    assert len(api.graph.edges) == 3
+
+
+def test_the_same_model_again_with_ports_read_again_says_inputs_updated(api):
+    """GM r4 8: the model line reads "GPT-4o · inputs updated" (never "X → X")
+    and the wires its re-read ports drop are listed as removed."""
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    rows = copy.deepcopy(OPENROUTER_ROWS)
+    rows[1]["input_modalities"] = ["text"]
+    model_cache.set("openrouter:models", {"models": rows, "count": 3}, ttl=300)
+    proposed = _swap(api, eye, model="openai/gpt-4o")
+    assert proposed.status_code == 201, proposed.text
+    view = proposed.json()["proposal"]
+    assert view["params"][0]["inputsUpdated"] == {"key": "model", "name": "GPT-4o"}
+    assert [edge["source"] for edge in view["removedEdges"]] == photos
+    assert view["plan"] == "Changes “Second take”, removes 2 connections · nothing runs until you choose"
+    # A real model change carries no such mark.
+    _warm_openrouter()
+    other = _swap(api, api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"}))
+    assert "inputsUpdated" not in other.json()["proposal"]["params"][0]
+
+
+def test_a_failed_read_at_accept_tells_the_person_and_keeps_the_proposal(api, monkeypatch):
+    """Review 2 wire-drop LOW-4: when the provider can't be read at Accept the
+    person reads their own line (never the agents' `unwire`), and the
+    proposal stays open, so Accept works once the read does."""
+    import main as main_module
+
+    _warm_openrouter()
+    photos, eye, ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    real = main_module._look_up_models
+
+    async def unreadable(wanted):
+        return {key: universal_ports._unread("Nebula couldn't reach OpenRouter to read its ports; try again")
+                for key in wanted}
+
+    monkeypatch.setattr(main_module, "_look_up_models", unreadable)
+    refused = _accept(api, view["id"])
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail == ("Nebula couldn't read which inputs anthropic/claude-sonnet-4.5 takes from OpenRouter's server, "
+                      "so it can't tell which connections “Second take” keeps. Try Accept again in a moment.")
+    assert "unwire" not in detail
+    assert main_module.canvas_proposals.get(view["id"]).is_open
+    assert len(api.graph.edges) == 3
+    # A missing key says so in the person's words.
+    async def keyless(wanted):
+        return {key: universal_ports._missing("openrouter", "model list", "OPENROUTER_API_KEY") for key in wanted}
+
+    monkeypatch.setattr(main_module, "_look_up_models", keyless)
+    assert "until your OpenRouter key is set" in _accept(api, view["id"]).json()["detail"]
+    monkeypatch.setattr(main_module, "_look_up_models", real)
+    accepted = _accept(api, view["id"])
+    assert accepted.status_code == 200, accepted.text
+    assert [(edge["source"], edge["targetHandle"]) for edge in api.graph.edges] == [(ask, "messages")]
+    # Creating it while the read fails still answers the agent in its own words.
+    _photos2, eye2, _ask2 = _two_photos_on_an_eye(api)
+    monkeypatch.setattr(main_module, "_look_up_models", unreadable)
+    created = _swap(api, eye2)
+    assert created.status_code == 400 and "unwire" in created.json()["detail"]
+
+
+def test_accept_refuses_a_removed_wire_re_pointed_to_another_node(api):
+    """Review 2 R1: the drop check compares the wires, not their count."""
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    third = api.graph.add_node("image-input", {})
+    assert api.graph.remove_edge(photos[0], "image", eye, "images")
+    api.graph.connect(third, "image", eye, "images")
+    refused = _accept(api, view["id"])
+    assert refused.status_code == 409
+    assert "connections it removes changed" in refused.json()["detail"]
+
+
+def _banana_between(api):
+    """A photo into Nano Banana (image in, image and text out) and its image
+    out into a vision model: a swap to a text-only model drops both, one on
+    each side."""
+    photo = api.graph.add_node("image-input", {})
+    banana = api.graph.add_node("openrouter-universal", {"model": "google/gemini-2.5-flash-image"})
+    eye = api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"})
+    api.graph.set_label(banana, "Banana")
+    for node_id, model in ((banana, "google/gemini-2.5-flash-image"), (eye, "openai/gpt-4o")):
+        configured = api.client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"model": model}})
+        assert configured.status_code == 200, configured.text
+    api.graph.connect(photo, "image", banana, "images")
+    api.graph.connect(banana, "image", eye, "images")
+    return photo, banana, eye
+
+
+def test_a_swap_drops_wires_on_the_output_side_too(api):
+    """Review 2 R10: a wire leaving the node from an output the new model
+    doesn't have is dropped and listed, as one arriving is."""
+    _warm_openrouter()
+    photo, banana, eye = _banana_between(api)
+    view = _swap(api, banana).json()["proposal"]
+    assert sorted((edge["source"], edge["sourceHandle"], edge["target"], edge["targetHandle"])
+                  for edge in view["removedEdges"]) == sorted([
+                      (photo, "image", banana, "images"), (banana, "image", eye, "images")])
+
+
+def test_accept_refuses_a_removed_wire_moved_to_another_port(api):
+    """Review 2 R2: same nodes, same count, another handle."""
+    _warm_openrouter()
+    _photo, banana, eye = _banana_between(api)
+    view = _swap(api, banana).json()["proposal"]
+    assert api.graph.remove_edge(banana, "image", eye, "images")
+    api.graph.edges.append({"id": "moved", "source": banana, "sourceHandle": "image",
+                            "target": eye, "targetHandle": "messages"})
+    refused = _accept(api, view["id"])
+    assert refused.status_code == 409
+    assert "connections it removes changed" in refused.json()["detail"]
+
+
+def test_a_reopen_checks_the_wires_it_removes(api):
+    """Review 2 R3/R4 (B20): the reopen's misfit check stages with drops and
+    compares them, as Accept does."""
+    import asyncio
+
+    import main as main_module
+
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    proposal = main_module.canvas_proposals.get(view["id"])
+    assert asyncio.run(main_module._proposal_reopen_misfit(proposal)) is None
+    api.graph.connect(api.graph.add_node("image-input", {}), "image", eye, "images")
+    assert asyncio.run(main_module._proposal_reopen_misfit(proposal)) == (
+        "the connections it removes changed after it was proposed")
+
+
+def test_accept_journals_each_removed_wire_as_the_persons(api):
+    """Review 2 R5-R7, R13 (B19): one edge.removed per dropped wire, by the
+    person, naming the proposal, in the journal's words."""
+    import main as main_module
+
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    created = [e for e in main_module.canvas_events.read(after=0, limit=200)["events"] if e["kind"] == "proposal.created"]
+    # Review 2 N1: the journal counts the removals as the Update does.
+    assert created[-1]["data"]["removes"] == 2
+    assert _accept(api, view["id"]).status_code == 200
+    removed = [e for e in main_module.canvas_events.read(after=0, limit=200)["events"] if e["kind"] == "edge.removed"]
+    assert len(removed) == 2
+    for event, photo in zip(removed, photos):
+        assert event["actor"]["kind"] == "person"
+        assert event["data"]["proposalId"] == view["id"]
+        assert event["summary"] == f"disconnected {photo}.image → {eye}.images (accepted from Claude Desktop)"
+
+
+def test_wire_words_are_pinned(api):
+    """Review 2 L5 (B14, B15, B23): the exact names and port label on a
+    removed wire (read on the live graph: the staged one has no "images"),
+    and on a new wire into a renamed new node."""
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    assert [(e["sourceName"], e["targetName"], e["targetLabel"]) for e in view["removedEdges"]] == [
+        ("Image Input", "Second take", "Images")] * 2
+    made = api.client.post("/api/canvas/proposals", headers=AGENT, json={
+        "note": "a third look",
+        "nodes": [{"ref": "+look", "definitionId": "openrouter-universal", "params": {"model": "openai/gpt-4o"}}],
+        "edges": [{"source": photos[0], "sourceHandle": "image", "target": "+look", "targetHandle": "images"}],
+        "rename": {"+look": "Third look"}}).json()["proposal"]
+    assert [(e["sourceName"], e["targetName"], e["targetLabel"]) for e in made["edges"]] == [
+        ("Image Input", "Third look", "Images")]
+
+
+def test_the_cli_prints_each_removed_wire(api):
+    """Review 2 R11."""
+    from cli.formatter import format_proposal
+
+    _warm_openrouter()
+    photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye).json()["proposal"]
+    lines = format_proposal(view).splitlines()
+    for photo in photos:
+        assert f"  removes  {photo}.image → {eye}.images" in lines
+
+
+def test_names_follow_a_rename_while_the_proposal_is_open(api):
+    """GM r4 4 (review 2 N2): the card, the plan line and get_proposal read
+    the node's name now; the note stays as the agent wrote it; the canvas
+    hears the new view."""
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye, run=[eye]).json()["proposal"]
+    assert view["cost"]["notReady"][0]["person"].startswith("“Second take” ")
+    api.sent.clear()
+    renamed = api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Final look"})
+    assert renamed.status_code == 200, renamed.text
+    resent = [m for m in api.sent if m.get("type") == "proposalOpened" and m["proposal"]["id"] == view["id"]]
+    assert resent and resent[-1]["proposal"]["params"][0]["title"] == "Final look"
+    assert resent[-1]["acceptKey"] == _proposal_key(api, view["id"])
+    read = api.client.get(f"/api/canvas/proposals/{view['id']}", headers=AGENT).json()["proposal"]
+    assert read["params"][0]["title"] == "Final look"
+    assert read["params"][0]["name"] == f"Final look ({eye})"
+    assert {edge["targetName"] for edge in read["removedEdges"]} == {"Final look"}
+    assert read["names"][eye] == "Final look"
+    assert read["plan"].startswith("Changes and runs “Final look”, removes 2 connections")
+    assert read["cost"]["nodes"][0]["name"] == "Final look"
+    assert read["cost"]["notReady"][0]["person"].startswith("“Final look” ")
+    assert read["cost"]["notReady"][0]["name"] == "Final look"
+    assert read["note"] == "text only"
+    # A second sync with no rename sends nothing new.
+    api.sent.clear()
+    api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Final look"})
+    assert not [m for m in api.sent if m.get("type") == "proposalOpened"]
+
+
+def test_a_universal_nodes_paid_run_names_its_model(api):
+    """GM r4 3 (review 2 L3): "Claude Sonnet 4.5 on your OpenRouter key",
+    never "OpenRouter on your OpenRouter key"."""
+    _warm_openrouter()
+    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    view = _swap(api, eye, run=[eye]).json()["proposal"]
+    assert "Claude Sonnet 4.5 on your OpenRouter key" in view["plan"], view["plan"]
+    assert view["cost"]["nodes"][0]["model"] == "Claude Sonnet 4.5"
+    assert universal_ports.model_name("openrouter-universal", "x/y", {"name": "Anthropic: Claude Opus"}) == "Claude Opus"
+    assert universal_ports.model_name("replicate-universal", "owner/model", {"name": "Ignored"}) == "owner/model"
+    model_cache.clear()
+    assert universal_ports.model_name("openrouter-universal", "anthropic/claude-sonnet-4.5") == "anthropic/claude-sonnet-4.5"

@@ -332,13 +332,15 @@ describe("an accepted proposal's removed connections", () => {
 
     useGraphStore.getState().undo();
     expect(links()).toEqual(['n1->n2']);
+    // The canvas's own wire comes back, never one made up from its ends (review 2 FE6/F12).
+    expect(useGraphStore.getState().edges.map((edge) => [edge.id, edge.type])).toEqual([['e1', 'typed-edge']]);
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n2')?.data.params).toEqual({});
     await flush();
     const restore = net.calls.find((call) => call.path === '/api/graph/restore');
     expect(restore?.body).toMatchObject({ action: 'undo', wire: [{ source: 'n1', target: 'n2' }] });
   });
 
-  it("leave at once when Accept's reply lands before its graphSync", () => {
+  it("leave at once when Accept's reply lands before its graphSync, and come back with its Undo", () => {
     sync(nodes(), [wire('n1', 'n2', 'e1')], { graphReplaced: true });
     const step = useGraphStore.getState().beginUndoStep();
     const swapped = { ...previewNode('n2'), data: { ...previewNode('n2').data, params: { model: 'b' } } };
@@ -346,6 +348,27 @@ describe("an accepted proposal's removed connections", () => {
       { undoStep: step, unwired: [connection('n1', 'n2')] });
     useGraphStore.getState().endUndoStep(step);
     expect(wires()).toEqual([]);
+    useGraphStore.getState().undo();
+    expect(useGraphStore.getState().edges.map((edge) => [edge.id, edge.type])).toEqual([['e1', 'typed-edge']]);
+  });
+
+  it('leave a wire the person drew again alone on Undo (review 2 F7)', () => {
+    sync(nodes(), [wire('n1', 'n2', 'e1')], { graphReplaced: true });
+    const step = useGraphStore.getState().beginUndoStep();
+    const swapped = { ...previewNode('n2'), data: { ...previewNode('n2').data, params: { model: 'b' } } };
+    sync([textNode('n1'), swapped], [], { edit: true });
+    useGraphStore.getState().adoptAcceptedProposal({ nodes: [], edges: [], updatedNodes: [swapped] },
+      { undoStep: step, unwired: [connection('n1', 'n2')] });
+    useGraphStore.getState().endUndoStep(step);
+    // The same wire is on the canvas again when Undo is pressed (a sync that
+    // is no undo step of this tab's brought it): Undo keeps that one.
+    sync([textNode('n1'), swapped], [wire('n1', 'n2', 'e9')]);
+    expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual(['e9']);
+    useGraphStore.getState().undo();
+    expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual(['e9']);
+    // Its Redo isn't the Accept's to take away either.
+    useGraphStore.getState().redo();
+    expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual(['e9']);
   });
 
   it("stay gone when one of the wire's ends was deleted since", () => {

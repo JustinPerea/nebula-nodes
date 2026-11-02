@@ -609,10 +609,6 @@ def summarize_cost(
 PLAN_NAMES = 3
 NOTHING_RUNS = "nothing runs until you choose"
 PLAN_NO_PRICE = "no list price"
-# The groups, in the order the line says them (GM - Design, PR #216 r3): each
-# node once, by what happens to it.
-PLAN_GROUPS: tuple[tuple[str, ...], ...] = (
-    ("adds", "runs"), ("adds",), ("changes", "runs"), ("changes",), ("runs",))
 
 
 def billed_to(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
@@ -653,18 +649,22 @@ def _plan_name(name: Any) -> str | None:
     return text or None
 
 
+plan_name = _plan_name
+
+
 def _and_list(words: list[str]) -> str:
     """“A”, “A” and “B”, “A”, “B” and “C”: no serial comma."""
     return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
 
 
-def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> str:
-    """One group's nodes (GM - Design, PR #216 r3): up to PLAN_NAMES by name,
-    from one more a count. Nodes are told apart by id, never by name: two in
-    the group with one name read "2 “Image” nodes", and a name an earlier
-    group already said, on another node, reads "another “Image”"."""
+def _group_words(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> list[str]:
+    """One group's nodes (GM - Design, PR #216 r3), as list items: up to
+    PLAN_NAMES by name, from one more a count. Nodes are told apart by id,
+    never by name: two in the group with one name read "2 “Image” nodes", and
+    a name an earlier group already said, on another node, reads "another
+    “Image”" (GM r4: also after that group's count of them)."""
     if len(keys) > PLAN_NAMES:
-        return _plural(len(keys), "node")
+        return [_plural(len(keys), "node")]
     counts: dict[str | None, int] = {}
     for key in keys:
         name = names.get(key)
@@ -680,7 +680,33 @@ def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str
         # Every node the view names has a name; this is the last resort (review 1 L3:
         # one without never turns the others into a count).
         words.append(_plural(unnamed, "more node") if words else _plural(unnamed, "node"))
-    return _and_list(words)
+    return words
+
+
+def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> str:
+    return _and_list(_group_words(keys, names, said))
+
+
+def _spoke(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> None:
+    """The names a group said aloud join `said` (review 2 L2): a group that
+    counted its nodes ("4 nodes") said none, so a later "another" has
+    nothing to point back to."""
+    if len(keys) <= PLAN_NAMES:
+        said.update(name for name in (names.get(key) for key in keys) if name)
+
+
+def _runs_of(group: list[str], running: list[str], names: Mapping[str, str | None]) -> str:
+    """Which of a group's nodes it runs, after its verb (GM - Design, PR #216
+    r4): "both", "all 3", or, when only some run, those by name ("“A”"); "1
+    of them" when a name doesn't tell them apart."""
+    if len(running) == len(group):
+        return "both" if len(group) == 2 else f"all {len(group)}"
+    run_names = [names.get(key) for key in running]
+    group_names = [names.get(key) for key in group]
+    if (len(running) > PLAN_NAMES or None in run_names
+            or any(group_names.count(name) > run_names.count(name) for name in run_names)):
+        return f"{len(running)} of them"
+    return _group_names(running, names, set())
 
 
 def _plan_names(view: Mapping[str, Any]) -> dict[str, str | None]:
@@ -713,13 +739,24 @@ def _runs_nothing(view: Mapping[str, Any]) -> bool:
 
 def plan_groups(view: Mapping[str, Any]) -> list[str]:
     """What Accept does, one group per kind of change (GM - Design, PR #216
-    r3): each node once, merged by id, under the verbs that happen to it
-    ("Adds and runs “A”", "changes “B”", "runs “C”"). New connections ride
-    on the group that adds nodes ("and 1 connection" after one name, "plus 1
-    connection" after a merged verb or a list, so no group says "and"
-    twice), or make their own group; wires a model change drops close the
-    line ("removes 2 connections"). A run that waits on placeholders runs
-    nothing yet, so it adds no "runs"."""
+    r3-r4): the nodes it adds, then the nodes it changes, each followed by
+    which of them it runs, then the other nodes it runs, then the wires a
+    model change removes.
+
+    - One node keeps its verbs merged: "Adds and runs “A” plus 1
+      connection", "Changes and runs “K”".
+    - More than one names them, and the run follows: "Adds “A”, “B” and 1
+      connection, runs both" ("runs all 3", "runs all 4" after "Adds 4 nodes
+      and 1 connection"); only some running are named: "runs “A”".
+    - New connections close the list of the nodes added ("“A”, “B” and 1
+      connection"; "plus 1 connection" after a merged verb, so no group says
+      "and" twice), or make their own group with no node added.
+    - The other runs join the last run named ("runs both plus “C”"), else
+      make their own group ("runs “C”", "another “Image”" after a group that
+      said "Image").
+    - Wires a model change drops close the line ("removes 2 connections").
+
+    A run that waits on placeholders runs nothing yet, so it adds no run."""
     names = _plan_names(view)
     verbs: dict[str, list[str]] = {}
 
@@ -740,28 +777,46 @@ def plan_groups(view: Mapping[str, Any]) -> list[str]:
 
     edges = len(view.get("edges") or [])
     removed = len(view.get("removedEdges") or [])
+    connections = _plural(edges, "connection") if edges else ""
     said: set[str] = set()
     groups: list[str] = []
-    # The group new connections ride on: the plain "adds" one if any, else
-    # "adds and runs"; and whether it says one verb and one name.
-    adds_at: int | None = None
-    adds_single = False
-    for kind in PLAN_GROUPS:
-        keys = [key for key, done in verbs.items() if tuple(done) == kind]
+    # The last group's run clause, while it is the line's last words: the
+    # other runs join it. ("both"/"all N"/"N of them" join with "plus".)
+    last_run: tuple[list[str], str] | None = None
+    for verb in ("adds", "changes"):
+        keys = [key for key, done in verbs.items() if done[0] == verb]
         if not keys:
+            if verb == "adds" and connections:
+                groups.append(f"adds {connections}")
             continue
-        words = _group_names(keys, names, said)
-        said.update(name for name in (names.get(key) for key in keys) if name)
-        if kind[0] == "adds" and (adds_at is None or kind == ("adds",)):
-            adds_at = len(groups)
-            adds_single = len(kind) == 1 and (len(keys) == 1 or len(keys) > PLAN_NAMES)
-        groups.append(f"{' and '.join(kind)} {words}")
-    if edges:
-        connections = _plural(edges, "connection")
-        if adds_at is None:
-            groups.insert(0, f"adds {connections}")
+        running = [key for key in keys if "runs" in verbs[key]]
+        extra = connections if verb == "adds" else ""
+        if len(keys) == 1:
+            words = _group_names(keys, names, said)
+            if running:
+                groups.append(f"{verb} and runs {words}" + (f" plus {extra}" if extra else ""))
+            else:
+                groups.append(f"{verb} {words}" + (f" and {extra}" if extra else ""))
+            last_run = None
         else:
-            groups[adds_at] = f"{groups[adds_at]} {'and' if adds_single else 'plus'} {connections}"
+            items = _group_words(keys, names, said)
+            groups.append(f"{verb} {_and_list([*items, *([extra] if extra else [])])}")
+            last_run = None
+            if running:
+                which = _runs_of(keys, running, names)
+                groups.append(f"runs {which}")
+                last_run = (running, which)
+        _spoke(keys, names, said)
+    others = [key for key, done in verbs.items() if done == ["runs"]]
+    if others:
+        if last_run is not None:
+            running, which = last_run
+            if which.startswith(("both", "all ")) or which.endswith(" of them"):
+                groups[-1] = f"runs {which} plus {_group_names(others, names, said)}"
+            else:
+                groups[-1] = f"runs {_and_list([*_group_words(running, names, set()), *_group_words(others, names, said)])}"
+        else:
+            groups.append(f"runs {_group_names(others, names, said)}")
     if removed:
         groups.append(f"removes {_plural(removed, 'connection')}")
     return groups
@@ -1273,11 +1328,22 @@ class ProposalBook:
             self._items.pop(proposal.id, None)
 
     # -- what agents and the canvas see (never the accept key) ---------------
-    def view(self, proposal: Proposal, *, registry: Any) -> dict[str, Any]:
+    def view(self, proposal: Proposal, *, registry: Any, live: Mapping[str, str] | None = None) -> dict[str, Any]:
+        """What agents and the canvas read. ``live`` maps the existing nodes it
+        touches to their names on the canvas now: names follow a rename while
+        the proposal is open (GM - Design, PR #216 r4 4: ids are what's
+        applied; the agent's note stays as written)."""
         from services import node_route
 
         definitions = registry.get_all() if registry is not None else {}
         spec = proposal.spec
+        live = {key: value for key, value in (live or {}).items() if key in proposal.existing and value}
+
+        def existing_row(node_id: str) -> dict[str, Any]:
+            row = dict(proposal.existing.get(node_id) or {})
+            if node_id in live:
+                row.update(title=live[node_id], name=f"{live[node_id]} ({node_id})")
+            return row
         node_costs = {entry.get("ref"): entry for entry in proposal.cost.get("nodes", [])}
         nodes: list[dict[str, Any]] = []
         names = spec.names
@@ -1301,15 +1367,16 @@ class ProposalBook:
             })
         params: list[dict[str, Any]] = []
         for change in spec.params:
-            before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
+            row = existing_row(change.node_id)
+            before = row.get("params") or {}
             params.append({
                 "nodeId": change.node_id,
-                "name": (proposal.existing.get(change.node_id) or {}).get("name") or change.node_id,
+                "name": row.get("name") or change.node_id,
                 # The card's words: the node's name and model, never its id.
-                **({"title": proposal.existing[change.node_id]["title"]}
-                   if (proposal.existing.get(change.node_id) or {}).get("title") else {}),
-                **({"model": proposal.existing[change.node_id]["model"]}
-                   if (proposal.existing.get(change.node_id) or {}).get("model") else {}),
+                **({"title": row["title"]} if row.get("title") else {}),
+                **({"model": row["model"]} if row.get("model") else {}),
+                # The same model set again, its ports read again (GM - Design, PR #216 r4 8).
+                **({"inputsUpdated": dict(row["inputsUpdated"])} if row.get("inputsUpdated") else {}),
                 "changes": {
                     key: {
                         "from": safe_value(before.get(key), key=key),
@@ -1321,8 +1388,8 @@ class ProposalBook:
         # Each node it touches by its canvas name, by id or ref: the plan line's
         # and the panel's words (review 1 L3: a run-only node keeps its name).
         node_names: dict[str, str] = {
-            node_id: str(row["title"]) for node_id, row in sorted(proposal.existing.items())
-            if isinstance(row, Mapping) and row.get("title")}
+            node_id: str(existing_row(node_id)["title"]) for node_id, row in sorted(proposal.existing.items())
+            if isinstance(row, Mapping) and existing_row(node_id).get("title")}
         node_names.update({node["ref"]: node["name"] for node in nodes if node.get("name")})
         new_ports = {node["ref"]: {port["id"]: port["label"] for port in node["ports"]["inputs"]} for node in nodes}
         edges: list[dict[str, Any]] = []
@@ -1331,8 +1398,8 @@ class ProposalBook:
             edges.append({
                 **edge.as_dict(),
                 # “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3).
-                "sourceName": words.get("sourceName") or node_names.get(edge.source) or edge.source,
-                "targetName": words.get("targetName") or node_names.get(edge.target) or edge.target,
+                "sourceName": live.get(edge.source) or words.get("sourceName") or node_names.get(edge.source) or edge.source,
+                "targetName": live.get(edge.target) or words.get("targetName") or node_names.get(edge.target) or edge.target,
                 "targetLabel": (words.get("targetLabel") or new_ports.get(edge.target, {}).get(edge.target_handle)
                                 or edge.target_handle),
             })
@@ -1346,11 +1413,13 @@ class ProposalBook:
             "expiresAt": int(proposal.expires_at * 1000),
             "nodes": nodes,
             "edges": edges,
-            "removedEdges": copy.deepcopy(proposal.removed_edges),
+            "removedEdges": [{**edge, **({"sourceName": live[edge["source"]]} if edge.get("source") in live else {}),
+                              **({"targetName": live[edge["target"]]} if edge.get("target") in live else {})}
+                             for edge in copy.deepcopy(proposal.removed_edges)],
             "names": node_names,
             "params": params,
             "run": list(spec.run),
-            "cost": copy.deepcopy(proposal.cost),
+            "cost": _cost_with_names(proposal.cost, live),
             "references": sorted(proposal.references, key=_node_sort_key),
             "reason": proposal.reason,
             "idMap": dict(proposal.id_map) if proposal.id_map else None,
@@ -1394,6 +1463,25 @@ class ProposalBook:
             "expiresInSeconds": max(0, int(proposal.expires_at - self._clock())),
             **({"cantRun": missing} if missing else {}),
         }
+
+
+def _cost_with_names(cost: Mapping[str, Any], live: Mapping[str, str]) -> dict[str, Any]:
+    """The proposal's cost with each existing node under its name now: its
+    price item, and its not-ready row (the person's line names it first)."""
+    cost = copy.deepcopy(dict(cost))
+    for entry in cost.get("nodes") or []:
+        if isinstance(entry, dict) and entry.get("nodeId") in live:
+            entry["name"] = live[entry["nodeId"]]
+    for row in cost.get("notReady") or []:
+        if not isinstance(row, dict) or row.get("nodeId") not in live:
+            continue
+        old, new = str(row.get("name") or ""), live[row["nodeId"]]
+        person = row.get("person")
+        quoted = f"“{_plan_name(old) or old}”"
+        if isinstance(person, str) and person.startswith(quoted):
+            row["person"] = f"“{_plan_name(new) or new}”{person[len(quoted):]}"
+        row["name"] = new
+    return cost
 
 
 def _node_sort_key(node_id: str) -> tuple[int, str]:

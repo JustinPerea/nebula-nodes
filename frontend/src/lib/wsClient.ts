@@ -245,8 +245,13 @@ export interface ProposalView {
    * each new node, wire, changed node and removed wire. */
   changeCount?: number;
   /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
-   * card's words, "Hero shot" and "Krea 2" (no id). */
+   * card's words, "Hero shot" and "Krea 2" (no id). `inputsUpdated`: the
+   * change sets the model param `key` to the model the node already has, so
+   * its inputs are read again; `name` is that model's own name (GM - Design,
+   * PR #216 r4 8: "Krea 2 · inputs updated"). Names follow renames while the
+   * proposal is open. */
   params: Array<{ nodeId: string; name: string; title?: string; model?: string;
+    inputsUpdated?: { key: string; name: string };
     changes: Record<string, { from: unknown; to: unknown }> }>;
   run: string[];
   cost: {

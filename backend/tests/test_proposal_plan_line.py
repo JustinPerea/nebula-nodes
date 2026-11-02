@@ -69,7 +69,8 @@ def test_adds_with_connections_and_counts_from_four():
     one = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}])
     assert plan_line(one) == "Adds “Krea 2” and 1 connection · nothing runs until you choose"
     three = _view(nodes=[{"ref": f"+{i}", "name": f"N{i}"} for i in range(3)], edges=[{}, {}])
-    assert plan_line(three) == "Adds “N0”, “N1” and “N2” plus 2 connections · nothing runs until you choose"
+    # GM - Design, PR #216 r4: the connections close the list of the nodes added.
+    assert plan_line(three) == "Adds “N0”, “N1”, “N2” and 2 connections · nothing runs until you choose"
     four = _view(params=[{**HERO, "nodeId": f"n{i}", "title": f"T{i}"} for i in range(4)])
     assert plan_line(four) == "Changes 4 nodes · nothing runs until you choose"
 
@@ -267,9 +268,10 @@ def test_nodes_merge_by_id_never_by_name():
 
 
 def test_adds_two_runs_one():
-    """Review 1 L1 (mutant B2): the run names the node it runs, not both."""
+    """Review 1 L1 (mutant B2): the run names the node it runs, not both
+    (GM - Design, PR #216 r4: "runs “A”" after the nodes added)."""
     view = _view(nodes=[{"ref": "+a", "name": "A"}, {"ref": "+b", "name": "B"}], run=["+a"], cost={"freeRuns": 1})
-    assert plan_line(view) == "Adds and runs “A”, adds “B” · free"
+    assert plan_line(view) == "Adds “A” and “B”, runs “A” · free"
 
 
 def test_an_unnamed_run_target_never_reads_none_or_turns_the_rest_into_a_count():
@@ -300,11 +302,11 @@ def test_a_name_with_and_in_it_keeps_the_groups_comma():
 
 
 def _unquoted(group: str) -> str:
+    """The group with each quoted name as one word. No other rewrite: the
+    merged verb's "and" counts too (review 2 L1)."""
     import re
 
-    text = re.sub(r"“[^”]*”", "Q", group)
-    # The merged verb is one verb (GM - Design, PR #216 r3: "Changes and runs").
-    return re.sub(r"^(adds|changes) and runs ", "VERB ", text)
+    return re.sub(r"“[^”]*”", "Q", group)
 
 
 def test_no_group_holds_two_ands_outside_quoted_names():
@@ -323,6 +325,7 @@ def test_no_group_holds_two_ands_outside_quoted_names():
                      names={f"n{50 + i}": f"Other {i}" for i in range(run_other)},
                      cost={"freeRuns": len(run)})
         for group in plan_groups(view):
+            # The merged verb's own "and" ("Adds and runs") counts (review 2 L1).
             assert _unquoted(group).count(" and ") <= 1, (group, view)
             checked += 1
     assert checked > 1000
@@ -372,3 +375,98 @@ def test_a_route_line_takes_the_nodes_name_in_place_of_the_model():
         assert named == "“Hero shot”" + plain[len(model):]
         checked += 1
     assert checked > 0
+
+
+# -- round 3b (GM - Design, PR #216 r4; review 2 L1, L2) ---------------------
+
+def _new(*names):
+    return [{"ref": f"+{name.lower()}", "name": name} for name in names]
+
+
+def test_gm_r4_added_nodes_that_all_run():
+    """GM r4 1: every added node also runs → "runs both", "runs all 3", and
+    from 4 a count; one added node keeps "Adds and runs"."""
+    two = _view(nodes=_new("A", "B"), edges=[{}], run=["+a", "+b"], cost={"freeRuns": 2})
+    assert plan_line(two) == "Adds “A”, “B” and 1 connection, runs both · free"
+    three = _view(nodes=_new("A", "B", "C"), edges=[{}], run=["+a", "+b", "+c"], cost={"freeRuns": 3})
+    assert plan_line(three) == "Adds “A”, “B”, “C” and 1 connection, runs all 3 · free"
+    four = _view(nodes=_new("A", "B", "C", "D"), edges=[{}], run=["+a", "+b", "+c", "+d"], cost={"freeRuns": 4})
+    assert plan_line(four) == "Adds 4 nodes and 1 connection, runs all 4 · free"
+    one = _view(nodes=_new("A"), edges=[{}], run=["+a"], cost={"freeRuns": 1})
+    assert plan_line(one) == "Adds and runs “A” plus 1 connection · free"
+    # No connection: the names alone.
+    assert plan_line({**two, "edges": []}) == "Adds “A” and “B”, runs both · free"
+
+
+def test_gm_r4_only_some_added_nodes_run():
+    """GM r4 1: "If only some added nodes run, name them"."""
+    view = _view(nodes=_new("A", "B"), edges=[{}], run=["+a"], cost={"freeRuns": 1})
+    assert plan_line(view) == "Adds “A”, “B” and 1 connection, runs “A” · free"
+    # A name that doesn't tell them apart is a count of them.
+    same = _view(nodes=[{"ref": "+x", "name": "Image"}, {"ref": "+y", "name": "Image"}], run=["+x"],
+                 cost={"freeRuns": 1})
+    assert plan_line(same) == "Adds 2 “Image” nodes, runs 1 of them · free"
+    many = _view(nodes=_new("A", "B", "C", "D", "E"), run=["+a", "+b"], cost={"freeRuns": 2})
+    assert plan_line(many) == "Adds 5 nodes, runs “A” and “B” · free"
+
+
+def test_gm_r4_changed_nodes_that_run_follow_the_same_rule():
+    """Review 2 L1: no merged verb before two names ("Changes and runs “A”
+    and “B”"), so no group says "and" twice."""
+    params = [{**KREA, "nodeId": "n1", "title": "A"}, {**KREA, "nodeId": "n2", "title": "B"}]
+    both = _view(params=params, run=["n1", "n2"], cost={"freeRuns": 2})
+    assert plan_line(both) == "Changes “A” and “B”, runs both · free"
+    one = _view(params=params, run=["n1"], cost={"freeRuns": 1})
+    assert plan_line(one) == "Changes “A” and “B”, runs “A” · free"
+
+
+def test_other_runs_join_the_run_named_last():
+    """One "runs" per line end: the other nodes it runs join the last run
+    clause ("both plus", or one list of names)."""
+    params = [{**KREA, "nodeId": "n1", "title": "A"}, {**KREA, "nodeId": "n2", "title": "B"}]
+    both = _view(params=params, run=["n1", "n2", "n9"], names={"n9": "C"}, cost={"freeRuns": 3})
+    assert plan_line(both) == "Changes “A” and “B”, runs both plus “C” · free"
+    some = _view(params=params, run=["n1", "n9"], names={"n9": "C"}, cost={"freeRuns": 2})
+    assert plan_line(some) == "Changes “A” and “B”, runs “A” and “C” · free"
+    # After a single merged group the other runs keep their own group (GM r3 5).
+    single = _view(params=params[:1], run=["n1", "n9"], names={"n9": "C"}, cost={"freeRuns": 2})
+    assert plan_line(single) == "Changes and runs “A”, runs “C” · free"
+    # Added nodes that run, then changed ones that don't: the other runs get their own group.
+    mixed = _view(nodes=_new("X", "Y"), params=params[:1], run=["+x", "+y", "n9"], names={"n9": "C"},
+                  cost={"freeRuns": 3})
+    assert plan_line(mixed) == "Adds “X” and “Y”, runs both, changes “A”, runs “C” · free"
+
+
+def test_gm_r4_another_after_a_count_and_every_group_keeps_its_verb():
+    """GM r4 2: "Keep "another" after a count; every group keeps its verb".
+    The groups keep r3's order (changes before other runs), so GM's example
+    "Runs 2 “Image” nodes, changes another “Image”" reads with the change first."""
+    params = [{**KREA, "nodeId": "n1", "title": "Image"}, {**KREA, "nodeId": "n2", "title": "Image"}]
+    view = _view(params=params, run=["n7"], names={"n7": "Image"}, cost={"freeRuns": 1})
+    assert plan_line(view) == "Changes 2 “Image” nodes, runs another “Image” · free"
+    two_others = _view(params=params[:1], run=["n7", "n8"], names={"n7": "Image", "n8": "Image"},
+                       cost={"freeRuns": 2})
+    assert plan_line(two_others) == "Changes “Image”, runs 2 other “Image” nodes · free"
+
+
+def test_l2_a_group_that_counted_its_nodes_said_no_name():
+    """Review 2 L2: "Adds 4 nodes, runs another “Image”" pointed back at a
+    name the reader never saw."""
+    nodes = [{"ref": "+a", "name": "Image"}, *_new("B", "C", "D")]
+    view = _view(nodes=nodes, run=["n7"], names={"n7": "Image"}, cost={"freeRuns": 1})
+    assert plan_line(view) == "Adds 4 nodes, runs “Image” · free"
+
+
+def test_a_quoted_name_is_quoted_once_in_the_not_ready_line(api):  # noqa: F811 - pytest fixture
+    """Review 2 L4: the plan line's rule for the card's other lines."""
+    node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
+    api.graph.set_label(node_id, "“Hero shot”")
+    response = _propose(api, {"note": "Try it", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}],
+                              "run": [node_id]})
+    assert response.status_code == 201, response.text
+    view = response.json()["proposal"]
+    assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea account. Connect it in Settings."
+    assert view["plan"].startswith("Changes and runs “Hero shot” · ")
+    import main
+
+    assert main._quoted_name_line("FLUX 3 can't run here.", "'Hero'", {"displayName": "FLUX 3"}) == "“Hero” can't run here."
