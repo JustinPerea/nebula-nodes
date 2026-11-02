@@ -847,7 +847,7 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     `applied` (what was set). Proposals are kept in memory: after Nebula
     restarts, an open one is gone (404), so propose again if you still want it.
     While it is open, its node names (`plan`, `names`, `params[].title`, the
-    wires' names) are the canvas's names now: the person may have renamed a
+    connection names in `removedEdges`) are the canvas's names now: the person may have renamed a
     node since. Ids are what Accept applies; your note stays as you wrote it.
     """
     from urllib.parse import quote
