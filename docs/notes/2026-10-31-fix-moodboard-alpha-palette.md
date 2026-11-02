@@ -1262,3 +1262,247 @@ palette's two colours. Round 5 in the browser gave #111413, #d75439 and
   alpha, reader, reader routes, store, the Commons api, worker, error kind
   and records, the ΔE00 contract, the copy sweep, and moodboard analysis.
 - **Build budget:** 444,224 bytes raw, unchanged.
+
+## Round 7 (base 79261710): a band only for a continuous run
+
+Review 5 found one verified MEDIUM (M1): round 6's one-band rule merged two
+touching flat accents into their mean, a colour the image doesn't hold.
+GM r11's principle for this round: **a palette never shows a colour the
+image doesn't contain.**
+
+### M1 (GM r11 item 1): continuous runs only, real colours only
+
+**The rule (`twoFlats`).** A run is two flat colours, not a band, when its
+256 px pixels *inside a flat area* fall in two strong modes along the A–B
+line with a thin trough between them.
+- **Inside a flat area** (`edgeEvidenceFromLabels`): a pixel whose colour
+  (within 2 levels a channel, `FLAT_TOLERANCE`) is on both sides along one
+  axis and on at least one side along the other.
+  - A cell that a straight edge cuts matches along the edge but on neither
+    side across it, so it's never inside. A line two cells wide is.
+- **Why only those pixels.** My first try read every pixel of the run.
+  - A hard edge at 256 px gives each partly covered cell one exact mix, so
+    every edge looks like a flat mode.
+  - The 14 px frame (keyline 74%, edge mix 25%) and the 1 px flag (25 / 50
+    / 25) read as two flats and split into phantom pairs: #464646 and
+    #808080; #ac194e and #4423a2.
+  - Read on inside pixels only, each of those has one mode or none, so
+    it's a band. Pink and violet, and #333 and #ddd, each have a large
+    interior, so they're two flats.
+- **The test.** The inside pixels are projected onto the segment in 32
+  bins and split where the two sides differ most (Otsu). It's two flats
+  when all of these hold:
+  - each side holds at least 20% of the weight;
+  - each side is flat: its heaviest 3 bins hold 60% of it;
+  - the peaks are at least 3 bins apart;
+  - no bin between them is over 25% of the smaller peak (`BAND_MODE`).
+- **No inside pixels** (a ramp, a stripe under 2 cells) means a run.
+
+**The band's colour (`mostPopulated`).** It is the band's most populated
+256 px colour, never a mean.
+- Pixels are binned at 4 levels a channel. The heaviest bin wins, then
+  its heaviest exact colour.
+- Inside pixels count alone when there are any.
+- A near tie (within 25%, `MODE_TIE`) goes to the colour nearest the
+  pixels' mean. That only chooses among real colours:
+  - a ramp's mid-tone;
+  - a one-cell keyline's middle: 97 | 128 | 153 gives 128, where the
+    heaviest alone gave #616161.
+- **Without pixels** to read (unit tests, stub evidence), the band shows
+  its heaviest part. Ties go by colour, so input order doesn't matter.
+
+**Order (the lightest-pair-first mutant).** All candidate runs on all
+lines are collected, then one is picked:
+1. the heaviest ends first;
+2. then the longer run;
+3. then the nearer one (mean ΔE00 off the line);
+4. then by colour.
+
+Nothing depends on the index order.
+- The "nearest first" alternative failed `frame-10.box`: the band inside
+  the band (grey blends between white and a dark blend) went first and
+  left #171717 as a colour. Heaviest ends first gives #808080.
+- The lightest-pair-first and nearest-first mutants are both killed.
+
+**Sizes at 256 px (`sizer`).** Whether a swatch is "small" (under 5%) and
+lighter than its line's ends is now read on its 256 px share when it has
+pixels there; otherwise on its 96 px share as before.
+- **Why.** With the exact 256 grid (L1), pink | red edges have partial
+  cells, so they're no longer "unseen". The 96 px cluster of that mix
+  weighed 1.96%, more than the pink tag's 1.6%, so it couldn't be a blend
+  of it and stayed as #cb1635.
+- At 256 px it has 77 cells against the tag's 770, so it folds.
+- The same fix removed #dfdfdf and #bdbdbd from the #333 / #ccc greys at
+  gaps 10 to 40. They now give exactly #333333 and #cccccc, and #404040
+  and #c8c8c8.
+
+**The pinned cases (all hold at once, one rule):**
+
+| Case | Round 6 | Round 7 |
+|---|---|---|
+| 2.4 px stripe (flag 25 px of 1000), bilinear 96 | #dc1428 #1428c8 #6d1f81 | #dc1428 #1428c8 **#781e78** |
+| same, box / lanczos 96 | #6d1f81 / #781e78 | #781e78 / #781e78 |
+| 60 px soft ramp of 960 (the 6 px soft edge at 96), bilinear / box / lanczos | 3, mid #6d6d6d / #7e7e7e / #7e7e7e (means) | 3, mid #656565 / #757575 / #757575 (ramp values) |
+| 14 px frame | #000 #fefefe #6f6f6f | #000 #fefefe **#808080** |
+| ui-nav gap 0 (#333 touching #ddd) | #fff #000 **#858585** | #fff #000 #333333 #dddddd |
+| ui-nav gap 0, area path | #fff #000 #8d8d8d | #fff #000 #333333 #dddddd |
+| ui-nav gap 20, both paths | #333333 #dfdfdf / #e5e5e5 | #333333 #dddddd |
+| #333 / #ccc, gaps 0-40, opaque | #434343 or #404040, #bdbdbd-#d3d3d3, #dfdfdf at 20 and 40 | #333333 #cccccc at every gap |
+| #404040 / #c8c8c8, gaps 0-40, opaque | #4c4c4c, #b3b3b3-#c1c1c1, plus #dedede / #eeeeee | #404040 #c8c8c8 at every gap |
+| pink beside violet | #1528c7 #dc1428 **#781e78** | #dc1428 #1528c7 #aa1950 #4623a0 |
+| pink beside violet, area path | #781e78 | #aa1950 #4623a0 |
+
+- **Still open: the area path at gap 0 for the #333 / #ccc and #404040 /
+  #c8c8c8 greys.** It shows only the dark grey (round 6 did too: #4f4f4f
+  and #434343).
+  - The 96 px integer-block reduction is 91 x 55 there, and the 25 px
+    light bar is 2.3 cells, so k-means never gets a light-grey cluster:
+    its cluster is #797979, a mix.
+  - At 256 px every #ccc pixel is nearest the white cluster.
+  - That's the 96 px clustering on the area path, which predates this PR
+    and isn't the band rule. ui-nav (#333 / #ddd) holds on both paths.
+
+**N1, the dense text phantom (`strokes`): still there, and now on the
+area path too.** Opaque, it went from `#959595 #ffffff #e0e0e0` to
+`#959595 #ffffff #d9d9d9`. Through the area path, round 6 gave
+`#8c8c8c #ffffff` and round 7 gives `#8c8c8c #ffffff #cfcfcf`: with the
+exact grid the light 256 px mixes have pixels, so they no longer fold as
+"unseen".
+- The strokes are 4 px black with 1 px greys at a 12 px pitch on 1000 px:
+  3.07 cells a stroke at 256 px.
+- At that scale nothing in the texture is a flat area (0 inside pixels),
+  and #d9d9d9 is a 256 px mix that the full image doesn't hold.
+- It's a texture finer than the evidence; telling it apart needs the full
+  image. Not fixed, reported.
+
+### L1 (GM r11 item 2): exactly 256 px
+
+- `exactAreaGrid` reduces so the longest edge is exactly 256 (as is when
+  smaller): the same alpha-weighted area average, with fractional cells.
+  - Each source pixel is shared between the at most 2 x 2 cells it
+    overlaps, by area.
+  - Pixels under `ALPHA_MIN` are out first.
+  - Weight is the coverage over the cell's area (w/gw · h/gh · 255).
+- The evidence is read on it. The clusters keep `areaGrid`'s integer
+  blocks, as the backend's `_area_pixels` does.
+- **500 to 520 px, measured** (black | grey band | white, `w` x 300, band
+  at 4 offsets):
+  - Round 6: a 6 or 7 px band folded from 513 px at two offsets.
+  - Round 7: 7 px kept everywhere, 3 px folded everywhere.
+  - A band right at the 3-cell cut (6 px at 514-517 px is 2.99 cells)
+    still depends on where it sits. That's the cut itself, not the grid.
+  - A test sweeps 7 px and 3 px over 500-520 and 4 offsets.
+
+### L2 (GM r11 item 3): a small swatch shows its 256 px colour
+
+- A swatch under 5% (at 256 px) that stays takes `mostPopulated` of its
+  256 px pixels, when those pixels are a few clean colours: its 3 most
+  populated bins hold 75% (`REAL_COLOUR`).
+- **Why the guard.** Without it, two real images moved:
+  - scene_out2's #709f7a went to #bc8c4f, a stray pixel (top 3 bins hold
+    0.01 of it);
+  - minimal-line-art's #d3d3d3 went to #999999 (top 3 hold 0.15; line art
+    finer than 256 px).
+  - Every small swatch in the real images is at 1.00 or at 0.15 and under.
+- Keylines: frame-10/14 go to #808080 on both paths (round 6 #6a6a6a /
+  #6f6f6f / #707070); stickers to #6e6e6e (their ring, round 6 #6a6a6a to
+  #6d6d6d).
+- Big areas keep their 96 px colour.
+
+### Near-black guards (GM r11 item 4)
+
+- A merge of neutral near-blacks keeps the group's most populated black:
+  - the heaviest swatch's own colour;
+  - then, with pixels to read, the group's most populated 256 px colour,
+    if it's a neutral near-black.
+- It is never a mean, and never #000 unless the image has it.
+- **No chaining.** For a merge with a black group, every member's own
+  colour must meet the rule (neutral near-black, or ΔE00 under 3) against
+  the kept black.
+  - Test: #000 (6), #121212 (5) and #141414 (4, L* 6.32). Round 6 merged
+    the blacks to #0a0a0a, 2.42 from #141414, and then took it in too: one
+    swatch, #0b0b0b. Now #141414 is 3.72 from the kept #000 and stays.
+- **Real images: cinematic-noir changes**, #070808 to #010101. #070808 was
+  the blacks' mean; #010101 is the most populated. It is the only real
+  image that changes in round 7. GM to confirm.
+- The 200 noisy-black seeds: see "Checks, round 7".
+
+### N2 and the surfaces
+
+- The comment above `rgbToLab` no longer says Extract merges "the way the
+  moodboard palette does". It says the near-black merge is Extract-only
+  and why: the backend's ΔE00 5 merge already leaves one black (0 of 60
+  noisy seeds kept two).
+- `commons_search` and `commons_get` (MCP) say that `transparent` shows to
+  the person as "Not analyzed" (nothing failed), so don't offer a retry.
+
+### Checks, round 7
+
+- **Real images.** Of the 29 (the 12 presets, the 10 goldens, the 7
+  character-smoke images), only cinematic-noir changes: its black goes
+  from #070808 to #010101 (GM r11 item 4). The other 28, plus bwgrey and
+  noisyblack, give exactly round 6's swatches.
+- **200 noisy-black seeds:** 200 give one black.
+- **4K in Node** (3840 x 2160, `paletteFromImageData` alone, median of 5):
+  - opaque 63 ms (round 6: 32);
+  - with transparency 77 ms (round 6: 56).
+  - The exact 256 px resample's fractional cells are the cost.
+- **Mutants (`scratchpad/alpha/r7/mutate7.py`): 31, all killed.** They
+  are review 5's 11 survivors, adapted to the new code, plus 20 on round
+  7's code:
+  - pair order (lightest first, nearest first);
+  - twoFlats (off, all cells, trough, minSide);
+  - mostPopulated (no inside preference, no near tie);
+  - the L2 guard and L2 itself;
+  - sizer;
+  - the integer grid, no fractional split;
+  - the black mean, the chain guard, black recolour;
+  - inside (all, strict), the flat tolerance;
+  - the band colour;
+  - the colour tie-break.
+
+  On the first pass 7 survived. Each now has a test:
+  - **nearest-first and band-colour-heaviest:** a 12 px sticker ring;
+  - **shortest-run:** two runs sharing a swatch at a line crossing;
+  - **edge-NaN-keep:** a band with no pixels, on a line that isn't the
+    nearest;
+  - **fewColours off:** a small swatch of scattered tones;
+  - **chain guard:** a heavier grey that a black group would take in;
+  - **trough:** a third flat between two.
+- **Live** at 1440, on 8792/5792, isolated backend through
+  `serve_isolated.py`. The canaries were blocked before and inside the app
+  (28 lines in `blocked.log`, canaries only). Shots are in `shots7/`; no
+  md5 repeats.
+
+  | Image | Extract |
+  |---|---|
+  | ui-nav-gap0 | #ffffff #000000 #333333 #dddddd |
+  | ui-nav-gap20 | #ffffff #000000 #333333 #dddddd |
+  | pink-violet-touching | #1428c8 #dc1428 #aa1950 #4623a0 |
+  | frame-14 | #000000 #fefefe #808080 |
+  | flag-25 | #dc1428 #1428c8 #781e78 |
+  | mark74 | #111413 #e8593c (round 6 exactly) |
+  | studio-product | #f2f2f3 #e2e0de #b29b6d (round 6 exactly) |
+  | neon-alley-9x16 | round 6's six |
+  | bwgrey | #000000 #ffffff #808080 |
+  | seed 7 (rgbnoiseblack-7) | #020602 #f07814 (round 6: #040303, the mean; now the most populated black) |
+  | strokes | 6 swatches: #fefefe #515151 #373737 #d0d0d0 #a2a2a2 #747474 |
+
+  Chrome's 96 px downscale of the dense strokes texture is not PIL's; it
+  splits into its mixes at 96 px. That's N1's texture, finer than both
+  scales.
+- **The Inspector shows the first three swatches without scrolling.** A
+  fourth (the violet, the #ddd) is in the list below them, which the
+  driver reads.
+
+### Gates, round 7
+
+- `tsc -b --noEmit` and `npm run lint` (inline styles, Slava CSS scope):
+  clean.
+- **Vitest** `--maxWorkers=2`, round 6's 120 files from an explicit array:
+  1904 passed, 0 errors.
+- **Pytest**, isolated, 12 files: 381 passed. The files are colour alpha,
+  the ΔE00 contract, the Commons agents, error kind, api, MCP parity,
+  records, store and worker, the copy sweep, moodboard analysis, and agent
+  MCP registration.
+- **Build budget:** 444,224 bytes raw, unchanged.

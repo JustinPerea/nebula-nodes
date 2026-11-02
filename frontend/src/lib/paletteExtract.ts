@@ -53,10 +53,13 @@ function srgbToLinear(c: number): number {
 
 // sRGB to CIELAB (D65) exactly as backend/cinema/color.py ``rgb_to_lab``
 // computes it, and CIEDE2000 as backend/commons/colour.py ``delta_e00`` does:
-// Extract merges swatches the way the moodboard palette does
-// (commons/measure.py ``_merge``), so the two agree on what "the same
-// colour" is. contracts/fixtures/colour/delta_e00.json is the table both
-// sides are tested against, so they can't drift.
+// Extract measures "the same colour" in the units the moodboard palette
+// does (commons/measure.py ``_merge``). contracts/fixtures/colour/
+// delta_e00.json is the table both sides are tested against, so they can't
+// drift. The merge itself differs: Extract also merges neutral near-blacks
+// (``NEUTRAL_NEAR_BLACK``) and the backend doesn't. Its ΔE00 5 merge
+// already leaves one black: 0 of 60 per-channel noisy-black seeds kept two
+// (review 5, N2), where Extract's ΔE00 3 left a dark photo with three.
 const XYZ_WHITE = [0.95047, 1.0, 1.08883];
 const RGB_TO_XYZ = [
   [0.4124564, 0.3575761, 0.1804375],
@@ -187,20 +190,38 @@ export type EdgeEvidence = {
   /** NaN when ``swatch`` has no pixel to look at. */
   edge: (swatch: number[], a: number[], b: number[]) => number;
   touching: (a: number[], b: number[]) => boolean;
-  /** The weighted mean colour of the pixels of ``swatch``, or null when it
-   *  has none. */
+  /** The most populated colour of the pixels of ``swatch``
+   *  (``mostPopulated``), or null when it has none. */
   colour?: (swatch: number[]) => number[] | null;
+  /** The pixels of ``swatch`` (colour and weight), or none when it has none. */
+  cells?: (swatch: number[]) => EvidenceCell[];
+  /** The share of the evidence's weight that ``swatch``'s pixels hold, or
+   *  NaN when it has none there. */
+  size?: (swatch: number[]) => number;
 };
+
+/** One evidence pixel: its colour, its weight (alpha), and whether it lies
+ *  inside a flat area rather than on an edge. */
+export type EvidenceCell = { rgb: number[]; weight: number; inside: boolean };
+
+/** How far (per channel, 0-255) a neighbour may be and still count as the
+ *  same flat colour. */
+export const FLAT_TOLERANCE = 2;
 
 /** ``colors`` with near-identical ones merged (CIEDE2000 under
  *  ``MERGE_DELTA_E``, or both neutral near-blacks, ``NEUTRAL_NEAR_BLACK``)
  *  and empty ones dropped: the closest pair first, each merge a
- *  weight-averaged colour whose weights add up. Specks fold into a near
- *  bigger swatch (``foldSpecks``). Then, when ``edgeEvidence`` can tell an
- *  edge from an accent, small edge blends fold (``foldEdgeBlends``) and a
- *  run of blends between two colours becomes one band (``foldBands``);
- *  without it neither happens. Ordered by weight, most first; a stable sort,
- *  so equal weights keep their order. */
+ *  weight-averaged colour whose weights add up. Merged blacks are the
+ *  exception (GM r11): the group shows its most populated black (the
+ *  heaviest swatch, or with pixels to read, their most populated black),
+ *  and every swatch in it must meet the rule against that black, so a
+ *  merge never chains. Specks fold into a near bigger swatch
+ *  (``foldSpecks``). Then, when ``edgeEvidence`` can tell an edge from an
+ *  accent, small edge blends fold (``foldEdgeBlends``), a continuous run of
+ *  blends between two colours becomes one band (``foldBands``), and a small
+ *  swatch that stays shows its colour at the evidence's scale; without it
+ *  none of this happens. Ordered by weight, most first; a stable sort, so
+ *  equal weights keep their order. */
 export function mergeNearColors(
   colors: WeightedColor[],
   threshold = MERGE_DELTA_E,
@@ -210,27 +231,49 @@ export function mergeNearColors(
   const out = colors
     .map((c, i) => ({ rgb: [...c.rgb], weight: c.weight, members: c.members ? [...c.members] : [i] }))
     .filter((c) => c.weight > 0);
+  // Each swatch as it came in: a merged black keeps one of these (GM r11).
+  const own = new Map<number, { rgb: number[]; weight: number }>();
+  for (const c of out) for (const m of c.members) own.set(m, { rgb: c.rgb, weight: c.weight / c.members.length });
+  const blackGroup = new Set<Swatch>();
   for (;;) {
     let pair: [number, number] | null = null;
     let closest = threshold;
+    let keep: number[] | null = null;
     for (let i = 0; i < out.length; i++) {
       for (let j = i + 1; j < out.length; j++) {
         const d = mergeDistance(out[i].rgb, out[j].rgb);
-        if (d < closest) {
-          closest = d;
-          pair = [i, j];
+        if (!(d < closest)) continue;
+        // A merge of blacks keeps the group's most populated black, and
+        // every member must meet the rule against that black, not against
+        // a neighbour it was merged with: no chaining.
+        let kept: number[] | null = null;
+        if (blackGroup.has(out[i]) || blackGroup.has(out[j]) || d < deltaE00(out[i].rgb, out[j].rgb)) {
+          const members = [...out[i].members, ...out[j].members];
+          kept = members.map((m) => own.get(m)!).reduce(heavier).rgb;
+          if (!members.every((m) => mergeDistance(own.get(m)!.rgb, kept!) < threshold)) continue;
         }
+        closest = d;
+        pair = [i, j];
+        keep = kept;
       }
     }
     if (!pair) break;
     const [i, j] = pair;
     const weight = out[i].weight + out[j].weight;
-    out[i] = {
-      rgb: out[i].rgb.map((v, n) => (v * out[i].weight + out[j].rgb[n] * out[j].weight) / weight),
+    const merged: Swatch = {
+      rgb: keep ?? out[i].rgb.map((v, n) => (v * out[i].weight + out[j].rgb[n] * out[j].weight) / weight),
       weight,
       members: [...out[i].members, ...out[j].members],
     };
+    if (keep) blackGroup.add(merged);
+    out[i] = merged;
     out.splice(j, 1);
+  }
+  // With pixels to read, a merged black shows its most populated real black.
+  for (const c of blackGroup) {
+    const at = out.indexOf(c);
+    const real = at >= 0 ? edgeEvidence?.colour?.(c.members) : null;
+    if (real && isNeutralNearBlack(rgbToLab(real))) out[at] = { ...c, rgb: real };
   }
   foldSpecks(out, lineTolerance);
   if (edgeEvidence) {
@@ -243,6 +286,20 @@ export function mergeNearColors(
     foldEdgeBlends(out, lineTolerance, edgeEvidence, { mainEndsOnly: true, unseenIsEdge: false });
     foldBands(out, lineTolerance, edgeEvidence);
     foldEdgeBlends(out, lineTolerance, edgeEvidence, { mainEndsOnly: false, unseenIsEdge: true });
+    // A small swatch that stays shows its most populated colour at the
+    // evidence's scale, where a keyline isn't smeared into what's beside it
+    // (GM r11: #808080, not #6a6a6a), when it is a few clean colours there
+    // (``REAL_COLOUR``). A big area keeps its colour, and so does a swatch
+    // of scattered tones (a photo's, line art finer than the evidence),
+    // which would otherwise jump to a stray pixel.
+    const total = out.reduce((sum, c) => sum + c.weight, 0);
+    const size = sizer(edgeEvidence, total);
+    for (let s = 0; s < out.length; s++) {
+      if (size(out[s]) >= EDGE_BLEND_SHARE) continue;
+      const cells = edgeEvidence.cells?.(out[s].members) ?? [];
+      const real = mostPopulated(cells);
+      if (real && fewColours(cells)) out[s] = { ...out[s], rgb: real };
+    }
   }
   return out.sort((a, b) => b.weight - a.weight);
 }
@@ -318,68 +375,228 @@ function onSegment(p: number[], a: number[], b: number[]): { t: number; off: num
   return { t, off: deltaE00(p, a.map((v, n) => v + t * ab[n])) };
 }
 
-/** Whether a swatch of ``weight`` can be a blend of two bigger swatches: a
- *  small one (``EDGE_BLEND_SHARE`` of ``total``), lighter than both. */
-function canBlend(weight: number, a: Swatch, b: Swatch, total: number): boolean {
-  return weight < EDGE_BLEND_SHARE * total && a.weight > weight && b.weight > weight;
+/** The heavier of two swatches; of two as heavy, the darker by its sRGB
+ *  values in order, so the choice doesn't depend on the order they come in. */
+function heavier<T extends { rgb: number[]; weight: number }>(x: T, y: T): T {
+  if (x.weight !== y.weight) return x.weight > y.weight ? x : y;
+  for (let n = 0; n < 3; n++) if (x.rgb[n] !== y.rgb[n]) return x.rgb[n] < y.rgb[n] ? x : y;
+  return x;
 }
+
+/** Whether ``s`` can be a blend of two bigger swatches: a small one (under
+ *  ``EDGE_BLEND_SHARE``), smaller than both, each measured by ``size``. */
+function canBlend(s: Swatch, a: Swatch, b: Swatch, size: (c: Swatch) => number): boolean {
+  return size(s) < EDGE_BLEND_SHARE && size(a) > size(s) && size(b) > size(s);
+}
+
+/** How much of the image ``c`` covers: its share at the evidence's (finer)
+ *  scale when it has pixels there, where a thin edge isn't smeared wider
+ *  than it is, and its share of ``total`` otherwise. */
+function sizer(evidence: EdgeEvidence, total: number): (c: Swatch) => number {
+  return (c) => {
+    const fine = evidence.size?.(c.members) ?? NaN;
+    return Number.isNaN(fine) ? c.weight / total : fine;
+  };
+}
+
+/** Colours within this share of the most populated one count as
+ *  populated: a line one pixel wide at the evidence's scale has its own
+ *  colour and the two mixes beside it about equally often, and the one in
+ *  the middle is the line. */
+export const MODE_TIE = 0.25;
+
+/** The most populated real colour of ``cells`` (GM r11 on #208: "a palette
+ *  never shows a colour the image doesn't contain"): the cells are put in
+ *  bins of 4 levels a channel, the heaviest bin wins, and its heaviest exact
+ *  colour is the answer. Cells inside a flat area count alone when there
+ *  are any. A near tie (``MODE_TIE``) goes to the colour nearest the cells'
+ *  mean, which only picks among real colours (a ramp's mid-tone, a thin
+ *  line's middle). Null with no cells. */
+export function mostPopulated(all: { rgb: number[]; weight: number; inside?: boolean }[]): number[] | null {
+  const flat = all.filter((c) => c.inside);
+  const cells = flat.length > 0 ? flat : all;
+  if (cells.length === 0) return null;
+  const total = cells.reduce((sum, c) => sum + c.weight, 0);
+  const mean = [0, 1, 2].map((n) => cells.reduce((sum, c) => sum + c.rgb[n] * c.weight, 0) / total);
+  const near = (rgb: number[]) => rgb.reduce((sum, v, n) => sum + (v - mean[n]) ** 2, 0);
+  const pick = <T>(groups: Map<string, { key: number[]; weight: number; items: T }>) => {
+    const all = [...groups.values()];
+    const most = Math.max(...all.map((g) => g.weight));
+    const close = all.filter((g) => g.weight >= (1 - MODE_TIE) * most);
+    close.sort((x, y) => near(x.key) - near(y.key) || y.weight - x.weight || (x.key.join() < y.key.join() ? -1 : 1));
+    return close[0];
+  };
+  const bins = new Map<string, { key: number[]; weight: number; items: { rgb: number[]; weight: number }[] }>();
+  for (const c of cells) {
+    const b = c.rgb.map((v) => Math.floor(Math.round(v) / 4));
+    const k = b.join();
+    const g = bins.get(k) ?? { key: b.map((v) => v * 4 + 1.5), weight: 0, items: [] };
+    g.weight += c.weight;
+    g.items.push(c);
+    bins.set(k, g);
+  }
+  const bin = pick(bins);
+  const exact = new Map<string, { key: number[]; weight: number; items: null }>();
+  for (const c of bin.items) {
+    const r = c.rgb.map((v) => Math.round(v));
+    const k = r.join();
+    const g = exact.get(k) ?? { key: r, weight: 0, items: null };
+    g.weight += c.weight;
+    exact.set(k, g);
+  }
+  return pick(exact).key;
+}
+
+/** A small swatch shows its colour at the evidence's scale only when it is
+ *  a few clean colours there: its ``REAL_COLOUR.colours`` most populated
+ *  (in ``mostPopulated``'s bins) hold ``REAL_COLOUR.share`` of its weight.
+ *  A flat accent is one, a line one pixel wide is three (itself and the
+ *  mix on each side). A photo's scattered tones or line art finer than the
+ *  evidence are dozens (the 22 real images: every small swatch at 1.00 or
+ *  at 0.15 and under), and their most populated pixel is a stray. */
+export const REAL_COLOUR = { colours: 3, share: 0.75 } as const;
+
+/** Whether ``cells`` are a few clean colours (``REAL_COLOUR``). */
+function fewColours(cells: { rgb: number[]; weight: number }[]): boolean {
+  const bins = new Map<string, number>();
+  let total = 0;
+  for (const c of cells) {
+    const k = c.rgb.map((v) => Math.floor(Math.round(v) / 4)).join();
+    bins.set(k, (bins.get(k) ?? 0) + c.weight);
+    total += c.weight;
+  }
+  const top = [...bins.values()].sort((x, y) => y - x).slice(0, REAL_COLOUR.colours);
+  return total > 0 && top.reduce((x, y) => x + y, 0) >= REAL_COLOUR.share * total;
+}
+
+/** Whether ``cells``, read along the line from ``a`` to ``b``, are two flat
+ *  colours (two strong modes with a thin trough between them) rather than
+ *  one colour or a continuous run (GM r11 on #208). Each cell's position is
+ *  its projection on the sRGB segment, in ``BAND_BINS`` bins. The cells
+ *  split where the two sides are best told apart (Otsu); each side must
+ *  hold at least ``BAND_MODE.minSide`` of the weight and be flat (its
+ *  heaviest 3 bins hold ``BAND_MODE.flat`` of it), and the bins between
+ *  the two modes hold no more than ``BAND_MODE.trough`` of the smaller
+ *  mode's peak bin. */
+export function twoFlats(all: EvidenceCell[], a: number[], b: number[]): boolean {
+  const cells = all.filter((c) => c.inside);
+  const ab = b.map((v, n) => v - a[n]);
+  const len2 = ab.reduce((sum, v) => sum + v * v, 0);
+  if (len2 === 0 || cells.length === 0) return false;
+  const hist = new Array(BAND_BINS).fill(0);
+  for (const c of cells) {
+    const t = Math.min(1, Math.max(0, ab.reduce((sum, v, n) => sum + v * (c.rgb[n] - a[n]), 0) / len2));
+    hist[Math.min(BAND_BINS - 1, Math.floor(t * BAND_BINS))] += c.weight;
+  }
+  const total = hist.reduce((x, y) => x + y, 0);
+  // Otsu: the split with the most variance between the two sides.
+  let split = -1;
+  let bestVar = -1;
+  for (let k = 1; k < BAND_BINS; k++) {
+    const w0 = hist.slice(0, k).reduce((x, y) => x + y, 0);
+    const w1 = total - w0;
+    if (w0 <= 0 || w1 <= 0) continue;
+    const m0 = hist.slice(0, k).reduce((x, y, i) => x + y * i, 0) / w0;
+    const m1 = hist.slice(k).reduce((x, y, i) => x + y * (i + k), 0) / w1;
+    const v = w0 * w1 * (m0 - m1) ** 2;
+    if (v > bestVar) {
+      bestVar = v;
+      split = k;
+    }
+  }
+  if (split < 0) return false;
+  const side = (lo: number, hi: number) => {
+    const mass = hist.slice(lo, hi).reduce((x, y) => x + y, 0);
+    let peak = lo;
+    for (let i = lo; i < hi; i++) if (hist[i] > hist[peak]) peak = i;
+    const window = hist.slice(Math.max(lo, peak - 1), Math.min(hi, peak + 2)).reduce((x, y) => x + y, 0);
+    return { mass, peak, flat: mass > 0 ? window / mass : 0 };
+  };
+  const L = side(0, split);
+  const R = side(split, BAND_BINS);
+  if (Math.min(L.mass, R.mass) < BAND_MODE.minSide * total) return false;
+  if (L.flat < BAND_MODE.flat || R.flat < BAND_MODE.flat) return false;
+  if (R.peak - L.peak < 3) return false;
+  const between = hist.slice(L.peak + 2, R.peak - 1);
+  const trough = between.length ? Math.max(...between) : 0;
+  return trough <= BAND_MODE.trough * Math.min(hist[L.peak], hist[R.peak]);
+}
+
+/** The bins ``twoFlats`` reads a run in, along its line. */
+export const BAND_BINS = 32;
+/** ``twoFlats``'s tuning (see the round 7 notes for the cases it holds). */
+export const BAND_MODE = { minSide: 0.2, flat: 0.6, trough: 0.25 } as const;
 
 /** One band (GM r10 on #208): a run of small swatches that all lie on the
  *  line between the same two colours, strictly between them and within
  *  ``threshold`` (CIEDE2000), and touch one another in the image (read on
- *  the clusters' own grid), is one band. A solid stripe the downscale turns into three or four columns of
- *  blends gave a doubled purple and a doubled blue (review 4, L1); a soft
- *  ramp gave two or three mid-tones. The run merges to its weighted centre,
- *  read on the evidence's pixels when it has them (``colour``: the 96 px
- *  blends at a stripe's sides are smeared toward its neighbours, so their
- *  centre drifted off the stripe's colour), with its weights adding up; the
- *  evidence then decides the one swatch: next to
- *  both colours (``EDGE_EVIDENCE_SHARE``) it is their edge and folds into
- *  the nearer one; with an interior it is an accent and stays, once. Two
- *  small accents on one line that don't touch stay two. The heaviest pair
- *  of colours goes first; then again until no run is left. */
+ *  the clusters' own grid), is one band, when it is continuous: an
+ *  antialiased edge, a ramp, a stripe the downscale turned into three or
+ *  four columns of blends (review 4, L1). Two flat colours that touch stay
+ *  two (``twoFlats``; GM r11, review 5 M1). The band shows its most
+ *  populated colour at the evidence's scale (``colour``), never a mean, with
+ *  its weights adding up; without pixels to read, its heaviest part's. The
+ *  evidence then decides the one swatch: next to both colours
+ *  (``EDGE_EVIDENCE_SHARE``) it is their edge and folds into the nearer
+ *  one; with an interior it is an accent and stays, once. Two small accents
+ *  on one line that don't touch stay two. Of all the runs on all the lines,
+ *  the one between the heaviest ends goes first (then the longer, the
+ *  nearer, then by colour), so the result doesn't depend on the order the
+ *  swatches come in; then again until no run is left. */
 function foldBands(out: Swatch[], threshold: number, evidence: EdgeEvidence): void {
   for (;;) {
     const total = out.reduce((sum, c) => sum + c.weight, 0);
-    const pairs: [number, number][] = [];
-    for (let a = 0; a < out.length; a++) for (let b = a + 1; b < out.length; b++) pairs.push([a, b]);
-    pairs.sort(([a1, b1], [a2, b2]) => out[a2].weight + out[b2].weight - (out[a1].weight + out[b1].weight));
-    let band: { run: number[]; a: number; b: number } | null = null;
-    for (const [a, b] of pairs) {
-      const on = out
-        .map((c, s) => ({ c, s }))
-        .filter(({ c, s }) => {
-          if (s === a || s === b || !canBlend(c.weight, out[a], out[b], total)) return false;
+    const size = sizer(evidence, total);
+    // Every candidate band on every line, then one chosen by a rule that
+    // doesn't depend on the order the swatches or lines come in.
+    const found: { run: number[]; a: number; b: number; off: number }[] = [];
+    for (let a = 0; a < out.length; a++) {
+      for (let b = a + 1; b < out.length; b++) {
+        const offs = new Map<number, number>();
+        out.forEach((c, s) => {
+          if (s === a || s === b || !canBlend(c, out[a], out[b], size)) return;
           const at = onSegment(c.rgb, out[a].rgb, out[b].rgb);
-          return at !== null && at.t > 0 && at.t < 1 && at.off < threshold;
-        })
-        .map(({ s }) => s);
-      if (on.length < 2) continue;
-      // The runs: the swatches on the line, grouped by touching.
-      const group = on.map((_, n) => n);
-      const root = (n: number): number => (group[n] === n ? n : (group[n] = root(group[n])));
-      for (let i = 0; i < on.length; i++) {
-        for (let j = i + 1; j < on.length; j++) {
-          if (root(i) !== root(j) && evidence.touching(out[on[i]].members, out[on[j]].members)) group[root(j)] = root(i);
+          if (at !== null && at.t > 0 && at.t < 1 && at.off < threshold) offs.set(s, at.off);
+        });
+        const on = [...offs.keys()];
+        if (on.length < 2) continue;
+        // The runs: the swatches on the line, grouped by touching.
+        const group = on.map((_, n) => n);
+        const root = (n: number): number => (group[n] === n ? n : (group[n] = root(group[n])));
+        for (let i = 0; i < on.length; i++) {
+          for (let j = i + 1; j < on.length; j++) {
+            if (root(i) !== root(j) && evidence.touching(out[on[i]].members, out[on[j]].members)) group[root(j)] = root(i);
+          }
+        }
+        const runs = new Map<number, number[]>();
+        on.forEach((s, n) => runs.set(root(n), [...(runs.get(root(n)) ?? []), s]));
+        for (const run of runs.values()) {
+          if (run.length < 2) continue;
+          // Only a continuous run is a band: two flat colours that touch
+          // stay two colours (GM r11 on #208).
+          const cells = evidence.cells?.(run.flatMap((s) => out[s].members)) ?? [];
+          if (twoFlats(cells, out[a].rgb, out[b].rgb)) continue;
+          found.push({ run, a, b, off: run.reduce((sum, s) => sum + offs.get(s)!, 0) / run.length });
         }
       }
-      const runs = new Map<number, number[]>();
-      on.forEach((s, n) => runs.set(root(n), [...(runs.get(root(n)) ?? []), s]));
-      const run = [...runs.values()].filter((r) => r.length >= 2).sort((x, y) => y.length - x.length)[0];
-      if (run) {
-        band = { run, a, b };
-        break;
-      }
     }
-    if (!band) return;
-    const { run, a, b } = band;
+    if (found.length === 0) return;
+    // The line between the heaviest ends first (a band inside a band's
+    // line would otherwise take part of it), then the longer run, the
+    // nearer one, and, for an exact tie, the colours themselves.
+    const ends = (x: { a: number; b: number }) => out[x.a].weight + out[x.b].weight;
+    const key = (x: { run: number[]; a: number; b: number }) =>
+      [x.a, x.b, ...x.run].map((s) => out[s].rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')).join();
+    found.sort(
+      (x, y) =>
+        ends(y) - ends(x) || y.run.length - x.run.length || x.off - y.off || (key(x) < key(y) ? -1 : key(x) > key(y) ? 1 : 0),
+    );
+    const { run, a, b } = found[0];
     const weight = run.reduce((sum, s) => sum + out[s].weight, 0);
     const members = run.flatMap((s) => out[s].members);
-    const merged: Swatch = {
-      rgb: evidence.colour?.(members) ?? [0, 1, 2].map((n) => run.reduce((sum, s) => sum + out[s].rgb[n] * out[s].weight, 0) / weight),
-      weight,
-      members,
-    };
+    // The band shows its most populated real colour, never a mean.
+    const heaviest = run.map((s) => out[s]).reduce(heavier);
+    const merged: Swatch = { rgb: evidence.colour?.(members) ?? heaviest.rgb, weight, members };
     const at = onSegment(merged.rgb, out[a].rgb, out[b].rgb);
     const share = evidence.edge(merged.members, out[a].members, out[b].members);
     const edge = Number.isNaN(share) || share >= EDGE_EVIDENCE_SHARE;
@@ -409,6 +626,7 @@ function foldEdgeBlends(
   { mainEndsOnly, unseenIsEdge }: { mainEndsOnly: boolean; unseenIsEdge: boolean },
 ): void {
   const total = out.reduce((sum, c) => sum + c.weight, 0);
+  const size = sizer(edgeEvidence, total);
   for (;;) {
     const order = out.map((_, i) => i).sort((a, b) => out[a].weight - out[b].weight);
     let folded = false;
@@ -419,12 +637,12 @@ function foldEdgeBlends(
       // scattered 74%-clear mark mix charcoal and orange into a swatch
       // heavier than the orange; review 4, M3).
       const unseen = unseenIsEdge && Number.isNaN(edgeEvidence.edge(out[s].members, [], []));
-      if (out[s].weight >= EDGE_BLEND_SHARE * total && !unseen) continue;
+      if (size(out[s]) >= EDGE_BLEND_SHARE && !unseen) continue;
       const lines: { off: number; a: number; b: number; t: number }[] = [];
       for (let a = 0; a < out.length; a++) {
         for (let b = a + 1; b < out.length; b++) {
-          if (a === s || b === s || (!unseen && !canBlend(out[s].weight, out[a], out[b], total))) continue;
-          if (mainEndsOnly && Math.min(out[a].weight, out[b].weight) < EDGE_BLEND_SHARE * total) continue;
+          if (a === s || b === s || (!unseen && !canBlend(out[s], out[a], out[b], size))) continue;
+          if (mainEndsOnly && Math.min(size(out[a]), size(out[b])) < EDGE_BLEND_SHARE) continue;
           const at = onSegment(out[s].rgb, out[a].rgb, out[b].rgb);
           if (!at || at.t <= 0 || at.t >= 1) continue;
           if (at.off < threshold) lines.push({ ...at, a, b });
@@ -461,18 +679,69 @@ export function edgeEvidenceFromLabels(
   pixels?: PixelGrid,
 ): EdgeEvidence {
   const height = Math.ceil(labels.length / width);
-  const colour = pixels
+  // A pixel is inside a flat area when it has its colour (within
+  // ``FLAT_TOLERANCE`` a channel) on both sides along one axis and on at
+  // least one side along the other (neighbours off the grid or clear
+  // count as the same). A cell a straight edge cuts matches along the edge
+  // but on neither side across it, so it is never inside; a line two
+  // pixels wide is.
+  let inside: Uint8Array | null = null;
+  const insideAt = (i: number) => {
+    if (!pixels) return false;
+    if (!inside) {
+      inside = new Uint8Array(labels.length);
+      for (let j = 0; j < labels.length; j++) {
+        if (!(pixels.weight[j] > 0)) continue;
+        const x = j % width;
+        const y = Math.floor(j / width);
+        const same = (dx: number, dy: number) => {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height) return true;
+          const k = ny * width + nx;
+          if (!(pixels.weight[k] > 0)) return true;
+          for (let n = 0; n < 3; n++) if (Math.abs(pixels.rgb[k * 3 + n] - pixels.rgb[j * 3 + n]) > FLAT_TOLERANCE) return false;
+          return true;
+        };
+        const h = [same(-1, 0), same(1, 0)];
+        const v = [same(0, -1), same(0, 1)];
+        inside[j] = (h[0] && h[1] && (v[0] || v[1])) || (v[0] && v[1] && (h[0] || h[1])) ? 1 : 0;
+      }
+    }
+    return inside[i] === 1;
+  };
+  const cells = pixels
     ? (swatch: number[]) => {
         const inS = new Set(swatch);
-        const sum = [0, 0, 0];
-        let weight = 0;
+        const found: EvidenceCell[] = [];
         for (let i = 0; i < labels.length; i++) {
-          if (!inS.has(labels[i])) continue;
-          const w = pixels.weight[i];
-          for (let n = 0; n < 3; n++) sum[n] += pixels.rgb[i * 3 + n] * w;
-          weight += w;
+          if (!inS.has(labels[i]) || !(pixels.weight[i] > 0)) continue;
+          found.push({
+            rgb: [pixels.rgb[i * 3], pixels.rgb[i * 3 + 1], pixels.rgb[i * 3 + 2]],
+            weight: pixels.weight[i],
+            inside: insideAt(i),
+          });
         }
-        return weight > 0 ? sum.map((v) => v / weight) : null;
+        return found;
+      }
+    : undefined;
+  const colour = cells ? (swatch: number[]) => mostPopulated(cells(swatch)) : undefined;
+  let evidenceTotal = -1;
+  const sizes = new Map<string, number>();
+  const size = pixels
+    ? (swatch: number[]) => {
+        if (evidenceTotal < 0) {
+          evidenceTotal = 0;
+          for (let i = 0; i < labels.length; i++) if (labels[i] >= 0 && pixels.weight[i] > 0) evidenceTotal += pixels.weight[i];
+        }
+        const key = swatch.join();
+        let known = sizes.get(key);
+        if (known === undefined) {
+          const found = cells!(swatch).reduce((sum, c) => sum + c.weight, 0);
+          known = found > 0 && evidenceTotal > 0 ? found / evidenceTotal : NaN;
+          sizes.set(key, known);
+        }
+        return known;
       }
     : undefined;
   const touching = (a: number[], b: number[]) => {
@@ -527,7 +796,7 @@ export function edgeEvidenceFromLabels(
     }
     return seen ? onEdge / seen : NaN;
   };
-  return { edge, touching, colour };
+  return { edge, touching, colour, cells, size };
 }
 
 /** Deterministic k-means over RGB pixels, each counting by its weight (its
@@ -674,23 +943,78 @@ export function areaGrid(data: Uint8ClampedArray, width: number, height: number,
   const f = Math.max(width, height) <= maxDim ? 1 : Math.ceil(Math.max(width, height) / maxDim);
   const gw = Math.ceil(width / f);
   const gh = Math.ceil(height / f);
+  const cellX = new Int32Array(width).map((_, x) => Math.floor(x / f));
+  const cellY = new Int32Array(height).map((_, y) => Math.floor(y / f));
+  return reduceArea(data, width, height, gw, gh, { at: cellX, part: null }, { at: cellY, part: null }, f * f * 255);
+}
+
+/** RGBA pixel data (straight alpha, ``width`` x ``height``) reduced so its
+ *  longest edge is exactly ``maxDim`` (as it is when already smaller): the
+ *  same alpha-weighted area average as ``areaGrid``, with fractional cells,
+ *  each source pixel shared between the (at most 2 x 2) cells it overlaps
+ *  by how much of it falls in each (GM r11 on #208). An integer block
+ *  made the grid anything from 129 to 256 px, so how wide a band had to be
+ *  to stay jumped with the image's size (review 5, L1). The evidence is
+ *  read on it; the clusters keep ``areaGrid``, as the backend reduces. */
+export function exactAreaGrid(data: Uint8ClampedArray, width: number, height: number, maxDim: number): PixelGrid {
+  const longest = Math.max(width, height);
+  if (longest <= maxDim) return areaGrid(data, width, height, maxDim);
+  const gw = Math.max(1, Math.round((width * maxDim) / longest));
+  const gh = Math.max(1, Math.round((height * maxDim) / longest));
+  const axis = (n: number, g: number) => {
+    // Pixel p covers [p, p + 1) of the source; cell c covers [c * size, (c + 1) * size).
+    const size = n / g;
+    const at = new Int32Array(n);
+    const part = new Float64Array(n);
+    for (let p = 0; p < n; p++) {
+      const c = Math.min(g - 1, Math.floor(p / size));
+      at[p] = c;
+      part[p] = c + 1 < g ? Math.min(1, (c + 1) * size - p) : 1;
+    }
+    return { at, part };
+  };
+  return reduceArea(data, width, height, gw, gh, axis(width, gw), axis(height, gh), (width / gw) * (height / gh) * 255);
+}
+
+/** The area average both reductions share. Each source pixel goes to cell
+ *  ``at`` along each axis, a ``part`` of it (all of it when ``part`` is
+ *  null) and the rest to the next cell. */
+function reduceArea(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  gw: number,
+  gh: number,
+  xs: { at: Int32Array; part: Float64Array | null },
+  ys: { at: Int32Array; part: Float64Array | null },
+  full: number,
+): PixelGrid {
   const sums = new Float64Array(gw * gh * 4);
+  const add = (c: number, i: number, w: number) => {
+    sums[c] += data[i] * w;
+    sums[c + 1] += data[i + 1] * w;
+    sums[c + 2] += data[i + 2] * w;
+    sums[c + 3] += w;
+  };
   for (let y = 0; y < height; y++) {
-    const row = Math.floor(y / f) * gw;
+    const cy = ys.at[y];
+    const py = ys.part ? ys.part[y] : 1;
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
       const a = data[i + 3];
       if (a < ALPHA_MIN) continue;
-      const c = (row + Math.floor(x / f)) * 4;
-      sums[c] += data[i] * a;
-      sums[c + 1] += data[i + 1] * a;
-      sums[c + 2] += data[i + 2] * a;
-      sums[c + 3] += a;
+      const cx = xs.at[x];
+      const px = xs.part ? xs.part[x] : 1;
+      add((cy * gw + cx) * 4, i, a * px * py);
+      if (px < 1) add((cy * gw + cx + 1) * 4, i, a * (1 - px) * py);
+      if (py < 1) {
+        add(((cy + 1) * gw + cx) * 4, i, a * px * (1 - py));
+        if (px < 1) add(((cy + 1) * gw + cx + 1) * 4, i, a * (1 - px) * (1 - py));
+      }
     }
   }
   const rgb = new Float64Array(gw * gh * 3);
   const weight = new Float64Array(gw * gh);
-  const full = f * f * 255;
   for (let n = 0; n < gw * gh; n++) {
     const a = sums[n * 4 + 3];
     if (a === 0) continue;
@@ -786,7 +1110,7 @@ export function paletteFromImageData(
   clusterGrid?: { data: Uint8ClampedArray; width: number },
 ): PaletteResult {
   const grid = clusterGrid ? gridFromRgba(clusterGrid.data, clusterGrid.width) : areaGrid(data, width, height, CLUSTER_MAX_DIM);
-  return paletteFromGrid(grid, k, areaGrid(data, width, height, EVIDENCE_MAX_DIM));
+  return paletteFromGrid(grid, k, exactAreaGrid(data, width, height, EVIDENCE_MAX_DIM));
 }
 
 /** Draw ``img`` at ``w`` x ``h`` and read its pixels back, or null without a

@@ -87,9 +87,9 @@ describe('Extract from reference shows each distinct colour once', () => {
 
   it("doesn't collapse a gradient", () => {
     const grey = colors(image(96, 60, (x) => { const v = Math.round((x / 95) * 255); return [v, v, v, 255]; }));
-    // Five: k-means's #000000 and #070707 (ΔE00 1.1) are one black now, as
-    // the moodboard palette reads them (round 4); the rest stay apart.
-    expect(grey).toEqual(['#d0d0d0', '#797979', '#3a3a3a', '#171717', '#050505']);
+    // Five: k-means's near-blacks are one black (round 4), shown as the
+    // most populated of them, never a mean (GM r11); the rest stay apart.
+    expect(grey).toEqual(['#d0d0d0', '#797979', '#3a3a3a', '#171717', '#030303']);
     noNearPair(grey);
     const warm = colors(image(96, 60, (x) => [...mix([30, 90, 200], [230, 90, 40], x / 95), 255] as Px));
     expect(warm.length).toBeGreaterThanOrEqual(3);
@@ -311,7 +311,9 @@ describe('near-identical blacks and whites are one swatch (review 3, M1)', () =>
 
   it("merges a dark photo's blacks and leaves its greys (cinematic-noir.webp at 96 px)", () => {
     // 7886a137 and b972eb9d gave #020202 #0e0e0e #1a1a1a #070707 #393939 #7f7f7f.
-    expect(colors(fixture('cinematic-noir', 96))).toEqual(['#070808', '#1a1a1a', '#393939', '#7f7f7f']);
+    // Round 6 showed the merged black as their mean, #070808; it is the most
+    // populated of them now (GM r11), a black the image holds.
+    expect(colors(fixture('cinematic-noir', 96))).toEqual(['#010101', '#1a1a1a', '#393939', '#7f7f7f']);
   });
 
   it('keeps the tinted darks and deep violets of three photos as round 5 gave them (GM r9 guards)', () => {
@@ -427,7 +429,7 @@ describe('the neutral near-black merge', () => {
     expect(merged([11, 19, 17], black)).toHaveLength(2);
   });
 
-  it('merges three neutral near-blacks transitively, each pair over ΔE00 3, weights adding', () => {
+  it('merges three neutral near-blacks, each pair over ΔE00 3, weights adding, into the most populated one', () => {
     const three = [[0, 0, 0], [0, 7, 2], [5, 0, 6]];
     expect(deltaE00(three[0], three[1])).toBeGreaterThan(3);
     expect(deltaE00(three[0], three[2])).toBeGreaterThan(3);
@@ -439,9 +441,75 @@ describe('the neutral near-black merge', () => {
       { rgb: [240, 120, 20], weight: 4 },
     ]);
     expect(out.map((c) => c.weight)).toEqual([10, 4]);
-    // Weight-averaged in sRGB: (0*5 + 0*3 + 5*2) / 10, (0*5 + 7*3 + 0*2) / 10, (0*5 + 2*3 + 6*2) / 10.
-    out[0].rgb.forEach((v, i) => expect(v).toBeCloseTo([1, 2.1, 1.8][i], 9));
-    expect(isNeutralNearBlack(rgbToLab(out[0].rgb))).toBe(true);
+    // Round 6 showed their weighted mean, #010202; GM r11: the group's most
+    // populated real black, here the heaviest.
+    expect(out[0].rgb).toEqual([0, 0, 0]);
+  });
+
+  it("shows the most populated black, never #000 when the image has no #000 (GM r11)", () => {
+    const out = mergeNearColors([
+      { rgb: [12, 12, 12], weight: 2 },
+      { rgb: [4, 4, 4], weight: 6 },
+      { rgb: [9, 9, 12], weight: 3 },
+      { rgb: [240, 120, 20], weight: 4 },
+    ]);
+    expect(out.map((c) => c.weight)).toEqual([11, 4]);
+    expect(out[0].rgb).toEqual([4, 4, 4]);
+    // The same in any order.
+    const again = mergeNearColors([
+      { rgb: [240, 120, 20], weight: 4 },
+      { rgb: [9, 9, 12], weight: 3 },
+      { rgb: [12, 12, 12], weight: 2 },
+      { rgb: [4, 4, 4], weight: 6 },
+    ]);
+    expect(again[0]).toMatchObject({ rgb: [4, 4, 4], weight: 11 });
+  });
+
+  it('with pixels to read, shows the black most of the group’s pixels have', () => {
+    // Two near-black clusters; the lighter cluster's pixels are mostly #050505.
+    const evidence: EdgeEvidence = {
+      edge: () => 0,
+      touching: () => false,
+      colour: (swatch) => (swatch.includes(0) && swatch.includes(1) ? [5, 5, 5] : null),
+    };
+    const out = mergeNearColors([
+      { rgb: [2, 2, 2], weight: 6, members: [0] },
+      { rgb: [10, 10, 10], weight: 3, members: [1] },
+      { rgb: [240, 120, 20], weight: 4, members: [2] },
+    ], MERGE_DELTA_E, evidence);
+    expect(out[0]).toMatchObject({ rgb: [5, 5, 5], weight: 9 });
+  });
+
+  it('keeps a black apart from a heavier grey that its group would otherwise take in', () => {
+    // #0a0a0a (2) and #000 (1) are one black, kept #0a0a0a. #161616 (9) is
+    // 2.70 from #0a0a0a but 4.28 from #000: taking it in would make it the
+    // group's colour, 4.28 from a member.
+    const out = mergeNearColors([
+      { rgb: [10, 10, 10], weight: 2 },
+      { rgb: [0, 0, 0], weight: 1 },
+      { rgb: [22, 22, 22], weight: 9 },
+    ]);
+    expect(out.map((c) => [c.rgb, c.weight])).toEqual([[[22, 22, 22], 9], [[10, 10, 10], 3]]);
+  });
+
+  it("doesn't chain: each colour meets the rule against the kept black, not a neighbour", () => {
+    // #000 (heaviest) and #121212 are neutral near-blacks; #141414 isn't
+    // (L* 6.32). It is ΔE00 1.81 from #121212 and 3.72 from #000. Round 6
+    // merged the blacks to their mean (#0a0a0a), 2.42 from #141414, and
+    // then pulled it in too: one swatch of all three, #0b0b0b.
+    const kept = [0, 0, 0];
+    const near = [18, 18, 18];
+    const grey = [20, 20, 20];
+    expect(isNeutralNearBlack(rgbToLab(near))).toBe(true);
+    expect(isNeutralNearBlack(rgbToLab(grey))).toBe(false);
+    expect(deltaE00(near, grey)).toBeLessThan(3);
+    expect(deltaE00(kept, grey)).toBeGreaterThan(3);
+    const out = mergeNearColors([
+      { rgb: kept, weight: 6 },
+      { rgb: near, weight: 5 },
+      { rgb: grey, weight: 4 },
+    ]);
+    expect(out.map((c) => [c.rgb, c.weight])).toEqual([[kept, 11], [grey, 4]]);
   });
 
   it('keeps a deep navy and a tinted dark apart from black', () => {
