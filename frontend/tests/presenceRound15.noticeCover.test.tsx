@@ -49,7 +49,7 @@ const lines = await import('../src/lib/notConnectedLine');
 const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } = await import('../src/lib/personSession');
 const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 
-const PAGE = 'Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 const TOKEN = 'a'.repeat(43);
 /** The prompt's backdrop as the app styles it (styles/commons.css), not a copy of its values. */
 const PROMPT_RULE = /body\.app-slava-restraint \.commons-prompt \{[^}]*\}/.exec(

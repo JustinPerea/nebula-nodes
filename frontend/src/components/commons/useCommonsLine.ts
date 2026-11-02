@@ -71,8 +71,8 @@ export function useReloadEpoch(): [number, () => void] {
 }
 
 /** GM r22 (PR #204 round 14): the page's own words, for a line that covers every load. */
-export const COMMONS_PAGE_HEADING = 'Couldn’t load the Commons.';
-const COMMONS_PAGE_WHAT = 'load the Commons';
+export const COMMONS_PAGE_HEADING = 'Couldn’t load Commons.';
+const COMMONS_PAGE_WHAT = 'load Commons';
 
 /** One load's failure: its own line, the page line it would share, and whether it was refused
  * only because this tab isn't connected as you. */
@@ -156,7 +156,7 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
     const line = isPersonRefusal(error) && what ? notConnectedBecause(what)
       : what ? loadFailedLine(what, error) : failureMessage(error, heading);
     // The page's own words over the failure's reason (the request names only itself).
-    const page = isPersonRefusal(error) ? notConnectedBecause('load the Commons')
+    const page = isPersonRefusal(error) ? notConnectedBecause('load Commons')
       : loadFailedLine(COMMONS_PAGE_WHAT, error) || line;
     setFailure(load, line, page, isPersonRefusal(error));
     settle(load);

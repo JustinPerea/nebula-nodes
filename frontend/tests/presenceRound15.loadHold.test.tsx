@@ -30,8 +30,8 @@ const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 const { resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
 
-const PAGE = 'Nebula couldn’t load the Commons because the server didn’t respond. Try again.';
-const STATUS = 'Nebula couldn’t check the Commons status because the server didn’t respond. Try again.';
+const PAGE = 'Nebula couldn’t load Commons because the server didn’t respond. Try again.';
+const STATUS = 'Nebula couldn’t check Commons status because the server didn’t respond. Try again.';
 const REFERENCES = 'Nebula couldn’t load the references because the server didn’t respond. Try again.';
 
 type Load = 'status' | 'collections' | 'search';
@@ -200,8 +200,8 @@ describe('useCommonsLoadLines\' hold', () => {
   it('a not-connected page line never waits for the other loads', () => {
     const view = mount();
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
-    act(() => view.result.current.show('status', notConnected('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
-    expect(view.result.current.lines).toEqual(['Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.']);
+    act(() => view.result.current.show('status', notConnected('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
+    expect(view.result.current.lines).toEqual(['Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.']);
   });
 
   it('the hold starts again once the lines have gone', async () => {
@@ -221,7 +221,7 @@ describe('useCommonsLoadLines\' hold', () => {
   it('a failed load sent again (the next poll) isn\'t one the others wait for', () => {
     const view = mount();
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
-    act(() => view.result.current.show('status', noAnswer('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', noAnswer('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
     act(() => view.result.current.start('status')); // the next poll, before the line has shown
     expect(view.result.current.lines).toEqual([]); // references is on its way
     act(() => view.result.current.clear('references'));
@@ -233,7 +233,7 @@ describe('useCommonsLoadLines\' hold', () => {
     act(() => demote());
     const view = mount();
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
-    act(() => view.result.current.show('status', notConnected('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', notConnected('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
     act(() => promote()); // the sweep clears the refused load's line; nothing answered it
     act(() => view.result.current.clear('references'));
     act(() => view.result.current.start('references'));
@@ -244,12 +244,12 @@ describe('useCommonsLoadLines\' hold', () => {
   it('a failed load sent again doesn\'t hold its own line', () => {
     const view = mount();
     act(() => view.result.current.start('status'));
-    act(() => view.result.current.show('status', noAnswer('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', noAnswer('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
     act(() => view.result.current.clear('references'));
     expect(view.result.current.lines).toEqual([STATUS]);
     act(() => view.result.current.clear('status'));
     act(() => view.result.current.start('status'));
-    act(() => view.result.current.show('status', noAnswer('Couldn’t check the Commons status.'), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', noAnswer('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
     act(() => view.result.current.start('status')); // the next poll
     expect(view.result.current.lines).toEqual([STATUS]);
   });
@@ -287,7 +287,7 @@ describe('a load cancelled before it answered (review 13 LOW-1)', () => {
     const view = renderHook(() => useCommonsLoadLines(['status', 'references'] as const, 'test.loads', () => {}));
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
     act(() => view.result.current.abandon('references'));
-    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check the Commons status.', 503, {}), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check Commons status.', 503, {}), 'Couldn’t check Commons status.'));
     expect(view.result.current.lines).toEqual([STATUS]);
   });
 
@@ -296,7 +296,7 @@ describe('a load cancelled before it answered (review 13 LOW-1)', () => {
     // The effect's cleanup abandons, then the next run starts it again, in one commit.
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
     act(() => { view.result.current.abandon('references'); view.result.current.start('references'); });
-    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check the Commons status.', 503, {}), 'Couldn’t check the Commons status.'));
+    act(() => view.result.current.show('status', new RequestFailedError('Couldn’t check Commons status.', 503, {}), 'Couldn’t check Commons status.'));
     expect(view.result.current.lines).toEqual([]);
     await act(() => vi.advanceTimersByTimeAsync(LOAD_LINE_HOLD_MS));
     expect(view.result.current.lines).toEqual([STATUS]);

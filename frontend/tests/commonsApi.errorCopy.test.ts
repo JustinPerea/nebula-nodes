@@ -116,7 +116,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     const error = await failure(() => commonsApi.status());
     expect(error.reason).toBe(LOST);
     expect(error.status).toBe(0);
-    expect(error.heading).toBe("Couldn’t check the Commons status.");
+    expect(error.heading).toBe("Couldn’t check Commons status.");
   });
 
   it('a used body (a bug, not a dropped connection) is not read as a lost connection', async () => {

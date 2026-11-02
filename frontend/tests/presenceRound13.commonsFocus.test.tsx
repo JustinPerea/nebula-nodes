@@ -186,7 +186,7 @@ describe('the data still starts again on a demote and the promote', () => {
 });
 
 describe('one page line on a held tab, never a load\'s own (review 10 NIT-2, GM r22)', () => {
-  const STATUS_LINE = 'Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+  const STATUS_LINE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
   const lineText = () => document.querySelector('[data-commons-line="not-connected"]')?.textContent;
 
   it('a tab that never connected: the page line, after the search refuses too, and after a new search', async () => {

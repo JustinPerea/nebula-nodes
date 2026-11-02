@@ -2,7 +2,7 @@
  * PR #204 round 14, GM r22: the Commons page's load lines, one rule and no ranking between loads
  * (components/commons/useCommonsLine useCommonsLoadLines, pageLoadLines).
  * - A tab that isn't connected as you (never connected, demoted, a stale token): one line for the
- *   page, "Nebula couldn’t load the Commons because this tab isn’t connected as you. …", and no
+ *   page, "Nebula couldn’t load Commons because this tab isn’t connected as you. …", and no
  *   load's own line ever appears.
  * - A connected tab: one load failing alone shows its own line; every load failing for one reason
  *   shows the page line with that reason; different reasons show one line per failed load, in the
@@ -30,7 +30,7 @@ const { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } =
 const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 
-const PAGE = 'Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 const ADD_LINE = 'You can add references when this tab is connected as you.';
 const TOKEN = 'a'.repeat(43);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -76,13 +76,13 @@ async function until(check: () => void, max = 3000): Promise<void> {
   }
 }
 
-const LOAD_WORDS = /check the Commons status|load the references|search the library|load the collections|library status/;
+const LOAD_WORDS = /check Commons status|load the references|search the library|load the collections|library status/;
 
 describe('pageLoadLines (GM r22)', () => {
   const failure = (line: string, page: string, person = false) => ({ line, page, person });
   it('a refusal for this tab: the page line only, whatever else failed', () => {
     expect(pageLoadLines([failure('status because', PAGE, true)])).toEqual([PAGE]);
-    expect(pageLoadLines([failure('Couldn’t x. A.', 'Couldn’t load the Commons. A.'), failure('refs because', PAGE, true)])).toEqual([PAGE]);
+    expect(pageLoadLines([failure('Couldn’t x. A.', 'Couldn’t load Commons. A.'), failure('refs because', PAGE, true)])).toEqual([PAGE]);
   });
   it('one load alone: its own line; one reason for several: the page line; different reasons: each, in order', () => {
     expect(pageLoadLines([failure('Couldn’t x. A.', 'P. A.')])).toEqual(['Couldn’t x. A.']);
@@ -147,7 +147,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     await until(() => expect(shownLines()).toHaveLength(1));
     await tick(600);
     expect(shownLines()).toHaveLength(1);
-    expect(shownLines()[0]).toBe('Nebula couldn’t load the Commons because the server didn’t respond. Try again.');
+    expect(shownLines()[0]).toBe('Nebula couldn’t load Commons because the server didn’t respond. Try again.');
   });
 
   it('two different reasons show one line per failed load, in the page\'s order', async () => {
@@ -161,7 +161,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(2));
     const [first, second] = shownLines();
-    expect(first).toBe('Nebula couldn’t check the Commons status because the server didn’t respond. Try again.');
+    expect(first).toBe('Nebula couldn’t check Commons status because the server didn’t respond. Try again.');
     // Round 18b (GM r29 1): a load's other reason is a Nebula-subject load line too.
     expect(second).toMatch(/^Nebula couldn’t load the references[. ]/);
     expect(second).not.toMatch(/respond/);

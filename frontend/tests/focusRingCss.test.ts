@@ -232,6 +232,8 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // PR #204 round 18g (GM r36): a heading or a line focused from code (see the describe below).
+  'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
 };
 
 function focusSelectors(rule: Rule): string[] {
@@ -351,5 +353,104 @@ describe('the focus ring clears the Updates chip\'s unread ring', () => {
     const ringed = find('.agent-notes-chip--ringed:focus-visible');
     expect(ringed, 'a ringed chip moves its focus ring out').toBeTruthy();
     expect(px(decl(ringed!, 'outline-offset'))).toBeGreaterThanOrEqual(outer + 1);
+  });
+});
+
+// ── PR #204 round 18g (GM r36): focus from code draws no ring ────────────────
+// A handover (a demote, going offline, the Commons turning off, Try again's line going, the off
+// view opening into the Commons) moves focus to a heading, or to the line that says why, so a
+// screen reader announces it. A person never Tabs there (tabindex -1), so the ring would only mark
+// where code put focus. One rule in slava-restraint.css takes it off, app-wide; everything a person
+// tabs to keeps its ring.
+
+const CODE_FOCUS_RULE = 'body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible';
+/** What the rule covers: a heading, or a line (a focus line, a line box, a status or alert line). */
+const CODE_FOCUS_TARGET = /(^|[\s>+~(,])h[1-6](?![\w-])|\[data-focus-line\]|\[data-line-box\]|\[role="(status|alert)"\]|__title\b|-heading\b|\.line-box\b|\.person-lock-line\b/;
+
+describe('a heading or a line focused from code draws no ring (GM r36)', () => {
+  it('one rule takes the ring off them, important, after the baseline ring', () => {
+    const rule = rules.find((r) => r.selectors.includes(CODE_FOCUS_RULE));
+    expect(rule, 'the code-focus rule').toBeTruthy();
+    expect(rule!.file).toBe('styles/slava-restraint.css');
+    expect(rule!.selectors).toEqual([CODE_FOCUS_RULE]);
+    expect(decl(rule!, 'outline')).toBe('none');
+    // Important: no component's own ring can bring it back, whatever its specificity.
+    const raw = slava.slice(slava.indexOf(CODE_FOCUS_RULE));
+    expect(raw.slice(0, raw.indexOf('}'))).toMatch(/outline:\s*none\s*!important;/);
+    // Only tabindex -1: a heading or a line a person can Tab to keeps its ring.
+    expect(CODE_FOCUS_RULE).toContain('[tabindex="-1"]:focus-visible');
+    const base = slava.indexOf(':where(body.app-slava-restraint :focus-visible)');
+    expect(base).toBeGreaterThan(-1);
+    expect(slava.indexOf(CODE_FOCUS_RULE)).toBeGreaterThan(base);
+  });
+
+  it('no other rule draws a ring on a heading or a line when it takes focus', () => {
+    const bad: string[] = [];
+    for (const r of rules.filter(live)) {
+      if (r.selectors.includes(CODE_FOCUS_RULE)) continue;
+      for (const sel of focusSelectors(r)) {
+        // The focused element: the compound that carries :focus (not a :has() or a parent).
+        const focused = sel.split(/\s+|>|\+|~/).filter((part) => /:focus/.test(part) && !/:has\(/.test(part));
+        if (!focused.some((part) => CODE_FOCUS_TARGET.test(` ${part}`))) continue;
+        const outline = decl(r, 'outline');
+        if ((outline && !/^(none|0)$/.test(outline)) || (decl(r, 'box-shadow') ?? 'none') !== 'none') bad.push(`${where(r)} :: ${sel}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  // Every element the app gives tabindex -1 is either a heading or a line (the rule covers it and
+  // code focuses it) or listed here with why it keeps the ring. A new one has to be placed.
+  const KEEPS_RING: Record<string, string> = {
+    'components/create-studio/ResultCard.tsx': 'a button: a control keeps its ring',
+    'components/create-studio/ResultComparison.tsx': 'a dialog focused on open (not a heading or a line; for GM)',
+    'components/create-studio/Lightbox.tsx': 'a dialog focused on open (not a heading or a line; for GM)',
+    'components/create-studio/ModelPicker.tsx': 'a picker panel focused on open',
+    'components/nodes/SceneUnsavedMark.tsx': 'a popover focused on open',
+    'components/nodes/ProviderSwitcher.tsx': 'menu items, moved through with the arrow keys',
+    'components/nodes/MeshPreview.tsx': 'a modal focused on open (not a heading or a line; for GM)',
+    'components/nodes/WorldPreview.tsx': 'a modal focused on open (not a heading or a line; for GM)',
+    'components/commons/CommonsLeavePopover.tsx': 'an alertdialog focused on open',
+    'components/projects/ProjectSizePanel.tsx': 'a panel focused on open',
+    'components/panels/ChatModelPicker.tsx': 'a dialog focused on open',
+    'components/panels/settings/ServiceAccountInput.tsx': 'a hidden file input, never focused',
+    'components/panels/settings/ProviderRow.tsx': 'a provider row a setup link moves focus to (a row, not a heading or a line)',
+    'components/canvas/ProposalBar.tsx': 'Review focuses it: the neutral ring from the keyboard (#161)',
+    'components/agent-notes/AgentNotesList.tsx': 'the Updates list, focused on open',
+    'components/onboarding/OnboardingOverlay.tsx': 'the onboarding panel, focused on open',
+    'components/proposals/AssetProposalStrip.tsx': 'Review focuses it: the neutral ring from the keyboard (#161)',
+    'components/asset-move/AssetMoveMenu.tsx': 'menu items, moved through with the arrow keys',
+  };
+  const COVERED = /^<h[1-6]\b|data-focus-line|FOCUS_LINE_ATTR|data-line-box|role="(status|alert)"|role=\{person \? 'status'/;
+
+  it('every tabindex -1 in the app is a covered heading or line, or keeps its ring for a reason', () => {
+    const tsx = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return tsx(path);
+      return /\.tsx$/.test(name) && !/\.test\.tsx$/.test(name) ? [path] : [];
+    });
+    const unplaced: string[] = [];
+    let covered = 0;
+    for (const path of tsx(SRC)) {
+      const text = readFileSync(path, 'utf8');
+      const file = relative(SRC, path);
+      for (const match of text.matchAll(/tabIndex(=\{-1\}|: -1\b)/g)) {
+        // The element: from the last `<Tag` before it to the end of that tag.
+        const open = text.lastIndexOf('<', match.index);
+        const tag = text.slice(open, text.indexOf('>', match.index) + 1);
+        if (COVERED.test(tag)) { covered += 1; continue; }
+        if (!KEEPS_RING[file]) unplaced.push(`${file}: ${tag.slice(0, 80).replace(/\s+/g, ' ')}`);
+      }
+    }
+    expect(unplaced).toEqual([]);
+    // The page heading, the section headings, the Commons and person-lock lines, the line boxes.
+    expect(covered).toBeGreaterThanOrEqual(8);
+  });
+
+  it('the handover only ever focuses a heading or a line', () => {
+    const hook = readFileSync(join(SRC, 'hooks/useFocusHandover.ts'), 'utf8');
+    // Its targets: the control come back (the person's own, ring kept), a line, or the heading.
+    expect(hook).toMatch(/const target = same \?\? line \?\? \(frame >= FRAMES \? heading\(\) : null\);/);
+    expect(hook).toMatch(/const LINE = `\[\$\{FOCUS_LINE_ATTR\}\]`;/);
   });
 });

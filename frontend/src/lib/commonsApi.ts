@@ -193,7 +193,7 @@ export const commonsApi = {
     if (!path.startsWith('/api/commons/blobs/')) throw new Error('Invalid Commons blob path');
     return call<Blob>("Couldn’t load the reference.", path.slice('/api/commons'.length), { signal });
   },
-  status: () => call<CommonsStatus>("Couldn’t check the Commons status.", '/status'),
+  status: () => call<CommonsStatus>("Couldn’t check Commons status.", '/status'),
   collections: () => call<Collection[]>("Couldn’t load the collections.", '/collections'),
   createCollection: (name: string, brand?: string | null) =>
     post<Collection>("Couldn’t create the collection.", '/collections', { name, brand: brand || null }),
@@ -233,9 +233,9 @@ export const commonsApi = {
   purge: (assetId: string) => call("Couldn’t delete the reference.", `/assets/${assetId}`, { method: 'DELETE' }),
   comment: (assetId: string, text: string, membershipId?: string, regionId?: string) =>
     post("Couldn’t post the comment.", '/comments', { asset_id: assetId, text, membership_id: membershipId, region_id: regionId }),
-  settings: () => call<Record<string, unknown>>("Couldn’t load the Commons settings.", '/settings'),
+  settings: () => call<Record<string, unknown>>("Couldn’t load Commons settings.", '/settings'),
   patchSettings: (body: Record<string, unknown>) =>
-    patch<Record<string, unknown>>("Couldn’t save the Commons settings.", '/settings', body),
+    patch<Record<string, unknown>>("Couldn’t save Commons settings.", '/settings', body),
   candidates: () => call<{ term: string; count: number; assets: string[] }[]>(
     "Couldn’t load the vocabulary candidates.", '/vocabulary/candidates'),
   workerStart: () => post("Couldn’t start the worker.", '/worker/start'),

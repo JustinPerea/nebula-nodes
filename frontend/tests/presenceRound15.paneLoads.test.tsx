@@ -4,7 +4,7 @@
  *   Agent review:         "Nebula couldn’t load Agent review because the server didn’t respond. Try again."
  *   reference detail:     "Nebula couldn’t load this reference because the server didn’t respond. Try again."
  *   Blind labeling:       "Nebula couldn’t load Blind labeling because the server didn’t respond. Try again."
- *   Commons Settings:     "Nebula couldn’t load the Commons settings because the server didn’t respond. Try again."
+ *   Commons Settings:     "Nebula couldn’t load Commons settings because the server didn’t respond. Try again."
  * The pane names its load whichever of its requests failed (Settings reads three). These run the
  * real Commons API and apiFetch; only the browser's fetch is stubbed.
  * Round 17 (review 13 NIT-3): on fake time, each wait a fixed number of 50 ms steps.
@@ -23,7 +23,7 @@ vi.mock('../src/components/agent-notes/UpdatesSlot', () => ({ UpdatesSlot: () =>
 const REVIEW = 'Nebula couldn’t load Agent review because the server didn’t respond. Try again.';
 const REFERENCE = 'Nebula couldn’t load this reference because the server didn’t respond. Try again.';
 const LABELING = 'Nebula couldn’t load Blind labeling because the server didn’t respond. Try again.';
-const SETTINGS = 'Nebula couldn’t load the Commons settings because the server didn’t respond. Try again.';
+const SETTINGS = 'Nebula couldn’t load Commons settings because the server didn’t respond. Try again.';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 /** The path that fails, and how. */

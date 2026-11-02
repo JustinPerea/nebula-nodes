@@ -86,7 +86,7 @@ describe('review 12 NIT-5: the because rule reads each line, not one per block',
 
   it('catches a load\'s own line without the form beside a page line with it (mutant X21)', () => {
     const probe = (body: string) => refusalLinesWithoutBecause([{ name: 'P.ts', text: `const show = (error, heading) => { ${body} retryOnPromote(error, k, r); };` }]);
-    expect(probe('const line = failureMessage(error, heading); const page = isPersonRefusal(error) ? notConnectedBecause(\'load the Commons\') : failureUnder(error, H);')).toHaveLength(1);
+    expect(probe('const line = failureMessage(error, heading); const page = isPersonRefusal(error) ? notConnectedBecause(\'load Commons\') : failureUnder(error, H);')).toHaveLength(1);
     expect(probe('const line = isPersonRefusal(error) && what ? failureMessage(error, heading) : failureMessage(error, heading);')).toHaveLength(1);
     expect(probe('const line = isPersonRefusal(error) && what ? notConnectedBecause(what) : noResponse && what ? noResponseBecause(what) : failureMessage(error, heading);')).toHaveLength(0);
     expect(probe('const shownLine = isPersonRefusal(error) ? notConnectedBecause(\'x\') : failureMessage(error, heading);')).toHaveLength(0);

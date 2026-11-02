@@ -22,14 +22,14 @@ const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 
 /** Every load line #204 draws in the no-answer form, by where it shows. */
 export const LOAD_LINES = {
-  'Commons page': noResponseBecause('load the Commons'),
+  'Commons page': noResponseBecause('load Commons'),
   'references': noResponseBecause('load the references'),
   'collections': noResponseBecause('load the collections'),
-  'status': noResponseBecause('check the Commons status'),
+  'status': noResponseBecause('check Commons status'),
   'Agent review': noResponseBecause('load Agent review'),
   'Blind labeling': noResponseBecause('load Blind labeling'),
   'reference detail': noResponseBecause('load this reference'),
-  'Commons settings': noResponseBecause('load the Commons settings'),
+  'Commons settings': noResponseBecause('load Commons settings'),
 };
 const ERROR_TOKENS = /--sr-(?:error|danger|warning|accent)\b/;
 
@@ -39,7 +39,7 @@ afterEach(() => { cleanup(); resetLinesForTests(); document.body.className = '';
 describe('a load line, whatever its reason, and only a load line, is marked neutral (GM r29 1)', () => {
   it('isLoadLine reads a load\'s line, and not an action\'s', () => {
     for (const line of Object.values(LOAD_LINES)) expect(isLoadLine(line), line).toBe(true);
-    expect(isLoadLine(notConnectedBecause('load the Commons', false))).toBe(true);
+    expect(isLoadLine(notConnectedBecause('load Commons', false))).toBe(true);
     expect(isLoadLine('Nebula couldn’t load Agent review. The review set is closed.')).toBe(true);
     expect(isLoadLine('Couldn’t save the settings. That setting isn’t available.')).toBe(false);
     expect(isLoadLine("Nebula didn't respond. Try again.")).toBe(false);
@@ -52,7 +52,7 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
       ['load Agent review', 429, undefined, 'Nebula couldn’t load Agent review because the server is busy. Try again in a moment.'],
       ['load Agent review', 502, undefined, noResponseBecause('load Agent review')],
       ['load Agent review', 500, 'Internal Server Error', 'Nebula couldn’t load Agent review because the server hit an error. Try again.'],
-      ['load the Commons', 0, undefined, 'Nebula couldn’t load the Commons because the server isn’t answering. Check that Nebula is running, then try again.'],
+      ['load Commons', 0, undefined, 'Nebula couldn’t load Commons because the server isn’t answering. Check that Nebula is running, then try again.'],
       ['load this reference', 404, "That reference isn't there anymore. Reload to get the latest references.",
         'Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.'],
       ['load this reference', 409, "That reference isn't in this held-out set. Reload to get the latest references.",
@@ -61,14 +61,14 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
         'Nebula couldn’t load the references because those filters didn’t work. Clear them and try again.'],
       ['load this image', 404, 'not found', 'Nebula couldn’t load this image because the file isn’t there anymore.'],
       ['load this video', 404, 'not found', 'Nebula couldn’t load this video because the file isn’t there anymore.'],
-      ['load the Commons settings', 401, 'invalid UI session token',
-        'Nebula couldn’t load the Commons settings because this window’s session ended. Reload to sign in again.'],
-      ['load the Commons settings', 401, 'no UI session: open Nebula from the desktop app or use the dev link',
-        'Nebula couldn’t load the Commons settings because this window’s session ended. Reload to sign in again.'],
-      ['load the Commons settings', 403, 'only the human UI session can do this',
-        'Nebula couldn’t load the Commons settings because this window isn’t signed in as you. Reload to sign in again.'],
-      ['load the Commons settings', 403, undefined,
-        'Nebula couldn’t load the Commons settings because you don’t have access to this anymore. Reload to sign in again.'],
+      ['load Commons settings', 401, 'invalid UI session token',
+        'Nebula couldn’t load Commons settings because this window’s session ended. Reload to sign in again.'],
+      ['load Commons settings', 401, 'no UI session: open Nebula from the desktop app or use the dev link',
+        'Nebula couldn’t load Commons settings because this window’s session ended. Reload to sign in again.'],
+      ['load Commons settings', 403, 'only the human UI session can do this',
+        'Nebula couldn’t load Commons settings because this window isn’t signed in as you. Reload to sign in again.'],
+      ['load Commons settings', 403, undefined,
+        'Nebula couldn’t load Commons settings because you don’t have access to this anymore. Reload to sign in again.'],
       ['load the references', 422, undefined, 'Nebula couldn’t load the references because the server didn’t accept it. Try again.'],
       ['load Agent review', 404, 'Commons is disabled', COMMONS_OFF_COPY],
     ];
@@ -84,7 +84,7 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
     } finally { warn.mockRestore(); }
   });
   it('offline (a request refused before it was sent) says nothing', () => {
-    expect(loadFailedLine('load the Commons', new OfflineRefusal('GET', '/api/commons/status'))).toBe('');
+    expect(loadFailedLine('load Commons', new OfflineRefusal('GET', '/api/commons/status'))).toBe('');
   });
   it('the Commons off line is a load line: neutral', () => {
     expect(isLoadLine(COMMONS_OFF_COPY)).toBe(true);
@@ -104,7 +104,7 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
   }
 
   it('the same look as the Commons because line (H-prompt-demoted)', () => {
-    const view = render(<><CommonsErrorLine line={notConnectedBecause('load the Commons', false)} /><CommonsErrorLine line={LOAD_LINES['Commons page']} /></>);
+    const view = render(<><CommonsErrorLine line={notConnectedBecause('load Commons', false)} /><CommonsErrorLine line={LOAD_LINES['Commons page']} /></>);
     const [because, load] = [...view.container.querySelectorAll('[data-commons-line]')];
     expect(lineLook(load)).toEqual(lineLook(because));
   });
@@ -139,7 +139,7 @@ describe('one look for every neutral Commons line, wherever it sits (GM r30 1)',
     ['the settings', (line) => <section className="commons-settings">{line}</section>],
     ['the reference detail', (line) => <aside className="commons-detail">{line}</aside>],
   ];
-  const LINES = [...Object.values(LOAD_LINES), notConnectedBecause('load the Commons', false), COMMONS_OFF_COPY];
+  const LINES = [...Object.values(LOAD_LINES), notConnectedBecause('load Commons', false), COMMONS_OFF_COPY];
   it('the same component, the bare rail: neutral ink and rule, no fill, in every place', () => {
     const looks = new Set<string>();
     for (const [place, wrap] of PLACES) for (const line of LINES) {

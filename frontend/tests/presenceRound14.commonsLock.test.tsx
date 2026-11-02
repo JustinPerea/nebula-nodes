@@ -59,7 +59,7 @@ const { noteBackendConnection, resetBackendConnectionForTests } = await import('
 const { lockPlacementProblems } = await import('../src/lib/lockPlacement');
 const { CommonsErrorLine } = await import('../src/components/commons/CommonsErrorLine');
 
-const PAGE = 'Nebula couldn’t load the Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 const ADD_LINE = 'You can add references when this tab is connected as you.';
 const CREATE_LINE = 'You can create collections when this tab is connected as you.';
 const TOKEN = 'a'.repeat(43);

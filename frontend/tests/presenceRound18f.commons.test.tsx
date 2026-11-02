@@ -267,7 +267,7 @@ describe('only the 404 "disabled" sets the off line; any answer proving the Comm
     await tick(3000);
     const lines = commonsLines();
     expect(lines).not.toContain(OFF);
-    expect(lines).toEqual(['Nebula couldn’t load the Commons because the server hit an error. Try again.']);
+    expect(lines).toEqual(['Nebula couldn’t load Commons because the server hit an error. Try again.']);
     const line = document.querySelector('[data-commons-line]')!;
     expect(line.hasAttribute('data-line-neutral')).toBe(true);
     expect(lineLook(line)).toEqual(NEUTRAL);
@@ -407,7 +407,7 @@ describe('a load line\'s "Try again" button (GM r35 4)', () => {
     fails.settings = [503];
     render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
     await tick(1000);
-    expect(commonsLines()).toEqual(['Nebula couldn’t load the Commons settings because the server didn’t respond. Try again.']);
+    expect(commonsLines()).toEqual(['Nebula couldn’t load Commons settings because the server didn’t respond. Try again.']);
     delete fails.settings;
     fireEvent.click(retry()!);
     await tick(1000);

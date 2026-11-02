@@ -88,8 +88,8 @@ body.app-slava-restraint .workspace-header__back:disabled {
   cursor: not-allowed;
   opacity: var(--sr-disabled-opacity-strong);
 }
-body.app-slava-restraint .workspace-header__back:focus-visible,
-body.app-slava-restraint .workspace-header__title:focus-visible {
+/* The title takes focus only from code (tabindex -1): no ring (slava-restraint.css, round 18g). */
+body.app-slava-restraint .workspace-header__back:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
 }

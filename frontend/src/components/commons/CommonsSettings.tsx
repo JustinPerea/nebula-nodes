@@ -112,7 +112,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         // Round 18f (GM r35 4): read again by its "Try again": the line goes with the failure.
         setError(null);
       },
-      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load the Commons settings.", { reload: true }); },
+      (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Commons settings.", { reload: true }); },
     );
     return () => { cancelled = true; };
   }, [loadEpoch, line]);
@@ -140,7 +140,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       // again; never the backend's words. Refused because this tab isn't connected as you: the
       // settings load's own because line, which loads them again on the promote.
       const cause = isPersonRefusal(e) ? null : loadFailedCause('load the settings back', e);
-      if (isPersonRefusal(e)) line.show(e, "Couldn’t load the Commons settings.", { reload: true });
+      if (isPersonRefusal(e)) line.show(e, "Couldn’t load Commons settings.", { reload: true });
       else if (cause && cause !== COMMONS_OFF_COPY) line.keep(e, savedReadBackLine(cause));
     }
     // The write committed even if its read-back failed.
@@ -153,7 +153,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       const blob = await commonsApi.exportZip();
       await saveBlob(blob, `commons-export-${new Date().toISOString().slice(0, 10)}.zip`);
     } catch (e) {
-      line.show(e, "Couldn’t export the Commons.");
+      line.show(e, "Couldn’t export Commons.");
     }
   };
 

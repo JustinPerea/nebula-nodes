@@ -3002,3 +3002,88 @@ All five are pinned and killed.
 
 ### Left alone
 - The meter's "resets …" copy (queued for the wording batch).
+
+## Round 18g
+
+GM r36 on #204 (18f's design signed off): two small notes.
+
+### "Commons", not "the Commons", in the because and load lines
+- Changed (the person's copy, frontend only):
+  - The page line, `useCommonsLine` (`COMMONS_PAGE_HEADING`, `COMMONS_PAGE_WHAT`, the
+    not-connected page line): "Nebula couldn’t load Commons because the server hit an error. Try
+    again."
+  - The request headings in `lib/commonsApi.ts` that become because lines: "Couldn’t check
+    Commons status.", "Couldn’t load Commons settings.", "Couldn’t save Commons settings."
+  - CommonsSettings' own headings: "Couldn’t load Commons settings." and "Couldn’t export
+    Commons."
+  - Their tests: 16 files, the strings only.
+- Left, and why:
+  - The backend's "… asks to change a reference in the Commons" (asset proposal and Updates text)
+    and "an image in the Commons". Agents read them too, and they name a place, not a because or
+    load line.
+  - The backend's misfit reason "the Commons was turned off". Agent-facing, and not a because or
+    load line.
+  - The CLI and MCP help ("the person decides in the Commons"). Agent-facing.
+  - The frontend's "Turn on the Commons in Settings to review this proposal." (assetProposalReview)
+    and the offline refusal's "Stop the Commons worker". Neither is a because or load line. The
+    first is also stale, because no setting turns the Commons on. Both are for the wording batch.
+  - Comments that quote GM's earlier wording.
+
+### No ring on a heading or a line that takes focus from code
+- One rule, app-wide, in `slava-restraint.css`, right after the baseline ring:
+  `body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible { outline: none !important; }`
+- These are the handover targets: the page heading, the section headings, and the lines that say
+  why (the Commons and person-lock lines, the line boxes, the Projects home's notices). A person
+  can never Tab to them (tabindex -1), so the ring only marked where code put focus. Chrome counts
+  focus moved by code after a key press as `:focus-visible`, which is why the 18f shots showed the
+  ring on "Commons".
+- Screen readers still announce them: focus still moves.
+- Everything a person tabs to keeps its ring. A heading or a line at tabindex 0 is outside the
+  rule.
+- `workspace-header.css` no longer rings the title.
+- It holds for every handover: a demote, going offline, the Commons turning off, the Commons back
+  with a 500, Try again's line going, and the off view opening into the Commons.
+- Left with their ring, for GM: other tabindex -1 targets that code focuses but that aren't a
+  heading or a line.
+  - The proposal bar and the asset-proposal strip. #161's sweep (098f9eea) chose the neutral ring
+    for them from the keyboard, and this round doesn't reverse a merged decision.
+  - Dialogs and panels focused on open (Lightbox, the result comparison, the leave popover, the
+    model pickers, the onboarding card, the Updates list).
+  - Menu items moved through with the arrow keys. These need their ring.
+- The ratchet is in `tests/focusRingCss.test.ts`:
+  - the rule exists, comes after the baseline, is `!important`, and is limited to tabindex -1;
+  - no other rule rings a heading or a line on focus;
+  - every `tabIndex={-1}` in the app is a covered heading or line, or is listed with why it keeps
+    its ring (a new one has to be placed);
+  - the handover's targets are the control that came back, a focus line, or the heading.
+  - The existing "never clears the outline without the token ring" sweep lists the rule as an
+    intended exception.
+
+### Gates
+- tsc and eslint are clean; the inline-style and Slava CSS guards pass.
+- vitest on two workers, 437 files (18f's list plus every test that names focus or the Commons):
+  5,794 of 5,796.
+  - `presenceRound15.emptyState` still matched "the Commons" in a regex. Fixed; with
+    `graphStore.fix17`, 33 of 33.
+  - `graphStore.fix17` failed only under load. It doesn't touch these files and passes alone.
+- `vite build` plus the budget check: 471,025 B raw / 145,131 B gzip.
+- Mutations on the ratchet: 8 of 8 killed.
+  - no rule;
+  - not important;
+  - headings only;
+  - not limited to tabindex -1;
+  - the title's ring back;
+  - a new heading ring;
+  - an unplaced tabindex -1;
+  - the rule before the baseline.
+- Live at 1440 (8951/5951, guarded launcher, canaries first, real restarts): 12 of 12. Shift was
+  pressed before each handover, so the heading matched `:focus-visible` in Chrome and the missing
+  ring is the rule's doing.
+  - Off mid-visit from a focused Inbox tab: focus on "Commons", visible, outline none.
+  - Back on with the reads at 500: "Nebula couldn’t load Commons because the server hit an error.
+    Try again.", focus on the heading, no ring.
+  - The off view opening into the Commons on reconnect: the heading, no ring.
+  - Then Tab: "All", 2px solid token ring.
+  - Nothing reached a blocked host.
+- Shots (`fu3r/shots-r18g`): M off then 500, R off opens into Commons, T Tab after the heading.
+  md5 `uniq -d` empty; each opened.

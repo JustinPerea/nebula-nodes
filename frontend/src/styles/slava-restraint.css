@@ -351,6 +351,17 @@ body.app-slava-restraint {
   outline-offset: var(--sr-focus-offset);
 }
 
+/* PR #204 round 18g (GM r36): a heading or a line that takes focus from code draws no ring. A
+ * handover (a demote, going offline, the Commons turning off, Try again's line going, the off
+ * view opening into the Commons) moves focus to a page or section heading, or to the line that
+ * says why, so a screen reader announces it. Those targets have tabindex -1: a person can never
+ * Tab to them, so a ring there only marks where code put focus. Everything a person tabs to keeps
+ * its ring. Important, so no component's own :focus-visible ring can bring it back
+ * (tests/focusRingCss.test.ts). */
+body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible {
+  outline: none !important;
+}
+
 /* A canvas node with keyboard focus (Tab onto the card). React Flow clears
  * the wrapper's outline (.react-flow__node.selectable:focus-visible), and the
  * wrapper's box isn't the card's, so the ring goes on the drawn card. It is

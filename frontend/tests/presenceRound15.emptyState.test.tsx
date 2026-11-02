@@ -179,7 +179,7 @@ describe('the Add to menu\'s collections (GM r24 b)', () => {
     fails.collections = 500;
     act(() => noteBackendConnection('online'));
     await tick(1000);
-    expect(commonsLines().join(' ')).toMatch(/collections|the Commons/);
+    expect(commonsLines().join(' ')).toMatch(/collections|load Commons/);
     expect(noCollectionsOption()).not.toBeNull();
   });
   it('none, read: "No collections"', async () => {
@@ -196,7 +196,7 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
     render(<CommonsView />);
     await tick(1000);
     expect(commonsLines()).toHaveLength(1);
-    expect(commonsLines()[0]).toMatch(/^Nebula couldn’t load the Commons because this tab isn’t connected as you\./);
+    expect(commonsLines()[0]).toMatch(/^Nebula couldn’t load Commons because this tab isn’t connected as you\./);
     expect(seen).not.toContain(NO_MATCHES);
     // PR #204 round 18 (GM r28 3): the Add to select isn't left empty, in the one disabled look
     // (the person lock's). Round 18d (GM r31 2): it says "Not loaded", with the reason.
@@ -237,7 +237,7 @@ describe('Settings\' lists (GM r24 b)', () => {
     settings();
     await tick(1000);
     // GM r25: the pane's own words, whichever of its reads failed.
-    expect(text()).toContain('Nebula couldn’t load the Commons settings because the server didn’t respond. Try again.');
+    expect(text()).toContain('Nebula couldn’t load Commons settings because the server didn’t respond. Try again.');
     expect(seen).not.toContain(NO_FOLDERS);
     expect(seen).not.toContain(NO_TERMS);
   });

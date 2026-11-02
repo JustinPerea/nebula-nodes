@@ -228,7 +228,7 @@ describe('N1: a load-failure notice doesn\'t flash back on reconnect', () => {
   it('the first render back online shows nothing; the check clears it, so it never shows', () => {
     const shown: string[] = [];
     function Probe() {
-      const [notice, setNotice] = useState<string | null>("Couldn't check the Commons status. Commons is disabled.");
+      const [notice, setNotice] = useState<string | null>("Couldn't check Commons status. Commons is disabled.");
       const visible = useOfflineHiddenNotice(notice, () => setNotice(null));
       shown.push(visible ?? 'none');
       return <p>{visible ?? 'none'}</p>;
