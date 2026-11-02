@@ -728,30 +728,25 @@ html body .moodboard-board-panel .moodboard-def__row {
   border-color: var(--mb-board-select);
 }
 
-.moodboard-board__outside-chip--right {
-  right: 12px;
-  transform: translateY(-50%);
-  animation-name: mb-outside-in-right;
-}
-
-.moodboard-board__outside-chip--left {
-  left: 12px;
-  padding: 4px 4px 4px 10px;
-  transform: translateY(-50%);
-  animation-name: mb-outside-in-left;
-}
-
-.moodboard-board__outside-chip--top {
-  top: 12px;
-  transform: translateX(-50%);
-  animation-name: mb-outside-in-top;
-}
-
+/* OutsideChip sets the chip's centre (left, top): centred on the view's edge
+   nearest the tile, clear of the tile (GM r13), its foot above the toolbar and
+   the notice band (lib/bottomBar.ts floatingBottomLimit). */
+.moodboard-board__outside-chip--right,
+.moodboard-board__outside-chip--left,
+.moodboard-board__outside-chip--top,
 .moodboard-board__outside-chip--bottom {
-  /* OutsideChip puts its foot on the lowest line clear of the toolbar and
-     the notice band (lib/bottomBar.ts floatingBottomLimit). */
-  transform: translate(-50%, -100%);
-  animation-name: mb-outside-in-bottom;
+  transform: translate(-50%, -50%);
+}
+
+.moodboard-board__outside-chip--right { animation-name: mb-outside-in-right; }
+.moodboard-board__outside-chip--left { animation-name: mb-outside-in-left; }
+.moodboard-board__outside-chip--top { animation-name: mb-outside-in-top; }
+.moodboard-board__outside-chip--bottom { animation-name: mb-outside-in-bottom; }
+
+/* The arrow before the words (the tile is to the chip's left): the wider
+   padding goes to that side. */
+.moodboard-board__outside-chip--arrow-first {
+  padding: 4px 4px 4px 10px;
 }
 
 .moodboard-board__outside-thumb {
@@ -761,8 +756,12 @@ html body .moodboard-board-panel .moodboard-def__row {
   object-fit: cover;
 }
 
+/* One arrow (→) turned to point at the tile's centre from the chip's
+   (OutsideChip sets --outside-turn). */
 .moodboard-board__outside-arrow {
+  display: inline-block;
   font-size: 14px;
+  transform: rotate(var(--outside-turn, 0deg));
 }
 
 .moodboard-board__sr-only {
@@ -777,10 +776,10 @@ html body .moodboard-board-panel .moodboard-def__row {
   border: 0;
 }
 
-@keyframes mb-outside-in-right { from { transform: translate(8px, -50%); } to { transform: translate(0, -50%); } }
-@keyframes mb-outside-in-left { from { transform: translate(-8px, -50%); } to { transform: translate(0, -50%); } }
-@keyframes mb-outside-in-top { from { transform: translate(-50%, -8px); } to { transform: translate(-50%, 0); } }
-@keyframes mb-outside-in-bottom { from { transform: translate(-50%, calc(-100% + 8px)); } to { transform: translate(-50%, -100%); } }
+@keyframes mb-outside-in-right { from { transform: translate(calc(-50% + 8px), -50%); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-left { from { transform: translate(calc(-50% - 8px), -50%); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-top { from { transform: translate(-50%, calc(-50% - 8px)); } to { transform: translate(-50%, -50%); } }
+@keyframes mb-outside-in-bottom { from { transform: translate(-50%, calc(-50% + 8px)); } to { transform: translate(-50%, -50%); } }
 
 @media (prefers-reduced-motion: reduce) {
   .moodboard-board__outside-chip {

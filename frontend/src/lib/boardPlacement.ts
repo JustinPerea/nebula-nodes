@@ -22,6 +22,8 @@ import type { NodeRect } from './nodePlacement';
  *   in view, then off any tile as before, so it isn't hidden there and gets
  *   no chip (GM r7 answer 2). If no free spot in view is left for it and it
  *   still reaches into the band, it is reported, so the chip points at it.
+ * - Any tile is reported only while less than half its area is in view
+ *   (GM r13, `outsideForChip`): at half or more the person sees it.
  *
  * Exact, on any board size (review 2, M1). A tile's top-left may not sit in
  * the open rectangle each other tile rules out (its own box grown by the gap
@@ -71,6 +73,33 @@ export interface Placed {
 /** True when `rect` lies wholly inside `view`. */
 export const insideView = (rect: NodeRect, view: NodeRect) =>
   rect.x >= view.x && rect.y >= view.y && rect.x + rect.width <= view.x + view.width && rect.y + rect.height <= view.y + view.height;
+
+/** The share of `rect`'s area inside `view`, from 0 to 1. */
+export function visibleShare(rect: NodeRect, view: NodeRect): number {
+  const area = rect.width * rect.height;
+  if (!(area > 0)) return 0;
+  const w = Math.min(rect.x + rect.width, view.x + view.width) - Math.max(rect.x, view.x);
+  const h = Math.min(rect.y + rect.height, view.y + view.height) - Math.max(rect.y, view.y);
+  return w > 0 && h > 0 ? (w * h) / area : 0;
+}
+
+/** At this share of its area in view, or more, a tile is seen: no chip (GM r13). */
+export const CHIP_SHARE = 0.5;
+
+/**
+ * Whether the edge chip points at `rect` (GM r13: it must not contradict
+ * what the person sees): only when less than half the tile's area is in
+ * view. A tile bigger than the view, which may never get half its area in,
+ * is seen while it covers the view's centre (GM r4 answer 9, r7 answer 1).
+ * One rule for pastes, held spots, moved 409 adds and the chip's own going.
+ */
+export function outsideForChip(rect: NodeRect, view: NodeRect): boolean {
+  if (visibleShare(rect, view) >= CHIP_SHARE) return false;
+  if (rect.width <= view.width && rect.height <= view.height) return true;
+  const cx = view.x + view.width / 2;
+  const cy = view.y + view.height / 2;
+  return !(rect.x <= cx && cx <= rect.x + rect.width && rect.y <= cy && cy <= rect.y + rect.height);
+}
 
 /** True when `rect` and `view` share no area. */
 /** `rect` reaches past the view's bottom edge, into the toolbar band, while still partly in view. */
@@ -345,8 +374,9 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, band = fals
     const rect = { x: spot.x, y: spot.y, width: w, height: h };
     // Aimed, it is reported only when wholly out of view; under the band it
     // would be hidden by the toolbar, so reaching into the band counts too
-    // (no free spot in view to nudge it to): the chip points at it.
-    if (view && (aimed ? whollyOutside(rect, view) || (band && underBand(rect, view)) : !insideView(rect, view))) outside.push(index);
+    // (no free spot in view to nudge it to): the chip points at it. Either
+    // way, only while less than half of it is in view (GM r13).
+    if (view && (!aimed || whollyOutside(rect, view) || (band && underBand(rect, view))) && outsideForChip(rect, view)) outside.push(index);
     taken.push(rect);
     spots.push({ x: spot.x, y: spot.y });
   });

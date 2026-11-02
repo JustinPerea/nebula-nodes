@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useStore } from '@xyflow/react';
 import type { NodeRect } from '../../lib/nodePlacement';
 import { storedImageView } from '../../lib/storedImage';
@@ -6,20 +6,15 @@ import { BOTTOM_BAR_GAP, floatingBottomLimit } from '../../lib/bottomBar';
 import { isStudioShortcutTarget } from './studioKeys';
 import type { OutsideTiles } from './BoardCanvas';
 
-import { nearestEdge, outsideChipText, seenIn, type ChipEdge } from './outsideChipText';
-
-
-
-const ARROWS: Record<ChipEdge, string> = { left: '←', right: '→', top: '↑', bottom: '↓' };
-/** Room kept between the chip and the board's corners, in screen pixels. */
-const CORNER = 48;
-/** The chip's distance from the edge it sits on. */
-const EDGE = 12;
+import { CHIP_EDGE, outsideChipText, placeChip } from './outsideChipText';
+import { outsideForChip } from '../../lib/boardPlacement';
 
 /**
  * The reveal for tiles placed outside the view (GM - Design, #210 answer 1):
- * a chip on the view's edge nearest the first tile, its arrow pointing at it,
- * with the tile's thumbnail. A button: pressing it brings the tiles into view
+ * a chip centred on the view's edge nearest the first tile, never on a tile,
+ * its arrow pointing at it (GM r13: outsideChipText placeChip), with the
+ * tile's thumbnail. It is up only while some tile it points at has less
+ * than half its area in view (lib/boardPlacement outsideForChip). A button: pressing it brings the tiles into view
  * on the board's fit spring. No timer: it goes when pressed, when the person
  * pans or zooms the tiles into view, on Esc, or at the next paste (the
  * Studio replaces it). One polite announcement with the same words.
@@ -46,7 +41,7 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
   const view = width > 0 && height > 0 && zoom > 0 ? viewOf() : null;
-  const inView = view !== null && tiles.rects.every((rect) => seenIn(rect, view));
+  const inView = view !== null && tiles.rects.every((rect) => !outsideForChip(rect, view));
 
   // One polite announcement: the live region mounts empty and gets its words after.
   const [said, setSaid] = useState('');
@@ -73,7 +68,7 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
       if (!parent) return;
       const stack = document.querySelector('.notice-region__stack')?.getBoundingClientRect();
       const noticesTop = stack && stack.height > 0 ? stack.top - BOTTOM_BAR_GAP : Infinity;
-      setFloor(Math.round(Math.min(parent.bottom, floatingBottomLimit(EDGE), noticesTop) - parent.top));
+      setFloor(Math.round(Math.min(parent.bottom, floatingBottomLimit(CHIP_EDGE), noticesTop) - parent.top));
     };
     measure();
     const stack = document.querySelector('.notice-region__stack');
@@ -123,28 +118,27 @@ export function OutsideChip({ tiles, viewOf, onShow, onDone, focusBoard }: {
   // layout effect above moves focus and the board drops the chip before
   // paint), so it is still on the page when focus leaves it.
   if (gone && !focused) return null;
-  const first = tiles.rects[0];
-  const point = gone ? { x: 0, y: 0 } : { x: (first.x + first.width / 2) * zoom + tx, y: (first.y + first.height / 2) * zoom + ty };
-  const edge = nearestEdge(point, width, height);
-  const bottomLine = Math.min(height, floor ?? height);
-  const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high));
-  const along = edge === 'left' || edge === 'right'
-    ? { top: clamp(point.y, Math.max(CORNER, size.h / 2 + EDGE), bottomLine - Math.max(CORNER, size.h / 2 + EDGE)) }
-    : { left: clamp(point.x, size.w / 2 + EDGE, width - size.w / 2 - EDGE),
-      ...(edge === 'bottom' ? { top: bottomLine - EDGE } : {}) };
+  // In the board's own pixels: the view, the tiles, and where the chip goes.
+  const toScreen = (rect: NodeRect): NodeRect => ({ x: rect.x * zoom + tx, y: rect.y * zoom + ty, width: rect.width * zoom, height: rect.height * zoom });
+  const place = placeChip({ pane: { width, height }, view: view ? toScreen(view) : { x: 0, y: 0, width, height },
+    floor: floor ?? height, size, tiles: tiles.rects.map(toScreen) });
+  const { edge, centre, turn, arrowFirst } = place;
+  const arrow = <span className="moodboard-board__outside-arrow" aria-hidden="true" data-turn={turn}
+    style={{ '--outside-turn': `${turn}deg` } as CSSProperties}>→</span>;
   const { text, label } = outsideChipText(tiles.rects.length);
   const thumb = tiles.thumb ? storedImageView(tiles.thumb).src : null;
   return (
     <>
-      <button ref={chipRef} type="button" className={`moodboard-board__outside-chip moodboard-board__outside-chip--${edge}`}
-        style={along} aria-label={label}
+      <button ref={chipRef} type="button" aria-label={label} data-edge={edge}
+        className={`moodboard-board__outside-chip moodboard-board__outside-chip--${edge}${arrowFirst ? ' moodboard-board__outside-chip--arrow-first' : ''}`}
+        style={{ left: centre.x, top: centre.y }}
         onFocus={(event) => { setFocused(true); if (event.relatedTarget instanceof HTMLElement) before.current = event.relatedTarget; }}
         onBlur={() => setFocused(false)}
         onClick={() => { onShow(tiles.rects, hasFocus()); onDone(); }}>
-        {(edge === 'left' || edge === 'top') && <span className="moodboard-board__outside-arrow" aria-hidden="true">{ARROWS[edge]}</span>}
+        {arrowFirst && arrow}
         {thumb && <img className="moodboard-board__outside-thumb" src={thumb} alt="" draggable={false} />}
         <span>{text}</span>
-        {(edge === 'right' || edge === 'bottom') && <span className="moodboard-board__outside-arrow" aria-hidden="true">{ARROWS[edge]}</span>}
+        {!arrowFirst && arrow}
       </button>
       <span className="moodboard-board__sr-only" role="status" aria-live="polite">{said}</span>
     </>

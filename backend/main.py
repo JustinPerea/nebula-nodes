@@ -18887,6 +18887,11 @@ class MoodboardCreate(BaseModel):
     lastRead: Any = None
     # Updates are written only through /agent-notes (refused here by name).
     agentNotes: Any = None
+    # The client's id for this create (optional). Sent again with the same
+    # id, the create returns the board the first send made instead of a
+    # second one (services/moodboard_store.create_once). Any, so the store
+    # checks it and answers in its own words.
+    requestId: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -19306,7 +19311,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
-        moodboard = store.create(
+        moodboard, made = store.create_once(
             name=body.name,
             # Only what was sent: an image's weight left out comes from its
             # placements, if it asks for any.
@@ -19325,11 +19330,18 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             sendNotes=body.sendNotes,
             coverImageId=body.coverImageId,
             by=_moodboard_author(),
+            requestId=body.requestId,
         )
     except NotesOptInProtected as exc:
         _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    if not made:
+        # A repeat of a create already made (same requestId) changed
+        # nothing, so nobody is told twice. `repeated` tells the client the
+        # board is the earlier send's, as it is now: what this send held
+        # beyond it (the draft moved on meanwhile) isn't on it yet.
+        return {**_moodboard_out(moodboard), "repeated": True}
     await _broadcast_stored_asset("moodboard", moodboard)
     await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)

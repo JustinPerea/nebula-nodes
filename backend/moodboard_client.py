@@ -518,9 +518,15 @@ def _unique_new(existing: list[dict[str, Any]], urls: list[str]) -> tuple[list[s
 
 def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, project: str | None = None,
                  mode: str = "look", strength: float = 0.7, notes: str = "",
+                 request_id: str | None = None,
                  headers: dict[str, str] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None) -> tuple[dict[str, Any], int]:
-    """A new board with `sources`; returns (board, duplicates skipped)."""
+    """A new board with `sources`; returns (board, duplicates skipped).
+
+    `request_id` (optional, 8 to 128 letters, digits, '-' or '_') makes the
+    create safe to send again: a second create with the same id returns the
+    board the first one made (same id, same version) instead of a second
+    board, also after Nebula restarts. Left out, every call makes a board."""
     name = str(name or "").strip()
     if not name:
         raise MoodboardError("a board needs a name")
@@ -531,6 +537,8 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
     urls, skipped = _unique_new([], source_urls(api, sources, headers=headers, transport=transport))
     body = {"name": name, "images": [_image_entry(url) for url in urls], "notes": notes, "mode": mode,
             "strength": strength, "projectId": project_id}
+    if request_id is not None:
+        body["requestId"] = request_id
     board = api.request("POST", "/api/moodboards", json=body, headers=headers)
     if len(board.get("images") or []) != len(urls):
         # Gap 7: a board once came back empty. Say so instead of reporting success.

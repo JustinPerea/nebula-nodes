@@ -1111,7 +1111,11 @@ describe('moving a held spot the board took', () => {
     return [slot(-900, 1000), slot(-900, 1000 + h + G)];
   };
 
-  it('an aimed drop moved by the board into the toolbar band takes the chip (it would be hidden there)', async () => {
+  // GM r13: the chip only while less than half the tile is in view.
+  it.each([
+    ['a third in view: it takes the chip (mostly hidden there)', 3, true],
+    ['half in view: no chip (the person sees it)', 2, false],
+  ] as const)('an aimed drop moved by the board into the toolbar band, %s', async (_name, part, chip) => {
     const uploads = holdUploads();
     await openStudio('board');
     const view = { x: 0, y: 0, width: 2000, height: 1000 };
@@ -1119,12 +1123,16 @@ describe('moving a held spot the board took', () => {
     await waitFor(() => expect(board.placeholders).toHaveLength(1));
     expect(board.outside).toBeNull();
     // The only slot left reaches past the view's bottom edge, into the band.
-    const under = slot(500, 1000 - Math.round(h / 2));
+    const under = slot(500, 1000 - Math.round(h / part));
     arrive(around([under]));
     await uploads.open();
     await waitFor(() => expect(addOps()).toHaveLength(1));
     expect(addOps()[0].at).toEqual({ x: under.x, y: under.y });
-    await waitFor(() => expect(board.outside?.rects).toEqual([under]));
+    if (chip) await waitFor(() => expect(board.outside?.rects).toEqual([under]));
+    else {
+      await new Promise((done) => setTimeout(done, 30));
+      expect(board.outside).toBeNull();
+    }
   });
 
   it('X9: two spots of one paste moved together never land on the same slot', async () => {
@@ -1805,6 +1813,28 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     // The fade's end (the board's) lets the spot go.
     act(() => { board.filledDone!([spot.id]); });
     await waitFor(() => expect(board.placeholders).toEqual([]));
+  });
+
+  // GM r13: the chip only while less than half the tile is in view, here too.
+  it.each([[0.49, true], [0.5, false]] as const)('back on the board, its spot %s in view: chip %s', async (inView, chip) => {
+    const uploads = holdUploads();
+    await openStudio('board');
+    paste(clipboard({ files: [png('river.png')] }));
+    await waitFor(() => expect(board.placeholders).toHaveLength(1));
+    const spot = board.placeholders[0];
+    await toBoard('new');
+    await uploads.open();
+    await waitFor(() => expect(addOps()).toHaveLength(1));
+    // The view's left edge cuts the spot, leaving `inView` of its width in view.
+    board.view = { x: spot.x + spot.width * (1 - inView), y: spot.y - 1000, width: 4000, height: 3000 };
+    await toBoard('g1');
+    await screen.findByDisplayValue('Global board');
+    await waitFor(() => expect(board.placeholders).toEqual([expect.objectContaining({ id: spot.id, away: false })]));
+    if (chip) await waitFor(() => expect(board.outside?.rects).toEqual([{ x: spot.x, y: spot.y, width: spot.width, height: spot.height }]));
+    else {
+      await new Promise((done) => setTimeout(done, 40));
+      expect(board.outside).toBeNull();
+    }
   });
 
   it('LOW-3: a landing the board\'s draft couldn\'t take (edits unsent) is read again on return; the draft keeps its own edit', async () => {
@@ -3629,6 +3659,141 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     await screen.findByDisplayValue('Global board');
     await new Promise((done) => setTimeout(done, 30));
     expect(screen.queryByText(line)).toBeNull();
+  });
+
+  // Round 6e: a create carries the unsaved board's id, so one sent again after
+  // its answer was lost returns the board the first one made.
+  describe('round 6e: a create sent again makes one board', () => {
+    const lake = '/api/outputs/chat-uploads/lake.png';
+    const requestIds = () => api.createMoodboard.mock.calls.map((call) => (call[0] as { requestId?: string }).requestId);
+    /** made1's server, answering a create it has seen (by requestId) with that board as it is now, marked
+     *  `repeated`; the next create that makes a board has its answer lost (`cut`); an add of an image the
+     *  board has is skipped, as the server skips it. */
+    const onceServer = (made: ReturnType<typeof madeServer>, cut: { next: boolean; hold?: Promise<void> }) => {
+      const create = api.createMoodboard.getMockImplementation()!;
+      const seen = new Set<string>();
+      api.createMoodboard.mockImplementation(async (body: Partial<Moodboard> & { requestId?: string }) => {
+        if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards');
+        if (body.requestId && seen.has(body.requestId)) return { ...clone(made.board!), repeated: true };
+        const answer = await create(body);
+        if (body.requestId) seen.add(body.requestId);
+        if (cut.next) { cut.next = false; if (cut.hold) await cut.hold; throw dropped(); }
+        return answer;
+      });
+      const edit = api.editMoodboard.getMockImplementation()!;
+      api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], base?: number) => edit(id, id !== 'made1' ? ops
+        : ops.map((op) => (op.op === 'add' ? { ...op, images: op.images.filter((img) => !made.board!.images.some((have) => have.id === img.id)) } : op))
+          .filter((op) => op.op !== 'add' || op.images.length > 0), base));
+    };
+
+    it('an add that saves a board the person left, the create made on the server but its answer lost: sent again on reconnect, one board', async () => {
+      const made = madeServer();
+      onceServer(made, { next: true });
+      const uploads = holdUploads();
+      await openNew();
+      paste(clipboard({ files: [png('river.png')] }));
+      await waitFor(() => expect(board.placeholders).toHaveLength(1));
+      await toBoard('g1');
+      await screen.findByDisplayValue('Global board');
+      const probe = probeAnswers('offline');
+      try {
+        await uploads.open();
+        await waitFor(() => expect(isBackendOffline()).toBe(true));
+        await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveError: null, pendingSaveId: null, savedId: null, dirty: true }));
+      } finally { probe.stop(); }
+      // The first send made the board; its answer never came back.
+      expect(made.creates).toHaveLength(1);
+      await online();
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', saveError: null }));
+      expect(api.createMoodboard).toHaveBeenCalledTimes(2);
+      const [first, again] = requestIds();
+      expect(first).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+      expect(again).toBe(first);
+      expect(made.creates).toHaveLength(1);
+      expect(made.board?.images.map((img) => img.url)).toEqual([river]);
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null }));
+    });
+
+    it('New\'s save whose answer was lost, an image added while it was out: sent again, the same board, and the new image goes on it', async () => {
+      const made = madeServer();
+      const held = gate();
+      onceServer(made, { next: true, hold: held.held });
+      await newWithAdd(made);
+      await held.open();
+      // The first send went with no image (river was still uploading) and made the board.
+      expect(made.creates).toEqual([expect.objectContaining({ images: [] })]);
+      await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error',
+        saveError: expect.objectContaining({ heading: "Couldn't save the board." }) }));
+      // The person's Retry sends it again.
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
+      expect(made.creates).toHaveLength(1);
+      expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(requestIds()).size).toBe(1);
+      // The repeat's board lacked the second image: it went as an edit, not lost in the rebase.
+      expect(made.edits.flat().filter((op) => op.op === 'add').flatMap((op) => (op as Extract<MoodboardOp, { op: 'add' }>).images.map((img) => img.url)))
+        .toEqual([river]);
+      await waitFor(() => expect(urlsOf(madeKey)).toEqual([river]));
+      await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null, saveError: null }));
+    });
+
+    it('a repeat whose name differs from the draft\'s (renamed while the create was out) sends the name next', async () => {
+      const made = madeServer();
+      const held = gate();
+      onceServer(made, { next: true, hold: held.held });
+      await openNew();
+      paste(clipboard({ files: [png('river.png')] }));
+      await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+      clickNew();
+      await waitFor(() => expect(made.creates).toHaveLength(1));
+      act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk' })); });
+      await held.open();
+      await waitFor(() => expect(made.board?.name).toBe('Dusk'));
+      expect(made.creates).toHaveLength(1);
+      expect(made.creates[0]).toMatchObject({ name: 'Untitled Moodboard' });
+      expect(made.puts).toEqual([expect.objectContaining({ name: 'Dusk' })]);
+      expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(requestIds()).size).toBe(1);
+    });
+
+    it('every send of one draft carries the same id; a fresh draft gets its own', async () => {
+      madeServer();
+      api.createMoodboard.mockRejectedValue(new RequestFailedError("Couldn't save the board.", 500, { reason: "Nebula didn't respond. Try again." }));
+      await openNew();
+      paste(clipboard({ files: [png('river.png')] }));
+      await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
+      clickNew();
+      await waitFor(() => expect(store().entries[newKey]?.saveState).toBe('error'));
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(2));
+      await waitFor(() => expect(store().entries[newKey]?.saveState).toBe('error'));
+      const before = requestIds();
+      expect(before[0]).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+      expect(new Set(before)).toEqual(new Set([before[0]]));
+      act(() => { store().reset(newKey, fresh()); store().patch(newKey, { loaded: true }); });
+      expect(store().entries[newKey].createRequestId).toBeUndefined();
+      paste(clipboard({ files: [png('lake.png')] }));
+      await waitFor(() => expect(urlsOf(newKey)).toEqual([lake]));
+      clickNew();
+      await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBeGreaterThan(before.length));
+      const after = requestIds().slice(before.length);
+      expect(after[0]).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+      expect(after[0]).not.toBe(before[0]);
+      expect(new Set(after)).toEqual(new Set([after[0]]));
+    });
+
+    it('a saved board\'s PUT never carries a create id', async () => {
+      const made = madeServer();
+      await openNew();
+      paste(clipboard({ files: [png('river.png')] }));
+      clickNew();
+      await waitFor(() => expect(made.creates).toHaveLength(1));
+      expect(made.creates[0]).toHaveProperty('requestId');
+      await toBoard('made1');
+      act(() => { store().edit(madeKey, (draft) => ({ ...(draft as object), name: 'Renamed' })); });
+      await waitFor(() => expect(made.puts.length).toBeGreaterThan(0));
+      expect(made.puts.every((put) => !('requestId' in put))).toBe(true);
+    });
   });
 });
 

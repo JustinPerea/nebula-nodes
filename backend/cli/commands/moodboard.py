@@ -511,7 +511,7 @@ def run(client: NebulaClient, args) -> None:
         elif verb == "new":
             board, skipped = boards.create_board(
                 api, args.name, args.sources, project=args.project, mode=args.mode, strength=args.strength,
-                notes=args.notes or "", headers=headers)
+                notes=args.notes or "", request_id=args.request_id, headers=headers)
             if args.json:
                 _print_json(boards.brief(board))
                 return
@@ -698,6 +698,9 @@ def add_parser(sub) -> None:
                        help="look (style), world (setting) or subject (default: look)")
     new_p.add_argument("--strength", type=float, default=0.7, help="How strongly it steers, 0 to 1 (default 0.7)")
     new_p.add_argument("--notes", help="Notes for the whole board")
+    new_p.add_argument("--request-id", dest="request_id",
+                       help="Your own id for this create (8 to 128 letters, digits, '-' or '_'). Run again "
+                            "with the same id, it gives back the board the first run made instead of a second one")
     new_p.add_argument("--json", action="store_true", help="Print JSON")
 
     add_p = msub.add_parser("add", help="Add files, folders and links to a board")

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { insideView, nearestFreeAnywhere, placeTiles, respot } from './boardPlacement';
 import type { NodeRect } from './nodePlacement';
+import { DROP_GAP } from './boardDrop';
 
 // Where new tiles go on the Board view (GM - Design, #210 rulings): one helper
 // for paste, Add images and drop. Never on a tile, in view when there's room,
@@ -84,9 +85,26 @@ describe('no room in view', () => {
     expect(nearestFreeAnywhere({ x: 500, y: 500, width: 50, height: 50 }, crowd)).toEqual({ x: 500, y: 500 });
   });
 
-  it('a tile bigger than the view goes outside it', () => {
-    const { outside } = placeTiles({ at: { x: 0, y: 0 }, sizes: [[500, 500]], occupied: [], view: { x: 0, y: 0, width: 200, height: 200 } });
-    expect(outside).toEqual([0]);
+  it('a tile bigger than the view gets the chip unless it covers the view\'s centre (GM r4 answer 9, r13)', () => {
+    const view = { x: 0, y: 0, width: 200, height: 200 };
+    // Over the view, filling it: the person sees it.
+    expect(placeTiles({ at: { x: 0, y: 0 }, sizes: [[500, 500]], occupied: [], view }).outside).toEqual([]);
+    // The view is taken: it goes past the tile there, off the view.
+    const taken = { x: -300, y: -300, width: 800, height: 800 };
+    const placed = placeTiles({ at: { x: 0, y: 0 }, sizes: [[500, 500]], occupied: [taken], view });
+    expect(placed.outside).toEqual([0]);
+  });
+
+  // GM r13: a paste's tile is reported only while less than half of it is in view.
+  it('a paste reported by area: 49% in view takes the chip, 50% does not', () => {
+    const view = { x: 0, y: 0, width: 1000, height: 700 };
+    // A 200 x 100 tile; the view's room taken but for a spot past its right edge.
+    const block = (inView: number) => ({ x: -10, y: -2000, width: 1000 - 200 * inView - DROP_GAP + 10, height: 5000 });
+    for (const [inView, chip] of [[0.49, true], [0.5, false]] as const) {
+      const { spots, outside } = placeTiles({ at: { x: 500, y: 350 }, sizes: [[200, 100]], occupied: [block(inView)], view });
+      expect(spots[0].x).toBe(Math.round(1000 - 200 * inView));
+      expect(outside).toEqual(chip ? [0] : []);
+    }
   });
 });
 

@@ -778,7 +778,10 @@ export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
   return response.json();
 }
 
-export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodboard> {
+/** A board create. `requestId` (once per unsaved board) makes it safe to send
+ *  again: the same id answers with the board the first send made, marked
+ *  `repeated`, as it is now, instead of making a second one. */
+export async function createMoodboard(body: MoodboardCreateInput & { requestId?: string }): Promise<Moodboard & { repeated?: boolean }> {
   const response = await apiRequest("Couldn't create the board.", '/api/moodboards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -4304,6 +4304,7 @@ Studio shows. Both use `backend/moodboard_client.py`.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard new "Dusk" ./refs --request-id dusk-board-0001   # safe to run again: the same id gives back the same board
 nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5 --strength 0.6

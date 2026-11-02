@@ -185,7 +185,8 @@ def board_scopes(root: Path) -> list[Path]:
     """The folders under the moodboard root that hold boards: each scope
     (``_global`` and every project's) and the trash (``.trash``), whose
     boards a restore brings back. Other dot folders are side files kept
-    beside the boards (``.notes``: Updates, services/agent_notes.py; later
+    beside the boards (``.notes``: Updates, services/agent_notes.py;
+    ``.creates``: the request ids of creates, ``_CREATES_DIR``; later
     ``.history`` and ``.runs``), never boards, so the start-up scans
     (``migrate_store``, ``save_colour_checks``) never rewrite them."""
     from services.asset_trash import TRASH_DIR
@@ -194,6 +195,49 @@ def board_scopes(root: Path) -> list[Path]:
         return []
     return sorted(path for path in root.iterdir()
                   if path.is_dir() and (not is_trash_folder(path) or path.name == TRASH_DIR))
+
+
+# A create may carry the client's request id (``requestId``): Moodboard
+# Studio makes one per unsaved board, and an agent may send its own. Sent
+# again (the answer to the first send was lost on the way back), the same
+# id returns the board that send made instead of a second one. Each id is a
+# small file in this side folder, ``{"id": <board id>, "createdAt": ...}``,
+# so it holds across a restart; the scans skip dot folders, so it is never
+# read as a scope. A record whose board is gone (deleted, purged) is ignored
+# and the create goes ahead.
+_CREATES_DIR = ".creates"
+REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+# One lock for creates that carry a request id: the check and the write are
+# one step, so two sends of one id racing each other still make one board.
+_CREATES_LOCK = threading.Lock()
+
+
+def _validate_request_id(request_id: Any) -> str:
+    if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):
+        raise ValueError("requestId must be 8 to 128 letters, digits, '-' or '_'")
+    return request_id
+
+
+def _created_for(root: Path, request_id: str) -> dict[str, Any] | None:
+    """The live board an earlier create with ``request_id`` made, laid out,
+    or None (no such create, or its board is gone)."""
+    record = root / _CREATES_DIR / f"{request_id}.json"
+    try:
+        board_id = json.loads(record.read_text(encoding="utf-8")).get("id")
+    except (FileNotFoundError, ValueError, AttributeError):
+        return None
+    if not isinstance(board_id, str) or not _MOODBOARD_ID_RE.fullmatch(board_id):
+        return None
+    path = _find_moodboard_file(root, board_id)
+    if path is None:
+        return None
+    return _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
+
+
+def _note_created(root: Path, request_id: str, moodboard_id: str) -> None:
+    folder = root / _CREATES_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    _write_json(folder / f"{request_id}.json", {"id": moodboard_id, "createdAt": _now_iso()})
 
 
 def _now_iso() -> str:
@@ -671,13 +715,85 @@ class MoodboardStore:
         sendNotes: bool | None = None,
         coverImageId: str | None = None,
         by: str = "agent",
+        requestId: str | None = None,
         **extra: Any,
     ) -> dict[str, Any]:
         """A new board. Its images are laid out from the start (the cards
         they ask for, else placed by Nebula), so it is saved with
         ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
         any hand-written brief. ``coverImageId`` names one of ``images`` by
-        id (the board opens on it); left out, it opens on #1."""
+        id (the board opens on it); left out, it opens on #1. ``requestId``
+        (optional) makes the create safe to send again: see
+        ``create_once``."""
+        return self.create_once(
+            name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+            briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, requestId, **extra,
+        )[0]
+
+    def create_once(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None = None,
+        notes: str = "",
+        mode: str = "look",
+        strength: float = 0.7,
+        analysis: dict[str, Any] | None = None,
+        projectId: str | None = None,
+        direction: str = "",
+        avoid: list[str] | None = None,
+        pinnedColors: dict[str, Any] | None = None,
+        briefOverride: dict[str, Any] | None = None,
+        clashMode: str | None = None,
+        colorChoices: dict[str, Any] | None = None,
+        sendNotes: bool | None = None,
+        coverImageId: str | None = None,
+        by: str = "agent",
+        requestId: str | None = None,
+        **extra: Any,
+    ) -> tuple[dict[str, Any], bool]:
+        """``create``, saying whether it made a board: (board, True) when it
+        did; (board, False) when ``requestId`` was sent before and that
+        board is still live, which is returned as it is now (same id, same
+        version) and nothing is written. Without ``requestId`` every call
+        makes a board, as before."""
+        if requestId is None:
+            return self._create(
+                name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, **extra,
+            ), True
+        request_id = _validate_request_id(requestId)
+        root = _moodboard_root()
+        with _CREATES_LOCK:
+            earlier = _created_for(root, request_id)
+            if earlier is not None:
+                return earlier, False
+            moodboard = self._create(
+                name, images, notes, mode, strength, analysis, projectId, direction, avoid, pinnedColors,
+                briefOverride, clashMode, colorChoices, sendNotes, coverImageId, by, **extra,
+            )
+            _note_created(root, request_id, moodboard["id"])
+        return moodboard, True
+
+    def _create(
+        self,
+        name: str,
+        images: list[dict[str, Any]] | None,
+        notes: str,
+        mode: str,
+        strength: float,
+        analysis: dict[str, Any] | None,
+        projectId: str | None,
+        direction: str,
+        avoid: list[str] | None,
+        pinnedColors: dict[str, Any] | None,
+        briefOverride: dict[str, Any] | None,
+        clashMode: str | None,
+        colorChoices: dict[str, Any] | None,
+        sendNotes: bool | None,
+        coverImageId: str | None,
+        by: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
         brief = _brief()
         _guard_send_notes(False, sendNotes, by)
         name = str(name or "").strip()

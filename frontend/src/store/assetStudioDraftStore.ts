@@ -32,6 +32,11 @@ export interface AssetStudioDraftEntry<D = unknown> {
   epoch: number;
   pendingSaveId: string | null;
   pendingAnalysisId: string | null;
+  /** An unsaved asset's create id, made at its first create and sent with
+   * every create of it after (a board's: lib/api createMoodboard), so a
+   * create sent again after its answer was lost returns the asset the first
+   * one made. A new draft (reset) starts without one. */
+  createRequestId?: string;
 }
 
 /** A project draft is keyed under the canvas project it was started in

@@ -49,7 +49,7 @@ import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, op
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
 import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
-import { insideView, placeTiles, respot, spotFree } from '../../lib/boardPlacement';
+import { outsideForChip, placeTiles, respot, spotFree } from '../../lib/boardPlacement';
 import type { NodeRect } from '../../lib/nodePlacement';
 import { sizeFor } from '../../lib/moodboardLayout';
 import { useBoardCanvasStore, useBoardSelection, type MoodboardView } from '../../store/boardCanvasStore';
@@ -228,15 +228,18 @@ async function saveAway(key: string, away: 'background' | 'resend' | null = null
   const sending = attempt.entry.draft as MoodboardDraft;
   try {
     const sent = new Set(sending.pendingOps ?? []);
-    const result = await createMoodboard(createBody(sending));
+    const result = await createMoodboard(createBody(sending, createRequestIdFor(at)));
     const now = useAssetStudioDraftStore.getState().entries[at];
     if (now) {
       const drafted = sending as Partial<Record<BoardFieldKey, unknown>>;
       const asSent = Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
         .map((field) => [field, drafted[field]]));
-      store.patch(at, { draft: draftOnBoard(withBriefFields(now.draft as MoodboardDraft), result, sent, asSent), thumbnail: result.thumbnail });
+      const draft = withBriefFields(now.draft as MoodboardDraft);
+      store.patch(at, { draft: result.repeated ? draftOnBoard(draft, result) : draftOnBoard(draft, result, sent, asSent),
+        thumbnail: result.thumbnail });
     }
     if (store.finishSave(at, attempt.id, attempt.revision, result.id, result.thumbnail)) {
+      if (result.repeated) markLeftToSend(at);
       const savedKey = assetStudioDraftKey('moodboard', result.projectId ? 'project' : 'global', result.id, result.projectId);
       store.copyTo(at, savedKey);
       void sendQueued(savedKey, result.id);
@@ -366,6 +369,34 @@ function unsentOf(draft: MoodboardDraft, fields: Partial<Record<BoardFieldKey, u
   return changed;
 }
 
+/** The draft at `key` still holds ops or board fields the server hasn't (a
+ *  save that ended left them): it is dirty again, so they are sent. */
+function markLeftToSend(key: string) {
+  const store = useAssetStudioDraftStore.getState();
+  const entry = store.entries[resolveAssetStudioDraftKey(store, key)];
+  const draft = entry?.draft as MoodboardDraft | undefined;
+  if (entry && !entry.dirty && draft && ((draft.pendingOps ?? []).length || Object.keys(unsentFields(draft)).length)) {
+    store.patch(key, { dirty: true, saveState: 'draft' });
+  }
+}
+
+/**
+ * The id every create of the unsaved board at `key` carries (round 6e): made
+ * at its first create and kept on its draft entry, so a create sent again
+ * after its answer was lost (New's save that got no answer, then Retry; an
+ * add's save sent again on reconnect) returns the board the first one made
+ * instead of a second board. A new draft gets a new one.
+ */
+function createRequestIdFor(key: string): string {
+  const store = useAssetStudioDraftStore.getState();
+  const at = resolveAssetStudioDraftKey(store, key);
+  const made = store.entries[at]?.createRequestId;
+  if (made) return made;
+  const id = crypto.randomUUID();
+  store.patch(at, { createRequestId: id });
+  return id;
+}
+
 /**
  * What a new board's draft took while saveAway's create was out (an add
  * that landed on the open board meanwhile), sent as the open Studio's save
@@ -439,11 +470,7 @@ async function sendQueued(key: string, savedId: string, resend: SendOwns | null 
     // same way as this one.
     if (store.finishSave(key, attempt.id, attempt.revision, savedId, thumbnail)) {
       dropWaitingSend(savedId);
-      const left = entryNow();
-      const draft = left?.draft as MoodboardDraft | undefined;
-      if (left && !left.dirty && draft && ((draft.pendingOps ?? []).length || Object.keys(unsentFields(draft)).length)) {
-        store.patch(key, { dirty: true, saveState: 'draft' });
-      }
+      markLeftToSend(key);
       if (entryNow()?.dirty && !isOpenBoard(key)) void sendQueued(key, savedId);
     }
   } catch (err) {
@@ -580,9 +607,11 @@ function keepFailedAway(board: BoardRef, ops: MoodboardOp[], aspects: Record<str
   if (err !== null && !isOfflineRefusal(err)) failed();
 }
 
-/** A new board's first save: everything but the checked-edit bookkeeping. */
-function createBody(draft: MoodboardDraft) {
-  const body: MoodboardDraft = { ...withBriefFields(draft), name: draft.name.trim(), images: provisionalForCreate(draft.images) };
+/** A new board's first save: everything but the checked-edit bookkeeping,
+ *  with the board's create id (createRequestIdFor) when it is a create. */
+function createBody(draft: MoodboardDraft, requestId?: string) {
+  const body: MoodboardDraft & { requestId?: string } = { ...withBriefFields(draft), name: draft.name.trim(),
+    images: provisionalForCreate(draft.images), ...(requestId ? { requestId } : {}) };
   delete body.base;
   delete body.version;
   delete body.pendingOps;
@@ -942,16 +971,16 @@ export function MoodboardStudioView() {
     if (loaded && savedId) void follow();
   }, [key, loaded, savedId, follow]);
 
-  /** Adds a 409 replay moved (freeQueuedAdds) that are now outside the view
-   *  they were made in get the edge chip, as a moved held spot does
-   *  (review 8, NIT-3; GM r11 3: the held spot's rule). */
+  /** Adds a 409 replay moved (freeQueuedAdds) with less than half of them
+   *  now in the view they were made in get the edge chip, as a moved held
+   *  spot does (review 8, NIT-3; GM r11 3: the held spot's rule; GM r13). */
   const chipMovedAdds = useCallback((moved: ReadonlyArray<Extract<MoodboardOp, { op: 'add' }>>) => {
     if (!isCurrent()) return;
     const outside = moved.flatMap((op) => {
       const seen = addViews.get(op);
       if (!seen?.view || !op.at) return [];
       const rect = { x: op.at.x, y: op.at.y, width: seen.size[0], height: seen.size[1] };
-      return insideView(rect, seen.view) ? [] : [{ rect, thumb: op.images[0]?.url ?? null }];
+      return outsideForChip(rect, seen.view) ? [{ rect, thumb: op.images[0]?.url ?? null }] : [];
     });
     if (outside.length === 0) return;
     outsideSeq.current += 1;
@@ -970,12 +999,22 @@ export function MoodboardStudioView() {
     try {
       const savedId = attempt.entry.savedId;
       let result: Moodboard | null = null;
+      let repeated = false;
       if (!savedId) {
         const sent = new Set(currentDraft.pendingOps ?? []);
-        result = await createMoodboard(createBody(currentDraft));
+        const made = await createMoodboard(createBody(currentDraft, createRequestIdFor(key)));
         const drafted = currentDraft as Partial<Record<BoardFieldKey, unknown>>;
-        moveDraft(result, sent, Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
-          .map((field) => [field, drafted[field]])));
+        // A repeat (round 6e): the board is the earlier send's, as it is now.
+        // None of this send counts as on it; the draft's ops and fields
+        // replay on top and go next (an add of an image it has is skipped).
+        if (made.repeated) {
+          repeated = true;
+          moveDraft(made);
+        } else {
+          moveDraft(made, sent, Object.fromEntries(BOARD_FIELD_KEYS.filter((field) => field !== 'analysis' && field in drafted)
+            .map((field) => [field, drafted[field]])));
+        }
+        result = made;
       } else {
         // Image edits go as checked edits, then the board fields the person
         // changed go on a PUT; both with the version last read. Someone else
@@ -1043,6 +1082,7 @@ export function MoodboardStudioView() {
       const id = result?.id ?? savedId!;
       forgetUnsentSteps();
       if (!store.finishSave(key, attempt.id, attempt.revision, id, thumbnail)) return null;
+      if (repeated) markLeftToSend(key);
       if (!savedId && result) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
         const selectedAtCompletion = isCurrent();
@@ -1348,9 +1388,9 @@ export function MoodboardStudioView() {
   };
 
   /** The chip after a held spot moved (review 4, LOW-3): it points at where
-   *  the tiles are now. A moved spot no longer wholly in the paste-time view
-   *  joins it (a new chip if there was none); one that came into view leaves
-   *  it. Its thumbnail is the first outside tile's image. */
+   *  the tiles are now. A moved spot with less than half of it in the
+   *  paste-time view joins it (a new chip if there was none; GM r13); one
+   *  that came into view leaves it. Its thumbnail is the first outside tile's image. */
   const followMovedSpots = (chip: number | null, holders: BoardPlaceholder[], live: boolean[],
     spotOf: (holder: BoardPlaceholder) => { x: number; y: number }, target: BoardTarget, firstThumb: string | null) => {
     const view = target.view;
@@ -1359,13 +1399,13 @@ export function MoodboardStudioView() {
       if (!live[index]) return [];
       const rect = { ...spotOf(holder), width: holder.width, height: holder.height };
       // An aimed tile counts as outside only when wholly out of view (GM r4
-      // answers 3 and 4), or reaching into the toolbar band (lib/boardPlacement).
+      // answers 3 and 4), or reaching into the toolbar band (lib/boardPlacement);
+      // any tile only while less than half of it is in view (GM r13).
       const bottom = view.y + view.height;
-      const out = target.aim && index === 0
-        ? rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= bottom || rect.y + rect.height <= view.y
-          || Boolean(target.band && rect.y + rect.height > bottom)
-        : !insideView(rect, view);
-      return out ? [rect] : [];
+      const aimedOut = !(target.aim && index === 0)
+        || rect.x >= view.x + view.width || rect.x + rect.width <= view.x || rect.y >= bottom || rect.y + rect.height <= view.y
+        || Boolean(target.band && rect.y + rect.height > bottom);
+      return aimedOut && outsideForChip(rect, view) ? [rect] : [];
     });
     if (chip !== null) {
       setOutsideTiles((current) => (current?.id !== chip ? current
@@ -1637,7 +1677,7 @@ export function MoodboardStudioView() {
         return;
       }
       const rects = awayHere.map((holder) => ({ x: holder.x, y: holder.y, width: holder.width, height: holder.height }))
-        .filter((rect) => !insideView(rect, shownView));
+        .filter((rect) => outsideForChip(rect, shownView));
       if (rects.length === 0) return;
       outsideSeq.current += 1;
       setOutsideTiles({ id: outsideSeq.current, rects, thumb: awayHere[0].filled?.url ?? null });
