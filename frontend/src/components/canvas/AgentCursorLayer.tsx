@@ -26,6 +26,7 @@ import {
 } from '../../lib/agentCursorPlanner';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
+  AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
   AGENT_CURSOR_STACK,
@@ -82,7 +83,14 @@ interface FieldEntry {
    *  a later report means the node moved, not the agent. */
   node: string | null;
   seq: number;
+  /** Its say pill shows: the cursor stacked below it steps past name and say. */
+  say: boolean;
+  /** Where its node was drawn when `target` was read (null off a node). */
+  nodeAt?: Point | null;
 }
+
+const samePoint = (a: Point | null | undefined, b: Point | null | undefined) =>
+  a === b || (Boolean(a) && Boolean(b) && a!.x === b!.x && a!.y === b!.y);
 
 class CursorField {
   /** Each cursor's resolved target and its place in the stack. */
@@ -90,6 +98,8 @@ class CursorField {
   /** Each cursor's motion, so a new flight can see the others still under way. */
   readonly motions = new Map<string, CursorMotion>();
   readonly wakers = new Map<string, () => void>();
+  /** A say shown before the cursor's first report. */
+  private readonly pendingSay = new Map<string, boolean>();
   readonly pointerListeners = new Set<() => void>();
   pointer: Point | null = null;
   /** The pane's box, read once and kept until it resizes or the viewport moves. */
@@ -101,27 +111,51 @@ class CursorField {
   visibilityEpoch = 0;
   private arrivals = 0;
 
-  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0): void {
-    this.purge();
-    const before = this.targets.get(key);
-    if (before && before.target.x === target.x && before.target.y === target.y) {
-      if (before.node !== node || before.seq !== seq) this.targets.set(key, { ...before, node, seq });
+  /** A cursor's say pill showed or went: the cursors stacked below it glide
+   *  to their new step on the land spring (GM - Design, PR #211 r13 item 2). */
+  setSay(key: string, say: boolean): void {
+    const entry = this.targets.get(key);
+    if (!entry) {
+      this.pendingSay.set(key, say); // before its first report
       return;
     }
-    const carried = before !== undefined && before.node === node && before.seq === seq && node !== null;
-    this.place(key, before, target, zoom, node, seq);
-    if (carried) {
+    if (entry.say === say) return;
+    this.targets.set(key, { ...entry, say });
+    for (const [other, wake] of this.wakers) if (other !== key) wake();
+  }
+
+  /** A cursor's resolved target, its node and event, and where that node
+   *  is now (`nodeAt`, its drawn position), read this frame. */
+  report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null): void {
+    this.purge();
+    const before = this.targets.get(key);
+    let changed = false;
+    if (before && before.target.x === target.x && before.target.y === target.y) {
+      if (before.node !== node || before.seq !== seq || !samePoint(before.nodeAt, nodeAt)) {
+        this.targets.set(key, { ...before, node, seq, nodeAt });
+      }
+    } else {
+      this.place(key, before, target, zoom, node, seq);
+      this.targets.set(key, { ...this.targets.get(key)!, nodeAt });
+      changed = true;
+    }
+    if (node !== null && nodeAt) {
       // The node moved, so it carried every cursor on it the same way: move
       // them now, so the stack is read from where they all are this frame,
-      // whichever cursor's frame runs first.
-      const dx = target.x - before.target.x;
-      const dy = target.y - before.target.y;
+      // whichever cursor's frame runs first. Each by how far the node moved
+      // since its own last report, so a cursor already moved this frame
+      // isn't moved again (round 4c: the column follows its head's tip).
       for (const [other, o] of this.targets) {
-        if (other === key || o.node !== node) continue;
+        if (other === key || o.node !== node || !o.nodeAt) continue;
+        const dx = nodeAt.x - o.nodeAt.x;
+        const dy = nodeAt.y - o.nodeAt.y;
+        if (dx === 0 && dy === 0) continue;
         this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq);
+        this.targets.set(other, { ...this.targets.get(other)!, nodeAt });
+        changed = true;
       }
     }
-    for (const [other, wake] of this.wakers) if (other !== key) wake();
+    if (changed) for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
   private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number): void {
@@ -138,7 +172,7 @@ class CursorField {
       const dx = target.x - before.target.x;
       const dy = target.y - before.target.y;
       this.targets.set(key, meets
-        ? { target, since: Infinity, at: null, node, seq }
+        ? { target, since: Infinity, at: null, node, seq, say: before.say }
         : { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
       return;
     }
@@ -147,7 +181,10 @@ class CursorField {
     // way to a new spot and is stamped again on landing.
     const anchor = before?.at ?? null;
     const stays = before && anchor && near(anchor, target);
-    this.targets.set(key, stays ? { ...before, target, node, seq } : { target, since: Infinity, at: null, node, seq });
+    this.targets.set(key, stays
+      ? { ...before, target, node, seq }
+      : { target, since: Infinity, at: null, node, seq, say: before?.say ?? this.pendingSay.get(key) ?? false });
+    this.pendingSay.delete(key);
   }
 
   /** The cursor visibly landed: it takes its place in the stack now, so the
@@ -169,6 +206,7 @@ class CursorField {
       key: k,
       target: v.target,
       since: v.since !== Infinity ? v.since : UNLANDED + this.etaMs(k),
+      say: v.say,
     }));
     return deStack(entries, zoom).get(key);
   }
@@ -218,6 +256,7 @@ class CursorField {
 
   forget(key: string): void {
     this.targets.delete(key);
+    this.pendingSay.delete(key);
     this.motions.delete(key);
     this.wakers.delete(key);
     for (const wake of this.wakers.values()) wake();
@@ -276,6 +315,13 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
   const sayLeaving = sayFadeSeq === cursor.seq;
   const idle = idleSeq === cursor.seq;
 
+  // A pill hidden by a takeover stays hidden for the rest of that exit, even
+  // if the new holder leaves first (GM - Design, PR #211 review 5, item 6).
+  const [takenLatched, setTakenLatched] = useState(false);
+  if (leaving && nameTaken && !takenLatched) setTakenLatched(true);
+  if (!leaving && takenLatched) setTakenLatched(false);
+  const taken = leaving && (nameTaken || takenLatched);
+
   const dragging = cursor.action === 'drag' && cursor.from !== undefined;
   const fill = sessionFill(cursor.color, cursor.session);
   const name = sessionName(cursor.name, cursor.session);
@@ -284,6 +330,10 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
   // spring about 3 s after the last event, then goes; at once under reduced
   // motion. A new event clears both timers, so a fade in progress stops.
   useEffect(() => {
+    // Leaving: the say and the dimming stay as they are; the whole cursor
+    // fades on the opacity spring, no pill on a curve of its own (GM -
+    // Design, PR #211 review 5, item 4).
+    if (leaving) return undefined;
     const seq = cursor.seq;
     // A replayed cursor (a tab that just connected) is already part way
     // through both, by its last event's age (GM - Design, PR #211 r3). A live
@@ -304,15 +354,20 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
       window.clearTimeout(idleTimer);
     };
-  }, [cursor.seq, cursor.receivedAt, cursor.replayed]);
+  }, [cursor.seq, cursor.receivedAt, cursor.replayed, leaving]);
 
   // What the loop, the pointer and the timers read between renders.
   useLayoutEffect(() => {
     sayShownRef.current = showSay && !idle;
     idleRef.current = idle;
-    peersRef.current = peers;
+    // A leaving cursor keeps the peers it had as its exit began, so its
+    // label keeps its layout (review 5, M1).
+    if (!leaving) peersRef.current = peers;
     leavingRef.current = leaving;
     exited.current = onExited;
+    // Its label block, for the cursor stacked below it (the say pill counts
+    // while it is drawn, its fade out included).
+    if (!leaving) field.setSay(cursor.key, showSay && !idle);
   });
 
   useLayoutEffect(() => {
@@ -398,7 +453,8 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
     // the pointer and the timers: never React state per frame.
     updateLabel.current = () => {
       const el = cursorRef.current;
-      if (!el) return;
+      // A leaving cursor's label keeps the layout it had (review 5, M1).
+      if (!el || leavingRef.current) return;
       const m = motion.current;
       const sinceFirstSightMs = firstSightAt.current === null ? 0 : performance.now() - firstSightAt.current;
       const shown = nameVisible({
@@ -445,7 +501,11 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       const start = dragging && cursor.from ? resolveAnchor(cursor.from, lookup) : null;
       if (!resolved) return; // Node not drawn yet; the store subscription wakes us.
       const z = zoomRef.current;
-      field.report(cursor.key, resolved, z, 'nodeId' in cursor.target ? cursor.target.nodeId : null, cursor.seq);
+      const nodeId = 'nodeId' in cursor.target ? cursor.target.nodeId : null;
+      const nodeAt = nodeId !== null
+        ? (lookup.get(nodeId) as { internals?: { positionAbsolute?: Point } } | undefined)?.internals?.positionAbsolute ?? null
+        : null;
+      field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y });
       const target = field.spot(cursor.key, z) ?? resolved;
       const goal = phase.current === 'pickup' && start ? start : target;
       const pointer = pointerInFlow();
@@ -590,8 +650,10 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       field.pointerListeners.add(onPointer);
     }
 
-    phase.current = dragging && !reduced ? 'pickup' : 'travel';
-    planPending.current = true;
+    if (!leaving) {
+      phase.current = dragging && !reduced ? 'pickup' : 'travel';
+      planPending.current = true;
+    }
     lastTime.current = null;
     wake.current();
     // Nodes move, resize, or appear after a graph sync: follow them.
@@ -651,7 +713,7 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         data-edge={pillEdge(fill) ?? undefined}
         data-idle={idle ? 'true' : undefined}
         data-leaving={leaving ? 'true' : undefined}
-        data-taken={leaving && nameTaken ? 'true' : undefined}
+        data-taken={taken ? 'true' : undefined}
         role={leaving ? undefined : 'status'}
         aria-hidden={leaving ? true : undefined}
         aria-label={leaving ? undefined : `${name}${cursor.say ? `: ${cursor.say}` : ''}`}
@@ -660,7 +722,7 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
           <span key={cursor.seq} className="agent-cursor__ripple" />
         )}
         <svg ref={pointerRef} className="agent-cursor__pointer" width="20" height="22" viewBox="0 0 20 22" aria-hidden="true">
-          <path d="M1.5 1.5 L1.5 17.5 L6 13.3 L9.1 20.1 L11.9 18.9 L8.9 12.3 L14.7 12.1 Z" />
+          <path d={AGENT_CURSOR_ARROW_PATH} />
         </svg>
         <div className="agent-cursor__label">
           {/* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */}

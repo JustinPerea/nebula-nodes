@@ -46,7 +46,8 @@
 }
 
 /* A leaving cursor whose name a live cursor now shows (a number taken over)
-   hides its pill at once: one name never shows twice (PR #211 review 4). */
+   hides its pill at once, for the rest of its exit: one name never shows
+   twice (PR #211 reviews 4 and 5). */
 .agent-cursor[data-taken='true'] .agent-cursor__label {
   visibility: hidden;
 }
@@ -142,6 +143,19 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
 
 .agent-cursor__say--leaving {
   animation: agent-cursor-say-out var(--agent-cursor-say-fade) both;
+}
+
+/* A leaving cursor's pills keep their layout and fade only with the tip, on
+   the opacity spring set from JS: no pill runs a curve of its own (GM -
+   Design, PR #211 review 5, item 4). A say pill's own fade in or out stops
+   where it is. */
+.agent-cursor[data-leaving='true'] .agent-cursor__label,
+.agent-cursor[data-leaving='true'] .agent-cursor__name {
+  transition: none;
+}
+
+.agent-cursor[data-leaving='true'] .agent-cursor__say {
+  animation-play-state: paused;
 }
 
 .agent-cursor__ripple {

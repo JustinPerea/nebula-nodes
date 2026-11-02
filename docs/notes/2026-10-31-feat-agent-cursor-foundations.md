@@ -453,7 +453,7 @@ Review 4 (boundary and accept; motion, look and live) and GM's answers (r10, r11
 
 ### Any person move carries resting cursors (GM r11 item 2)
 
-- A drag sets React Flow's `dragging` flag. A keyboard nudge (arrows, Shift+arrows) and Arrange (the whole canvas or the selection) don't, but all three end in `graphStore.persistNodePositions`. That call now records where the person put each node (`lib/personNodeMoves.ts`, bounded at 2,000 nodes). The layer treats a node at the person's spot as the person's move, so a resting cursor rides it at 0 px. A sync, an undo or another agent puts the node elsewhere, so a cursor still flies there.
+- A drag sets React Flow's `dragging` flag. A keyboard nudge (arrows, Shift+arrows) and Arrange (the whole canvas or the selection) don't, but all three end in `graphStore.persistNodePositions`. That call now records where the person put each node (`lib/personNodeMoves.ts`, bounded at 2,000 nodes). The layer treats a node at the person's spot as the person's move, so a resting cursor rides it at 0 px. (Round 4c replaced this: a position match also matched a sync or an agent that put the node back on the person's spot, and the record outlived `loadGraph`. See "Round 4c" below.)
 - **Jumps are read from the carrier now,** not the de-stacked spot. A step aside is 26 px, past the 24 px re-plan distance, so with the new pill step it would otherwise have flown an arc instead of landing on the land spring. A test pins it.
 - At 300% zoom, the tests show 0 px trail and 0° lean for a 20 px Shift nudge, a 5 px nudge and a 300 px Arrange, and a sync still flies. Live, 10 Shift+ArrowRight presses at 300% moved the node 180 flow px. The cursor was 0 frames off its rest offset (0.003 flow px of float noise), had 0 lean frames and was never promoted.
 
@@ -492,10 +492,65 @@ Review 4 (boundary and accept; motion, look and live) and GM's answers (r10, r11
 
 - `tsc -b` exit 0. `npm run lint` exit 0: eslint, `check:inline-styles` (255 files) and `check:slava-css-scope` (4 files).
 - Focused vitest, `--maxWorkers=2`, 133 files in four runs (every test that reads `src/` or `styles/`, plus the cursor, presence, promote, entry-split and graph-store move tests): 562 + 354 + 600 + 552 = 2,068 passed, 0 failed, no timeouts.
-- Isolated pytest, 120 files (every file that touches presence, broadcasts, cursors, pins or proposals, all under the new conftest check), in three runs: 1,227 + 2,140 + 900 passed. One known failure: `test_cli_apply.py::test_arrange_from_the_builder_and_in_the_reply`, the existing order leak after `test_canvas_pins.py`. It passes alone.
+- Isolated pytest, 120 files (every file that touches presence, broadcasts, cursors, pins or proposals; the new conftest check ran in each, but review 5 found that a fixture patching `broadcast_raw` before it was installed blinded it for the rest of the run, so it did not hold in all of them; fixed in round 4c), in three runs: 1,227 + 2,140 + 900 passed. One known failure: `test_cli_apply.py::test_arrange_from_the_builder_and_in_the_reply`, the existing order leak after `test_canvas_pins.py`. It passes alone.
 - Build budget: pass. The entry is 443,226 B raw and 136,096 gzip (+169 B for `personNodeMoves`, the token demote and the feed's held replay). The cursor chunk is 22,723 B (round 4: 20,435), `wsClient` 2,550 B, the store 3,155 B.
 - Mutation checks:
   - Backend: 16, all caught. The AST guard alone catches review 4's G01–G04.
   - Frontend: 29 on the first pass, 28 caught. The survivor, the leaving branch's own `release`, was redundant with the effect's cleanup, so it was removed; with both releases off, the strengthened test catches it.
   - Frontend, after that: 2 more for the whole-pixel landing, both caught.
 - Live at 1440, Restraint, on isolated ports: the canary showed 8000, 8005, 5173, 8840 and outside blocked. 0 page errors, and only the canary's two requests were intercepted.
+
+## Round 4c
+
+Review 5 (boundary and exit; motion, look and live) and GM's answers (r12, r13). The spec's "Rulings from #211 review 5" section and line 66 are the source.
+
+### The pill step (GM r12, r13 items 1-3)
+
+- **Straight down, never right.** `stackStepPx` computes the step from the drawn shapes, not a constant: the arrow's path (`AGENT_CURSOR_ARROW_PATH`, the one the layer draws) with its 1.4 px stroke, and the round-ended pills with the 1 px edge ring on the name pill. The step is the smallest whole px that leaves 2 px between the later cursor's arrow and name pill and the earlier cursor's label block.
+- **The result is 24 px below a name and 47 px below a name and a say.** GM expected about 26: review 5's table measured the arrow against the pill's rectangle. Against the painted round shape (GM r13 item 1), the wing clears the earlier pill by 2.04 px at 24, and the name pills are exactly 2 px apart with both rings, so 24 is the smallest that holds. A test measures this apart from the module (signed distances sampled along every outline): at least 2 px at the step, under 2 px one px above it.
+- **Says count.** The field knows which cursors show a say (`setSay`, including a say fading out, and one shown before the first report). When a say shows or goes, the cursors below glide to their new step on the land spring. Says stay visible for every cursor.
+- **Near targets join the column (M2).** A cursor aimed within 16 px of a live cursor's tip (or of a column member's own target, so a chain is one column) lands straight below the column's last cursor, in arrival order. Leaving cursors aren't in the field, so they don't count. A property test covers every integer aim 9 to 16 px away, with 2 and 3 cursors and says on and off: no painted arrow or pill comes within 2 px of another.
+- **The node carry is per node position now.** It used to move the other cursors on a node by this cursor's own dx. When two cursors' frames ran in either order, that moved one twice or back, which the old 10 px right step hid but a column (x read from the head's tip) showed as a 4 px lag. Each report now carries the node's drawn position, and each other cursor moves by how far the node moved since its own last report.
+
+### The exit (M1, GM r13 item 4)
+
+- A leaving view keeps the peers count it had when its exit began and never updates its label, so `data-label` and the label's transform hold. The main effect's re-run on `leaving` no longer resets the phase. The say and idle timers stop for the exit. In CSS, a leaving cursor's label and name have `transition: none`, and a say pill's own fade animation is paused, so tip, name and say fade only together on the opacity spring.
+- Live, two peers leaving together (the upper with a say), across 47 frames: 0 frames with a layout change, the name pill's own opacity at least 1 throughout, the say's own opacity at least 1, and element opacity 1, then 0.669, then 0.158 on both.
+
+### Takeover (LOW-3, GM r13 item 6)
+
+- `taken` latches for the rest of the exit (derived state in the view). A test takes number 2 over, then demotes the new holder: the old pill stays hidden on every frame, and never two "Claude · 2" show.
+
+### Moves by cause (LOW-2, GM r13 item 5)
+
+- `personNodeMoves` records the move itself: the position object the person's move put on the node. React Flow keeps that object on the node (`applyNodeChanges` assigns the change's position; `adoptUserNodes` spreads the node), so the record matches only while the node holds that very move. Any other move (a sync, an agent, another tab) puts a new object there and flies, even onto the person's spot. No position is compared.
+- The person's own undo and redo now record the nodes they move (`applyHistory`). Every canvas replacement (`loadGraph`, `loadProjectGraph`, a replaced sync, a clear) forgets the record.
+- Tests for each source: nudge, drop (not drag frames), Arrange, Arrange selected, undo, redo, a sync away and back onto the person's spot, a y-only sync, `loadGraph`, and the LRU refresh.
+
+### The conftest guard (M3 and MEDIUM-1, LOW-1); tests only
+
+- The checks are installed before any fixture (`pytest_runtest_setup`, tryfirst) and at the top of every `monkeypatch.setattr`. A bound copy of the class's own sender that a monkeypatch undo leaves on `main.manager` is dropped before and after each test. (The first try checked the wrapper's marker first; a bound method reads its function's marker, so the stale copy was never dropped. A mutant pins the order.)
+- **Content as well as route.** No person-only frame (an `agentPresence` carrying `session`, or an `agentPresenceReplay`) may reach a socket that isn't the person's canvas. This is checked on the real senders, on every instance-level stand-in (wrapped as it goes in, signature kept), and on Starlette's `WebSocket.send_text`/`send_json` (so the hello's replay is checked against `browser_connections`). The route check stays.
+- The stricter check found two stand-ins in `test_canvas_pins.py` that dropped `others=` when forwarding. They now forward it.
+- An AST rule (`person_only_sends`) lists every person-only send in `main.py`. The only one is the replay in `websocket_endpoint`, inside the branch where `manager.promote(...)` verified the hello. The parse and walk are cached and the fixpoints stop early: the main guard went from about 1.5 s to under 1 s here (review 5 measured 6 s on its machine).
+- Subprocess tests, run with `NEBULA_TEST_SHARD` stripped: each cursor file passes alone; a patching fixture can't blind the check; the check is in before the first fixture, even when the fixture itself imports `main`.
+- The backend boundary is unchanged: no diff in `person_gate.py`, `scene_keys.py`, `person_session.py`, `main.py` or `services/`.
+
+### NITs
+
+- B1: `live_only` at exactly the TTL lands, and a moment past it doesn't. F5: a closed socket's late no-token answer doesn't demote the tab. The draw-time snap: a fractional pan at rest, and a ride's end, both on whole device pixels. `nextSeq`: an idle cursor whose say had ended comes back mid-exit neither idle nor spent. F9-F12: the name shows through a plain exit, no status role, the wire drops on the first exit frame, and a leaving cursor reads no hover boxes.
+
+### Checks (round 4c)
+
+- `tsc -b` exit 0. `npm run lint` exit 0.
+- Focused vitest, `--maxWorkers=2`, 143 files in four chunks (every test that reads `src/` or `styles/`, the cursor, presence, promote and move tests, and the files main brought in). First run: 710 + 369 + 620 + 613 passed, with 2 failures. `round21Lines` matched the new leaving rule as the say rule, so the rule moved below the base one. The new property test hit vitest's 5 s timeout in the big run, so it now samples more coarsely and has a 30 s limit. Rerun of those two chunks: 711 + 614. Total 2,314 passed.
+- Isolated pytest: 125 focused files (cursor, presence, pin, proposal, `cli_apply` and the round 4b list) 4,326 passed; a sample of 19 unrelated files, including 5 websocket ones, 671 passed. Each cursor file alone: sessions 53, review2 29, round4 40, round4c 24. The full suite wasn't run here (CI runs it); a partial run before it was stopped found only the pin stand-in, fixed above.
+- Build budget: pass, 443,707 B raw and 136,243 gzip. The cursor chunk is 25,104 B (4b: 22,723).
+- Mutation checks:
+  - Frontend: 30, all caught. They include review 5's survivors (F1, F3, F5, F9-F12, the snap, `nextSeq`) and every round 4c change.
+  - Backend: 15. B1 is caught. The first run left 4 survivors; new tests pin them, and they are now caught. The two early installs each survived alone (the stale-copy cleanup covers for them), so a probe now pins "in before the first fixture". Two AST survivors are pinned by new shapes ("replay's cursors alone", "bound later").
+- Live at 1440, Restraint, ports 8780 and 5780. The canary showed 8000, 8005, 5173, 8840 and outside blocked; `blocked.log` holds only canary lines. 0 page errors.
+  - Three cursors: steps of 24 and 24, dx 0, 2.0 px clear, 4 px between pills; the same through 61 drag frames and after.
+  - With a say in the middle: steps of 24 and 47, the glide over 16 in-between frames (3.7 px per frame at most), and back to 24 when the say ends.
+  - Near targets 10 px apart: one column, step 24.
+  - Exit strip: as above.

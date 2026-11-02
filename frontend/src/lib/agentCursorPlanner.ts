@@ -534,8 +534,8 @@ export function stepMotion(
   // arc's end and the land spring track as it goes.
   const prevLive = m.lastLive;
   // The target's own motion is its carrier's: a de-stack shift isn't speed,
-  // and isn't a jump (a step aside is 26 px, past the re-plan distance; it
-  // lands on the land spring, below).
+  // and isn't a jump (a step down the column is 24 px or more, the re-plan
+  // distance; it lands on the land spring, below).
   const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
   const jumpPx = prevCarrier ? dist(carrier, prevCarrier) * zoom : 0;
   const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);

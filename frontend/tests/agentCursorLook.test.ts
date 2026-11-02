@@ -11,6 +11,8 @@ import {
   sessionLightness,
   contrastRatio,
   deStack,
+  stackClearancePx,
+  stackStepPx,
   hexToOklch,
   inkFor,
   labelLayout,
@@ -21,6 +23,9 @@ import {
   AGENT_CURSOR_PILL,
   AGENT_CURSOR_PILL_EDGE,
   AGENT_CURSOR_STACK,
+  AGENT_CURSOR_ARROW_PATH,
+  AGENT_CURSOR_ARROW_POINTS,
+  AGENT_CURSOR_ARROW_STROKE,
   pillEdge,
 } from '../src/lib/agentCursorLook';
 
@@ -281,69 +286,166 @@ describe('the name rule', () => {
   });
 });
 
-describe('no stacking', () => {
-  it('lands a later cursor 10 px right and a pill height plus 4 px down of an earlier one within 16 px (GM r10 item 3)', () => {
+// The painted shapes, measured apart from agentCursorLook's own geometry: a
+// signed distance from each shape (negative inside), and points sampled
+// along each outline. Arrow: the path at its tip, stroke 1.4. Name pill:
+// round ends, the 1 px edge ring. Say pill: round ends, 4 px under the name.
+type P = { x: number; y: number };
+const ARROW: P[] = [[1.5, 1.5], [1.5, 17.5], [6, 13.3], [9.1, 20.1], [11.9, 18.9], [8.9, 12.3], [14.7, 12.1]]
+  .map(([x, y]) => ({ x, y }));
+const NAME_W = 64;
+const SAY_W = 140;
+
+function segDist(p: P, a: P, b: P): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+function inPolygon(p: P, poly: P[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const a = poly[i];
+    const b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+interface Shape { sdf: (p: P) => number; outline: P[] }
+function arrowAt(o: P): Shape {
+  const poly = ARROW.map((v) => ({ x: v.x + o.x, y: v.y + o.y }));
+  const outline: P[] = [];
+  for (let i = 0; i < poly.length; i += 1) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.2);
+    for (let k = 0; k < n; k += 1) outline.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  const sdf = (p: P) => {
+    const d = Math.min(...poly.map((a, i) => segDist(p, a, poly[(i + 1) % poly.length])));
+    return (inPolygon(p, poly) ? -d : d) - 0.7;
+  };
+  return { sdf, outline };
+}
+function pillAt(left: number, top: number, width: number, grow: number): Shape {
+  const r = 10;
+  const sdf = (p: P) => {
+    const cx = Math.min(Math.max(p.x, left + r), left + width - r);
+    return Math.hypot(p.x - cx, p.y - (top + r)) - r - grow;
+  };
+  const outline: P[] = [];
+  const R = r + grow;
+  for (let a = 0; a < 2 * Math.PI; a += 0.02) {
+    const cx = Math.cos(a) < 0 ? left + r : left + width - r;
+    outline.push({ x: cx + R * Math.cos(a), y: top + r + R * Math.sin(a) });
+  }
+  for (let x = left + r; x <= left + width - r; x += 0.25) outline.push({ x, y: top - grow }, { x, y: top + 2 * r + grow });
+  return { sdf, outline };
+}
+function pillsAt(o: P, say: boolean): Shape[] {
+  const name = pillAt(o.x + 15, o.y + 17, NAME_W, 1);
+  return say ? [name, pillAt(o.x + 15, o.y + 41, SAY_W, 0)] : [name];
+}
+/** The painted gap between two shapes: the least signed distance from
+ *  either's outline to the other (negative when they overlap). The arrow's
+ *  outline is its path; its sdf carries the stroke. */
+function gap(a: Shape, b: Shape): number {
+  const ab = Math.min(...a.outline.map((p) => b.sdf(p)));
+  const ba = Math.min(...b.outline.map((p) => a.sdf(p)));
+  return Math.min(ab, ba);
+}
+/** Every painted part of cursor i against every part of cursor j: arrows
+ *  against pills and pills against pills (arrows may come close to arrows). */
+function paintedGap(i: P, sayI: boolean, j: P, sayJ: boolean): number {
+  let least = Infinity;
+  for (const [a, b, sb] of [[i, j, sayJ], [j, i, sayI]] as [P, P, boolean][]) {
+    for (const pill of pillsAt(b, sb)) least = Math.min(least, gap(pill, arrowAt(a)));
+  }
+  for (const p of pillsAt(i, sayI)) for (const q of pillsAt(j, sayJ)) least = Math.min(least, gap(p, q));
+  return least;
+}
+
+describe('no stacking (GM - Design, PR #211 r12 and r13)', () => {
+  it('steps straight down by the smallest step with 2 px clear: 24 below a name, 47 below a name and a say', () => {
+    expect(stackStepPx(false)).toBe(24);
+    expect(stackStepPx(true)).toBe(47);
+    for (const say of [false, true]) {
+      const step = stackStepPx(say);
+      // Measured apart from the module: 2 px clear at the step, less one px above it.
+      expect(paintedGap({ x: 0, y: 0 }, say, { x: 0, y: step }, false)).toBeGreaterThanOrEqual(2 - 0.02);
+      expect(paintedGap({ x: 0, y: 0 }, say, { x: 0, y: step - 1 }, false)).toBeLessThan(2);
+      expect(stackClearancePx(step, say)).toBeGreaterThanOrEqual(AGENT_CURSOR_STACK.clearPx);
+      expect(stackClearancePx(step - 1, say)).toBeLessThan(AGENT_CURSOR_STACK.clearPx);
+    }
+  });
+
+  it('measures the arrow the layer draws', () => {
+    expect(AGENT_CURSOR_ARROW_POINTS).toEqual(ARROW);
+    expect(AGENT_CURSOR_ARROW_PATH).toBe(`M${ARROW.map((p) => `${p.x} ${p.y}`).join(' L')} Z`);
+    const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
+    expect(layer).toMatch(/<path d=\{AGENT_CURSOR_ARROW_PATH\} \/>/);
+  });
+
+  it('lands a later cursor straight below an earlier one within 16 px, never to the right', () => {
     const spots = deStack([
       { key: 'b', target: { x: 105, y: 100 }, since: 2 },
       { key: 'a', target: { x: 100, y: 100 }, since: 1 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 100, y: 100 });
-    expect(spots.get('b')).toEqual({ x: 115, y: 124 });
+    expect(spots.get('b')).toEqual({ x: 100, y: 124 });
   });
 
-  it('leaves cursors 16 px or more apart where they are', () => {
+  it('leaves cursors more than 16 px apart where they are', () => {
     const spots = deStack([
       { key: 'a', target: { x: 100, y: 100 }, since: 1 },
-      { key: 'b', target: { x: 116, y: 100 }, since: 2 },
+      { key: 'b', target: { x: 116.5, y: 100 }, since: 2 },
     ], 1);
-    expect(spots.get('b')).toEqual({ x: 116, y: 100 });
+    expect(spots.get('b')).toEqual({ x: 116.5, y: 100 });
   });
 
-  it('chains: a third on the same spot steps past both', () => {
-    const spots = deStack([
-      { key: 'a', target: { x: 0, y: 0 }, since: 1 },
-      { key: 'b', target: { x: 0, y: 0 }, since: 2 },
-      { key: 'c', target: { x: 0, y: 0 }, since: 3 },
-    ], 1);
-    expect(spots.get('b')).toEqual({ x: 10, y: 24 });
-    expect(spots.get('c')).toEqual({ x: 20, y: 48 });
+  it('steps past the earlier label block: name, plus the say pill while one shows', () => {
+    const at = (say: boolean[]) => [...deStack(say.map((s, i) => ({
+      key: String(i), target: { x: 0, y: 0 }, since: i + 1, say: s,
+    })), 1).values()];
+    expect(at([false, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 24 }, { x: 0, y: 48 }]);
+    expect(at([false, true, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 24 }, { x: 0, y: 71 }]);
+    expect(at([true, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: 47 }, { x: 0, y: 71 }]);
   });
 
-  it('never lands on an earlier tip: one aimed up-left of it steps past (review 1, F1)', () => {
+  it('never lands on an earlier tip: one aimed up-left of it joins its column (review 1, F1)', () => {
     const spots = deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: -10, y: -10 }, since: 2 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 10, y: 38 });
+    expect(spots.get('b')).toEqual({ x: 0, y: 24 });
   });
 
-  it('two later cursors never share a spot (review 1, F1)', () => {
+  it('joining is transitive: a chain of near targets is one column, ordered by arrival (review 5, M2)', () => {
     const spots = deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'c', target: { x: 10, y: 10 }, since: 2 },
       { key: 'b', target: { x: 0, y: 0 }, since: 3 },
+      // Near only the second cursor's tip (0, 24), not the first's.
+      { key: 'd', target: { x: 6, y: 30 }, since: 4 },
     ], 1);
-    expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('c')).toEqual({ x: 20, y: 34 });
-    expect(spots.get('b')).toEqual({ x: 30, y: 72 });
-    const all = [...spots.values()];
-    for (const p of all) for (const q of all) if (p !== q) expect(p.x === q.x && p.y === q.y).toBe(false);
+    expect([...spots.entries()]).toEqual([
+      ['a', { x: 0, y: 0 }], ['c', { x: 0, y: 24 }], ['b', { x: 0, y: 48 }], ['d', { x: 0, y: 72 }],
+    ]);
   });
 
   it('orders by when each came to its spot, not by its last event (review 1, F2)', () => {
-    // a came first; b's newer event doesn't push a aside.
     const spots = deStack([
-      { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: 0, y: 0 }, since: 2 },
+      { key: 'a', target: { x: 0, y: 0 }, since: 1 },
     ], 1);
     expect(spots.get('a')).toEqual({ x: 0, y: 0 });
-    expect(spots.get('b')).toEqual({ x: 10, y: 24 });
+    expect(spots.get('b')).toEqual({ x: 0, y: 24 });
   });
 
   it('measures in screen px at any zoom', () => {
     // At zoom 2, 10 flow px is 20 screen px: not stacked. 5 flow px is 10:
-    // stacked, a step of 5 right and 12 down in flow px.
+    // stacked, a step of 12 flow px down.
     expect(deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: 10, y: 0 }, since: 2 },
@@ -351,35 +453,61 @@ describe('no stacking', () => {
     expect(deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: 5, y: 0 }, since: 2 },
-    ], 2).get('b')).toEqual({ x: 10, y: 12 });
+    ], 2).get('b')).toEqual({ x: 0, y: 12 });
   });
 
-  it.each([2, 3])('%i cursors on one target: no two name pills intersect, at any pill width', (count) => {
-    const spots = [...deStack(Array.from({ length: count }, (_, i) => ({
-      key: String(i), target: { x: 50, y: 50 }, since: i + 1,
-    })), 1).values()];
-    for (const width of [30, 60, 140]) {
-      const pills = spots.map((tip) => ({
-        left: tip.x + AGENT_CURSOR_PILL.left, top: tip.y + AGENT_CURSOR_PILL.top, width, height: AGENT_CURSOR_PILL.height,
-      }));
-      for (const [i, a] of pills.entries()) {
-        for (const b of pills.slice(i + 1)) {
-          const apart = a.left + a.width <= b.left || b.left + b.width <= a.left
-            || a.top + a.height <= b.top || b.top + b.height <= a.top;
-          expect(apart).toBe(true);
-        }
-      }
-      // No tip is on another cursor's pill.
-      for (const [i, tip] of spots.entries()) {
-        for (const [j, pill] of pills.entries()) {
-          if (i === j) continue;
-          const inside = tip.x >= pill.left && tip.x <= pill.left + pill.width
-            && tip.y >= pill.top && tip.y <= pill.top + pill.height;
-          expect(inside).toBe(false);
+  it('a column rides its node as one: moving every target moves every spot the same', () => {
+    const at = (dx: number, dy: number) => deStack([0, 1, 2].map((i) => ({
+      key: String(i), target: { x: 200 + dx + (i === 2 ? 9 : 0), y: 100 + dy }, since: i + 1, say: i === 1,
+    })), 1);
+    const rest = at(0, 0);
+    for (const [dx, dy] of [[3, 0], [0, 7.5], [-40, 12], [250, -90]]) {
+      const moved = at(dx, dy);
+      for (const [key, spot] of rest) expect(moved.get(key)).toEqual({ x: spot.x + dx, y: spot.y + dy });
+    }
+  });
+
+  it.each([2, 3])('%i cursors on one target, says on and off: no painted arrow or pill within 2 px of another', (count) => {
+    for (let mask = 0; mask < 2 ** count; mask += 1) {
+      const says = Array.from({ length: count }, (_, i) => Boolean(mask & (1 << i)));
+      const spots = [...deStack(says.map((say, i) => ({ key: String(i), target: { x: 50, y: 50 }, since: i + 1, say })), 1).values()];
+      for (const spot of spots) expect(spot.x).toBe(50);
+      for (let i = 0; i < count; i += 1) {
+        for (let j = i + 1; j < count; j += 1) {
+          expect(paintedGap(spots[i], says[i], spots[j], says[j])).toBeGreaterThanOrEqual(2 - 0.02);
         }
       }
     }
   });
+
+  it('near targets 9 to 16 px apart, 2 and 3 cursors, says on and off: no painted overlap (review 5, M2)', () => {
+    const aims: P[] = [];
+    for (let dx = -16; dx <= 16; dx += 1) {
+      for (let dy = -16; dy <= 16; dy += 1) {
+        const d = Math.hypot(dx, dy);
+        if (d >= 9 && d <= 16) aims.push({ x: dx, y: dy });
+      }
+    }
+    let checked = 0;
+    for (const aim of aims) {
+      for (const sayA of [false, true]) {
+        const spots = deStack([
+          { key: 'a', target: { x: 0, y: 0 }, since: 1, say: sayA },
+          { key: 'b', target: aim, since: 2 },
+          // A third aimed back the other way from the second.
+          { key: 'c', target: { x: -aim.y / 2, y: aim.x / 2 }, since: 3 },
+        ], 1);
+        const [a, b, c] = ['a', 'b', 'c'].map((k) => spots.get(k)!);
+        expect(b).toEqual({ x: 0, y: stackStepPx(sayA) });
+        expect(c.x).toBe(0);
+        expect(paintedGap(a, sayA, b, false)).toBeGreaterThanOrEqual(2 - 0.02);
+        expect(paintedGap(b, false, c, false)).toBeGreaterThanOrEqual(2 - 0.02);
+        expect(paintedGap(a, sayA, c, false)).toBeGreaterThanOrEqual(2 - 0.02);
+        checked += 1;
+      }
+    }
+    expect(checked).toBe(aims.length * 2);
+  }, 30_000);
 
   it('a leaving cursor whose name a live one shows hides its pill at once (PR #211 review 4), and none is promoted from CSS', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
@@ -388,6 +516,14 @@ describe('no stacking', () => {
     expect(rule?.[1]).not.toMatch(/transition/);
     // will-change comes from the layer, only while a cursor flies (r10 item 1).
     expect(css).not.toMatch(/will-change\s*:/);
+  });
+
+  it('a leaving cursor\'s pills run no curve of their own: no transition, and a say fade stops where it is (review 5, M1)', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+    const still = css.match(/^\.agent-cursor\[data-leaving='true'\] \.agent-cursor__label,\n\.agent-cursor\[data-leaving='true'\] \.agent-cursor__name \{([^}]*)\}/m);
+    expect(still?.[1]).toMatch(/transition: none;/);
+    const say = css.match(/^\.agent-cursor\[data-leaving='true'\] \.agent-cursor__say \{([^}]*)\}/m);
+    expect(say?.[1]).toMatch(/animation-play-state: paused;/);
   });
 
   it("the pill box matches agentCursor.css: the label's offset and the pill's height", () => {
@@ -399,7 +535,14 @@ describe('no stacking', () => {
     const pad = Number(pill.match(/padding: (\d+)px/)![1]);
     const line = Number(pill.match(/line-height: (\d+)px/)![1]);
     expect(line + 2 * pad).toBe(AGENT_CURSOR_PILL.height);
-    expect(AGENT_CURSOR_STACK.downPx).toBe(AGENT_CURSOR_PILL.height + 4);
+    expect(pill).toMatch(/border-radius: 999px;/); // round ends
+    expect(label).toMatch(new RegExp(`gap: ${AGENT_CURSOR_PILL.gap}px;`));
+    const say = css.match(/^\.agent-cursor__say \{([^}]*)\}/m)![1];
+    expect(Number(say.match(/line-height: (\d+)px/)![1]) + 2 * Number(say.match(/padding: (\d+)px/)![1])).toBe(AGENT_CURSOR_PILL.height);
+    expect(say).toMatch(/border-radius: 999px;/);
+    // The arrow's stroke, and the ring on an edge fill.
+    expect(css).toMatch(new RegExp(`stroke-width: ${AGENT_CURSOR_ARROW_STROKE};`));
+    expect(css).toMatch(new RegExp(`box-shadow: 0 0 0 ${AGENT_CURSOR_PILL.ring}px rgb`));
   });
 
   it('paints the most recently active cursor on top (last)', () => {

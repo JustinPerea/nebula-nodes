@@ -24,6 +24,7 @@ describe('agentCursor.css runs on springs only', () => {
     const timed = [...declarations('transition'), ...declarations('animation')];
     expect(timed.length).toBeGreaterThan(0);
     for (const value of timed) {
+      if (value === 'none') continue; // stops a curve (a leaving cursor's pills, PR #211 review 5): no timing
       for (const part of value.split(/,(?![^(]*\))/)) {
         expect(part, value).toMatch(/var\(--agent-cursor-[a-z-]+\)/);
       }
@@ -42,7 +43,8 @@ describe('agentCursor.css runs on springs only', () => {
   it('reduced motion turns off every animation and transition', () => {
     const animated = new Set<string>();
     for (const match of main.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-      if (/(?:^|[;\s])(?:animation|transition):/.test(match[2])) {
+      // A rule that only sets `none` stops a curve; it runs nothing to turn off.
+      if (/(?:^|[;\s])(?:animation|transition):(?!\s*none;)/.test(match[2])) {
         for (const selector of match[1].split(',')) animated.add(selector.trim());
       }
     }

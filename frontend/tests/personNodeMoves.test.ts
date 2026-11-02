@@ -3,10 +3,13 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * Every person move of a node is marked for the agent cursors (GM - Design,
- * PR #211 review 4, item 2): a cursor resting on it rides it, never flies.
- * A drag's drop and a keyboard nudge (React Flow's position change with
- * dragging false), Arrange and Arrange selected; never a sync.
+ * The cause decides, not the position (GM - Design, PR #211 review 5, item
+ * 5). The person's own moves of a node are recorded for the agent cursors,
+ * which ride them at 0 px: a drag's drop and a keyboard nudge (React Flow's
+ * position change with dragging false), Arrange and Arrange selected, and
+ * their own undo and redo. Anyone else's move (a sync: an agent, another
+ * tab) isn't, even when it puts the node back on the person's spot. A new
+ * canvas forgets the record.
  */
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() },
@@ -33,42 +36,91 @@ beforeEach(() => {
 });
 afterEach(() => forgetPersonPlaced());
 
+const sync = (nodes: Node<NodeData>[], moved: string[]) => {
+  const event = { type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes, edges: [], empty: false, moved } as unknown as ExecutionEvent;
+  for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
+};
+const placed = (id: string) => placedByPerson(id, position(id));
+/** The person's layout PUT has answered: a sync no longer keeps their spot. */
+const layoutSaved = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('the person moves a node', () => {
-  it('a keyboard nudge (a position change, not dragging) marks where they put it', () => {
+  it('a keyboard nudge (a position change, not dragging) is recorded with the move itself', () => {
     useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
     expect(position('n1')).toEqual({ x: 20, y: 0 });
-    expect(placedByPerson('n1', { x: 20, y: 0 })).toBe(true);
-    expect(placedByPerson('n1', { x: 0, y: 0 })).toBe(false);
-    expect(placedByPerson('n2', position('n2'))).toBe(false);
+    expect(placed('n1')).toBe(true);
+    // The move, not the spot: the same numbers in another object are not it.
+    expect(placedByPerson('n1', { x: 20, y: 0 })).toBe(false);
+    expect(placed('n2')).toBe(false);
   });
 
-  it('a drag marks its drop, not its frames (React Flow marks those as dragging)', () => {
+  it('a drag records its drop, not its frames (React Flow marks those as dragging)', () => {
     useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 5, y: 0 }, dragging: true }]);
-    expect(placedByPerson('n1', { x: 5, y: 0 })).toBe(false);
+    expect(placed('n1')).toBe(false);
     useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 9, y: 0 }, dragging: false }]);
-    expect(placedByPerson('n1', { x: 9, y: 0 })).toBe(true);
+    expect(placed('n1')).toBe(true);
   });
 
-  it('Arrange and Arrange selected mark every node they place', () => {
+  it('Arrange and Arrange selected record every node they place', () => {
     useGraphStore.getState().autoLayout();
-    for (const id of ['n1', 'n2']) expect(placedByPerson(id, position(id))).toBe(true);
+    for (const id of ['n1', 'n2']) expect(placed(id)).toBe(true);
     forgetPersonPlaced();
     useGraphStore.setState({ nodes: [node('n1', 0, 0, { selected: true }), node('n2', 400, 300, { selected: true })] });
     useGraphStore.getState().autoLayoutSelected();
-    for (const id of ['n1', 'n2']) expect(placedByPerson(id, position(id))).toBe(true);
+    for (const id of ['n1', 'n2']) expect(placed(id)).toBe(true);
   });
 
-  it("a sync's move isn't the person's", () => {
-    const event = { type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [node('n1', 0, 0), node('n2', 300, 300)],
-      edges: [], empty: false, moved: ['n2'] } as unknown as ExecutionEvent;
-    for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
-    expect(position('n2')).toEqual({ x: 300, y: 300 });
-    expect(placedByPerson('n2', position('n2'))).toBe(false);
+  it("the person's own undo and redo are theirs: each records the nodes it moves", () => {
+    useGraphStore.setState({ nodes: [node('n1', 0, 0), node('n2', 400, 900)] });
+    useGraphStore.getState().autoLayout();
+    const arranged = position('n2')!;
+    expect(arranged).not.toEqual({ x: 400, y: 900 });
+    forgetPersonPlaced();
+    useGraphStore.getState().undo();
+    expect(position('n2')).toEqual({ x: 400, y: 900 });
+    expect(placed('n2')).toBe(true);
+    forgetPersonPlaced();
+    useGraphStore.getState().redo();
+    expect(position('n2')).toEqual(arranged);
+    expect(placed('n2')).toBe(true);
   });
 
-  it('remembers a bounded number of nodes, the oldest going first', () => {
-    for (let i = 0; i <= PERSON_NODE_MOVES_MAX; i += 1) notePersonPlaced({ [`k${i}`]: { x: i, y: 0 } });
-    expect(placedByPerson('k0', { x: 0, y: 0 })).toBe(false);
-    expect(placedByPerson(`k${PERSON_NODE_MOVES_MAX}`, { x: PERSON_NODE_MOVES_MAX, y: 0 })).toBe(true);
+  it("a sync's move isn't the person's, even back onto the person's spot (review 5, LOW-2)", async () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
+    expect(placed('n1')).toBe(true);
+    await layoutSaved();
+    sync([node('n1', 300, 0), node('n2', 0, 300)], ['n1']);
+    expect(position('n1')).toEqual({ x: 300, y: 0 });
+    expect(placed('n1')).toBe(false);
+    sync([node('n1', 20, 0), node('n2', 0, 300)], ['n1']);
+    expect(position('n1')).toEqual({ x: 20, y: 0 });
+    expect(placed('n1')).toBe(false);
+  });
+
+  it('a sync along y only is not the person\'s either', async () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n2', position: { x: 0, y: 320 }, dragging: false }]);
+    await layoutSaved();
+    sync([node('n1', 0, 0), node('n2', 0, 360)], ['n2']);
+    expect(position('n2')).toEqual({ x: 0, y: 360 });
+    expect(placed('n2')).toBe(false);
+  });
+
+  it('a new canvas (loadGraph) forgets the record', () => {
+    useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
+    const spot = position('n1')!;
+    useGraphStore.getState().loadGraph([{ ...node('n1', 0, 0), position: spot }], []);
+    expect(position('n1')).toBe(spot);
+    expect(placed('n1')).toBe(false);
+  });
+
+  it('remembers a bounded number of nodes, the least recently moved going first', () => {
+    const spots = Array.from({ length: PERSON_NODE_MOVES_MAX + 1 }, (_, i) => ({ x: i, y: 0 }));
+    notePersonPlaced({ k0: spots[0] });
+    notePersonPlaced({ k1: spots[1] });
+    notePersonPlaced({ k0: spots[0] }); // moved again: now the newest
+    for (let i = 2; i <= PERSON_NODE_MOVES_MAX; i += 1) notePersonPlaced({ [`k${i}`]: spots[i] });
+    expect(placedByPerson('k1', spots[1])).toBe(false);
+    expect(placedByPerson('k0', spots[0])).toBe(true);
+    expect(placedByPerson(`k${PERSON_NODE_MOVES_MAX}`, spots[PERSON_NODE_MOVES_MAX])).toBe(true);
   });
 });

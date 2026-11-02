@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import json
 from pathlib import Path
 
@@ -213,23 +214,27 @@ def _literal_text(node: ast.AST) -> str | None:
 class _Cursors:
     """What counts as a cursor event in one function: see ``is_cursor``."""
 
-    def __init__(self, func: ast.AST, cursor_funcs: set[str]) -> None:
+    def __init__(self, bindings: list[tuple[ast.AST, ast.AST]], cursor_funcs: set[str] | frozenset[str],
+                 point_funcs: set[str] | frozenset[str] = frozenset(POINT_FUNCS)) -> None:
         self.cursor_funcs = cursor_funcs
+        self.point_funcs = point_funcs
         self.names: set[str] = set()
         self.senders: set[str] = set(SENDERS)
         # A fixpoint: a name can come from a name assigned later in the source.
         for _ in range(4):
-            for node in ast.walk(func):
-                for target, value in self._bindings(node):
-                    if isinstance(target, ast.Name):
-                        if self.is_cursor(value):
-                            self.names.add(target.id)
-                        if (isinstance(value, ast.Attribute) and value.attr in self.senders) or (
-                                isinstance(value, ast.Name) and value.id in self.senders):
-                            self.senders.add(target.id)
+            before = (len(self.names), len(self.senders))
+            for target, value in bindings:
+                if isinstance(target, ast.Name):
+                    if self.is_cursor(value):
+                        self.names.add(target.id)
+                    if (isinstance(value, ast.Attribute) and value.attr in self.senders) or (
+                            isinstance(value, ast.Name) and value.id in self.senders):
+                        self.senders.add(target.id)
+            if (len(self.names), len(self.senders)) == before:
+                break
 
     @staticmethod
-    def _bindings(node: ast.AST):
+    def bindings(node: ast.AST):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, (ast.Tuple, ast.List)) and isinstance(node.value, (ast.Tuple, ast.List)):
@@ -261,7 +266,7 @@ class _Cursors:
             return any(k is None and self.is_cursor(v) for k, v in zip(node.keys, node.values))
         if isinstance(node, ast.Call):
             name = _call_name(node)
-            if name in POINT_FUNCS:
+            if name in self.point_funcs:
                 target = next((kw.value for kw in node.keywords if kw.arg == "target"), None)
                 return not (isinstance(target, ast.Constant) and target.value is None)
             if name in self.cursor_funcs:
@@ -277,6 +282,39 @@ def _functions(tree: ast.AST):
     return [f for f in ast.walk(tree) if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))]
 
 
+@functools.lru_cache(maxsize=64)
+def _parsed(source: str):
+    """main.py parsed and walked once per source (review 5, N5: the guard
+    took about 6 s): each function with its nodes and its name bindings."""
+    functions = []
+    for func in _functions(ast.parse(source)):
+        nodes = list(ast.walk(func))
+        bindings = [pair for node in nodes for pair in _Cursors.bindings(node)]
+        functions.append((func, nodes, bindings))
+    return functions
+
+
+def _returning(functions, start: set[str], point_funcs) -> set[str]:
+    """Functions that build and return a cursor event (or a person-only
+    frame), so one built in one function and sent from another is seen too."""
+    found = set(start)
+    for _ in range(4):
+        grew = False
+        for func, nodes, bindings in functions:
+            if func.name in point_funcs or func.name in found:
+                continue
+            returns = [n for n in nodes if isinstance(n, ast.Return) and n.value is not None]
+            if not returns:
+                continue
+            seen = _Cursors(bindings, found, point_funcs)
+            if any(seen.is_cursor(n.value) for n in returns):
+                found.add(func.name)
+                grew = True
+        if not grew:
+            break
+    return found
+
+
 def cursor_broadcasts_outside_the_helper(source: str) -> list[int]:
     """Lines of main.py that send a cursor event (see ``_Cursors.is_cursor``)
     through a sender (``broadcast_raw``, ``broadcast_others``,
@@ -284,24 +322,14 @@ def cursor_broadcasts_outside_the_helper(source: str) -> list[int]:
     ``send_text``/``send_json``, or a name bound to one) anywhere but
     ``_broadcast_presence``, and every ``_broadcast_presence(e, e)``, which
     would send the bare form to the person's tabs."""
-    tree = ast.parse(source)
-    functions = _functions(tree)
-    # Functions that build and return a cursor event, so one built in one
-    # function and sent from another is seen too.
-    cursor_funcs: set[str] = set()
-    for _ in range(4):
-        for func in functions:
-            if func.name in POINT_FUNCS or func.name in cursor_funcs:
-                continue
-            seen = _Cursors(func, cursor_funcs)
-            if any(isinstance(n, ast.Return) and seen.is_cursor(n.value) for n in ast.walk(func)):
-                cursor_funcs.add(func.name)
+    functions = _parsed(source)
+    cursor_funcs = _returning(functions, set(), POINT_FUNCS)
     bad: list[int] = []
-    for func in functions:
+    for func, nodes, bindings in functions:
         if func.name == "_broadcast_presence":
             continue
-        seen = _Cursors(func, cursor_funcs)
-        for node in ast.walk(func):
+        seen = _Cursors(bindings, cursor_funcs)
+        for node in nodes:
             if not isinstance(node, ast.Call):
                 continue
             name = _call_name(node)
@@ -312,6 +340,49 @@ def cursor_broadcasts_outside_the_helper(source: str) -> list[int]:
                     and ast.dump(node.args[0]) == ast.dump(node.args[1]):
                 bad.append(node.lineno)
     return sorted(set(bad))
+
+
+# What only the person's canvas may get (review 5, LOW-1): a cursor event in
+# the person form, and the replay of the live cursors.
+PERSON_FUNCS = frozenset({"person_form", "_person_form", "_accepted_person_form", "replay"})
+
+
+def person_only_sends(source: str) -> list[tuple[int, str]]:
+    """Every place main.py sends a person-only frame: a call to one of
+    PERSON_FUNCS, a name bound to one, a copy of one, a function returning
+    one, or a literal ``{"type": "agentPresenceReplay", ...}`` given to a
+    sender or as ``_broadcast_presence``'s first (the other sockets') form.
+    Each comes with the function it's in; the one allowed route,
+    ``_broadcast_presence``'s ``person`` argument, isn't listed."""
+    functions = _parsed(source)
+    person_funcs = _returning(functions, set(PERSON_FUNCS), frozenset())
+
+    class _Person(_Cursors):
+        def is_cursor(self, node):  # type: ignore[no-untyped-def]
+            if isinstance(node, ast.Dict):
+                keys = {_literal_text(k): v for k, v in zip(node.keys, node.values) if k is not None}
+                if _literal_text(keys.get("type", ast.Constant(None))) == "agentPresenceReplay":
+                    return True
+                return any(self.is_cursor(v) for v in node.values if v is not None)
+            return super().is_cursor(node)
+
+    found: list[tuple[int, str]] = []
+    for func, nodes, bindings in functions:
+        if func.name == "_broadcast_presence":
+            continue
+        seen = _Person(bindings, person_funcs, frozenset())
+        for node in nodes:
+            if not isinstance(node, ast.Call):
+                continue
+            name = _call_name(node)
+            if name == "_broadcast_presence":
+                if node.args and seen.is_cursor(node.args[0]):
+                    found.append((node.lineno, func.name))
+                continue
+            args = [*node.args, *(kw.value for kw in node.keywords)]
+            if name in seen.senders and any(seen.is_cursor(arg) for arg in args):
+                found.append((node.lineno, func.name))
+    return sorted(set(found))
 
 
 GUARD_SHAPES = {
@@ -335,6 +406,8 @@ GUARD_SHAPES = {
     "gather": "await asyncio.gather(manager.broadcast_raw(_point(i, target=t)))",
     "socket": "await ws.send_text(json.dumps(_point(i, target=t)))",
     "from another function": "await manager.broadcast_raw(build())",
+    # Bound from a name assigned further down (a loop body): the fixpoint's second pass.
+    "bound later": "f = e\n    e = _point(i, target=t)\n    await manager.broadcast_raw(f)",
 }
 
 

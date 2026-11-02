@@ -19,13 +19,26 @@ export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const
  * otherwise the offset is not used. No fill is ever pure white.
  */
 export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, clampGap: 0.07 } as const;
-/** The name pill's box from the tip, in screen px (agentCursor.css: the
- *  label's left and top, and the pill's 16 px line plus 2 px above and below). */
-export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20 } as const;
-/** A later cursor whose target is within `radiusPx` of an earlier one's lands
- *  `offsetPx` right and one pill height plus 4 px down (GM - Design, PR #211
- *  r10 item 3), so neither tip nor name pill covers the other's pill. */
-export const AGENT_CURSOR_STACK = { radiusPx: 16, offsetPx: 10, downPx: AGENT_CURSOR_PILL.height + 4 } as const;
+/** The arrow (AgentCursorLayer draws it): its path in screen px from the
+ *  cursor's origin, the tip at (1.5, 1.5), and its white stroke
+ *  (agentCursor.css). The wing reaches 13.2 px right of the tip. */
+export const AGENT_CURSOR_ARROW_PATH = 'M1.5 1.5 L1.5 17.5 L6 13.3 L9.1 20.1 L11.9 18.9 L8.9 12.3 L14.7 12.1 Z';
+export const AGENT_CURSOR_ARROW_POINTS: readonly Point[] = [
+  { x: 1.5, y: 1.5 }, { x: 1.5, y: 17.5 }, { x: 6, y: 13.3 }, { x: 9.1, y: 20.1 },
+  { x: 11.9, y: 18.9 }, { x: 8.9, y: 12.3 }, { x: 14.7, y: 12.1 },
+];
+export const AGENT_CURSOR_ARROW_STROKE = 1.4;
+/** The label column from the cursor's origin, in screen px (agentCursor.css):
+ *  the name pill at `left`/`top`, `height` tall (an 11 px line of 16 plus
+ *  2 px above and below) with fully round ends, then `gap`, then the say
+ *  pill, the same height. A name pill can carry a 1 px edge ring outside it
+ *  (pillEdge); the say pill's hairline is inset. */
+export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 1 } as const;
+/** A cursor whose target is within `radiusPx` of a live cursor's tip joins
+ *  that cursor's column, straight below it, never to the right; the step is
+ *  the smallest that leaves `clearPx` between the painted shapes (GM -
+ *  Design, PR #211 r12 and r13; stackStepPx). */
+export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
 /** A chat title in a cursor's name is cut to this many characters. */
@@ -273,30 +286,149 @@ interface StackEntry {
   target: Point;
   /** When this cursor came to its spot: earlier ones keep their place (GM - Design, PR #211 r2). */
   since: number;
+  /** Its say pill shows (or is fading out): its label block is name plus say. */
+  say?: boolean;
+}
+
+/** An axis-aligned box. */
+interface Box { left: number; top: number; right: number; bottom: number }
+
+function pointToBox(p: Point, b: Box): number {
+  const dx = Math.max(b.left - p.x, 0, p.x - b.right);
+  const dy = Math.max(b.top - p.y, 0, p.y - b.bottom);
+  return Math.hypot(dx, dy);
+}
+
+function pointToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+
+/** Does segment a-b cross box b (Liang-Barsky)? */
+function segmentHitsBox(a: Point, b: Point, box: Box): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const edges: [number, number][] = [[-dx, a.x - box.left], [dx, box.right - a.x], [-dy, a.y - box.top], [dy, box.bottom - a.y]];
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const r = q / p;
+      if (p < 0) t0 = Math.max(t0, r);
+      else t1 = Math.min(t1, r);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
+}
+
+/** Distance from a segment to a box: 0 when they meet, else the nearest of
+ *  the segment's ends to the box and the box's corners to the segment. */
+function segmentToBox(a: Point, b: Point, box: Box): number {
+  if (segmentHitsBox(a, b, box)) return 0;
+  const corners = [
+    { x: box.left, y: box.top }, { x: box.right, y: box.top },
+    { x: box.left, y: box.bottom }, { x: box.right, y: box.bottom },
+  ];
+  return Math.min(pointToBox(a, box), pointToBox(b, box), ...corners.map((c) => pointToSegment(c, a, b)));
+}
+
+function boxToBox(a: Box, b: Box): number {
+  return Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
+}
+
+/** A painted pill: its core segment's box (the pill less its round ends'
+ *  radius) and that radius, edge ring included. Width doesn't matter
+ *  stacked straight down from the same left, as long as the ends are round. */
+interface Pill { core: Box; radius: number }
+
+function pill(top: number, ring: number, dy = 0): Pill {
+  const { left, height } = AGENT_CURSOR_PILL;
+  const r = height / 2;
+  const width = 4 * height;
+  return { core: { left: left + r, right: left + width - r, top: top + r + dy, bottom: top + r + dy }, radius: r + ring };
+}
+
+/** The earlier cursor's painted label block: its name pill (edge ring
+ *  included) and, while one shows, its say pill. */
+export function labelBlockPills(say: boolean): Pill[] {
+  const { top, height, gap, ring } = AGENT_CURSOR_PILL;
+  return say ? [pill(top, ring), pill(top + height + gap, 0)] : [pill(top, ring)];
 }
 
 /**
- * Where each cursor lands so no tip or name pill covers another's. Cursors
- * are placed in the order they came to their spots. Each starts at its
- * target; while it is within 16 screen px of an earlier cursor's placed tip
- * and not already a full step (10 px right, 24 px down) past it, it takes
- * that step. So a second cursor on a spot lands a step from the first, its
- * pill 4 px under the first's, a third a step past both, and one aimed
- * up-left of an earlier tip never lands on it. Targets and results are in
- * flow coordinates.
+ * How far apart, in screen px, a later cursor `dy` px straight below an
+ * earlier one paints from the earlier one's label block: its arrow's
+ * painted path (stroke included) and its own name pill (edge ring
+ * included) against the earlier name pill (ring included) and say pill.
+ * Negative when they overlap.
+ */
+export function stackClearancePx(dy: number, earlierSay: boolean): number {
+  const block = labelBlockPills(earlierSay);
+  const half = AGENT_CURSOR_ARROW_STROKE / 2;
+  const points = AGENT_CURSOR_ARROW_POINTS.map((p) => ({ x: p.x, y: p.y + dy }));
+  const own = pill(AGENT_CURSOR_PILL.top, AGENT_CURSOR_PILL.ring, dy);
+  let clear = Infinity;
+  for (const p of block) {
+    for (let i = 0; i < points.length; i += 1) {
+      clear = Math.min(clear, segmentToBox(points[i], points[(i + 1) % points.length], p.core) - p.radius - half);
+    }
+    clear = Math.min(clear, boxToBox(own.core, p.core) - own.radius - p.radius);
+  }
+  return clear;
+}
+
+const stepCache = new Map<boolean, number>();
+
+/**
+ * The step down, in whole screen px, from an earlier cursor to the one
+ * stacked below it: the smallest that leaves AGENT_CURSOR_STACK.clearPx
+ * between the later cursor's painted arrow and name pill and the earlier
+ * cursor's painted label block (GM - Design, PR #211 r13 items 1 and 2).
+ * 24 below a name; 47 below a name and a say pill.
+ */
+export function stackStepPx(earlierSay: boolean): number {
+  const cached = stepCache.get(earlierSay);
+  if (cached !== undefined) return cached;
+  let dy = 0;
+  while (stackClearancePx(dy, earlierSay) < AGENT_CURSOR_STACK.clearPx - 1e-9) dy += 1;
+  stepCache.set(earlierSay, dy);
+  return dy;
+}
+
+/**
+ * Where each cursor lands so no arrow or pill covers another's (GM - Design,
+ * PR #211 r12 and r13). Cursors are placed in the order they came to their
+ * spots. A cursor whose target is within 16 screen px of an earlier
+ * cursor's placed tip (or its target) joins that cursor's column: it lands
+ * straight below the column's last cursor, never to the right, by
+ * stackStepPx of that cursor's label block (name, plus its say pill while
+ * one shows). Joining is transitive, so near and identical targets make one
+ * column, ordered by arrival. Only live cursors are passed in: a leaving
+ * one doesn't count. Targets and results are in flow coordinates.
  */
 export function deStack(cursors: readonly StackEntry[], zoom: number): Map<string, Point> {
   const radius = AGENT_CURSOR_STACK.radiusPx / zoom;
-  const right = AGENT_CURSOR_STACK.offsetPx / zoom;
-  const down = AGENT_CURSOR_STACK.downPx / zoom;
   const placed = new Map<string, Point>();
   const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  const eps = 1e-9;
+  const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) <= radius + 1e-9;
+  const columns: { x: number; members: { tip: Point; target: Point; say: boolean }[] }[] = [];
   for (const cursor of ordered) {
-    let at = { ...cursor.target };
-    const blocked = () => [...placed.values()].some((p) => Math.hypot(p.x - at.x, p.y - at.y) < radius
-      && !(at.x >= p.x + right - eps && at.y >= p.y + down - eps));
-    for (let i = 0; i <= 2 * placed.size + 2 && blocked(); i += 1) at = { x: at.x + right, y: at.y + down };
+    const say = Boolean(cursor.say);
+    const column = columns.find((c) => c.members.some((m) => near(cursor.target, m.tip) || near(cursor.target, m.target)));
+    let at: Point;
+    if (!column) {
+      at = { ...cursor.target };
+      columns.push({ x: at.x, members: [{ tip: at, target: cursor.target, say }] });
+    } else {
+      const last = column.members[column.members.length - 1];
+      at = { x: column.x, y: last.tip.y + stackStepPx(last.say) / zoom };
+      column.members.push({ tip: at, target: cursor.target, say });
+    }
     placed.set(cursor.key, at);
   }
   return placed;
