@@ -417,34 +417,72 @@ export interface CursorShape {
    *  block, across arrow and pills. Another arrow in here reads as this
    *  label's owner (GM - Design, PR #211 r14). */
   unit: Box;
+  /** A say pill on the left of the arrow owns its own box and gapPx under
+   *  it; `unit` then covers the arrow, the name and the say row to their
+   *  right only (r17 item 2). */
+  sayUnit?: Box;
 }
 
-export function cursorShape(origin: Point, say: boolean, nameW = DEFAULT_NAME_W, sayW = DEFAULT_SAY_W): CursorShape {
+/** Where a say pill flipped to the left of its arrow ends: its right edge
+ *  this far left of the tip (GM - Design, PR #211 r17 item 2). */
+export const AGENT_CURSOR_SAY_LEFT_GAP_PX = 4;
+
+/** The tip of the arrow below the cursor's origin. */
+const TIP = AGENT_CURSOR_ARROW_POINTS[0];
+
+/**
+ * A cursor as painted at `origin` (screen px). `say` draws its say pill:
+ * true or 'right' under the name, as always; 'left' on the same row with
+ * its right edge AGENT_CURSOR_SAY_LEFT_GAP_PX left of the tip, where a say
+ * goes when its right side would touch another column (r17 item 2).
+ */
+export function cursorShape(origin: Point, say: boolean | 'right' | 'left', nameW = DEFAULT_NAME_W, sayW = DEFAULT_SAY_W): CursorShape {
   const { top, height, gap, ring, left } = AGENT_CURSOR_PILL;
   const arrow = AGENT_CURSOR_ARROW_POINTS.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y }));
   const pills = [pill(top, ring, origin.y, nameW, origin.x)];
-  if (say) pills.push(pill(top + height + gap, 0, origin.y, sayW, origin.x));
+  const sayLeft = say === 'left';
+  const sayWidth = Math.max(sayW, height);
+  // The left say's own left edge, from the origin.
+  const leftSayAt = TIP.x - AGENT_CURSOR_SAY_LEFT_GAP_PX - sayWidth;
+  if (say) pills.push(pill(top + height + gap, 0, origin.y, sayW, origin.x + (sayLeft ? leftSayAt - left : 0)));
   const half = AGENT_CURSOR_ARROW_STROKE / 2;
+  const arrowLeft = origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half;
   const bounds = {
-    left: origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half,
-    right: origin.x + Math.max(Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half, left + Math.max(nameW, height) + ring, say ? left + Math.max(sayW, height) : 0),
+    left: Math.min(arrowLeft, sayLeft ? origin.x + leftSayAt : Infinity),
+    right: origin.x + Math.max(Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half, left + Math.max(nameW, height) + ring, say && !sayLeft ? left + sayWidth : 0),
     top: origin.y + AGENT_CURSOR_ARROW_TOP,
-    bottom: origin.y + labelBlockBottomPx(say),
+    bottom: origin.y + labelBlockBottomPx(Boolean(say)),
   };
   const arrowBox = {
-    left: bounds.left,
+    left: origin.x + Math.min(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) - half,
     right: origin.x + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.x)) + half,
     top: bounds.top,
     bottom: origin.y + Math.max(...AGENT_CURSOR_ARROW_POINTS.map((p) => p.y)) + half,
   };
-  return { arrow, pills, bounds, arrowBox, unit: { ...bounds, bottom: bounds.bottom + AGENT_CURSOR_STACK.gapPx } };
+  const g = AGENT_CURSOR_STACK.gapPx;
+  if (!sayLeft) return { arrow, pills, bounds, arrowBox, unit: { ...bounds, bottom: bounds.bottom + g } };
+  const sayBox = sayPillBox({ pills } as CursorShape)!;
+  return {
+    arrow, pills, bounds, arrowBox,
+    unit: { ...bounds, left: arrowLeft, bottom: origin.y + labelBlockBottomPx(false) + g },
+    sayUnit: { ...sayBox, bottom: sayBox.bottom + g },
+  };
+}
+
+/** The say pill's painted box in a shape that has one (its last pill). */
+export function sayPillBox(shape: CursorShape): { left: number; top: number; right: number; bottom: number } | null {
+  if (shape.pills.length < 2) return null;
+  const { core, radius } = shape.pills[shape.pills.length - 1];
+  return { left: core.left - radius, right: core.right + radius, top: core.top - radius, bottom: core.bottom + radius };
 }
 
 /** Do two cursors meet: painted closer than clearPx, or either's arrow
  *  inside what the other owns (beside its label)? */
 export function cursorsMeet(a: CursorShape, b: CursorShape): boolean {
-  const inside = (box: Box, unit: Box) => box.left < unit.right && box.right > unit.left && box.top < unit.bottom && box.bottom > unit.top;
-  return inside(a.arrowBox, b.unit) || inside(b.arrowBox, a.unit) || cursorClearancePx(a, b) < AGENT_CURSOR_STACK.clearPx - 1e-9;
+  const inside = (box: Box, unit: Box | undefined) => unit !== undefined
+    && box.left < unit.right && box.right > unit.left && box.top < unit.bottom && box.bottom > unit.top;
+  return inside(a.arrowBox, b.unit) || inside(b.arrowBox, a.unit) || inside(a.arrowBox, b.sayUnit) || inside(b.arrowBox, a.sayUnit)
+    || cursorClearancePx(a, b) < AGENT_CURSOR_STACK.clearPx - 1e-9;
 }
 
 /**
@@ -480,7 +518,10 @@ const stepCache = new Map<boolean, number>();
  * cursor's whole label block (name pill and ring, plus the say pill while
  * one shows), so each arrow sits by its own label only. 42 below a name;
  * 65 below a name and a say. The painted check (clearPx between arrow,
- * pills and the earlier block) is the floor.
+ * pills and the earlier block) is the floor. The step is rounded up to
+ * whole px so the pills stay on the pixel grid; with the arrow's painted
+ * top at 0.8 px that leaves 4.8 px under a ringed name pill and 5.8 px
+ * under a say pill (no ring), never under 4 (review 7 NIT-2).
  */
 export function stackStepPx(earlierSay: boolean): number {
   const cached = stepCache.get(earlierSay);
@@ -496,30 +537,61 @@ export function stackStepPx(earlierSay: boolean): number {
 /** Where a cursor lands, and what put it there: `sig` names the column
  *  members it is stacked under (with their says), so a change in it is a
  *  change of layout (a say, a join, a leave), and anything else moving the
- *  spot is a ride (a node carried, a zoom). `above` lists those members. */
-export interface StackSpot { at: Point; sig: string; above: readonly string[] }
+ *  spot is a ride (a node carried, a zoom). `above` lists those members.
+ *  In a column of four or more, the third slot stands for the rest: its
+ *  cursor's spot carries `group` (itself and the later arrivals folded into
+ *  it, in arrival order), and each folded cursor's carries `collapsedInto`,
+ *  that slot's key (GM - Design, PR #211 r17 item 1). */
+export interface StackSpot {
+  at: Point;
+  sig: string;
+  above: readonly string[];
+  group?: readonly string[];
+  collapsedInto?: string;
+}
+
+/** A column draws at most this many cursors: from the next member on, the
+ *  last slot is one count cursor ("2 more") for all of them (r17 item 1). */
+export const AGENT_CURSOR_COLUMN_DRAWN = 3;
+
+/** The count cursor's pill: how many cursors its slot stands for. */
+export function countLabel(count: number): string {
+  return `${count} more`;
+}
 
 /**
- * Where each cursor lands so no arrow sits beside or over a label or arrow
- * that isn't its own (GM - Design, PR #211 r14 and review 6). Cursors are
- * placed in the order they came to their spots. A cursor joins a column
+ * Where each cursor lands so no arrow sits beside or over a name or arrow
+ * that isn't its own (GM - Design, PR #211 r14, review 6 and r17). Cursors
+ * are placed in the order they came to their spots. A cursor joins a column
  * when its target is within 16 screen px of a member's target, or when its
- * arrow and label at its own target would come within clearPx of any
- * placed cursor: it lands straight below the column, never to the right, a
- * stackStepPx under the lowest member's label block. Should that spot meet
- * another placed cursor, that cursor's column joins this one and it steps
- * on below it. Joining on targets is transitive, so near and identical
- * targets make one column, ordered by arrival. Only live cursors are passed
+ * arrow and name at its own target would come within clearPx of any placed
+ * cursor's arrow or name: it lands straight below the column, never to the
+ * right, a stackStepPx under the lowest member's label block (say included,
+ * in its own column). A say pill never makes a join and never moves another
+ * column (r17 item 2): where a say has no room, it moves aside or waits
+ * (AgentCursorLayer). Should the spot meet another placed cursor, that
+ * cursor's column joins this one and it steps on below it. Joining on
+ * targets is transitive, so near and identical targets make one column,
+ * ordered by arrival. A column draws its first AGENT_CURSOR_COLUMN_DRAWN − 1
+ * members in full; with more than AGENT_CURSOR_COLUMN_DRAWN, every later
+ * arrival folds into the last slot (StackSpot.group), so no cursor rests
+ * more than two steps below its column's head. Only live cursors are passed
  * in: a leaving one doesn't count. Targets and results are in flow
  * coordinates; every distance and step is in screen px at `zoom`.
  */
 export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
   const { radiusPx } = AGENT_CURSOR_STACK;
   const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  interface Placed { key: string; tip: Point; target: Point; say: boolean; shape: CursorShape; column: number; sig: string; above: string[] }
+  interface Placed {
+    key: string; tip: Point; target: Point; say: boolean; shape: CursorShape; column: number; sig: string; above: string[];
+    group: string[] | null;
+    /** Folded into this slot's count cursor, or null. */
+    folded: string | null;
+  }
   const placed: Placed[] = [];
-  // Each column's x (its head's) and its members; a merged column points on.
-  const columns: { x: number; members: Placed[]; into: number | null }[] = [];
+  // Each column's x (its head's), its members in arrival order, and its
+  // count slot once it has one; a merged column points on.
+  const columns: { x: number; members: Placed[]; slot: Placed | null; into: number | null }[] = [];
   const root = (c: number): number => {
     let at = c;
     while (columns[at].into !== null) at = columns[at].into!;
@@ -529,64 +601,87 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
   for (const cursor of ordered) {
     const say = Boolean(cursor.say);
     const nameW = cursor.nameW ?? DEFAULT_NAME_W;
-    const sayW = cursor.sayW ?? DEFAULT_SAY_W;
     const target = { x: cursor.target.x * zoom, y: cursor.target.y * zoom };
-    const own = cursorShape(target, say, nameW, sayW);
+    // Arrow and name only: a say pill never makes a join (r17 item 2).
+    const own = cursorShape(target, false, nameW);
     const hit = new Set<number>();
     for (const p of placed) {
-      if (Math.hypot(p.target.x - target.x, p.target.y - target.y) <= radiusPx + 1e-9 || cursorsMeet(own, p.shape)) {
+      if (Math.hypot(p.target.x - target.x, p.target.y - target.y) <= radiusPx + 1e-9 || (!p.folded && cursorsMeet(own, p.shape))) {
         hit.add(root(p.column));
       }
     }
     let entry: Placed;
     if (hit.size === 0) {
-      entry = { key: cursor.key, tip: target, target, say, shape: own, column: columns.length, sig: '', above: [] };
-      columns.push({ x: target.x, members: [entry], into: null });
+      entry = { key: cursor.key, tip: target, target, say, shape: own, column: columns.length, sig: '', above: [], group: null, folded: null };
+      columns.push({ x: target.x, members: [entry], slot: null, into: null });
     } else {
       // The oldest column it meets takes it; any other column its spot
       // then meets joins that one (below), so it goes under that one too.
       const first = Math.min(...hit);
       const join = (c: number) => {
         columns[first].members.push(...columns[c].members);
+        columns[first].slot ??= columns[c].slot;
         columns[c].members = [];
         columns[c].into = first;
       };
       const x = columns[first].x;
       for (;;) {
-        let under = columns[first].members[0];
-        for (const m of columns[first].members) {
+        const column = columns[first];
+        const drawn = column.members.filter((m) => !m.folded);
+        if (column.slot || drawn.length >= AGENT_CURSOR_COLUMN_DRAWN) {
+          // The column is full: this one folds into its last slot, which
+          // becomes (or stays) the count cursor.
+          const slot = column.slot ?? drawn[AGENT_CURSOR_COLUMN_DRAWN - 1];
+          column.slot = slot;
+          slot.group ??= [slot.key];
+          slot.group.push(cursor.key);
+          entry = {
+            key: cursor.key, tip: slot.tip, target, say: false, shape: slot.shape, column: first,
+            sig: `${slot.sig}#${slot.key}`, above: slot.above, group: null, folded: slot.key,
+          };
+          column.members.push(entry);
+          break;
+        }
+        let under = drawn[0];
+        for (const m of drawn) {
           if (m.tip.y + stackStepPx(m.say) > under.tip.y + stackStepPx(under.say)) under = m;
         }
         const tip = { x, y: under.tip.y + stackStepPx(under.say) };
-        const shape = cursorShape(tip, say, nameW, sayW);
-        const meets = placed.find((p) => root(p.column) !== first && cursorsMeet(shape, p.shape));
+        const shape = cursorShape(tip, false, nameW);
+        const meets = placed.find((p) => !p.folded && root(p.column) !== first && cursorsMeet(shape, p.shape));
         if (meets) {
           join(root(meets.column));
           continue;
         }
-        const head = columns[first].members[0];
+        const head = drawn[0];
         entry = {
           key: cursor.key, tip, target, say, shape, column: first,
           sig: `${under.sig || head.key}>${under.key}${under.say ? '+' : ''}`,
-          above: [...under.above, under.key],
+          above: [...under.above, under.key], group: null, folded: null,
         };
-        columns[first].members.push(entry);
+        column.members.push(entry);
         break;
       }
     }
     placed.push(entry);
-    result.set(cursor.key, { at: { x: entry.tip.x / zoom, y: entry.tip.y / zoom }, sig: entry.sig, above: entry.above });
+  }
+  for (const p of placed) {
+    const spot: StackSpot = { at: { x: p.tip.x / zoom, y: p.tip.y / zoom }, sig: p.sig, above: p.above };
+    if (p.group) spot.group = [...p.group];
+    if (p.folded) spot.collapsedInto = p.folded;
+    result.set(p.key, spot);
   }
   return result;
 }
 
 /** Would these two cursors, each on its own target, join one column: the
- *  targets within the join radius, or the shapes meeting (deStackLayout)? */
+ *  targets within the join radius, or the arrows and names meeting
+ *  (deStackLayout; a say pill never joins)? */
 export function targetsMeet(a: StackEntry, b: StackEntry, zoom: number): boolean {
   const ta = { x: a.target.x * zoom, y: a.target.y * zoom };
   const tb = { x: b.target.x * zoom, y: b.target.y * zoom };
   if (Math.hypot(ta.x - tb.x, ta.y - tb.y) <= AGENT_CURSOR_STACK.radiusPx + 1e-9) return true;
-  return cursorsMeet(cursorShape(ta, Boolean(a.say), a.nameW, a.sayW), cursorShape(tb, Boolean(b.say), b.nameW, b.sayW));
+  return cursorsMeet(cursorShape(ta, false, a.nameW), cursorShape(tb, false, b.nameW));
 }
 
 /** Each cursor's spot (deStackLayout), in flow coordinates. */
@@ -595,14 +690,19 @@ export function deStack(cursors: readonly StackEntry[], zoom: number): Map<strin
 }
 
 /** Text widths for the pills, without a layout read: the canvas's text
- *  metrics where there is one, else an estimate on the wide side. */
-let textContext: { font: string; measureText(text: string): { width: number } } | null | undefined;
+ *  metrics where there is one, else an estimate on the wide side. The
+ *  canvas measures with the page's fonts as loaded now: a web font subset
+ *  still loading measures as the fallback, so the layer measures again when
+ *  fonts finish loading (AgentCursorLayer, review 7 MEDIUM-4). One context,
+ *  made again only if the platform's OffscreenCanvas itself changes. */
+let textContext: { font: string; measureText(text: string): { width: number } } | null = null;
+let textContextFrom: unknown = null;
 function textWidthPx(text: string, weight: number): number {
-  if (textContext === undefined) {
+  const Canvas = typeof OffscreenCanvas !== 'undefined' ? OffscreenCanvas : null;
+  if (Canvas !== textContextFrom) {
+    textContextFrom = Canvas;
     try {
-      textContext = typeof OffscreenCanvas !== 'undefined'
-        ? (new OffscreenCanvas(1, 1).getContext('2d') as unknown as typeof textContext) ?? null
-        : null;
+      textContext = Canvas ? (new Canvas(1, 1).getContext('2d') as unknown as typeof textContext) ?? null : null;
     } catch {
       textContext = null;
     }
@@ -612,6 +712,10 @@ function textWidthPx(text: string, weight: number): number {
   // letter-spacing 0.01em on the name.
   return textContext.measureText(text).width + 0.11 * text.length;
 }
+
+/** The fonts the pills draw in, as `document.fonts.load` takes them. */
+export const AGENT_CURSOR_NAME_FONT = '600 11px Inter';
+export const AGENT_CURSOR_SAY_FONT = '500 11px Inter';
 
 /** The name and say pills' widths in screen px (agentCursor.css: 7 px and
  *  9 px of padding, the say pill at most 260 px), 2 px on the wide side. */

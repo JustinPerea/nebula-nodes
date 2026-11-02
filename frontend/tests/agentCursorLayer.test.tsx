@@ -49,7 +49,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
-import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
+import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, cursorsMeet, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
 
 /** The column step below a name, and below a name and a say (GM - Design, PR #211 r14). */
 const S = stackStepPx(false);
@@ -1683,10 +1683,11 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     const name = el.querySelector('.agent-cursor__name')!.textContent!;
     const say = el.querySelector('.agent-cursor__say');
     const w = labelWidths(name, say?.textContent);
-    return cursorShape({ x: p.x * z + tx, y: p.y * z + ty }, say !== null && el.dataset.sayWait !== 'true', w.nameW, w.sayW);
+    const painted = say !== null && el.dataset.sayWait === undefined;
+    return cursorShape({ x: p.x * z + tx, y: p.y * z + ty }, painted && (el.dataset.saySide === 'left' ? 'left' : true), w.nameW, w.sayW);
   };
   const leastClear = () => {
-    const shapes = cursors().filter((el) => el.dataset.leaving !== 'true').map(shapeOf);
+    const shapes = cursors().filter((el) => el.dataset.leaving !== 'true' && el.dataset.collapsed !== 'true').map(shapeOf);
     let least = Infinity;
     for (const [i, a] of shapes.entries()) for (const b of shapes.slice(i + 1)) least = Math.min(least, cursorClearancePx(a, b));
     return least;
@@ -1762,8 +1763,12 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
       send(event({ ...session(key, i + 1), target: { x: 300, y: 300 + 15 * i } }));
       flush();
     }
-    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S }, d: { x: 300, y: 300 + 3 * S } });
-    // b goes elsewhere: c, 30 px from a, still meets a's label, and d meets c.
+    // Four in one column: d folds into c's count cursor (GM r17 item 1).
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S }, d: { x: 300, y: 300 + 2 * S } });
+    expect(byKey('c').dataset.count).toBe('2');
+    expect(byKey('d').dataset.collapsed).toBe('true');
+    // b goes elsewhere: c, 30 px from a, still meets a's label, and d meets
+    // c; the count cursor opens back into c and d.
     send(event({ ...session('b', 2), target: { nodeId: 'n2' } }));
     const path: { c: number; d: number }[] = [];
     for (let i = 0; i < 200 && (where().c.y !== 300 + S || where().d.y !== 300 + 2 * S); i += 1) {
@@ -1772,12 +1777,15 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     }
     expect(where().c).toEqual({ x: 300, y: 300 + S });
     expect(where().d).toEqual({ x: 300, y: 300 + 2 * S });
+    expect(byKey('c').dataset.count).toBeUndefined();
+    expect(byKey('d').dataset.collapsed).toBeUndefined();
     expect(path.filter((p) => p.c > 300 + S && p.c < 300 + 2 * S).length).toBeGreaterThan(3);
     for (let i = 1; i < path.length; i += 1) {
       expect(Math.abs(path[i].c - path[i - 1].c)).toBeLessThan(12);
-      expect(Math.abs(path[i].d - path[i - 1].d)).toBeLessThan(12);
-      // Together: the step between them never closes.
-      expect(path[i].d - path[i].c).toBeGreaterThanOrEqual(S - 1e-6);
+      // d opens where the count cursor was, and c glides up out of it: the
+      // step between them only grows.
+      expect(path[i].d).toBe(300 + 2 * S);
+      expect(path[i].d - path[i].c).toBeGreaterThanOrEqual(path[i - 1].d - path[i - 1].c - 1e-9);
     }
   });
 
@@ -1787,7 +1795,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
     const a = byKey('a');
     const frames: { waiting: boolean; b: number; clear: number }[] = [];
-    for (let i = 0; i < 120 && where().c.y !== 344 + SS + S; i += 1) {
+    for (let i = 0; i < 120 && (where().b.y !== 344 + SS || where().c.y !== 344 + SS + S); i += 1) {
       tickFrames(1);
       frames.push({ waiting: a.dataset.sayWait === 'true', b: where().b.y, clear: leastClear() });
     }
@@ -1875,11 +1883,438 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
 
   it('a waiting say is hidden by CSS and fades in when the wait ends; never under reduced motion', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
-    const rule = css.match(/^\.agent-cursor\[data-say-wait='true'\] \.agent-cursor__say \{([^}]*)\}/m);
+    // Waiting ('true') or in the Agent log only ('log'): hidden either way.
+    const rule = css.match(/^\.agent-cursor\[data-say-wait\] \.agent-cursor__say \{([^}]*)\}/m);
     expect(rule?.[1]).toMatch(/animation: none;/);
     expect(rule?.[1]).toMatch(/opacity: 0;/);
     const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
-    expect(layer).toMatch(/!prefersReducedMotion\(\) && el\) \{\n\s+sayWaitSince\.current = performance\.now\(\);/);
+    // Under reduced motion it takes its place at once (capped: no wait).
+    expect(layer).toMatch(/if \(prefersReducedMotion\(\)\) \{\n\s+setSay\.current\('wait'\);\n\s+decideSay\.current\(true\);/);
   });
 });
 
+
+describe('round 4e: the head leads its column, says find room or wait for the log, columns cap at 3, zoom and fonts (review 7, GM r17)', () => {
+  type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
+  const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
+  const byKey = (k: string) => cursors().find((el) => el.dataset.session === k.repeat(12))!;
+  const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session!.slice(0, 1), at(el)]));
+  const painted = (el: HTMLElement) => el.querySelector('.agent-cursor__say') !== null && el.dataset.sayWait === undefined;
+  /** A cursor as drawn this frame, in screen px: its say counts once it shows, on its side. */
+  const shapeOf = (el: HTMLElement) => {
+    const p = at(el);
+    const [tx, ty, z] = pane.transform;
+    const name = el.querySelector('.agent-cursor__name')!.textContent!;
+    const say = el.querySelector('.agent-cursor__say');
+    const w = labelWidths(name, say?.textContent);
+    return cursorShape({ x: p.x * z + tx, y: p.y * z + ty }, painted(el) && (el.dataset.saySide === 'left' ? 'left' : true), w.nameW, w.sayW);
+  };
+  const drawn = () => cursors().filter((el) => el.dataset.leaving !== 'true' && el.dataset.collapsed !== 'true');
+  /** Any two drawn cursors meeting: closer than 2 px, or an arrow beside a label that isn't its own. */
+  const anyMeet = () => {
+    const shapes = drawn().map(shapeOf);
+    for (const [i, a] of shapes.entries()) for (const b of shapes.slice(i + 1)) if (cursorsMeet(a, b)) return true;
+    return false;
+  };
+  const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
+  /** One frame, with the timers (and performance.now) a frame on too. */
+  const frame = () => {
+    act(() => { vi.advanceTimersByTime(1000 / 60); });
+    tickFrames(1);
+  };
+  const column = (keys = ['a', 'b', 'c'], target: AgentPresenceEvent['target'] = { nodeId: 'n1' }) => {
+    for (const [i, key] of keys.entries()) {
+      send(event({ ...session(key, i + 1), target }));
+      flush();
+    }
+  };
+
+  // Review 7, MEDIUM-1 (P1): the head nudges its own target within its
+  // stamp radius. The members follow its drawn tip, never under the step.
+  it.each([[0, -10], [12, 0], [0, 10], [-12, -8]])('the head moves (%s, %s) by its own event: the column glides with it, never under the step, nothing meets', (dx, dy) => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b', 'c'], { x: 300, y: 300 });
+    expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S } });
+    send(event({ ...session('a', 1), target: { x: 300 + dx, y: 300 + dy } }));
+    let maxJump = 0;
+    let minStep = Infinity;
+    let meetFrames = 0;
+    let moving = 0;
+    let prev = where();
+    for (let i = 0; i < 120; i += 1) {
+      tickFrames(1);
+      const w = where();
+      for (const k of ['b', 'c']) maxJump = Math.max(maxJump, Math.hypot(w[k].x - prev[k].x, w[k].y - prev[k].y));
+      if (w.b.y !== prev.b.y || w.b.x !== prev.b.x) moving += 1;
+      minStep = Math.min(minStep, w.b.y - w.a.y, w.c.y - w.b.y);
+      if (anyMeet()) meetFrames += 1;
+      prev = w;
+    }
+    flush();
+    expect(where()).toEqual({
+      a: { x: 300 + dx, y: 300 + dy }, b: { x: 300 + dx, y: 300 + dy + S }, c: { x: 300 + dx, y: 300 + dy + 2 * S },
+    });
+    // A glide over many frames, at about the head's own pace and
+    // eb3d2477's glide (1.2 to 1.6 px a frame at most; review 7 saw 10 to
+    // 14.4 px jumps).
+    expect(moving).toBeGreaterThan(8);
+    expect(maxJump).toBeLessThan(1.7);
+    expect(minStep).toBeGreaterThanOrEqual(S - 1e-6);
+    expect(meetFrames).toBe(0);
+  });
+
+  it('a head carried by its node still carries its column in the same frame (a ride, not a glide)', () => {
+    render(<AgentCursorLayer />);
+    column();
+    for (let i = 1; i <= 10; i += 1) {
+      const next = new Map(lookupRef.current) as Map<string, Entry>;
+      const node = next.get('n1')!;
+      next.set('n1', { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: { x: 400, y: 300 - 3 * i } } });
+      lookupRef.current = next as never;
+      notifyStore();
+      tickFrames(1);
+      expect(where()).toEqual({ a: { x: 500, y: 344 - 3 * i }, b: { x: 500, y: 344 - 3 * i + S }, c: { x: 500, y: 344 - 3 * i + 2 * S } });
+    }
+  });
+
+  // Review 7, MEDIUM-2 (P3, P5; they pin F24): a flyer landing under the
+  // speaking cursor holds its say.
+  it('a say on the head while the cursor below acts in the same moment: the say waits for it, never painted over its arrow', () => {
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    send(event({ ...session('b', 2), target: { nodeId: 'n1' }, action: 'look' }));
+    let waited = 0;
+    let shownMeeting = 0;
+    for (let i = 0; i < 90; i += 1) {
+      tickFrames(1);
+      if (!painted(byKey('a'))) waited += 1;
+      else if (anyMeet()) shownMeeting += 1;
+    }
+    expect(waited).toBeGreaterThan(3);
+    expect(shownMeeting).toBe(0);
+    expect(painted(byKey('a'))).toBe(true);
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + SS + S } });
+  });
+
+  it.each([['a', 'b'], ['b', 'a']])('two says at once (%s, then %s): each waits for the column below it, nothing meets', (first, second) => {
+    render(<AgentCursorLayer />);
+    column();
+    const says: Record<string, string> = { a: 'Checking the prompt', b: 'Reading the brief now' };
+    for (const k of [first, second]) send(event({ ...session(k, k === 'a' ? 1 : 2), target: { nodeId: 'n1' }, say: says[k] }));
+    let meetFrames = 0;
+    for (let i = 0; i < 90; i += 1) {
+      tickFrames(1);
+      if (anyMeet()) meetFrames += 1;
+    }
+    expect(meetFrames).toBe(0);
+    expect(painted(byKey('a')) && painted(byKey('b'))).toBe(true);
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + 2 * SS } });
+  });
+
+  it('a flyer passing through elsewhere doesn\'t hold a say', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b']);
+    // e flies across the canvas far from a's say room.
+    send(event({ ...session('e', 3), target: { x: 100, y: 100 } }));
+    flush();
+    send(event({ ...session('e', 3), target: { x: 900, y: 120 } }));
+    tickFrames(2);
+    send(event({ ...session('b', 2), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    tickFrames(1);
+    expect(painted(byKey('b'))).toBe(true);
+  });
+
+  // GM r17 item 2: another column in the way on the right.
+  const blocker = (key: string, ordinal: number, x: number, y: number, extra: Partial<AgentPresenceEvent> = {}) => {
+    send(event({ ...session(key, ordinal), target: { x, y }, ...extra }));
+    flush();
+  };
+
+  it('a say with another column\'s arrow on its right moves left of its own arrow, right edge 4 px left of the tip, and moves nobody', () => {
+    render(<AgentCursorLayer />);
+    blocker('a', 1, 300, 300);
+    blocker('e', 2, 360, 346);
+    const before = where();
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    tickFrames(2);
+    const a = byKey('a');
+    expect(a.dataset.saySide).toBe('left');
+    expect(painted(a)).toBe(true);
+    expect(anyMeet()).toBe(false);
+    flush();
+    expect(where()).toEqual(before);
+  });
+
+  it('no room on either side: the say waits, then after 600 ms shows in the Agent log only, and comes back once the room clears (pins the cap)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      blocker('a', 1, 300, 300);
+      blocker('e', 2, 360, 346);
+      blocker('f', 3, 210, 346);
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const t0 = performance.now();
+      const a = byKey('a');
+      let loggedAt = -1;
+      for (let i = 0; i < 60 && loggedAt < 0; i += 1) {
+        frame();
+        expect(painted(a)).toBe(false);
+        if (a.dataset.sayWait === 'log') loggedAt = performance.now() - t0;
+        else expect(a.dataset.sayWait).toBe('true');
+      }
+      expect(loggedAt).toBeGreaterThan(600);
+      expect(loggedAt).toBeLessThan(640);
+      // Off the canvas, still said: the cursor's label keeps it, and the
+      // Agent log has it (agentLogStore).
+      expect(a.getAttribute('aria-label')).toBe('Claude: Checking the prompt');
+      for (let i = 0; i < 10; i += 1) frame();
+      expect(a.dataset.sayWait).toBe('log');
+      // e goes: the right side clears, and the say, still current, shows.
+      send(event({ ...session('e', 2), target: { nodeId: 'n2' } }));
+      let back = -1;
+      for (let i = 0; i < 90 && back < 0; i += 1) {
+        frame();
+        if (painted(a)) back = i;
+        if (painted(a)) expect(anyMeet()).toBe(false);
+      }
+      expect(back).toBeGreaterThan(0);
+      expect(a.dataset.saySide).toBeUndefined();
+      expect(performance.now() - t0).toBeLessThan(AGENT_SAY_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('another cursor\'s say pill counts as in the way (review 7, LOW-2 M4)', () => {
+    render(<AgentCursorLayer />);
+    blocker('a', 1, 300, 300);
+    // e, below and to the left, says first: its say pill runs 1 px under
+    // a's say row, on both sides of a's arrow; its arrow and name are clear.
+    blocker('e', 2, 180, 321);
+    send(event({ ...session('e', 2), target: { x: 180, y: 321 }, say: 'Reading the brief and the prompt' }));
+    tickFrames(2);
+    expect(painted(byKey('e'))).toBe(true);
+    expect(byKey('e').dataset.saySide).toBeUndefined();
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    tickFrames(10);
+    expect(byKey('a').dataset.sayWait).toBe('true');
+    expect(anyMeet()).toBe(false);
+  });
+
+  it('another cursor\'s pills count at their measured widths, not a default (review 7, LOW-2 M5)', () => {
+    render(<AgentCursorLayer />);
+    blocker('a', 1, 300, 300);
+    blocker('e', 1, 150, 326, { agent: { id: 'e', name: 'A very long agent name for the pill', color: '#5B9DFF', verified: true } });
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    tickFrames(10);
+    expect(byKey('a').dataset.sayWait).toBe('true');
+    expect(anyMeet()).toBe(false);
+  });
+
+  it('a say waits for a cursor still flying to a spot under it, however far away it is (r17 item 3)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b']);
+    send(event({ ...session('c', 3), target: { x: 2400, y: 1400 } }));
+    flush();
+    // c flies in from far off to join under b, as a speaks.
+    send(event({ ...session('c', 3), target: { nodeId: 'n1' } }));
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    let shownAt = -1;
+    for (let i = 0; i < 90 && shownAt < 0; i += 1) {
+      tickFrames(1);
+      if (painted(byKey('a'))) shownAt = i;
+    }
+    // b is clear of the say after about 14 frames; c's flight takes longer.
+    expect(shownAt).toBeGreaterThan(24);
+    flush();
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + SS + S } });
+  });
+
+  it('a zoom mid-glide keeps the glide where it is on screen: the step it has so far, in that very frame (review 7, MEDIUM-3)', () => {
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    tickFrames(4);
+    const screenY = (k: string) => at(byKey(k)).y * pane.transform[2] + pane.transform[1];
+    const before = [screenY('b') - screenY('a'), screenY('c') - screenY('b')];
+    expect(before[0]).toBeGreaterThan(S + 1);
+    expect(before[0]).toBeLessThan(SS - 1);
+    for (const z of [0.5, 1.7]) {
+      pane.transform = [0, 0, z];
+      notifyStore();
+      expect(screenY('b') - screenY('a')).toBeCloseTo(before[0], 6);
+      expect(screenY('c') - screenY('b')).toBeCloseTo(before[1], 6);
+    }
+  });
+
+  // GM r17 item 1: a column draws at most 3.
+  describe('the count cursor', () => {
+    const rectFor = (el: Element): DOMRect => {
+      if (el === pane.dom) return new DOMRect(0, 0, 1440, 900);
+      const cursor = el.closest<HTMLElement>('.agent-cursor');
+      const p = cursor ? at(cursor) : { x: -999, y: -999 };
+      if (el.classList.contains('agent-cursor__name')) return new DOMRect(p.x + 15, p.y + 17, 50, 20);
+      return new DOMRect(0, 0, 0, 0);
+    };
+    beforeEach(() => {
+      pane.dom = document.createElement('div');
+      document.body.appendChild(pane.dom);
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        return rectFor(this);
+      });
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      pane.dom?.remove();
+    });
+    const pointer = (x: number, y: number) => act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y })); });
+    const list = (el: HTMLElement) => [...el.querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent);
+
+    it('four or more: two in full, then one neutral arrow with "2 more" that lists the names on hover; the later arrivals fade out into it', () => {
+      render(<AgentCursorLayer />);
+      column(['a', 'b', 'c', 'd']);
+      const c = byKey('c');
+      const d = byKey('d');
+      expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + S }, c: { x: 500, y: 344 + 2 * S }, d: { x: 500, y: 344 + 2 * S } });
+      expect(c.dataset.count).toBe('2');
+      expect(c.querySelector('.agent-cursor__name')!.textContent).toBe('2 more');
+      expect(c.style.getPropertyValue('--agent-color')).toBe('#52525b');
+      expect(c.getAttribute('aria-label')).toBe('2 more: Claude · 3, Claude · 4');
+      expect(c.getAttribute('role')).toBe('status');
+      // Not focusable, as no cursor is.
+      expect(c.querySelector('[tabindex]')).toBeNull();
+      expect(c.hasAttribute('tabindex')).toBe(false);
+      expect(d.dataset.collapsed).toBe('true');
+      expect(d.getAttribute('aria-hidden')).toBe('true');
+      expect(Number(d.style.opacity)).toBeLessThan(0.01);
+      expect(list(c)).toEqual(['Claude · 3', 'Claude · 4']);
+      expect(c.dataset.hover).toBeUndefined();
+      const p = at(c);
+      pointer(p.x + 30, p.y + 25);
+      expect(c.dataset.hover).toBe('true');
+      pointer(1400, 880);
+      expect(c.dataset.hover).toBeUndefined();
+      // Up to three names, then how many more.
+      for (const [k, ordinal] of [['e', 5], ['f', 6]] as const) {
+        send(event({ ...session(k, ordinal), target: { nodeId: 'n1' } }));
+        flush();
+      }
+      expect(where().e).toEqual(where().c);
+      expect(c.querySelector('.agent-cursor__name')!.textContent).toBe('4 more');
+      expect(list(c)).toEqual(['Claude · 3', 'Claude · 4', 'Claude · 5', '1 more']);
+      expect(c.getAttribute('aria-label')!.startsWith('4 more')).toBe(true);
+    });
+
+    it('members leave: the count cursor opens back into full cursors on the layout spring, nothing jumps', () => {
+      render(<AgentCursorLayer />);
+      column(['a', 'b', 'c', 'd']);
+      act(() => {
+        const s = useAgentPresenceStore;
+        const agents = { ...s.getState().agents };
+        for (const k of Object.keys(agents)) if (agents[k].session?.key === 'a'.repeat(12)) delete agents[k];
+        s.setState({ agents });
+      });
+      const path: Record<string, { x: number; y: number }>[] = [];
+      for (let i = 0; i < 80; i += 1) {
+        tickFrames(1);
+        path.push(where());
+      }
+      flush();
+      expect(byKey('c').dataset.count).toBeUndefined();
+      expect(byKey('d').dataset.collapsed).toBeUndefined();
+      expect(Number(byKey('d').style.opacity)).toBe(1);
+      expect(where()).toMatchObject({ b: { x: 500, y: 344 }, c: { x: 500, y: 344 + S }, d: { x: 500, y: 344 + 2 * S } });
+      for (let i = 1; i < path.length; i += 1) {
+        for (const k of ['b', 'c', 'd']) expect(Math.abs(path[i][k].y - path[i - 1][k].y)).toBeLessThan(12);
+      }
+      // A glide: c passes through the frames between.
+      expect(path.filter((w) => w.c.y > 344 + S + 1 && w.c.y < 344 + 2 * S - 1).length).toBeGreaterThan(3);
+    });
+  });
+
+  // Review 7, MEDIUM-3: a zoom one frame after a say, while the column glides.
+  const zoomRuns: [string, (f: number) => [number, number, number][]][] = [
+    // setViewport over 300 ms: one smooth step a frame.
+    ['setViewport 1 → 0.5', (f) => (f >= 1 && f <= 18 ? [[0, 0, 1 - (0.5 * f) / 18]] : [])],
+    // Keyboard zoom: a few discrete steps, frames apart.
+    ['keyboard zoom in, then out', (f) => (f === 1 ? [[0, 0, 1.2]] : f === 4 ? [[0, 0, 1.44]] : f === 8 ? [[0, 0, 1.2]] : f === 12 ? [[0, 0, 1]] : f === 15 ? [[0, 0, 0.833]] : [])],
+    // Pinch: several wheel events a frame, zooming about the pointer.
+    ['pinch about the pointer', (f) => (f >= 1 && f <= 14 ? [1, 2, 3].map((k) => {
+      const z = 1 - (0.4 * ((f - 1) * 3 + k)) / 42;
+      return [700 * (1 - z), 400 * (1 - z), z] as [number, number, number];
+    }) : [])],
+  ];
+  it.each(zoomRuns)('%s, starting one frame after a say: the steps stay in screen px while the column glides, nothing meets', (_name, zoomAt) => {
+    render(<AgentCursorLayer />);
+    column();
+    send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+    tickFrames(1);
+    let minAB = Infinity;
+    let minBC = Infinity;
+    let meetFrames = 0;
+    const screenY = (k: string) => at(byKey(k)).y * pane.transform[2] + pane.transform[1];
+    const check = () => {
+      minAB = Math.min(minAB, screenY('b') - screenY('a'));
+      minBC = Math.min(minBC, screenY('c') - screenY('b'));
+      if (anyMeet()) meetFrames += 1;
+    };
+    for (let f = 1; f <= 60; f += 1) {
+      for (const t of zoomAt(f)) {
+        pane.transform = t;
+        notifyStore();
+        // Carried in the zoom's own frame.
+        check();
+      }
+      tickFrames(1);
+      check();
+    }
+    flush();
+    expect(minAB).toBeGreaterThanOrEqual(S - 1e-6);
+    expect(minBC).toBeGreaterThanOrEqual(S - 1e-6);
+    expect(meetFrames).toBe(0);
+    expect(screenY('b') - screenY('a')).toBeCloseTo(SS, 6);
+    expect(screenY('c') - screenY('b')).toBeCloseTo(S, 6);
+  });
+
+  // Review 7, MEDIUM-4: a pill measured before its font loaded.
+  it('fonts that finish loading measure the pills again: a cursor whose arrow the wider name now reaches joins its column', () => {
+    let loaded = false;
+    class StubCanvas {
+      getContext() {
+        return { font: '', measureText: (text: string) => ({ width: text.length * (loaded ? 9 : 6) }) };
+      }
+    }
+    const fonts = new EventTarget() as EventTarget & { load: ReturnType<typeof vi.fn> };
+    fonts.load = vi.fn(() => Promise.resolve([]));
+    vi.stubGlobal('OffscreenCanvas', StubCanvas);
+    const realFonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fonts });
+    try {
+      const agent = { id: 'g', name: 'Ελληνικός πράκτορας', color: '#5B9DFF', verified: true };
+      render(<AgentCursorLayer />);
+      send(event({ ...session('d', 1), agent, target: { x: 300, y: 300 } }));
+      flush();
+      expect(fonts.load).toHaveBeenCalledWith('600 11px Inter', 'Ελληνικός πράκτορας');
+      const narrow = labelWidths(agent.name, '').nameW;
+      loaded = true;
+      const wide = labelWidths(agent.name, '').nameW;
+      loaded = false;
+      expect(wide - narrow).toBeGreaterThan(30);
+      // Its arrow halfway between the two right edges, on the name's row.
+      const x = 300 + AGENT_CURSOR_PILL.left + (narrow + wide) / 2;
+      send(event({ ...session('b', 2), target: { x, y: 310 } }));
+      flush();
+      expect(where().b).toEqual({ x, y: 310 });
+      loaded = true;
+      act(() => { fonts.dispatchEvent(new Event('loadingdone')); });
+      flush();
+      // Now measured as drawn: b's arrow is by g's name, so it joins.
+      expect(where().b).toEqual({ x: 300, y: 300 + S });
+    } finally {
+      if (realFonts) Object.defineProperty(document, 'fonts', realFonts);
+      else delete (document as unknown as { fonts?: unknown }).fonts;
+      vi.unstubAllGlobals();
+    }
+  });
+});

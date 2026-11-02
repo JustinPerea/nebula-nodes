@@ -149,6 +149,9 @@ export interface CursorMotion {
    * agent's next action ends it (planMove), and that flies on the planner.
    */
   attached: Point | null;
+  /** The zoom it last stepped at: a zoom during a glide keeps the glide's
+   *  offset and speed in screen px (review 7, MEDIUM-3). */
+  lastZoom: number | null;
   /** Consecutive frames the target has moved; a fling (an action held by a
    *  target that jumps every frame) and how long the target has held still. */
   chase: number;
@@ -184,6 +187,7 @@ export function createMotion(at: Point, opacity = 0): CursorMotion {
     liveVel: { x: 0, y: 0 },
     lastRel: null,
     attached: null,
+    lastZoom: null,
     chase: 0,
     held: false,
     stillFor: 0,
@@ -528,6 +532,7 @@ export function stepMotion(
     m.lean = { x: 0, v: 0 };
     m.opacity = { x: opacityTarget, v: 0 };
     m.carry = 0;
+    m.lastZoom = opts.zoom;
     return { arrived, handedOff: false, atRest: true };
   };
   if (reduced) return finish(false);
@@ -546,6 +551,18 @@ export function stepMotion(
   const prevCarrier = prevLive && m.lastRel ? { x: prevLive.x - m.lastRel.x, y: prevLive.y - m.lastRel.y } : prevLive;
   const jumpPx = prevCarrier ? dist(carrier, prevCarrier) * zoom : 0;
   const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
+  // A zoom while it glides to a new spot (a say, a join, a leave): its
+  // offset from the spot and its speed keep their size in screen px, as the
+  // column's steps do, so the glide rides the zoom as a resting cursor does
+  // (review 7, MEDIUM-3).
+  if (m.landing && !m.plan && prevLive && !jumped && m.lastZoom !== null && m.lastZoom !== zoom && zoom > 0) {
+    const r = m.lastZoom / zoom;
+    m.pos.x = live.x + (m.pos.x - prevLive.x) * r;
+    m.pos.y = live.y + (m.pos.y - prevLive.y) * r;
+    m.vel.x *= r;
+    m.vel.y *= r;
+  }
+  m.lastZoom = zoom;
   // The spot moved on its node (a de-stack), not with it.
   const relShifted = opts.shifted ?? (m.lastRel !== null && dist(rel, m.lastRel) * zoom > 0.01);
   // Where the target was a frame ago, when it is moving: the steps in this

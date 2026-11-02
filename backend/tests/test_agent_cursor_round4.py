@@ -190,7 +190,7 @@ def test_the_proposing_session_never_reaches_an_agent(sockets, person):
 # _broadcast_presence fails the test that sent it.
 
 SENDERS = {"broadcast_raw", "broadcast_others", "broadcast_browser", "_broadcast_raw_quietly",
-           "send_text", "send_json"}
+           "send_text", "send_json", "send_bytes", "send"}
 POINT_FUNCS = {"_point", "point"}
 
 
@@ -357,43 +357,117 @@ def _dotted(node: ast.AST) -> str | None:
     return None
 
 
+# Frames that carry a ``session`` key of another meaning and may go to any
+# socket: a literal ``type`` outside this set (review 7, LOW-A). The set is
+# what only the person's canvas may get.
+PERSON_ONLY_TYPES = frozenset({"agentPresence", "agentPresenceReplay"})
+
+
 def person_only_sends(source: str) -> list[tuple[int, str]]:
     """Every place main.py sends a person-only frame: a call to one of
-    PERSON_FUNCS, a name (or ``self.x``) bound to one, a copy of one, a
-    function returning one, a dict with a ``"session"`` key built from a
-    presence event (a literal ``agentPresence``, a spread, or
-    ``e["session"] = ...`` on a bound name), or a replay, literal or
-    ``dict(type="agentPresenceReplay", ...)``; read through ``a if c else b``,
-    lists and tuples looped over, ``functools.partial(sender, ...)`` and
-    ``getattr(manager, "<sender>")`` (review 6, LOW-2). Given to a sender or
-    as ``_broadcast_presence``'s first (the other sockets') form. Each comes
-    with the function it's in; the one allowed route,
+    PERSON_FUNCS (or a name, partial, lambda or ``getattr`` standing for
+    one), a name (or ``self.x``) bound to one, a copy of one, a function
+    returning one, any dict with a ``"session"`` key, literal or ``dict()``,
+    unless its ``type`` is a literal outside PERSON_ONLY_TYPES (review 7,
+    LOW-A), a name given a session after it was built (``e["session"] =``,
+    ``e.update(session=...)``, ``e |= {...}``, ``e.setdefault("session",
+    ...)``, ``e | {...}``), or a replay; read through ``a if c else b``,
+    lists, tuples and sets (looped over, indexed or spread),
+    ``functools.partial(sender, ...)``, stored or called at once,
+    ``getattr(manager, ...)``, and names standing for a sender. Given to a
+    sender or as ``_broadcast_presence``'s first (the other sockets') form.
+    Each comes with the function it's in; the one allowed route,
     ``_broadcast_presence``'s ``person`` argument, isn't listed."""
     functions = _parsed(source)
     person_funcs = _returning(functions, set(PERSON_FUNCS), frozenset())
 
+    def session_dict(node: ast.AST) -> bool:
+        """A dict literal or ``dict(...)`` with a ``session`` key whose type
+        isn't a literal outside the person-only set."""
+        if isinstance(node, ast.Dict):
+            keys = {_literal_text(k): v for k, v in zip(node.keys, node.values) if k is not None}
+        elif isinstance(node, ast.Call) and _call_name(node) == "dict":
+            keys = {k.arg: k.value for k in node.keywords if k.arg is not None}
+        else:
+            return False
+        if "session" not in keys:
+            return False
+        kind = _literal_text(keys["type"]) if "type" in keys else None
+        return kind is None or kind in PERSON_ONLY_TYPES
+
     class _Person(_Cursors):
-        def __init__(self, bindings, cursor_funcs, point_funcs, loops):  # type: ignore[no-untyped-def]
+        def __init__(self, bindings, cursor_funcs, point_funcs, loops, nodes):  # type: ignore[no-untyped-def]
             self.loops = loops
+            self.aliases: set[str] = set()
+            self.partials: dict[str, list[ast.AST]] = {}
             super().__init__(bindings, cursor_funcs, point_funcs)
-            # ``e["session"] = ...`` makes ``e`` the person form; a loop over a
-            # list or tuple of person-only frames binds its name to one.
             for _ in range(4):
-                before = len(self.names)
+                before = (len(self.names), len(self.aliases), len(self.senders), len(self.partials))
                 for target, value in bindings:
-                    if isinstance(target, ast.Subscript) and _literal_text(target.slice) == "session":
-                        name = _dotted(target.value)
-                        if name:
-                            self.names.add(name)
                     name = _dotted(target)
-                    if name and self.is_cursor(value):
+                    # ``e["session"] = ...`` makes ``e`` the person form.
+                    if isinstance(target, ast.Subscript) and _literal_text(target.slice) == "session":
+                        inner = _dotted(target.value)
+                        if inner:
+                            self.names.add(inner)
+                    if not name:
+                        continue
+                    if self.is_cursor(value):
                         self.names.add(name)
+                    # A name standing for a person function: an alias, a
+                    # partial of one, a lambda returning one.
+                    if self.person_func(value) or (isinstance(value, ast.Lambda) and self.is_cursor(value.body)):
+                        self.aliases.add(name)
+                    # A name standing for a sender: an alias (of either branch,
+                    # or on ``self``), or a stored partial with what it binds.
+                    if self.sender_ref(value):
+                        self.senders.add(name)
+                    if isinstance(value, ast.Call) and _call_name(value) == "partial" and value.args and self.sender_ref(value.args[0]):
+                        self.partials[name] = [*value.args[1:], *(kw.value for kw in value.keywords)]
+                # A loop over person-only frames binds its name to one.
                 for target, iterable in self.loops:
                     name = _dotted(target)
-                    if name and isinstance(iterable, (ast.List, ast.Tuple, ast.Set)) and any(self.is_cursor(e) for e in iterable.elts):
+                    if name and self.is_cursor(iterable):
                         self.names.add(name)
-                if len(self.names) == before:
+                # Given a session after it was built.
+                for node in nodes:
+                    marked = None
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                        attr, args = node.func.attr, node.args
+                        if attr == "update" and (any(k.arg == "session" for k in node.keywords) or any(session_dict(a) for a in args)):
+                            marked = node.func.value
+                        elif attr == "setdefault" and args and _literal_text(args[0]) == "session":
+                            marked = node.func.value
+                    elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.BitOr) and session_dict(node.value):
+                        marked = node.target
+                    name = _dotted(marked) if marked is not None else None
+                    if name:
+                        self.names.add(name)
+                if (len(self.names), len(self.aliases), len(self.senders), len(self.partials)) == before:
                     break
+
+        def person_func(self, node):  # type: ignore[no-untyped-def]
+            """A reference to a person function (``_person_form``,
+            ``agent_presence.replay``, an alias, a partial of one)."""
+            if isinstance(node, ast.Name):
+                return node.id in self.cursor_funcs or node.id in self.aliases
+            if isinstance(node, ast.Attribute):
+                return node.attr in self.cursor_funcs or _dotted(node) in self.aliases
+            if isinstance(node, ast.Call) and _call_name(node) == "partial" and node.args:
+                return self.person_func(node.args[0])
+            if isinstance(node, ast.Call) and _call_name(node) == "getattr" and len(node.args) >= 2:
+                return _literal_text(node.args[1]) in self.cursor_funcs
+            return False
+
+        def sender_ref(self, node):  # type: ignore[no-untyped-def]
+            """A reference to a sender: by name, on ``self``, either branch."""
+            if isinstance(node, ast.Name):
+                return node.id in self.senders
+            if isinstance(node, ast.Attribute):
+                return node.attr in self.senders or _dotted(node) in self.senders
+            if isinstance(node, ast.IfExp):
+                return self.sender_ref(node.body) or self.sender_ref(node.orelse)
+            return False
 
         def is_cursor(self, node):  # type: ignore[no-untyped-def]
             if isinstance(node, ast.Attribute):
@@ -402,37 +476,48 @@ def person_only_sends(source: str) -> list[tuple[int, str]]:
                 return self.is_cursor(node.body) or self.is_cursor(node.orelse)
             if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
                 return any(self.is_cursor(e) for e in node.elts)
+            if isinstance(node, (ast.Subscript, ast.Starred)):
+                return self.is_cursor(node.value)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+                return self.is_cursor(node.left) or self.is_cursor(node.right)
+            if session_dict(node):
+                return True
             if isinstance(node, ast.Dict):
                 keys = {_literal_text(k): v for k, v in zip(node.keys, node.values) if k is not None}
-                kind = _literal_text(keys.get("type", ast.Constant(None)))
-                if kind == "agentPresenceReplay":
-                    return True
-                if "session" in keys and (kind == "agentPresence" or any(k is None for k in node.keys)):
+                if _literal_text(keys.get("type", ast.Constant(None))) == "agentPresenceReplay":
                     return True
                 return any(self.is_cursor(v) for v in node.values if v is not None)
-            if isinstance(node, ast.Call) and _call_name(node) == "dict":
-                kw = {k.arg: k.value for k in node.keywords if k.arg is not None}
-                if _literal_text(kw.get("type", ast.Constant(None))) == "agentPresenceReplay":
-                    return True
-                if "session" in kw and (node.args or _literal_text(kw.get("type", ast.Constant(None))) == "agentPresence"):
+            if isinstance(node, ast.Call):
+                # Encoded for a bytes send.
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "encode":
+                    return self.is_cursor(node.func.value)
+                if _call_name(node) == "dict":
+                    kw = {k.arg: k.value for k in node.keywords if k.arg is not None}
+                    if _literal_text(kw.get("type", ast.Constant(None))) == "agentPresenceReplay":
+                        return True
+                if self.person_func(node.func) or (isinstance(node.func, ast.Name) and node.func.id in self.aliases):
                     return True
             return super().is_cursor(node)
 
-    def sender_call(node: ast.Call, seen: _Cursors) -> list[ast.AST] | None:
-        """The frames a call sends, if it is a sender's: by name, through
-        ``getattr(x, "<sender>")``, or ``functools.partial(sender, ...)``."""
+    def sender_call(node: ast.Call, seen: _Person) -> list[ast.AST] | None:
+        """The frames a call sends, if it is a sender's: by name (or a name
+        standing for one), through ``getattr(x, ...)`` (any name but a
+        literal other than a sender's), a stored partial, or
+        ``functools.partial(sender, ...)``."""
         args = [*node.args, *(kw.value for kw in node.keywords)]
-        if _call_name(node) in seen.senders:
+        name = _dotted(node.func)
+        if name in seen.partials:
+            return [*seen.partials[name], *args]
+        if _call_name(node) in seen.senders or (name is not None and name in seen.senders):
             return args
         inner = node.func
         if isinstance(inner, ast.Call):
-            if _call_name(inner) == "getattr" and len(inner.args) >= 2 and _literal_text(inner.args[1]) in seen.senders:
-                return args
-            if _call_name(inner) == "partial" and inner.args:
-                first = inner.args[0]
-                name = first.attr if isinstance(first, ast.Attribute) else first.id if isinstance(first, ast.Name) else None
-                if name in seen.senders:
-                    return [*inner.args[1:], *(kw.value for kw in inner.keywords), *args]
+            if _call_name(inner) == "getattr" and len(inner.args) >= 2:
+                attr = _literal_text(inner.args[1])
+                if attr is None or attr in seen.senders:
+                    return args
+            if _call_name(inner) == "partial" and inner.args and seen.sender_ref(inner.args[0]):
+                return [*inner.args[1:], *(kw.value for kw in inner.keywords), *args]
         return None
 
     found: list[tuple[int, str]] = []
@@ -440,7 +525,7 @@ def person_only_sends(source: str) -> list[tuple[int, str]]:
         if func.name == "_broadcast_presence":
             continue
         loops = [(n.target, n.iter) for n in nodes if isinstance(n, (ast.For, ast.AsyncFor, ast.comprehension))]
-        seen = _Person(bindings, person_funcs, frozenset(), loops)
+        seen = _Person(bindings, person_funcs, frozenset(), loops, nodes)
         for node in nodes:
             if not isinstance(node, ast.Call):
                 continue

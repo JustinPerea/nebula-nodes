@@ -211,6 +211,31 @@ def test_an_asyncmock_stand_in_is_checked_and_still_reads_as_the_mock(sockets, m
     assert fake.marker == 1
 
 
+def test_a_stand_in_marked_by_hand_is_still_wrapped_and_reads_as_itself(sockets, monkeypatch):
+    """Review 7, NIT-1 and NIT-4: the marker alone no longer passes a stand-in
+    unwrapped; the wrapper shows the stand-in in its repr, and deleting an
+    attribute through it deletes it on the stand-in."""
+    from unittest.mock import AsyncMock
+
+    api = sockets
+    _, person = _person(api.main.agent_presence)
+    fake = AsyncMock()
+    fake._nebula_cursor_route = True
+    monkeypatch.setattr(api.main.manager, "broadcast_others", fake)
+    wrapped = vars(api.main.manager)["broadcast_others"]
+    assert wrapped is not fake
+    assert repr(wrapped) == f"<checked {fake!r}>"
+    with watch_cursor_routes() as stray:
+        asyncio.run(api.main.manager.broadcast_others(person))
+    assert any("a person-only frame for the other sockets" in line for line in stray), stray
+    wrapped.marker = 1
+    del wrapped.marker
+    assert "marker" not in vars(fake)
+    # Already checked: set again, it isn't wrapped twice.
+    monkeypatch.setattr(api.main.manager, "broadcast_others", wrapped)
+    assert vars(api.main.manager)["broadcast_others"] is wrapped
+
+
 def test_a_magicmock_stand_in_sent_the_agent_form_is_left_alone(sockets, monkeypatch):
     from unittest.mock import MagicMock
 
@@ -240,6 +265,15 @@ def test_the_socket_check_reads_bytes_too():
     other = Sink()
     assert person_only_frame(b'{"type": "agentPresenceReplay", "cursors": []}')
     assert not person_only_frame(b'{"type": "agentPresence", "target": null}')
+    # Review 7, NIT-2: a bytearray, a UTF-8 BOM, UTF-16, and bad UTF-8 in a value.
+    frame = '{"type": "agentPresence", "session": {"key": "k", "ordinal": 1}}'
+    assert person_only_frame(bytearray(frame.encode()))
+    assert person_only_frame(b"\xef\xbb\xbf" + frame.encode())
+    assert person_only_frame(frame.encode("utf-16"))
+    assert person_only_frame(frame.encode("utf-32"))
+    assert person_only_frame(b'{"type": "agentPresence", "say": "\xff", "session": {"key": "k", "ordinal": 1}}')
+    assert not person_only_frame(bytearray(b'{"type": "agentPresence", "target": null}'))
+    assert not person_only_frame("not json, agentPresence".encode("utf-16"))
     with watch_cursor_routes() as stray:
         asyncio.run(other.send_bytes(b'{"type": "agentPresence", "target": null}'))
         assert stray == []
@@ -328,6 +362,36 @@ PERSON_SHAPES = {
     "getattr": "p = _person_form(e, i, h)\n    await getattr(manager, 'broadcast_raw')(p)",
     "loop over a list": "p = _person_form(e, i, h)\n    for x in [p]:\n        await manager.broadcast_others(x)",
     "on self": "self.p = _person_form(e, i, h)\n    await manager.broadcast_others(self.p)",
+    # Review 7, LOW-B: each reader from its other side.
+    "other branch": "p = _person_form(e, i, h)\n    await manager.broadcast_others(e if ok else p)",
+    "loop over a tuple": "p = _person_form(e, i, h)\n    for x in (p,):\n        await manager.broadcast_others(x)",
+    "loop over a set": "p = _person_form(e, i, h)\n    for x in {p}:\n        await manager.broadcast_others(x)",
+    "partial, keyword": "p = _person_form(e, i, h)\n    await functools.partial(manager.broadcast_others, data=p)()",
+    "dict() with session": "await manager.broadcast_raw(dict(e, session=tag))",
+    "dict() presence with session": "await manager.broadcast_raw(dict(type='agentPresence', target=t, session=tag))",
+    # Review 7, LOW-A: the shapes it found missed.
+    "send_bytes": "p = _person_form(e, i, h)\n    await ws.send_bytes(json.dumps(p).encode())",
+    "raw socket send": "p = _person_form(e, i, h)\n    await ws.send({'type': 'websocket.send', 'text': json.dumps(p)})",
+    "person function alias": "pf = _person_form\n    await manager.broadcast_raw(pf(e, i, h))",
+    "person function partial": "await manager.broadcast_raw(functools.partial(_person_form, e)(i, h))",
+    "person function lambda": "mk = lambda: _person_form(e, i, h)\n    await manager.broadcast_raw(mk())",
+    "person function getattr": "await manager.broadcast_raw(getattr(agent_presence, 'person_form')(e, i))",
+    "stored partial": "p = _person_form(e, i, h)\n    f = functools.partial(manager.broadcast_others, p)\n    await f()",
+    "sender either branch": "p = _person_form(e, i, h)\n    s = manager.broadcast_raw if ok else manager.broadcast_others\n    await s(p)",
+    "sender in the other branch": "p = _person_form(e, i, h)\n    s = log_it if quiet else manager.broadcast_others\n    await s(p)",
+    "sender on self": "p = _person_form(e, i, h)\n    self.out = manager.broadcast_raw\n    await self.out(p)",
+    "getattr, a variable": "p = _person_form(e, i, h)\n    await getattr(manager, n)(p)",
+    "update(session=)": "e = _point(i, target=None, say='x')\n    e.update(session=tag)\n    await manager.broadcast_raw(e)",
+    "update({session})": "e = _point(i, target=None, say='x')\n    e.update({'session': tag})\n    await manager.broadcast_raw(e)",
+    "|=": "e = _point(i, target=None, say='x')\n    e |= {'session': tag}\n    await manager.broadcast_raw(e)",
+    "|": "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(e | {'session': tag})",
+    "setdefault": "e = _point(i, target=None, say='x')\n    e.setdefault('session', tag)\n    await manager.broadcast_raw(e)",
+    "a variable type": "await manager.broadcast_raw({'type': kind, 'target': t, 'session': tag})",
+    "dict(), a variable type": "await manager.broadcast_raw(dict(target=t, session=tag, type=kind))",
+    "no type": "await manager.broadcast_raw({'session': tag, 'target': t})",
+    "a list, looped by name": "p = _person_form(e, i, h)\n    ps = [p]\n    for x in ps:\n        await manager.broadcast_others(x)",
+    "indexed": "p = _person_form(e, i, h)\n    await manager.broadcast_others([p][0])",
+    "spread": "p = _person_form(e, i, h)\n    await manager.broadcast_others(*[p])",
 }
 
 
@@ -346,7 +410,18 @@ def test_the_person_only_guard_catches_each_shape(shape):
     "await manager.broadcast_raw({'type': 'graphSync', 'session': s})",
     "await manager.broadcast_raw(dict(type='graphSync', session=s))",
     "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(e if ok else {**e})",
-], ids=["the route", "the route, named", "agent log", "not presence", "another kind's session", "dict() of another kind", "agent forms either way"])
+    # Review 7: each reader's other side, with nothing person-only in it.
+    "e = _point(i, target=None, say='x')\n    for x in (e,):\n        await manager.broadcast_others(x)",
+    "e = _point(i, target=None, say='x')\n    await functools.partial(manager.broadcast_others, data=e)()",
+    "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(dict(e, say='y'))",
+    "e = _point(i, target=None, say='x')\n    e.update(say='y')\n    await manager.broadcast_raw(e)",
+    "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(e | {'say': 'y'})",
+    "pf = _person_form\n    await _broadcast_presence(e, pf(e, i, h))",
+    "await ws.send_bytes(json.dumps({'type': 'graphSync', 'session': s}).encode())",
+    "await manager.broadcast_raw({'type': 'workspaceSession', 'session': s})",
+], ids=["the route", "the route, named", "agent log", "not presence", "another kind's session", "dict() of another kind",
+        "agent forms either way", "agent form in a tuple", "agent form, partial keyword", "agent form, dict() copy",
+        "agent form, updated", "agent form, merged", "alias to the route", "bytes of another kind", "a literal other kind"])
 def test_the_person_only_guard_lets_the_route_through(shape):
     assert person_only_sends(f"async def f():\n    {shape}\n") == []
 

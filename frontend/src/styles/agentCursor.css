@@ -147,11 +147,48 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
 
 /* A say pill just shown waits, hidden, while the cursors below glide out of
    its way, then fades in: its animation starts when the attribute goes (GM -
-   Design, PR #211 review 6, item 3). The layer never sets it under reduced
-   motion. */
-.agent-cursor[data-say-wait='true'] .agent-cursor__say {
+   Design, PR #211 review 6, item 3). With no room on either side after
+   600ms it stays off the canvas ('log': the Agent log shows it) until the
+   room clears (r17 item 2). */
+.agent-cursor[data-say-wait] .agent-cursor__say {
   animation: none;
   opacity: 0;
+}
+
+/* Another column in the way on the right: the say pill sits on its own row
+   to the left of the arrow, its right edge 4px left of the tip (1.5px in
+   the arrow's box, the label 15px in): GM - Design, PR #211 r17 item 2. */
+.agent-cursor[data-say-side='left'] .agent-cursor__say {
+  position: absolute;
+  top: 24px;
+  right: calc(100% + 17.5px);
+  transform-origin: 100% 0;
+}
+
+/* A full column's third slot (r17 item 1): one neutral arrow with a count
+   pill ("2 more"); the cursors folded into it fade out at its spot (their
+   opacity comes from the layer's spring). Hover lists their names. */
+.agent-cursor[data-collapsed='true'] .agent-cursor__label {
+  visibility: hidden;
+}
+
+.agent-cursor__list {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 10px;
+  background: #18181b;
+  color: #ececee;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.agent-cursor[data-count][data-hover='true'] .agent-cursor__list {
+  display: flex;
 }
 
 /* A leaving cursor's pills keep their layout and fade only with the tip, on

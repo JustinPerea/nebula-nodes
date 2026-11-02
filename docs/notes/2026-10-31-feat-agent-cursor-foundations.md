@@ -642,3 +642,95 @@ GM's r14 (the step) and r15 (answers to review 6), and review 6's findings. The 
   - A say on the middle cursor: steps of 42 and 65, with the glide over 17 in-between frames at 2.67 px per frame at most. Back to 42 and 42 after.
   - Near targets 10 px apart: one column, step 42. (0,30,15): steps of 42 and 42.
   - The node library panel a new project opens with still covers the node's left side in shots 3 and 5.
+
+## Round 4e
+
+Review 7 (one MEDIUM, three LOWs that each broke a GM rule) and GM's r17. The spec's "Rulings from #211 review 7" section is the source.
+
+### The head moves (review 7 MEDIUM-1, LOW-1)
+
+- A spot change counts as a ride only when it comes from a zoom or a node being carried. When the head moves by its own event (a new target inside its stamp radius), the layer bumps that cursor's `revs`, and the cursors below see it as a layout change and glide on the land spring.
+- **The column floor.** Each frame, a landed cursor in a column can't sit closer than one step under the cursor above it, as drawn: `floor = above.y + step(above's say)/zoom`, and its downward speed is at least the above's. A resting cursor whose above is flying or landing is turned into a landing cursor so the floor holds it too. The above pushes its members on the same frame it steps (`holdBelow`), only if they've stepped this frame or have no frame pending, so nobody moves twice in one frame. This is the structural fix for LOW-1 as well: the members no longer depend on which view's frame runs first.
+- The floor skips a cursor whose last step ran at another zoom, so a zoom mid-glide rescales it before anything pushes it (mutant E29 pins this).
+- Review 7's P1 cases (0,−10), (12,0), (0,10), (−12,−8) are tests: no member moves 12 px or more in a frame (measured at most 1.7), the step never goes under 42, and nothing meets while the head flies. A drag ride stays kinematic. Live, the head moving up gave members at most 1.63 px per frame and a least step of 42.
+
+### Says (review 7 MEDIUM-2, GM r17 items 2 and 3)
+
+- **A say never joins.** Joins use name-only shapes: a target within 16 px, or an arrow meeting a name pill. The step inside a column still counts says (42 under a name, 65 under a say). The fuzz now checks name-only shapes across columns.
+- **Waiting for flyers.** A say waits for a flyer whose drawn arrow is inside its room, or whose landing spot is under the speaker (it lists the speaker in its `above`). A flyer passing through doesn't count. P3 and P5 are tests, and they pin F24 (now E6 and E7).
+- **The room.** A cursor blocks a say only when it meets the speaker with its say but not without it, at the cursors' drawn positions and real widths, with their says as painted. The cursor right below waits the say until it's a full say step (65) down.
+- **Left flip.** When the right side touches a foreign cursor, the say tries the left of its own arrow: on the say row, its right edge 4 px left of the tip (`AGENT_CURSOR_SAY_LEFT_GAP_PX`). A left say owns its own box (`sayUnit`); the arrow and name keep theirs.
+- **The log.** If both sides are blocked, the say waits up to 600 ms, then leaves the canvas (`data-say-wait="log"`) and comes back when a side clears, if it's still current. The Agent log already shows says: a cursor event's line is `event.log || say`, and the backend sets `log` only when it adds words the bubble leaves out. So no new copy was needed. A say in the log keeps the 65 px under its cursor reserved, so the column doesn't jump when it returns.
+- Inside its own column, the review 6 rule holds: the cursors below glide first, then the say fades in.
+- Under reduced motion, the say skips the wait and goes straight to its side or the log.
+
+### Column cap (GM r17 item 1)
+
+- A column draws at most 3 cursors (`AGENT_CURSOR_COLUMN_DRAWN`). With 4 or more members, the third slot is a count cursor: a neutral arrow and pill (`#52525b`) reading "2 more" or "3 more". Hovering lists the names (up to 3, then a count line). Its aria-label starts with the visible text ("2 more: Pair · 3, Pair · 4"). It isn't focusable because the other cursors aren't either: all of them are `role="status"` with no tabindex.
+- **For GM:** the latest arrivals fold into the count. When columns merge, each part keeps its drawn cursors. Folded cursors fade out (opacity 0, `aria-hidden`, no say).
+- In an upward chain a folded cursor's target can sit above its slot, but it isn't drawn. No drawn cursor rests more than 2 steps below its target, tested at zooms 0.25 to 3.
+- When members leave, the count opens back into full cursors on the spring. An opening cursor isn't held by the floor while it rises into its slot. Live, it moved at most 6.6 px per frame.
+
+### Zoom during a glide (review 7 MEDIUM-3)
+
+- `CursorMotion.lastZoom` records the zoom each step ran at. While landing, a changed zoom rescales the offset from the live spot and the velocity by `lastZoom/zoom`, so steps stay in screen px.
+- The zoom subscription now steps gliding cursors too, on the same frame (dt 0), not only resting ones.
+- Tests start the zoom one frame after a say, through `setViewport`, keyboard zoom and pinch.
+
+### Font load (review 7 MEDIUM-4)
+
+- The widths memo depends on a `fontVersion` that the layer bumps on `document.fonts` `loadingdone`, and an effect calls `document.fonts.load()` for each name and say. `textWidthPx` rebuilds its canvas context if the `OffscreenCanvas` constructor changes. There are still no per-frame layout reads.
+- Tested with a mocked FontFaceSet and a stub canvas, with a Greek name. Live, the Greek pill's reserved width went from 133 px before the load to 139 after it, against 136.4 drawn, with the cursor below 5 px clear.
+
+### Boundary guards (review 7 LOW-A, LOW-B, NITs), tests only
+
+- **The AST rule.** Any dict literal or `dict()` call with a `"session"` key is flagged unless its `"type"` is a literal outside the person-only set. It also reads:
+  - aliases, lambdas, partials and `getattr` of person-only functions;
+  - stored partials, and sender aliases through an if-expression or a dotted name;
+  - `getattr` with a variable;
+  - `update`, `setdefault`, `|=` and `|` on a session dict;
+  - subscripts, spreads and `.encode()`.
+  `SENDERS` adds `send_bytes` and `send`.
+- **LOW-B.** Each of the four one-sided readers is pinned from both sides. There are new person-only shapes, plus 8 allowed shapes with ids.
+- **NITs.** A stand-in skips wrapping only if it really is a checked wrapper. `_CheckedStandIn` has `__delattr__` and a `<checked …>` repr. Bytes frames decode with `json.loads(bytes(data))`, which covers bytearray, a BOM, UTF-16 and UTF-32, and falls back to a replace-decode for bad UTF-8.
+- There's no diff in `main.py`, `services/`, `person_gate.py`, `scene_keys.py` or `person_session.py`. Agent reads and the POST `/api/canvas/cursor` response are unchanged.
+
+### NIT-1 and NIT-2
+
+- **NIT-1.** The layout runs once per frame for all views. It's cached on the field, keyed on a version (bumped by any target, stamp, label or arrival change), the zoom, and the unlanded cursors in eta order. Mutant E27 (no version in the key) is caught.
+- **NIT-2.** The 4.8 px is on purpose. The step is `ceil(label block bottom + 4 − arrow top)`, and the arrow's painted top is at 0.8 px, so whole-px steps add 0.8 px. Whole-px steps keep the pills on the pixel grid, so they stay crisp. Under a say the block ends at the say pill, which has no ring, so the painted gap there is 5.8 px (review 7's number). GM r16 accepted 42 and 65, so I kept them and didn't tighten.
+
+### Checks (round 4e)
+
+- `tsc -b` exit 0; `npm run lint` exit 0.
+- **Focused vitest.** `--maxWorkers=2`, 144 files in four explicit arrays (every test that reads `src/` or `styles/`, plus the cursor, move and promote files): 779 + 376 + 632 + 599 = 2,386 passed.
+- **Isolated pytest.**
+  - 125 focused files: 4,383 passed and 1 failed. The failure is the same `test_cli_apply::test_arrange_from_the_builder_and_in_the_reply` order flake as round 4d, and the file passes alone (27 passed).
+  - Each cursor file alone, with `NEBULA_TEST_SHARD` stripped: sessions 53, review2 29, round4 40, round4c 79, canvas_pins 39.
+- **Build budget.** Pass: 443,707 B raw and 136,226 gzip, so the entry is unchanged. The cursor chunk is 35,605 B (4d: 29,081).
+- **Mutation checks.**
+  - Frontend, 29 of 29 caught (E1 to E29). They cover:
+    - the floor, the push and the one-move-per-frame gate;
+    - the head's own event read as a ride;
+    - flyers, both inside the room and landing under the speaker (F24);
+    - others' says (M4) and others' widths (M5);
+    - the 600 ms cap (M1), the left flip, the log and its return;
+    - the full-step wait, a say joining, the cap and which cursors fold;
+    - the opening hold, the zoom rescale and same-frame zoom;
+    - the font re-measure, the 2 px margin (M2) and canvas under-measure (M3);
+    - the count wording and its aria, folded visibility, the layout cache key, the left say's own box, and the floor's zoom check.
+  - Backend, 23 of 23 caught (B7 to B33). B21 (sender aliases read through one branch only) survived the first run, so I added an alias shape in the other branch, and it's caught now.
+- **Live at 1440, Restraint, on 8780 and 5780, with the node library closed.**
+  - The canary blocked 8000, 8005, 5173, 8840 and outside, with 0 page errors. The 11 shots have no md5 duplicates, and I opened each one.
+  - Three cursors: steps of 42 and 42, least gap 4.8 px, 0 pairs meeting.
+  - The say strip:
+    - frame 0 before the say: step 42;
+    - frame 1, mid-glide: 58.35 with the say hidden;
+    - frame 2: 65 and 42 with the say in;
+    - 17 frames waiting, never under 42, members at most 3.4 px per frame.
+  - A middle say: steps of 42 and 65.
+  - The head moving up: least step 42, members at most 1.63 px per frame, the head 1.42.
+  - Count cursor: "2 more" with aria "2 more: Pair · 3, Pair · 4", and its hover list shows both names. Opening back, cursors moved at most 6.6 px per frame, ending at 42 and 42.
+  - Left flip: the say drew left of its arrow, beside a foreign cursor, with 0 pairs meeting.
+  - Wait then log: waiting at 250 ms, in the log at 900 ms (the Agent log line shows it), and back on the canvas on the right once the room cleared.
+  - Greek name after the font loaded: the reserved width went from 133 to 139 px against a drawn pill of 136.4, with the cursor below 5 px clear.

@@ -29,10 +29,15 @@ import {
   AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
+  AGENT_CURSOR_NAME_FONT,
+  AGENT_CURSOR_SAY_FONT,
   AGENT_CURSOR_STACK,
+  countLabel,
   cursorShape,
-  cursorsMeet,
   deStackLayout,
+  cursorsMeet,
+  sayPillBox,
+  stackStepPx,
   inkFor,
   labelWidths,
   labelLayout,
@@ -120,6 +125,22 @@ class CursorField {
    *  lands unseen on return, with no arrival (GM - Design, PR #211 r5). */
   visibilityEpoch = 0;
   private arrivals = 0;
+  /** Bumped whenever anything the layout reads changes. */
+  private version = 0;
+  private laid: { key: string; spots: Map<string, StackSpot> } | null = null;
+  /** Per cursor, how many events moved its target (review 7, MEDIUM-1). */
+  private readonly revs = new Map<string, number>();
+  /** Each cursor's say pill as painted on the canvas now: its side, or
+   *  absent while it has none, waits, or shows in the Agent log only. */
+  readonly paint = new Map<string, 'right' | 'left'>();
+  /** Each view draws its cursor where its motion is now (the column floor). */
+  readonly placers = new Map<string, () => void>();
+  /** Cursors unfolding from a count cursor, not yet a step under the
+   *  member above (hold). */
+  readonly opening = new Set<string>();
+  private readonly folded = new Set<string>();
+  /** Each cursor's name as its pill shows it, for the count cursor's list. */
+  readonly names = new Map<string, string>();
 
   /** A cursor's say pill showed or went: the cursors stacked below it glide
    *  to their new step on the land spring (GM - Design, PR #211 r13 item 2). */
@@ -132,6 +153,7 @@ class CursorField {
     }
     if (entry.say === say && entry.nameW === label.nameW && entry.sayW === label.sayW) return;
     this.targets.set(key, { ...entry, ...label });
+    this.version += 1;
     for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
@@ -170,6 +192,7 @@ class CursorField {
   }
 
   private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number): void {
+    this.version += 1;
     const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
     if (before && node !== null && before.node === node && before.seq === seq) {
       // Carried by its node with no event of its own (a person's drag, a
@@ -188,6 +211,9 @@ class CursorField {
         : { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
       return;
     }
+    // Its target moved by an event of its own, not carried: the cursors
+    // stacked under it glide to their new spots (review 7, MEDIUM-1).
+    this.revs.set(key, (this.revs.get(key) ?? 0) + 1);
     // A new event keeps its place in the stack while it stays within the
     // stack radius of the spot it landed on. Further than that, it is on its
     // way to a new spot and is stamped again on landing.
@@ -209,53 +235,170 @@ class CursorField {
     const entry = this.targets.get(key);
     if (!entry || entry.since !== Infinity) return;
     this.targets.set(key, { ...entry, since: (this.arrivals += 1), at: { ...entry.target } });
+    this.version += 1;
   }
 
   spot(key: string, zoom: number): Point | undefined {
     return this.layout(zoom).get(key)?.at;
   }
 
-  /** Every live cursor's spot and what put it there (deStackLayout). */
+  /** Every live cursor's spot and what put it there (deStackLayout), worked
+   *  out once for every view while nothing it reads changes (review 7,
+   *  NIT-1): the targets, stamps, labels, zoom, and the order the cursors
+   *  still on their way are due to land in. */
   layout(zoom: number): Map<string, StackSpot> {
     this.purge();
+    const due = [...this.targets].filter(([, v]) => v.since === Infinity).map(([k]) => ({ k, eta: this.etaMs(k) }));
+    due.sort((a, b) => a.eta - b.eta || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+    const cacheKey = `${this.version}|${zoom}|${due.map((d) => d.k).join(',')}`;
+    if (this.laid && this.laid.key === cacheKey) return this.laid.spots;
+    let spots: Map<string, StackSpot>;
     if (this.targets.size < 2) {
-      return new Map([...this.targets].map(([k, v]) => [k, { at: v.target, sig: '', above: [] }]));
+      spots = new Map([...this.targets].map(([k, v]) => [k, { at: v.target, sig: '', above: [] }]));
+    } else {
+      // Cursors still on their way come after every landed one, the one due
+      // to land soonest first.
+      const order = new Map(due.map((d, i) => [d.k, i]));
+      const entries = [...this.targets].map(([k, v]) => ({
+        key: k,
+        target: v.target,
+        since: v.since !== Infinity ? v.since : UNLANDED + order.get(k)!,
+        say: v.say,
+        nameW: v.nameW,
+        sayW: v.sayW,
+      }));
+      spots = deStackLayout(entries, zoom);
     }
-    // Cursors still on their way come after every landed one, the one due to
-    // land soonest first.
-    const entries = [...this.targets].map(([k, v]) => ({
-      key: k,
-      target: v.target,
-      since: v.since !== Infinity ? v.since : UNLANDED + this.etaMs(k),
-      say: v.say,
-      nameW: v.nameW,
-      sayW: v.sayW,
-    }));
-    return deStackLayout(entries, zoom);
+    // A cursor no longer folded opens out of its count cursor (hold).
+    for (const [k, spot] of spots) {
+      if (spot.collapsedInto) this.folded.add(k);
+      else if (this.folded.delete(k)) this.opening.add(k);
+    }
+    for (const k of this.folded) if (!spots.has(k)) this.folded.delete(k);
+    this.laid = { key: cacheKey, spots };
+    return spots;
+  }
+
+  /** How many events have moved this cursor's target (place). */
+  revOf(key: string): number {
+    return this.revs.get(key) ?? 0;
   }
 
   /**
-   * Is the room under this cursor's say pill clear: no other cursor's
-   * drawn arrow or pills (where it is this frame, not where it is going)
-   * within clearPx of this cursor's label with the say, and no other arrow
-   * beside it (cursorsMeet)? So the say shows once the cursors below have
-   * all but finished their glide. Cursors still
-   * flying are passing through, not stacked, and don't count (GM - Design,
-   * PR #211 review 6, item 3).
+   * The column floor (review 7, MEDIUM-1 and LOW-1): a landed cursor in a
+   * column is never drawn less than its step under the member above it,
+   * where that one is drawn now (its say counted while it paints), so a
+   * head moving by its own event leads the cursors under it, and they glide
+   * in lockstep whichever frame runs first. A cursor gliding on the land
+   * spring is held; one at rest is held only while the member above glides
+   * or flies (its spring's overshoot, a head's own move), and then glides
+   * back to its spot. A ride is exact as it is, and a cursor still flying in
+   * comes from anywhere. True when it moved it.
    */
-  sayRoomClear(key: string, at: Point, zoom: number): boolean {
-    this.purge();
-    const own = this.targets.get(key);
-    if (!own) return true;
-    const mine = cursorShape({ x: at.x * zoom, y: at.y * zoom }, true, own.nameW, own.sayW);
-    for (const [other, entry] of this.targets) {
-      if (other === key) continue;
-      const m = this.motions.get(other);
-      if (!m || m.plan) continue;
-      const theirs = cursorShape({ x: m.pos.x * zoom, y: m.pos.y * zoom }, entry.say, entry.nameW, entry.sayW);
-      if (cursorsMeet(mine, theirs)) return false;
+  hold(key: string, zoom: number): boolean {
+    const m = this.motions.get(key);
+    const entry = this.targets.get(key);
+    if (!m || !entry || m.plan || entry.since === Infinity) return false;
+    // Not stepped at this zoom yet (a zoom's frame, before its own turn):
+    // its own step carries it to this zoom first, then holds it.
+    if (m.lastZoom !== null && m.lastZoom !== zoom) return false;
+    const spot = this.layout(zoom).get(key);
+    if (!spot || spot.collapsedInto || spot.above.length === 0) return false;
+    const upKey = spot.above[spot.above.length - 1];
+    const up = this.motions.get(upKey);
+    if (!up || (!m.landing && !up.plan && !up.landing)) return false;
+    const floor = up.pos.y + stackStepPx(Boolean(this.paint.get(upKey))) / zoom;
+    if (m.pos.y >= floor - 1e-9) {
+      this.opening.delete(key);
+      return false;
+    }
+    // Opening out of a count cursor: it starts on the slot the member
+    // above is gliding up from, and is held once they are a step apart.
+    if (this.opening.has(key)) return false;
+    m.pos.y = floor;
+    if (m.vel.y < up.vel.y) m.vel.y = up.vel.y;
+    if (!m.landing) {
+      // Off its spot now: it glides back once the member above has settled.
+      m.attached = null;
+      m.landing = { ...m.pos };
+      m.lastZoom = zoom;
+      this.wakers.get(key)?.();
     }
     return true;
+  }
+
+  /** This cursor was just drawn at frame `time`: the members under it that
+   *  have already stepped in this frame are held to the column floor now
+   *  and drawn again; one still to step holds itself after its own step,
+   *  so no cursor moves twice in one frame. */
+  holdBelow(key: string, zoom: number, time: number, depth = 0): void {
+    if (depth > this.targets.size) return;
+    for (const [other, spot] of this.layout(zoom)) {
+      if (spot.collapsedInto || spot.above[spot.above.length - 1] !== key) continue;
+      // Still to step in this frame: it holds itself after its own step.
+      const due = this.dueAt.get(other);
+      if (this.steppedAt.get(other) !== time && due !== undefined && due < time) continue;
+      if (this.hold(other, zoom)) this.placers.get(other)?.();
+      this.holdBelow(other, zoom, time, depth + 1);
+    }
+  }
+
+  /** The frame each cursor last stepped in, and the frame each pending
+   *  frame was asked for in (holdBelow). */
+  readonly steppedAt = new Map<string, number>();
+  readonly dueAt = new Map<string, number>();
+  frameTime = -Infinity;
+
+  /**
+   * Is there room for this cursor's say pill on `side`, drawn at `at`
+   * (where the cursor is this frame)? Against every other cursor as it is
+   * drawn now, its own say included (with its real widths): `wait` when one
+   * of its own column's cursors below is still in the way (they glide out
+   * of it), or a flying cursor the say waits for; `foreign` when a cursor
+   * of another column is in the way, which the say never moves (GM - Design,
+   * PR #211 r17 item 2). A flyer counts only when its drawn arrow is in the
+   * say's room or it is on its way to a spot under this cursor; one just
+   * passing through elsewhere doesn't (r17 item 3). Folded cursors aren't
+   * drawn and don't count.
+   */
+  sayRoom(key: string, side: 'right' | 'left', at: Point, zoom: number): { wait: boolean; foreign: boolean } {
+    this.purge();
+    const out = { wait: false, foreign: false };
+    const own = this.targets.get(key);
+    if (!own) return out;
+    const laid = this.layout(zoom);
+    const mySpot = laid.get(key);
+    const origin = { x: at.x * zoom, y: at.y * zoom };
+    const mine = cursorShape(origin, side, own.nameW, own.sayW);
+    const bare = cursorShape(origin, false, own.nameW);
+    const room = sayPillBox(mine)!;
+    const gap = AGENT_CURSOR_STACK.gapPx;
+    for (const [other, entry] of this.targets) {
+      if (other === key) continue;
+      const spot = laid.get(other);
+      const m = this.motions.get(other);
+      if (!m || spot?.collapsedInto) continue;
+      const theirs = cursorShape({ x: m.pos.x * zoom, y: m.pos.y * zoom }, this.paint.get(other) ?? false, entry.nameW, entry.sayW);
+      const under = spot?.above.includes(key) ?? false;
+      if (m.plan) {
+        const box = theirs.arrowBox;
+        const inRoom = box.left < room.right + gap && box.right > room.left - gap && box.top < room.bottom + gap && box.bottom > room.top - gap;
+        if (inRoom || under) out.wait = true;
+        continue;
+      }
+      // The cursor right under it waits until it is a full say step down,
+      // so the column floor never has to push it as the say shows.
+      if (under && spot!.above[spot!.above.length - 1] === key
+        && (m.pos.y - at.y) * zoom < stackStepPx(true) - 0.01) {
+        out.wait = true;
+        continue;
+      }
+      // In the way of the say: they meet with it and not without it.
+      if (!cursorsMeet(mine, theirs) || cursorsMeet(bare, theirs)) continue;
+      if (under || (mySpot?.above.includes(other) ?? false)) out.wait = true;
+      else out.foreign = true;
+    }
+    return out;
   }
 
   private etaMs(key: string): number {
@@ -306,6 +449,14 @@ class CursorField {
     this.pendingSay.delete(key);
     this.motions.delete(key);
     this.wakers.delete(key);
+    this.paint.delete(key);
+    this.placers.delete(key);
+    this.names.delete(key);
+    this.revs.delete(key);
+    this.opening.delete(key);
+    this.steppedAt.delete(key);
+    this.dueAt.delete(key);
+    this.version += 1;
     for (const wake of this.wakers.values()) wake();
   }
 }
@@ -324,11 +475,23 @@ function overlaps(rect: DOMRect, x: number, y: number): boolean {
 
 type Phase = 'pickup' | 'travel' | 'rest';
 
-function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTaken = false, onExited }: {
+/** Where a say pill is: on the canvas right or left of its arrow, waiting
+ *  hidden for room, or in the Agent log only (GM - Design, PR #211 r17). */
+type SayState = 'none' | 'wait' | 'log' | 'right' | 'left';
+
+/** The count cursor's fill: neutral, no agent's colour (r17 item 1). */
+const COUNT_FILL = '#52525b';
+
+/** The count cursor's list: up to this many names, then how many more. */
+const COUNT_LIST_NAMES = 3;
+
+function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving = false, nameTaken = false, onExited }: {
   cursor: AgentCursor;
   zoom: number;
   peers: number;
   field: CursorField;
+  /** Bumped when the page's fonts finish loading: the pills are measured again. */
+  fontVersion?: number;
   /** Removed from the store: it fades out where it is, then onExited forgets it. */
   leaving?: boolean;
   /** While leaving, a live cursor shows the same name: the pill hides at once. */
@@ -355,13 +518,24 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
   const updateLabel = useRef<() => void>(() => {});
   const place = useRef<() => void>(() => {});
   const leavingRef = useRef(leaving);
-  // What put it on its spot last frame (StackSpot.sig): the spot moving
-  // with this unchanged is a ride (a zoom, a node carried), not a re-layout.
+  // What put it on its spot last frame (StackSpot.sig), and the events that
+  // moved the targets of the members above it: the spot moving with neither
+  // changed is a ride (a zoom, a node carried), not a re-layout.
   const layoutSig = useRef<string | null>(null);
-  // A say pill just shown waits, hidden, until the cursors below have
-  // glided out of its way (review 6, item 3): since when, or null.
+  const layoutRevs = useRef('');
+  // Its say pill (r17 item 2): a new one waits, hidden, until the cursors
+  // below have glided out of its way (review 6, item 3), moves to the left
+  // of its arrow when another column is in the way on the right, and after
+  // SAY_WAIT_MAX_MS shows in the Agent log only until the room clears.
+  const sayState = useRef<SayState>('none');
   const sayWaitSince = useRef<number | null>(null);
   const sayWasShown = useRef(false);
+  const sayText = useRef<string | null>(null);
+  // In a full column: folded into the count cursor, or the count cursor
+  // with the keys it stands for (r17 item 1).
+  const [fold, setFold] = useState<{ into: string | null; group: readonly string[] | null }>({ into: null, group: null });
+  const foldKey = useRef('');
+  const collapsedRef = useRef(false);
   const exited = useRef(onExited);
   const [arrivedSeq, setArrivedSeq] = useState(0);
   // Each holds the event seq whose timer ran out, so a new event resets both.
@@ -381,9 +555,32 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
   const taken = leaving && (nameTaken || takenLatched);
 
   const dragging = cursor.action === 'drag' && cursor.from !== undefined;
-  const fill = sessionFill(cursor.color, cursor.session);
+  const counting = !leaving && fold.group !== null && fold.group.length > 1;
+  const collapsed = !leaving && fold.into !== null;
+  const fill = counting ? COUNT_FILL : sessionFill(cursor.color, cursor.session);
   const name = sessionName(cursor.name, cursor.session);
-  const widths = useMemo(() => labelWidths(name, cursor.say), [name, cursor.say]);
+  const countText = counting ? countLabel(fold.group!.length) : null;
+  // Measured again when the page's fonts finish loading: a pill measured
+  // with the fallback font can be narrower than it is drawn (review 7,
+  // MEDIUM-4). No layout read.
+  const widths = useMemo(
+    () => labelWidths(countText ?? name, countText === null ? cursor.say : ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontVersion: the fonts changed under the same text
+    [name, cursor.say, countText, fontVersion],
+  );
+  // The pills' text in the font they draw in: a subset not loaded yet loads
+  // now, and the layer measures again when it has (fontVersion).
+  useEffect(() => {
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (!fonts || typeof fonts.load !== 'function') return;
+    fonts.load(AGENT_CURSOR_NAME_FONT, countText ?? name).catch(() => {});
+    if (cursor.say) fonts.load(AGENT_CURSOR_SAY_FONT, cursor.say).catch(() => {});
+  }, [name, cursor.say, countText]);
+  // A count cursor and a folded one draw no say pill: the says of a full
+  // column's later members show in the Agent log.
+  const drawsSay = !counting && !collapsed;
+  // The names the count cursor stands for, in arrival order.
+  const countNames = counting ? fold.group!.map((key) => (key === cursor.key ? name : field.names.get(key) ?? '')) : [];
 
   // Narration and idle dimming follow each new event. The bubble fades on a
   // spring about 3 s after the last event, then goes; at once under reduced
@@ -415,6 +612,66 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
     };
   }, [cursor.seq, cursor.receivedAt, cursor.replayed, leaving]);
 
+  // The say pill's place, set outside React like the label: on the canvas
+  // (and which side), waiting hidden, or in the Agent log only.
+  const setSay = useRef<(state: SayState) => void>(() => {});
+  setSay.current = (state: SayState) => {
+    sayState.current = state;
+    if (state !== 'wait') sayWaitSince.current = state === 'log' ? sayWaitSince.current : null;
+    const el = cursorRef.current;
+    if (el) {
+      if (state === 'wait' || state === 'log') el.dataset.sayWait = state === 'wait' ? 'true' : 'log';
+      else delete el.dataset.sayWait;
+      if (state === 'left') el.dataset.saySide = 'left';
+      else delete el.dataset.saySide;
+    }
+    if (state === 'right' || state === 'left') field.paint.set(cursor.key, state);
+    else field.paint.delete(cursor.key);
+  };
+  // Where a waiting say goes now, from where the cursors are drawn this
+  // frame: right of its arrow when that side has room; left when another
+  // column is in the way on the right and the left has room; else it waits,
+  // and once SAY_WAIT_MAX_MS is up (or at once, `capNow`) it shows on the
+  // right if only its own column or a flyer was in the way, or in the Agent
+  // log only if another column is. From the log it comes back once a side
+  // has room, while it is still current (GM - Design, PR #211 r17 items 2-3).
+  const decideSay = useRef<(capNow?: boolean) => void>(() => {});
+  decideSay.current = (capNow = false) => {
+    const state = sayState.current;
+    if (state !== 'wait' && state !== 'log') return;
+    const m = motion.current;
+    if (!m) {
+      if (capNow) setSay.current('right');
+      return;
+    }
+    const z = zoomRef.current;
+    const since = sayWaitSince.current;
+    const capped = capNow || state === 'log' || (since !== null && performance.now() - since > SAY_WAIT_MAX_MS);
+    const right = field.sayRoom(cursor.key, 'right', m.pos, z);
+    if (!right.wait && !right.foreign) {
+      setSay.current('right');
+      return;
+    }
+    if (right.foreign) {
+      const left = field.sayRoom(cursor.key, 'left', m.pos, z);
+      if (!left.wait && !left.foreign) {
+        setSay.current('left');
+        return;
+      }
+    }
+    if (!capped) return;
+    setSay.current(right.foreign || state === 'log' ? 'log' : 'right');
+  };
+  // A say that replaces one still drawn: does its side still have room?
+  const sayFits = useRef<() => boolean>(() => false);
+  sayFits.current = () => {
+    const m = motion.current;
+    const side = sayState.current;
+    if (!m || (side !== 'right' && side !== 'left')) return false;
+    const room = field.sayRoom(cursor.key, side, m.pos, zoomRef.current);
+    return !room.wait && !room.foreign;
+  };
+
   // What the loop, the pointer and the timers read between renders.
   useLayoutEffect(() => {
     sayShownRef.current = showSay && !idle;
@@ -427,26 +684,39 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
     // Its label block, for the cursor stacked below it (the say pill counts
     // while it is drawn, its fade out included).
     if (leaving) return;
-    field.setSay(cursor.key, showSay && !idle, widths);
-    // A say pill that just appeared: hidden until the room under it is
-    // clear, then it fades in. Under reduced motion everything is instant.
-    const sayNow = showSay && !idle;
-    const el = cursorRef.current;
-    if (sayNow && !sayWasShown.current && !prefersReducedMotion() && el) {
+    collapsedRef.current = collapsed;
+    field.names.set(cursor.key, name);
+    const sayNow = showSay && !idle && drawsSay;
+    field.setSay(cursor.key, sayNow, widths);
+    if (!sayNow) {
+      setSay.current('none');
+    } else if (!sayWasShown.current || sayText.current !== cursor.say) {
+      // A new say pill: hidden until there is room for it (its own column
+      // glides first), then it fades in. Under reduced motion everything is
+      // instant: it takes its place now, or the log. A say that replaces
+      // one still drawn keeps its side while that side has room.
+      const fresh = !sayWasShown.current;
       sayWaitSince.current = performance.now();
-      // The loop sees it: a say comes with a new event, which re-runs the
-      // loop's effect (below) and wakes it.
-      el.dataset.sayWait = 'true';
-    } else if (!sayNow && el && sayWaitSince.current !== null) {
-      sayWaitSince.current = null;
-      delete el.dataset.sayWait;
+      if (prefersReducedMotion()) {
+        setSay.current('wait');
+        decideSay.current(true);
+      } else if (fresh || !sayFits.current()) {
+        // The loop sees it: a say comes with a new event, which re-runs the
+        // loop's effect (below) and wakes it. (Waking it from here would
+        // queue the old loop, which the new one then can't replace.)
+        setSay.current('wait');
+      }
     }
     sayWasShown.current = sayNow;
+    sayText.current = sayNow ? cursor.say : null;
   });
 
   useLayoutEffect(() => {
     const reduced = prefersReducedMotion();
-    const opacityTarget = () => (idleRef.current ? AGENT_CURSOR_IDLE_OPACITY : 1);
+    // A cursor folded into its column's count cursor fades out where it is
+    // (the count's slot), and back in when the column opens up again.
+    const opacityTarget = () => (collapsedRef.current ? 0 : idleRef.current ? AGENT_CURSOR_IDLE_OPACITY : 1);
+    const sayPending = () => sayState.current === 'wait' || sayState.current === 'log';
     // The person's pointer in flow coordinates, or null off the canvas. The
     // pane's box is cached on the field: no layout read per frame.
     const pointerInFlow = (): Point | null => {
@@ -487,6 +757,7 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       el.dataset.placed = 'true';
     };
     place.current = apply;
+    if (!leaving) field.placers.set(cursor.key, apply);
     const updateWire = (start: Point | null, arrivedNow = false) => {
       const line = wireRef.current;
       const m = motion.current;
@@ -540,6 +811,9 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       const layout = labelLayout(shown, sayShownRef.current);
       if (el.dataset.label !== layout) hoverBoxes = null; // the pills changed: their boxes too
       el.dataset.label = layout;
+      // The count cursor lists its names on hover (r17 item 1).
+      if (hovered.current) el.dataset.hover = 'true';
+      else delete el.dataset.hover;
     };
     const onPointer = () => {
       const client = field.pointer;
@@ -551,8 +825,16 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       updateLabel.current();
     };
 
+    // A frame asked for now runs in the next frame (the column floor reads
+    // which cursors still step in this one: field.holdBelow).
+    const request = () => {
+      frame.current = requestAnimationFrame(tick);
+      field.dueAt.set(cursor.key, field.frameTime);
+    };
     const tick = (time: number) => {
       frame.current = null;
+      field.dueAt.delete(cursor.key);
+      if (time > field.frameTime) field.frameTime = time;
       if (leavingRef.current) {
         // Its exit: no events, no place in the stack, no hover; it fades out
         // where it is, then it's forgotten.
@@ -567,7 +849,7 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         }
         apply();
         updateWire(null);
-        frame.current = requestAnimationFrame(tick);
+        request();
         return;
       }
       const lookup = store.getState().nodeLookup;
@@ -585,11 +867,29 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       field.report(cursor.key, resolved, z, nodeId, cursor.seq, nodeAt && { x: nodeAt.x, y: nodeAt.y });
       const laid = field.layout(z).get(cursor.key);
       const target = laid?.at ?? resolved;
-      // Its layout changed (a say, a join, a leave): it glides to the new
-      // spot. Anything else moving the spot (a zoom, a node carried, the
-      // column's head carried) carries it there on this frame.
-      const shifted = laid !== undefined && layoutSig.current !== null && laid.sig !== layoutSig.current;
-      if (laid) layoutSig.current = laid.sig;
+      // Its layout changed (a say, a join, a leave), or a member above it
+      // moved by an event of its own (its head nudged its target): it glides
+      // to the new spot, held under the member above as that one is drawn
+      // (field.hold). Anything else moving the spot (a zoom, a node carried,
+      // the column's head carried) carries it there on this frame (review 7,
+      // MEDIUM-1).
+      const revs = laid ? laid.above.map((k) => field.revOf(k)).join(',') : '';
+      const shifted = laid !== undefined && layoutSig.current !== null
+        && (laid.sig !== layoutSig.current || revs !== layoutRevs.current);
+      if (laid) {
+        layoutSig.current = laid.sig;
+        layoutRevs.current = revs;
+      }
+      // Folded into a full column's count cursor, or that count cursor: a
+      // render only when that changes, never per frame.
+      const into = laid?.collapsedInto ?? null;
+      const group = laid?.group && laid.group.length > 1 ? laid.group : null;
+      const nextFold = into ? `>${into}` : group ? group.join(',') : '';
+      if (nextFold !== foldKey.current) {
+        foldKey.current = nextFold;
+        collapsedRef.current = into !== null;
+        setFold({ into, group });
+      }
       const goal = phase.current === 'pickup' && start ? start : target;
       const pointer = pointerInFlow();
       const others = field.flightsBesides(cursor.key);
@@ -628,7 +928,8 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         updateLabel.current();
         onPointer();
         // Still fading back in, or a new say waiting for room: on next frame.
-        if (fading || sayWaitSince.current !== null) frame.current = requestAnimationFrame(tick);
+        decideSay.current();
+        if (fading || sayPending()) request();
         return;
       }
 
@@ -687,7 +988,8 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         hoverBoxes = null;
         movedSinceBoxes = false;
         onPointer();
-        if (sayWaitSince.current !== null) frame.current = requestAnimationFrame(tick);
+        decideSay.current();
+        if (sayPending()) request();
         return;
       }
 
@@ -708,16 +1010,17 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         // No layout invalidation here: nothing else moved, and this
         // cursor's own hover boxes go when it comes to rest (movedSinceBoxes).
       }
+      // The column floor: held under the member above as it is drawn now,
+      // and the members under this one held under it, in this frame.
+      field.hold(cursor.key, z);
+      field.steppedAt.set(cursor.key, time);
       apply();
+      field.holdBelow(cursor.key, z, time);
       updateWire(start, arrivedNow);
       updateLabel.current();
-      const sayWaiting = sayWaitSince.current !== null;
-      if (sayWaiting && (field.sayRoomClear(cursor.key, m.pos, z) || performance.now() - sayWaitSince.current! > SAY_WAIT_MAX_MS)) {
-        sayWaitSince.current = null;
-        if (cursorRef.current) delete cursorRef.current.dataset.sayWait;
-      }
+      decideSay.current();
 
-      if (phase.current === 'rest' && result.atRest && sayWaitSince.current === null) {
+      if (phase.current === 'rest' && result.atRest && !sayPending()) {
         lastTime.current = null;
         field.landed(cursor.key);
         if (movedSinceBoxes) {
@@ -727,11 +1030,11 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         onPointer(); // landed under a still pointer, or flew out from under it
         return; // At rest: sleep until the canvas, an event or a timer changes.
       }
-      frame.current = requestAnimationFrame(tick);
+      request();
     };
 
     wake.current = () => {
-      if (frame.current === null) frame.current = requestAnimationFrame(tick);
+      if (frame.current === null) request();
     };
     if (!leaving) {
       field.wakers.set(cursor.key, () => wake.current());
@@ -756,10 +1059,17 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
       const zoomNow = store.getState().transform?.[2];
       const zoomed = zoomNow !== seenZoom;
       seenZoom = zoomNow;
-      if (zoomed && frame.current === null && !leavingRef.current && motion.current && phase.current === 'rest') {
-        tick(performance.now());
+      if (zoomed && !leavingRef.current && motion.current) {
+        // At rest, or mid-glide (review 7, MEDIUM-3): moved now, at this
+        // zoom. A glide steps no time here (its frame's own time is spent
+        // already), so only the zoom moves it; its next frame runs as usual.
+        const resting = frame.current === null && phase.current === 'rest';
+        if (frame.current !== null) cancelAnimationFrame(frame.current);
+        frame.current = null;
+        field.dueAt.delete(cursor.key);
+        tick(resting || lastTime.current === null ? performance.now() : lastTime.current);
         // The next frame's step counts from that frame, not from now.
-        lastTime.current = null;
+        if (resting) lastTime.current = null;
         return;
       }
       wake.current();
@@ -767,6 +1077,8 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
     return () => {
       unsubscribe();
       field.pointerListeners.delete(onPointer);
+      if (field.placers.get(cursor.key) === apply) field.placers.delete(cursor.key);
+      field.dueAt.delete(cursor.key);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
@@ -820,9 +1132,13 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
         data-idle={idle ? 'true' : undefined}
         data-leaving={leaving ? 'true' : undefined}
         data-taken={taken ? 'true' : undefined}
-        role={leaving ? undefined : 'status'}
-        aria-hidden={leaving ? true : undefined}
-        aria-label={leaving ? undefined : `${name}${cursor.say ? `: ${cursor.say}` : ''}`}
+        data-count={counting ? fold.group!.length : undefined}
+        data-collapsed={collapsed ? 'true' : undefined}
+        role={leaving || collapsed ? undefined : 'status'}
+        aria-hidden={leaving || collapsed ? true : undefined}
+        aria-label={leaving || collapsed ? undefined : counting
+          ? `${countText}: ${countNames.join(', ')}`
+          : `${name}${cursor.say ? `: ${cursor.say}` : ''}`}
       >
         {ripple && arrivedSeq === cursor.seq && !prefersReducedMotion() && (
           <span key={cursor.seq} className="agent-cursor__ripple" />
@@ -831,9 +1147,24 @@ function AgentCursorView({ cursor, zoom, peers, field, leaving = false, nameTake
           <path d={AGENT_CURSOR_ARROW_PATH} />
         </svg>
         <div className="agent-cursor__label">
-          {/* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */}
-          <span className="agent-cursor__name"><bdi>{cursor.name}</bdi>{name.slice(cursor.name.length)}</span>
-          {showSay && !idle && (
+          {counting ? (
+            <>
+              <span className="agent-cursor__name">{countText}</span>
+              {/* Its names on hover, up to three, then how many more (r17 item 1). */}
+              <span className="agent-cursor__list" aria-hidden="true">
+                {countNames.slice(0, COUNT_LIST_NAMES).map((member, i) => (
+                  <span key={i} className="agent-cursor__list-name"><bdi>{member}</bdi></span>
+                ))}
+                {countNames.length > COUNT_LIST_NAMES && (
+                  <span className="agent-cursor__list-name">{countLabel(countNames.length - COUNT_LIST_NAMES)}</span>
+                )}
+              </span>
+            </>
+          ) : (
+            /* The agent's name isolated, so a right-to-left name keeps " · 2" after it. */
+            <span className="agent-cursor__name"><bdi>{cursor.name}</bdi>{name.slice(cursor.name.length)}</span>
+          )}
+          {showSay && !idle && drawsSay && (
             <span className={`agent-cursor__say${sayLeaving ? ' agent-cursor__say--leaving' : ''}`}>{cursor.say}</span>
           )}
         </div>
@@ -850,6 +1181,16 @@ export function AgentCursorLayer() {
   const prune = useAgentPresenceStore((s) => s.prune);
   const zoom = useStore((s) => s.transform[2]);
   const [field] = useState(() => new CursorField());
+  // Fonts that finish loading can widen a pill measured with the fallback:
+  // every cursor measures again (review 7, MEDIUM-4).
+  const [fontVersion, setFontVersion] = useState(0);
+  useEffect(() => {
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (!fonts || typeof fonts.addEventListener !== 'function') return undefined;
+    const onLoaded = () => setFontVersion((v) => v + 1);
+    fonts.addEventListener('loadingdone', onLoaded);
+    return () => fonts.removeEventListener('loadingdone', onLoaded);
+  }, []);
 
   // The presence exit (GM - Design, PR #211 review 4): a cursor the store
   // drops (a prune, a number taken over, a demoted tab, a refused hello, a
@@ -948,6 +1289,7 @@ export function AgentCursorLayer() {
             zoom={zoom}
             peers={cursors.length}
             field={field}
+            fontVersion={fontVersion}
             leaving={out}
             nameTaken={out && names.has(sessionName(cursor.name, cursor.session))}
             onExited={onExited}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -28,6 +28,14 @@ import {
   AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_ARROW_POINTS,
   AGENT_CURSOR_ARROW_STROKE,
+  AGENT_CURSOR_COLUMN_DRAWN,
+  AGENT_CURSOR_NAME_FONT,
+  AGENT_CURSOR_SAY_FONT,
+  AGENT_CURSOR_SAY_LEFT_GAP_PX,
+  countLabel,
+  cursorShape,
+  sayPillBox,
+  targetsMeet,
   pillEdge,
 } from '../src/lib/agentCursorLook';
 
@@ -460,16 +468,18 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
       // 16 px from c's target, not a's: it joins through c.
       { key: 'd', target: { x: 26, y: 10 }, since: 4 },
     ], 1);
+    // The fourth folds into the third slot's count cursor (GM r17 item 1).
     expect([...spots.entries()]).toEqual([
-      ['a', { x: 0, y: 0 }], ['c', { x: 0, y: S }], ['b', { x: 0, y: 2 * S }], ['d', { x: 0, y: 3 * S }],
+      ['a', { x: 0, y: 0 }], ['c', { x: 0, y: S }], ['b', { x: 0, y: 2 * S }], ['d', { x: 0, y: 2 * S }],
     ]);
   });
 
   it('joining on targets reaches as far as the chain does, past where any label could meet (GM r14: targets)', () => {
     // Each 16 px above the last: d's own spot is clear of everyone, but its
     // target is within 16 px of c's, so it is in the column.
-    const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, -16, 2), entry('c', 0, -32, 3), entry('d', 0, -48, 4)], 1);
-    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }, { x: 0, y: 3 * S }]);
+    const spots = deStackLayout([entry('a', 0, 0, 1), entry('b', 0, -16, 2), entry('c', 0, -32, 3), entry('d', 0, -48, 4)], 1);
+    expect([...spots.values()].map((spot) => spot.at)).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }, { x: 0, y: 2 * S }]);
+    expect(spots.get('d')!.collapsedInto).toBe('c');
   });
 
   it('orders by when each came to its spot, not by its last event (review 1, F2)', () => {
@@ -556,8 +566,9 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
   it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in and steps on past it', () => {
     const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 60, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)], 1);
     // b is past a's label (60 > 42), so it rests on its target; c would land
-    // at 42, over b's arrow: it goes under b, and d under c.
-    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + 2 * S }]);
+    // at 42, over b's arrow: it goes under b. The column has three now, so d
+    // folds into c's count cursor (GM r17 item 1).
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + S }]);
   });
 
   it('a target on another cursor\'s name pill, to the right, joins that column', () => {
@@ -587,12 +598,13 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(deStackLayout(base, 1).get('c')!.above).toEqual(['a', 'b']);
   });
 
-  it('fuzz: random targets, arrival orders, says and zooms: no two cursors closer than 2 px, no arrow by a foreign label', () => {
+  it('fuzz: random targets, arrival orders, says and zooms: no two drawn cursors closer than 2 px, no arrow by a foreign label', () => {
     const rand = seeded(211_6);
     let pairs = 0;
-    for (let round = 0; round < 160; round += 1) {
+    let columnPairs = 0;
+    for (let round = 0; round < 200; round += 1) {
       const zoom = [0.25, 0.5, 0.8, 1, 1.5, 2, 3][Math.floor(rand() * 7)];
-      const count = 2 + Math.floor(rand() * 4);
+      const count = 2 + Math.floor(rand() * 6);
       const list = Array.from({ length: count }, (_, i) => entry(
         String.fromCharCode(97 + i),
         // In a box about 120 screen px wide, so they meet often.
@@ -601,22 +613,105 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
         Math.floor(rand() * 1000),
         rand() < 0.4,
       ));
-      const spots = deStack(list, zoom);
-      const screen = list.map((e) => ({ at: { x: spots.get(e.key)!.x * zoom, y: spots.get(e.key)!.y * zoom }, say: e.say }));
-      for (let i = 0; i < count; i += 1) {
-        for (let j = i + 1; j < count; j += 1) {
+      const laid = deStackLayout(list, zoom);
+      // Folded cursors aren't drawn: their count cursor is.
+      const drawn = list.filter((e) => !laid.get(e.key)!.collapsedInto);
+      const head = (key: string) => laid.get(key)!.above[0] ?? key;
+      const screen = drawn.map((e) => ({ key: e.key, at: { x: laid.get(e.key)!.at.x * zoom, y: laid.get(e.key)!.at.y * zoom }, say: Boolean(e.say) }));
+      for (let i = 0; i < screen.length; i += 1) {
+        for (let j = i + 1; j < screen.length; j += 1) {
           const [p, q] = [screen[i], screen[j]];
-          expect(paintedGap(p.at, p.say, q.at, q.say, true)).toBeGreaterThanOrEqual(2 - 0.05);
-          expect(ownsArrowOf(p.at, p.say, q.at)).toBe(false);
-          expect(ownsArrowOf(q.at, q.say, p.at)).toBe(false);
+          // In one column every say counts; across columns a say pill
+          // never moves anyone (r17 item 2): the layer moves it aside or
+          // holds it, so arrows and names only.
+          const own = head(p.key) === head(q.key);
+          if (own) columnPairs += 1;
+          const [sp, sq] = own ? [p.say, q.say] : [false, false];
+          expect(paintedGap(p.at, sp, q.at, sq, true)).toBeGreaterThanOrEqual(2 - 0.05);
+          expect(ownsArrowOf(p.at, sp, q.at)).toBe(false);
+          expect(ownsArrowOf(q.at, sq, p.at)).toBe(false);
           pairs += 1;
         }
       }
-      // Never to the right of its column, never above its own target.
-      for (const e of list) expect(spots.get(e.key)!.y).toBeGreaterThanOrEqual(e.target.y - 1e-9);
+      for (const e of drawn) {
+        // Never above its own target.
+        expect(laid.get(e.key)!.at.y).toBeGreaterThanOrEqual(e.target.y - 1e-9);
+      }
+      // At most three drawn per column.
+      const perHead = new Map<string, number>();
+      for (const e of drawn) perHead.set(head(e.key), (perHead.get(head(e.key)) ?? 0) + 1);
+      for (const n of perHead.values()) expect(n).toBeLessThanOrEqual(AGENT_CURSOR_COLUMN_DRAWN);
     }
     expect(pairs).toBeGreaterThan(300);
+    expect(columnPairs).toBeGreaterThan(100);
   }, 60_000);
+
+  it.each([0.25, 0.5, 1, 2, 3])('a column of 4 to 8 at zoom %s draws 3: two in full, then one count cursor for the rest, never more than 2 steps down (GM r17 item 1)', (zoom) => {
+    for (let n = 4; n <= 8; n += 1) {
+      for (const says of [false, true]) {
+        const keys = Array.from({ length: n }, (_, i) => String.fromCharCode(97 + i));
+        const laid = deStackLayout(keys.map((key, i) => entry(key, 50, 50, i + 1, says)), zoom);
+        const step = stackStepPx(says) / zoom;
+        const y = (key: string) => laid.get(key)!.at.y;
+        expect(laid.get('a')!.at).toEqual({ x: 50, y: 50 });
+        expect(y('b')).toBeCloseTo(50 + step, 9);
+        // The third slot is the count cursor; the latest arrivals fold into it.
+        expect(y('c')).toBeCloseTo(50 + 2 * step, 9);
+        expect(laid.get('c')!.group).toEqual(keys.slice(2));
+        for (const key of keys.slice(3)) {
+          expect(laid.get(key)!.collapsedInto).toBe('c');
+          expect(laid.get(key)!.at).toEqual(laid.get('c')!.at);
+        }
+        for (const spot of laid.values()) expect((spot.at.y - 50) * zoom).toBeLessThanOrEqual(2 * stackStepPx(true) + 1e-6);
+        expect(countLabel(laid.get('c')!.group!.length)).toBe(`${n - 2} more`);
+      }
+    }
+    // Three: all in full, no count.
+    const three = deStackLayout(['a', 'b', 'c'].map((key, i) => entry(key, 0, 0, i + 1)), zoom);
+    expect([...three.values()].every((spot) => !spot.group && !spot.collapsedInto)).toBe(true);
+  });
+
+  it('a column opening back up: a member leaves and the count cursor is three full cursors again, the folded one at its slot', () => {
+    const four = deStackLayout(['a', 'b', 'c', 'd'].map((key, i) => entry(key, 0, 0, i + 1)), 1);
+    expect(four.get('d')!.collapsedInto).toBe('c');
+    const three = deStackLayout(['a', 'c', 'd'].map((key) => entry(key, 0, 0, key.charCodeAt(0))), 1);
+    // c glides up a step; d opens where the count cursor was.
+    expect(three.get('c')!.at).toEqual({ x: 0, y: S });
+    expect(three.get('d')!.at).toEqual(four.get('c')!.at);
+    expect(three.get('d')!.collapsedInto).toBeUndefined();
+  });
+
+  it('a say pill never makes a join or moves another column: only a target within 16 px or an arrow by a name pill does (GM r17 item 2)', () => {
+    // b's arrow under a's say pill, clear of a's name: it stays on its target.
+    const spots = deStack([entry('a', 0, 0, 1, true), entry('b', 60, 46, 2)], 1);
+    expect(spots.get('b')).toEqual({ x: 60, y: 46 });
+    expect(targetsMeet(entry('a', 0, 0, 1, true), entry('b', 60, 46, 2), 1)).toBe(false);
+    // The same arrow by a's name pill joins, say or not.
+    for (const say of [false, true]) expect(deStack([entry('a', 0, 0, 1, say), entry('b', 40, 12, 2)], 1).get('b')).toEqual({ x: 0, y: stackStepPx(say) });
+    // A later cursor whose say pill would reach an earlier one's arrow
+    // stays where it is: its say moves aside instead (the layer).
+    const late = deStack([entry('a', 120, 30, 1), entry('b', 0, 0, 2, true)], 1);
+    expect(late.get('b')).toEqual({ x: 0, y: 0 });
+    expect(late.get('a')).toEqual({ x: 120, y: 30 });
+  });
+
+  it('a say flipped to the left of its arrow: its right edge 4 px left of the tip, on the say row', () => {
+    const tip = AGENT_CURSOR_ARROW_POINTS[0];
+    const left = cursorShape({ x: 100, y: 100 }, 'left', 64, 120);
+    const box = sayPillBox(left)!;
+    expect(box.right).toBeCloseTo(100 + tip.x - AGENT_CURSOR_SAY_LEFT_GAP_PX, 9);
+    expect(box.right - box.left).toBeCloseTo(120, 9);
+    const right = sayPillBox(cursorShape({ x: 100, y: 100 }, true, 64, 120))!;
+    expect(box.top).toBe(right.top);
+    expect(right.left).toBe(100 + AGENT_CURSOR_PILL.left);
+    expect(left.bounds.left).toBeCloseTo(box.left, 9);
+    expect(left.bounds.bottom).toBe(right.bottom);
+    // The CSS puts it there: the label is 15 px in, the tip 1.5 px.
+    const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+    const rule = css.match(/^\.agent-cursor\[data-say-side='left'\] \.agent-cursor__say \{([^}]*)\}/m)![1];
+    expect(rule).toMatch(new RegExp(`right: calc\\(100% \\+ ${AGENT_CURSOR_PILL.left - tip.x + AGENT_CURSOR_SAY_LEFT_GAP_PX}px\\);`));
+    expect(rule).toMatch(new RegExp(`top: ${AGENT_CURSOR_PILL.height + AGENT_CURSOR_PILL.gap}px;`));
+  });
 
   it('measures pill widths without a layout read: on the wide side, the say pill at most 260 px', () => {
     const { nameW, sayW } = labelWidths('Claude · 2', 'Checking the prompt');
@@ -624,6 +719,39 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(sayW).toBeGreaterThanOrEqual(18 + 'Checking the prompt'.length * 5);
     expect(labelWidths('x', 'y'.repeat(400)).sayW).toBe(260);
     expect(labelWidths('x', undefined).sayW).toBe(0);
+  });
+
+  it('measures with the canvas where there is one: its font, 0.01em letter-spacing on top, padding and 2 px on the wide side (review 7, LOW-2 M2/M3)', () => {
+    const fonts: string[] = [];
+    class StubCanvas {
+      getContext() {
+        return {
+          font: '',
+          measureText(this: { font: string }, text: string) {
+            fonts.push(this.font);
+            return { width: text.length * 6.5 };
+          },
+        };
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', StubCanvas);
+    try {
+      const name = 'Claude · 2';
+      const say = 'Checking the prompt';
+      const w = labelWidths(name, say);
+      expect(w.nameW).toBe(Math.ceil(name.length * 6.5 + 0.11 * name.length + 14 + 2));
+      expect(w.sayW).toBe(Math.ceil(say.length * 6.5 + 0.11 * say.length + 18 + 2));
+      expect(fonts).toEqual([
+        '600 11px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif',
+        '500 11px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif',
+      ]);
+      expect(AGENT_CURSOR_NAME_FONT).toBe('600 11px Inter');
+      expect(AGENT_CURSOR_SAY_FONT).toBe('500 11px Inter');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    // Without one: the estimate again.
+    expect(labelWidths('abcd', '').nameW).toBe(4 * 7 + 16);
   });
 
   it('a leaving cursor whose name a live one shows hides its pill at once (PR #211 review 4), and none is promoted from CSS', () => {

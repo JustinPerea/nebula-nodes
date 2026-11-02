@@ -478,15 +478,22 @@ def _targeted_cursor(data: object) -> bool:
 
 def person_only_frame(data: object) -> bool:
     """A frame only the person's canvas may get: a cursor event in the person
-    form (it carries ``session``) or the replay of the live cursors."""
-    if isinstance(data, (str, bytes, bytearray)):
-        text = bytes(data).decode("utf-8", "replace") if isinstance(data, (bytes, bytearray)) else data
-        if "agentPresence" not in text:
-            return False
-        import json
+    form (it carries ``session``) or the replay of the live cursors. Text or
+    bytes are read as JSON; bytes in any encoding json reads (UTF-8, -16 or
+    -32, a BOM included), else as UTF-8 with bad bytes replaced (review 7,
+    NIT-2)."""
+    import json
 
+    if isinstance(data, (bytes, bytearray)):
         try:
-            data = json.loads(text)
+            data = json.loads(bytes(data))
+        except ValueError:
+            data = bytes(data).decode("utf-8", "replace")
+    if isinstance(data, str):
+        if "agentPresence" not in data:
+            return False
+        try:
+            data = json.loads(data)
         except ValueError:
             return False
     if not isinstance(data, Mapping):
@@ -525,7 +532,14 @@ def _socket_check(send):  # type: ignore[no-untyped-def]
         return await send(self, data, *args, **kwargs)
 
     checked._nebula_cursor_route = True  # type: ignore[attr-defined]
+    _CHECKED_CODES.add(checked.__code__)
     return checked
+
+
+# The code of this file's own checked wrappers: a stand-in is left as it is
+# only if it is one of them (or a _CheckedStandIn), never because it says so
+# (review 7, NIT-1: a Mock given the marker by hand).
+_CHECKED_CODES: set[object] = set()
 
 
 def _install_cursor_route_check() -> None:
@@ -570,6 +584,7 @@ def _install_cursor_route_check() -> None:
                     _check_send(name, data, kwargs.get("others"))
                 return await sender(self, data, *args, **kwargs)
             send._nebula_cursor_route = True  # type: ignore[attr-defined]
+            _CHECKED_CODES.add(send.__code__)
             return send
 
         setattr(manager_class, name, checked())
@@ -599,9 +614,10 @@ def _check_instance_senders() -> None:
                 func is real or func is getattr(real, "__wrapped__", None)):
             del own[name]  # (a bound method reads its function's marker, so this goes first)
             continue
-        # ``is True``: a Mock makes up any attribute it is asked for, the
-        # marker included (review 6, MEDIUM-1).
-        if getattr(value, "_nebula_cursor_route", False) is True:
+        # By what it is, not by the marker: a Mock makes up any attribute it
+        # is asked for (review 6, MEDIUM-1), and one can be given the marker
+        # by hand (review 7, NIT-1).
+        if type(value) is _CheckedStandIn or getattr(getattr(value, "__func__", value), "__code__", None) in _CHECKED_CODES:
             continue
         own[name] = _CheckedStandIn(value, name)
 
@@ -628,6 +644,12 @@ class _CheckedStandIn:
 
     def __setattr__(self, attr: str, value: object) -> None:
         setattr(self._fake, attr, value)
+
+    def __delattr__(self, attr: str) -> None:
+        delattr(self._fake, attr)
+
+    def __repr__(self) -> str:
+        return f"<checked {self._fake!r}>"
 
 
 @contextlib.contextmanager
