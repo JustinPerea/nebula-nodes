@@ -24,7 +24,8 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p' }:
   // Round 18 (GM r28 1): a load that got no answer destroys nothing either: neutral, in the same
   // one style as a because line (styles/becauseLine.css `data-line-neutral`). Round 18b (GM r29
   // 1): a load that failed for any reason (errorCopy isLoadLine).
-  const neutral = !person && isLoadLine(line);
+  // Round 18c (GM r30 1): and a because line, so the two share one look, the bare rail.
+  const neutral = person || isLoadLine(line);
   return (
     <Tag className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
       role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}

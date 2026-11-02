@@ -66,11 +66,19 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); document.body.className = ''; });
 
 describe('each pane load, no answer, verbatim', () => {
-  for (const code of [503, 500, 408, 429]) {
+  for (const code of [503, 502, 504, 408, 429]) {
     it(`Agent review (${code})`, async () => {
       state.failing = '/api/commons/review'; state.status = code;
       render(<CommonsReview />);
       await shows(REVIEW);
+    });
+  }
+  // Round 18c (GM r30 3): the server's own error isn't "didn't respond".
+  for (const code of [500, 501]) {
+    it(`Agent review (${code}): the server hit an error`, async () => {
+      state.failing = '/api/commons/review'; state.status = code;
+      render(<CommonsReview />);
+      await shows('Nebula couldn’t load Agent review because Nebula’s server hit an error. Try again.');
     });
   }
 
@@ -120,17 +128,19 @@ describe('a failed settings read shows no form (GM r29: only the heading and the
   });
 });
 
-describe('another cause: the because form where its reason has a clause, else the reason as it is (GM r29 1)', () => {
+describe('another cause: the because form, its clause or the 4xx line (GM r29 1, r30)', () => {
   const answer = (failing: string, status: number, detail: string) => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input instanceof Request ? input.url : input)).pathname;
     return path === failing ? json({ detail }, status) : backend(input);
   }));
-  it('a reason with no clause yet: "Nebula couldn’t load X." and the reason as it is, neutral, no "Try again."', async () => {
+  it('a reason not listed: the 4xx line, neutral; the backend\'s words only in the console (GM r30)', async () => {
     state.failing = '';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     answer('/api/commons/review', 409, 'The review set is closed.');
     render(<CommonsReview />);
-    await shows('Nebula couldn’t load Agent review. The review set is closed.');
-    expect(document.body.textContent).not.toContain('didn’t respond');
+    await shows('Nebula couldn’t load Agent review because Nebula’s server didn’t accept it. Try again.');
+    expect(document.body.textContent).not.toContain('The review set is closed');
+    expect(warn.mock.calls.flat().join(' ')).toContain('The review set is closed.');
   });
   it('the reference detail\'s 404: the because form, "Reload …" not "Try again."', async () => {
     state.failing = '';

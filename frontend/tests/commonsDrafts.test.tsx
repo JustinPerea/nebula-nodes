@@ -83,7 +83,7 @@ describe('Commons comment submissions', () => {
     fireEvent.change(input, { target: { value: 'Committed comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load this reference. Read-back offline.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load this reference because Nebula’s server didn’t accept it. Try again.');
     expect(api.comment).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
   });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { failureCopy, failureMessage, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { failureMessage, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 
 /** The heading the request itself carries (lib/commonsApi: each call names itself). */
@@ -55,7 +55,7 @@ export function useCommonsLine<T extends string | null>(
     const what = /^Couldn['’]t (.+)\.$/.exec((options.reload ? heading : '') || requestHeading(error) || heading)?.[1];
     // Round 18b (GM r29 1): a load says every reason in the because form (loadFailedLine).
     const line = (isPersonRefusal(error) && what ? notConnectedBecause(what)
-      : options.reload && what ? loadFailedLine(what, failureCopy(error).reason) : failureMessage(error, heading)) as T;
+      : options.reload && what ? loadFailedLine(what, error) : failureMessage(error, heading)) as T;
     setLine(line);
     register(error, line);
     if (options.reload && reloadKey && reload) retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.reload-retry
@@ -153,12 +153,11 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
     const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
     // Round 15 (GM r24 c): no answer's reason is the because form too, one sentence for one cause.
     // Round 18b (GM r29 1): and every other reason too (loadFailedLine).
-    const reason = failureCopy(error).reason;
     const line = isPersonRefusal(error) && what ? notConnectedBecause(what)
-      : what ? loadFailedLine(what, reason) : failureMessage(error, heading);
+      : what ? loadFailedLine(what, error) : failureMessage(error, heading);
     // The page's own words over the failure's reason (the request names only itself).
     const page = isPersonRefusal(error) ? notConnectedBecause('load the Commons')
-      : loadFailedLine(COMMONS_PAGE_WHAT, reason) || line;
+      : loadFailedLine(COMMONS_PAGE_WHAT, error) || line;
     setFailure(load, line, page, isPersonRefusal(error));
     settle(load);
     register(load, error, line);

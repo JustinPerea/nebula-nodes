@@ -8,7 +8,7 @@ import { commonsApi, filtersToRequest, uploadFailureCopy, type UrlAddResult } fr
 import { holdCommonsCalls } from '../../lib/commonsHold';
 import { useDemotedView } from '../../hooks/useTabHeld';
 import { expectBecauseLine, isBecauseLine } from '../../lib/notConnectedLine';
-import type { FailureCopy } from '../../lib/errorCopy';
+import { COMMONS_OFF_COPY, type FailureCopy } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import { EMPTY_FILTERS, type Collection, type CommonsStatus, type FilterState, type SearchRow } from '../../lib/commonsTypes';
 import { pickFiles } from '../../lib/commonsFiles';
@@ -345,6 +345,9 @@ export function CommonsView() {
 
 /** The page's loads, in its order (GM r22: one line covers them on a held tab). */
 const COMMONS_LOADS = ['status', 'references', 'collections'] as const;
+/** GM r30 2, verbatim: Add to and Add while the collections haven't loaded. */
+export const ADD_TO_NOT_LOADED = 'Add to, not loaded. It works again once the collections load.';
+export const ADD_NOT_LOADED = 'Add, not loaded. It works again once the collections load.';
 
 function CommonsViewBody({ view }: {
   /** The data's generation: a new one (the switch to demoted, the promote) empties the loaded
@@ -461,6 +464,10 @@ function CommonsViewBody({ view }: {
   // "No collections") shows only then: after a failure, or before the first answer, nothing was
   // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
   const [answered, setAnswered] = useState<{ references: Tab | null; collections: boolean }>({ references: null, collections: false });
+  // Round 18c (GM r30 2): the collections read failed or hasn't answered: Add to says "Not loaded"
+  // and Add is disabled, both with the one reason. A tab not connected as you keeps its lock
+  // (round 18, GM r28 3: "No collections", locked, with Add's lock line).
+  const collectionsNotLoaded = !answered.collections && !addLock.locked;
   const noteAnswered = useCallback(<K extends keyof typeof answered>(load: K, value: (typeof answered)[K]) =>
     setAnswered((current) => (current[load] === value ? current : { ...current, [load]: value })), []);
   const [dataView, setDataView] = useState(view);
@@ -611,6 +618,9 @@ function CommonsViewBody({ view }: {
   };
 
   const requireTarget = (): string | null => {
+    // Round 18c (GM r30 2): with the collections not loaded, Add is disabled and does nothing; no
+    // line asks the person to pick what Nebula couldn't list.
+    if (collectionsNotLoaded) return null;
     if (target) return target;
     setError('Pick or create a collection first.');
     return null;
@@ -698,6 +708,9 @@ function CommonsViewBody({ view }: {
 
   // An action's failure first; a load's only while Nebula is online.
   const shownError = error ? [error] : shownLoadLines;
+  // Round 18c (GM r30, the wording batch): the backend runs without the Commons. Its page line,
+  // "Commons is turned off for this Nebula.", stands in place of every tab's content.
+  const commonsOff = Boolean(shownLoadLines?.includes(COMMONS_OFF_COPY));
   // Round 14 (GM r23 1): Add locks at once; its line waits for the page's because line, so the
   // row moves once (useLockLineHold, capped).
   const addLine = useLockLineHold(addLock, Boolean(shownError?.length));
@@ -745,8 +758,14 @@ function CommonsViewBody({ view }: {
           onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
-          <select value={target} onChange={(event) => void chooseTarget(event.target.value)}
+          <select value={collectionsNotLoaded ? '' : target}
+            onChange={(event) => { if (!collectionsNotLoaded) void chooseTarget(event.target.value); }}
+            {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_TO_NOT_LOADED, 'data-not-loaded': '' } : {})}
+            // Round 18c (GM r30 2): loaded with none, "No collections" in the disabled look; the
+            // select stays live, since New collection… is how one is made.
+            {...(!collectionsNotLoaded && !addLock.locked && collections.length === 0 ? { 'data-no-choice': '' } : {})}
             {...(addLock.locked && collections.length === 0 ? addLine.control() : {})}>
+            {collectionsNotLoaded ? <option value="">Not loaded</option> : <>
             {/* Round 15 (GM r24 b): "No collections" only when the collections answered with none. */}
             {/* Round 18 (GM r28 3): and on a tab that isn't connected, in the one disabled look (the
                 person lock's, below), so the select never shows empty. */}
@@ -754,17 +773,19 @@ function CommonsViewBody({ view }: {
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             {/* Round 11: locked with Add (its line covers it); picking a target stays live. */}
             <option value={NEW_COLLECTION} disabled={addLock.locked}>New collection…</option>
+            </>}
           </select>
         </label>
         <div className="commons-add">
           <button
-            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly && !addLock.locked}
+            type="button" className="commons-button commons-button--primary" aria-expanded={addOpen && !readOnly && !addLock.locked && !collectionsNotLoaded}
             disabled={readOnly} {...offlineMark(readOnly)} {...addLine.control()}
-            onClick={addLock.guard(() => setAddOpen((open) => !open))}
+            {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_NOT_LOADED, 'data-not-loaded': '' } : {})}
+            onClick={addLock.guard(() => { if (!collectionsNotLoaded) setAddOpen((open) => !open); })}
           >
             Add
           </button>
-          {addOpen && !readOnly && !addLock.locked && (
+          {addOpen && !readOnly && !addLock.locked && !collectionsNotLoaded && (
             <div className="commons-add__menu" role="menu">
               <button
                 type="button" role="menuitem" className="commons-button"
@@ -840,17 +861,17 @@ function CommonsViewBody({ view }: {
 
       {/* Hidden, not unmounted, while another section shows (display: contents
           otherwise, so each panel stays the view's grid item; commons.css). */}
-      {opened.includes('review') && (
+      {!commonsOff && opened.includes('review') && (
         <div className="commons-panel-slot" hidden={tab !== 'review'}>
           <CommonsReview key={view} active={tab === 'review'} onWork={leave.report.review} />
         </div>
       )}
-      {opened.includes('labeling') && (
+      {!commonsOff && opened.includes('labeling') && (
         <div className="commons-panel-slot" hidden={tab !== 'labeling'}>
           <CommonsEvaluation key={view} active={tab === 'labeling'} onWork={leave.report.labeling} />
         </div>
       )}
-      {tab === 'review' || tab === 'labeling' ? null : tab === 'settings' ? (
+      {commonsOff || tab === 'review' || tab === 'labeling' ? null : tab === 'settings' ? (
         <main className="commons-main commons-main--settings">
           <CommonsSettings key={view} status={status} onOpenAsset={openAsset} onChanged={refresh} />
         </main>
@@ -865,7 +886,7 @@ function CommonsViewBody({ view }: {
               emptyHint={emptyHint}
               onOpen={(row) => setSelectedId(row.id)}
               onDropFiles={(files) => void upload(files)}
-              dropLocked={addLock.locked}
+              dropLocked={addLock.locked || collectionsNotLoaded}
               proposed={proposed}
             />
             {rows.length === 20 && <p className="commons-meta">Showing the top 20. Narrow the search to see others.</p>}

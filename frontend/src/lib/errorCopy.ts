@@ -137,17 +137,14 @@ export function noResponseBecause(what: string): string {
 }
 
 /**
- * PR #204 round 18b (GM r29 1): a load's reason, as the clause after "because". A load that failed
- * destroys nothing, so every reason says it in the because form with Nebula the subject:
- * "Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest
- * references." Each clause is the backend's (or GM's) own line with only its subject turned to
- * fit; "Try again." stays only where trying again can help. A reason with no clause that reads
- * well isn't reworded here: it is in the notes' list for GM's wording batch, and says
- * "Nebula couldn’t load X." with the reason as it is (loadFailedLine).
+ * PR #204 round 18b (GM r29 1) and 18c (GM r30, the wording batch): a load's failure, as the
+ * clause after "because". A load that failed destroys nothing, so every reason says it in the
+ * because form with Nebula the subject: "Nebula couldn’t load this reference because it isn’t
+ * there anymore. Reload to get the latest references." "Try again." only where trying again can
+ * help. No backend message ever shows to the person as it is: a reason not listed here says the
+ * 4xx line (LOAD_NOT_ACCEPTED), and its raw text goes to the console.
  */
 export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
-  // 401 or 403 with no reason (GM's line).
-  [ACCESS_LOST_COPY, 'you don’t have access to this anymore. Reload to sign in again.'],
   // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
   ["That reference isn't there anymore. Reload to get the latest references.",
     'it isn’t there anymore. Reload to get the latest references.'],
@@ -156,17 +153,47 @@ export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
     'it isn’t in this held-out set. Reload to get the latest references.'],
   // The references' search with filters the backend can't read (backend person_copy.BAD_FILTERS).
   ["Those filters didn't work. Clear them and try again.", 'those filters didn’t work. Clear them and try again.'],
+  // GM r30: a reference's image or video the blob route can't find (backend routes/commons get_blob).
+  ['not found', 'the file isn’t there anymore.'],
+  // GM r30: the UI session's 401s (backend commons/actors.py resolve_actor).
+  ['invalid UI session token', 'this window’s session ended. Reload to sign in again.'],
+  ['no UI session: open Nebula from the desktop app or use the dev link', 'this window’s session ended. Reload to sign in again.'],
+  // GM r30: a route only the person's own window may call (backend routes/commons human_dep).
+  ['only the human UI session can do this', 'this window isn’t signed in as you. Reload to sign in again.'],
 ]);
+/** 401 or 403 with no reason (GM's line, kept by GM r30). */
+const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to sign in again.';
+/** GM r30 3: a server error (500) isn't "didn't respond". */
+const SERVER_ERROR_CLAUSE = 'Nebula’s server hit an error. Try again.';
+/** GM r30: no answer at all. */
+const NOT_ANSWERING_CLAUSE = 'Nebula’s server isn’t answering. Check that it’s running, then try again.';
+/** GM r30: a 4xx with no readable reason, and any reason not listed above. */
+export const LOAD_NOT_ACCEPTED = 'Nebula’s server didn’t accept it. Try again.';
+/** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
+ * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
+ * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
+export const COMMONS_OFF_DETAIL = 'Commons is disabled';
+export const COMMONS_OFF_COPY = 'Commons is turned off for this Nebula.';
 
-/** A load's failure line (GM r24 c, r29 1): `what` is what Nebula was doing ("load the
- * references"), `reason` the failure's reason (failureCopy). No answer is noResponseBecause's
- * form; a reason in LOAD_BECAUSE its clause; any other reason "Nebula couldn’t X." and the
- * reason as it is. Empty when the reason is (a request refused offline says nothing). */
-export function loadFailedLine(what: string, reason: string): string {
+/** A load's failure line: `what` is what Nebula was doing ("load the references"). Empty when
+ * the failure says nothing (a request refused offline). A refusal because this tab isn't
+ * connected as you is the caller's (notConnectedBecause). */
+export function loadFailedLine(what: string, error: unknown): string {
+  const { reason } = failureCopy(error);
   if (!reason) return '';
-  if (reason === NO_RESPONSE_COPY) return noResponseBecause(what);
-  const clause = LOAD_BECAUSE.get(reason);
-  return clause ? `Nebula couldn’t ${what} because ${clause}` : headedLine(`Nebula couldn’t ${what}.`, reason);
+  const because = (clause: string) => `Nebula couldn’t ${what} because ${clause}`;
+  const status = error instanceof RequestFailedError ? error.status : null;
+  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return because(NOT_ANSWERING_CLAUSE);
+  const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
+  if (status === 404 && detail === COMMONS_OFF_DETAIL) return COMMONS_OFF_COPY;
+  if (status !== null && failureKind(status) === 'no-response') {
+    // 408, 429 and a gateway's 502-504 are "didn't respond"; the server's own 5xx is an error.
+    return status >= 500 && !GATEWAY_STATUSES.has(status) ? because(SERVER_ERROR_CLAUSE) : noResponseBecause(what);
+  }
+  const clause = LOAD_BECAUSE.get(detail) ?? (reason === ACCESS_LOST_COPY ? ACCESS_LOST_CLAUSE : undefined);
+  if (clause) return because(clause);
+  if (detail) console.warn(`[nebula] Couldn’t ${what}: the backend said "${detail}" (not shown).`);
+  return because(LOAD_NOT_ACCEPTED);
 }
 
 /** PR #204 round 18 (GM r28 1), widened in round 18b (GM r29 1): a load's failure line, whatever
@@ -174,7 +201,7 @@ export function loadFailedLine(what: string, reason: string): string {
  * action's line says "Couldn’t save …"), and a load that failed destroys nothing, so it is drawn
  * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
 export function isLoadLine(text: string): boolean {
-  return /^Nebula couldn’t (?:load|check) /.test(text);
+  return /^Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
 }
 
 /**

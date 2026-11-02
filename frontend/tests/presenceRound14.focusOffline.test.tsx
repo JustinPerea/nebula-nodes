@@ -13,6 +13,11 @@ vi.mock('../src/lib/backend', async (original) => {
     ...real,
     apiFetch: (path: string, init?: RequestInit) => {
       net.sent.push(`${String(init?.method ?? 'GET').toUpperCase()} ${path.split('?')[0]}`);
+      // Round 18c (GM r30 2): the collections answer (none), so Add and Add to are live once
+      // connected; with them pending both are disabled ("Not loaded").
+      if (path.split('?')[0] === '/api/commons/collections' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
+        return Promise.resolve(new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
       return new Promise<Response>(() => {}); // never answers: the test reads what was sent
     },
   };

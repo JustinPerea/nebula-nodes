@@ -91,3 +91,13 @@
   font-size: var(--sr-type-label);
   line-height: 1.4;
 }
+
+/*
+ * PR #204 round 18c (GM r30 1): one look for every neutral Commons line, a load's and a because
+ * line: the bare rail, no fill. The fill read as a box on a pane's lighter heading (Agent review,
+ * Blind labeling) and as nothing on the page; now it is nothing everywhere. CommonsErrorLine marks
+ * both `data-line-neutral`. An action's failure keeps its box.
+ */
+[data-commons-line][data-line-box][data-line-neutral] {
+  background: transparent !important;
+}

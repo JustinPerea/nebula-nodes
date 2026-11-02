@@ -19,4 +19,15 @@ export function lineLook(box: Element) {
     : /currentColor/i.test(shorthand) ? color : resolve(won, shorthand.split(/\s+/).at(-1) ?? '');
   return { color, rule: resolve(won, ruleColor) };
 }
+/** Round 18c (GM r30 1): the box's fill, the winner of `background` and `background-color`. */
+export function lineFill(box: Element): string {
+  const won = cascaded(box);
+  const rank = (w?: { important: boolean; specificity: [number, number, number]; order: number }) =>
+    w ? [w.important ? 1 : 0, ...w.specificity, w.order] : [-1];
+  const [a, b] = [won.get('|background'), won.get('|background-color')];
+  const ra = rank(a); const rb = rank(b);
+  let first: typeof a = undefined;
+  for (let i = 0; i < Math.max(ra.length, rb.length); i++) { if ((ra[i] ?? -1) !== (rb[i] ?? -1)) { first = (ra[i] ?? -1) > (rb[i] ?? -1) ? a : b; break; } }
+  return resolve(won, (first ?? a ?? b)?.value.replace(/\s*!important/, '').trim() ?? '');
+}
 export const NEUTRAL = { color: 'var(--sr-ink-light)', rule: 'var(--sr-ink-light)' };

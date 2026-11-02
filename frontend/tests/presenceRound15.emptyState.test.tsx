@@ -41,14 +41,17 @@ const NO_TERMS = 'No new terms proposed yet.';
 const TOKEN = 'a'.repeat(43);
 type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates' | 'review' | 'evaluation';
 const fails: Partial<Record<Load, number>> = {};
+/** Round 18c: the backend runs without the Commons (every route answers 404 "Commons is disabled"). */
+const commonsOff = { on: false };
 /** A load the test holds until it lets it answer. */
 const held: Partial<Record<Load, Promise<void>>> = {};
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 async function answer(path: string): Promise<Response> {
   const load = (['status', 'collections', 'search', 'folders', 'settings', 'candidates', 'review', 'evaluation'] as const).find((name) => path.endsWith(`/${name}`));
   if (load && held[load]) await held[load];
+  if (commonsOff.on) return json({ detail: 'Commons is disabled' }, 404);
   if (load && fails[load]) return json({ detail: 'no' }, fails[load]);
-  if (load === 'status') return json({ worker: { running: false, state: 'idle' }, queue: {} });
+  if (load === 'status') return json({ worker: { running: false, state: 'idle' }, queue: {}, meter: { calls: 0, cap: 100, resets_at: '2026-11-02T00:00:00Z' } });
   if (load === 'collections') return json([]);
   if (load === 'search') return json({ results: [] });
   if (load === 'folders' || load === 'candidates') return json([]);
@@ -73,6 +76,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   for (const key of Object.keys(fails)) delete fails[key as Load];
   for (const key of Object.keys(held)) delete held[key as Load];
+  commonsOff.on = false;
   transport.token = TOKEN;
   transport.fetch.mockReset();
   transport.fetch.mockImplementation(async (path: string) => answer(path));
@@ -90,7 +94,7 @@ afterEach(() => {
 
 describe('the references grid (GM r24 b)', () => {
   it('a failed search: only its failure line, never "No matches"', async () => {
-    fails.search = 500;
+    fails.search = 503; // round 18c: a 500 is "hit an error" (GM r30 3)
     render(<CommonsView />);
     await tick(1000);
     expect(commonsLines()).toEqual(['Nebula couldn’t load the references because it didn’t respond. Try again.']);
@@ -155,7 +159,7 @@ describe('the references grid (GM r24 b)', () => {
 
 describe('the Add to menu\'s collections (GM r24 b)', () => {
   it('a failed load: no "No collections"', async () => {
-    fails.collections = 500;
+    fails.collections = 503;
     render(<CommonsView />);
     await tick(1000);
     // GM r24 c's shape for the collections.
@@ -225,7 +229,7 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
 describe('Settings\' lists (GM r24 b)', () => {
   const settings = () => render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
   it('a failed load: neither "No folders linked" nor "No new terms"', async () => {
-    fails.folders = 500;
+    fails.folders = 503;
     settings();
     await tick(1000);
     // GM r25: the pane's own words, whichever of its reads failed.
@@ -304,5 +308,57 @@ describe('Agent review and Blind labeling (review 13 MEDIUM-1, GM r27 1)', () =>
     expect(screen.getByText(SETUP)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Prepare 15 held-out references/ })).toBeTruthy();
     expect(seen).not.toContain(LABELING_LINE);
+  });
+});
+
+describe('Add to and Add while the collections haven\'t loaded (round 18c, GM r30 2)', () => {
+  const TABS = ['All', 'Inbox', 'Agent review', 'Blind labeling', 'Settings'];
+  const select = () => document.querySelector<HTMLSelectElement>('.commons-field--inline select')!;
+  const add = () => document.querySelector<HTMLButtonElement>('.commons-add > button')!;
+  const disabledNotLoaded = (where: string) => {
+    expect(select().getAttribute('aria-disabled'), where).toBe('true');
+    expect(select().getAttribute('aria-label'), where).toBe('Add to, not loaded. It works again once the collections load.');
+    expect([...select().options].map((o) => o.textContent), where).toEqual(['Not loaded']);
+    expect(add().getAttribute('aria-disabled'), where).toBe('true');
+    expect(add().getAttribute('aria-label'), where).toBe('Add, not loaded. It works again once the collections load.');
+    fireEvent.click(add());
+    expect(screen.queryByRole('menu'), where).toBeNull();
+    expect(text(), where).not.toContain('Pick or create a collection first.');
+  };
+  for (const [how, set] of [['failed (503)', () => { fails.collections = 503; }], ['failed (500)', () => { fails.collections = 500; }],
+    ['pending', () => { held.collections = new Promise(() => {}); }]] as const) {
+    it(`${how}: both disabled on every tab, "Not loaded"`, async () => {
+      set();
+      render(<CommonsView />);
+      await tick(1000);
+      for (const tab of TABS) {
+        fireEvent.click(screen.getByRole('tab', { name: tab }));
+        await tick(300);
+        disabledNotLoaded(`${how}, ${tab}`);
+      }
+    });
+  }
+  it('loaded with none: "No collections" in the disabled grey, the select live (New collection…), Add live', async () => {
+    render(<CommonsView />);
+    await tick(1000);
+    expect(select().hasAttribute('data-no-choice')).toBe(true);
+    expect(select().getAttribute('aria-disabled')).toBeNull();
+    expect([...select().options].map((o) => o.textContent)).toEqual(['No collections', 'New collection…']);
+    expect(add().getAttribute('aria-disabled')).toBeNull();
+  });
+});
+
+describe('the Commons turned off (round 18c, GM r30 wording batch)', () => {
+  it('one page line in place of every tab\'s content: "Commons is turned off for this Nebula."', async () => {
+    commonsOff.on = true;
+    render(<CommonsView />);
+    await tick(2000);
+    for (const tab of ['All', 'Inbox', 'Agent review', 'Blind labeling', 'Settings']) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }));
+      await tick(2000);
+      expect(commonsLines(), tab).toEqual(['Commons is turned off for this Nebula.']);
+      expect(document.querySelector('.commons-main, .commons-filters, .commons-panel-slot, .commons-settings'), tab).toBeNull();
+      expect(text(), tab).not.toContain('Commons is disabled');
+    }
   });
 });

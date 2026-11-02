@@ -278,6 +278,36 @@
   opacity: 1 !important;
   cursor: default !important;
 }
+/* PR #204 round 18c (GM r30 2): a control that waits on a read that failed or hasn't answered
+   (the Commons' Add to and Add, `data-not-loaded`) is disabled in the same look as a lock, with
+   its own reason in its label. A select whose only value says there is nothing to pick
+   ("No collections", `data-no-choice`) shows it in the disabled grey, and stays live. */
+button[data-not-loaded],
+button[data-not-loaded]:hover,
+button[data-not-loaded]:active {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+select[data-not-loaded],
+select[data-not-loaded]:hover,
+select[data-not-loaded]:active {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  cursor: default !important;
+}
+select[data-no-choice] {
+  color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
+}
 input[type='checkbox'][data-person-lock]:not([data-held-pending]),
 input[type='checkbox'][data-person-lock]:not([data-held-pending]):hover,
 input[type='checkbox'][data-person-lock]:not([data-held-pending]):active {

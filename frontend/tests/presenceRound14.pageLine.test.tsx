@@ -133,7 +133,7 @@ describe('a tab that isn\'t connected as you: one page line, never a load\'s own
 describe('a connected tab (GM r22, confirmed)', () => {
   it('one load failing alone shows its own line', async () => {
     transport.token = TOKEN;
-    fails.search = 500;
+    fails.search = 503; // round 18c: a 500 is "hit an error" (GM r30 3); 503 is the no-response case
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(1));
     // Round 15 (GM r24 c), verbatim.
@@ -142,7 +142,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
 
   it('every load failing for one reason shows the page line with that reason', async () => {
     transport.token = TOKEN;
-    fails.status = 500; fails.collections = 500; fails.search = 500;
+    fails.status = 503; fails.collections = 503; fails.search = 503;
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(1));
     await tick(600);
@@ -152,7 +152,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
 
   it('two different reasons show one line per failed load, in the page\'s order', async () => {
     transport.token = TOKEN;
-    fails.status = 500; fails.search = 404;
+    fails.status = 503; fails.search = 404;
     // The status answers last, so arrival order isn't the page's order.
     transport.fetch.mockImplementation(async (path: string) => {
       if (path.endsWith('/status')) await new Promise((resolve) => { setTimeout(resolve, 600); });

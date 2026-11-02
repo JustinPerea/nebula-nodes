@@ -2594,3 +2594,95 @@ GM's three fixes; with them the PR is signed off on design.
     rgba(255,255,255,0.55), as the because line).
   - Agent review, Blind labeling and the page line stay neutral.
   - Shots at 1440 in the scratchpad (`fu3r/shots-r18b`), md5 `uniq -d` empty, opened.
+
+## Round 18c (GM r30; base 9bd4a245)
+
+### 1. One look for every neutral Commons line
+- The line was one component everywhere, but its fill (`--sr-surface-control`, black at 0.3) read
+  as a box on Agent review's and Blind labeling's lighter heading and as nothing on the page's
+  black. Every neutral Commons line, a load's and a because line, now draws the bare rail with no
+  fill (styles/becauseLine.css, `[data-commons-line][data-line-box][data-line-neutral]`).
+  CommonsErrorLine marks a because line `data-line-neutral` too, so one rule covers both. An
+  action's failure keeps its filled box.
+- Test: every load line, the because line and the Commons-off line, in the page row, both panes'
+  headings, the settings and the detail, resolve to one look (class, ink, rule, no fill)
+  (`tests/helpers/lineLook.ts lineFill`).
+
+### 2. Add to and Add while the collections haven't loaded
+- Failed or pending collections read (`answered.collections` false, on a connected tab): the
+  select is aria-disabled, holds one option, "Not loaded", and is labelled "Add to, not loaded.
+  It works again once the collections load."; Add is aria-disabled, labelled "Add, not loaded. It
+  works again once the collections load.", opens nothing, and the grid's drop and a page's
+  candidates add nothing, so "Pick or create a collection first." never shows. Both take the lock's
+  grey (`data-not-loaded`, styles/disabled-buttons.css, a block of its own beside the lock's).
+- Loaded with none: "No collections" in the disabled grey (`data-no-choice`); the select stays
+  live, since its "New collection…" is how one is made. Add stays live: its menu's Import
+  moodboards makes collections. (GM's "Add enabled only if it creates one", read that way; for
+  GM.)
+- A tab not connected as you keeps round 18's lock: "No collections", locked, with Add's line
+  (GM r28 3). Nothing was read there either; whether it should say "Not loaded" is for GM.
+- About the shots GM compared: in F, I and K only the pane's read failed; the collections loaded,
+  with none, so "No collections" was true there. D's collections read failed. Now D says
+  "Not loaded" with both disabled; F, I and K show "No collections" in the grey.
+- Tests: on every tab, a 503, a 500 and a pending read leave both disabled with the words above,
+  and a click opens nothing; loaded with none, the grey "No collections" and a live Add.
+  `presenceRound13.commonsFocus`, `presenceRound14.focusOffline` and `presenceRound11.demote`
+  now answer the collections read (it never answered, which is now "Not loaded").
+
+### 3 and 4. The wording batch, as GM wrote it
+- `errorCopy.loadFailedLine(what, error)` reads the status and the backend's detail, not the
+  reason's words:
+
+  | Failure | Line |
+  |---|---|
+  | No answer at all | Nebula couldn’t X because Nebula’s server isn’t answering. Check that it’s running, then try again. |
+  | 500, 501, 505+ | Nebula couldn’t X because Nebula’s server hit an error. Try again. |
+  | 408, 429, 502-504 | Nebula couldn’t X because it didn’t respond. Try again. |
+  | 404 "Commons is disabled" | Commons is turned off for this Nebula. (one page line; below) |
+  | 404 "not found" (blobs) | Nebula couldn’t load this image because the file isn’t there anymore. (or "this video") |
+  | 401 "invalid UI session token", "no UI session: …" | Nebula couldn’t X because this window’s session ended. Reload to sign in again. |
+  | 403 "only the human UI session can do this" | Nebula couldn’t X because this window isn’t signed in as you. Reload to sign in again. |
+  | 401/403 with no reason | Nebula couldn’t X because you don’t have access to this anymore. Reload to sign in again. |
+  | 404 reference gone, 409 not in the held-out set, 422 filters | as round 18b |
+  | Any other 4xx, with no reason or one not listed | Nebula couldn’t X because Nebula’s server didn’t accept it. Try again. |
+
+- No backend message shows as it is: an unlisted reason's words go to the console
+  (`[nebula] Couldn’t X: the backend said "…" (not shown).`), and `warnFailure` logs the answer as
+  before.
+- The gateway statuses (502-504) keep "didn't respond": the dev proxy answers 502 for a backend
+  that isn't there (errorCopy GATEWAY_STATUSES). For GM if that should read otherwise.
+- A Commons 401 reaches the screen as the not-connected line (lib/commonsApi turns every 401 into
+  it after one retry), so the session-ended clause is in place for any other path.
+- The Commons turned off: the Commons is on only when the backend starts with
+  `NEBULA_COMMONS_ENABLED=1` (backend commons/activation.py); no setting turns it on, so the line
+  ends after "Nebula". When the page's loads say so, the page line "Commons is turned off for
+  this Nebula." stands in place of every tab's content (no filters, grid, panes or settings).
+- CommonsMedia names what it loads: "load this image", "load this video".
+- Tests: every row above (`presenceRound18.neutralLines`, `paneLoads`, `mediaLine`), the raw text
+  only in the console, the Commons-off page on every tab (`presenceRound15.emptyState`), and each
+  backend string the mapping keys on read from the backend's own files.
+- Tests that used 500 for the no-response case now use 503 (`pageLine`, `emptyState`).
+
+### Gates
+- tsc and eslint clean; check:inline-styles and check:slava-css-scope pass.
+- vitest on two workers, an explicit array of 352 files: 350 of 352 files, 4,672 of 4,674 tests.
+  The two were timeouts under the run's load (`clearsOnPromote.ratchet` round 5 at 30 s and
+  `savePaused.store` at 5 s); rerun alone, both pass (32 of 32).
+- `npm run build` with the budget check: 458,377 B raw / 141,243 B gzip.
+- Mutations (rsync copy): 20 run, 20 killed. The fill back, because lines unmarked; the select
+  not disabled, Add opening, never "not loaded", Add unmarked, "No collections" for not loaded,
+  the grey dropped; 500 as "didn't respond", the file, session and signed-in clauses dropped, a
+  raw reason shown, no console line, no answer's old line, Commons off not read, its content kept,
+  its line not neutral, the media's words, the 4xx line's old words. The held status slot's test
+  timed out (5 s) on its cold import in five of the mutant runs; it now has 30 s.
+- Live (8951/5951, backend only through `harness/serve_isolated.py` with the person token on
+  stdin; canaries first; `blocked.log` holds only canary lines): 23 of 23.
+  - D (status, references and collections at 500), F-agent-review (503), I (500), F-settings
+    (500), K (a real backend 422): one look, `commons-notice commons-notice--error`, ink and rule
+    rgba(255,255,255,0.55), 2 px rail, no fill (rgba(0,0,0,0)).
+  - D on every tab: "Not loaded", both aria-disabled in the grey, the two labels; a click on Add
+    opens nothing and never says "Pick or create a collection first.".
+  - F, I, K: "No collections" grey, the select and Add live.
+  - M: every Commons call answered with the backend's own 404 body for a disabled Commons; on
+    every tab one line, "Commons is turned off for this Nebula.", and no content.
+  - Shots at 1440 in the scratchpad (`fu3r/shots-r18c`), md5 `uniq -d` empty, opened.

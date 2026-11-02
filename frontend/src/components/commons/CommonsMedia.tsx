@@ -35,13 +35,14 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setErrorPath(path);
-      line.show(failure, "Couldn’t load this reference.", { reload: true });
+      // Round 18c (GM r30): the media says which it is ("this image", "this video").
+      line.show(failure, video ? "Couldn’t load this video." : "Couldn’t load this image.", { reload: true });
     });
     return () => {
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [path, loadEpoch, line]);
+  }, [path, video, loadEpoch, line]);
   const current = media?.path === path ? media : undefined;
   // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
   const shownError = useOfflineFirstBecause(error);
