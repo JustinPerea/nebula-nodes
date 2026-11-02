@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { normalizeAgentEventSource, type AgentEventSource } from '../lib/agentEvents';
+import { cleanSession, cursorLabel } from '../lib/agentCursorLabel';
 
 /** The Agent log keeps this many entries, oldest dropped first. Memory only. */
 export const AGENT_LOG_MAX_ENTRIES = 50;
@@ -10,7 +11,7 @@ export interface AgentLogEntry {
   /** Wall-clock ms: the backend's for an agent's action, arrival for a chat line. */
   ts: number;
   source: AgentEventSource;
-  /** Who acted, as their cursor names them. Absent on the chat's thinking lines. */
+  /** Who acted, as their cursor's pill names them (cursorLabel). Absent on the chat's thinking lines. */
   agent?: { id: string; name: string; color: string };
   message: string;
 }
@@ -53,7 +54,10 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
   return {
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,
     source: 'agent',
-    agent: { id: agent.id, name: agent.name, color: SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR },
+    // Named as its cursor's pill names it ("Pair · 3"), from the same
+    // helper, so two sessions of one agent read apart (GM - Design, PR #211
+    // r19). Person UI only.
+    agent: { id: agent.id, name: cursorLabel(agent.name, cleanSession(event.session)), color: SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR },
     message,
   };
 }

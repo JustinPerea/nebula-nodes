@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresenceActions';
 import type { AgentCursorAnchor, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
+import { cleanSession } from '../lib/agentCursorLabel';
 
 /** Cursors dim after this long without news, and disappear after AGENT_CURSOR_EXPIRE_MS. */
 export const AGENT_CURSOR_IDLE_MS = 20_000;
@@ -70,8 +71,6 @@ interface AgentPresenceState {
 }
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
-const SESSION_KEY = /^[0-9a-f]{12}$/;
-const MAX_SESSION_ORDINAL = 100_000;
 
 /**
  * The last seq each cursor key had, kept after the cursor leaves: one that
@@ -94,18 +93,9 @@ export function cursorAction(raw: unknown): AgentCursorAction {
   return AGENT_CURSOR_ACTIONS.includes(raw as AgentCursorAction) ? (raw as AgentCursorAction) : 'move';
 }
 
-/** A session the backend gave, or null: anything malformed lands the event on
- *  the agent's own cursor. */
-export function cleanSession(raw: unknown): AgentPresenceSession | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const session = raw as Record<string, unknown>;
-  const { key, ordinal } = session;
-  if (typeof key !== 'string' || !SESSION_KEY.test(key)) return null;
-  if (typeof ordinal !== 'number' || !Number.isInteger(ordinal) || ordinal < 1 || ordinal > MAX_SESSION_ORDINAL) {
-    return null;
-  }
-  return { key, ordinal };
-}
+// cleanSession lives with the cursor's label (agentCursorLabel), which the
+// Agent log, loaded with the app, uses without pulling in this store.
+export { cleanSession };
 
 function cleanDid(raw: unknown, now: number): AgentCursorDid | null {
   if (!raw || typeof raw !== 'object') return null;

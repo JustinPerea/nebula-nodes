@@ -1890,7 +1890,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     expect(rule?.[1]).toMatch(/opacity: 0;/);
     const layer = readFileSync(resolve(__dirname, '../src/components/canvas/AgentCursorLayer.tsx'), 'utf8');
     // Under reduced motion it takes its place at once (capped: no wait).
-    expect(layer).toMatch(/if \(prefersReducedMotion\(\)\) \{\n\s+setSay\.current\('wait'\);\n\s+decideSay\.current\(true\);/);
+    expect(layer).toMatch(/if \(prefersReducedMotion\(\)\) \{\n\s+setSay\.current\('hold'\);\n\s+decideSay\.current\(true\);/);
   });
 });
 
@@ -2407,5 +2407,162 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(d.dataset.collapsed).toBeUndefined();
     expect(painted(d)).toBe(true);
     expect(anyMeet()).toBe(false);
+  });
+
+
+  // GM r19 item 2: hold still. A say that another column blocks waits with
+  // nothing moving; it goes to the log with every position unchanged.
+  it('a say blocked by another column holds with nothing moving, and goes to the log leaving every position unchanged (r19 item 2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column(['a', 'b'], { x: 300, y: 300 });
+      blocker('e', 3, 400, 318);
+      blocker('f', 4, 150, 322);
+      const before = where();
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const a = byKey('a');
+      for (let i = 0; i < 120; i += 1) {
+        frame();
+        expect(where()).toEqual(before);
+        expect(painted(a)).toBe(false);
+      }
+      expect(a.dataset.sayWait).toBe('log');
+      expect(where()).toEqual(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('once the blocker goes, the column glides and then the say fades in; the cap counts only the hold, not the glide (r19 item 2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column(['a', 'b'], { x: 300, y: 300 });
+      blocker('e', 3, 400, 318);
+      blocker('f', 4, 150, 322);
+      const before = where();
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const t0 = performance.now();
+      const a = byKey('a');
+      // Held 540 ms (32 frames), nothing moving.
+      for (let i = 0; i < 32; i += 1) {
+        frame();
+        expect(where()).toEqual(before);
+      }
+      expect(a.dataset.sayWait).toBe('true');
+      send(event({ ...session('e', 3), target: { nodeId: 'n2' } }));
+      let prev = where();
+      let gliding = 0;
+      let shownAt = -1;
+      for (let i = 0; i < 120 && shownAt < 0; i += 1) {
+        frame();
+        const w = where();
+        expect(Math.abs(w.b.y - prev.b.y)).toBeLessThan(4);
+        expect(w.b.y - w.a.y).toBeGreaterThanOrEqual(S - 1e-6);
+        if (w.b.y !== prev.b.y) gliding += 1;
+        expect(a.dataset.sayWait).not.toBe('log');
+        if (painted(a)) {
+          shownAt = i;
+          expect(w.b.y - w.a.y).toBeGreaterThanOrEqual(stackStepPx(true) - 0.01);
+          expect(performance.now() - t0).toBeGreaterThan(600);
+        }
+        prev = w;
+      }
+      // The glide ran past the 600 ms since the say came, and still it shows.
+      expect(gliding).toBeGreaterThan(3);
+      expect(shownAt).toBeGreaterThan(4);
+      expect(a.dataset.saySide).toBeUndefined();
+      expect(anyMeet()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+
+  // GM r19: the Agent log names each say by the cursor's own label, the
+  // string its pill shows, from one helper.
+  it('the Agent log names each line as its cursor\'s pill does ("Claude · 3"), for every cursor in a column (r19)', () => {
+    render(<AgentCursorLayer />);
+    const sent = (['a', 'b', 'c', 'd'] as const).map((k, i) => {
+      const e = event({ ...session(k, i + 1), target: { nodeId: 'n1' }, say: `Step ${k}` });
+      send(e);
+      flush();
+      return [k, e] as const;
+    });
+    for (const [k, e] of sent) {
+      const pill = byKey(k).querySelector('.agent-cursor__name')!.textContent;
+      const logged = agentActionEntry(e)!.agent!.name;
+      // The count cursor's pill shows "2 more"; its own label is what the
+      // cursor's other members are listed by.
+      const own = byKey(k).dataset.count ? 'Claude · 3' : pill;
+      expect(logged).toBe(own);
+    }
+    expect(sent.map(([, e]) => agentActionEntry(e)!.agent!.name)).toEqual(['Claude', 'Claude · 2', 'Claude · 3', 'Claude · 4']);
+    // The folded member's list name, too.
+    expect([...byKey('c').querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent)).toEqual(['Claude · 3', 'Claude · 4']);
+    // No session, or a malformed one: the bare name, as the cursor shows it.
+    expect(agentActionEntry(event({ say: 'x' }))!.agent!.name).toBe('Claude');
+    expect(agentActionEntry(event({ say: 'x', session: { key: 'not-hex', ordinal: 3 } as never }))!.agent!.name).toBe('Claude');
+  });
+
+  // GM r19 check: the full cursors are the column's earliest arrivals,
+  // whatever numbers their sessions carry.
+  it('the two full cursors are the earliest arrivals, whatever their numbers; the latest fold (r19 check)', () => {
+    render(<AgentCursorLayer />);
+    // Arrival order a (·6), b (·3), c (·5), d (·4): numbers out of order.
+    for (const [k, ordinal] of [['a', 6], ['b', 3], ['c', 5], ['d', 4]] as const) {
+      send(event({ ...session(k, ordinal), target: { nodeId: 'n1' } }));
+      flush();
+    }
+    const full = drawn().filter((el) => !el.dataset.count).map((el) => el.dataset.session!.slice(0, 1));
+    expect(full.sort()).toEqual(['a', 'b']);
+    expect(byKey('c').dataset.count).toBe('2');
+    expect(byKey('d').dataset.collapsed).toBe('true');
+    expect(where().a.y).toBeLessThan(where().b.y);
+    expect([...byKey('c').querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent)).toEqual(['Claude · 5', 'Claude · 4']);
+  });
+
+
+  it('a say whose room is taken again mid-glide holds again: it never shows over the blocker, gives its room back, and goes to the log (r19 item 2)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column(['a', 'b'], { nodeId: 'n1' });
+      const a0 = where().a;
+      // Another column already in the way on the left.
+      blocker('f', 4, a0.x - 150, a0.y + 22);
+      // e rests on n2, out of the way.
+      send(event({ ...session('e', 3), target: { nodeId: 'n2' } }));
+      flush();
+      send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
+      frame();
+      frame();
+      const a = byKey('a');
+      expect(a.dataset.sayWait).toBe('true');
+      // b has begun gliding down for the say.
+      expect(where().b.y - where().a.y).toBeGreaterThan(S);
+      // n2 is carried so e lands in the say's room on the right.
+      const move = (dx: number, dy: number) => {
+        const next = new Map(lookupRef.current) as Map<string, Entry>;
+        const node = next.get('n2')!;
+        next.set('n2', { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: {
+          x: node.internals.positionAbsolute.x + dx, y: node.internals.positionAbsolute.y + dy } } } as Entry);
+        lookupRef.current = next as never;
+        notifyStore();
+      };
+      for (let i = 0; i < 4; i += 1) {
+        move(-(1000 - (a0.x + 100)) / 4, 18 / 4);
+        frame();
+      }
+      for (let i = 0; i < 90; i += 1) {
+        frame();
+        expect(painted(a)).toBe(false);
+      }
+      expect(a.dataset.sayWait).toBe('log');
+      expect(where().b.y - where().a.y).toBeCloseTo(S, 6);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

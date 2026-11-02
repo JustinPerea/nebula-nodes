@@ -777,3 +777,70 @@ GM signed off round 4e's design in r18, with one change and one addition. The sp
     
     The say showed after 18 frames at a 65.08 px step. The least step was 42 throughout, and the member moved at most 3.8 px per frame.
   - **Folded say:** four cursors, so the count reads "2 more". The fourth one's "Reading the brief" is in the Agent log, no say is on the canvas, and nothing moved.
+
+## Round 4g
+
+GM r19 approved the say-back strip, made one fix (the log labels), added one rule (hold still) and asked for one check (earliest arrivals). The spec is re-copied with these rulings.
+
+### Hold still (r19 item 2)
+
+- A new say starts **held** (`hold`): hidden, with the layout keeping no room for it, so nothing moves.
+  - While another column is in its way on both sides, it stays held.
+  - When `SAY_WAIT_MAX_MS` (600 ms) of holding runs out, it goes to the Agent log, and nothing has moved at all.
+- **Once a side is clear,** it goes to **waiting** (`wait`). Its wait clock starts again, and only now does the layout count it. The cursors below glide on the land spring, then it fades in on the right, or on the left when another column is still on the right. This all happens in the same frame the room clears.
+- **The cap.** It counts only the hold, never the glide. A test holds a say for 540 ms, clears it, and the say shows after more than 600 ms in total, without going to the log.
+- **Blocked again.** A say whose room is taken again on both sides during the glide goes back to held. It gives its room back (the cursors below glide back to 42), never shows over the blocker, and goes to the log once its new hold runs out. The test carries the blocker in on a dragged node.
+- Inside its own column with no foreign blocker, nothing changes: the review 6 order (glide, then fade in). A flyer in the way still holds a waiting say up to the cap.
+- `sayKeepsRoom(state)` is the one place that says which states keep room: waiting and shown.
+
+### The Agent log names each cursor as its pill does (r19 fix)
+
+- `src/lib/agentCursorLabel.ts` is a small module, so the log, loaded with the app, doesn't pull in the cursor geometry. It holds:
+  - `cleanSession`, moved from `agentPresenceStore`, which still re-exports it;
+  - `sessionName` and `cutGraphemes`, moved from `agentCursorLook`, which re-exports them;
+  - the new `cursorLabel(name, session)`.
+  
+  The canvas pill (all three call sites in the layer) and `agentActionEntry` both call `cursorLabel` with a session cleaned by `cleanSession`. So the log says "Pair · 3" exactly where the pill does, and both fall back to the bare name for no session or a malformed one.
+- It stays out of the entry chunk: `entrySplit.test.ts` caught a first attempt that imported the presence store into the log store, and the store stays behind a dynamic import.
+- **Every place the log names an agent:**
+  - the line's source label and its tooltip;
+  - the header's status (the latest line's agent).
+  
+  All three read `entry.agent.name`, which is now the cursor's label. `data-agent` keeps the agent id; it isn't shown. Chat thinking lines have no agent and are unchanged.
+- **Found, not fixed.** The log's colour dot uses the agent's base colour. The canvas shades a cursor numbered 2 or more (`sessionFill`), so the "Pair · 6" line has a plain orange dot while its cursor is a different shade. The words now tell them apart. Whether the dot should match the cursor's shade is a question for GM.
+- **Person UI only.** Agents read nothing new: no backend, MCP, CLI or socket change.
+
+### The full cursors are the earliest arrivals (r19 check)
+
+- Confirmed and pinned. A test sends four sessions whose numbers are out of order with arrival (6, 3, 5, 4). The two drawn in full are the first two to arrive. The third arrival is the count cursor, and the fourth folds into it. Its list reads "Claude · 5, Claude · 4", in arrival order.
+- **Shot 2, live.** The arrival order was:
+  - fold-1 → "Pair · 3" (drawn);
+  - fold-2 → "Pair · 4" (drawn);
+  - fold-3 → the count cursor ("2 more");
+  - fold-4 → "Pair · 6" (folded).
+  
+  Here the numbers did follow arrival. They start at 3 because the scenario before it still held numbers 1 and 2 on the backend.
+
+### Checks (round 4g)
+
+- `tsc -b` exit 0; `npm run lint` exit 0.
+- **Focused vitest.** `--maxWorkers=2`, the same 144 files: 786 + 376 + 632 + 599 = 2,393 passed.
+- **Build budget.** Pass: 444,353 B raw and 136,498 gzip. That's 646 B more, for `cursorLabel` and `cleanSession` now in the entry with the log, still under the 512,000 B limit. The cursor chunk is 35,611 B.
+- **Log and label tests:** the 22 files that touch the log, the label or the look module, plus the planner and session files, ran after the move: 627 passed, including `entrySplit`.
+- **Mutation checks:** 7 of 7 caught.
+  - **H1:** a held say keeps its room.
+  - **H2:** a held say never goes to the log.
+  - **H3:** the cap counts the glide.
+  - **H4:** a cleared hold shows at once.
+  - **H5:** a new say starts waiting, not held.
+  - **H6:** the log names the agent only.
+  - **H7:** a wait blocked again keeps its room. It survived until the dragged-blocker test was added.
+- **Live at 1440, Restraint, on 8780 and 5780, with the library closed.** The canary blocked everything else, and there were 0 page errors. Puppeteer used the installed Chrome. The shots have no md5 duplicates, and I opened each one.
+  - **Blocked-say strip:**
+    - frame 0, at 250 ms: held, with every cursor where it was (step 42);
+    - frame 1: the blocker goes at 381 ms, and the cursor below glides (46.5 at 445 ms);
+    - frame 2: at 877 ms the step is 65 and the say is in.
+    
+    The least step was 42, with members at most 3.6 px per frame.
+  - **A say that never clears** went to the log, and nothing moved (0 px over 70 frames).
+  - **Shot 2:** the log reads "Pair · 6 — Reading the brief" over the Pair lines, and the header status reads "pair · 6".

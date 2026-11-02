@@ -45,10 +45,10 @@ import {
   paintOrder,
   pillEdge,
   sessionFill,
-  sessionName,
   targetsMeet,
   type StackSpot,
 } from '../../lib/agentCursorLook';
+import { cursorLabel } from '../../lib/agentCursorLabel';
 import { SPRING_SOFT, springFromStiffness, springLinear } from '../../lib/springs';
 import '../../styles/agentCursor.css';
 
@@ -475,9 +475,15 @@ function overlaps(rect: DOMRect, x: number, y: number): boolean {
 
 type Phase = 'pickup' | 'travel' | 'rest';
 
-/** Where a say pill is: on the canvas right or left of its arrow, waiting
- *  hidden for room, or in the Agent log only (GM - Design, PR #211 r17). */
-type SayState = 'none' | 'wait' | 'log' | 'right' | 'left';
+/** Where a say pill is: on the canvas right or left of its arrow; held
+ *  hidden while another column is in its way, with nothing moving; waiting
+ *  hidden while its own column glides out of its way; or in the Agent log
+ *  only (GM - Design, PR #211 r17, r19 item 2). */
+type SayState = 'none' | 'hold' | 'wait' | 'log' | 'right' | 'left';
+
+/** Whether the layout keeps room for a say in this state: only once it
+ *  waits for its own column or shows (r18 item 3, r19 item 2). */
+const sayKeepsRoom = (state: SayState): boolean => state === 'wait' || state === 'right' || state === 'left';
 
 /** The count cursor's fill: neutral, no agent's colour (r17 item 1). */
 const COUNT_FILL = '#52525b';
@@ -558,7 +564,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const counting = !leaving && fold.group !== null && fold.group.length > 1;
   const collapsed = !leaving && fold.into !== null;
   const fill = counting ? COUNT_FILL : sessionFill(cursor.color, cursor.session);
-  const name = sessionName(cursor.name, cursor.session);
+  const name = cursorLabel(cursor.name, cursor.session);
   const countText = counting ? countLabel(fold.group!.length) : null;
   // Measured again when the page's fonts finish loading: a pill measured
   // with the fallback font can be narrower than it is drawn (review 7,
@@ -617,10 +623,10 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const setSay = useRef<(state: SayState) => void>(() => {});
   setSay.current = (state: SayState) => {
     sayState.current = state;
-    if (state !== 'wait') sayWaitSince.current = state === 'log' ? sayWaitSince.current : null;
+    if (state === 'none' || state === 'right' || state === 'left') sayWaitSince.current = null;
     const el = cursorRef.current;
     if (el) {
-      if (state === 'wait' || state === 'log') el.dataset.sayWait = state === 'wait' ? 'true' : 'log';
+      if (state === 'hold' || state === 'wait' || state === 'log') el.dataset.sayWait = state === 'log' ? 'log' : 'true';
       else delete el.dataset.sayWait;
       if (state === 'left') el.dataset.saySide = 'left';
       else delete el.dataset.saySide;
@@ -628,56 +634,66 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     if (state === 'right' || state === 'left') field.paint.set(cursor.key, state);
     else field.paint.delete(cursor.key);
     // The layout counts only what is drawn (GM - Design, PR #211 r18 item
-    // 3): a say in the Agent log keeps no room under its cursor, and one
-    // waiting for its room (from the log too) has the cursors below glide
-    // out of its way first.
-    field.setSay(cursor.key, state !== 'none' && state !== 'log', widths);
+    // 3), and nothing moves for a say that may never show (r19 item 2): a
+    // say held for another column or in the Agent log keeps no room; once
+    // its room is clear it waits while the cursors below glide out of its
+    // way, then fades in.
+    field.setSay(cursor.key, sayKeepsRoom(state), widths);
   };
-  // Where a waiting say goes now, from where the cursors are drawn this
-  // frame: right of its arrow when that side has room; left when another
-  // column is in the way on the right and the left has room; else it waits,
-  // and once SAY_WAIT_MAX_MS is up (or at once, `capNow`) it shows on the
-  // right if only its own column or a flyer was in the way, or in the Agent
-  // log only if another column is. From the log it comes back once a side
-  // has room, while it is still current (GM - Design, PR #211 r17 items 2-3).
+  // Where a hidden say goes now, from where the cursors are drawn this
+  // frame (GM - Design, PR #211 r17 items 2-3, r18 item 3, r19 item 2):
+  // - held: while another column is in the way on both sides, nothing
+  //   moves. Once a side is clear, it waits for its room. When
+  //   SAY_WAIT_MAX_MS of holding is up (or at once, `capNow`), it goes to
+  //   the Agent log only, and nothing has moved.
+  // - in the log: once a side is clear, it waits for its room, while it is
+  //   still current.
+  // - waiting: the cursors below glide out of its way (the layout counts
+  //   it now), then it shows right of its arrow, or left when another
+  //   column is in the way on the right. A flyer in its way holds it up to
+  //   SAY_WAIT_MAX_MS, counted from when the wait began; another column
+  //   back in the way on both sides holds it again.
   const decideSay = useRef<(capNow?: boolean) => void>(() => {});
   decideSay.current = (capNow = false) => {
     const state = sayState.current;
-    if (state !== 'wait' && state !== 'log') return;
+    if (state !== 'hold' && state !== 'wait' && state !== 'log') return;
     const m = motion.current;
     if (!m) {
       if (capNow) setSay.current('right');
       return;
     }
     const z = zoomRef.current;
-    if (state === 'log') {
-      // From the log, once another column no longer blocks a side, it waits
-      // for its room as a new say does: the cursors below glide down first,
-      // then it fades in (review 6 order, r18 item 3), with the same cap.
-      const free = !field.sayRoom(cursor.key, 'right', m.pos, z).foreign
-        || !field.sayRoom(cursor.key, 'left', m.pos, z).foreign;
-      if (!free) return;
-      sayWaitSince.current = performance.now();
-      setSay.current('wait');
-      if (capNow || prefersReducedMotion()) decideSay.current(true);
-      return;
-    }
     const since = sayWaitSince.current;
     const capped = capNow || (since !== null && performance.now() - since > SAY_WAIT_MAX_MS);
     const right = field.sayRoom(cursor.key, 'right', m.pos, z);
+    const left = right.foreign ? field.sayRoom(cursor.key, 'left', m.pos, z) : null;
+    const blocked = right.foreign && left!.foreign;
+    if (state === 'hold' || state === 'log') {
+      if (blocked) {
+        if (state === 'hold' && capped) setSay.current('log');
+        return;
+      }
+      sayWaitSince.current = performance.now();
+      setSay.current('wait');
+      // In the same frame: with its room already clear, it shows now.
+      decideSay.current(capNow || prefersReducedMotion());
+      return;
+    }
+    if (blocked) {
+      sayWaitSince.current = performance.now();
+      setSay.current('hold');
+      return;
+    }
     if (!right.wait && !right.foreign) {
       setSay.current('right');
       return;
     }
-    if (right.foreign) {
-      const left = field.sayRoom(cursor.key, 'left', m.pos, z);
-      if (!left.wait && !left.foreign) {
-        setSay.current('left');
-        return;
-      }
+    if (left && !left.wait) {
+      setSay.current('left');
+      return;
     }
     if (!capped) return;
-    setSay.current(right.foreign ? 'log' : 'right');
+    setSay.current(right.foreign ? 'left' : 'right');
   };
   // A say that replaces one still drawn: does its side still have room?
   const sayFits = useRef<() => boolean>(() => false);
@@ -706,24 +722,25 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     const sayNow = showSay && !idle && drawsSay;
     // A folded member's say is in the Agent log only (r18 item 1); one in
     // the log keeps no room (setSay below sets it as it is drawn).
-    field.setSay(cursor.key, sayNow && sayState.current !== 'log', widths);
+    field.setSay(cursor.key, sayNow && sayKeepsRoom(sayState.current), widths);
     if (!sayNow) {
       setSay.current('none');
     } else if (!sayWasShown.current || sayText.current !== cursor.say) {
-      // A new say pill: hidden until there is room for it (its own column
-      // glides first), then it fades in. Under reduced motion everything is
-      // instant: it takes its place now, or the log. A say that replaces
-      // one still drawn keeps its side while that side has room.
+      // A new say pill: held hidden, nothing moving, until another column
+      // is out of its way; then its own column glides and it fades in.
+      // Under reduced motion everything is instant: it takes its place
+      // now, or the log. A say that replaces one still drawn keeps its side
+      // while that side has room.
       const fresh = !sayWasShown.current;
       sayWaitSince.current = performance.now();
       if (prefersReducedMotion()) {
-        setSay.current('wait');
+        setSay.current('hold');
         decideSay.current(true);
       } else if (fresh || !sayFits.current()) {
         // The loop sees it: a say comes with a new event, which re-runs the
         // loop's effect (below) and wakes it. (Waking it from here would
         // queue the old loop, which the new one then can't replace.)
-        setSay.current('wait');
+        setSay.current('hold');
       }
     }
     sayWasShown.current = sayNow;
@@ -735,7 +752,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // A cursor folded into its column's count cursor fades out where it is
     // (the count's slot), and back in when the column opens up again.
     const opacityTarget = () => (collapsedRef.current ? 0 : idleRef.current ? AGENT_CURSOR_IDLE_OPACITY : 1);
-    const sayPending = () => sayState.current === 'wait' || sayState.current === 'log';
+    const sayPending = () => sayState.current === 'hold' || sayState.current === 'wait' || sayState.current === 'log';
     // The person's pointer in flow coordinates, or null off the canvas. The
     // pane's box is cached on the field: no layout read per frame.
     const pointerInFlow = (): Point | null => {
@@ -1293,7 +1310,7 @@ export function AgentCursorLayer() {
   const exiting = Object.values(leaving);
   if (cursors.length === 0 && exiting.length === 0) return null;
   const byKey = new Map(cursors.map((cursor) => [cursor.key, cursor]));
-  const names = new Set(cursors.map((cursor) => sessionName(cursor.name, cursor.session)));
+  const names = new Set(cursors.map((cursor) => cursorLabel(cursor.name, cursor.session)));
   // One list, so a cursor coming back mid-exit keeps its view. Leaving
   // cursors paint under every live one; the most recently active paints on top.
   const views = [
@@ -1312,7 +1329,7 @@ export function AgentCursorLayer() {
             field={field}
             fontVersion={fontVersion}
             leaving={out}
-            nameTaken={out && names.has(sessionName(cursor.name, cursor.session))}
+            nameTaken={out && names.has(cursorLabel(cursor.name, cursor.session))}
             onExited={onExited}
           />
         ))}

@@ -1,4 +1,5 @@
 import type { Point } from './agentCursorMotion';
+import type { SessionLike } from './agentCursorLabel';
 
 /**
  * How an agent cursor reads (GM - Design, agent cursor §1 and §4): when its
@@ -43,37 +44,9 @@ export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 
 export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2, gapPx: 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
-/** A chat title in a cursor's name is cut to this many characters. */
-export const AGENT_CURSOR_TITLE_CHARS = 20;
-
-interface SessionLike {
-  ordinal: number;
-}
-
-/**
- * "Claude" for number 1, then "Claude · 2", "Claude · 3": the number the
- * backend gave, the lowest free among the agent's live sessions. This only
- * shows it and never numbers. A chat title, when Nebula has one for the
- * session, takes the number's place.
- */
-/** The first `count` user-perceived characters (grapheme clusters), so a flag or an accent is never split. */
-export function cutGraphemes(text: string, count: number): string {
-  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
-  if (!Segmenter) return [...text].slice(0, count).join('');
-  const parts: string[] = [];
-  for (const { segment } of new Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
-    if (parts.length === count) break;
-    parts.push(segment);
-  }
-  return parts.join('');
-}
-
-export function sessionName(name: string, session: SessionLike | null, title?: string | null): string {
-  const cut = title ? cutGraphemes(title.trim(), AGENT_CURSOR_TITLE_CHARS).trim() : '';
-  if (cut) return `${name} · ${cut}`;
-  if (!session || !Number.isInteger(session.ordinal) || session.ordinal < 2) return name;
-  return `${name} · ${session.ordinal}`;
-}
+// The cursor's label (its name and number) lives in agentCursorLabel, so the
+// Agent log can name a cursor exactly as its pill does without this module.
+export { AGENT_CURSOR_TITLE_CHARS, cursorLabel, cutGraphemes, sessionName } from './agentCursorLabel';
 
 // sRGB ↔ OKLab (Björn Ottosson's published matrices).
 type Rgb = [number, number, number];
