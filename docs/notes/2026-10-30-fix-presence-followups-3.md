@@ -3774,3 +3774,72 @@ there was nothing to merge.
     test_commons_evaluation_close, 125 passed.
   - Build: 474,879 B raw / 147,244 B gzip.
   - person_gate.py is identical to main.
+
+## Round 18p
+
+GM r59 and r60, the CLI and log strings, as GM wrote them. No UI change.
+- **mcp_connect.**
+  - r59: "error: in-app agents can’t connect other apps to Nebula. Ask the person to run this
+    in their own terminal." and the disconnect twin ("can’t disconnect other apps from
+    Nebula").
+  - r59: the paste prompt is "Paste the token from Settings > Connect your agent. It stays
+    hidden as you paste. " (ending in a space).
+  - r60 1: "{path} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it.", then "The
+    parser said {exc}." on its own line.
+  - r60 9: "Nebula saved a backup at {backup}." plus, with a token, "The old Nebula token is
+    blanked out in it." It follows "Wrote {path} with mode 600." or "Removed nebula from
+    {path}.".
+  - r60 11: "error: no token. Make one in Settings > Connect your agent. Pick {Client}, name it
+    {name} and set a daily limit of ${n}. Then run the command …". The name and the limit are
+    each optional, joined with "and", no serial comma: "Pick Cursor.", "Pick Cursor and name
+    it Desk.", "Pick Cursor, name it Desk and set a daily limit of $5.".
+  - r60 12: "note: this token belongs to “{a}”, not “{b}”. The canvas will show “{a}”." Curly
+    quotes, no repr.
+  - r59 and r60 19: "Stop the OpenClaw Gateway, then run this command." or "Run this
+    command.", with the command on the next line.
+- **person_session (log text only).** r60 23: "Nebula couldn’t start the person session
+  because the startup pipe is missing or invalid. Person-only actions are refused until Nebula
+  restarts." No token code changed; person_gate.py is identical to main.
+- **Three more lines, not in GM's list, that the new check caught.** They are reworded to
+  GM's pattern, so GM should read them:
+  - "error: `codex` isn’t on PATH. Run this command yourself once it is." Before, it was "Run
+    this yourself once it is:", and the command followed on the next line.
+  - "Nebula will run this command." with the masked command on the next line. Before, it was
+    "Running: {command}".
+  - `--print`'s snippet header is two comment lines, "# {label}" and "# {where}", and the
+    alternative's is "# Or" and "# {where}". Before, they were "# {label}: {where}" and "# Or:
+    {where}", where `where` is often a path.
+- **The check (test_flag_parens_copy).**
+  - It has an exemption list by surface: help text (help, description, epilog, usage and
+    docstrings), and the four terminal prefixes "Nebula:", "error:", "note:" and "!"
+    (TERMINAL_PREFIXES). Only the prefix is exempt. The apostrophe, semicolon and parens checks
+    read the text after it.
+  - New: no colon introduces a command or a path. The check reads each whole message in
+    person_session.py, devserver.py and mcp_connect.py: printed, logged, raised, returned or a
+    prompt. It puts f-string parts and `+` joins back together and reads an `x if c else y`
+    both ways. After the prefix, a colon may not be followed by a backtick, `~`, `/`, `$`, `--`,
+    `nebula`, a relative path, an interpolated value whose code names a path, argv, snippet,
+    backup, command, cmd, file or where, or the end of a line.
+- **Still has a colon, out of this round's scope.** agent_connect.py's setup steps, which the
+  app shows too, say "Check with: claude mcp get nebula" and "Stop the local OpenClaw Gateway
+  first: openclaw mcp set refuses while it runs.". The app's alternative block is labelled
+  "Or: {where}" (ConnectedApps.tsx). "warning:" (couldn’t reach Nebula) is a fifth terminal
+  prefix that isn't on GM's list. Its colon introduces no command, so the check passes it.
+- **Agents and docs.** Nothing parses these lines: no code or skill greps "Run:", "Backup:"
+  or "Running:", and MCP-SETUP.md and skills/nebula/SKILL.md don't quote them.
+- **Tests.**
+  - test_agent_connect: r59's lines, item 1, and new tests for 9, 11 (4 cases), 12, 19
+    (OpenClaw, Hermes and Codex), the paste prompt, the PATH line, "Nebula will run this
+    command." and the `--print` header.
+  - test_person_session: item 23.
+  - test_flag_parens_copy: the prefix list, the colon check on the real files, and its probes,
+    old lines and lines after each prefix.
+- **Mutations.** 19 of 19 caught. On the real files: plain "Run:", OpenClaw "then run:",
+  "Backup:", "once it is:", "Running:", "# label: where", and a command or path after
+  "error:", "Nebula:" and "note:", plus a colon before a relative path in person_session's log.
+  The check without its prefix exemption fails, and so does a prefix list missing "!". The
+  string tests catch repr names, a serial comma, the comma splice, a colon in the prompt, the
+  old in-app line and the old log wording.
+- **Gates (isolated backend).** test_flag_parens_copy, test_agent_connect,
+  test_person_session, test_unprivileged_marker, test_ci_shard, test_connected_copy_sweep and
+  test_round20_fence: 270 passed. person_gate.py is identical to main.

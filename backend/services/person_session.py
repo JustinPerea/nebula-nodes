@@ -160,8 +160,8 @@ def initialize(*, stdin=None, stdout=None, timeout: float = 5.0, backend_origin:
         try:
             session.set(_read_line(stdin, timeout).strip())
         except (OSError, ValueError, EOFError, TimeoutError, RuntimeError):
-            log.warning("Person session unavailable: the startup pipe is missing or invalid. "
-                        "Person-only actions are refused this launch.")
+            log.warning("Nebula couldn’t start the person session because the startup pipe is missing or "
+                        "invalid. Person-only actions are refused until Nebula restarts.")
         return
     if _provided is not None:
         session.set(_provided)

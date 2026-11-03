@@ -73,7 +73,8 @@ def _load(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8") or "{}")
     except ValueError as exc:
         # GM r51 Q6: the parser's words on their own line, after the sentence the person acts on.
-        raise MergeError(f"{path} isn’t valid JSON. Fix it by hand, Nebula won’t overwrite it.\n"
+        # GM r60 1: no comma splice.
+        raise MergeError(f"{path} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it.\n"
                          f"The parser said {exc}.") from exc
     if not isinstance(data, dict):
         raise MergeError(f"{path} doesn’t hold a JSON object. Nebula won’t overwrite it.")
@@ -183,7 +184,9 @@ def _token(args: Any) -> tuple[str | None, str | None]:
     if not sys.stdin.isatty():
         line = sys.stdin.readline().strip()
         return line or None, None
-    return getpass.getpass("Token from Settings > Connect your agent, hidden as you paste: ").strip() or None, None
+    # GM r59: the prompt ends in a space, not a colon.
+    prompt = "Paste the token from Settings > Connect your agent. It stays hidden as you paste. "
+    return getpass.getpass(prompt).strip() or None, None
 
 
 def check_token(url: str, token: str) -> dict[str, Any] | None:
@@ -225,11 +228,15 @@ def _limit(payload: dict[str, Any] | None) -> float | None:
 
 
 def _print_setup(setup: dict[str, Any]) -> None:
-    print(f"# {setup['label']}: {setup['where']}")
+    # Round 18p (GM r60): no colon introduces a path or a command, so the label and the place are
+    # two comment lines over the snippet.
+    print(f"# {setup['label']}")
+    print(f"# {setup['where']}")
     print(setup["snippet"].rstrip("\n"))
     if setup.get("alternative"):
         alt = setup["alternative"]
-        print(f"\n# Or: {alt['where']}")
+        print("\n# Or")
+        print(f"# {alt['where']}")
         print(alt["snippet"].rstrip("\n"))
     print()
     for step in setup["steps"]:
@@ -310,14 +317,17 @@ def _entry_token(entry: Any) -> str | None:
 def _backup_note(backup: Path | None, redacted: str | None) -> str:
     if backup is None:
         return ""
-    return f" Backup, with the old Nebula token blanked out: {backup}" if redacted else f" Backup: {backup}"
+    # GM r60 9: no colon before the path.
+    note = f" Nebula saved a backup at {backup}."
+    return note + " The old Nebula token is blanked out in it." if redacted else note
 
 
 def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str] = input,
                 runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
                 backend_dir: Path | None = None) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can’t connect other apps to Nebula. Only the person can run this.", file=sys.stderr)
+        print("error: in-app agents can’t connect other apps to Nebula. Ask the person to run this in their own "
+              "terminal.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)
@@ -332,9 +342,11 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if token is None and not print_only:
-        print("error: no token. Make one in Settings > Connect your agent: "
-              f"pick {client.label}{', name it ' + args.name if args.name else ''}"
-              f"{', set a daily limit of $' + format(args.daily_usd, 'g') if args.daily_usd else ''}. Then run the command "
+        # GM r60 11: no colon and no serial comma.
+        picks = [f"Pick {client.label}"] + ([f"name it {args.name}"] if args.name else []) \
+            + ([f"set a daily limit of ${format(args.daily_usd, 'g')}"] if args.daily_usd else [])
+        pick = picks[0] if len(picks) == 1 else ", ".join(picks[:-1]) + " and " + picks[-1]
+        print(f"error: no token. Make one in Settings > Connect your agent. {pick}. Then run the command "
               "it shows, with --token-file and the file Nebula saved the token to. The CLI can’t make tokens: only "
               "the Nebula canvas you opened from the launch link can. For a token made before token files, set "
               "NEBULA_APP_TOKEN or pass --paste-token.", file=sys.stderr)
@@ -357,7 +369,8 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"warning: couldn’t reach Nebula at {where} to check the token.", file=sys.stderr)
     app_name = (status or {}).get("agent") or args.name or client.label
     if status and args.name and args.name != app_name:
-        print(f"note: this token belongs to {app_name!r}, not {args.name!r}. The canvas will show {app_name!r}.",
+        # GM r60 12: names the person reads in curly quotes, never repr.
+        print(f"note: this token belongs to “{app_name}”, not “{args.name}”. The canvas will show “{app_name}”.",
               file=sys.stderr)
     daily = _limit(status) if status else args.daily_usd
 
@@ -406,7 +419,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         else:
             argv = agent_connect.codex_add_argv(entry)
         if shutil.which(argv[0]) is None:
-            print(f"error: `{argv[0]}` isn’t on PATH. Run this yourself once it is:", file=sys.stderr)
+            print(f"error: `{argv[0]}` isn’t on PATH. Run this command yourself once it is.", file=sys.stderr)
             print(setup["snippet"])
             return 1
         # `codex mcp add` silently replaces a server with the same name, so
@@ -416,7 +429,8 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
             print(f"error: {client.label} already has a server named nebula. Run `nebula mcp disconnect {client.id}` "
                   "first if you want to replace it.", file=sys.stderr)
             return 1
-        print(f"Running: {_mask(setup['snippet'], token)}")
+        print("Nebula will run this command.")
+        print(_mask(setup["snippet"], token))
         if not _confirm(f"Add Nebula to {client.label}?", args.yes, ask):
             return 1
         done = runner(argv, capture_output=True, text=True)
@@ -471,7 +485,8 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
 def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], str] = input,
                    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can’t disconnect other apps from Nebula. Only the person can run this.", file=sys.stderr)
+        print("error: in-app agents can’t disconnect other apps from Nebula. Ask the person to run this in their own "
+              "terminal.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)
@@ -511,7 +526,9 @@ def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], 
         print(revoke)
         return 0
     if argv:
-        print(("Stop the OpenClaw Gateway, then run: " if client.id == "openclaw" else "Run: ") + " ".join(argv))
+        # GM r59/r60 19: a sentence, then the command on the next line.
+        print("Stop the OpenClaw Gateway, then run this command." if client.id == "openclaw" else "Run this command.")
+        print(" ".join(argv))
     else:
         print(f"Remove the nebula server from {client.stored_in}.")
     if client.id == "hermes":

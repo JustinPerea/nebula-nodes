@@ -1024,8 +1024,11 @@ def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
     mcp_connect.run_connect(args("cursor"), home=tmp_path)
     mcp_connect.run_disconnect(args("cursor"), home=tmp_path)
     err = capsys.readouterr().err.splitlines()
-    assert err == ["error: an in-app agent can’t connect other apps to Nebula. Only the person can run this.",
-                   "error: an in-app agent can’t disconnect other apps from Nebula. Only the person can run this."]
+    # GM r59: actionable for the agent that hits it.
+    assert err == ["error: in-app agents can’t connect other apps to Nebula. Ask the person to run this in their own "
+                   "terminal.",
+                   "error: in-app agents can’t disconnect other apps from Nebula. Ask the person to run this in their "
+                   "own terminal."]
     monkeypatch.delenv("NEBULA_AGENT_TOKEN")
 
     monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(401, json={"detail": "invalid"}))
@@ -1039,5 +1042,80 @@ def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
     with pytest.raises(mcp_connect.MergeError) as raised:
         mcp_connect._load(broken)
     first, second = str(raised.value).split("\n")
-    assert first == f"{broken} isn’t valid JSON. Fix it by hand, Nebula won’t overwrite it."
+    assert first == f"{broken} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it."  # GM r60 1
     assert second.startswith("The parser said Expecting property name") and second.endswith(".")
+
+
+def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
+    """Round 18p (GM r59, r60): GM's exact strings. Nothing introduces a command or a path with a colon:
+    a sentence ends with a period and the command goes on the next line."""
+    # r60 19: OpenClaw's and the plain case, the command on its own line.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
+    assert mcp_connect.run_disconnect(args("openclaw"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Stop the OpenClaw Gateway, then run this command.",
+                                                        "openclaw mcp unset nebula"]
+    assert mcp_connect.run_disconnect(args("hermes"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Run this command.", "hermes mcp remove nebula"]
+    assert mcp_connect.run_disconnect(args("codex"), home=tmp_path) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == ["Run this command.", "codex mcp remove nebula"]
+
+    # r60 9: the backup sentence, with and without a blanked-out token.
+    backup = tmp_path / "mcp.json.nebula-backup-1"
+    assert mcp_connect._backup_note(backup, None) == f" Nebula saved a backup at {backup}."
+    assert mcp_connect._backup_note(backup, "nebula_app_old") == (
+        f" Nebula saved a backup at {backup}. The old Nebula token is blanked out in it.")
+    assert mcp_connect._backup_note(None, "nebula_app_old") == ""
+
+    # r60 12: the names in curly quotes, no repr.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert mcp_connect.run_connect(args("cursor", name="Desk"), home=tmp_path) == 0
+    assert "note: this token belongs to “My Cursor”, not “Desk”. The canvas will show “My Cursor”.\n" in \
+        capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name, daily, pick", [
+    (None, None, "Pick Cursor."),
+    ("Desk", None, "Pick Cursor and name it Desk."),
+    (None, 5, "Pick Cursor and set a daily limit of $5."),
+    ("Desk", 0.5, "Pick Cursor, name it Desk and set a daily limit of $0.5."),
+])
+def test_gm_r60_11_no_token_names_the_picks_without_a_colon(tmp_path, monkeypatch, capsys, name, daily, pick):
+    monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
+    assert mcp_connect.run_connect(args("cursor", name=name, daily_usd=daily), home=tmp_path) == 1
+    assert capsys.readouterr().err.startswith(
+        f"error: no token. Make one in Settings > Connect your agent. {pick} Then run the command it shows, ")
+
+
+def test_gm_r59_the_paste_prompt_and_the_commands_the_cli_runs(tmp_path, legacy_env, monkeypatch, capsys):
+    monkeypatch.delenv("NEBULA_APP_TOKEN")
+    monkeypatch.setattr(mcp_connect.sys.stdin, "isatty", lambda: True, raising=False)
+    prompts = []
+    monkeypatch.setattr(mcp_connect.getpass, "getpass", lambda prompt: prompts.append(prompt) or TOKEN)
+    assert mcp_connect._token(args("cursor", paste_token=True)) == (TOKEN, None)
+    assert prompts == ["Paste the token from Settings > Connect your agent. It stays hidden as you paste. "]
+
+    # Not on PATH: a sentence, then the command.
+    monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", legacy_env.file)
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
+    assert mcp_connect.run_connect(args("codex"), home=tmp_path) == 1
+    out = capsys.readouterr()
+    assert out.err == "error: `codex` isn’t on PATH. Run this command yourself once it is.\n"
+    # The command follows any warning lines.
+    assert [line for line in out.out.splitlines() if not line.startswith("! ")][0].startswith("codex mcp add")
+
+    # On PATH: what Nebula runs, on the line after the sentence.
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    runner = lambda argv, **kw: subprocess.CompletedProcess(argv, 1 if argv[2] == "get" else 0, "", "")  # noqa: E731
+    assert mcp_connect.run_connect(args("claude-code"), home=tmp_path, runner=runner) == 0
+    lines = capsys.readouterr().out.splitlines()
+    at = lines.index("Nebula will run this command.")
+    assert lines[at + 1].startswith("claude mcp add") and not any(line.startswith("Running") for line in lines)
+
+
+def test_print_puts_the_label_and_the_place_on_their_own_lines(tmp_path, cli_env, capsys):
+    assert mcp_connect.run_connect(args("codex", print_only=True), home=tmp_path) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == ["# Codex", "# Terminal"]
+    assert lines[lines.index("# Or") + 1] == "# ~/.codex/config.toml"
