@@ -18,6 +18,11 @@ export function useBackendOffline(): boolean {
  * banner (BackendConnectionStatus). */
 export const OFFLINE_MARK = 'data-offline-disabled';
 
+/** PR #204 round 18k (GM r41): the studio offline row's line id (components/StudioOfflineRow), a
+ * control's reason while it is locked offline (aria-describedby: the Commons close-batch button).
+ * One row per screen. */
+export const STUDIO_OFFLINE_LINE_ID = 'studio-offline-line';
+
 /** Spread on a control that edits: the offline mark while offline. */
 export function offlineMark(offline: boolean): { 'data-offline-disabled'?: '' } {
   return offline ? { [OFFLINE_MARK]: '' } as { 'data-offline-disabled': '' } : {};

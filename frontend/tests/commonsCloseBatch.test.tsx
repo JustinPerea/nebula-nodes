@@ -4,7 +4,7 @@ import { CommonsCloseBatch } from '../src/components/commons/CommonsCloseBatch';
 import { RequestFailedError } from '../src/lib/errorCopy';
 
 const api = vi.hoisted(() => ({ close: vi.fn() }));
-vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api }));
+vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: { get: vi.fn(async () => null) } }));
 
 beforeEach(() => { vi.clearAllMocks(); api.close.mockResolvedValue({ state: 'closed' }); });
 afterEach(() => cleanup());
@@ -15,7 +15,8 @@ it('asks for confirmation before closing and cancel makes no call', () => {
   expect(api.close).not.toHaveBeenCalled();
   const dialog = screen.getByRole('alertdialog');
   expect(dialog.textContent).toContain('not blind ground truth');
-  expect(dialog.textContent).toContain('2 / 15 reviewed');
+  expect(dialog.textContent).toContain('You can keep agreeing with or correcting grades after closing. You’ve reviewed 2 of 15 so far. No new grades will be requested.');
+  expect(dialog.textContent).toContain('This can’t be undone.');
   expect(document.activeElement?.textContent).toBe('Cancel');
   fireEvent.click(screen.getByText('Cancel'));
   expect(screen.queryByRole('alertdialog')).toBeNull();

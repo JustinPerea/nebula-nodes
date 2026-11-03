@@ -3382,3 +3382,66 @@ GM r40: the close-batch line (B1, B2), its ratchet, and the stacked dialog.
     graphStore.fix18), and they passed 54 of 54 on a rerun of the three alone.
   - Backend named tests: 9 of 9.
   - Build: 474,676 B raw / 147,143 B gzip, after merging main with #211.
+
+## Round 18k
+
+GM r41: the close strings verbatim, the 403's cause, the lock rule and two wording fixes.
+
+- **Merge.** The worktree already contained origin/main (062fb370: #218 and #211), merged in at
+  f53ef9be, so there was nothing to merge or stage. No test here stands in for
+  `broadcast_raw` or reads pin text.
+- **Strings.** `closeBatchFailedLine` (lib/errorCopy) now maps each cause on its own, with GM's
+  words. The full table, generated from the ratchet's CLOSE_LINES, is in the scratchpad's
+  pr204-r18k-strings.md.
+  - 401, and any refusal for this tab: lib/commonsApi turns every 401 into one, so all of them
+    read "…you’re signed out. Open the link Nebula printed when it started.". That includes a
+    held tab, which used to get the not-connected line.
+  - Commons off: GM's restart line. It is neutral (`isBecauseFailure` now matches it).
+- **403.** On this route a 403 means one of two things:
+  - routes/commons `human_dep`: no person token (the CLI, an agent token, an MCP client);
+  - services/local_guard: a foreign Origin or Host.
+  - Both are origin or token problems, so GM's line applies. The person gate isn't on the
+    Commons routes, and an unknown token gets a 401.
+  - Checked live against the isolated backend: no token and `X-Nebula-Client` got 403 "only the
+    human UI session can do this"; a foreign Origin got 403 "Origin not allowed"; a bad token
+    got 401; the person got 409.
+  - In the person's own window neither can show. lib/commonsApi never sends a Commons call
+    without the token, and local_guard's 403 has no CORS headers, so the browser sees no answer.
+- **Lock rule (GM r41).**
+  - A close line that doesn't end in "Try again." or "Try again in a moment." (`closeLineRetries`)
+    makes the close button aria-disabled. The line (CommonsErrorLine's new `id`) is its
+    aria-describedby; focus stays on the button, a press does nothing, and Cancel stays live.
+  - A locked `.commons-button` dims like a disabled one and keeps its rest look on hover. That
+    look comes from the `--commons-rest-*` custom properties, so no new disabled rule is needed
+    outside the shared sheet.
+  - Grade running: while that line shows, the dialog reads Agent review every 5 s
+    (`GRADE_WAIT_MS`). When no grade is running, the line clears itself and the button is live
+    again. It asks at no other time.
+  - Offline: no line; the button is aria-disabled with the studio offline row's line as its
+    aria-describedby. `STUDIO_OFFLINE_LINE_ID` is in lib/useBackendOffline, and StudioOfflineRow
+    gives its pill that id. Before, the button was natively disabled.
+- **Wording.** The B2 bullet now reads "You can keep agreeing with or correcting grades after
+  closing. You’ve reviewed 0 of 15 so far. No new grades will be requested." Both dialogs say
+  "This can’t be undone." CommonsDetail's "Delete … This cannot be undone." confirm is a
+  different dialog and is left for the app-wide copy PR.
+- **Tests.**
+  - `tests/commonsCopy.ratchet.test.tsx` (9): every row in both panes is exact, neutral and in
+    the right state, and the rule "live ⇔ ends in a retry" is checked per row. Also the 401 case,
+    the grade wait (locked, still locked, then cleared and live with focus kept), a retry line
+    never starting the wait, and offline.
+  - `tests/commonsCloseBatch.test.tsx`: the new bullet and "can’t".
+- **Mutations.** 19 of 19 killed (K1–K19). K11 first survived, because a test advanced fake
+  time in the same act as the failure. It now settles first.
+- **Live** (installed Chrome, throwaway profile, 8951/5951, canaries refused): 16 of 16. That
+  covers the 403 probes, and in Blind labeling a 503 left live, a 403 locked (opacity 0.48), the
+  grade wait, offline locked by the offline row, and both dialogs' wording. One shot,
+  K-403-locked, is in the scratchpad's fu3r/shots-r18k.
+- The first gate run caught one problem: the grade wait cleared its line with an updater
+  function, which presenceRound9's scan reads as a screen setting a failure line itself. It now
+  calls `setError('')`. That is safe because any other line cancels the wait first. K9 was
+  re-run against the new code and is killed.
+- **Gates.**
+  - tsc -b and npm run lint are clean.
+  - vitest on the explicit list: 447 files, 5,871 of 5,871.
+  - Backend named tests: 9 of 9.
+  - Build: 474,675 B raw / 147,169 B gzip.

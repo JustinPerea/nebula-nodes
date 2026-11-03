@@ -211,44 +211,75 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
 }
 
 /**
- * PR #204 round 18j (GM r40): closing the held-out batch failed. Nothing was lost, so the line is
- * a load's shape, the because form with Nebula the subject and curly apostrophes, never the
- * server's own text: "Nebula couldn’t close the batch because the server didn’t respond. Try
- * again." The reasons the close itself gives (backend commons/evaluation close, its 409s) say
- * what to do instead; the session reasons are the load's.
+ * PR #204 round 18j (GM r40), round 18k (GM r41, verbatim): closing the held-out batch failed.
+ * Nothing was lost, so the line is neutral, in the because form with Nebula the subject, with
+ * curly apostrophes, and never the server's own words (those go to the console). The 409s are
+ * the close's own refusals (backend commons/evaluation close), read by their words.
  */
 export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
-  ...LOAD_BECAUSE,
-  // Sealed in another window meanwhile.
-  ["These labels are sealed as blind ground truth, so there's nothing to close.",
-    'its labels are sealed as blind ground truth, so there’s nothing to close. Reload to see them.'],
   // An agent grade was still running.
   ['A grading attempt is still running. Close after it finishes.',
     'a grade is still running. Close the batch again when it finishes.'],
-  // The batch changed in another window (a stale revision).
+  // Sealed in another window meanwhile.
+  ["These labels are sealed as blind ground truth, so there's nothing to close.",
+    'its labels were already sealed as blind ground truth. Reload to see them.'],
+  // The batch changed somewhere else (a stale revision).
   ['Labels changed in another window. Reload before saving.',
-    'it changed in another window. Reload, then close the batch again.'],
+    'it changed somewhere else. Reload, then close the batch again.'],
   // The batch was cleared meanwhile.
-  ["There's no held-out set yet. Prepare a folder first.", 'there’s no held-out set anymore. Reload to get the latest.'],
+  ["There's no held-out set yet. Prepare a folder first.",
+    'its held-out set no longer exists. Reload to get the latest references.'],
   // The integrity check (backend evaluation.INTEGRITY).
   ["The held-out set doesn't match what was saved, so Nebula stopped and changed nothing.",
-    'the held-out set doesn’t match what was saved, so Nebula stopped and changed nothing.'],
+    'the held-out set doesn’t match what was saved. Nothing was changed. Reload to check it again.'],
 ]);
+/** The 409 a grade still running gives (CLOSE_BECAUSE's first): the close waits for it. */
+export const CLOSE_GRADE_RUNNING = 'Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.';
+/** GM r41: the Commons turned off. */
+export const CLOSE_COMMONS_OFF = 'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to close this batch.';
 
-/** PR #204 round 18j (GM r40): a failure said in the because form with Nebula the subject (a
- * load's or an action's): it destroyed nothing, so its line is neutral (CommonsErrorLine). */
-export function isBecauseFailure(text: string): boolean {
-  return /^(?:Saved\. )?Nebula couldn’t /.test(text);
+/**
+ * PR #204 round 18k (GM r41): a failed close's line, in either pane (CommonsCloseBatch). Empty
+ * when the failure says nothing (offline: the offline row says it).
+ * - 401, and any refusal because this tab isn't the person's (lib/commonsApi sessionLost):
+ *   "you’re signed out. Open the link Nebula printed when it started."
+ * - 403: the close route's only 403s are an origin or a token problem (services/local_guard's
+ *   Host or Origin refusal; routes/commons human_dep, a request without the person's token):
+ *   "this sign-in isn’t allowed to do that. Open the link Nebula printed when it started."
+ */
+export function closeBatchFailedLine(error: unknown): string {
+  const lead = 'Nebula couldn’t close the batch because';
+  const { reason } = failureCopy(error);
+  if (!reason) return '';
+  const status = error instanceof RequestFailedError ? error.status : null;
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === PERSON_REQUIRED_CODE || status === 401) return `${lead} you’re signed out. Open the link Nebula printed when it started.`;
+  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return `${lead} the server isn’t answering. Try again.`;
+  if (isCommonsOff(error)) return CLOSE_COMMONS_OFF;
+  if (status === 403) return `${lead} this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.`;
+  if (status !== null && failureKind(status) === 'no-response') {
+    if (status === 429) return `${lead} ${SERVER_BUSY_CLAUSE}`;
+    return `${lead} ${status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE}`;
+  }
+  const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
+  const clause = status === 409 ? CLOSE_BECAUSE.get(detail) : undefined;
+  if (clause) return `${lead} ${clause}`;
+  if (detail) console.warn(`[nebula] Couldn’t close the batch: the backend said "${detail}" (not shown).`);
+  return `${lead} the server didn’t accept the request. Try again.`;
 }
 
-/** PR #204 round 18j (GM r40): a failed close's line, in either pane (CommonsCloseBatch). Empty
- * when the failure says nothing. A refusal because this tab isn't connected as you is the
- * caller's (notConnectedBecause). */
-export function closeBatchFailedLine(error: unknown): string {
-  const what = 'close the batch';
-  const clause = loadFailedClause(what, error, CLOSE_BECAUSE);
-  if (clause === null) return '';
-  return clause === COMMONS_OFF_COPY ? COMMONS_OFF_COPY : `Nebula couldn’t ${what} because ${clause}`;
+/** PR #204 round 18j (GM r40): a failure said in the because form (a load's or an action's), or
+ * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
+ * (CommonsErrorLine). */
+export function isBecauseFailure(text: string): boolean {
+  return /^(?:Saved\. )?Nebula couldn’t |^Commons is turned off because /.test(text);
+}
+
+/** GM r41: the close's line says to try again (the close button beside it is the retry), or
+ * names another step (Reload, open the link, wait, restart), and then the close button is
+ * aria-disabled with the line as its reason. */
+export function closeLineRetries(line: string): boolean {
+  return /(?:^|\s)Try again(?: in a moment)?\.$/.test(line);
 }
 
 /** Whether a Commons call was refused because the backend runs without the Commons (its 404

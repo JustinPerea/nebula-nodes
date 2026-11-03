@@ -44,7 +44,7 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
  * Its words register (components/LineText), so a because line sends the general notice away
  * while it shows.
  */
-export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry, elementRef }: {
+export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry, elementRef, id }: {
   line: string | null | undefined; className?: string;
   /** Round 18: `span` where a block can't go (inside a tile or a phrase). */
   as?: 'p' | 'span';
@@ -53,6 +53,8 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   onRetry?: () => void;
   /** Round 18i: the line's element (a tile's media line watches it scroll back into view). */
   elementRef?: Ref<HTMLElement>;
+  /** Round 18k: its id, for a control it locks (aria-describedby: the close-batch dialog). */
+  id?: string;
 }) {
   const line = useOfflineFirstBecause(given);
   const offline = useBackendOffline();
@@ -75,7 +77,7 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   const bare = !onRetry ? retryStem(line) : null;
   const words = bare ?? line;
   return (
-    <Tag ref={elementRef as Ref<HTMLParagraphElement & HTMLSpanElement>} className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
+    <Tag ref={elementRef as Ref<HTMLParagraphElement & HTMLSpanElement>} id={id} className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
       role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}
       // Round 11 (GM r18 c): the rail and fill make it a box, the shared one (styles/becauseLine.css):
       // neutral and in the sans face with a because line, the warning look for any other failure.
