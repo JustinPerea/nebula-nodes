@@ -91,6 +91,15 @@ export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
  * wire (GM - Design, PR #211 r5: "the tip lands, and that's all").
  */
 export const AGENT_CURSOR_STALE_GAP_SECONDS = 0.25;
+/**
+ * The longest a gliding cursor waits past its own rest for the rest of its
+ * column (ms): the layer's rest gate holds a column's glide so it lands on
+ * one frame (GM - Design, #219 r65), and this caps the hold (r66), so a drag
+ * that keeps retargeting one member can't keep the others unsettled for as
+ * long as the person drags. A spring lands the members of one move within
+ * about 220 ms of each other, so a column glide never reaches it.
+ */
+export const AGENT_CURSOR_REST_HOLD_MAX_MS = 300;
 /** The land spring snaps onto the target within these (screen px, px/s). */
 const REST_DISTANCE_PX = 0.2;
 const REST_SPEED_PX = 2;

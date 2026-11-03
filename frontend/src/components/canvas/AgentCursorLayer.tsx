@@ -20,6 +20,7 @@ import {
   entranceStart,
   isMoving,
   planMove,
+  AGENT_CURSOR_REST_HOLD_MAX_MS,
   stepExit,
   stepMotion,
   type CursorMotion,
@@ -613,8 +614,28 @@ class CursorField {
    * column per frame, before any of them steps in it (all of one frame's
    * steps share `time`). Undefined (rest on its own) for a cursor gliding
    * alone. A member whose loop stopped (its node gone) doesn't hold the rest.
+   * A cursor waits at most AGENT_CURSOR_REST_HOLD_MAX_MS past its own rest,
+   * then lands on its own (r66). The hold changes only when a cursor counts
+   * as at rest: it keeps drawing its spring position, and what the eye sees
+   * on its own rest (the hover re-test) doesn't wait for it (the view's
+   * loop, `ownRest`).
    */
   restGate(key: string, zoom: number, time: number): boolean | undefined {
+    const gate = this.columnGate(key, zoom, time);
+    const m = this.motions.get(key);
+    if (m?.landing && !m.plan && m.nearRest === true) {
+      if (!this.heldSince.has(key)) this.heldSince.set(key, time);
+    } else {
+      this.heldSince.delete(key);
+    }
+    if (gate === false && time - (this.heldSince.get(key) ?? Infinity) >= AGENT_CURSOR_REST_HOLD_MAX_MS) return true;
+    return gate;
+  }
+
+  /** When each held cursor first counted as at rest on its own (restGate). */
+  private readonly heldSince = new Map<string, number>();
+
+  private columnGate(key: string, zoom: number, time: number): boolean | undefined {
     if (time !== this.gatesAt) {
       this.gates.clear();
       this.gatesAt = time;
@@ -677,6 +698,7 @@ class CursorField {
 
   forget(key: string): void {
     this.carriedFrom.delete(key);
+    this.heldSince.delete(key);
     this.targets.delete(key);
     this.pendingSay.delete(key);
     this.motions.delete(key);
@@ -1110,6 +1132,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     // The tip moved since the boxes were read (a flight, or following its
     // node): they are stale when it comes to rest (review 2, L1).
     let movedSinceBoxes = false;
+    // Its own rest was seen, held by the column or not (ownRest, below).
+    let restNoted = false;
     let seenVisibility = field.visibilityEpoch;
     const hoverHit = (x: number, y: number): boolean => {
       if (!hoverBoxes || hoverEpoch !== field.layoutEpoch) {
@@ -1353,6 +1377,21 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       updateWire(start, arrivedNow);
       updateLabel.current();
       decideSay.current();
+
+      // Its own rest, though the column's rest gate may hold its landing
+      // (r66): what shows on a landing doesn't wait for the hold. A pointer
+      // still over where it came to rest hovers it now (within the rest
+      // distance of its spot), not when the column lands.
+      const ownRest = result.atRest || (m.landing !== null && !m.plan && m.nearRest === true);
+      if (phase.current === 'rest' && ownRest && !restNoted) {
+        restNoted = true;
+        if (movedSinceBoxes) {
+          hoverBoxes = null;
+          movedSinceBoxes = false;
+        }
+        onPointer();
+      }
+      if (!ownRest) restNoted = false;
 
       if (phase.current === 'rest' && result.atRest && !sayPending()) {
         lastTime.current = null;

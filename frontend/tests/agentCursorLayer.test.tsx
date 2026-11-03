@@ -48,6 +48,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 }));
 
 import { AgentCursorLayer, CARRY_PREVIEW_HOLD_MS } from '../src/components/canvas/AgentCursorLayer';
+import { AGENT_CURSOR_REST_HOLD_MAX_MS } from '../src/lib/agentCursorPlanner';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, cursorsMeet, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
 
@@ -3117,6 +3118,110 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       headToBottom();
       expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
       for (let i = 0; i < 30; i += 1) { frame(); expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } }); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r66, bound 1: the rest gate changes only when cursors count as at
+  // rest. A held cursor keeps drawing its spring position (it isn't snapped
+  // or frozen), and what shows when it comes to rest doesn't wait for the
+  // column: a still pointer over d's slot hovers d on d's own rest, not when
+  // the column lands. (Audit: hover is the one visible thing keyed to rest;
+  // see the round 3e notes.)
+  it('a cursor held by the column draws its spring position, and a still pointer hovers it on its own rest, not the column\'s (r66)', () => {
+    fakeTimers();
+    pane.dom = document.createElement('div');
+    document.body.appendChild(pane.dom);
+    const rects = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === pane.dom) return new DOMRect(0, 0, 1440, 900);
+      const cursor = this.closest<HTMLElement>('.agent-cursor');
+      const p = cursor ? at(cursor) : { x: -999, y: -999 };
+      if (this.classList.contains('agent-cursor__pointer')) return new DOMRect(p.x, p.y, 20, 22);
+      if (this.classList.contains('agent-cursor__name')) return new DOMRect(p.x + 15, p.y + 17, 60, 20);
+      return new DOMRect(0, 0, 0, 0);
+    });
+    try {
+      render(<AgentCursorLayer />);
+      act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: 505, clientY: 350 })); });
+      headToBottom();
+      const d = byKey('d');
+      expect(d.dataset.hover).toBeUndefined();
+      const frames: { y: number; hover: boolean; flying: boolean; landed: boolean }[] = [];
+      for (let i = 0; i < 90; i += 1) {
+        frame();
+        const w = where();
+        frames.push({ y: w.d.y, hover: d.dataset.hover === 'true', flying: d.style.willChange !== 'auto',
+          landed: w.a.y === 344 + 2 * S && w.d.y === 344 && w.e.y === 344 + S });
+      }
+      // Its own rest, as the land spring counts it: within 0.2 px of its slot
+      // and slower than 2 px/s.
+      const still = (i: number) => i > 0 && Math.abs(frames[i].y - 344) < 0.2 && Math.abs(frames[i].y - frames[i - 1].y) * 60 < 2;
+      const ownRest = frames.findIndex((f, i) => still(i));
+      const hovered = frames.findIndex((f) => f.hover);
+      const landed = frames.findIndex((f) => f.landed);
+      // The column holds d past its own rest (the gate is on).
+      expect(landed - ownRest).toBeGreaterThan(3);
+      // Hovered on d's own rest, before the column lands.
+      expect(hovered).toBeGreaterThanOrEqual(0);
+      expect(hovered).toBeLessThanOrEqual(ownRest + 1);
+      expect(hovered).toBeLessThan(landed);
+      // Held: still on the spring, drawn where it is, not snapped or frozen.
+      const held = frames.slice(ownRest + 1, landed);
+      expect(held.every((f) => f.flying && f.y !== 344)).toBe(true);
+      expect(new Set(held.map((f) => f.y)).size).toBeGreaterThan(2);
+      // And it lands with no visible snap.
+      expect(Math.abs(frames[landed - 1].y - 344)).toBeLessThan(0.2);
+    } finally {
+      rects.mockRestore();
+      pane.dom.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r66, bound 2: the hold is capped. A drag that keeps retargeting the
+  // carry keeps its glide from settling (its spot is the column's bottom,
+  // while its node, the spring's carrier, keeps moving), which would hold d
+  // and e off their rest for as long as the person drags. For 2 s of wobble
+  // inside d's chain, no member waits more than AGENT_CURSOR_REST_HOLD_MAX_MS
+  // past its own rest: it lands on its own.
+  it('a 2 s wobble drag that keeps the carry gliding holds no member past the 300 ms cap (r66)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      headToBottom();
+      const capFrames = Math.ceil(AGENT_CURSOR_REST_HOLD_MAX_MS / (1000 / 60)) + 2;
+      const slot = { d: 344, e: 344 + S };
+      const held = { d: 0, e: 0 };
+      const worst = { d: 0, e: 0 };
+      const landedOnOwn = { d: false, e: false };
+      // 2 s: n2 swings a's target from 328 to 340 and back, a unit a frame.
+      const path = Array.from({ length: 120 }, (_, i) => {
+        const k = i % 24;
+        return { x: 400, y: 284 + (k < 12 ? k : 24 - k) };
+      });
+      let prev = where();
+      dragFrames('n2', path, () => {
+        const w = where();
+        for (const k of ['d', 'e'] as const) {
+          const el = byKey(k);
+          const y = w[k].y;
+          // Held: at rest as the land spring counts it (within 0.2 px of its
+          // slot, slower than 2 px/s), still on the spring.
+          if (el.style.willChange !== 'auto' && Math.abs(y - slot[k]) < 0.2 && Math.abs(y - prev[k].y) * 60 < 2) held[k] += 1;
+          else held[k] = 0;
+          if (el.style.willChange === 'auto' && y === slot[k]) landedOnOwn[k] = true;
+          worst[k] = Math.max(worst[k], held[k]);
+        }
+        prev = w;
+      });
+      expect(AGENT_CURSOR_REST_HOLD_MAX_MS).toBe(300); // GM r66
+      for (const k of ['d', 'e'] as const) {
+        expect(worst[k], k).toBeLessThanOrEqual(capFrames);
+        // The cap is what ended the hold: it ran close to the full 300 ms.
+        expect(worst[k], k).toBeGreaterThanOrEqual(capFrames - 4);
+        expect(landedOnOwn[k], k).toBe(true);
+      }
     } finally {
       vi.useRealTimers();
     }

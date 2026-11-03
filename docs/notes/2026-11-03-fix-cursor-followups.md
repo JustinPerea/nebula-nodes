@@ -291,6 +291,39 @@ asked for the move to be pinned.
 - **The 4 px swap** is its own test now ("a 4 px drag of a chained pair makes
   no join of its own").
 
+## 2g. Round 3e (GM - Design r66): the rest gate's two bounds
+
+- **Nothing visible waits for the hold.** A held cursor keeps its landing
+  open, so it is drawn at its spring position (unsnapped, still moving by
+  hundredths of a pixel) and lands within the rest distance, with no visible
+  snap. Audit of what reads rest:
+  - Hover re-test on landing (the name for a still pointer): **was keyed to
+    rest**. It ran only in the loop's at-rest branch. It now runs on the
+    cursor's own rest (`ownRest` in the view's loop), held or not. Test: "a
+    cursor held by the column draws its spring position, and a still pointer
+    hovers it on its own rest".
+  - Drawing: `apply()` draws `m.pos` while landing and snaps to whole pixels
+    at rest. The held cursor draws its spring position, as asked, and lands
+    from within 0.2 px of its slot (same test).
+  - Name shown while moving: `isMoving` is speed-based (over 30 px/s), and a
+    held cursor is under 2 px/s. None.
+  - Say pill: `sayRoom` reads `isMoving` and positions, never rest. None.
+  - The 20 s dim: a timer from the event's age. None.
+  - The action's look (ripple): fires on the planner's `arrived` (within 2 px,
+    while `awaiting`). Every plan sets `awaiting`, and it is cleared only
+    with an arrival or a finish, so the `!m.landing` fallback never waits on
+    a held landing. None.
+  - Column floor, `crossing`, the zoom path for a glide, `landed()`, the loop
+    sleeping: they read `landing`, but nothing visible. None.
+- **The cap.** A cursor waits at most `AGENT_CURSOR_REST_HOLD_MAX_MS` (300 ms,
+  with the motion tuning in agentCursorPlanner.ts) past its own rest, then
+  lands on its own (`CursorField.restGate`, `heldSince`). A column glide's
+  members land within about 220 ms of each other, so a plain move never
+  reaches it. A drag that keeps moving the carry's node keeps its glide off
+  rest: the spot is the column's bottom, but the spring's carrier keeps
+  moving. Test: 2 s of wobble inside d's chain, where d and e each wait close
+  to 300 ms and never past it.
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's
