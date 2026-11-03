@@ -299,7 +299,7 @@ def test_the_colon_check_catches_what_it_is_for():
     assert check("log.warning(\"Person link unavailable. Pass it: --open\")\n", "m.py")
     assert check("raise MergeError(f\"Fix it: {path}\")\n", "m.py")
     # The prefix alone is exempt, a URL isn't a path, and a colon before words or a detail is fine.
-    assert not check("print(f\"error: `{argv[0]}` isn’t on PATH. Run this command yourself once it is.\")\n", "m.py")
+    assert not check("print(f\"error: `{argv[0]}` isn’t on PATH. Add it to PATH, then run this command yourself.\")\n", "m.py")
     assert not check("print(f\"error: {exc}\")\nprint(f\"Nebula: open the canvas as you: {link}\")\n", "m.py")
     assert not check("print(\"Person link unavailable: no terminal.\")\nprint(f\"{path}: {exc}.\")\n", "m.py")
     assert not check("x = f\"http://{host}:{port}\"\nuvicorn.Config(\"main:app\")\n", "m.py")

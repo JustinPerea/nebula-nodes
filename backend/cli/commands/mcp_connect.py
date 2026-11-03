@@ -419,7 +419,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         else:
             argv = agent_connect.codex_add_argv(entry)
         if shutil.which(argv[0]) is None:
-            print(f"error: `{argv[0]}` isn’t on PATH. Run this command yourself once it is.", file=sys.stderr)
+            print(f"error: `{argv[0]}` isn’t on PATH. Add it to PATH, then run this command yourself.", file=sys.stderr)
             print(setup["snippet"])
             return 1
         # `codex mcp add` silently replaces a server with the same name, so

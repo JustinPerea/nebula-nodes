@@ -1101,7 +1101,7 @@ def test_gm_r59_the_paste_prompt_and_the_commands_the_cli_runs(tmp_path, legacy_
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
     assert mcp_connect.run_connect(args("codex"), home=tmp_path) == 1
     out = capsys.readouterr()
-    assert out.err == "error: `codex` isn’t on PATH. Run this command yourself once it is.\n"
+    assert out.err == "error: `codex` isn’t on PATH. Add it to PATH, then run this command yourself.\n"
     # The command follows any warning lines.
     assert [line for line in out.out.splitlines() if not line.startswith("! ")][0].startswith("codex mcp add")
 
