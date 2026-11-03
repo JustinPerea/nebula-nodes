@@ -20,6 +20,10 @@ Re-pinned 2026-10-20 (weight 0 out of the summary's count, plan section
 4.4): one path moved, ``brand.summary`` "4 reference image(s)" to "3", since
 its image 5 is at weight 0. Its colours, brief, negatives, keywords and
 per-image colours are as they were.
+
+Re-pinned 2026-10-31 (GM r1 on #208): the 4 summaries' "N reference
+image(s)" became "N reference images". Nothing else moved. (The same PR
+counts alpha; no image here has transparency, so no colour moved.)
 """
 from __future__ import annotations
 

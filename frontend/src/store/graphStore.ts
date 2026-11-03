@@ -1942,6 +1942,13 @@ async function trackGraphMutation<T>(operation: () => Promise<T>, options: { res
   }
 }
 
+/** The graph on the canvas now: the count every replacement bumps (a
+ * switch, an import, Load graph). #208 round 8e keys a palette extract on it
+ * (with the project), so one can't land on a replaced graph. */
+export function canvasGeneration(): number {
+  return canvasReplacementRevision;
+}
+
 function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) {
   return (...args: Args): Promise<Result> => trackGraphMutation(() => operation(...args));
 }
