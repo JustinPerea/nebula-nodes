@@ -6,7 +6,8 @@
  *
  * 1. Every <CommonsErrorLine> in src passes `onRetry`, except the few below, each with why.
  * 2. With `onRetry` a load line ending "Try again." has the button (the full stop after it, outside
- *    it); without `onRetry`, or for an action's line, it has none.
+ *    it); without `onRetry` it has none and ends at its reason instead (round 18i, GM r39 1c:
+ *    "Try again." always means a button); an action's line has none.
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -26,7 +27,7 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 /** file → how many of its CommonsErrorLine may go without `onRetry`, and why. */
 const NO_RETRY: Record<string, { count: number; why: string }> = {
   'components/commons/CommonsOffView.tsx': { count: 1, why: 'shows only the Commons-off line, which says to restart Nebula and never ends "Try again."' },
-  'components/commons/CommonsCloseBatch.tsx': { count: 1, why: 'an action’s line only: a button there would send the close again; the person presses Close again' },
+  'components/commons/CommonsCloseBatch.tsx': { count: 1, why: 'an action’s line only: a button there would send the close again. Its "Try again." points at the Close button right beside it (round 18i, GM r39 1b, measured live: the same row in Blind labeling, the next row in Agent review, nothing between)' },
 };
 
 function linesWithoutRetry(source: string, name: string): number {
@@ -68,10 +69,10 @@ describe('every Commons line ending "Try again." has the button', () => {
     expect(button.nextSibling?.textContent).toBe('.');
   });
 
-  it('without onRetry the same line has no button', () => {
+  it('without onRetry the same line has no button, and no "Try again." either (GM r39 1c)', () => {
     render(<CommonsErrorLine line={LOAD} />);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(document.querySelector('[data-commons-line]')?.textContent).toBe(LOAD);
+    expect(document.querySelector('[data-commons-line]')?.textContent).toBe('Nebula couldn’t load Agent review because the server hit an error.');
   });
 
   it('an action’s line has no button even with onRetry (it would send the action again)', () => {

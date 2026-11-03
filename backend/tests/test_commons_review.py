@@ -57,8 +57,11 @@ async def test_proposal_has_no_human_labels_or_fewshots_and_is_not_blind(store, 
 async def test_budget_failure_and_duplicate_inflight_cannot_spend_twice(store, source, monkeypatch):
     await evaluation.prepare(store, str(source))
     monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '0')
-    with pytest.raises(evaluation.EvaluationError, match='budget'):
+    with pytest.raises(evaluation.EvaluationError, match='budget') as refused:
         await review.propose(store, 0)
+    # GM r39: the restart is the step (the frontend re-reads on the new boot), no parens.
+    assert refused.value.person == ('Agent review is turned off because Nebula started without a call budget. Restart '
+                                    'Nebula with NEBULA_COMMONS_REVIEW_CALL_BUDGET set to the number of calls to allow.')
     monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '1')
     started, release = asyncio.Event(), asyncio.Event()
     async def reader(*args, **kwargs):

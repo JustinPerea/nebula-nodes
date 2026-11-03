@@ -37,6 +37,30 @@ export interface PersonLock {
 }
 
 /**
+ * PR #204 round 18i (GM r39 Fix E): a lock whose reason isn't the person's (the Commons is off),
+ * in the one lock's shape: aria-disabled and still focusable, its line under the control through
+ * components/PersonLock's PersonLockLine, pointed at by aria-describedby, no tooltip.
+ */
+export function useLineLock(line: string, locked: boolean): PersonLock {
+  const id = useId();
+  return {
+    locked, line, shown: locked, id,
+    control: (describedBy) => ({
+      'aria-disabled': locked || undefined,
+      'aria-describedby': [describedBy, locked ? id : undefined].filter(Boolean).join(' ') || undefined,
+    }),
+    guard: (fn) => (...args) => {
+      if (locked) {
+        const event = args[0] as SyntheticEvent | undefined;
+        if (event && typeof event === 'object' && 'preventDefault' in event) event.preventDefault();
+        return;
+      }
+      void fn(...args);
+    },
+  };
+}
+
+/**
  * PR #204 round 10 (GM r15): the one lock for a control whose route is the person's alone
  * (personGateRoutes.py: require_person / person_only / the Commons' human_dep). While this tab
  * isn't connected as the person, the control stays where it is and focusable (aria-disabled, the

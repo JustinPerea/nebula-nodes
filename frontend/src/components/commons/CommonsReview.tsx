@@ -13,6 +13,7 @@ import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { isLoadLine } from '../../lib/errorCopy';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
@@ -92,7 +93,11 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     let cancelled = false;
     const version = ++requestVersion.current;
     api.get().then((value) => {
-      if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) { setBatch(value); setAnswered(true); }
+      if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
+        // Round 18i: a read that answers clears the line, as the poll's does (a failed load's line
+        // would otherwise keep the pane to that line alone).
+        setBatch(value); setAnswered(true); setError('');
+      }
     }, () => undefined);
     return () => { cancelled = true; };
   }, [active]);
@@ -154,7 +159,10 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     <p>See the agent’s take. Agree, or change the parts you see differently.</p>
   </div>;
   // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
-  if (!answered) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
+  // Round 18i (GM r39 Fix B, r32): and whenever the latest read failed, until one succeeds:
+  // "Prepare the reference set…" and "0 / 15 reviewed · 0 grades ready" would be stale. The 5 s
+  // poll never reads while a draft is being edited, so this never hides one.
+  if (!answered || isLoadLine(error)) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}</header>
     {/* Round 18f (GM r35 4): its "Try again" reads it again. */}
     <CommonsErrorLine line={error} onRetry={loadAgain} />

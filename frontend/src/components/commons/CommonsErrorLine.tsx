@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type Ref } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
 import { isLoadLine, retryStem } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
@@ -44,13 +44,15 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
  * Its words register (components/LineText), so a because line sends the general notice away
  * while it shows.
  */
-export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry }: {
+export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', onRetry, elementRef }: {
   line: string | null | undefined; className?: string;
   /** Round 18: `span` where a block can't go (inside a tile or a phrase). */
   as?: 'p' | 'span';
   /** Round 18f (GM r35 4): how a load reads again. A load's line that ends "Try again." ends in a
    * "Try again" button that does it (retryStem). Never an action's: that would send it again. */
   onRetry?: () => void;
+  /** Round 18i: the line's element (a tile's media line watches it scroll back into view). */
+  elementRef?: Ref<HTMLElement>;
 }) {
   const line = useOfflineFirstBecause(given);
   const offline = useBackendOffline();
@@ -66,8 +68,12 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   // Round 18c (GM r30 1): and a because line, so the two share one look, the bare rail.
   const neutral = person || isLoadLine(line);
   const stem = onRetry ? retryStem(line) : null;
+  // Round 18i (GM r39 1c): "Try again." always means a button. A load's line given no way to
+  // read again (media inside a tile, which reads again by itself) ends at its reason.
+  const bare = !onRetry ? retryStem(line) : null;
+  const words = bare ?? line;
   return (
-    <Tag className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
+    <Tag ref={elementRef as Ref<HTMLParagraphElement & HTMLSpanElement>} className={`commons-notice commons-notice--error${className ? ` ${className}` : ''}`}
       role={person ? 'status' : 'alert'} data-commons-line={person ? 'not-connected' : 'error'}
       // Round 11 (GM r18 c): the rail and fill make it a box, the shared one (styles/becauseLine.css):
       // neutral and in the sans face with a because line, the warning look for any other failure.
@@ -75,7 +81,7 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
       {...(neutral ? { 'data-line-neutral': '' } : {})}
       // Round 11 (GM r19 2): a not-connected line can take focus when a demote removes the control.
       {...(person ? { tabIndex: -1, [FOCUS_LINE_ATTR]: '' } : {})}>
-      {stem === null ? <LineText text={line} /> : (
+      {stem === null ? <LineText text={words} /> : (
         <LineText text={line}>
           <span className="commons-notice__text">
             {stem} <RetryButton onRetry={onRetry!} />.

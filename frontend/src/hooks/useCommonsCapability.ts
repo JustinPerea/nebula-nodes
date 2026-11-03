@@ -55,10 +55,10 @@ export function useCommonsCapability(): void {
       // PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend says it runs
       // without it opens to the Commons-off view, as the Commons turned off mid-visit does. Only
       // the backend's own "off": no answer says nothing about the Commons.
-      if (answer === 'off' && commonsRouteWanted()) {
-        noteCommonsOff();
-        useUIStore.getState().setCommonsOffShown(true);
-      }
+      // Round 18i (GM r39 Fix E): any tab notes it, so an Update's Review on a Commons proposal
+      // locks with the reason (components/agent-notes/AgentNoteParts).
+      if (answer === 'off') noteCommonsOff();
+      if (answer === 'off' && commonsRouteWanted()) useUIStore.getState().setCommonsOffShown(true);
     });
     return () => { cancelled = true; };
   }, []);

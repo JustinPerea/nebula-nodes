@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import { CommonsErrorLine } from './CommonsErrorLine';
-import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useCommonsLine, useLoadLineQuietOnReconnect, useReloadEpoch } from './useCommonsLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 type Props = {
@@ -14,9 +14,10 @@ type Props = {
   muted?: boolean;
   controls?: boolean;
   preload?: string;
-  /** Round 18h (GM r38 3a): the media sits inside a control (a grid tile, a keyframe tab). Its
-   * line then has no Try again button, since a button can't go inside a button; the tile is the
-   * control, and opening it reads the media again. */
+  /** The media sits inside a control (a grid tile, a keyframe tab). A button can't go inside a
+   * button, so its line has none and no "Try again." either (round 18i, GM r39 1c): it reads
+   * again by itself, on reconnect and when it scrolls back into view. The tile's click keeps its
+   * own meaning. */
   inControl?: boolean;
 };
 
@@ -47,11 +48,36 @@ export function CommonsMedia({ path, video, alt = '', loading, inControl = false
       if (url) URL.revokeObjectURL(url);
     };
   }, [path, video, loadEpoch, line]);
+  // Round 18i (GM r39 1c): the line reads again quietly on reconnect, as every Commons load line.
+  useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
+  // And inside a tile or tab, once each time it comes back into view: an observer that waits for
+  // the line to leave the view, then reads again the first time it enters, once. A read that fails
+  // again while in view waits for the next time it leaves and comes back (no loop, no polling).
+  const lineRef = useRef<HTMLElement | null>(null);
+  const failed = Boolean(error && errorPath === path);
+  useEffect(() => {
+    const element = lineRef.current;
+    if (!inControl || !failed || !element || typeof IntersectionObserver !== 'function') return undefined;
+    let away = false;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) away = true;
+        else if (away) {
+          observer.disconnect();
+          loadAgain();
+          return;
+        }
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [inControl, failed, loadEpoch, loadAgain]);
   const current = media?.path === path ? media : undefined;
   // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
   const shownError = useOfflineFirstBecause(error);
   // Round 18 (GM r28 1): its load's line in the one Commons line style (a span: it sits in a tile).
-  if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} onRetry={inControl ? undefined : loadAgain} /> : null;
+  if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} elementRef={lineRef}
+    onRetry={inControl ? undefined : loadAgain} /> : null;
   return video ? <video {...props} src={current?.url} /> :
     <img {...props} src={current?.url} alt={alt} loading={loading} />;
 }

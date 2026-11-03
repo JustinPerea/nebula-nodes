@@ -463,6 +463,37 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     expect(useAssetProposalsStore.getState().review).toBeNull();
   });
 
+  it('while the Commons is off, a Commons ask\'s Review stays, locked, with the reason under it (round 18i)', async () => {
+    const { noteCommonsOff, noteCommonsAnswered, COMMONS_OFF_REVIEW_LINE } = await import('../src/lib/commonsOff');
+    const enterCommons = vi.fn();
+    useUIStore.setState({ enterCommons, commonsEnabled: false });
+    act(() => noteCommonsOff());
+    try {
+      render(<AppAgentNotes />);
+      sync([ask('commons', 'ast_1'), ask('project', 'dusk')]);
+      fireEvent.click(chip());
+      const [commons, project] = within(screen.getByRole('dialog', { name: 'Updates' })).getAllByRole('listitem');
+      const review = within(commons).getByRole('button', { name: 'Review' });
+      expect(review.getAttribute('aria-disabled')).toBe('true');
+      const reason = document.getElementById(review.getAttribute('aria-describedby')!.split(' ').at(-1)!)!;
+      expect(reason.textContent).toBe(COMMONS_OFF_REVIEW_LINE);
+      expect(commons.contains(reason)).toBe(true);
+      fireEvent.click(review);
+      await act(async () => { await Promise.resolve(); });
+      expect(enterCommons).not.toHaveBeenCalled();
+      expect(useAssetProposalsStore.getState().review).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+      // A project's ask is not the Commons: its Review stays live.
+      expect(within(project).getByRole('button', { name: 'Review' }).getAttribute('aria-disabled')).toBeNull();
+      // The Commons answers on again: the lock and its line go.
+      act(() => noteCommonsAnswered());
+      expect(review.getAttribute('aria-disabled')).toBeNull();
+      expect(document.getElementById(reason.id)).toBeNull();
+    } finally {
+      act(() => noteCommonsAnswered());
+    }
+  });
+
   it('once the proposal closed, says how in place of Review, greyed', () => {
     render(<AppAgentNotes />);
     sync([ask('project', 'dusk', { readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z',

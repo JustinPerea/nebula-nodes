@@ -19,6 +19,10 @@ function set(next: boolean) {
 }
 
 export function noteCommonsOff(): void { set(true); }
+
+/** GM r37, r39: why a Commons proposal's Review can't open while the Commons is off (the Updates
+ * Review button's lock line, and lib/assetProposalReview's refusal). */
+export const COMMONS_OFF_REVIEW_LINE = 'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to review this proposal.';
 export function noteCommonsAnswered(): void { set(false); }
 export function commonsOffNow(): boolean { return off; }
 

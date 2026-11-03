@@ -3206,3 +3206,99 @@ Review 16 (the commons-reconnect logic lens and the focus-ring live lens) and GM
   - Nothing reached a blocked host.
 - Shots (`fu3r/shots-r18h`): H1, H2, B, E, F1, F2. The md5 `uniq -d` check is empty, and each was
   opened.
+
+## Round 18i
+
+GM r39: the Agent review line, 1(b), 1(c), Fix E and Fix B.
+
+### Copy (GM r39, the Agent review line)
+- `backend/commons/review.py`, Agent review with no call budget: "Agent review is turned off
+  because Nebula started without a call budget. Restart Nebula with
+  NEBULA_COMMONS_REVIEW_CALL_BUDGET set to the number of calls to allow."
+- `backend/tests/test_commons_review.py` now pins it exactly. Both parens ratchets pass.
+- The wording batch's "Agree, or change the parts you see differently." → "Agree or change the
+  parts you see differently." (GM r39) is left for that batch, not done here.
+
+### Close-batch line (GM r39 1(b)): the exception stays
+- Measured live (installed Chrome, 1440 × 900) with a staged open batch and a close answering 500:
+  - Blind labeling: the confirm dialog lays out as a row. The line (364–504 px, 706–807 px)
+    sits directly left of "Close without sealing" (504–647 px, 715–740 px): same row, 0 px
+    between, nothing between them in the DOM.
+  - Agent review: the line (731–765 px) sits directly above "Close as assisted review"
+    (765–790 px), with left edges aligned and 0 px between.
+- So "Try again." points at the control right beside it. CommonsCloseBatch stays in the
+  ratchet's NO_RETRY list, and its reason now cites the measurement.
+- Seen in passing, not changed here: in Blind labeling the confirm dialog's row layout squeezes
+  the heading, the list and the line into narrow columns (shot B1). That is a layout question
+  for GM. The line's copy is the shared action copy, "Couldn’t close the batch. Nebula didn't
+  respond. Try again.", and its straight apostrophe comes from the app-wide failureMessage.
+
+### Media inside a tile or a keyframe tab (GM r39 1(c))
+- `CommonsErrorLine`: a load line given no `onRetry` ends at its reason. "Try again." goes,
+  since it always means a button. This is central, so the ratchet is exact; exception (c) is
+  gone.
+- `CommonsMedia` with `inControl`:
+  - the line reads again quietly on reconnect (`useLoadLineQuietOnReconnect`, as the panes do);
+  - it reads again once each time it comes back into view. An IntersectionObserver on the line
+    waits for it to leave the view, then reads once on the next entry and disconnects. A read
+    that fails again while in view waits for the next leave and enter. No polling, no loop.
+  - The tile's click still opens the reference.
+- Media outside a control keeps its Try again button and no observer.
+
+### Updates "Review" while the Commons is off (Fix E)
+- `hooks/usePersonLock.ts` `useLineLock(line, locked)`: the PersonLock shape for a lock whose
+  reason isn't the person's. It gives aria-disabled (still focusable), aria-describedby to the
+  line's id, and the guard.
+- `AgentNoteParts` NoteButtons:
+  - a Commons proposal's Review while `useCommonsOff()` is locked by it;
+  - the reason renders under it through the shared `PersonLockLine`, with the same text as
+    the refusal, `COMMONS_OFF_REVIEW_LINE` (`lib/commonsOff.ts`, used by
+    `lib/assetProposalReview.ts` too);
+  - a click does nothing;
+  - a project's or a board's Review is untouched.
+- `useCommonsCapability` notes the backend's "off" on any tab now, not only on a Commons route,
+  so a canvas tab knows before the click. No answer notes nothing.
+
+### Panes show only the line while the latest read failed (Fix B, GM r32)
+- Agent review (`CommonsReview`): its 5 s poll can fail after a read answered. While the latest
+  read's line is a load line, the pane shows only the eyebrow, the heading and the line. That
+  drops "Prepare the reference set in Blind labeling first.", "0 / 15 reviewed · 0 grades
+  ready", and with a batch, the references and their form. The poll never reads while a draft
+  is being edited, so no draft is hidden. The next good read brings it all back.
+  - The read on returning from another section now clears the line on success too, as the
+    poll's does. Before, it left a failed load's line standing, which with this guard kept the
+    pane on that line alone (found by tests/presenceRound18d.commons.test.tsx).
+- The other panes, checked:
+  - Blind labeling: once answered it never re-reads by itself. Its reconnect re-read needs a
+    batch and ignores failures, and a promote retry exists only for a load that was refused,
+    which was never answered. No stale state is reachable. I tried a guard and a test and
+    dropped both, since the test could only stage it by faking an impossible order.
+  - Commons Settings: keeps its saved values on a failed re-read (GM r32 3's design).
+  - Reference detail: shows only the line until it reads.
+  - Agent review's per-reference image and Blind labeling's image: they show the line in place
+    of the image.
+
+### Tests
+- `tests/presenceRound18i.mediaRead.test.tsx` (4): no "Try again." and no button inside a tile,
+  and its click still opens; scrolling back reads once per entry, never while it stays in view;
+  reconnect re-reads quietly; outside a control the button stays and nothing observes.
+- `tests/presenceRound18i.staleLoads.test.tsx` (2): Agent review's failed poll shows only the
+  line, without a batch and with one, until a read succeeds (by the poll and by Try again).
+- `tests/AgentNotesCorner.test.tsx` (+1): the locked Review has aria-disabled, aria-describedby
+  pointing to GM's line, does nothing on click, leaves a project's Review alone, and unlocks
+  when the Commons answers on.
+- `tests/commonsCapability.test.tsx` (+1): a canvas tab notes the backend's off; no answer
+  notes nothing.
+- `tests/commonsRetryButton.ratchet.test.tsx`: without onRetry, the line has no "Try again."
+- Mutations: 14 of 16 killed. The two survivors are equivalent:
+  - I3, the observer's disconnect before the re-read: the effect's cleanup disconnects it when
+    loadEpoch changes;
+  - I8, the lock checking every action of the note: a proposal's Update carries only its Review
+    (services/agent_notes.py).
+- Gates: tsc -b, npm run lint, vitest on the explicit list (446 files, 5,853 of 5,853, ratchets
+  included), backend test_commons_review.py and test_flag_parens_copy.py (9 of 9), vite build
+  with the budget at 471,728 B raw / 145,416 B gzip.
+- Live (installed Chrome, throwaway profile, 8951/5951 through serve_isolated, canaries refused):
+  15 of 15. Shots A, B1, B2, C1, C2 and D in the scratchpad's fu3r/shots-r18i, all md5-distinct.
+  A tile image is read twice on the first load in dev; that is the StrictMode double mount, not
+  the observer.

@@ -2,6 +2,8 @@ import { useContext, useState, type CSSProperties, type MouseEvent, type ReactNo
 import { LeaveBusyContext } from './leaveBusy';
 import { HELD_OPS, useNoteLock } from './heldLock';
 import { PersonLockLine, type PersonLock } from '../PersonLock';
+import { useLineLock } from '../../hooks/usePersonLock';
+import { COMMONS_OFF_REVIEW_LINE, useCommonsOff } from '../../lib/commonsOff';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { AgentNote, AgentNoteAction, AgentNoteAuthor, AgentNoteRun } from '../../lib/agentNotes';
 import { authorInitials, clipDuration, noteControls, type NoteButton } from '../../lib/agentNotesView';
@@ -134,6 +136,9 @@ export function BusyButton({ className, onClick, children, op, lock }: {
   );
 }
 
+/** An action that opens a Commons proposal (Review). */
+const reviewsCommons = (action: AgentNoteAction) => action.op.kind === 'proposal.review' && action.op.target === 'commons';
+
 /** The update's own buttons (edit actions first, then Show) or its greyed state. */
 export function NoteButtons({
   note,
@@ -156,8 +161,13 @@ export function NoteButtons({
   const ownLock = useNoteLock(note);
   const lock = sharedLock ?? ownLock;
   const held = lock.locked;
+  // Round 18i (GM r39 Fix E): a Commons proposal's Review while the Commons is off stays where it
+  // is, locked, with the reason under it; it is the lock that says why, before the person clicks.
+  const commonsOff = useCommonsOff();
+  const offLock = useLineLock(COMMONS_OFF_REVIEW_LINE, commonsOff && note.actions.some(reviewsCommons));
   if (controls.buttons.length === 0 && !controls.state) return null;
   const holds = controls.buttons.some((button) => button.kind === 'action' && HELD_OPS.has(button.action.op.kind));
+  const offLocked = (button: NoteButton) => offLock.locked && button.kind === 'action' && reviewsCommons(button.action);
   return (
     <div className="agent-notes-acts">
       {controls.state && <span className="agent-notes-acts__state">{controls.state}</span>}
@@ -166,17 +176,19 @@ export function NoteButtons({
           key={button.kind === 'show' ? 'show' : button.label}
           className={`agent-notes-btn${button.kind === 'action' && button.primary ? ' agent-notes-btn--primary' : ''}`}
           op={button.kind === 'action' ? button.action.op.kind : undefined}
-          lock={button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? lock : null}
+          lock={offLocked(button) ? offLock : button.kind === 'action' && HELD_OPS.has(button.action.op.kind) ? lock : null}
           onClick={(event) => {
             event.stopPropagation();
             if (button.kind === 'show') onShow(event.currentTarget);
+            else if (offLocked(button)) return;
             else if (!(held && HELD_OPS.has(button.action.op.kind))) onAction(button.action, event.currentTarget);
           }}
         >
           {button.label}
         </BusyButton>
       ))}
-      {holds && !sharedLock && <PersonLockLine lock={lock} place="control" className="agent-notes-acts__held-line" />}
+      {offLock.locked ? <PersonLockLine lock={offLock} place="control" className="agent-notes-acts__held-line" />
+        : holds && !sharedLock && <PersonLockLine lock={lock} place="control" className="agent-notes-acts__held-line" />}
     </div>
   );
 }

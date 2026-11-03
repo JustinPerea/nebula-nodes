@@ -5,7 +5,7 @@ import { requestReview } from '../store/assetProposalReviewRequest';
 import { openWorkspace } from './goToCanvas';
 import { refuseWhileCommonsUnsaved } from './commonsUnsaved';
 import { writtenLine } from './errorCopy';
-import { commonsOffNow } from './commonsOff';
+import { COMMONS_OFF_REVIEW_LINE, commonsOffNow } from './commonsOff';
 
 /**
  * Review on an asset proposal's Update (Justin's Q92 a): take the person to
@@ -30,7 +30,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   // Round 18h (GM r37): a tab that loaded with the Commons off, or one whose Commons calls since
   // heard it is off (lib/commonsOff: a restart without it, live check), says why and how.
   if (kind === 'commons' && (!ui.commonsEnabled || commonsOffNow())) {
-    throw writtenLine('Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to review this proposal.');
+    throw writtenLine(COMMONS_OFF_REVIEW_LINE);
   }
   requestReview({ kind, targetId });
   if (kind === 'project') {
