@@ -33,12 +33,13 @@ it('closes once with the current revision after confirmation', async () => {
 });
 
 it('shows the server refusal and stays open', async () => {
-  // Round 3e: the API's typed refusal, as commonsApi throws it.
-  api.close.mockRejectedValue(new RequestFailedError("Couldn't close the batch.", 409, { reason: 'A grading attempt is still running. Close after it finishes.' }));
+  // Round 3e: the API's typed refusal, as commonsApi throws it (the backend's words in `detail`).
+  // Round 18j (GM r40): said in the because form, never the backend's own words.
+  api.close.mockRejectedValue(new RequestFailedError("Couldn't close the batch.", 409, { detail: 'A grading attempt is still running. Close after it finishes.' }));
   render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
   fireEvent.click(screen.getByText('Close without sealing…'));
   fireEvent.click(screen.getByText('Close without sealing'));
-  expect((await screen.findByRole('alert')).textContent).toContain('still running');
+  expect((await screen.findByRole('alert')).textContent).toBe('Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.');
   expect(screen.getByRole('alertdialog')).toBeTruthy();
 });
 

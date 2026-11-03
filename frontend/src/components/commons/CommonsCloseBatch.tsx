@@ -3,6 +3,8 @@ import { commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationBatch } from '../../lib/commonsEvaluationTypes';
 import { isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
+import { closeBatchFailedLine } from '../../lib/errorCopy';
+import { isPersonRefusal } from '../../lib/clearsOnPromote';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useCommonsLine } from './useCommonsLine';
 
@@ -32,7 +34,12 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
     let closed: EvaluationBatch;
     try { closed = await commonsEvaluationApi.close(revision); }
     catch (e) {
-      if (!isOfflineRefusal(e)) line.show(e, "Couldn’t close the review.");
+      // Round 18j (GM r40): nothing was lost, so the because form, neutral, in either pane:
+      // "Nebula couldn’t close the batch because the server didn’t respond. Try again." Its
+      // "Try again." points at the Close button right beside it (round 18i, measured live).
+      // Offline, the offline row says it.
+      if (isPersonRefusal(e)) line.show(e, "Couldn’t close the batch.");
+      else if (!isOfflineRefusal(e)) line.keep(e, closeBatchFailedLine(e));
       setClosing(false); return;
     }
     setClosing(false); setConfirming(false);
@@ -50,10 +57,11 @@ export function CommonsCloseBatch({ revision, assisted, reviewed, total, disable
       <li>Library analysis of imported references can start. This cannot be undone.</li>
     </ul>
     <CommonsErrorLine line={error} />
+    {/* GM r40 1: one row, Cancel then the close, which keeps its look. */}
     <div className="review-actions">
+      <button type="button" ref={cancel} className="commons-button" disabled={closing} onClick={() => { setConfirming(false); setError(''); }}>Cancel</button>
       <button type="button" className="commons-button commons-button--primary" disabled={closing || disabled || readOnly} {...offlineMark(readOnly)} onClick={() => void close()}>
         {closing ? 'Closing…' : assisted ? 'Close as assisted review' : 'Close without sealing'}</button>
-      <button type="button" ref={cancel} className="commons-button" disabled={closing} onClick={() => { setConfirming(false); setError(''); }}>Cancel</button>
     </div>
   </div>;
 }

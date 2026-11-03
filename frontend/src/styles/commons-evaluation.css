@@ -236,7 +236,8 @@
 .evaluation-review {
   max-width:780px;
 }
-.evaluation-review>div {
+/* A reference's row. Not the close dialog, which sits among the rows and stacks (GM r40 1). */
+.evaluation-review>div:not(.evaluation-close) {
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -334,6 +335,21 @@ body.app-slava-restraint .commons-evaluation input::placeholder {
 .evaluation-close ul {
   margin:0 0 12px;
   padding-left:18px;
+}
+/* PR #204 round 18j (GM r40 1): the dialog stacks in either pane: the heading, the list at the
+ * dialog's full width, the failure line, then one row of buttons, Cancel and the close. */
+.evaluation-close {
+  display:block;
+}
+.evaluation-close .review-actions {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  margin:12px 0 0;
+}
+.evaluation-close .review-actions .commons-button--primary {
+  margin:0;
 }
 /* A panel's Save with "Unsaved" beside it while the draft is unsaved
  * (commons-leave), in the panel's own muted ink and the section eyebrow's

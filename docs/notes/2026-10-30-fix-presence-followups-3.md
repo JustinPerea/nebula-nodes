@@ -3302,3 +3302,83 @@ GM r39: the Agent review line, 1(b), 1(c), Fix E and Fix B.
   15 of 15. Shots A, B1, B2, C1, C2 and D in the scratchpad's fu3r/shots-r18i, all md5-distinct.
   A tile image is read twice on the first load in dev; that is the StrictMode double mount, not
   the observer.
+
+## Round 18j
+
+GM r40: the close-batch line (B1, B2), its ratchet, and the stacked dialog.
+
+### The failed close's line (GM r40 B1, B2)
+- Both panes share CommonsCloseBatch, so Blind labeling and Agent review read the same.
+- A failed close destroyed nothing, so the line uses the because form. It is neutral, has
+  curly apostrophes and never shows the server's words. It is built by `closeBatchFailedLine` in
+  `lib/errorCopy.ts`, which runs the loads' status mapping over `CLOSE_BECAUSE`. That map is the
+  loads' session reasons plus the close's own 409s.
+- Each exact string, by cause:
+  - 503, 502, 504, 408: "Nebula couldn’t close the batch because the server didn’t respond. Try again."
+  - 500, 501: "Nebula couldn’t close the batch because the server hit an error. Try again."
+  - 429: "Nebula couldn’t close the batch because the server is busy. Try again in a moment."
+  - No answer: "Nebula couldn’t close the batch because the server isn’t answering. Check that
+    Nebula is running, then try again."
+  - 409, a grade running: "Nebula couldn’t close the batch because a grade is still running.
+    Close the batch again when it finishes."
+  - 409, sealed meanwhile: "Nebula couldn’t close the batch because its labels are sealed as
+    blind ground truth, so there’s nothing to close. Reload to see them."
+  - 409, stale revision: "Nebula couldn’t close the batch because it changed in another window.
+    Reload, then close the batch again."
+  - 409, no set: "Nebula couldn’t close the batch because there’s no held-out set anymore.
+    Reload to get the latest."
+  - 409, integrity: "Nebula couldn’t close the batch because the held-out set doesn’t match what
+    was saved, so Nebula stopped and changed nothing."
+  - Any other 4xx, or a reason not listed (its words go to the console): "Nebula couldn’t close
+    the batch because the server didn’t accept it. Try again."
+  - 401 session ended: "Nebula couldn’t close the batch because this window’s session ended.
+    Reload to sign in again."
+  - 403 with no reason: "Nebula couldn’t close the batch because you don’t have access to this
+    anymore. Reload to sign in again."
+  - Commons off: "Commons is turned off for this Nebula." The off view takes over.
+  - This tab not connected as you: `notConnectedBecause('close the batch')`.
+  - Offline: no line; the offline row says it.
+- `CommonsErrorLine` treats any line in the because form as neutral (`isBecauseFailure`), as a
+  load's line is. It still has no Try again button, and "Try again." keeps the exception for
+  the Close button beside it.
+- The 409 wordings that weren't given are mine, for GM to rule on.
+
+### Ratchet (GM r40)
+- `tests/commonsCopy.ratchet.test.tsx`:
+  - every close reason above renders in both panes as listed, neutral in the app's own cascade,
+    never with a straight apostrophe, "Couldn…" or "Nebula didn…";
+  - the person refusal says `notConnectedBecause`;
+  - CommonsCloseBatch's source has no `failureMessage` or `copyForStatus`, and its one
+    `line.show` is the person refusal's;
+  - the stacked dialog's order, display and button row are checked there too.
+
+### The stacked dialog (GM r40 1)
+- The cause: `.evaluation-review>div` (a reference's row, flex) also caught the dialog, which
+  sits among the rows in Blind labeling. It is now `:not(.evaluation-close)`.
+- The dialog is a block: the heading, the list at the dialog's full width, the line, then one
+  row of buttons, Cancel then the close.
+- The close keeps `commons-button--primary`. The row's flex now lives in
+  commons-evaluation.css; before, it came only from commons-review.css, which Blind labeling
+  didn't load.
+- Cancel moved before the close in both panes, the order GM gave. Focus still opens on Cancel.
+- Live at 1024, 1280 and 1440 in both panes, 33 of 33 checks:
+  - the dialog is 620 px at every width, and the list fills its 582 px inner width;
+  - the line sits 12 px above the button row;
+  - Cancel and the close share one row, 10 px apart.
+- Shots B1-close-blind-{1024,1280,1440} and B2-close-review-{1024,1280,1440} are in the
+  scratchpad's fu3r/shots-r18j, all md5-distinct.
+
+### Tests
+- `tests/commonsCopy.ratchet.test.tsx` (6, new).
+- `tests/commonsCloseBatch.test.tsx`: the 409 refusal now uses the real `detail` shape and
+  expects the because line.
+- Mutations: 7 of 7 killed (J1–J4, J6, J8, J9). Not run as a unit mutant: dropping the
+  dialog's own row flex. jsdom's cascade still finds commons-review.css, so only the live check
+  catches it.
+- Gates:
+  - tsc -b and npm run lint are clean.
+  - vitest on the explicit list: 447 files, 5,865 of 5,868. The 3 failures were 5 s timeouts
+    under load in files this round doesn't touch (GraphFileActions, ModelPicker,
+    graphStore.fix18), and they passed 54 of 54 on a rerun of the three alone.
+  - Backend named tests: 9 of 9.
+  - Build: 474,676 B raw / 147,143 B gzip, after merging main with #211.

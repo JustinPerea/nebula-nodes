@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type Ref } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
-import { isLoadLine, retryStem } from '../../lib/errorCopy';
+import { isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
@@ -66,7 +66,9 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
   // one style as a because line (styles/becauseLine.css `data-line-neutral`). Round 18b (GM r29
   // 1): a load that failed for any reason (errorCopy isLoadLine).
   // Round 18c (GM r30 1): and a because line, so the two share one look, the bare rail.
-  const neutral = person || isLoadLine(line);
+  // Round 18j (GM r40): and an action's line in the because form ("Nebula couldn’t close the
+  // batch because …"): it says nothing was lost.
+  const neutral = person || isLoadLine(line) || isBecauseFailure(line);
   const stem = onRetry ? retryStem(line) : null;
   // Round 18i (GM r39 1c): "Try again." always means a button. A load's line given no way to
   // read again (media inside a tile, which reads again by itself) ends at its reason.
