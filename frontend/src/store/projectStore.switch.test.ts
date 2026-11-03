@@ -22,10 +22,13 @@ import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
-import { useGraphStore } from './graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from './graphStore';
 import { useUIStore } from './uiStore';
 import { subscribeProjectAutosave, switchMessage, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const saveProject = vi.mocked(api.saveProject);
 const summary = (id: string, name: string): ProjectSummary => ({
