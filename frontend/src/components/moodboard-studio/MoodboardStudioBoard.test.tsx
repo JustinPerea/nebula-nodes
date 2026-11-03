@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -62,6 +62,10 @@ import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { MOODBOARD_VIEW_KEY, useBoardCanvasStore } from '../../store/boardCanvasStore';
 import { useBoardUndoStore } from '../../lib/boardUndo';
 import { RequestFailedError } from '../../lib/errorCopy';
+import { DeferredRegionNotices } from '../../lib/deferredChunks';
+
+// The notices are a deferred chunk: load it before any render (tests/helpers/regionNoticesReady.ts).
+beforeAll(async () => { await DeferredRegionNotices.preload(); });
 
 const card = (id: string, x = 0, y = 0): MoodboardPlacement => ({ id: `c-${id}`, frameId: null, x, y, w: 480, h: 270,
   weight: 1, placedBy: 'person', placedAt: '2026-10-20T00:00:00+00:00' });

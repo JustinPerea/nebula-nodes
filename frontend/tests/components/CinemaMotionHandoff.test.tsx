@@ -9,11 +9,14 @@ vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof
   apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: (listener: (event: unknown) => void) => { mocks.listeners.push(listener); } } }));
 import { CinemaShotPanel } from '../../src/components/cinema-studio/CinemaShotPanel';
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { useCinemaMotionStore } from '../../src/store/cinemaMotionStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../src/lib/cinemaMotion';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const initial = { ...useGraphStore.getState() };
 const uiInitial = { ...useUIStore.getState() };

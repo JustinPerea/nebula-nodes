@@ -24,6 +24,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+const { resetDeletedSceneEditsForTests } = store;
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix round 4 (review 4; GM's r4 and r5 rulings):
@@ -30,7 +30,9 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
-const { useGraphStore, sceneDeleteDisabledTitle, sceneStopLines } = await import('../../src/store/graphStore');
+const { useGraphStore, sceneDeleteDisabledTitle, sceneStopLines, resetDeletedSceneEditsForTests } = await import('../../src/store/graphStore');
+// A deleted scene's kept edits never reach the next test's node with the same id.
+afterEach(() => resetDeletedSceneEditsForTests());
 // GM r28 item 2 (round 19): the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
