@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix round 8 (review 7; GM r10 and r11), against a small keyed
@@ -30,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
 const { useGraphStore } = store;

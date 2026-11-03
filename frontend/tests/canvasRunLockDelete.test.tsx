@@ -58,9 +58,12 @@ vi.mock('../src/lib/canvasSelection', () => ({
 
 import { Canvas } from '../src/components/Canvas';
 import { quietConsole, installFakeFlowStore } from './helpers/fakeFlowStore';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 /**
  * PR #198 fix round 4, M1 (review 4): React Flow's own Delete key is off
