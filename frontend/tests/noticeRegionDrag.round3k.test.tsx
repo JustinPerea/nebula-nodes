@@ -1,11 +1,12 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { AgentLog } from '../src/components/panels/AgentLog';
 import { LOG_HELD_ATTR } from '../src/lib/noticeStackPlace';
 import { useUIStore } from '../src/store/uiStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 
 /**
  * PR #216 review 3 MEDIUM-3: after the card leaves, notices still showing
@@ -30,6 +31,10 @@ const setFloat = (box: { top: number; bottom: number; left: number; right: numbe
  * notices (their layout width, and boxes drawn wherever `drawnAt` says), the card. */
 const layout = { drawnLeft: 560, noticeW: 243, regionLeft: 64 };
 let moves: Array<{ element: Element; finish: () => void }> = [];
+
+// The region's notices are a deferred chunk: load it before any render
+// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 3l).
+beforeAll(regionNoticesReady);
 
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });

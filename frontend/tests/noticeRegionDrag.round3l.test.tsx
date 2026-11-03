@@ -1,7 +1,8 @@
 import { act, cleanup, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { GLIDE_MS, LOG_HELD_ATTR, LOG_SETTLING_ATTR } from '../src/lib/noticeStackPlace';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 
 /**
  * PR #216 round 3l.
@@ -45,6 +46,10 @@ function regionBox(region: HTMLElement) {
   const right = 1024 - (region.style.right ? Number.parseFloat(region.style.right) : Math.max(16, clearance));
   return { left, right };
 }
+
+// The region's notices are a deferred chunk: load it before any render
+// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 3l).
+beforeAll(regionNoticesReady);
 
 beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
