@@ -8,7 +8,7 @@
 //   for the button's own activation), and a real Shift-then-Tab leaves it.
 // - Review 15 LOW-B / GM r27 item 3: a notice replaced under focus (Undo's
 //   remount) sends focus to the open dialog's field; Redo stays reachable by Tab.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { ReactNode } from 'react';
@@ -22,6 +22,10 @@ import { ResultComparison, type ComparisonResult } from '../src/components/creat
 import { SHORTCUTS_OPEN_EVENT } from '../src/lib/keyboardShortcuts';
 import { moveFocusFromLeave } from '../src/lib/noticeLeave';
 import { useUIStore } from '../src/store/uiStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const initialUI = useUIStore.getState();
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };

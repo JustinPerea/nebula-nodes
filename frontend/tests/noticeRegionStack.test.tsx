@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
@@ -43,6 +43,10 @@ import { useCanvasProposalsStore } from '../src/store/canvasProposalsStore';
 import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 import { useProjectStore } from '../src/store/projectStore';
 import { useUIStore } from '../src/store/uiStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const SLOW = 20_000;

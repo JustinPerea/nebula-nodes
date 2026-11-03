@@ -12,11 +12,14 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), subscribe: vi.fn((handler) => { transport.sync = handler; }), disconnect: vi.fn(),
 } }));
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { noticeSpy } from './helpers/noticeSpy';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 function node(value = 'Current', id = 'n1'): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 100 },

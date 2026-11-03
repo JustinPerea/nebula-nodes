@@ -8,10 +8,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { CinemaStudioView } from '../src/components/cinema-studio/CinemaStudioView';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import type { CinemaSceneSpec, NodeData } from '../src/types';
 import type { Node } from '@xyflow/react';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 vi.mock('../src/components/cinema-studio/CinemaSharedControls', () => ({ CinemaSharedControls: () => null }));
 vi.mock('../src/components/cinema-studio/CinemaShotPanel', () => ({ CinemaShotPanel: () => <textarea aria-label="Shot prompt" /> }));

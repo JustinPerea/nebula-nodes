@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('../src/lib/backend', async (original) => ({ ...await original<typeof import('../src/lib/backend')>(), apiFetch: api.fetch }));
@@ -44,9 +44,13 @@ vi.mock('../src/components/commons/CommonsView', async () => {
   return { CommonsView: () => <button onClick={() => useUIStore.getState().exitCommons()}>Return from Commons</button> };
 });
 import App from '../src/App';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
 import { DeferredChatPanel } from '../src/lib/deferredChunks';
 import { useUIStore } from '../src/store/uiStore';
 import { useProjectStore } from '../src/store/projectStore';
+
+// App mounts the notice region, whose notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 const initialUI = useUIStore.getState();
 const initialProjects = useProjectStore.getState();
 beforeEach(() => { useUIStore.setState(initialUI, true); useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });

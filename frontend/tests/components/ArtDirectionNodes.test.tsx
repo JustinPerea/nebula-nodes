@@ -10,7 +10,10 @@ import type { CharacterDraft } from '../../src/components/character-studio/Chara
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { REFERENCE_ROLE_IDS } from '../../src/lib/referenceRoles';
 import { freezeRunSnapshot, type RunRecord } from '../../src/lib/runHistory';
-import { useGraphStore } from '../../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 const requests = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock('../../src/lib/backend', async (importOriginal) => ({
