@@ -445,7 +445,24 @@ The server exposes these tools for building and running (see
   `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
   own text, unchanged) and, since error-copy round 3, `asset.last_error_kind`:
   `unavailable` (network, a timeout or the provider down), `unreadable` (the
-  model declined or couldn't read the image) or `other`. Curating (corrections, regions, a reference's role,
+  model declined or couldn't read the image), `other`, or `transparent`
+  (below). The reader sees a
+  reference with transparency composited onto #0a0a0a, the tile and stage
+  surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
+  transparent to add colors (no pixel at alpha 16 of 255) is never sent and
+  is marked failed with `last_error` "too transparent to add colors; not sent
+  to the reader" and kind `transparent`, which the Commons shows as no
+  error, with the plain neutral badge "Not analyzed" (its own colour,
+  `--sr-ink-light`) and no
+  Retry or Re-analyze: "This image is too transparent to analyze." The
+  person's re-analyze route answers that state rather than requeuing it,
+  since the file can't change (assets are stored by their sha256), and
+  the person's Re-analyze stale leaves it as it is too (its `queued`
+  counts only what was requeued).
+  `commons_search` rows carry `last_error_kind` too. References measured before
+  `measure-2` keep their palettes until analyzed again. The Vision node and
+  QC send an image with transparency as it shows on a canvas node (#0a0a0a)
+  too. Curating (corrections, regions, a reference's role,
   why or inbox place) is the person's: agents propose it, see
   [Commons curation](#commons-curation). Each has a `nebula commons` twin.
 - `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
@@ -4586,7 +4603,7 @@ nebula moodboard delete <board>
   lists also catch up on a change made while their tab's socket was closed
   (a backend restart), once it opens again. A Preview of the run
   counts only the images that steer ("4 images"), weight 0 left out like
-  the switch, and so does the analysis's summary ("4 reference image(s)
+  the switch, and so does the analysis's summary ("4 reference images
   analyzed"). The Moodboard node's bundle leaves weight-0 images out of
   `images`, `analysis.images` and `representativeImages` as it does switched ones. When nothing
   steers, the analysis warns "Every reference is set aside, so none of them
@@ -4671,6 +4688,55 @@ nebula moodboard delete <board>
   (its part of the board share), largest first. `show` prints them as
   `#4 0.35%, #5 0.26%`. An analysis from before sources existed has none;
   `analyze` again to see them.
+- Colour counts alpha (analysis version 6, Commons `measure-2`): pixels
+  under alpha 16 of 255 aren't counted, the rest count by their alpha, and
+  a share is of what's seen. An image with transparency is read at 256 px
+  by an area filter that weighs each pixel by its alpha, so a thin stroke
+  still counts, with its own colour. An image with no pixel at 16 or above
+  (clear, or a faint haze) has no colours: its `analysis.images` entry has
+  `transparent: true`, `colors: []` and null `lightness` and `saturation`,
+  and the summary and `warnings` say `#N is too transparent to add
+  colors.` It takes no part of the board's weight; any other image counts
+  as one full reference however much of it is clear.
+- Nebula stores two facts on each image entry of the HTTP board
+  (`GET /api/moodboards/{id}`; MCP's image views leave them out):
+  `hasTransparency` (a pixel less than opaque) and `hasClearPixels` (a
+  pixel under alpha 16 of 255), with `alphaFileStat`, the file's
+  `[mtime_ns, size, ino, ctime_ns]` when they were read (the inode and
+  change time catch a same-size copy whose mtime was put back, and a
+  replace by rename; a stamp of the older `[mtime_ns, size]` form never
+  matches, so that image is read again once and restamped). Each is read once when the image
+  is added (off the event loop, before the board is locked), and once at
+  startup (in the background) for the images of boards analyzed before
+  version 6. A use trusts them only while the file's stat still matches
+  `alphaFileStat` (one stat, no decode), so an image stored as opaque is
+  never decoded to find clear pixels; a file replaced in place at the same
+  path is read again (decoded once per file version). A client that sends
+  the images back may echo all three; what it sends is ignored. An
+  unreadable or missing file has none, which never marks a board out of
+  date.
+- A saved analysis older than version 6 that measured an image with clear
+  pixels (set aside or not) has out-of-date colours: it counted the black
+  those pixels hide. An image added after that analysis, or one that is
+  only semi-transparent (no clear pixel; it was counted in its real colour),
+  doesn't make it so. On every read
+  its analysis carries `outdated` ("These colors counted transparent areas
+  as dark. Analyze again to update them.", which Moodboard Studio and
+  `show` print), and the composed `brief` carries `outdated` too ("This
+  brief uses the old colors. The next run analyzes the board again and
+  sends an updated one.", or on a hand-written brief "This brief uses the
+  old colors. The next run sends it with the updated ones."), printed right
+  after the brief's text. At strength 0 nothing is sent, so the brief has no
+  `outdated`. Neither is ever saved. The dry run's `saved` has `outdated`
+  beside `current`, which still says only whether the analysis describes
+  the board; `--dry-run` prints both lines when both hold. The
+  Moodboard node analyzes such a board again and warns "The board’s saved
+  colors counted transparent areas as dark, so this run analyzed it again.
+  Analyze it in Moodboard Studio to save the new analysis." An older
+  analysis of a board with no transparency stays as it is.
+- Summaries count in a real plural: "1 reference image analyzed as look.",
+  "7 reference images analyzed as look."; one saved with "image(s)" reads
+  with today's.
 - `analyze --dry-run` (`moodboard_analyze` with `dry_run`) calls
   `POST /api/moodboards/{id}/analyze/dry-run`: the analysis and the brief
   generators would get, plus `changes` against what's saved (palette and
@@ -4722,6 +4788,16 @@ nebula moodboard delete <board>
     `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
     says who read (`source: "model"`). Board and image
     notes go only when the board's `sendNotes` is on; private notes never.
+  - A reference with transparency is sent as it shows on the board card:
+    composited onto #080808 (the card's rgba(255, 255, 255, 0.03) over the
+    black canvas), never onto the colour hidden under its alpha. An opaque
+    one is sent exactly as before. One too transparent to add colors (no
+    pixel at alpha 16) is never sent or priced: `--estimate` lists it in
+    `transparent` ("#N wasn’t read because it’s too transparent."), and the
+    read shows "#N is too transparent to add colors." and "#N is unsorted
+    because it’s too transparent." (its `why`: "It’s too transparent to add
+    colors."). An image stored as opaque or with no clear pixel is never
+    decoded to tell, and the rest are checked once, off the event loop.
     A reference that isn't a file on this computer is skipped and listed.
   - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
 

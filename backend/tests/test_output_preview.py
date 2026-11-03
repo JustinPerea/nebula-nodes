@@ -124,3 +124,14 @@ def test_garbage_file_is_a_clear_error(api):
     response = api.client.get(f"/api/graph/node/{node_id}/preview")
     assert response.status_code == 422
     assert "Couldn't preview" in response.json()["detail"]
+
+
+def test_the_contact_sheet_turns_exif_rotated_images(tmp_path):
+    # PR #208 round 4 (review 3 R18): each tile as it shows, EXIF turn included.
+    path = tmp_path / "exif-6.jpg"
+    exif = Image.Exif()
+    exif[0x0112] = 6  # 60x40 stored, shown 40x60
+    Image.new("RGB", (60, 40), (200, 40, 40)).save(path, format="JPEG", exif=exif.tobytes())
+    data, _mime = output_preview.contact_sheet([path], "small")
+    with Image.open(io.BytesIO(data)) as sheet:
+        assert sheet.height > sheet.width

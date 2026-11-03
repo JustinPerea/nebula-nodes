@@ -237,6 +237,10 @@ const NO_OUTLINE: Record<string, string> = {
   'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
   // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
   'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:focus-visible': 'focused only from code: no ring',
+  // #208 GM r23: the palette's "Extracting colors…" line, given focus by
+  // code when it replaces the row a control had it in; a line, not a control.
+  'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
+  'styles/panels.css::body.app-slava-restraint .inspector__palette-pending:focus': 'code-moved focus on a line',
 };
 
 function focusSelectors(rule: Rule): string[] {

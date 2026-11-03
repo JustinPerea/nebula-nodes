@@ -156,6 +156,20 @@ body.app-slava-restraint .moodboard-studio-view__main {
   gap: 16px;
 }
 
+/* The bottom spacer that holds a panel scrolled to the bottom in place when
+   Analyze clears the "old colors" lines (GM r6 on #208, item 4;
+   useHoldBottom.ts). Hidden, so it takes no gap, until it holds. Not visual,
+   so it is unscoped: the board panel and the list both have it. */
+.moodboard-hold-spacer {
+  display: none;
+  flex: none;
+}
+
+.moodboard-hold-spacer[data-holding] {
+  display: block;
+  height: var(--moodboard-hold-h, 0px);
+}
+
 body.app-slava-restraint .moodboard-studio-view__loading,
 body.app-slava-restraint .moodboard-analysis__empty {
   color: var(--sr-ink-meta);

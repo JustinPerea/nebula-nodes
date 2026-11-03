@@ -9,11 +9,11 @@ import {
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
-import { actorLabel, STATE_LABELS } from '../../lib/commonsFormat';
+import { actorLabel, analysisBadge } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
-import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
+import { ANALYSIS_FAILED, analysisFailureIsNeutral, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { CommonsErrorLine } from './CommonsErrorLine';
@@ -312,12 +312,18 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   };
 
   const keywords = fields.keywords ?? [];
+  const badge = analysisBadge(asset.analysis_state, asset.last_error_kind);
+  // Too transparent: re-analyzing can't change a property of the image, so
+  // there is no Re-analyze (GM r6 on #208, item 3). An asset's file never
+  // changes (content-addressed), so the state always belongs to this file; a
+  // changed file comes in as a new asset, with Re-analyze.
+  const settledUnanalyzed = asset.analysis_state === 'analysis_failed' && analysisFailureIsNeutral(asset.last_error_kind);
   const palette = fields.palette ?? [];
 
   return (
     <aside className="commons-detail" aria-label="Asset detail">
       <div className="commons-detail__bar">
-        <span className={`commons-badge commons-badge--${asset.analysis_state}`}>{STATE_LABELS[asset.analysis_state]}</span>
+        <span className={`commons-badge commons-badge--${badge.modifier}`}>{badge.label}</span>
         <span className="commons-meta">
           {asset.media}{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''} · made by {asset.made_by}
         </span>
@@ -335,6 +341,10 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <ProposalsFor kind="commons" targetId={assetId} names={proposalNames} />
 
       {asset.analysis_state === 'analysis_failed' && (
+        analysisFailureIsNeutral(asset.last_error_kind) ? (
+          // Too transparent: nothing in it is seen, so it was never sent. Not an error (GM r5 on #208).
+          <p className="commons-notice commons-notice--muted">{analysisFailureReason(asset.last_error_kind)}</p>
+        ) : (
         <div className="commons-notice commons-notice--error commons-analysis-failure" data-line-box="">
           <div className="commons-analysis-failure__text">
             <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
@@ -344,6 +354,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
           </div>
           <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Retry</button>
         </div>
+        )
       )}
 
       {asset.media === 'image' ? (
@@ -553,7 +564,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       </section>
 
       <div className="commons-detail__actions">
-        <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Re-analyze</button>
+        {!settledUnanalyzed && (
+          <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Re-analyze</button>
+        )}
         <button type="button" className="commons-button commons-button--danger" onClick={() => void purge()}>Delete and purge</button>
       </div>
       </fieldset>
