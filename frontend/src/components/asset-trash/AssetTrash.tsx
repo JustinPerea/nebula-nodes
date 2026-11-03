@@ -82,9 +82,12 @@ export interface RecentlyDeletedAssetsProps {
   /** Something came into or left this list (often an agent's delete or
    * restore elsewhere), so the library above it should list again. */
   onTrashChanged?: () => void;
-  /** Change it to open the list (a Studio line's Restore for several boards, round 6j). */
-  openRequest?: number;
+  /** A new `n` opens the list (a Studio line's Restore for several boards, round 6j), and focus goes to the
+   *  Restore button of the first of `focus` it lists, with the keyboard ring only when `keyboard` (round 6k, GM r19 3). */
+  openRequest?: TrashOpenRequest;
 }
+
+export interface TrashOpenRequest { n: number; focus?: readonly string[]; keyboard?: boolean }
 
 export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged, openRequest }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
@@ -92,13 +95,23 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
   const [itemsFor, setItemsFor] = useState('');
   const [open, setOpen] = useState(false);
   // A request from outside opens the list: a new one, not one made before this list mounted.
-  const [seenRequest, setSeenRequest] = useState(openRequest);
-  if (openRequest !== seenRequest) {
-    setSeenRequest(openRequest);
-    if (openRequest) setOpen(true);
+  const [seenRequest, setSeenRequest] = useState(openRequest?.n);
+  const [focusWanted, setFocusWanted] = useState<TrashOpenRequest | null>(null);
+  if (openRequest?.n !== seenRequest) {
+    setSeenRequest(openRequest?.n);
+    if (openRequest?.n) {
+      setOpen(true);
+      setFocusWanted(openRequest);
+    }
   }
+  const focusDone = useRef<TrashOpenRequest | null>(null);
+  const list = useRef<HTMLUListElement | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A failed load's line, and a failed Restore or delete's own (round 6k: the list read again after an
+  // action, as it always is, clears only a load's line, so an action's refusal stays until the next action).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
+  const error = actError ?? loadError;
   const [reload, setReload] = useState(0);
   const noun = NOUNS[kind];
   // A project's Recently deleted is the open canvas project's (lib/currentProject).
@@ -120,7 +133,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
         if (cancelled) return;
         setItems(list);
         setItemsFor(where);
-        setError(null);
+        setLoadError(null);
         const ids = list.map((item) => item.id).join(',');
         const before = listed.current;
         listed.current = { where, ids };
@@ -129,7 +142,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       .catch((err) => {
         if (cancelled) return;
         setItemsFor(where);
-        setError(failureMessage(err, "Couldn't load Recently deleted."));
+        setLoadError(failureMessage(err, "Couldn't load Recently deleted."));
       });
     return () => { cancelled = true; };
   }, [kind, scope, projectId, noProject, where, refreshKey, reload]);
@@ -141,15 +154,26 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
     }
   }), [kind]);
 
+  // Once this scope's list is up: the first asked-for board's Restore takes focus (none listed: nothing moves).
+  useEffect(() => {
+    if (!focusWanted || focusDone.current === focusWanted || !open || itemsFor !== where) return;
+    focusDone.current = focusWanted;
+    const listed = new Set(items.map((item) => item.id));
+    const first = focusWanted.focus?.find((id) => listed.has(id));
+    const button = first ? Array.from(list.current?.querySelectorAll<HTMLButtonElement>('button[data-restore-id]') ?? [])
+      .find((it) => it.getAttribute('data-restore-id') === first) : undefined;
+    button?.focus({ focusVisible: Boolean(focusWanted.keyboard) } as FocusOptions);
+  }, [focusWanted, open, items, itemsFor, where]);
+
   const act = useCallback(async (work: () => Promise<void>, after?: () => void) => {
     setBusy(true);
-    setError(null);
+    setActError(null);
     try {
       await work();
       after?.();
     } catch (err) {
       // A request's own line; never another error's message (round 3b).
-      setError(failureMessage(err, ''));
+      setActError(failureMessage(err, ''));
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -176,7 +200,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
       {open && (
         <>
           <p className="asset-trash__note">Deleted {noun.many} stay here until you delete them for good.</p>
-          <ul className="asset-trash__list">
+          <ul className="asset-trash__list" ref={list}>
             {items.map((item) => (
               <li key={item.id} className="asset-trash__row" aria-label={item.name || 'Untitled'}>
                 <span className="asset-trash__thumb">
@@ -188,7 +212,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                   {storedImageView(item.thumbnail).outside && <OutsideImageNote />}
                 </span>
                 <span className="asset-trash__actions">
-                  <button type="button" className="asset-trash__button" disabled={busy}
+                  <button type="button" className="asset-trash__button" disabled={busy} data-restore-id={item.id}
                     aria-label={`Restore ${item.name || 'Untitled'}`}
                     onClick={() => void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item))}>
                     <RotateCcw aria-hidden="true" />Restore

@@ -197,6 +197,24 @@ body.app-slava-restraint .moodboard-studio__notice-action {
   flex: none;
 }
 
+/* Round 6k (GM r19 1): the red line for a board deleted for good closes by
+   its × (its edit is already gone). As the trash toast's ×, in the line's ink. */
+body.app-slava-restraint .moodboard-studio__notice-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-studio__notice-close:hover { background: var(--sr-pending-soft); }
+body.app-slava-restraint .moodboard-studio__notice-close svg { width: 14px; height: 14px; }
+
 body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved {
   color: var(--sr-ink-light);
 }

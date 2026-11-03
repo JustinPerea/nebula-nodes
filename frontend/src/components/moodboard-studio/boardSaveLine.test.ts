@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
-import { boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, joinWithAnd,
+import { boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, joinWithAnd,
   keptFromBoardLine, lostAddLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
@@ -170,6 +170,18 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(deletedBoardsLine([forty], 'purged').text).toBe(`Nebula couldn’t save your change to “${forty}” because the board was deleted somewhere else.`);
     expect(deletedBoardsLine(['  '], 'purged')).toEqual({
       text: 'Nebula couldn’t save your change to “Untitled” because the board was deleted somewhere else.', title: '“Untitled”' });
+  });
+});
+
+describe('a Restore\'s confirmation (round 6k, GM r19 2, 3)', () => {
+  it('names the boards by the same rule: one, then up to three with "and", then a count; clipped, with full names in the title', () => {
+    expect(restoredBoardsLine(['Dusk'])).toEqual({ text: 'Restored “Dusk” and saved your change.', title: '“Dusk”' });
+    expect(restoredBoardsLine(['Rivers', 'Harbor']).text).toBe('Restored “Rivers” and “Harbor” and saved your changes.');
+    expect(restoredBoardsLine(['Rivers', 'Harbor', 'Sea']).text).toBe('Restored “Rivers”, “Harbor” and “Sea” and saved your changes.');
+    expect(restoredBoardsLine(['a', 'b', 'c', 'd'])).toEqual({ text: 'Restored 4 boards and saved your changes.', title: '“a”, “b”, “c” and “d”' });
+    const long = 'An exceptionally long board name that keeps going well past forty';
+    expect(restoredBoardsLine([long])).toEqual({ text: `Restored “${long.slice(0, 39)}…” and saved your change.`, title: `“${long}”` });
+    expect(restoredBoardsLine([' ']).text).toBe('Restored “Untitled” and saved your change.');
   });
 });
 

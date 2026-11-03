@@ -709,6 +709,65 @@ Merged origin/main at 062fb370 (#218, #211) with no conflicts. `broadcast_raw` n
   - Mixed: Rivers and Harbor in Recently deleted, Sea deleted for good. The two lines showed, neutral first: "…your changes to “Rivers” and “Harbor” because they were deleted. Restore them to keep the changes." and then "…your change to “Sea” because the board was deleted somewhere else.". Restore opened the rail's Recently deleted listing both boards, and restored nothing.
   - No request left the lane. Shots: scratchpad `paste/shots6j/` (5), each opened at 1000 px, no md5 repeats.
 
+## Round 6k (GM r19)
+
+Main hadn't moved past 062fb370, so nothing to merge. GM signed off 6j's design, agreed to naming a board by its saved name, and asked for four fixes and one answer.
+
+- **GM's answer: one line for the open board.** When the open board is in Recently deleted and has a kept edit waiting, the load's "This board is in Recently deleted. Restore it from the list on the left." is dropped for it, and only the kept edit's line shows. With no kept edit, that line stays as it was.
+- **1. The red line (deleted for good).**
+  - It has a × (`aria-label="Dismiss"`, `.moodboard-studio__notice-close`).
+  - It clears when another board opens: a render-time check on `moodboardEditorId`, so it is gone before the new board's lookup answers.
+  - It is a `status` line, and a re-check adds nothing to it. Its edit was dropped the first time, so the same element and text stay and it isn't said again.
+- **2. Restore's confirmation.** Recently deleted's own Restore gives none, so both paths get GM's neutral status line: "Restored “Dusk” and saved your change."
+  - It shows once each restored board is loaded (so it's back and its kept edit replayed) and clean. A save out leaves the draft dirty, so clean means saved.
+  - It names the board as it is now (the replayed name), each name clipped at 40 with the full names in the title.
+  - It goes when another board opens. A "Kept …" line from the replay follows it.
+  - A failed save shows its own line instead, and no confirmation.
+  - A board the line names that is restored from Recently deleted gets the same confirmation (`boardRestored`). A board no line named gets none.
+- **3. Restore for several.**
+  - Recently deleted opens on the first board's scope. `RecentlyDeletedAssets`'s `openRequest` is now `{ n, focus, keyboard }`: focus goes to the Restore button of the first of the line's boards in that scope's list. That is the line's order, so Rivers here, though the list shows Harbor first. The focus waits for that scope's list, and it is moved once, never again on a reload.
+  - The ring shows only when Restore was pressed from the keyboard (`event.detail === 0`, then `focus({ focusVisible })`), as `SceneClashNotice` does.
+  - As each board is restored there, the line names the ones left (the one-board form at one). When all are back and saved, it goes and one confirmation names them by the same rule:
+    - "Restored “Rivers” and “Harbor” and saved your changes."
+    - "Restored “Rivers”, “Harbor” and “Sea” and saved your changes."
+    - "Restored 4 boards and saved your changes."
+- **4. Empty in the list a line opened: kept and scoped (no change).**
+  - The list the line opens is the rail's ordinary Recently deleted for that scope, not a narrower one, and every board in it is on screen.
+  - Empty sends exactly the listed ids (`emptyTrash(filter, items)`), and `POST /api/trash/empty` deletes only those (`test_emptying_deletes_only_what_the_person_saw`).
+  - So it already empties only what the list shows. A test pins it for a list a request opened. No shot is needed.
+- **5. Rivers and Dusk: one setup, and Restore opened the board it named.** The board's saved name was "Rivers", and its kept edit renamed it "Dusk" (a failed save). The line names the saved name, as GM agreed. Restore opened that board (6j live checked the id), and its replay renamed it Dusk. So no bug. 6k's confirmation now says "Restored “Dusk” …", and the test checks the same id.
+- **Found and fixed on the way.**
+  - A board restored from the rail's Recently deleted while it was the open route (as not found or in Recently deleted) didn't reload: the same route doesn't change, and the live update skips an entry with no saved id. `openBoard` now loads it again. The line's Restore uses it too.
+  - Recently deleted wiped a Restore or delete refusal at once: the list reads itself again after every action, and that read cleared the line. That made `asks before deleting for good` flaky under load. A load's line and an action's line are now kept apart, and the read clears only a load's.
+  - The confirmation and the deleted-board lines share their naming (`namedBoards`). Each sentence is written whole, so the hand-built-line check passes.
+- **Tests.**
+  - `boardSaveLine.test.ts`, +1: the confirmation's 1/2/3/4+ forms, the clip, the title and Untitled.
+  - Paste, +7 new and 6 changed:
+    - The open board's one line, and the old line kept with no kept edit.
+    - The confirmation only after the held save lands, and gone on another board.
+    - The Kept line after the confirmation.
+    - No confirmation on a failed save.
+    - A rail restore of the open board: reload, replay, confirmation.
+    - A rail restore no line named: no confirmation.
+    - The red line's ×, a board change (before the new lookup answers) and a re-check.
+    - Several restored from the rail: the line counting down, then one confirmation.
+    - The keyboard flag and the focus ids (only the scope's boards).
+  - `AssetTrash.test.tsx`, +4: focus on the first asked-for Restore with and without the ring, never pulled back on a reload; a scope switch focusing the new list; Empty sending only the listed boards; a refusal kept through the list's reload.
+- **Mutants:** 29 (scratchpad `paste/mutate-r6k.py`), all killed. On the first pass 7 survived:
+  - Two were code that did nothing: the save-out check (a save out leaves the draft dirty) and a dedupe. They are removed.
+  - The red line's board check became a clear on board change, after a held-lookup test showed it would come back when returning to the board.
+  - The rest needed tests: a board switch while not found, a sync check after a rail restore, a mixed-scope focus, and a scope switch in the list.
+  - Changed code was run again, then all 29 in a final pass.
+- **Gates:** tsc 0, lint 0, focused vitest over 154 files 2697 of 2697, the build budget 447,725 B raw (dist deleted). No backend change, so no pytest.
+- **Live (8797/5797, the installed Chrome with a throwaway profile, a fresh home and token per scenario, canary first, 1440):** 31 of 31 over 4 scenarios.
+  - The open board deleted with a kept edit shows only the new line. Restore opened that board (same id), saved "Dusk", and confirmed "Restored “Dusk” and saved your change." (neutral, status, titled). The confirmation went when another board opened.
+  - Deleted with no kept edit: the old line stays.
+  - Deleted for good: red, a status line whose only button is × "Dismiss"; × closes it, and a second one clears when another board opens.
+  - Two deleted:
+    - With the pointer, the line's Restore focused the rail's "Restore Rivers" with no ring; from the keyboard, the same button with the ring.
+    - Restoring Rivers there left the one-board line for Harbor. Restoring Harbor ended with "Restored “Dusk” and “Port” and saved your changes."
+  - No request left the lane. Shots: scratchpad `paste/shots6k/` (5), each opened at 1000 px, no md5 repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -731,6 +790,7 @@ Merged origin/main at 062fb370 (#218, #211) with no conflicts. `broadcast_raw` n
 - Round 6h: `boardSaveLine.ts` (`boardSaveLine`, `lostAddLine`, `isLostAddLine`, `joinWithAnd`, `keptFromBoardLine`), `MoodboardStudioView.tsx` (`failBoardSave`, the lost add's names, the load keeping its line), `store/assetStudioDraftStore.ts` (`'reload'`), and their tests.
 - Round 6i: `unsavedDrafts.ts` (`keptEditOf`, `syncEdits`, `takeKeptEdit`, `replayKeptFields`), `MoodboardStudioView.tsx` (`replayKeptEdit`, the load's replay, the lost add's chip, the notice's title), `boardSaveLine.ts` (the signed-out step, `KEPT_NAME_MAX`, the one name's value), `store/assetStudioDraftStore.ts` (`StudioNotice`), and their tests.
 - Round 6j: `boardSaveLine.ts` (`deletedBoardsLine`), `unsavedDrafts.ts` (the kept edit's `name`, `keptEditsWaiting`, `dropKeptEdit`), `MoodboardStudioView.tsx` (the lookup, the two lines, Restore, `trashRequest`), `asset-trash/AssetTrash.tsx` (`openRequest`), `styles/moodboard-studio.css` (the Restore line), and their tests; `tests/test_moodboard_create_request_id.py` (the broadcast stand-in's `**_`).
+- Round 6k: `boardSaveLine.ts` (`restoredBoardsLine`, `namedBoards`), `MoodboardStudioView.tsx` (the open board's one line, the red line's × and board-change clear, `restoring` and the confirmation, `boardRestored`, `openBoard`, the keyboard flag and focus ids), `asset-trash/AssetTrash.tsx` (`TrashOpenRequest`, the focus, load and action lines apart), `styles/moodboard-studio.css` (the ×), and their tests.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

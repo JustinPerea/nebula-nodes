@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
+import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import {
   analyzeMoodboard,
@@ -12,14 +13,14 @@ import {
   lookupStoredAsset,
   updateMoodboard,
 } from '../../lib/api';
-import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
 import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { useBackendOffline } from '../../lib/useBackendOffline';
 import { placeholderLabel } from './boardPlaceholder';
-import { boardSaveLine, deletedBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
+import { boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
 import { dropKeptEdit, keepUnsavedDrafts, keptEditsWaiting, replayKeptFields, takeKeptEdit, type KeptEdit } from './unsavedDrafts';
 import { restoreTrashed } from '../../lib/trash';
 import { FailureLines } from '../failure/FailureLines';
@@ -1011,8 +1012,10 @@ export function MoodboardStudioView() {
           // In Recently deleted? Say so; the list in the rail restores it.
           void lookupStoredAsset('moodboard', moodboardEditorId!).catch(() => null).then((stored) => {
             if (!current()) return;
+            // In Recently deleted with a kept edit: the kept edit's line says it, with its Restore (GM r19), so not this one too.
+            const kept = keptEditsWaiting().some((it) => it.board === moodboardEditorId);
             initialize(fresh, null, '', stored?.status === 'trashed'
-              ? 'This board is in Recently deleted. Restore it from the list on the left.'
+              ? (kept ? null : 'This board is in Recently deleted. Restore it from the list on the left.')
               : 'Moodboard not found. Add images to save a new one.');
           });
           return;
@@ -2064,8 +2067,47 @@ export function MoodboardStudioView() {
   // Restore; one gone for good gets the red line, and its edit is dropped
   // once that line is up (nothing could replay it).
   const [goneEdits, setGoneEdits] = useState<{ trashed: GoneBoard[]; purged: GoneBoard[] }>({ trashed: [], purged: [] });
+  // The red line goes by its × or when another board opens (GM r19 1); its edits are already dropped.
+  const [purgedOn, setPurgedOn] = useState(moodboardEditorId);
+  if (purgedOn !== moodboardEditorId) {
+    setPurgedOn(moodboardEditorId);
+    if (goneEdits.purged.length) setGoneEdits({ ...goneEdits, purged: [] });
+  }
   const [restoreError, setRestoreError] = useState<FailureCopy | null>(null);
-  const [trashRequest, setTrashRequest] = useState<{ n: number; scope: AssetScope } | null>(null);
+  const [trashRequest, setTrashRequest] = useState<(TrashOpenRequest & { scope: AssetScope }) | null>(null);
+  // The boards a Restore is bringing back (GM r19 2, 3): once each is loaded (so back, its kept edit replayed)
+  // and saved, one confirmation names them, on the board open then. A board in the trash never loads.
+  const [restoring, setRestoring] = useState<string[] | null>(null);
+  const [restoredLine, setRestoredLine] = useState<{ text: string; title: string; at: string | null } | null>(null);
+  // Read only while a Restore waits on its boards' saves.
+  const draftEntries = useAssetStudioDraftStore((state) => (restoring ? state.entries : null));
+  if (restoring && draftEntries) {
+    const saved = restoring.map((id) => Object.values(draftEntries).find((entry) => entry.savedId === id && entry.loaded));
+    // Dirty until its save lands (a save out leaves it dirty), so clean here is saved.
+    if (saved.every((entry) => entry && !entry.dirty)) {
+      setRestoring(null);
+      setRestoredLine({ ...restoredBoardsLine(saved.map((entry) => String((entry!.draft as MoodboardDraft).name ?? ''))), at: moodboardEditorId });
+    }
+  }
+  /** A board the line named came back (its Restore, or Recently deleted's): the line names the ones left, and
+   *  either way it is confirmed once saved (GM r19 2: the two Restores match). */
+  const boardRestored = (id: string) => {
+    if (!goneEdits.trashed.some((it) => it.id === id)) return;
+    setGoneEdits((gone) => ({ ...gone, trashed: gone.trashed.filter((it) => it.id !== id) }));
+    setRestoring((batch) => (batch?.includes(id) ? batch : [...(batch ?? []), id]));
+  };
+  /** Open `id`: the board open already but not loaded as it (not found, or in Recently deleted, until a
+   *  Restore) loads again, since the same route wouldn't. */
+  const openBoard = (id: string, scope: AssetScope) => {
+    const ui = useUIStore.getState();
+    if (ui.moodboardEditorId === id && ui.moodboardEditorScope === scope) {
+      const state = useAssetStudioDraftStore.getState();
+      const entry = state.entries[resolveAssetStudioDraftKey(state, key)];
+      if (isCurrent() && entry?.savedId !== id) patch({ loaded: false, loadError: null, revision: (entry?.revision ?? revision) + 1 });
+      return;
+    }
+    enterMoodboardEditor(id, scope);
+  };
   useEffect(() => {
     let cancelled = false;
     void Promise.all(keptEditsWaiting().map((kept) => lookupStoredAsset('moodboard', kept.board).then((stored) => ({ kept, stored }), () => null)))
@@ -2082,20 +2124,24 @@ export function MoodboardStudioView() {
             purged.push({ id: it.kept.board, name: it.kept.name ?? '', scope: 'global' });
           }
         }
-        setGoneEdits((gone) => ({
-          trashed,
-          purged: [...gone.purged, ...purged.filter((board) => !gone.purged.some((shown) => shown.id === board.id))],
-        }));
+        // A board gone for good is found once (its edit is dropped below), so a re-check adds nothing and the
+        // red line stays as it was: said once.
+        setGoneEdits((gone) => ({ trashed, purged: purged.length ? [...gone.purged, ...purged] : gone.purged }));
         for (const board of purged) dropKeptEdit(board.id);
       });
     return () => { cancelled = true; };
   }, [moodboardEditorId, deleting.refreshKey]);
   /** Restore: one board comes back and opens, its edit replayed by the load; for several, Recently deleted opens. */
-  const restoreGone = async () => {
+  const restoreGone = async (keyboard: boolean) => {
     const trashed = goneEdits.trashed;
     setRestoreError(null);
     if (trashed.length !== 1) {
-      if (trashed[0]) setTrashRequest((request) => ({ n: (request?.n ?? 0) + 1, scope: trashed[0].scope }));
+      if (!trashed[0]) return;
+      // Recently deleted opens on the first board's scope, its Restore focused (the ring only from the keyboard).
+      const scope = trashed[0].scope;
+      setRestoring(trashed.map((it) => it.id));
+      setTrashRequest((request) => ({ n: (request?.n ?? 0) + 1, scope, keyboard,
+        focus: trashed.filter((it) => it.scope === scope).map((it) => it.id) }));
       return;
     }
     const [board] = trashed;
@@ -2106,15 +2152,9 @@ export function MoodboardStudioView() {
       return;
     }
     if (!mounted.current) return;
-    setGoneEdits((gone) => ({ ...gone, trashed: gone.trashed.filter((it) => it.id !== board.id) }));
+    boardRestored(board.id);
     setRailScope(board.scope);
-    const ui = useUIStore.getState();
-    if (ui.moodboardEditorId === board.id && ui.moodboardEditorScope === board.scope) {
-      // Open already, as "not found" or "in Recently deleted": load it again (the same route wouldn't).
-      if (isCurrent()) patch({ loaded: false, loadError: null, revision: (useAssetStudioDraftStore.getState().entries[key]?.revision ?? revision) + 1 });
-      return;
-    }
-    enterMoodboardEditor(board.id, board.scope);
+    openBoard(board.id, board.scope);
   };
 
   const deleteBoard = async () => {
@@ -2236,9 +2276,10 @@ export function MoodboardStudioView() {
         projectId={projectId}
         refreshKey={`${deleting.refreshKey}:${moving.moves}`}
         trashRequest={trashRequest}
+        onRestored={boardRestored}
         onSelect={(id, scope) => {
           setRailScope(scope);
-          enterMoodboardEditor(id, scope);
+          openBoard(id, scope);
         }}
         onNew={async (scope) => {
           if (!isCurrent()) return;
@@ -2286,6 +2327,11 @@ export function MoodboardStudioView() {
           <FailureLines failure={saveError} /></div>
         : <div className="moodboard-studio__notice moodboard-studio__notice--error">
           <FailureLines failure={saveError} retry={canRetry} /></div>)}
+      {/* A Restore's confirmation (round 6k, GM r19 2): before any "Kept …" line its replay gives. */}
+      {restoredLine && restoredLine.at === moodboardEditorId && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" data-restored="" role="status"
+          title={restoredLine.title}>{restoredLine.text}</div>
+      )}
       {/* The Studio's own neutral line about this board (round 6g: what a repeat kept from the board). */}
       {notice && <div className="moodboard-studio__notice moodboard-studio__notice--neutral" data-line-neutral="" role="status"
         title={typeof notice === 'string' ? undefined : notice.title}>{typeof notice === 'string' ? notice : notice.text}</div>}
@@ -2300,7 +2346,7 @@ export function MoodboardStudioView() {
             data-gone="trashed" role="status" title={line.title}>
             <span>{line.text}</span>
             <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
-              onClick={() => { void restoreGone(); }}>Restore</button>
+              onClick={(event) => { void restoreGone(event.detail === 0); }}>Restore</button>
           </div>
         );
       })()}
@@ -2309,7 +2355,15 @@ export function MoodboardStudioView() {
       )}
       {goneEdits.purged.length > 0 && (() => {
         const line = deletedBoardsLine(goneEdits.purged.map((board) => board.name), 'purged');
-        return <div className="moodboard-studio__notice moodboard-studio__notice--error" data-gone="purged" role="alert" title={line.title}>{line.text}</div>;
+        // Said once, in the status region; its edit is already gone, so only the × (GM r19 1).
+        return (
+          <div className="moodboard-studio__notice moodboard-studio__notice--error moodboard-studio__notice--action" data-gone="purged"
+            role="status" title={line.title}>
+            <span>{line.text}</span>
+            <button type="button" className="moodboard-studio__notice-close" aria-label="Dismiss"
+              onClick={() => setGoneEdits((gone) => ({ ...gone, purged: [] }))}><X aria-hidden="true" /></button>
+          </div>
+        );
       })()}
     </>
   );
@@ -2569,6 +2623,7 @@ function MoodboardRail({
   projectId,
   refreshKey,
   trashRequest,
+  onRestored,
   onSelect,
   onNew,
 }: {
@@ -2580,7 +2635,9 @@ function MoodboardRail({
   projectId: string | null;
   refreshKey?: unknown;
   /** A Studio line's Restore for several deleted boards: show this scope's Recently deleted, open (round 6j). */
-  trashRequest?: { n: number; scope: AssetScope } | null;
+  trashRequest?: (TrashOpenRequest & { scope: AssetScope }) | null;
+  /** A board came back from this rail's Recently deleted (before it opens). */
+  onRestored?: (id: string) => void;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
 }) {
@@ -2691,7 +2748,7 @@ function MoodboardRail({
         })}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
-        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} openRequest={trashRequest?.n} />
+        onRestored={(item) => { onRestored?.(item.id); onSelect(item.id, scope); }} onTrashChanged={relist} openRequest={trashRequest ?? undefined} />
     </div>
   );
 }

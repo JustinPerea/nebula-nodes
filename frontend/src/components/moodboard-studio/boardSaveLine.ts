@@ -154,16 +154,33 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
  *   "…your changes to 4 boards because they were deleted somewhere else."
  */
 export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'purged'): { text: string; title: string } {
-  const shown = names.map((name) => name.trim() || 'Untitled');
-  const one = shown.length === 1;
-  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} boards`;
+  const { one, what, title } = namedBoards(names);
   // Each form spelled out whole, as GM wrote it (and so no sentence is pieced from parts).
   const text = gone === 'trashed'
     ? (one ? `Nebula couldn’t save your change to ${what} because the board was deleted. Restore it to keep the change.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted. Restore them to keep the changes.`)
     : (one ? `Nebula couldn’t save your change to ${what} because the board was deleted somewhere else.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted somewhere else.`);
-  return { text, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
+  return { text, title };
+}
+
+/**
+ * The confirmation once the boards a deleted-board line named are restored
+ * and their kept edits saved (round 6k, GM r19 2 and 3), named by the same
+ * rule: "Restored “Dusk” and saved your change."; "Restored “Rivers” and
+ * “Harbor” and saved your changes."; "Restored 4 boards and saved your
+ * changes."
+ */
+export function restoredBoardsLine(names: readonly string[]): { text: string; title: string } {
+  const { one, what, title } = namedBoards(names);
+  return { text: one ? `Restored ${what} and saved your change.` : `Restored ${what} and saved your changes.`, title };
+}
+
+/** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name. */
+function namedBoards(names: readonly string[]): { one: boolean; what: string; title: string } {
+  const shown = names.map((name) => name.trim() || 'Untitled');
+  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} boards`;
+  return { one: shown.length === 1, what, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
 }
 
 /** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
