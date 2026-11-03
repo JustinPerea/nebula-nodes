@@ -184,6 +184,19 @@ body.app-slava-restraint .moodboard-studio__notice--neutral {
   background: var(--sr-surface-control);
 }
 
+/* Round 6j (GM r18): a line with its own action (Restore for a deleted
+   board's kept edit) keeps the button at the line's end. */
+body.app-slava-restraint .moodboard-studio__notice--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.app-slava-restraint .moodboard-studio__notice-action {
+  flex: none;
+}
+
 body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved {
   color: var(--sr-ink-light);
 }

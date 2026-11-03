@@ -82,13 +82,21 @@ export interface RecentlyDeletedAssetsProps {
   /** Something came into or left this list (often an agent's delete or
    * restore elsewhere), so the library above it should list again. */
   onTrashChanged?: () => void;
+  /** Change it to open the list (a Studio line's Restore for several boards, round 6j). */
+  openRequest?: number;
 }
 
-export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged }: RecentlyDeletedAssetsProps) {
+export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged, openRequest }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
   // Which tab and project `items` came from.
   const [itemsFor, setItemsFor] = useState('');
   const [open, setOpen] = useState(false);
+  // A request from outside opens the list: a new one, not one made before this list mounted.
+  const [seenRequest, setSeenRequest] = useState(openRequest);
+  if (openRequest !== seenRequest) {
+    setSeenRequest(openRequest);
+    if (openRequest) setOpen(true);
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);

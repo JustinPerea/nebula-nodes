@@ -1,8 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyAssetStudioEntry, useAssetStudioDraftStore, type AssetStudioDraftEntry } from '../../store/assetStudioDraftStore';
 import type { MoodboardOp } from '../../lib/moodboardEdits';
-import { isUnsavedBoardKey, keepUnsavedDrafts, keptEditOf, replayKeptFields, resetUnsavedDrafts, restoreUnsavedDrafts, takeKeptEdit,
-  unsavedWouldBeLost, type KeptEdit } from './unsavedDrafts';
+import { dropKeptEdit, isUnsavedBoardKey, keepUnsavedDrafts, keptEditOf, keptEditsWaiting, replayKeptFields, resetUnsavedDrafts,
+  restoreUnsavedDrafts, takeKeptEdit, unsavedWouldBeLost, type KeptEdit } from './unsavedDrafts';
 
 // Round 6g (GM r15 3): an unsaved board's draft lives through a reload of
 // its tab, in session storage, as the waiting sends do.
@@ -219,6 +219,35 @@ describe('a saved board\'s kept edit', () => {
     const add = addOp('i9', '/api/outputs/chat-uploads/sea.png');
     const edit = keptEditOf(g1Key, saved({ name: 'Dusk', pendingOps: [add, addOp('i8', 'blob:http://localhost/1')] }))!;
     expect(edit).toMatchObject({ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' }, fieldEditedAt: { name: 7 }, ops: [add] });
+    // The board's saved name, trimmed, to name the board if it's gone (round 6j): not the rename that never saved;
+    // the draft's when the board has none; none when both are blank.
+    expect(keptEditOf(g1Key, saved({ name: '  Dusk ' }))?.name).toBe('Global board');
+    expect(keptEditOf(g1Key, saved({ name: '  Dusk ', base: { ...base, name: '  ' } }))?.name).toBe('Dusk');
+    expect(keptEditOf(g1Key, saved({ name: '  ', notes: 'x', base: { ...base, name: ' ' } }))).not.toHaveProperty('name');
+  });
+
+  it('those an earlier page load left wait, listed for the Studio to look up; this page\'s own don\'t (round 6j)', () => {
+    const left = (board: string, extra: Record<string, unknown> = {}) => ({ board, name: board.toUpperCase(), fields: { name: 'X' }, base: {}, ops: [], at: Date.now(), ...extra });
+    window.sessionStorage.setItem(EDITS, JSON.stringify([left('g1'), left('g2'), left('g3', { name: 5 })]));
+    expect(keptEditsWaiting().map((it) => [it.board, it.name])).toEqual([['g1', 'G1'], ['g2', 'G2']]);
+    // This page writes its own for g1: that one isn't waiting.
+    set({ [g1Key]: saved({ name: 'Dusk' }) });
+    expect(keptEditsWaiting().map((it) => it.board)).toEqual(['g2']);
+    // Dropped: g2's goes; this page's own g1 stays, whoever asks.
+    dropKeptEdit('g2');
+    dropKeptEdit('g1');
+    dropKeptEdit('g9');
+    expect(edits().map((it) => it.board)).toEqual(['g1']);
+    expect(keptEditsWaiting()).toEqual([]);
+  });
+
+  it('dropping the last waiting edit clears the store, and dropping one not there writes nothing', () => {
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ board: 'g2', fields: { name: 'X' }, base: {}, ops: [], at: Date.now() }]));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    dropKeptEdit('g9');
+    expect(setItem).not.toHaveBeenCalled();
+    dropKeptEdit('g2');
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
   });
 
   it('is nothing for a clean board, a name changed only by spaces, a draft not loaded or not saved, or an unsaved key', () => {

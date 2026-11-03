@@ -632,7 +632,7 @@ Main had nothing new since 6h's merge of #217 (02b291ba), so nothing to merge.
   - A send that waited for Nebula (`takeWaitingSend`) is taken and dropped when a kept edit replays, since the kept edit holds it. Left alone, its fields would overrule the replay (a mutant showed it).
   - Cases the brief asked about:
     - Two tabs on one board: each keeps and replays only its own edit (per-tab storage). The server's version decides between them as it does live. A duplicated tab copies session storage, so both copies would replay it: the existing Duplicate Tab follow-up.
-    - Board deleted before the reload: nothing replays ("Moodboard not found" or the Recently deleted line, as before), and the edit stays for a day. Restored and opened in that tab within the day, it replays.
+    - Board deleted before the reload: nothing replays ("Moodboard not found" or the Recently deleted line, as before), and the edit stays for a day. Restored and opened in that tab within the day, it replays. (Round 6j now says so when the Studio opens, below.)
     - Every field older than the board's change: the board's values all stay, nothing is sent, and the line names them ("Kept 4 changes from the board." from four).
     - A project switch: found by board id wherever the board is opened.
   - The page asks before unload only when that storage write failed (`unsavedWouldBeLost` covers both kinds).
@@ -655,6 +655,60 @@ Main had nothing new since 6h's merge of #217 (02b291ba), so nothing to merge.
   - Two named files lost on a board not loaded: the red line, "Saved", no Retry.
   - No request left the lane. Shots: scratchpad `paste/shots6i/` (4), each opened, no md5 repeats.
 
+## Round 6j (GM r18)
+
+Merged origin/main at 062fb370 (#218, #211) with no conflicts. `broadcast_raw` now takes `others=`, so the create request-id test's broadcast stand-in takes `**_`.
+
+- **A kept edit whose board was deleted (GM r18).** Before, a board deleted before its kept edit could replay said nothing, and the edit waited a day (6i). Now it is said when the Studio opens.
+  - What is looked up: `keptEditsWaiting()` (in `unsavedDrafts.ts`) lists the kept edits an earlier page load of this tab left and this page doesn't hold. The Studio looks up each one's board (`lookupStoredAsset`, whose 404 says `in_trash` with the trash record) on mount, and again when it opens another board or a delete lands (`deleting.refreshKey`). A board that is there says nothing (its own load replays the edit), and so does one Nebula didn't answer about.
+  - In Recently deleted: the neutral line in the Studio's notice region with Restore. For one board, Restore calls the existing trash restore route (`restoreTrashed`, `POST /api/trash/moodboard/{id}/restore`). That route isn't person-gated, since a restore undoes a delete, so nothing about the gate changed. Restore then opens the board where it lives (the trash record's `projectId`), and its load takes and replays the edit by the 6g rule, with a Kept line when the board's side wins. When the board was already open (as "in Recently deleted"), the same route wouldn't reload it, so Restore bumps its revision. A restore that fails gives a red line under it ("Couldn't restore the board.", the because form from `failureCopy`), and the Restore line stays.
+  - Several boards in Recently deleted: Restore opens the rail's Recently deleted instead, on the first board's scope (`MoodboardRail`'s new `trashRequest`, `RecentlyDeletedAssets`'s new `openRequest`). A request opens the list only if made after it mounted, so a later rail remount doesn't reopen it.
+  - Gone for good (a plain 404): the red line, with no Retry or Restore. The stored edit is dropped as the line goes up (`dropKeptEdit`, which never drops this page's own). The line stays while the Studio is open and isn't said again.
+  - Names: a kept edit now records the board's saved name (`name`, trimmed; the draft's when the board has none). That is the name Recently deleted and the rail show, not a rename that never saved, so a purged board can still be named. A trashed board is named from its trash record first.
+- **The lines (`deletedBoardsLine` in `boardSaveLine.ts`).** Names are quoted, each clipped past 40 grapheme clusters as in the Kept lines, up to three joined with "and" (no serial comma), then a count. The line's `title` holds every full name. A blank name reads "Untitled".
+  - In Recently deleted:
+    - 1: "Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change."
+    - 2: "Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted. Restore them to keep the changes."
+    - 3: "Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted. Restore them to keep the changes."
+    - 4+: "Nebula couldn’t save your changes to 4 boards because they were deleted. Restore them to keep the changes."
+  - Gone for good:
+    - 1: "Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else."
+    - 2: "Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted somewhere else."
+    - 3: "Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted somewhere else."
+    - 4+: "Nebula couldn’t save your changes to 4 boards because they were deleted somewhere else."
+  - Both at once: two lines, the Restore one first, each with its own names or count.
+- **Style.** The Restore line is a flex row with its button at the end (`.moodboard-studio__notice--action`, `.moodboard-studio__notice-action`, Restraint-scoped). The button is the toolbar's button.
+- **Found while building.**
+  - The repo's hand-built-line ratchet (`tests/lib/errorCopy.namedLine.test.ts`) caught the first version, which pieced the Restore step onto the sentence from a slot. Each of the four forms is now written out whole, so it reads as GM wrote it and passes without an allow-list entry.
+  - When a deleted board is itself the one open (its route reloaded), "This board is in Recently deleted. Restore it from the list on the left." still shows above the new line. Both are true and the new line has the button, but GM may want only one.
+- **Tests.**
+  - `boardSaveLine.test.ts`, 3 new: each form from 1 to 4+ names in both kinds, the 40-character clip with full names in the title, and blank names as Untitled.
+  - `unsavedDrafts.test.ts`, 2 new and 1 extended: the saved name recorded (not the unsaved rename, the draft's as fallback, none when blank); edits waiting vs this page's own; dropping one (never this page's, nothing written when it isn't there).
+  - Paste, 11 new and 1 rewritten:
+    - In Recently deleted: the neutral line with Restore, the edit kept.
+    - Restore on the open board: the trash route, the reload, the edit replayed and sent, the line gone.
+    - Restore of a board not open: it opens where it lives.
+    - A failed restore: red, the Restore line stays.
+    - Gone for good: red with no buttons, storage cleared. The 6i "deleted before the reload" test now expects this.
+    - Mixed: two lines, neutral first, each titled.
+    - Several: Restore opens the rail's list, in a project's scope too.
+    - No answer, or the board there: nothing said, edits kept.
+    - Looked up again on a board change.
+    - This page's own edit never looked up.
+  - `AssetTrash.test.tsx`, 1 new: `openRequest` opens the list only for a request made after mount, and again for each new one.
+  - The Paste file's lookup stand-in now answers as the route does (the board when it's there), not always "missing".
+- **Mutants:** 33 on the lines, the storage, the lookup, Restore, the rail and the list (scratchpad `paste/mutate-r6j.py`), all killed. The line and name mutants were run again after their code changed.
+- **Gates:**
+  - tsc 0 (the build's `tsc -b`); lint 0.
+  - Focused vitest over 154 files (6i's 153 plus `AssetTrash.test.tsx`), two workers: 2685 of 2685.
+  - The build budget: 447,725 B raw of 512,000 (main's merge included; dist deleted).
+  - Isolated pytest over the 23 backend files 6g used (the merge, the stand-in): 947 passed.
+- **Live (8797/5797, the installed Chrome with a throwaway profile, a fresh home and token per scenario, canary first, 1440):** 28 of 28 over 3 scenarios.
+  - Trashed: a rename to "Dusk" whose PUT failed (the page's 503), with the kept edit naming "Rivers". The tab went away, the board was deleted through the route (to Recently deleted), and the Studio opened on another board. It showed the neutral line naming “Rivers” with Restore (title “Rivers”), and the edit was still stored. Restore brought the board back, opened it, and replayed and saved "Dusk"; the line was gone and storage empty.
+  - Purged: the same, then deleted for good. The red line named “Rivers” with no buttons or Retry, and storage was cleared. The next open didn't say it again.
+  - Mixed: Rivers and Harbor in Recently deleted, Sea deleted for good. The two lines showed, neutral first: "…your changes to “Rivers” and “Harbor” because they were deleted. Restore them to keep the changes." and then "…your change to “Sea” because the board was deleted somewhere else.". Restore opened the rail's Recently deleted listing both boards, and restored nothing.
+  - No request left the lane. Shots: scratchpad `paste/shots6j/` (5), each opened at 1000 px, no md5 repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -676,6 +730,7 @@ Main had nothing new since 6h's merge of #217 (02b291ba), so nothing to merge.
 - Round 6g: `unsavedDrafts.ts` (new, with a test), `MoodboardStudioView.tsx` (`createAttemptFor`, `repeatOnBoard`, `handOverDraft`, `createWaits`, the kept line, 7a), `store/assetStudioDraftStore.ts` (`createAttempts`, `fieldEditedAt`, `notice`, `handOver`), `boardSaveLine.ts` (`CREATE_ID_REFUSED_LINE`, `keptFromBoardLine`), `boardAdds.ts` (`createsWaited`, `isOpShape` exported), `lib/boardPlacement.ts` (`SeenArea`, `unionArea`), `BoardCanvas.tsx` (`seenArea`), `OutsideChip.tsx` (`seenOf`), `lib/api.ts`, and their tests; backend `services/moodboard_store.py`, `main.py`, `moodboard_client.py`, `mcp_server.py`, `cli/commands/moodboard.py`, `tests/test_moodboard_create_request_id.py`.
 - Round 6h: `boardSaveLine.ts` (`boardSaveLine`, `lostAddLine`, `isLostAddLine`, `joinWithAnd`, `keptFromBoardLine`), `MoodboardStudioView.tsx` (`failBoardSave`, the lost add's names, the load keeping its line), `store/assetStudioDraftStore.ts` (`'reload'`), and their tests.
 - Round 6i: `unsavedDrafts.ts` (`keptEditOf`, `syncEdits`, `takeKeptEdit`, `replayKeptFields`), `MoodboardStudioView.tsx` (`replayKeptEdit`, the load's replay, the lost add's chip, the notice's title), `boardSaveLine.ts` (the signed-out step, `KEPT_NAME_MAX`, the one name's value), `store/assetStudioDraftStore.ts` (`StudioNotice`), and their tests.
+- Round 6j: `boardSaveLine.ts` (`deletedBoardsLine`), `unsavedDrafts.ts` (the kept edit's `name`, `keptEditsWaiting`, `dropKeptEdit`), `MoodboardStudioView.tsx` (the lookup, the two lines, Restore, `trashRequest`), `asset-trash/AssetTrash.tsx` (`openRequest`), `styles/moodboard-studio.css` (the Restore line), and their tests; `tests/test_moodboard_create_request_id.py` (the broadcast stand-in's `**_`).
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

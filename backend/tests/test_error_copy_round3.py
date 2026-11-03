@@ -80,7 +80,7 @@ def canvas(tmp_path, monkeypatch, person):
     guard = ProviderStartGuard(tmp_path / "paid-starts.json")
     recoveries = ProviderRecoveryStore(None)
 
-    async def capture(_data):
+    async def capture(_data, **_kw):
         return None
 
     monkeypatch.setattr(main_module, "cli_graph", graph)

@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   moveStoredAsset: vi.fn(), updateMoodboard: vi.fn(), SAVE_BOARD: "Couldn't save the board.",
 }));
 const backend = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+// Recently deleted (round 6j): the restore route, and what the rail's list was asked.
+const trash = vi.hoisted(() => ({ restore: vi.fn() }));
 const board = vi.hoisted(() => ({
   point: { x: 900, y: 300 } as { x: number; y: number } | null,
   view: { x: -1000, y: -1000, width: 4000, height: 3000 } as { x: number; y: number; width: number; height: number } | null,
@@ -37,7 +39,12 @@ vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, co
 vi.mock('../WorkspaceHeader', () => ({
   WorkspaceHeader: ({ children }: { children?: ReactNode }) => <header>{children}</header>,
 }));
-vi.mock('../asset-trash/AssetTrash', () => ({ RecentlyDeletedAssets: () => null, UndoDeleteToast: () => null }));
+vi.mock('../asset-trash/AssetTrash', () => ({
+  RecentlyDeletedAssets: ({ scope, openRequest }: { scope: string; openRequest?: number }) => (
+    <div data-testid="recently-deleted" data-scope={scope} data-open-request={openRequest ?? ''} />),
+  UndoDeleteToast: () => null,
+}));
+vi.mock('../../lib/trash', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/trash')>()), restoreTrashed: trash.restore }));
 // The trash's remove: a test can make it put the board in the trash (resolve true).
 const removeAsset = vi.hoisted(() => ({ fn: null as null | ((...args: unknown[]) => Promise<unknown>) }));
 vi.mock('../../hooks/useAssetDelete', () => ({
@@ -144,7 +151,10 @@ beforeEach(() => {
   server.uploads = [];
   api.fetchMoodboard.mockImplementation(async (id: string) => (id === server.board.id ? clone(server.board) : null));
   api.fetchMoodboards.mockImplementation(async (scope: string) => (scope === 'global' ? [clone(server.board)] : []));
-  api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
+  // As GET /api/moodboards/{id} answers: the board if it's there, else not found.
+  api.lookupStoredAsset.mockImplementation(async (_kind: string, id: string) => (id === server.board.id
+    ? { status: 'ready', asset: clone(server.board) } : { status: 'missing' }));
+  trash.restore.mockReset().mockResolvedValue(undefined);
   api.updateMoodboard.mockImplementation(async (_id: string, body: Record<string, unknown>) => {
     server.puts.push(body);
     const fields = { ...body };
@@ -5112,24 +5122,191 @@ describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () =>
     expect(window.sessionStorage.getItem('nebula:moodboard-sends-waiting')).toBeNull();
   });
 
-  it('the board deleted elsewhere before the reload: nothing replays, and the edit waits a day for its board to come back', async () => {
+  it('the board deleted for good elsewhere before the reload: nothing replays; the red line names it and the edit goes (round 6j)', async () => {
     const put = api.updateMoodboard.getMockImplementation()!;
     api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
     await openStudio();
     rename('Global board', 'Dusk');
     await screen.findByText('Nebula couldn’t save the board because the server hit an error. Try again.', {}, { timeout: 3000 });
-    const kept = server.board;
-    server.board = { ...kept, id: 'gone' } as Moodboard;
+    server.board = { ...server.board, id: 'gone' } as Moodboard;
     api.updateMoodboard.mockImplementation(put);
     reloadTab();
     act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
     render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
     await screen.findByText(/Moodboard not found/);
-    expect(keptEdits()).toHaveLength(1);
-    // Restored: its next load in this tab replays it.
-    server.board = kept;
-    reloadTab();
-    await reopen('Dusk');
+    // Named as it was saved (as Recently deleted and the rail show it), not by the rename that never saved.
+    const line = await screen.findByText('Nebula couldn’t save your change to “Global board” because the board was deleted somewhere else.');
+    expect(line.getAttribute('role')).toBe('alert');
+    expect(window.sessionStorage.getItem(EDITS)).toBeNull();
+    expect(server.puts).toEqual([]);
+  });
+});
+
+describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
+  const EDITS = 'nebula:moodboard-kept-edits';
+  const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change.';
+  const PURGED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else.';
+  /** What an earlier page load of this tab left for `board`. */
+  const left = (board: string, name: string, fields: Record<string, unknown> = { notes: 'mine' }, base: Record<string, unknown> = { notes: '' }) =>
+    ({ board, name, fields, base, fieldEditedAt: Object.fromEntries(Object.keys(fields).map((field) => [field, Date.now()])), ops: [], at: Date.now() });
+  const seed = (...edits: ReturnType<typeof left>[]) => window.sessionStorage.setItem(EDITS, JSON.stringify(edits));
+  const stored = () => (JSON.parse(window.sessionStorage.getItem(EDITS) ?? '[]') as Array<{ board: string }>).map((it) => it.board);
+  const inTrash = (boards: Record<string, { name: string; projectId?: string | null }>) => {
+    const ready = api.lookupStoredAsset.getMockImplementation()!;
+    api.lookupStoredAsset.mockImplementation(async (kind: string, id: string) => (boards[id]
+      ? { status: 'trashed', trashed: { kind: 'moodboard', id, name: boards[id].name, projectId: boards[id].projectId ?? null, deletedAt: '' } }
+      : ready(kind, id)));
+  };
+
+  it('in Recently deleted: the neutral line names the board, with Restore, and the edit stays', async () => {
+    seed(left('t1', 'Old name'));
+    inTrash({ t1: { name: 'Rivers' } });
+    await openStudio();
+    const line = (await screen.findByText(TRASHED)).parentElement!;
+    expect(line.className).toContain('moodboard-studio__notice--neutral');
+    expect(line.getAttribute('role')).toBe('status');
+    expect(line.getAttribute('title')).toBe('“Rivers”');
+    expect(line.querySelector('button')?.textContent).toBe('Restore');
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(stored()).toEqual(['t1']);
+  });
+
+  it('Restore brings the board back through the trash route and opens it, the edit replayed and sent', async () => {
+    const kept = clone(server.board);
+    seed(left('g1', 'Global board', { name: 'Dusk' }, { name: 'Global board' }));
+    server.board = { ...kept, id: 'gone' } as Moodboard;
+    inTrash({ g1: { name: 'Global board' } });
+    trash.restore.mockImplementation(async () => {
+      server.board = kept;
+      api.lookupStoredAsset.mockImplementation(async () => ({ status: 'ready', asset: clone(kept) }));
+    });
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
+    await screen.findByText(/This board is in Recently deleted/);
+    const line = 'Nebula couldn’t save your change to “Global board” because the board was deleted. Restore it to keep the change.';
+    await screen.findByText(line);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await screen.findByDisplayValue('Dusk', {}, { timeout: 3000 });
+    expect(trash.restore).toHaveBeenCalledWith('moodboard', 'g1');
     await waitFor(() => expect(server.board.name).toBe('Dusk'), { timeout: 3000 });
+    expect(screen.queryByText(line)).toBeNull();
+    expect(screen.queryByText(/This board is in Recently deleted/)).toBeNull();
+    await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
+  });
+
+  it('Restore of a board that isn\'t open opens it where it lives', async () => {
+    seed(left('t1', 'Rivers'));
+    inTrash({ t1: { name: 'Rivers', projectId: 'p1' } });
+    await openStudio();
+    await screen.findByText(TRASHED);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(useUIStore.getState()).toMatchObject({ moodboardEditorId: 't1', moodboardEditorScope: 'project' }));
+    expect(trash.restore).toHaveBeenCalledWith('moodboard', 't1');
+  });
+
+  it('a restore that fails says so in red; the Restore line stays', async () => {
+    seed(left('t1', 'Rivers'));
+    inTrash({ t1: { name: 'Rivers' } });
+    trash.restore.mockRejectedValue(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    await openStudio();
+    await screen.findByText(TRASHED);
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    const failed = await screen.findByText(/restore the board/i);
+    expect(failed.closest('[role="alert"]')).not.toBeNull();
+    expect(screen.getByText(TRASHED)).toBeTruthy();
+    expect(useUIStore.getState().moodboardEditorId).toBe('g1');
+  });
+
+  it('gone for good: the red line with no Retry or Restore, and the stored edit is cleared', async () => {
+    seed(left('t1', 'Rivers'));
+    await openStudio();
+    const line = await screen.findByText(PURGED);
+    expect(line.className).toContain('moodboard-studio__notice--error');
+    expect(line.getAttribute('role')).toBe('alert');
+    expect(line.getAttribute('title')).toBe('“Rivers”');
+    expect(line.querySelector('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
+  });
+
+  it('trashed and purged together: two lines, the Restore one first, each with its own names', async () => {
+    seed(left('t1', 'Rivers'), left('t2', 'Dusk'), left('t3', 'Sea'), left('t4', 'Moss'));
+    inTrash({ t1: { name: 'Rivers' }, t2: { name: 'Dusk' } });
+    await openStudio();
+    const restoreLine = (await screen.findByText('Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted. '
+      + 'Restore them to keep the changes.')).parentElement!;
+    const goneLine = await screen.findByText('Nebula couldn’t save your changes to “Sea” and “Moss” because they were deleted somewhere else.');
+    expect(restoreLine.compareDocumentPosition(goneLine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(goneLine.getAttribute('title')).toBe('“Sea” and “Moss”');
+    await waitFor(() => expect(stored()).toEqual(['t1', 't2']));
+  });
+
+  it('several in Recently deleted: Restore opens the list in the rail instead', async () => {
+    seed(left('t1', 'A'), left('t2', 'B'), left('t3', 'C'), left('t4', 'D'));
+    inTrash({ t1: { name: 'Rivers' }, t2: { name: 'Dusk' }, t3: { name: 'Sea' }, t4: { name: 'Moss' } });
+    await openStudio();
+    const line = (await screen.findByText('Nebula couldn’t save your changes to 4 boards because they were deleted. Restore them to keep the changes.')).parentElement!;
+    expect(line.getAttribute('title')).toBe('“Rivers”, “Dusk”, “Sea” and “Moss”');
+    expect(screen.getByTestId('recently-deleted').getAttribute('data-open-request')).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(screen.getByTestId('recently-deleted').getAttribute('data-open-request')).toBe('1'));
+    expect(screen.getByTestId('recently-deleted').getAttribute('data-scope')).toBe('global');
+    expect(trash.restore).not.toHaveBeenCalled();
+  });
+
+  it('several in Recently deleted, in a project: the rail shows that project\'s list', async () => {
+    seed(left('t1', 'A'), left('t2', 'B'));
+    inTrash({ t1: { name: 'Rivers', projectId: 'p1' }, t2: { name: 'Dusk', projectId: 'p1' } });
+    await openStudio();
+    await screen.findByText(/to “Rivers” and “Dusk” because they were deleted/);
+    expect(screen.getByTestId('recently-deleted').getAttribute('data-scope')).toBe('global');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(screen.getByTestId('recently-deleted').getAttribute('data-scope')).toBe('project'));
+    expect(screen.getByTestId('recently-deleted').getAttribute('data-open-request')).toBe('1');
+  });
+
+  it('says nothing for a board Nebula didn\'t answer about, or one that is there, and keeps their edits', async () => {
+    seed(left('t1', 'Rivers'), left('t9', 'Elsewhere'));
+    const ready = api.lookupStoredAsset.getMockImplementation()!;
+    api.lookupStoredAsset.mockImplementation(async (kind: string, id: string) => {
+      if (id === 't1') throw new ConnectionLostError(new TypeError('Failed to fetch'));
+      if (id === 't9') return { status: 'ready', asset: { ...clone(server.board), id: 't9' } };
+      return ready(kind, id);
+    });
+    await openStudio();
+    await waitFor(() => expect(api.lookupStoredAsset).toHaveBeenCalledWith('moodboard', 't9'));
+    await new Promise((done) => setTimeout(done, 100));
+    expect(screen.queryByText(/because the board was deleted|because they were deleted/)).toBeNull();
+    expect(stored()).toEqual(['t1', 't9']);
+  });
+
+  it('looks again when the Studio opens another board: a board deleted meanwhile gets its line, and one restored loses it', async () => {
+    seed(left('t1', 'Rivers'));
+    const there = async (_kind: string, id: string) => (id === 't1' || id === 'g1'
+      ? { status: 'ready', asset: { ...clone(server.board), id } } : { status: 'missing' });
+    api.lookupStoredAsset.mockImplementation(there);
+    await openStudio();
+    await waitFor(() => expect(api.lookupStoredAsset).toHaveBeenCalledWith('moodboard', 't1'));
+    // Deleted elsewhere after the Studio looked: said on the next board change.
+    inTrash({ t1: { name: 'Rivers' } });
+    act(() => { useUIStore.getState().enterMoodboardEditor('t7', 'global'); });
+    await screen.findByText(TRASHED);
+    // Restored from somewhere else: the next look finds it there, and the line goes.
+    api.lookupStoredAsset.mockImplementation(there);
+    act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
+    await waitFor(() => expect(screen.queryByText(TRASHED)).toBeNull());
+    expect(stored()).toEqual(['t1']);
+  });
+
+  it('this page\'s own kept edit isn\'t looked up', async () => {
+    api.updateMoodboard.mockRejectedValue(new RequestFailedError("Couldn't save the board.", 500, { detail: 'boom' }));
+    await openStudio();
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Dusk' } });
+    await waitFor(() => expect(stored()).toEqual(['g1']), { timeout: 3000 });
+    api.lookupStoredAsset.mockClear();
+    act(() => { useUIStore.getState().enterMoodboardEditor('t5', 'global'); });
+    await new Promise((done) => setTimeout(done, 100));
+    expect(api.lookupStoredAsset).not.toHaveBeenCalledWith('moodboard', 'g1');
   });
 });

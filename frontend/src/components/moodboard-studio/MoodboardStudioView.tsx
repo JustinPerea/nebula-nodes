@@ -15,12 +15,13 @@ import {
 import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
-import { failureCopy, failureMessage, isBackendUnreachable } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
 import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { useBackendOffline } from '../../lib/useBackendOffline';
 import { placeholderLabel } from './boardPlaceholder';
-import { boardSaveLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
-import { keepUnsavedDrafts, replayKeptFields, takeKeptEdit, type KeptEdit } from './unsavedDrafts';
+import { boardSaveLine, deletedBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine, keptFromBoardLine, lostAddLine } from './boardSaveLine';
+import { dropKeptEdit, keepUnsavedDrafts, keptEditsWaiting, replayKeptFields, takeKeptEdit, type KeptEdit } from './unsavedDrafts';
+import { restoreTrashed } from '../../lib/trash';
 import { FailureLines } from '../failure/FailureLines';
 import { storedImageView } from '../../lib/storedImage';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -397,6 +398,9 @@ function unsentOf(draft: MoodboardDraft, fields: Partial<Record<BoardFieldKey, u
  * holds already went (a save that landed before the reload); a remove keeps
  * only the images still there; rebaseDraft drops an op on an image that's gone.
  */
+/** A board a kept edit was for, deleted before the edit could replay (round 6j). */
+interface GoneBoard { id: string; name: string; scope: AssetScope }
+
 function replayKeptEdit(board: Moodboard, kept: KeptEdit): { draft: MoodboardDraft; kept: BoardFieldKey[] } {
   const fields = boardFieldsOf(board);
   const replay = replayKeptFields(kept, fields, Date.parse(board.updatedAt ?? '') || 0);
@@ -2053,6 +2057,66 @@ export function MoodboardStudioView() {
       && (now.id === route.id || (savedId !== null && now.id === savedId));
   };
   const deleting = useAssetDelete('moodboard');
+
+  // Kept edits whose boards were deleted before they could replay (round 6j,
+  // GM r18): looked up when the Studio opens, and again after a board
+  // changes or a delete. One in Recently deleted gets the neutral line with
+  // Restore; one gone for good gets the red line, and its edit is dropped
+  // once that line is up (nothing could replay it).
+  const [goneEdits, setGoneEdits] = useState<{ trashed: GoneBoard[]; purged: GoneBoard[] }>({ trashed: [], purged: [] });
+  const [restoreError, setRestoreError] = useState<FailureCopy | null>(null);
+  const [trashRequest, setTrashRequest] = useState<{ n: number; scope: AssetScope } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(keptEditsWaiting().map((kept) => lookupStoredAsset('moodboard', kept.board).then((stored) => ({ kept, stored }), () => null)))
+      .then((found) => {
+        if (cancelled || !mounted.current) return;
+        const trashed: GoneBoard[] = [];
+        const purged: GoneBoard[] = [];
+        for (const it of found) {
+          if (!it) continue; // Nebula didn't answer: say nothing yet
+          if (it.stored.status === 'trashed') {
+            const item = it.stored.trashed;
+            trashed.push({ id: it.kept.board, name: item.name || it.kept.name || '', scope: item.projectId ? 'project' : 'global' });
+          } else if (it.stored.status === 'missing') {
+            purged.push({ id: it.kept.board, name: it.kept.name ?? '', scope: 'global' });
+          }
+        }
+        setGoneEdits((gone) => ({
+          trashed,
+          purged: [...gone.purged, ...purged.filter((board) => !gone.purged.some((shown) => shown.id === board.id))],
+        }));
+        for (const board of purged) dropKeptEdit(board.id);
+      });
+    return () => { cancelled = true; };
+  }, [moodboardEditorId, deleting.refreshKey]);
+  /** Restore: one board comes back and opens, its edit replayed by the load; for several, Recently deleted opens. */
+  const restoreGone = async () => {
+    const trashed = goneEdits.trashed;
+    setRestoreError(null);
+    if (trashed.length !== 1) {
+      if (trashed[0]) setTrashRequest((request) => ({ n: (request?.n ?? 0) + 1, scope: trashed[0].scope }));
+      return;
+    }
+    const [board] = trashed;
+    try {
+      await restoreTrashed('moodboard', board.id);
+    } catch (err) {
+      if (mounted.current) setRestoreError(failureCopy(err, { heading: "Couldn't restore the board." }));
+      return;
+    }
+    if (!mounted.current) return;
+    setGoneEdits((gone) => ({ ...gone, trashed: gone.trashed.filter((it) => it.id !== board.id) }));
+    setRailScope(board.scope);
+    const ui = useUIStore.getState();
+    if (ui.moodboardEditorId === board.id && ui.moodboardEditorScope === board.scope) {
+      // Open already, as "not found" or "in Recently deleted": load it again (the same route wouldn't).
+      if (isCurrent()) patch({ loaded: false, loadError: null, revision: (useAssetStudioDraftStore.getState().entries[key]?.revision ?? revision) + 1 });
+      return;
+    }
+    enterMoodboardEditor(board.id, board.scope);
+  };
+
   const deleteBoard = async () => {
     if (!savedId || !isCurrent()) return;
     const scope = moodboardEditorScope;
@@ -2171,6 +2235,7 @@ export function MoodboardStudioView() {
         boardHome={boardHome}
         projectId={projectId}
         refreshKey={`${deleting.refreshKey}:${moving.moves}`}
+        trashRequest={trashRequest}
         onSelect={(id, scope) => {
           setRailScope(scope);
           enterMoodboardEditor(id, scope);
@@ -2227,6 +2292,25 @@ export function MoodboardStudioView() {
       {moving.error && (
         <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={moving.error} /></div>
       )}
+      {/* Kept edits whose boards were deleted (round 6j): the Restore line first, then the gone-for-good one. */}
+      {goneEdits.trashed.length > 0 && (() => {
+        const line = deletedBoardsLine(goneEdits.trashed.map((board) => board.name), 'trashed');
+        return (
+          <div className="moodboard-studio__notice moodboard-studio__notice--neutral moodboard-studio__notice--action" data-line-neutral=""
+            data-gone="trashed" role="status" title={line.title}>
+            <span>{line.text}</span>
+            <button type="button" className="moodboard-studio-toolbar__button moodboard-studio__notice-action"
+              onClick={() => { void restoreGone(); }}>Restore</button>
+          </div>
+        );
+      })()}
+      {restoreError && (
+        <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert"><FailureLines failure={restoreError} /></div>
+      )}
+      {goneEdits.purged.length > 0 && (() => {
+        const line = deletedBoardsLine(goneEdits.purged.map((board) => board.name), 'purged');
+        return <div className="moodboard-studio__notice moodboard-studio__notice--error" data-gone="purged" role="alert" title={line.title}>{line.text}</div>;
+      })()}
     </>
   );
 
@@ -2484,6 +2568,7 @@ function MoodboardRail({
   boardHome,
   projectId,
   refreshKey,
+  trashRequest,
   onSelect,
   onNew,
 }: {
@@ -2494,10 +2579,18 @@ function MoodboardRail({
   /** The canvas project open now (null: none), whose boards the Project tab lists. */
   projectId: string | null;
   refreshKey?: unknown;
+  /** A Studio line's Restore for several deleted boards: show this scope's Recently deleted, open (round 6j). */
+  trashRequest?: { n: number; scope: AssetScope } | null;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
 }) {
   const [scope, setScope] = useState<AssetScope>(initialScope);
+  // A new request (not one made before this rail mounted) switches to its scope.
+  const [seenRequest, setSeenRequest] = useState(trashRequest?.n ?? 0);
+  if (trashRequest && trashRequest.n !== seenRequest) {
+    setSeenRequest(trashRequest.n);
+    setScope(trashRequest.scope);
+  }
   // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
   const [relistKey, setRelistKey] = useState(0);
   const relist = useCallback(() => setRelistKey((value) => value + 1), []);
@@ -2598,7 +2691,7 @@ function MoodboardRail({
         })}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
-        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
+        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} openRequest={trashRequest?.n} />
     </div>
   );
 }

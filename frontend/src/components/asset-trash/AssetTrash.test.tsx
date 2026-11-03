@@ -60,6 +60,22 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByText('Image link from outside Nebula')).toBeTruthy();
   });
 
+  it('opens when asked from outside (a Studio line\'s Restore, round 6j), but not for a request made before it mounted', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={3} />);
+    const toggle = await screen.findByRole('button', { name: /Recently deleted/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={4} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+    // Closed by the person, it stays closed until the next request.
+    fireEvent.click(toggle);
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={4} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="global" openRequest={5} />);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('stays hidden while nothing is in the trash', async () => {
     trash.fetchTrash.mockResolvedValue([]);
     const { container } = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);

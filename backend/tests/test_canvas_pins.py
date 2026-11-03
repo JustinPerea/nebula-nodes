@@ -707,7 +707,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     capture = main_module.manager.broadcast_raw
 
     async def pin_mid_switch(data, **kw):
-        await capture(data)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
             added["at"] = store.read()["activeProjectId"]
             # The pin route itself, as a request landing at this await would run it.
@@ -750,7 +750,7 @@ def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, 
         first_id = first.json()["pin"]["id"]
 
     async def switch_and_pin(data, **kw):
-        await capture(data)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
         if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
             done["pin"] = None
             # The person opens the other project while this route awaits its

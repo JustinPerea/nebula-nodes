@@ -30,7 +30,7 @@ def api(tmp_path, monkeypatch, canvas_project):
     presence = AgentPresence()
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     async def ignore(data):

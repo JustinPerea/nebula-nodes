@@ -195,6 +195,9 @@ export function resetUnsavedDrafts(): void {
  */
 export interface KeptEdit {
   board: string;
+  /** The board's saved name (the draft's when it has none), to name the board if it's gone when the edit would replay (round 6j):
+   *  the name Recently deleted and the rail show, not a rename that never saved. */
+  name?: string;
   fields: Record<string, unknown>;
   base: Record<string, unknown>;
   fieldEditedAt?: Record<string, number>;
@@ -226,7 +229,9 @@ export function keptEditOf(key: string, entry: AssetStudioDraftEntry | undefined
   }
   const ops = (draft.pendingOps ?? []).filter((op) => op.op !== 'add' || op.images.every((image) => storableUrl(image.url)));
   if (!ops.length && !Object.keys(fields).length) return null;
-  return { board: entry.savedId, fields, base: from, fieldEditedAt: entry.fieldEditedAt, ops, at: Date.now() };
+  const nameOf = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+  const name = nameOf(base.name) || nameOf(draft.name);
+  return { board: entry.savedId, ...(name ? { name } : {}), fields, base: from, fieldEditedAt: entry.fieldEditedAt, ops, at: Date.now() };
 }
 
 function readEdits(): KeptEdit[] {
@@ -235,6 +240,7 @@ function readEdits(): KeptEdit[] {
     if (!Array.isArray(parsed)) return [];
     const now = Date.now();
     return parsed.filter((it): it is KeptEdit => isRecord(it) && typeof it.board === 'string' && isRecord(it.fields) && isRecord(it.base)
+      && (it.name === undefined || typeof it.name === 'string')
       && Object.keys(it.fields).every((field) => (BOARD_FIELD_KEYS as readonly string[]).includes(field))
       && (it.fieldEditedAt === undefined || (isRecord(it.fieldEditedAt) && Object.values(it.fieldEditedAt).every((at) => typeof at === 'number')))
       && Array.isArray(it.ops) && it.ops.every(isOpShape)
@@ -282,6 +288,21 @@ function syncEdits(entries: Record<string, AssetStudioDraftEntry>): void {
   // from an earlier page load stays until its board loads and takes it.
   const others = readEdits().filter((it) => !ours.has(it.board) && !held.has(it.board) && !loaded.has(it.board));
   writeEdits([...others, ...mine]);
+}
+
+/** The kept edits earlier page loads of this tab left that this page doesn't hold: each waits for its board's load (round 6j: the Studio
+ *  looks up their boards when it opens, to say so when one was deleted). */
+export function keptEditsWaiting(): KeptEdit[] {
+  const held = new Set([...writtenEdits.values()].map((it) => it.board));
+  return readEdits().filter((it) => !held.has(it.board));
+}
+
+/** Forget the kept edit for `board` an earlier page load left (its board is gone for good, and the person has been told). */
+export function dropKeptEdit(board: string): void {
+  if ([...writtenEdits.values()].some((it) => it.board === board)) return;
+  const list = readEdits();
+  const left = list.filter((it) => it.board !== board);
+  if (left.length !== list.length) writeEdits(left);
 }
 
 /** The kept edit an earlier page load of this tab left for `board`, taken once (null if none, or if this page holds the board's edit itself). */

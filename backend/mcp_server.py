@@ -23,6 +23,7 @@ from nebula_api import (NebulaAPI, NebulaAPIError, dropped_mid_request, error_de
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import universal_ports as _universal_ports
+from services.cursor_actions import ACTIONS as _CURSOR_ACTIONS, refusal as _cursor_action_refusal, session_ok
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -355,12 +356,27 @@ def _agent_name(client: str) -> str:
 # two sessions of one agent (two Codex lanes) never share one (fix round 9,
 # M-2; services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
 _AGENT_SESSION = os.environ.get("NEBULA_AGENT_SESSION") or secrets.token_hex(8)
+# A NEBULA_AGENT_SESSION the backend ignores for the cursor counts as unset
+# there (review 2, NIT-1): this process's own cursor, through the cursor-only
+# header. _AGENT_SESSION is still sent as given, so scene reads are unchanged.
+def _own_cursor_session(agent_session: str) -> str | None:
+    return None if session_ok(agent_session) else secrets.token_hex(8)
+
+
+_CURSOR_SESSION = _own_cursor_session(_AGENT_SESSION)
+
+
+def _session_headers() -> dict[str, str]:
+    headers = {"X-Nebula-Agent-Session": _AGENT_SESSION}
+    if _CURSOR_SESSION:
+        headers["X-Nebula-Cursor-Session"] = _CURSOR_SESSION
+    return headers
 
 
 def _agent_headers(ctx: Context | None) -> dict[str, str]:
     """Who this agent is on the canvas (its cursor name) and this session;
     nebula_api adds the token."""
-    return {"X-Nebula-Agent": _cursor_name(ctx), "X-Nebula-Agent-Session": _AGENT_SESSION}
+    return {"X-Nebula-Agent": _cursor_name(ctx), **_session_headers()}
 
 
 def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 10.0, **kwargs: Any) -> dict[str, Any]:
@@ -579,6 +595,26 @@ def point_at(
     explaining, or to show what you are about to change. What you noticed, a
     report or a suggestion goes in post_note, which the person reads in the
     Updates list, not at your cursor.
+
+    `action`, what you are doing there:
+    - `move`: going there, no gesture;
+    - `look`: reading or checking something;
+    - `think`: working something out at that spot;
+    - `type`: writing a prompt or changing a field;
+    - `click`: pressing something;
+    - `drag`: connecting, with `from_node_id`/`from_port`;
+    - `run`: starting a run;
+    - `propose`: you proposed a change and wait for the person's OK;
+    - `wait`: you asked the person something and wait for the answer;
+    - `error`: something you tried failed.
+    Graph edits through Nebula's API pick their own action. Any other value
+    is refused.
+
+    Each of your sessions (each MCP server process) has its own cursor on the
+    person's canvas: a second one shows as "<name> · 2". Set
+    NEBULA_AGENT_SESSION to choose the id yourself. Subagents that share this
+    server share its cursor; to give each lane its own, have each use the
+    CLI with its own NEBULA_AGENT_SESSION.
     """
     def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any] | None:
         if node:
@@ -587,6 +623,8 @@ def point_at(
             return {"x": px, "y": py}
         return None
 
+    if not isinstance(action, str) or action not in _CURSOR_ACTIONS:
+        raise ValueError(f"point_at: {_cursor_action_refusal(action)}")
     if not node_id and (x is None) != (y is None):
         raise ValueError(f"point_at needs node_id, or x and y (both): you gave only {'x' if y is None else 'y'}")
     target = anchor(node_id, port, x, y)
@@ -2918,7 +2956,7 @@ CHANNEL_CAPABILITY = "claude/channel"
 async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
     """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
     url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
-    headers = with_identity({"X-Nebula-Agent": agent, "X-Nebula-Agent-Session": _AGENT_SESSION})
+    headers = with_identity({"X-Nebula-Agent": agent, **_session_headers()})
     async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
         try:
             response = await client.get(f"{url}{path}", params=params, headers=headers)

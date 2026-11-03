@@ -39,6 +39,17 @@ export interface ProjectSwitch {
   created?: boolean;
 }
 
+export { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from './agentPresenceActions';
+
+/** Which session of its agent a cursor is: an opaque key the backend derives
+ * (never the agent's own id) and its number, the lowest free among the
+ * agent's live sessions, held until its cursor leaves. The backend is the one
+ * place that numbers, so every tab agrees ("Claude · 2"). Display only. */
+export interface AgentPresenceSession {
+  key: string;
+  ordinal: number;
+}
+
 export interface AgentPresenceEvent {
   type: 'agentPresence';
   agent: { id: string; name: string; color: string; verified: boolean };
@@ -46,7 +57,8 @@ export interface AgentPresenceEvent {
    * the Agent log lists it (agentLogStore) and no cursor moves. */
   target?: AgentCursorAnchor;
   from?: AgentCursorAnchor;
-  action: 'move' | 'click' | 'drag' | 'look';
+  /** One of AGENT_CURSOR_ACTIONS; anything else is read as 'move' (forward compatible). */
+  action: string;
   say: string;
   /** The Agent log's words when they differ from the bubble's (GM - Design,
    * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
@@ -63,6 +75,23 @@ export interface AgentPresenceEvent {
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
   did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
+  /** Person tabs only: which session of this agent and its number (display
+   * only). Every cursor event a person tab gets carries it, the agent's plain
+   * cursor's too; the agents' form never does. */
+  session?: AgentPresenceSession;
+  /** Person tabs only: backend wall-clock ms when this cursor came to where
+   * it is (a move to the same node, or a nudge, keeps it). Columns stack by
+   * it, so every tab, before and after a reload, draws the same cursors in
+   * full (GM - Design, PR #211 r21). */
+  since?: number;
+}
+
+/** Person tabs only, right after a verified hello: every live cursor, so a
+ * tab that connects mid-session shows the same cursors and numbers as the
+ * others (GM - Design, PR #211 r3). Each is drawn where it is, no flight. */
+export interface AgentPresenceReplayEvent {
+  type: 'agentPresenceReplay';
+  cursors: (AgentPresenceEvent & { replay?: boolean; secondsAgo?: number })[];
 }
 
 /** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
@@ -120,6 +149,13 @@ export interface Pin {
  *  Moodboard Studio, the Assets panel). */
 export interface SocketReconnectedEvent {
   type: 'socketReconnected';
+}
+
+/** Said by this client, never the backend: the server refused this socket's
+ *  hello (its `personRequired` frame), so it gets the agents' form from now
+ *  on. Person-only state the tab drew (numbered cursors) goes. */
+export interface SocketDemotedEvent {
+  type: 'socketDemoted';
 }
 
 /** A saved moodboard, character or Style changed (backend main.py
@@ -339,6 +375,8 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | AgentPresenceReplayEvent
+  | SocketDemotedEvent
   | AgentStatusEvent
   | AgentRunEvent
   | CanvasPinsEvent
@@ -386,6 +424,10 @@ class WebSocketClient {
     void personTokenForSocket(url).then((personToken) => {
       if (!personToken) {
         reportPersonRequired();
+        // No hello, so this socket gets the agents' form: numbered cursors
+        // from before (a token forgotten after a second 401) leave, as on a
+        // refused hello (GM - Design, PR #211 review 4, item 4).
+        if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
         return;
       }
       if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
@@ -446,6 +488,7 @@ class WebSocketClient {
               // The server refused this socket's hello: demoted (GM r29 item 3).
               if (this.promoted === socket) this.promoted = null;
               reportPersonRequired();
+              if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
               return;
             }
             // GM r29 item 3: the person-only proposalSync comes on promote

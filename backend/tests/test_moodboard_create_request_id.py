@@ -45,7 +45,7 @@ def told(tmp_path, monkeypatch):
     monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
     calls: dict[str, list] = {"broadcast": [], "said": []}
 
-    async def ignore(data):
+    async def ignore(data, **_):
         return None
 
     async def broadcast(kind, board, *_, **__):

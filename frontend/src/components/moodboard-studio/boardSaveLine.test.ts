@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
-import { boardSaveCause, boardSaveFailure, boardSaveLine, isBoardNotSavedLine, isCreateIdRefusal, joinWithAnd, keptFromBoardLine,
-  lostAddLine } from './boardSaveLine';
+import { boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, joinWithAnd,
+  keptFromBoardLine, lostAddLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
   new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
@@ -135,6 +135,41 @@ describe('the red line for a truly lost add (GM r16 7a)', () => {
     expect(lostAddLine(['a.png', 'b.png', 'c.png', 'd.png']).reason)
       .toBe('Nebula couldn’t add 4 images because the board hadn’t loaded. Add them again.');
     expect(lostAddLine([]).reason).toBe('Nebula couldn’t add the image because the board hadn’t loaded. Add it again.');
+  });
+});
+
+describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
+  it('in Recently deleted: one board by name, then up to three joined with "and", then a count', () => {
+    expect(deletedBoardsLine(['Rivers'], 'trashed')).toEqual({
+      text: 'Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change.', title: '“Rivers”' });
+    expect(deletedBoardsLine(['Rivers', 'Dusk'], 'trashed').text)
+      .toBe('Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted. Restore them to keep the changes.');
+    expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'trashed').text)
+      .toBe('Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted. Restore them to keep the changes.');
+    expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea', 'Moss'], 'trashed')).toEqual({
+      text: 'Nebula couldn’t save your changes to 4 boards because they were deleted. Restore them to keep the changes.',
+      title: '“Rivers”, “Dusk”, “Sea” and “Moss”' });
+  });
+
+  it('gone for good: the same names, deleted somewhere else, with no step', () => {
+    expect(deletedBoardsLine(['Rivers'], 'purged').text).toBe('Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else.');
+    expect(deletedBoardsLine(['Rivers', 'Dusk'], 'purged').text)
+      .toBe('Nebula couldn’t save your changes to “Rivers” and “Dusk” because they were deleted somewhere else.');
+    expect(deletedBoardsLine(['Rivers', 'Dusk', 'Sea'], 'purged').text)
+      .toBe('Nebula couldn’t save your changes to “Rivers”, “Dusk” and “Sea” because they were deleted somewhere else.');
+    expect(deletedBoardsLine(['a', 'b', 'c', 'd', 'e'], 'purged').text)
+      .toBe('Nebula couldn’t save your changes to 5 boards because they were deleted somewhere else.');
+  });
+
+  it('clips each name past 40 characters with the full names in the title; a blank name is Untitled', () => {
+    const long = 'An exceptionally long board name that keeps going well past forty';
+    const line = deletedBoardsLine([`  ${long} `, 'Dusk'], 'trashed');
+    expect(line.text).toBe(`Nebula couldn’t save your changes to “${long.slice(0, 39)}…” and “Dusk” because they were deleted. Restore them to keep the changes.`);
+    expect(line.title).toBe(`“${long}” and “Dusk”`);
+    const forty = 'x'.repeat(40);
+    expect(deletedBoardsLine([forty], 'purged').text).toBe(`Nebula couldn’t save your change to “${forty}” because the board was deleted somewhere else.`);
+    expect(deletedBoardsLine(['  '], 'purged')).toEqual({
+      text: 'Nebula couldn’t save your change to “Untitled” because the board was deleted somewhere else.', title: '“Untitled”' });
   });
 });
 

@@ -140,6 +140,32 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
   sendNotes: 'notes setting', analysis: 'analysis',
 };
 
+/**
+ * The line for kept edits whose boards were deleted before they could
+ * replay (round 6j, GM r18), named as the Kept lines are: up to three
+ * names, each clipped past KEPT_NAME_MAX, joined with "and", then a count;
+ * the title holds every full name.
+ * - In Recently deleted (neutral, with Restore): "Nebula couldn’t save your
+ *   change to “Rivers” because the board was deleted. Restore it to keep
+ *   the change."; for several, "Nebula couldn’t save your changes to “A”
+ *   and “B” because they were deleted. Restore them to keep the changes."
+ * - Gone for good (red, no Retry): "Nebula couldn’t save your change to
+ *   “Rivers” because the board was deleted somewhere else."; for several,
+ *   "…your changes to 4 boards because they were deleted somewhere else."
+ */
+export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'purged'): { text: string; title: string } {
+  const shown = names.map((name) => name.trim() || 'Untitled');
+  const one = shown.length === 1;
+  const what = shown.length <= MOST_NAMED ? joinWithAnd(shown.map((name) => `“${clipGraphemes(name, KEPT_NAME_MAX)}”`)) : `${shown.length} boards`;
+  // Each form spelled out whole, as GM wrote it (and so no sentence is pieced from parts).
+  const text = gone === 'trashed'
+    ? (one ? `Nebula couldn’t save your change to ${what} because the board was deleted. Restore it to keep the change.`
+      : `Nebula couldn’t save your changes to ${what} because they were deleted. Restore them to keep the changes.`)
+    : (one ? `Nebula couldn’t save your change to ${what} because the board was deleted somewhere else.`
+      : `Nebula couldn’t save your changes to ${what} because they were deleted somewhere else.`);
+  return { text, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
+}
+
 /** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
 export const KEPT_NAME_MAX = 40;
 
