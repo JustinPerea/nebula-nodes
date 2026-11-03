@@ -444,3 +444,38 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 | 10b | The card withdrawn: the log reopened at 250–430. |
 | 11, no card | The two notices (222–322) above a floating log at 330. |
 | 08, 09 frames 1–3 | Gives way 330 → 355, grows back 351 → 334 → 330, the bottom at 510 in every frame. |
+
+## Round 3g (GM - Design's r9, 2026-11-03)
+
+Merged origin/main (062fb370, #218 and #211) first, staged with `--no-commit`. One conflict, `backend/services/canvas_proposals.py`: both sides added a field to `Proposal` (this branch's `wires` / `removed_edges`, #211's `presence_session`); both kept.
+
+**Placement by a floating log in the card's column (GM r9), the log never moving:**
+1. **Beside it**, when one side of it has at least 400 px (r1's rule). The docked log's test and the floating log's are now one function, `besideRoom(m, left, rightClear)`: the docked log clears the region's right edge; a floating one clears its right edge (the card on the log's left) or its left edge (on its right). The more room wins. `placeNoticeStack` returns `float: 'left' | 'right'` and `inset` (the region's two sides), and `applyNoticeStack` writes them on the region inline; with no inset it takes its CSS sides again. Beside the log, the log gives nothing.
+2. **Else a side of it, under or above**, as round 3e built it: under it when the card fits there (the log gives nothing), else above with the log's give, else the side with more room. `float: 'under' | 'above'`.
+3. **Else a named shortfall**: step 5 on that side, the plan line first, the ⚠ line next behind the fade.
+
+**Where the collapse orders, and why:** after 1 and inside 2. Beside the log needs nothing from it, so it's tried first. The log is held at its bottom edge, so its give and collapse only ever free room above it; they count toward the "above" side in step 2, and come before step 3 wherever they help.
+
+**The measure reads the column as it is with no inset.** Being beside the log moves the card; read from the moved card, the log would no longer be "in the column", the stack would move back, and so on. So `measureNoticeStack` lifts the region's inline sides for its read (the region's sides have no transition), reads the region and the card's width there, and puts them back. The column is the card's width centred in that region.
+
+**Moves glide.** `stepChanged` now counts a change of side and of the inset (the log dragged, the window resized), so the stack glides from where it was; `glideStack` now moves sideways too (`translate(dx, dy)`; `layoutBox` takes a translate's x and a scale's width out). Live: resizing 1024 → 800 took the card from beside the log (left 413) to under it (left 127) through 183 distinct frames, with no step over 30 px.
+
+**The grid.** The round 3f grid's floating log was as wide as the card's column (598 px at 768 and 1024), which no default log is: its own width is `--col-right-w`, clamp(340px, 26vw, 460px). The grid now has both: `floating` (its own width, its left edge at the column's, where the person left it) and `floating wide` (resized to the column, round 3f's). 504 cells.
+- **Round 3f's 71 cells, with the log at its own width:** step 1 resolves 18 (every 1024×640 cell: 595 px on the log's right), step 2 resolves 0, and **53 remain**, listed by name with numbers in `EXPECTED_SHORT`: 420×560 (18), 420×640 (17), 768×600 (18). At 420 the log is the column's whole width; at 768 there are 339 px beside it; and above or under it there's no room for the card either (768×600: 151 under, 158 above with its give, against 186 for the card alone).
+- **With the log resized to the column:** 0, 0, 71. Nothing is ever beside it.
+- The test pins both counts and checks that the remaining list is exactly the `floating` cells in `EXPECTED_SHORT`.
+
+**Checks (round 3g).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, the round 3f list: 162 files, 3314 passed.
+- Isolated pytest after the merge (the conflict was in `canvas_proposals.py`): the proposal, plan-line, universal-ports, copy, MCP, CLI and node-route tests plus #211's four agent-cursor files, 1297 passed.
+- Entry: 459,269 B raw, 142,216 B gzip (main's #211 included).
+- Mutation checks: 21 run, 20 caught at first. The one that survived (the left side's room without the gap) is now pinned with a 400/399 test on the log's left, and caught. Runner `scratchpad/proposal-card/mut3g/run.py`; results in `out-first.txt` and `out-pins.txt`.
+- **Live** (Restraint; isolated backend on 8798, Vite on 5798; the installed Chrome with a throwaway profile, removed after; canaries blocked; nothing accepted or run). Shots are in `scratchpad/proposal-card/shots3g/`, and `md5 | uniq -d` is empty:
+
+| Shot | Result |
+|---|---|
+| 12, 1024×640, the log at 65–405 | The card beside it, on its right: region 413–1008 (inset 413 / 16), card 413–1008 × 215–452, the notices under it; the log untouched (no squeeze). |
+| 13, 13b, resized to 800 | 395 px beside it now: the card glides from left 413 to 127 (mid-glide frame, then rest), and sits under the log (card top 380 = the log's foot 372 + 8). |
+| 14, 1024×640, the log at 300–640 × 100–254 | Step 2: 228 and 360 px beside it, so under it: the notices from 262, the card 370–560, both kept lines whole. |
+| 15, 768×600, the log at 65–405 × 180–334 | A named shortfall: under it, the pill "2 notices", the card's body 49 px, the plan line whole, the ⚠ line behind the fade. |

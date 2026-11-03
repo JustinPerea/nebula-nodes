@@ -48,6 +48,18 @@ import { setNoticeMore } from './noticeMore';
  *    footer: the card's foot comes down over the log by the rest (`over`;
  *    the grid test lists those cells with their numbers).
  *
+ * A floating log in the card's column (GM r9), the log never moving:
+ * 1. Beside it, when there is at least BESIDE_LOG_MIN_W of room on one side
+ *    of it (r1's rule, `besideRoom`, the docked log's own test): the region
+ *    stops short of the log on that side (`inset`), the more room first.
+ * 2. Else the side of it, under or above, that holds the card: under it
+ *    first (the log gives nothing there), else above it with its give
+ *    (steps 3-4, its bottom edge held); with neither, the side with more
+ *    room. The collapse orders here, after 1, because beside needs nothing
+ *    from the log and it only ever frees room above the log.
+ * 3. Else a named shortfall: step 5 on that side (the grid lists them).
+ * A change of side, or of the inset, glides (`stepChanged`).
+ *
  * Steps 3 and 4 are the docked log's when the stack sits above it, and a
  * floating log's in the card's column when the stack sits above it (GM r7:
  * "it gives way the same way", anchored at its bottom edge; where the person
@@ -194,6 +206,21 @@ export interface StackPlace {
   over: number;
   /** The line the stack's top stays under (a floating log's foot may lower it). */
   topLine?: number;
+  /** Where the stack sits by a floating log in its column (GM r9): beside
+   * it on its left or right, under or above it; null with none. */
+  float?: FloatSide | null;
+  /** Beside a floating log: the region's insets from the window's left and
+   * right edges, so it stops short of the log on that side. */
+  inset?: { left: number; right: number } | null;
+}
+
+export type FloatSide = 'left' | 'right' | 'under' | 'above';
+
+/** The room beside a log for a region from `left` to the window's right
+ * less `rightClear` (r1's rule, GM - Design, PR #216 r3 and r9): the docked
+ * log clears the right edge; a floating one either edge. */
+export function besideRoom(m: Pick<StackMeasure, 'viewportW' | 'gutter'>, left: number, rightClear: number): number {
+  return m.viewportW - Math.max(m.gutter, rightClear) - left;
 }
 
 const ONE_LINE_PX = 20;
@@ -230,10 +257,10 @@ function sum(values: number[]): number {
 
 export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean } = {}): StackPlace {
   const docked = m.logClearance > 0 && m.logTop > 0;
-  const beside = m.viewportW - Math.max(m.gutter, m.logClearance) - m.regionLeft;
+  const beside = besideRoom(m, m.regionLeft, m.logClearance);
   const aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0 };
+  const none = { folded: 0, fold: [], more: 0, moreHost: -1, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0, float: null, inset: null };
   if (!m.card) {
     // The notices alone clear a floating log in their column too (GM r8):
     // under it when they fit between its foot and the line, else above it,
@@ -288,13 +315,29 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const collapseGive = Math.max(0, Math.floor(m.logCollapse ?? 0));
   let gives = aboveLog;
 
-  // A floating log in the card's column (GM r4 6, r7): under it when the
-  // stack fits between its foot and the stack's line; else above it, the log
-  // giving way at its bottom edge as the docked one does; when neither
-  // fits, the side with more room, and under it the stack's top then
-  // crosses the log's body, never its header.
+  // A floating log in the card's column (GM r4 6, r7, r9). 1: beside it,
+  // with at least BESIDE_LOG_MIN_W on one side (r1's rule): the region stops
+  // short of it there. 2: under it when the stack fits between its foot and
+  // the stack's line; else above it, the log giving way at its bottom edge
+  // as the docked one does; when neither fits, the side with more room, and
+  // under it the stack's top then crosses the log's body, never its header.
+  // 3: step 5 on that side.
   const float = docked ? null : m.floating;
+  let floatSide: FloatSide | null = null;
+  let inset: StackPlace['inset'] = null;
   if (float && m.column && float.left < m.column.right && float.right > m.column.left
+      && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
+    const regionRight = Math.max(m.gutter, m.logClearance);
+    const leftRoom = besideRoom(m, m.regionLeft, m.viewportW - float.left + FLOAT_GAP_PX);
+    const rightRoom = besideRoom(m, Math.max(m.regionLeft, float.right + FLOAT_GAP_PX), m.logClearance);
+    if (Math.max(leftRoom, rightRoom) >= BESIDE_LOG_MIN_W) {
+      floatSide = leftRoom >= rightRoom ? 'left' : 'right';
+      inset = floatSide === 'left'
+        ? { left: Math.floor(m.regionLeft), right: Math.ceil(m.viewportW - float.left + FLOAT_GAP_PX) }
+        : { left: Math.ceil(float.right + FLOAT_GAP_PX), right: Math.floor(regionRight) };
+    }
+  }
+  if (float && !floatSide && m.column && float.left < m.column.right && float.right > m.column.left
       && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
     const line0 = m.viewportH - m.regionBottom - base;
     const needs = card.chrome + floors.min + compact.rows;
@@ -303,9 +346,11 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body) + compact.rows;
     if (under >= needs || (over < needs && (under >= over || over < least))) {
       topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
+      floatSide = 'under';
     } else {
       base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
       gives = true;
+      floatSide = 'above';
     }
   }
 
@@ -333,6 +378,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
       underFade: height - card.chrome < floors.min,
       folded: more, fold, more, moreHost: host, expanded,
       keepPlan: height - card.chrome < floors.full,
+      float: floatSide, inset,
     };
   };
 
@@ -430,7 +476,11 @@ export function stackJumps(prev: { place: StackPlace; logTop: number; floatTop: 
 export function stepChanged(prev: StackPlace | null, next: StackPlace): boolean {
   if (!prev) return false;
   return prev.mode !== next.mode || prev.folded !== next.folded || prev.more !== next.more || prev.collapse !== next.collapse
-    || prev.moreHost !== next.moreHost;
+    || prev.moreHost !== next.moreHost
+    // GM r9: beside a floating log, under it or above it, and the inset
+    // beside it as the log is dragged or the window resized.
+    || (prev.float ?? null) !== (next.float ?? null)
+    || prev.inset?.left !== next.inset?.left || prev.inset?.right !== next.inset?.right;
 }
 
 function px(value: string): number {
@@ -460,7 +510,15 @@ function scrollerOf(card: HTMLElement): HTMLElement | null {
  * the step in force nor a scale or glide in flight changes it. */
 export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topLine: number): StackMeasure {
   const root = getComputedStyle(document.documentElement);
+  // The region and the card's column as they are with no floating log
+  // beside them (GM r9): the inset a place wrote is lifted for the read,
+  // so being beside the log never moves the column the log is tested
+  // against. The region's sides never transition, so nothing springs.
+  const inset = { left: region.style.left, right: region.style.right };
+  if (inset.left || inset.right) { region.style.left = ''; region.style.right = ''; }
   const rect = region.getBoundingClientRect();
+  const naturalCard = stack.querySelector<HTMLElement>(`[${SHRINK_ATTR}]`)?.offsetWidth ?? 0;
+  if (inset.left || inset.right) { region.style.left = inset.left; region.style.right = inset.right; }
   const card = stack.querySelector<HTMLElement>(`[${SHRINK_ATTR}]`);
   const body = card?.querySelector<HTMLElement>(`[${SHRINK_BODY_ATTR}]`) ?? null;
   let shrink: StackMeasure['card'] = null;
@@ -494,7 +552,11 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
       plan,
       first,
     };
-    column = { left: cardRect.left, right: cardRect.right };
+    // Centred in the region (its stack is), at its width there with no inset.
+    const width = inset.left || inset.right ? naturalCard : card.offsetWidth || cardRect.width;
+    column = width > 0
+      ? { left: rect.left + (rect.width - width) / 2, right: rect.left + (rect.width + width) / 2 }
+      : { left: cardRect.left, right: cardRect.right };
   }
   // With no card, the notices alone and their column (GM r8: they clear a
   // floating log too).
@@ -533,26 +595,38 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
   };
 }
 
-type Box = { top: number; bottom: number; height: number };
+type Box = { top: number; bottom: number; height: number; left?: number };
 const resting = new WeakMap<Element, Box>();
 const gliding = new WeakMap<Element, Animation>();
 
 function box(element: Element): Box {
   const rect = element.getBoundingClientRect();
-  return { top: rect.top, bottom: rect.bottom, height: rect.height };
+  return { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left };
+}
+
+/** The region's insets beside a floating log, or its own (CSS) with none. */
+function setInset(region: HTMLElement, inset: StackPlace['inset']): void {
+  const left = inset ? `${inset.left}px` : '';
+  const right = inset ? `${inset.right}px` : '';
+  if (region.style.left !== left) region.style.left = left;
+  if (region.style.right !== right) region.style.right = right;
 }
 
 /** Its box in the layout, without the transform it draws with now (a glide's
  * translate, an entrance's scale about its centre). */
 export function layoutBox(element: Element): Box {
-  const seen = box(element);
+  const rect = element.getBoundingClientRect();
+  const seen = { top: rect.top, bottom: rect.bottom, height: rect.height, left: rect.left };
   const matrix = /^matrix\(([^)]+)\)$/.exec(getComputedStyle(element).transform || '');
   if (!matrix) return seen;
-  const [, , , d = 1, , f = 0] = matrix[1].split(',').map((part) => Number.parseFloat(part));
+  const [a = 1, , , d = 1, e = 0, f = 0] = matrix[1].split(',').map((part) => Number.parseFloat(part));
   const scale = d || 1;
   const height = seen.height / scale;
   const top = seen.top - f - (height * (1 - scale)) / 2;
-  return { top, bottom: top + height, height };
+  const scaleX = a || 1;
+  const width = rect.width / scaleX;
+  const left = seen.left - e - (width * (1 - scaleX)) / 2;
+  return { top, bottom: top + height, height, left };
 }
 
 function reducedMotion(): boolean {
@@ -573,9 +647,11 @@ export function glideStack(elements: Array<{ element: HTMLElement; from: Box | u
     const to = layoutBox(element);
     if (to.height === 0) continue;
     const dy = foot ? from.bottom - to.bottom : from.top - to.top;
-    if (Math.abs(dy) < 1 || typeof element.animate !== 'function') continue;
+    // Sideways too, beside a floating log or back (GM r9).
+    const dx = from.left !== undefined && to.left !== undefined ? from.left - to.left : 0;
+    if ((Math.abs(dy) < 1 && Math.abs(dx) < 1) || typeof element.animate !== 'function') continue;
     const move = element.animate(
-      [{ transform: `translateY(${Math.round(dy)}px)` }, { transform: 'translateY(0)' }],
+      [{ transform: `translate(${Math.round(dx)}px, ${Math.round(dy)}px)` }, { transform: 'translate(0, 0)' }],
       { duration: GLIDE_MS, easing },
     );
     gliding.set(element, move);
@@ -607,6 +683,8 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   }
   if (place.aboveLog) region.dataset.aboveLog = 'true';
   else delete region.dataset.aboveLog;
+  // Beside a floating log (GM r9): the region stops short of it.
+  setInset(region, place.inset ?? null);
   region.style.setProperty('--notice-stack-lift', `${place.lift}px`);
   if (card && place.cap !== null) card.style.setProperty('--notice-card-cap', `${place.cap}px`);
   if (place.mode) region.dataset.noticeMode = place.mode;

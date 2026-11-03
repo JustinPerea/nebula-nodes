@@ -211,7 +211,7 @@ def test_the_dry_run_route_saves_and_broadcasts_nothing(app, tmp_path, monkeypat
 
     sent = []
 
-    async def record(data):
+    async def record(data, **_kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", record)

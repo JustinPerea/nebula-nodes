@@ -49,6 +49,9 @@
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
      covers it; the stack centres in what is left. */
   right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
+  /* Beside a floating log in the card's column with 400 px there (GM r9),
+     NoticeRegion sets both sides inline so it stops short of the log
+     (lib/noticeStackPlace.ts `inset`). */
   /* Its bottom edge's height above the window's bottom, once, for the
      proposal card's own placement too (canvasProposals.css). */
   --notice-region-bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));

@@ -610,7 +610,7 @@ export function AgentLog() {
                   className={`agent-log__entry agent-log__entry--${e.source}`}
                   data-source={e.source}
                   data-agent={e.agent?.id}
-                  style={e.agent ? { ['--agent-log-source-color' as string]: e.agent.color } : undefined}
+                  style={e.agent ? { ['--agent-log-source-color' as string]: e.agent.color, ['--agent-log-name-color' as string]: e.agent.ink ?? e.agent.color } : undefined}
                 >
                   <span className="agent-log__entry-marker" aria-hidden="true" />
                   <span className="agent-log__time">

@@ -692,7 +692,7 @@ body:not(.app-slava-restraint) .agent-log__source {
 
 /* An agent's action names the agent in its cursor colour (agentLogStore). */
 body:not(.app-slava-restraint) .agent-log__entry--agent .agent-log__source {
-  color: var(--agent-log-source-color);
+  color: var(--agent-log-name-color, var(--agent-log-source-color));
 }
 
 /* Spelled as the agent's cursor spells it, in every skin. */

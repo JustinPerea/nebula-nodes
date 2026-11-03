@@ -1107,6 +1107,11 @@ class Proposal:
     # sourceName, targetName, targetLabel}; Accept refuses when the live
     # graph would drop any others.
     removed_edges: list[dict[str, str]] = field(default_factory=list)
+    # The proposing request's raw presence session (agent_presence.
+    # presence_session; None for the agent's plain cursor), so the person's
+    # tabs show "Accepted" on that session's cursor (PR #211 r4). Person
+    # side only: never in view(), brief(), REST, the journal or logs.
+    presence_session: str | None = field(default=None, repr=False)
 
     @property
     def references(self) -> set[str]:

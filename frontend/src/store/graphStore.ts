@@ -14,6 +14,7 @@ import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { forgetPersonPlaced, notePersonPlaced } from '../lib/personNodeMoves';
 import { useArrangeStore } from './arrangeStore';
 import {
   clearPersistedRunHistory,
@@ -2297,6 +2298,7 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
   // as Nebula last saved it, never with the typing the line says wasn't saved.
   clearedAsSaved = agentClear ? lastSavedView() : null;
   canvasReplacementRevision += 1;
+  forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
   // Round 23 (review 22, M-1): what still holds an id of this canvas (the
   // note dialog) lets it go. A reconnect's sync found another canvas; any
   // other path here is a clear (fix round 1 of PR #200: the chat's Apply says which).
@@ -5974,7 +5976,23 @@ export function watchGraphSyncs(): { seen: ReadonlySet<string>; stop: () => void
   return { seen, stop: () => syncWatchers.delete(seen) };
 }
 
+/** The nodes `after` has somewhere else than `before`: each id with its new
+ *  position object (lib/personNodeMoves.ts records that very object). */
+function movedBy(before: Node<NodeData>[], after: Node<NodeData>[]): Record<string, { x: number; y: number }> {
+  const was = new Map(before.map((node) => [node.id, node.position]));
+  const moved: Record<string, { x: number; y: number }> = {};
+  for (const node of after) {
+    const old = was.get(node.id);
+    if (old && (old.x !== node.position.x || old.y !== node.position.y)) moved[node.id] = node.position;
+  }
+  return moved;
+}
+
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
+  // Every person move of a node but undo and redo comes through here (a
+  // drop, a nudge, an Arrange): an agent cursor resting on it rides it,
+  // never flies (lib/personNodeMoves.ts records each move's own position).
+  notePersonPlaced(positions);
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
   );
@@ -9151,6 +9169,9 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
       : { redoStack: rest, undoStack: [...state.undoStack, inverse] }),
     ...(stepNotice ? { undoNotice: stepNotice } : {}),
   });
+  // The person's own undo or redo moved these nodes: an agent cursor resting
+  // on one rides it (GM - Design, PR #211 review 5, item 5).
+  notePersonPlaced(movedBy(nodes, nextNodes));
   // GM r27 answer 2: an undo or redo that left a stopped scene with nothing
   // unsaved (the person's own Undo took their edits back) ends its stop.
   for (const [nodeId, scene] of [...cinemaScenePersistence]) {
@@ -9965,6 +9986,7 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
   }
   if (graphReplaced) {
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     noteCanvasReplaced(replacementWhileFollowing() ?? { kind: 'changed' });
     forgetLandingsOfReplacedCanvas();
     forgetRunsOfReplacedGraph();
@@ -13464,6 +13486,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     canvasLoadedOverHttp();
     noteCanvasReplaced({ kind: 'changed' });
     forgetLandingsOfReplacedCanvas();
@@ -13589,6 +13612,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
 
     canvasReplacementRevision += 1;
+    forgetPersonPlaced(); // a new canvas: node ids may restart (lib/personNodeMoves.ts)
     // Round 23 (review 22, L-2 and M-1): another canvas, loaded over HTTP.
     canvasLoadedOverHttp();
     // Another project's canvas: the agent's while following, else one with

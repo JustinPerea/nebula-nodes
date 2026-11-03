@@ -6,6 +6,8 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
+
 from .client import NebulaClient
 from .parser import NebulaArgumentParser
 
@@ -20,6 +22,32 @@ def _positive_int(text: str) -> int:
     return value
 
 
+# `nebula --help`'s closing section: how an orchestrator gives each lane its
+# own cursor (GM - Design, PR #211 r1). The same text is in skills/nebula and
+# docs/MCP-SETUP.md, "Agent cursors".
+CURSOR_ENV_HELP = """\
+your cursor on the person's canvas:
+  NEBULA_AGENT_NAME     the name it shows (in-app agents are named for you)
+  NEBULA_AGENT_SESSION  which of your sessions this is, up to 64 of A-Z a-z 0-9 _ . : -
+                        Each session gets its own cursor: "Claude Code", then
+                        "Claude Code · 2". Unset under Claude Code, the CLI uses
+                        your Claude Code session, which subagents share, so
+                        every subagent moves its parent's cursor. To give each
+                        subagent its own, set a value per lane, the same on every
+                        call it makes: NEBULA_AGENT_SESSION=lane-a nebula point n2
+                        It also keys your scene reads, so read and write with it.
+                        Only the person's canvas shows sessions; nebula look and
+                        nebula agents list one cursor per agent."""
+
+
+def _cursor_action(value: str) -> str:
+    """`nebula point --action`: one of the ten, else the same line the
+    backend and MCP give (GM - Design, PR #211 r2)."""
+    if value not in CURSOR_ACTIONS:
+        raise argparse.ArgumentTypeError(cursor_action_refusal(value))
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     # NebulaArgumentParser (cli/parser.py): errors say "Did you mean ...?" and
     # print only that command's usage; `describe` and `find` are hidden
@@ -28,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="nebula",
         usage="nebula [--url URL] <command> [options]",
         description="Nebula Nodes CLI — build and run media generation pipelines",
+        epilog=CURSOR_ENV_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         start_hint=True,
     )
     parser.add_argument("--url", default=None,
@@ -189,7 +219,9 @@ def build_parser() -> argparse.ArgumentParser:
         "point", help="Move your cursor on the canvas so the user sees where you are working",
         description="Point at a node, a port or a spot. With only --say (no target) the line shows where your "
                     "cursor already is, and it doesn't move; with no cursor yet it starts at the middle of the "
-                    "person's view, or at 0,0 when no canvas has reported its view.")
+                    "person's view, or at 0,0 when no canvas has reported its view. Each session of yours has its "
+                    "own cursor: give each lane its own $NEBULA_AGENT_SESSION, or a subagent moves its parent's "
+                    "cursor (see `nebula --help`).")
     point_p.add_argument("target", nargs="?", default=None,
                          help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "
                               "something where your cursor is")
@@ -197,8 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Short line shown next to your cursor: your own action only "
                               "(what you noticed goes in `nebula note`)")
     point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
-    point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
-                         help="Gesture to show (default: move, or drag with --from)")
+    point_p.add_argument("--action", type=_cursor_action, metavar="{" + ",".join(CURSOR_ACTIONS) + "}", default=None,
+                         help="What you are doing there: move (going there), look (reading), think, type "
+                              "(a prompt or field), click, drag (connecting, with --from), run, propose "
+                              "(waiting for the person's OK), wait (for their answer), error (something "
+                              "failed). Default: move, or drag with --from")
     point_p.add_argument("--as", dest="agent_name",
                          help="Cursor name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
@@ -484,7 +519,8 @@ def build_parser() -> argparse.ArgumentParser:
         "agents", help="The agents working in the open project: status, last action, what waits for the person",
         description=("The roster the person's Agents panel shows (MCP list_agents): each agent's status line, its "
                      "cursor's last action, and how many of its questions and proposals wait for the person "
-                     "(counts only). Needs you first, then Working."))
+                     "(counts only). Needs you first, then Working. One row per agent: the sessions "
+                     "$NEBULA_AGENT_SESSION separates show as their own cursors on the person's canvas only."))
     agents_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_agents returns it")
 
     # -- Quick --

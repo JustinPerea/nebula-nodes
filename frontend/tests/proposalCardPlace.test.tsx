@@ -15,6 +15,7 @@ import {
   MORE_SHOWN_ATTR,
   MORE_SLOT_ATTR,
   LOG_SQUEEZE_VAR,
+  besideRoom,
   SHOW_LESS,
   applyNoticeStack,
   bodyFloors,
@@ -409,6 +410,45 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack({ ...tall, floating: { top: 140, bottom: 380, left: 65, right: 403 } }).lift).toBe(0);
   });
 
+  it('GM r9 1: beside a floating log with at least 400 px there (r1\'s rule), the more room first; the log gives nothing', () => {
+    // 1024x640, the log at its own width (340) from the column's left edge.
+    const m: StackMeasure = {
+      ...at(640, 2), viewportW: 1024, logClearance: 0, logTop: 0, column: { left: 212, right: 812 },
+      floating: { top: 192, bottom: 372, left: 65, right: 405 },
+    };
+    const right = placeNoticeStack(m);
+    // 1024 - 16 - (405 + 8) = 595 on its right, nothing on its left.
+    expect(besideRoom(m, 405 + FLOAT_GAP_PX, 0)).toBe(595);
+    expect(right).toMatchObject({ float: 'right', inset: { left: 405 + FLOAT_GAP_PX, right: 16 }, squeeze: 0, collapse: false, lift: 0, topLine: LIVE.topLine });
+    // The same log by the right edge: on its left.
+    const left = placeNoticeStack({ ...m, floating: { top: 192, bottom: 372, left: 600, right: 940 } });
+    expect(left).toMatchObject({ float: 'left', inset: { left: 64, right: 1024 - 600 + FLOAT_GAP_PX } });
+    // r1's rule exactly: 400 is beside, 399 is not.
+    const at400 = { ...m, floating: { top: 192, bottom: 372, left: 65, right: 1024 - 16 - FLOAT_GAP_PX - 400 } };
+    expect(placeNoticeStack(at400).float).toBe('right');
+    const at399 = { ...m, floating: { ...at400.floating, right: at400.floating.right + 1 } };
+    expect(placeNoticeStack(at399).float).not.toBe('right');
+    expect(placeNoticeStack(at399).inset).toBeNull();
+    // And on its left: 400 from the region's left to its left less the gap.
+    const left400 = { ...m, floating: { top: 192, bottom: 372, left: 64 + 400 + FLOAT_GAP_PX, right: 64 + 400 + FLOAT_GAP_PX + 340 } };
+    expect(placeNoticeStack(left400)).toMatchObject({ float: 'left', inset: { left: 64, right: 1024 - left400.floating.left + FLOAT_GAP_PX } });
+    const left399 = { ...m, floating: { ...left400.floating, left: left400.floating.left - 1 } };
+    expect(placeNoticeStack(left399).float).not.toBe('left');
+    // Out of the column, or out of the stack's height: no inset.
+    expect(placeNoticeStack({ ...m, floating: { top: 192, bottom: 372, left: 830, right: 1000 } })).toMatchObject({ float: null, inset: null });
+    // The docked log's test is the same function.
+    expect(besideRoom(LIVE, LIVE.regionLeft, LIVE.logClearance)).toBe(420 - 348 - 64);
+  });
+
+  it('GM r9 2: with no 400 px beside it, the side of it, under or above, that holds the card; the log never moves', () => {
+    // 1024x640, the log at x 300-640: 228 px on its left, 360 on its right.
+    const base: StackMeasure = { ...at(640, 2), viewportW: 1024, logClearance: 0, logTop: 0, column: { left: 212, right: 812 } };
+    const high = placeNoticeStack({ ...base, floating: { top: 100, bottom: 280, left: 300, right: 640 } });
+    expect(high).toMatchObject({ float: 'under', inset: null, squeeze: 0, topLine: 280 + FLOAT_GAP_PX, underFade: false });
+    const low = placeNoticeStack({ ...base, floating: { top: 330, bottom: 510, left: 300, right: 640 } });
+    expect(low).toMatchObject({ float: 'above', inset: null, underFade: false });
+  });
+
   it('a floating log with no room on either side: the stack stays under it, crossing its body, never its header', () => {
     const m: StackMeasure = {
       ...at(560, 2), logClearance: 0, logTop: 0, logCollapse: 0, column: { left: 64, right: 404 },
@@ -456,13 +496,90 @@ describe('the give-way order (GM r5-r7)', () => {
  * numbers (the body it gets, the kept lines' need), and in those the plan
  * line still shows whole unless PLAN_SHORT lists it.
  */
+/** Round 3f's 71 floating cells short of their kept lines, with the log
+ * as wide as the card's column (GM r9: "don't accept yet"). */
+const R3F_FLOATING_SHORT = [
+  '420x560 floating 0',
+  '420x560 floating 0 banner',
+  '420x560 floating 1',
+  '420x560 floating 1 undo',
+  '420x560 floating 1 banner',
+  '420x560 floating 1 banner undo',
+  '420x560 floating 2',
+  '420x560 floating 2 undo',
+  '420x560 floating 2 banner',
+  '420x560 floating 2 banner undo',
+  '420x560 floating 3',
+  '420x560 floating 3 undo',
+  '420x560 floating 3 banner',
+  '420x560 floating 3 banner undo',
+  '420x560 floating 4',
+  '420x560 floating 4 undo',
+  '420x560 floating 4 banner',
+  '420x560 floating 4 banner undo',
+  '420x640 floating 0 banner',
+  '420x640 floating 1',
+  '420x640 floating 1 undo',
+  '420x640 floating 1 banner',
+  '420x640 floating 1 banner undo',
+  '420x640 floating 2',
+  '420x640 floating 2 undo',
+  '420x640 floating 2 banner',
+  '420x640 floating 2 banner undo',
+  '420x640 floating 3',
+  '420x640 floating 3 undo',
+  '420x640 floating 3 banner',
+  '420x640 floating 3 banner undo',
+  '420x640 floating 4',
+  '420x640 floating 4 undo',
+  '420x640 floating 4 banner',
+  '420x640 floating 4 banner undo',
+  '768x600 floating 0',
+  '768x600 floating 0 banner',
+  '768x600 floating 1',
+  '768x600 floating 1 undo',
+  '768x600 floating 1 banner',
+  '768x600 floating 1 banner undo',
+  '768x600 floating 2',
+  '768x600 floating 2 undo',
+  '768x600 floating 2 banner',
+  '768x600 floating 2 banner undo',
+  '768x600 floating 3',
+  '768x600 floating 3 undo',
+  '768x600 floating 3 banner',
+  '768x600 floating 3 banner undo',
+  '768x600 floating 4',
+  '768x600 floating 4 undo',
+  '768x600 floating 4 banner',
+  '768x600 floating 4 banner undo',
+  '1024x640 floating 0',
+  '1024x640 floating 0 banner',
+  '1024x640 floating 1',
+  '1024x640 floating 1 undo',
+  '1024x640 floating 1 banner',
+  '1024x640 floating 1 banner undo',
+  '1024x640 floating 2',
+  '1024x640 floating 2 undo',
+  '1024x640 floating 2 banner',
+  '1024x640 floating 2 banner undo',
+  '1024x640 floating 3',
+  '1024x640 floating 3 undo',
+  '1024x640 floating 3 banner',
+  '1024x640 floating 3 banner undo',
+  '1024x640 floating 4',
+  '1024x640 floating 4 undo',
+  '1024x640 floating 4 banner',
+  '1024x640 floating 4 banner undo',
+];
 // Where even every step leaves the body short of its kept lines (65 + two
 // fades = 97), [the body it gets, 97]: the 420x560 window under the
 // two-line offline banner with the log docked (12 px short with no Undo
 // notice: 78 px of room, the log's 89 and its collapse's 47, the pill's 40;
 // 26 short with one, whose row now carries the fold's count, GM r8); and a
-// floating log the person left mid-column (its bottom edge stays, so only
-// the room above it grows).
+// floating log the person left mid-column, at 30% of the height, where
+// nothing fits beside it either (GM r9: under 400 px; its bottom edge stays,
+// so only the room above it grows). `floating wide` is that log resized to
+// the column's width: nothing is ever beside it.
 const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x560 open 1 banner': [85, 97],
   '420x560 open 1 banner undo': [71, 97],
@@ -498,6 +615,24 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x560 floating 4 undo': [37, 97],
   '420x560 floating 4 banner': [20, 97],
   '420x560 floating 4 banner undo': [20, 97],
+  '420x560 floating wide 0': [91, 97],
+  '420x560 floating wide 0 banner': [34, 97],
+  '420x560 floating wide 1': [51, 97],
+  '420x560 floating wide 1 undo': [37, 97],
+  '420x560 floating wide 1 banner': [20, 97],
+  '420x560 floating wide 1 banner undo': [20, 97],
+  '420x560 floating wide 2': [51, 97],
+  '420x560 floating wide 2 undo': [37, 97],
+  '420x560 floating wide 2 banner': [20, 97],
+  '420x560 floating wide 2 banner undo': [20, 97],
+  '420x560 floating wide 3': [51, 97],
+  '420x560 floating wide 3 undo': [37, 97],
+  '420x560 floating wide 3 banner': [20, 97],
+  '420x560 floating wide 3 banner undo': [20, 97],
+  '420x560 floating wide 4': [51, 97],
+  '420x560 floating wide 4 undo': [37, 97],
+  '420x560 floating wide 4 banner': [20, 97],
+  '420x560 floating wide 4 banner undo': [20, 97],
   '420x640 floating 0 banner': [90, 97],
   '420x640 floating 1': [75, 97],
   '420x640 floating 1 undo': [61, 97],
@@ -515,6 +650,23 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '420x640 floating 4 undo': [61, 97],
   '420x640 floating 4 banner': [50, 97],
   '420x640 floating 4 banner undo': [36, 97],
+  '420x640 floating wide 0 banner': [90, 97],
+  '420x640 floating wide 1': [75, 97],
+  '420x640 floating wide 1 undo': [61, 97],
+  '420x640 floating wide 1 banner': [50, 97],
+  '420x640 floating wide 1 banner undo': [36, 97],
+  '420x640 floating wide 2': [75, 97],
+  '420x640 floating wide 2 undo': [61, 97],
+  '420x640 floating wide 2 banner': [50, 97],
+  '420x640 floating wide 2 banner undo': [36, 97],
+  '420x640 floating wide 3': [75, 97],
+  '420x640 floating wide 3 undo': [61, 97],
+  '420x640 floating wide 3 banner': [50, 97],
+  '420x640 floating wide 3 banner undo': [36, 97],
+  '420x640 floating wide 4': [75, 97],
+  '420x640 floating wide 4 undo': [61, 97],
+  '420x640 floating wide 4 banner': [50, 97],
+  '420x640 floating wide 4 banner undo': [36, 97],
   '768x600 floating 0': [69, 97],
   '768x600 floating 0 banner': [62, 97],
   '768x600 floating 1': [29, 97],
@@ -533,24 +685,42 @@ const EXPECTED_SHORT: Record<string, [number, number]> = {
   '768x600 floating 4 undo': [20, 97],
   '768x600 floating 4 banner': [22, 97],
   '768x600 floating 4 banner undo': [20, 97],
-  '1024x640 floating 0': [90, 97],
-  '1024x640 floating 0 banner': [90, 97],
-  '1024x640 floating 1': [50, 97],
-  '1024x640 floating 1 undo': [36, 97],
-  '1024x640 floating 1 banner': [50, 97],
-  '1024x640 floating 1 banner undo': [36, 97],
-  '1024x640 floating 2': [50, 97],
-  '1024x640 floating 2 undo': [36, 97],
-  '1024x640 floating 2 banner': [50, 97],
-  '1024x640 floating 2 banner undo': [36, 97],
-  '1024x640 floating 3': [50, 97],
-  '1024x640 floating 3 undo': [36, 97],
-  '1024x640 floating 3 banner': [50, 97],
-  '1024x640 floating 3 banner undo': [36, 97],
-  '1024x640 floating 4': [50, 97],
-  '1024x640 floating 4 undo': [36, 97],
-  '1024x640 floating 4 banner': [50, 97],
-  '1024x640 floating 4 banner undo': [36, 97],
+  '768x600 floating wide 0': [69, 97],
+  '768x600 floating wide 0 banner': [62, 97],
+  '768x600 floating wide 1': [29, 97],
+  '768x600 floating wide 1 undo': [20, 97],
+  '768x600 floating wide 1 banner': [22, 97],
+  '768x600 floating wide 1 banner undo': [20, 97],
+  '768x600 floating wide 2': [29, 97],
+  '768x600 floating wide 2 undo': [20, 97],
+  '768x600 floating wide 2 banner': [22, 97],
+  '768x600 floating wide 2 banner undo': [20, 97],
+  '768x600 floating wide 3': [29, 97],
+  '768x600 floating wide 3 undo': [20, 97],
+  '768x600 floating wide 3 banner': [22, 97],
+  '768x600 floating wide 3 banner undo': [20, 97],
+  '768x600 floating wide 4': [29, 97],
+  '768x600 floating wide 4 undo': [20, 97],
+  '768x600 floating wide 4 banner': [22, 97],
+  '768x600 floating wide 4 banner undo': [20, 97],
+  '1024x640 floating wide 0': [90, 97],
+  '1024x640 floating wide 0 banner': [90, 97],
+  '1024x640 floating wide 1': [50, 97],
+  '1024x640 floating wide 1 undo': [36, 97],
+  '1024x640 floating wide 1 banner': [50, 97],
+  '1024x640 floating wide 1 banner undo': [36, 97],
+  '1024x640 floating wide 2': [50, 97],
+  '1024x640 floating wide 2 undo': [36, 97],
+  '1024x640 floating wide 2 banner': [50, 97],
+  '1024x640 floating wide 2 banner undo': [36, 97],
+  '1024x640 floating wide 3': [50, 97],
+  '1024x640 floating wide 3 undo': [36, 97],
+  '1024x640 floating wide 3 banner': [50, 97],
+  '1024x640 floating wide 3 banner undo': [36, 97],
+  '1024x640 floating wide 4': [50, 97],
+  '1024x640 floating wide 4 undo': [36, 97],
+  '1024x640 floating wide 4 banner': [50, 97],
+  '1024x640 floating wide 4 banner undo': [36, 97],
 };
 // Of those, where even the plan line alone (33 + two fades = 65) can't show
 // whole, [the body, 65]: it is centred between the fades.
@@ -572,6 +742,23 @@ const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
   '420x560 floating 4 undo': [37, 65],
   '420x560 floating 4 banner': [20, 65],
   '420x560 floating 4 banner undo': [20, 65],
+  '420x560 floating wide 0 banner': [34, 65],
+  '420x560 floating wide 1': [51, 65],
+  '420x560 floating wide 1 undo': [37, 65],
+  '420x560 floating wide 1 banner': [20, 65],
+  '420x560 floating wide 1 banner undo': [20, 65],
+  '420x560 floating wide 2': [51, 65],
+  '420x560 floating wide 2 undo': [37, 65],
+  '420x560 floating wide 2 banner': [20, 65],
+  '420x560 floating wide 2 banner undo': [20, 65],
+  '420x560 floating wide 3': [51, 65],
+  '420x560 floating wide 3 undo': [37, 65],
+  '420x560 floating wide 3 banner': [20, 65],
+  '420x560 floating wide 3 banner undo': [20, 65],
+  '420x560 floating wide 4': [51, 65],
+  '420x560 floating wide 4 undo': [37, 65],
+  '420x560 floating wide 4 banner': [20, 65],
+  '420x560 floating wide 4 banner undo': [20, 65],
   '420x640 floating 1 undo': [61, 65],
   '420x640 floating 1 banner': [50, 65],
   '420x640 floating 1 banner undo': [36, 65],
@@ -584,6 +771,18 @@ const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
   '420x640 floating 4 undo': [61, 65],
   '420x640 floating 4 banner': [50, 65],
   '420x640 floating 4 banner undo': [36, 65],
+  '420x640 floating wide 1 undo': [61, 65],
+  '420x640 floating wide 1 banner': [50, 65],
+  '420x640 floating wide 1 banner undo': [36, 65],
+  '420x640 floating wide 2 undo': [61, 65],
+  '420x640 floating wide 2 banner': [50, 65],
+  '420x640 floating wide 2 banner undo': [36, 65],
+  '420x640 floating wide 3 undo': [61, 65],
+  '420x640 floating wide 3 banner': [50, 65],
+  '420x640 floating wide 3 banner undo': [36, 65],
+  '420x640 floating wide 4 undo': [61, 65],
+  '420x640 floating wide 4 banner': [50, 65],
+  '420x640 floating wide 4 banner undo': [36, 65],
   '768x600 floating 0 banner': [62, 65],
   '768x600 floating 1': [29, 65],
   '768x600 floating 1 undo': [20, 65],
@@ -601,32 +800,58 @@ const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
   '768x600 floating 4 undo': [20, 65],
   '768x600 floating 4 banner': [22, 65],
   '768x600 floating 4 banner undo': [20, 65],
-  '1024x640 floating 1': [50, 65],
-  '1024x640 floating 1 undo': [36, 65],
-  '1024x640 floating 1 banner': [50, 65],
-  '1024x640 floating 1 banner undo': [36, 65],
-  '1024x640 floating 2': [50, 65],
-  '1024x640 floating 2 undo': [36, 65],
-  '1024x640 floating 2 banner': [50, 65],
-  '1024x640 floating 2 banner undo': [36, 65],
-  '1024x640 floating 3': [50, 65],
-  '1024x640 floating 3 undo': [36, 65],
-  '1024x640 floating 3 banner': [50, 65],
-  '1024x640 floating 3 banner undo': [36, 65],
-  '1024x640 floating 4': [50, 65],
-  '1024x640 floating 4 undo': [36, 65],
-  '1024x640 floating 4 banner': [50, 65],
-  '1024x640 floating 4 banner undo': [36, 65],
+  '768x600 floating wide 0 banner': [62, 65],
+  '768x600 floating wide 1': [29, 65],
+  '768x600 floating wide 1 undo': [20, 65],
+  '768x600 floating wide 1 banner': [22, 65],
+  '768x600 floating wide 1 banner undo': [20, 65],
+  '768x600 floating wide 2': [29, 65],
+  '768x600 floating wide 2 undo': [20, 65],
+  '768x600 floating wide 2 banner': [22, 65],
+  '768x600 floating wide 2 banner undo': [20, 65],
+  '768x600 floating wide 3': [29, 65],
+  '768x600 floating wide 3 undo': [20, 65],
+  '768x600 floating wide 3 banner': [22, 65],
+  '768x600 floating wide 3 banner undo': [20, 65],
+  '768x600 floating wide 4': [29, 65],
+  '768x600 floating wide 4 undo': [20, 65],
+  '768x600 floating wide 4 banner': [22, 65],
+  '768x600 floating wide 4 banner undo': [20, 65],
+  '1024x640 floating wide 1': [50, 65],
+  '1024x640 floating wide 1 undo': [36, 65],
+  '1024x640 floating wide 1 banner': [50, 65],
+  '1024x640 floating wide 1 banner undo': [36, 65],
+  '1024x640 floating wide 2': [50, 65],
+  '1024x640 floating wide 2 undo': [36, 65],
+  '1024x640 floating wide 2 banner': [50, 65],
+  '1024x640 floating wide 2 banner undo': [36, 65],
+  '1024x640 floating wide 3': [50, 65],
+  '1024x640 floating wide 3 undo': [36, 65],
+  '1024x640 floating wide 3 banner': [50, 65],
+  '1024x640 floating wide 3 banner undo': [36, 65],
+  '1024x640 floating wide 4': [50, 65],
+  '1024x640 floating wide 4 undo': [36, 65],
+  '1024x640 floating wide 4 banner': [50, 65],
+  '1024x640 floating wide 4 banner undo': [36, 65],
 };
+
+const EXPECTED_R9_OWN = [18, 0, 53];
+const EXPECTED_R9_WIDE = [0, 0, 71];
 
 describe('the grid', () => {
   const SIZES: Array<[number, number]> = [[420, 560], [420, 640], [420, 760], [420, 900], [768, 600], [1024, 640], [1440, 900]];
-  const LOGS = ['open', 'closed', 'floating'] as const;
+  // `floating`: the log at its own width (layouts.css --col-right-w:
+  // clamp(340px, 26vw, 460px)), its left edge at the card's column's, where
+  // the person left it; `floating wide`: resized to the column's width (round
+  // 3f's grid had only this one, as `floating`).
+  const LOGS = ['open', 'closed', 'floating', 'floating wide'] as const;
   const COUNTS = [0, 1, 2, 3, 4];
   const LOG_HEADER = 37;
   const FLOOR = 91;
   const SHORT: Record<string, [number, number]> = {};
   const PLAN_SHORT: Record<string, [number, number]> = {};
+  /** Where the stack sits by each floating log (GM r9). */
+  const SIDE: Record<string, string> = {};
   const cells = SIZES.flatMap(([w, h]) => LOGS.flatMap((log) => COUNTS.flatMap((count) => [false, true].flatMap((banner) => (count ? [false, true] : [false]).map((undo) => {
     const regionLeft = 64;
     const column = { left: regionLeft, right: regionLeft + Math.min(600, w - regionLeft - 16) };
@@ -636,9 +861,11 @@ describe('the grid', () => {
     // The open log's own height (layouts.css --agent-h-open: clamp(180px, 22vh, 280px)).
     const natural = Math.min(280, Math.max(180, Math.round(h * 0.22)));
     const gives = log !== 'closed';
+    const floating = log === 'floating' || log === 'floating wide';
+    const logW = log === 'floating wide' ? column.right - column.left - 2 : Math.min(460, Math.max(340, Math.round(w * 0.26)));
     const m: StackMeasure = {
       viewportW: w, viewportH: h, gutter: 16, regionLeft, regionBottom: 81,
-      logClearance: log === 'floating' ? 0 : 348, logTop: log === 'open' ? natural + 88 : log === 'closed' ? CLOSED_LOG + 88 : 0,
+      logClearance: floating ? 0 : 348, logTop: log === 'open' ? natural + 88 : log === 'closed' ? CLOSED_LOG + 88 : 0,
       logSpare: gives ? natural - FLOOR : 0, logCollapse: gives ? FLOOR - CLOSED_LOG : 0,
       topLine,
       // The newest offers Undo, and carries the fold's count in its row (GM r8).
@@ -647,7 +874,7 @@ describe('the grid', () => {
         undo: Array(count).fill(false).map((_, i) => undo && i === count - 1),
         host: Array(count).fill(false).map((_, i) => undo && i === count - 1),
       },
-      floating: log === 'floating' ? { top: Math.round(h * 0.3), bottom: Math.round(h * 0.3) + natural, left: column.left + 1, right: column.right - 1 } : null,
+      floating: floating ? { top: Math.round(h * 0.3), bottom: Math.round(h * 0.3) + natural, left: column.left + 1, right: column.left + 1 + logW } : null,
       column,
     };
     return { name: `${w}x${h} ${log} ${count}${banner ? ' banner' : ''}${undo ? ' undo' : ''}`, m, log, count, undo };
@@ -658,6 +885,7 @@ describe('the grid', () => {
   });
 
   it.each(cells.map((cell) => [cell.name, cell] as const))('%s', (_name, { name, m, log, count, undo }) => {
+    const floating = log === 'floating' || log === 'floating wide';
     const place = placeNoticeStack(m);
     const { card, rows, line } = stackGeometry(m, place);
     expect(card).not.toBeNull();
@@ -674,7 +902,7 @@ describe('the grid', () => {
     if (place.squeeze > 0) expect(place.mode === 'pill' || place.mode === 'under' || !rows.some((row) => row.kind === 'notice' && !undo)).toBe(true);
     if (place.collapse) expect(place.squeeze).toBe(m.logSpare);
     if (place.underFade) {
-      expect(give).toBe(place.aboveLog || (log === 'floating' && give > 0) ? m.logSpare! + m.logCollapse! : give);
+      expect(give).toBe(place.aboveLog || (floating && give > 0) ? m.logSpare! + m.logCollapse! : give);
       SHORT[name] = [place.cap! - 89, floors.min];
       // The plan line first, whole between the fades.
       if (place.cap! - 89 >= floors.one) {
@@ -697,10 +925,22 @@ describe('the grid', () => {
       expect(place.moreHost).toBe(count - 1);
       expect(rows.some((row) => row.kind === 'more')).toBe(false);
     }
-    // A floating log: under it, above it (its top come down by its give),
-    // or, with no room either side, under it crossing its body; never its header.
+    // A floating log (GM r9): beside it, with at least 400 px there, the
+    // region stopping short of it; else under it, above it (its top come
+    // down by its give), or, with no room either side, under it crossing its
+    // body; never its header.
     let crossing = false;
-    if (log === 'floating') {
+    if (floating) SIDE[name] = place.float ?? 'none';
+    if (floating && (place.float === 'left' || place.float === 'right')) {
+      const float = m.floating!;
+      const inset = place.inset!;
+      expect(m.viewportW - inset.right - inset.left).toBeGreaterThanOrEqual(BESIDE_LOG_MIN_W);
+      if (place.float === 'left') expect(m.viewportW - inset.right).toBeLessThanOrEqual(float.left - FLOAT_GAP_PX);
+      else expect(inset.left).toBeGreaterThanOrEqual(float.right + FLOAT_GAP_PX);
+      expect(inset.left).toBeGreaterThanOrEqual(m.regionLeft);
+      expect(place).toMatchObject({ squeeze: 0, collapse: false });
+    } else if (floating) {
+      expect(place.inset ?? null).toBeNull();
       const float = m.floating!;
       const top = float.top + give;
       crossing = place.topLine! > m.topLine && boxes.some((box) => box.top < float.bottom);
@@ -723,10 +963,28 @@ describe('the grid', () => {
       expect(line).toBe(header - 8 + place.over);
       expect(place.over).toBe(0);
       for (const box of boxes) expect(box.bottom).toBeLessThanOrEqual(header - 8);
-    } else if (log !== 'floating') {
+    } else if (!floating) {
       expect(place.squeeze).toBe(0);
       expect(place.collapse).toBe(false);
     }
+  });
+
+  it('GM r9: how round 3f\'s 71 floating cells resolve, step by step', () => {
+    // 1: beside the log; 2: a side of it (under, or above with its give)
+    // that holds the kept lines; else 3: a named shortfall (SHORT).
+    const step = (name: string) => (SIDE[name] === 'left' || SIDE[name] === 'right' ? 1 : SHORT[name] ? 3 : 2);
+    const count = (names: string[]) => [1, 2, 3].map((n) => names.filter((name) => step(name) === n).length);
+    // With the log at its own width.
+    const own = R3F_FLOATING_SHORT;
+    expect(count(own)).toEqual(EXPECTED_R9_OWN);
+    // Step 1 takes every 1024x640 cell (595 px beside the log, on its
+    // right); the ones left are those in SHORT, with their numbers: at 420
+    // the log is the column's width, at 768 there are 339 px beside it.
+    expect(own.filter((name) => step(name) === 1).every((name) => name.startsWith('1024x640'))).toBe(true);
+    expect(own.filter((name) => step(name) === 3)).toEqual(Object.keys(EXPECTED_SHORT).filter((name) => / floating (?!wide)/.test(name)));
+    // With it resized to the column's width, as round 3f's grid had it.
+    const wide = R3F_FLOATING_SHORT.map((name) => name.replace(' floating', ' floating wide'));
+    expect(count(wide)).toEqual(EXPECTED_R9_WIDE);
   });
 
   it('lists the cells where every step leaves the body short of its kept lines', () => {
@@ -861,6 +1119,37 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect(getNoticeMore().host).toBe(null);
   });
 
+  it('beside a floating log, the region stops short of it; with none it takes its own sides again (GM r9)', () => {
+    const { region, stack } = stackDom(1);
+    applyNoticeStack(region, stack, place({ float: 'right', inset: { left: 413, right: 16 } }));
+    expect([region.style.left, region.style.right]).toEqual(['413px', '16px']);
+    applyNoticeStack(region, stack, place({ float: 'left', inset: { left: 64, right: 432 } }));
+    expect([region.style.left, region.style.right]).toEqual(['64px', '432px']);
+    applyNoticeStack(region, stack, place({ float: 'under', inset: null }));
+    expect([region.style.left, region.style.right]).toEqual(['', '']);
+  });
+
+  it('a move beside the log or back glides sideways on the spring, no jump (GM r9)', () => {
+    const { region, stack, card } = stackDom(0);
+    let left = 212;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return (this === card ? { top: 300, bottom: 450, height: 150, left, width: 600 } : { top: 0, bottom: 0, height: 0, left: 0, width: 0 }) as DOMRect;
+    });
+    const moves: Keyframe[][] = [];
+    Object.defineProperty(HTMLElement.prototype, 'animate', { value: vi.fn((frames: Keyframe[]) => { moves.push(frames); return { cancel() {} } as Animation; }), configurable: true });
+    const under = place({ float: 'under', inset: null });
+    applyNoticeStack(region, stack, under);
+    left = 413;
+    const beside = place({ float: 'right', inset: { left: 413, right: 16 } });
+    expect(stepChanged(under, beside)).toBe(true);
+    applyNoticeStack(region, stack, beside, false, stepChanged(under, beside));
+    expect(moves).toEqual([[{ transform: 'translate(-201px, 0px)' }, { transform: 'translate(0, 0)' }]]);
+    // Dragging the log moves the inset: that glides too.
+    expect(stepChanged(beside, { ...beside, inset: { left: 420, right: 16 } })).toBe(true);
+    expect(stepChanged(beside, { ...beside })).toBe(false);
+    expect(stepChanged(under, place({ float: 'above', inset: null }))).toBe(true);
+  });
+
   it('scrolls the plan line into view when the body is shorter than note and plan', () => {
     const { region, stack } = stackDom(1);
     const scroller = document.querySelector<HTMLElement>('.body')!;
@@ -955,9 +1244,9 @@ describe('the fold, the row and the glide, written to the stack', () => {
     tops.set(card, 330); heights.set(card, 120); tops.set(toasts[0], 222); tops.set(toasts[1], 276);
     applyNoticeStack(region, stack, place({ mode: 'above' }), false, true);
     expect(moves).toEqual([
-      ['card', [{ transform: 'translateY(-100px)' }, { transform: 'translateY(0)' }]],
-      ['toast t0', [{ transform: 'translateY(178px)' }, { transform: 'translateY(0)' }]],
-      ['toast t1', [{ transform: 'translateY(184px)' }, { transform: 'translateY(0)' }]],
+      ['card', [{ transform: 'translate(0px, -100px)' }, { transform: 'translate(0, 0)' }]],
+      ['toast t0', [{ transform: 'translate(0px, 178px)' }, { transform: 'translate(0, 0)' }]],
+      ['toast t1', [{ transform: 'translate(0px, 184px)' }, { transform: 'translate(0, 0)' }]],
     ]);
     expect(animate.mock.calls[0][1]).toMatchObject({ duration: GLIDE_MS });
     // Reduced motion: the same step on a fresh stack, no glide.
@@ -983,12 +1272,15 @@ describe('the fold, the row and the glide, written to the stack', () => {
 
   it('rests by its layout box, without the translate or the entrance scale it draws with', () => {
     const { card } = stackDom(0);
-    vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({ top: 104, bottom: 248, height: 144 } as DOMRect);
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ transform: 'matrix(0.96, 0, 0, 0.96, 0, -30)' } as CSSStyleDeclaration);
-    // 150 tall at 0.96 about its centre, 30 px up: it rests at 131-281.
-    expect(layoutBox(card)).toEqual({ top: 131, bottom: 281, height: 150 });
+    vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({ top: 104, bottom: 248, height: 144, left: 40, width: 576 } as DOMRect);
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ transform: 'matrix(0.96, 0, 0, 0.96, 12, -30)' } as CSSStyleDeclaration);
+    // 150 tall (600 wide) at 0.96 about its centre, 30 px up and 12 right
+    // (a sideways glide, GM r9): it rests at 131-281, from 16.
+    const rest = layoutBox(card);
+    expect(rest).toMatchObject({ top: 131, bottom: 281, height: 150 });
+    expect(rest.left).toBeCloseTo(16, 6);
     vi.mocked(window.getComputedStyle).mockReturnValue({ transform: 'none' } as CSSStyleDeclaration);
-    expect(layoutBox(card)).toEqual({ top: 104, bottom: 248, height: 144 });
+    expect(layoutBox(card)).toEqual({ top: 104, bottom: 248, height: 144, left: 40 });
   });
 
   it('a folded notice never glides, and a glide skips what has no place to come from', () => {
@@ -1127,6 +1419,33 @@ describe('measured from the live stack', () => {
     document.body.innerHTML = '<div data-notice-region=""><div class="notice-region__stack"></div></div>';
     expect(measureNoticeStack(document.querySelector<HTMLElement>('[data-notice-region]')!, document.querySelector<HTMLElement>('.notice-region__stack')!, 116))
       .toMatchObject({ notices: null, column: null, floating: null });
+  });
+
+  it('reads the region and the card\'s column as they are with no inset beside a floating log, and puts the inset back (GM r9)', () => {
+    document.body.innerHTML = `
+      <div data-notice-region="" style="left: 413px; right: 16px"><div class="notice-region__stack">
+        <div data-notice-slot="proposal"><div class="card" data-notice-shrinks="">
+          <div class="head"></div><div class="scroll" data-notice-shrink-body=""><div class="body"></div></div>
+        </div></div>
+      </div></div>`;
+    const region = document.querySelector<HTMLElement>('[data-notice-region]')!;
+    const stack = document.querySelector<HTMLElement>('.notice-region__stack')!;
+    const card = document.querySelector<HTMLElement>('.card')!;
+    const inset = () => region.style.left !== '';
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this === region) return (inset() ? { left: 413, right: 1008, width: 595, bottom: 560 } : { left: 64, right: 1008, width: 944, bottom: 560 }) as DOMRect;
+      if (this === card) return (inset() ? { left: 413, right: 1008, width: 595, top: 300, bottom: 450, height: 150 } : { left: 236, right: 836, width: 600, top: 300, bottom: 450, height: 150 }) as DOMRect;
+      return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 } as DOMRect;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this === card ? (inset() ? 595 : 600) : 0;
+    });
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 640, configurable: true });
+    const m = measureNoticeStack(region, stack, 70);
+    expect(m.regionLeft).toBe(64);
+    expect(m.column).toEqual({ left: 236, right: 836 });
+    expect([region.style.left, region.style.right]).toEqual(['413px', '16px']);
   });
 
   it('the empty toolbar Panel keeps its room in the top line, so a selection never moves the card (GM r6: not (c))', () => {

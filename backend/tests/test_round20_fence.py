@@ -66,7 +66,7 @@ def api(tmp_path, monkeypatch, person):
         store.commit(catalog)
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     book = CanvasUndoBook(persist_path=tmp_path / "canvas-revisions.json")
