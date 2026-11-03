@@ -3310,6 +3310,29 @@ interface DeletedSceneStop { refused: 'server' | 'bad-save' | 'too-big' | 'other
 interface DeletedSceneLine { nodeId: string; line: string; scene: string; said: boolean }
 const DELETED_SCENES_KEPT = 32;
 
+/**
+ * Tests only. A deleted scene's kept edits outlive the test that left them:
+ * tests reuse node ids (n1) on one canvas, so nothing bumps
+ * canvasReplacementRevision, and clearCinemaScenePersistence leaves this map
+ * alone. The next test's n1 then took the edits back as a delete undone and
+ * saved them (fix/ci-flakes-rename-fix16: a leaked "s2: mine on s2" save took
+ * graphStore.fix16's queued 400). Clears what a canvas replacement
+ * (replaceCanvasByClear) clears or retires of a node's edits outside the
+ * scene's own persistence: the kept deleted-scene edits (retired there by
+ * the revision), the copies held through a
+ * delete, typing deferred or parked behind one, and the unsaved param edits
+ * with the backend's scenes they are read against.
+ * tests/sceneEditsResetRatchet.test.ts keeps every scene-delete test file
+ * calling it in afterEach.
+ */
+export function resetDeletedSceneEditsForTests(): void {
+  deletedSceneEdits.clear();
+  heldCopies.clear();
+  deferredParamPushes.clear();
+  takeParkedParamSaves();
+  clearAllParamPushTimers();
+}
+
 /** Nebula's scene for a node, as the last sync (or save answer) had it. */
 function heldSceneOf(nodeId: string): CinemaSceneSpec | null {
   const held = backendScenes.get(nodeId);

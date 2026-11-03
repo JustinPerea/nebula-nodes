@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
@@ -21,6 +21,10 @@ import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { CinemaSceneNode } from '../src/components/nodes/CinemaSceneNode';
 import { useGraphStore } from '../src/store/graphStore';
+import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
+beforeAll(regionNoticesReady);
 
 const LAZY = { timeout: 10_000 };
 const initial = useGraphStore.getState();
