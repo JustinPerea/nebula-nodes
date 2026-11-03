@@ -15,13 +15,11 @@ export const CLOSING_LABEL_MS = 300;
 /** GM r43 Q1: how long the close may take before the dialog reads the batch to see what happened. */
 export const CLOSE_TIMEOUT_MS = 30_000;
 /**
- * GM r44 1: the lock line while edits are unsaved, one per pane. It names the controls by their
- * verbs (save, discard), which fits both panes' real labels. It locks the opener (aria-disabled,
- * focusable, the line under it); inside the dialog it is tested-only, since the opener can't open
- * the dialog while edits are unsaved.
+ * GM r44 1: the lock line while edits are unsaved, one per pane (lib/commonsEditLines). It locks
+ * the opener (aria-disabled, focusable, the line under it); inside the dialog it is tested-only,
+ * since the opener can't open the dialog while edits are unsaved.
  */
-export const EDITS_LINE_LABELING = 'Save or discard your label changes to close this batch.';
-export const EDITS_LINE_REVIEW = 'Save or discard your corrections to close this batch.';
+export { EDITS_LINE_LABELING, EDITS_LINE_REVIEW } from '../../lib/commonsEditLines';
 
 /**
  * The parent's busy state while the dialog is open (round 18l, review 17 MEDIUM-2): it locks the

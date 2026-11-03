@@ -72,12 +72,12 @@ def _load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8") or "{}")
     except ValueError as exc:
-        raise MergeError(f"{path} isn't valid JSON ({exc}); fix it by hand, Nebula won't overwrite it.") from exc
+        raise MergeError(f"{path} isn’t valid JSON ({exc}); fix it by hand, Nebula won’t overwrite it.") from exc
     if not isinstance(data, dict):
-        raise MergeError(f"{path} doesn't hold a JSON object; Nebula won't overwrite it.")
+        raise MergeError(f"{path} doesn’t hold a JSON object; Nebula won’t overwrite it.")
     servers = data.get("mcpServers")
     if servers is not None and not isinstance(servers, dict):
-        raise MergeError(f"mcpServers in {path} isn't an object; Nebula won't overwrite it.")
+        raise MergeError(f"mcpServers in {path} isn’t an object; Nebula won’t overwrite it.")
     return data
 
 
@@ -171,7 +171,7 @@ def _token(args: Any) -> tuple[str | None, str | None]:
         except agent_token_file.TokenFileError as exc:
             raise TokenSourceError(f"{path}: {exc}. Use the path Settings > Connect your agent shows.") from exc
         if not token.startswith(app_tokens.TOKEN_PREFIX):
-            raise TokenSourceError(f"{path} doesn't hold an app token from Settings > Connect your agent.")
+            raise TokenSourceError(f"{path} doesn’t hold an app token from Settings > Connect your agent.")
         return token, path
     token = os.environ.get(TOKEN_ENV, "").strip()
     if token:
@@ -195,11 +195,11 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
     except (httpx.ConnectError, httpx.TimeoutException):
         return None
     except httpx.HTTPError as exc:
-        print(f"error: couldn't talk to {url} ({type(exc).__name__}). Pass Nebula's address with --url.",
+        print(f"error: couldn’t talk to {url} ({type(exc).__name__}). Pass Nebula’s address with --url.",
               file=sys.stderr)
         sys.exit(1)
     if response.status_code == 401:
-        print("error: Nebula doesn't recognize this token (revoked, or from another Nebula). "
+        print("error: Nebula doesn’t recognize this token (revoked, or from another Nebula). "
               "Make a new one in Settings > Connect your agent.", file=sys.stderr)
         sys.exit(1)
     try:
@@ -207,11 +207,11 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
     except ValueError:
         payload = None
     if response.status_code != 200 or not isinstance(payload, dict) or "budget" not in payload:
-        print(f"error: {url} answered (HTTP {response.status_code}) but isn't a Nebula backend that knows this "
-              "token. Pass Nebula's address with --url; for the desktop app, set NEBULA_URL_FILE instead.", file=sys.stderr)
+        print(f"error: {url} answered (HTTP {response.status_code}) but isn’t a Nebula backend that knows this "
+              "token. Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead.", file=sys.stderr)
         sys.exit(1)
     if payload.get("budget") != "app":
-        print("error: that isn't an app token from Settings > Connect your agent.", file=sys.stderr)
+        print("error: that isn’t an app token from Settings > Connect your agent.", file=sys.stderr)
         sys.exit(1)
     return payload
 
@@ -263,10 +263,10 @@ def fill_codex_token(path: Path, placeholder: str | None, value: str, key: str =
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise MergeError(f"can't read {path}: {exc}") from exc
+        raise MergeError(f"can’t read {path}: {exc}") from exc
     if placeholder is not None:
         if text.count(placeholder) != 1:
-            raise MergeError(f"{path} doesn't hold the entry `codex mcp add` just wrote")
+            raise MergeError(f"{path} doesn’t hold the entry `codex mcp add` just wrote")
         text = text.replace(placeholder, token)
 
     def nebula_server(candidate: str) -> dict[str, Any] | None:
@@ -279,7 +279,7 @@ def fill_codex_token(path: Path, placeholder: str | None, value: str, key: str =
     server = nebula_server(text)
     env = (server or {}).get("env")
     if not isinstance(env, dict) or env.get(key) != token:
-        raise MergeError(f"{path} didn't parse back with the {'token' if key == TOKEN_ENV else 'token file'} in place")
+        raise MergeError(f"{path} didn’t parse back with the {'token' if key == TOKEN_ENV else 'token file'} in place")
     timeout_set = False
     header = f"[mcp_servers.{SERVER_NAME}]\n"
     lines = text.splitlines(keepends=True)
@@ -315,7 +315,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
                 runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
                 backend_dir: Path | None = None) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can't connect other apps to Nebula; the person runs this.", file=sys.stderr)
+        print("error: an in-app agent can’t connect other apps to Nebula; the person runs this.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)
@@ -333,7 +333,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print("error: no token. Make one in Settings > Connect your agent "
               f"(pick {client.label}{', name it ' + args.name if args.name else ''}"
               f"{', daily limit $' + format(args.daily_usd, 'g') if args.daily_usd else ''}), then run the command "
-              "it shows, with --token-file and the file Nebula saved the token to. The CLI can't make tokens: only "
+              "it shows, with --token-file and the file Nebula saved the token to. The CLI can’t make tokens: only "
               "the Nebula canvas you opened from the launch link can. For a token made before token files, set "
               "NEBULA_APP_TOKEN or pass --paste-token.", file=sys.stderr)
         return 1
@@ -347,12 +347,12 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         if writes:
             # A config written blind can point at nothing (the desktop app's
             # port changes every launch) or at another Nebula.
-            print(f"error: couldn't reach Nebula at {where} to check the token, so nothing was written. "
-                  "Start Nebula, or pass its address with --url; for the desktop app, set NEBULA_URL_FILE to the "
-                  "file Settings > Connect your agent names. --print shows the config without checking.",
+            print(f"error: couldn’t reach Nebula at {where} to check the token, so nothing was written. "
+                  "Start Nebula, or pass its address with --url. For the desktop app, set NEBULA_URL_FILE to the "
+                  "file named in Settings, under Connect your agent. --print shows the config without checking.",
                   file=sys.stderr)
             return 1
-        print(f"warning: couldn't reach Nebula at {where} to check the token.", file=sys.stderr)
+        print(f"warning: couldn’t reach Nebula at {where} to check the token.", file=sys.stderr)
     app_name = (status or {}).get("agent") or args.name or client.label
     if status and args.name and args.name != app_name:
         print(f"note: this token belongs to {app_name!r}, not {args.name!r}; the canvas will show {app_name!r}.",
@@ -373,13 +373,13 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
     setup = agent_connect.render(client.id, paths=paths, url=url, url_file=url_file, **credential,
                                  app_name=app_name, daily_usd=daily)
     if legacy:
-        print(f"note: this token has no token file, so {client.label}'s config will hold the token itself. Revoke it "
+        print(f"note: this token has no token file, so {client.label}’s config will hold the token itself. Revoke it "
               "in Settings > Connect your agent and connect again to keep it in a token file instead.",
               file=sys.stderr)
     if print_only or client.kind == "manual":
         if not token:
             print(f"# No token file given: replace {agent_connect.TOKEN_FILE_PLACEHOLDER} with the token file "
-                  "Settings > Connect your agent shows you. The CLI can't make tokens.\n")
+                  "Settings > Connect your agent shows you. The CLI can’t make tokens.\n")
         _print_setup(setup)
         return 0
 
@@ -404,7 +404,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         else:
             argv = agent_connect.codex_add_argv(entry)
         if shutil.which(argv[0]) is None:
-            print(f"error: `{argv[0]}` isn't on PATH. Run this yourself once it is:", file=sys.stderr)
+            print(f"error: `{argv[0]}` isn’t on PATH. Run this yourself once it is:", file=sys.stderr)
             print(setup["snippet"])
             return 1
         # `codex mcp add` silently replaces a server with the same name, so
@@ -469,7 +469,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
 def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], str] = input,
                    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> int:
     if os.environ.get("NEBULA_AGENT_TOKEN"):
-        print("error: an in-app agent can't disconnect other apps from Nebula; the person runs this.", file=sys.stderr)
+        print("error: an in-app agent can’t disconnect other apps from Nebula; the person runs this.", file=sys.stderr)
         return 1
     try:
         client = agent_connect.client(args.client)

@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { commonsReviewApi as api, commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationLabels } from '../../lib/commonsEvaluationTypes';
 import type { ReviewBatch, ReviewItem } from '../../lib/commonsReviewTypes';
-import { CommonsCloseBatch, EDITS_LINE_REVIEW } from './CommonsCloseBatch';
+import { CommonsCloseBatch } from './CommonsCloseBatch';
+import { CHANGE_REFERENCE_LINE_REVIEW, EDITS_LINE_REVIEW } from '../../lib/commonsEditLines';
 import { saveFailure, type LabelingWork, type SaveResult } from './commonsLeave';
 import { SectionEyebrow } from './CommonsSectionEyebrow';
 import '../../styles/commons-evaluation.css';
@@ -292,7 +293,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     </fieldset>
     <div className="evaluation-save">{agreement}</div>
     {dirty && <button className="commons-button commons-button--danger" disabled={disabled} onClick={discard}>Discard changes</button>}
-    <p role="status">{dirty ? 'Save before changing reference' : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
+    <p role="status">{dirty ? CHANGE_REFERENCE_LINE_REVIEW : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
     <details><summary>Original agent grade</summary><dl>
       {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{pretty(value)}</dd></div>)}
       {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{value.toFixed(2)}</dd></div>)}

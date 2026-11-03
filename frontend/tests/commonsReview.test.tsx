@@ -43,7 +43,7 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
   expect((screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText('Save before changing reference')).toBeTruthy();
+  expect(screen.getByText('Save or discard your corrections to change the reference.')).toBeTruthy();
   expect(screen.queryByText(/Unsaved corrections ·/)).toBeNull();
   fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
   await screen.findByRole('alert');

@@ -3634,3 +3634,54 @@ exemption by surface, and the close lines in the shared Try-again ratchet.
   and 2 failed on the first run (the two #208 interactions above); both fixed and their files
   re-run, 58 of 58. Backend isolated: test_flag_parens_copy, test_agent_connect,
   test_commons_evaluation_close, 88 of 88. Build 474,722 B raw / 147,190 B gzip.
+
+## Round 18n
+
+GM r45, on top of 005cc58d.
+
+- **1. Check (no code).** Live, in Agent review with a correction made: the light ring around
+  the locked "Close review & resume library analysis…" opener in the 18m shot is its
+  :focus-visible ring (outline solid 2px rgba(255,255,255,0.92)). Unfocused, the same opener
+  reads as locked through dimmed chrome: opacity 0.48, no outline, default cursor, its line
+  right under it. No shot needed.
+- **2. CLI rewordings** (cli/commands/mcp_connect.py), as r45 writes them, two sentences each:
+  - "Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead."
+  - "For a token made before token files, set NEBULA_APP_TOKEN or pass --paste-token." (as is)
+  - "…pass its address with --url. For the desktop app, set NEBULA_URL_FILE to the file named
+    in Settings, under Connect your agent."
+  test_agent_connect asserts GM's full third sentence, and a new test asserts the first with no
+  semicolon.
+- **3. The Review batch toggle.** Its action checked first: it switches Blind labeling to the
+  batch's review view ("One last look."), so "review the batch" is the verb. With unsaved labels
+  it is aria-disabled (focusable, presses ignored), with its own line right under it as its
+  describedby: "Save or discard your label changes to review the batch." It is natively
+  disabled only while a save is in flight, with no line. The status line takes the lock form:
+  "Save or discard your label changes to change the reference." (Blind labeling) and "Save or
+  discard your corrections to change the reference." (Agent review). All five unsaved-edits
+  lines now live in lib/commonsEditLines.ts (CommonsCloseBatch re-exports its two). The toggle
+  line is placed with data-lock-place="control", so lockPlacementProblems checks it; a new
+  commonsCopy.ratchet block pins every line to the house lock form and scans src for the old
+  "Save before changing reference".
+- **4. Curly apostrophes.** Every person-read message in mcp_connect.py (n’t, Nebula’s, the
+  client’s config) and devserver's "isn’t loopback" announce line. person_session's startup
+  lines have none. Help, description, epilog and usage text stay exempt by surface.
+  test_flag_parens_copy gains a straight-apostrophe check over person_session.py, devserver.py
+  and mcp_connect.py (docstrings and help skipped; code inside f-string braces ignored), with a
+  probe test of what it catches and what it lets through.
+- **MCP.** None of these strings are MCP tool or parameter descriptions. The mcp connect and
+  disconnect messages can reach an agent that runs the command for the person (the in-app agent
+  refusal is aimed at one); their meaning is unchanged, apostrophes and the three rewordings only.
+- **Left alone:** the "Discard changes" wrap and "&" → "and" (wording batch).
+- **Mutations.** Frontend 12 of 12 killed (N1–N12: the toggle line text, its placement, its
+  describedby, native instead of aria, presses not ignored, the line during a save, both status
+  lines, a lib line out of form, the old wording back, and others). Backend: A1–A4 killed by
+  the apostrophe check (a print, an f-string possessive, a log.warning, a devserver line), A5–A6
+  killed by the new test_agent_connect assertions (a reworded sentence back to a semicolon, the
+  third sentence's tail); A7, a straight apostrophe in a help= string, survives as intended.
+- **Live** (installed Chrome, throwaway profile, 8951/5951, canaries refused, no blocked hosts):
+  11 of 11. Shot: fu3r/shots-r18n/toggle-locked-with-line-1440.png (1440x900, md5
+  1c9142a5b99a09cf4dc4747651db4980, distinct from 18m's).
+- **Gates.** tsc -b and npm run lint clean. vitest on an explicit list of 497 files: 6,510 of
+  6,510. Backend isolated: test_flag_parens_copy, test_agent_connect, test_person_session,
+  test_commons_evaluation_close, 122 passed. Build 474,722 B raw / 147,176 B gzip.
+  person_gate.py identical to main.

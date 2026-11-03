@@ -25,7 +25,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withFocusFixup } from './helpers/focusFixup';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineLook, NEUTRAL } from './helpers/lineLook';
 import { cascaded } from './helpers/cssCascade';
@@ -633,6 +633,27 @@ describe('the opener, outside the dialog (GM r44 1)', () => {
     act(() => noteBackendConnection('offline'));
     expect(opener.disabled).toBe(true);
     expect(screen.queryByText(EDITS_LINE_REVIEW)).toBeNull();
+  });
+});
+
+describe('every unsaved-edits line is in the house lock form (GM r44 1, r45 Q1)', () => {
+  it('"Save or discard your <edits> to <what the control does>.", one sentence with its period', async () => {
+    const lines = await import('../src/lib/commonsEditLines');
+    expect({ ...lines }).toEqual({
+      EDITS_LINE_LABELING: 'Save or discard your label changes to close this batch.',
+      EDITS_LINE_REVIEW: 'Save or discard your corrections to close this batch.',
+      REVIEW_BATCH_LINE: 'Save or discard your label changes to review the batch.',
+      CHANGE_REFERENCE_LINE_LABELING: 'Save or discard your label changes to change the reference.',
+      CHANGE_REFERENCE_LINE_REVIEW: 'Save or discard your corrections to change the reference.',
+    });
+    for (const line of Object.values(lines)) expect(line).toMatch(/^Save or discard your (?:label changes|corrections) to [^.]+\.$/);
+  });
+
+  it('the old status line is gone from the app', () => {
+    const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+      .flatMap((entry) => (entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]));
+    const src = join(__dirname, '..', 'src');
+    expect(files(src).filter((path) => /\.tsx?$/.test(path) && /Save before changing reference/i.test(readFileSync(path, 'utf8')))).toEqual([]);
   });
 });
 

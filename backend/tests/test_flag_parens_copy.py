@@ -108,3 +108,37 @@ def test_the_startup_lines_for_the_person_are_checked():
                    if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped]
         for start in starts:
             assert any(text.startswith(start) for text in checked), f"{name}: {start!r} is not scanned"
+
+
+# Round 18n (GM r45 Q2): what the person reads in the terminal uses curly apostrophes, as the app's
+# lines do: the startup lines (the sign-in link and its startup errors) and `nebula mcp connect`
+# and `disconnect`, which the person runs. Help, description, epilog and usage stay exempt by
+# surface. Agents may read the mcp messages too (an agent running the command for the person);
+# the words mean the same either way.
+PERSON_READ = ("services/person_session.py", "devserver.py", "cli/commands/mcp_connect.py")
+STRAIGHT_APOSTROPHE = re.compile(r"\w'\w|^'\w")
+
+
+def straight_apostrophes(source: str, name: str) -> list[str]:
+    tree = ast.parse(source)
+    skipped = _docstrings(tree) | _help_text(tree)
+    return [f"{name}:{node.lineno}: {node.value!r}" for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skipped
+            and STRAIGHT_APOSTROPHE.search(node.value)]
+
+
+def test_person_read_terminal_lines_use_curly_apostrophes():
+    found = []
+    for name in PERSON_READ:
+        found += straight_apostrophes((BACKEND / name).read_text(encoding="utf-8"), name)
+    assert found == []
+
+
+def test_the_apostrophe_check_catches_what_it_is_for():
+    assert straight_apostrophes("print(\"error: Nebula doesn't recognize this token.\")\n", "m.py")
+    assert straight_apostrophes("print(f\"so {label}'s config will hold it\")\n", "m.py")
+    assert straight_apostrophes("log.warning(\"Pass Nebula's address\")\n", "m.py")
+    assert not straight_apostrophes("print(\"error: Nebula doesn’t recognize this token.\")\n", "m.py")
+    # Help text is exempt by surface; code inside an f-string's braces isn't text.
+    assert not straight_apostrophes("p.add_argument('--x', help=\"it doesn't\")\n", "m.py")
+    assert not straight_apostrophes("raise E(f\"{'token' if k else 'file'} in place\")\n", "m.py")

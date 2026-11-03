@@ -95,7 +95,7 @@ def announce(token: str, backend_origin: str, *, ui: str | None, open_browser: b
     stdout = sys.stdout if stdout is None else stdout
     link = person_session.person_link(token, backend_origin, ui)
     if link is None:
-        print("Nebula: no person link (the canvas or backend address isn't loopback). "
+        print("Nebula: no person link (the canvas or backend address isn’t loopback). "
               "The canvas will run unverified.", file=stdout, flush=True)
         return None
     if open_browser:

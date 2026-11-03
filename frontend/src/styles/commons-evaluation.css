@@ -314,6 +314,15 @@ body.app-slava-restraint .evaluation-form .commons-button--primary {
 .evaluation-heading>div {
   min-width:0;
 }
+/* PR #204 round 18n (GM r45 Q1): the Review batch toggle and, while labels are unsaved, its lock
+   line right under it, both at the heading's end. */
+.evaluation-heading__toggle {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  text-align:end;
+  flex-shrink:0;
+}
 body.app-slava-restraint .commons-evaluation select,body.app-slava-restraint .commons-evaluation input:not([type=checkbox]):not([type=range]) {
   background:#f9faf5;
   color:#2b3824;
