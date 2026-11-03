@@ -23,8 +23,11 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 
 import { NoticeRegion } from '../src/components/NoticeRegion';
 import { SceneUnsavedMark } from '../src/components/nodes/SceneUnsavedMark';
-import { useGraphStore } from '../src/store/graphStore';
+import { useGraphStore, resetDeletedSceneEditsForTests } from '../src/store/graphStore';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => resetDeletedSceneEditsForTests());
 
 // The notices are a deferred chunk: load it before any render (helpers/regionNoticesReady.ts).
 beforeAll(regionNoticesReady);

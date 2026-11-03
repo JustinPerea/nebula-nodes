@@ -227,3 +227,159 @@ pair depends on its order.
 
 `npx tsc -b --noEmit` is clean, and eslint is clean on every changed file,
 graphStore.ts included.
+
+## Round 2 (review 1)
+
+### MEDIUM-1: fix5 leaked through the save-404 route
+
+`deletedSceneEdits` fills from three routes: the person's delete, a sync that
+takes the card off, and a save answered 404. fix5's "404: deleted, no
+promise, nothing sent again" kept `n1`'s typing with no delete in the file,
+so the round-1 ratchet (which looked for deletes) passed it. The next test's
+fresh `n1` took the typing back and PUT `["s1:gone","s2:b"]`.
+
+- fix5 now resets in `afterEach`, and ends with an ordered pair
+  (`shuffle: false`): A leaves a 404's typing kept, B expects no PUT and the
+  scene as sent. Without the reset B fails 3/3 with
+  `expected [ [ 's1:gone', 's2:b' ] ] to deeply equal []`.
+- The rule is now structural: every test file that has `'cinema-scene'` in
+  code and takes the graph store resets in `afterEach`, whatever it does.
+  That added the reset to 58 more files. `graphStore.reloadLifecycle` opts
+  out with a reason: every test loads a fresh store (`vi.resetModules`).
+
+### LOW-1: the reset now matches replaceCanvasByClear
+
+`resetDeletedSceneEditsForTests` also clears `nodeWrites`, `wireWrites`,
+`deletesInFlight`, `renameDrafts`, `labelsInFlight`, `labelsSavedBefore` and
+runs `clearCinemaScenePersistence()` (which retires `suspendedCinemaScenes`).
+Its doc lists what it clears and what it leaves (store state, undo history,
+write queue, landings, runs). It is still called only from test files.
+
+### NIT-3: deleteLanded reads the hold itself
+
+New tests-only export `deleteInFlightForTests()`: a node's delete still
+unanswered, or `pressHitsDeleteInFlight` for the step on top. `deleteLanded`
+now requires that to be false as well as the notice.
+
+A surprise while pinning the coupling: the notice is set inside
+`applyDeleteAnswers` *before* the `finally` clears `deletesInFlight` and
+settles the step, so a synchronous store subscriber sees the notice while
+the delete is still in flight. It is the same synchronous call, so nothing a
+test awaits can run in between. fix16's new test "the delete's hold has
+ended by the time anything can act on its notice" checks this in a microtask
+after the notice. The 17 sites that still wait on the text "Deleted the node."
+(fix19, fix20 and others) rely on it.
+
+Mutation: the hold ending 200 ms after the notice. That new test fails in
+236 ms and names the cause. The deleteLanded tests in fix16/17/18/24/25
+pass. 17 other tests fail, because the delay also breaks restores and
+retries. The `deleteAndWait` helpers in fix21stops, fix22 and fix22b now
+call deleteLanded.
+
+### Ex-MEDIUM-2: fixed sleeps between a delete and its Undo
+
+fix24 (two sites, `sleep(300)`) and fix21stops A2 (`sleep(60)`, release,
+`sleep(100)`) now use `deleteLanded`. In A2 the try's PUT stays held while
+the delete goes out, and the wait comes after `release()`. With the DELETE
+answer stalled 350 ms, the before copies fail 5 tests (A2 plus fix24's four)
+and the after copies pass 30/30, twice.
+
+### LOW-2, NIT-1: the three ratchets read the syntax tree
+
+`tests/helpers/ratchetSource.ts` is shared. It holds the file walk, the
+parse, the comment ranges, the opt-out (`<key>: off, <reason of 10+
+chars>`, real comments only), and module bindings (named import, namespace,
+`await import`, `const { x } = store`, a full vi.mock).
+
+- **regionNoticesReady:** a mount is a JSX or `createElement` render of
+  `NoticeRegion`, or of `App` (NIT-2). The name counts only when the file
+  imports that module. A hook is beforeAll or beforeEach with
+  `regionNoticesReady` (any extra argument), a block that awaits the helper
+  or `DeferredRegionNotices.preload()`, or `() => regionNoticesReady()`.
+  These are rejected as teardown traps: `() => preload()`,
+  `async () => await preload()` and `beforeAll(X.preload)`. A test checks
+  that `App.tsx` is the only app file rendering `<NoticeRegion>`.
+- **deleteLanded:** catches a waitFor whose callback reads `deleted`
+  anywhere other than an `expect(read)` that asserts false. That covers
+  block bodies, toBeTruthy, toEqual(true), `not.toBe(false)`,
+  `if (!x.deleted) throw` and element access. It also catches a delete, then
+  a fixed sleep, then `.undo()` in one block with no deleteLanded and no
+  "Deleted the node." wait between.
+- **sceneEditsReset:** every `it` or `test` must sit in the file or a
+  describe whose own body has an afterEach that resets. The accepted forms
+  are `afterEach(fn)`, `afterEach(store.fn)`, or the call anywhere in the
+  callback, including after other calls.
+
+Each ratchet has caught and passing fixtures for every form the review
+planted, plus more. Mutations on real files:
+
+| Change | Result |
+|---|---|
+| preload removed from App.canvasFocus | named |
+| preload commented out in pr198Fix20Ui | named |
+| reset commented out in fix5 | named |
+| fix24's `sleep(300)` put back | named |
+| fix18's wait turned into a block-body `toBeTruthy` flag wait | named |
+| `beforeAll(regionNoticesReady, 10_000)` in pr198Fix23Ui | passes |
+| fix16's two afterEach merged into one block | passes |
+| `afterEach(resetDeletedSceneEditsForTests)` in fix21 | passes |
+| `deletedSceneEdits.clear()` dropped from the reset | fix16 B and fix5 B fail |
+
+Known gaps are listed in each ratchet's header comment.
+
+### NIT-2: App renders
+
+`noticeRegion` and the five `App.*` files that render `<App/>` now preload
+the chunk too (`beforeAll(regionNoticesReady)`). The ratchet covers them.
+
+### 8. Ratchet scan time
+
+Each scan prefilters on raw text before parsing:
+
+- region: `NoticeRegion`, or an `…/App` specifier;
+- scene: `cinema-scene`;
+- delete: `deleted`, `deleteNode`, `deleteSelected`.
+
+Any file with an escape that could spell a token is parsed too. The opt-out
+comment walk runs only for a file that would otherwise fail. Out of 703 test
+files, about 40 to 100 are parsed per ratchet.
+
+- **Locally:** region 0.55 s, scene 0.70 to 0.75 s, delete 0.50 s.
+- **Under load (load average 40):** the 93-file gate ran at the same time,
+  with a busy loop per core. Region was 0.55 to 0.60 s, scene 0.75 to
+  0.80 s, delete 0.61 s.
+- **Before the region prefilter was tightened:** 1.8 to 2.0 s
+  (`createElement` matched 81 files).
+
+Each repo scan has `{ timeout: 20_000 }`. #220 saw a ratio of about 5x
+between a local run and CI. On that ratio, these scans would take about 4 s
+in CI, well under 20 s.
+
+### Latent flakes this PR also fixes
+
+- **pr198Fix20Ui and pr198Fix21Ui** (review 1). With React's scheduler
+  stalled 20 ms, the base versions fail "the state slot … [Try again]
+  disabled" and "aria-disabled and the line aria-busy at once". So does
+  pr198Fix23Ui's "a rename during a try". The head versions pass 25/25,
+  twice.
+- **graphStore.fix18 "asked again (the person's delete and Undo): Codex's
+  edit to another field…"** failed in CI on #219 at d72ac1d2 (Frontend tests
+  part 3 of 3, 3054 ms, `expected undefined to be 'Codex changed “Opening”
+  while you wer…'`). #219 doesn't have this PR. Its copy of the test still
+  waits on `h.state.deleted` and then presses Undo. When the DELETE's answer
+  comes after the flag, the Undo is dropped by design (GM r18 option (c)),
+  and the waitFor for the clash times out at 3 s. With the DELETE answer
+  stalled 40 ms, #219's version fails 3/3 with CI's exact message at
+  3043 ms, and the head version passes 3/3. It is a test race, not a product
+  bug. #219 picks up the fix once it merges main after this PR lands.
+
+With the DELETE answer stalled 40 ms, the base versions of fix16, fix17 and
+fix18 fail 6 tests, and the head versions pass 31/31.
+
+### Gates (round 2)
+
+- **vitest:** 93 test files, every test file this PR changes plus the
+  ratchets, with `--maxWorkers=2` on an explicit list. 1337/1337 passed.
+  Part of the run overlapped a busy loop per core.
+- **tsc and eslint:** `tsc -b --noEmit` is clean, and eslint is clean on the
+  74 files changed this round.

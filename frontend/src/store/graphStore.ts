@@ -3318,26 +3318,46 @@ interface DeletedSceneLine { nodeId: string; line: string; scene: string; said: 
 const DELETED_SCENES_KEPT = 32;
 
 /**
- * Tests only. A deleted scene's kept edits outlive the test that left them:
- * tests reuse node ids (n1) on one canvas, so nothing bumps
- * canvasReplacementRevision, and clearCinemaScenePersistence leaves this map
- * alone. The next test's n1 then took the edits back as a delete undone and
- * saved them (fix/ci-flakes-rename-fix16: a leaked "s2: mine on s2" save took
- * graphStore.fix16's queued 400). Clears what a canvas replacement
- * (replaceCanvasByClear) clears or retires of a node's edits outside the
- * scene's own persistence: the kept deleted-scene edits (retired there by
- * the revision), the copies held through a
- * delete, typing deferred or parked behind one, and the unsaved param edits
- * with the backend's scenes they are read against.
- * tests/sceneEditsResetRatchet.test.ts keeps every scene-delete test file
- * calling it in afterEach.
+ * Tests only, never called from app code. Tests reuse node ids (n1) on one
+ * canvas, so nothing bumps canvasReplacementRevision between them, and what
+ * one test leaves keyed by a node id is the next test's n1's. A deleted
+ * scene's kept edits (deletedSceneEdits, GM r20 answer 3: filled by the
+ * person's delete, a sync that takes the card off, and a save answered 404)
+ * were taken back as a delete undone and saved (fix/ci-flakes-rename-fix16:
+ * a leaked "s2: mine on s2" save took graphStore.fix16's queued 400; PR #221
+ * review 1 MEDIUM-1: graphStore.fix5's 404 test PUT its typing from the next
+ * test's n1). So this clears every piece of per-node state that a canvas
+ * replacement (replaceCanvasByClear) clears or retires, the same way:
+ * - the kept deleted-scene edits (retired there by the revision);
+ * - the parked param saves, the param push timers and the typing deferred
+ *   behind a delete;
+ * - the scenes' own persistence (clearCinemaScenePersistence, which also
+ *   retires the scenes a reload suspended);
+ * - the node and wire writes still out, the deletes still on their way, the
+ *   copies held through a delete, rename drafts, and the labels in flight
+ *   with what they were saved over (PR #221 review 1 LOW-1: fix17's Redo
+ *   test left its restore's hold on n1 to the next test).
+ * A late answer to a request the test left unanswered can still arrive in the
+ * next test; its write is no longer tracked, so it changes nothing there.
+ * Not cleared: the store's own state and undo history (each test's
+ * beforeEach sets them), and canvas-wide records that a replacement also
+ * renews (the write queue, landings, runs), which hold no node's edits.
+ * tests/sceneEditsResetRatchet.test.ts keeps every test file that uses
+ * Cinema scenes with this store calling it in afterEach.
  */
 export function resetDeletedSceneEditsForTests(): void {
   deletedSceneEdits.clear();
-  heldCopies.clear();
-  deferredParamPushes.clear();
   takeParkedParamSaves();
+  nodeWrites.clear();
+  wireWrites.clear();
   clearAllParamPushTimers();
+  clearCinemaScenePersistence();
+  deferredParamPushes.clear();
+  deletesInFlight.clear();
+  heldCopies.clear();
+  renameDrafts.clear();
+  labelsInFlight.clear();
+  labelsSavedBefore.clear();
 }
 
 /** Nebula's scene for a node, as the last sync (or save answer) had it. */
@@ -9018,6 +9038,18 @@ function pressHitsDeleteInFlight(state: GraphState): boolean {
   if (!target || !('entry' in target)) return false;
   const entry = target.entry;
   return stepsInFlight.has(entry) && Boolean(removedBy.get(entry)?.size) && !clearSteps.has(entry);
+}
+
+/**
+ * Tests only, never called from app code (tests/helpers/deleteLanded.ts):
+ * whether a delete is still on its way. Either a node's backend delete hasn't
+ * answered (deletesInFlight), or an Undo pressed now would be dropped for the
+ * delete step on top (pressHitsDeleteInFlight, GM r18 option (c)). Read
+ * directly, so the helper never depends on the delete's notice being set in
+ * the same tick as its hold ends (PR #221 review 1 NIT-3).
+ */
+export function deleteInFlightForTests(): boolean {
+  return deletesInFlight.size > 0 || pressHitsDeleteInFlight(useGraphStore.getState());
 }
 
 /** Whether this press waits for a step's answer (and is queued, bound to its target). */

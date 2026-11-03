@@ -344,6 +344,38 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     expect(briefOf()[0]).toBe('s1:mine');
   });
 
+  // PR #221 review 1 NIT-3: tests that wait on "Deleted the node." before
+  // pressing Undo (fix18, fix19, fix20 and others) rely on the delete's hold
+  // ending in the same synchronous call that shows the notice
+  // (applyDeleteAnswers sets it, then the finally clears deletesInFlight and
+  // settles the step). deleteLanded reads the hold itself; this pins the
+  // coupling the notice waits rely on, so a refactor that ends the hold later
+  // fails here, not as scattered 3 s timeouts.
+  it('the delete’s hold has ended by the time anything can act on its notice', async () => {
+    const h = backend(S3);
+    withRestore(h);
+    await clashOnS1(h);
+    h.failNext(0);
+    const heldAfterNotice: boolean[] = [];
+    let seen = false;
+    const stop = useGraphStore.subscribe(() => {
+      const state = useGraphStore.getState();
+      const notice = state.undoNotice as { text?: string; offer?: string; entry?: unknown } | null;
+      if (seen || notice?.text !== 'Deleted the node.' || notice.offer !== 'undo' || notice.entry !== state.undoStack.at(-1)) return;
+      seen = true;
+      // The first point a test's waitFor (or anything else) can run after the notice.
+      queueMicrotask(() => heldAfterNotice.push(store.deleteInFlightForTests()));
+    });
+    try {
+      useGraphStore.getState().deleteNode('n1');
+      expect(store.deleteInFlightForTests()).toBe(true);
+      await deleteLanded(useGraphStore);
+    } finally {
+      stop();
+    }
+    expect(heldAfterNotice).toEqual([false]);
+  });
+
   it('a restore from another window after the person’s delete: asked again', async () => {
     const h = backend(S3);
     withRestore(h);
