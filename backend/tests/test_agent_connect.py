@@ -1024,6 +1024,13 @@ def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(
         if line == command:
             continue
         assert "'" not in line and "(" not in line and ")" not in line and ";" not in line, line
+    # GM r55: no colon to introduce the command; the dialog quoted exactly
+    # as Claude Code 2.1.317 shows it (title and confirm label).
+    lines = out.out.splitlines()
+    assert "Start Claude Code with the Nebula channel from any folder with this command." in lines
+    assert not any(line.rstrip().endswith(":") for line in lines if line != command)
+    assert ("Claude Code first shows “WARNING: Loading development channels”. "
+            "Choose “I am using this for local development”.") in lines
 
 
 def test_channel_connect_twice_changes_nothing_and_reuses_its_token_file(tmp_path, cli_env, monkeypatch, capsys):

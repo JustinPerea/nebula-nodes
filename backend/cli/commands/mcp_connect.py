@@ -342,6 +342,12 @@ def listen_config_path(home: Path | None = None) -> Path:
     return home / LISTEN_FILE
 
 
+# The development-channels dialog Claude Code shows on launch, verbatim as of
+# Claude Code 2.1.317 (title and confirm label). Checked against the binary.
+CLAUDE_DEV_CHANNELS_TITLE = "WARNING: Loading development channels"
+CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
+
+
 def launch_command(path: Path) -> str:
     """The one command that starts Claude Code with the channel. The saved
     `nebula` server's copies of the tools are left out, so nebula-listen
@@ -424,11 +430,13 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
         what = "It holds the token itself, so keep it private." if legacy else "It names your token file, never the token."
         print(f"Wrote {path} with mode 600. {what}" + _backup_note(backup, old_token))
     print()
-    print("Start Claude Code with the Nebula channel from any folder:")
+    print("Start Claude Code with the Nebula channel from any folder with this command.")
     print()
     print(launch_command(path))
     print()
-    print("Claude Code first shows “Loading development channels”. Choose “I am using this for local development”.")
+    # Claude Code's own dialog, quoted exactly: its title and confirm label as
+    # of Claude Code 2.1.317. If an update renames them, change both here.
+    print(f"Claude Code first shows “{CLAUDE_DEV_CHANNELS_TITLE}”. Choose “{CLAUDE_DEV_CHANNELS_CONFIRM}”.")
     print("On a Team or Enterprise seat an Owner must turn on Channels in the org’s Claude Code settings first.")
     return 0
 
