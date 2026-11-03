@@ -172,11 +172,38 @@ def requeue_stale_analyzing(store) -> int:
                             ).rowcount
 
 
+def _requeue(conn, store, asset_id: str, actor: str) -> None:
+    conn.execute("UPDATE assets SET analysis_state = 'queued', attempts = 0, next_attempt_at = NULL "
+                 "WHERE id = ? AND media = 'image'", (asset_id,))
+    store.emit(conn, "analysis_requeued", {"asset": asset_id}, actor)
+
+
 def requeue(store, asset_id: str, *, actor: str) -> None:
     with store.db.tx() as conn:
-        conn.execute("UPDATE assets SET analysis_state = 'queued', attempts = 0, next_attempt_at = NULL "
-                     "WHERE id = ? AND media = 'image'", (asset_id,))
-        store.emit(conn, "analysis_requeued", {"asset": asset_id}, actor)
+        _requeue(conn, store, asset_id, actor)
+
+
+def reanalyze(store, asset_id: str, *, actor: str) -> dict:
+    """Re-analyze one asset (the detail's Re-analyze), unless it is too
+    transparent to analyze: then it stays as it is and the answer is that
+    state, its kind and its line (GM r6 on #208: re-analyzing can't change a
+    property of the image). The state always belongs to the asset's current
+    file: an asset's bytes never change (content-addressed by sha256; no
+    route rewrites blob_key), and a different file is a different asset with
+    its own state. Check and requeue are one transaction, so a worker write
+    between them can't be lost."""
+    from commons import analysis_errors
+
+    with store.db.tx() as conn:
+        row = conn.execute("SELECT analysis_state, last_error, last_error_kind FROM assets WHERE id = ?",
+                           (asset_id,)).fetchone()
+        if row is not None and row["analysis_state"] == "analysis_failed" \
+                and analysis_errors.kind_of(dict(row)) == analysis_errors.TRANSPARENT:
+            return {"queued": False, "analysis_state": "analysis_failed",
+                    "last_error_kind": analysis_errors.TRANSPARENT, "last_error": row["last_error"],
+                    "reason": analysis_errors.TRANSPARENT_LINE}
+        _requeue(conn, store, asset_id, actor)
+    return {"queued": True}
 
 
 def stale_asset_ids(store, *, prompt_version: str, model_id: str, collection_id: str | None = None) -> list[str]:

@@ -264,3 +264,19 @@ describe('Preview of a Moodboard bundle saved before #90', () => {
     expect(within(section).getAllByRole('list').map((list) => list.getAttribute('aria-label'))).toEqual(['Palette']);
   });
 });
+
+// #208 review 2: the node showed only warnings[0], so a too-transparent image's
+// line hid the run's own "analyzed it again" (or the other way round).
+describe('the warnings of a run that analyzed the board again', () => {
+  const RERUN = 'The board’s saved colors counted transparent areas as dark, so this run analyzed it again. '
+    + 'Analyze it in Moodboard Studio to save the new analysis.';
+  const CLEAR = '#2 is too transparent to add colors.';
+
+  it('shows both, the run’s own first, on the card', () => {
+    const card = renderCard({ ...BUNDLE, analysis: { ...BUNDLE.analysis, warnings: [RERUN, CLEAR] } });
+    const items = statusItems(card);
+    expect(items.slice(-2)).toEqual([RERUN, CLEAR]);
+    const view = parseMoodboardBundle({ ...BUNDLE, analysis: { ...BUNDLE.analysis, warnings: [RERUN, CLEAR] } })!;
+    expect(moodboardStatus(view).slice(-2)).toEqual([RERUN, CLEAR]);
+  });
+});

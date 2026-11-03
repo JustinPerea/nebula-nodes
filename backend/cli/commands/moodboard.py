@@ -139,6 +139,9 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"    {composed['styleBrief']}")
     else:
         print(f"    Not built yet: `nebula moodboard analyze {board_id}`")
+    if composed.get("outdated"):
+        # Right after the brief's text (GM r5): its saved colours are out of date.
+        print(f"    {composed['outdated']}")
     if override and override.get("stale"):
         if override["by"] == "agent":
             print(f"    The board changed since this was written. Keep it with `nebula moodboard set {board_id} "
@@ -241,6 +244,9 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
         print(f"  Not analyzed since its last change. `nebula moodboard analyze {board.get('id')}`")
         return
     print("  Analysis:")
+    if analysis.get("outdated"):
+        # Made before alpha counted, on a board with transparent images.
+        print(f"    {analysis['outdated']} `nebula moodboard analyze {board.get('id')}`")
     if analysis.get("summary"):
         print(f"    {analysis['summary']}")
     _print_colours(analysis, board.get("id"))
@@ -280,7 +286,8 @@ def _print_colours(analysis: dict[str, Any], board_id: Any, indent: str = "    "
         print(f"{indent}{label} (share of the board · images it comes from, with its share of each):")
         for colour in (c for c in colours if c.get("role") == role):
             print(f"{indent}  {colour.get('hex')}  {_pct(colour.get('share')):>6}  {_sources_text(colour)}")
-    if (analysis.get("palette") or analysis.get("accents")) and not with_sources:
+    # An out-of-date analysis already says to analyze again, once (as Studio).
+    if (analysis.get("palette") or analysis.get("accents")) and not with_sources and not analysis.get("outdated"):
         print(f"{indent}Analyze again to see which images each colour comes from: "
               f"`nebula moodboard analyze {board_id}`")
 
@@ -319,8 +326,13 @@ def _print_dry_run(result: dict[str, Any]) -> None:
     saved = result.get("saved") or {}
     if not saved.get("analyzed"):
         print("  The board has no saved analysis, so everything below is new.")
-    elif not saved.get("current"):
-        print("  The saved analysis is out of date, so the changes include edits to the board.")
+    else:
+        # Both can hold: a board edited since, whose saved colours also
+        # counted transparent areas as dark.
+        if not saved.get("current"):
+            print("  The saved analysis is out of date, so the changes include edits to the board.")
+        if saved.get("outdated"):
+            print(f"  {saved['outdated']}")
     analysis = result.get("analysis") or {}
     print("  Would give:")
     _print_colours(analysis, result.get("id"))
@@ -383,6 +395,10 @@ def _price_text(est: dict[str, Any]) -> str:
     return text
 
 
+# A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
+TRANSPARENT_ESTIMATE_LINE = "#{number} wasn’t read because it’s too transparent."
+
+
 def _print_estimate(est: dict[str, Any]) -> None:
     reader = est.get("reader") or {}
     count, batches = est.get("count", 0), est.get("batches", 0)
@@ -391,6 +407,8 @@ def _print_estimate(est: dict[str, Any]) -> None:
           f"{_price_text(est)}.")
     if est.get("unreadable"):
         print(f"  Not on this computer, so not read: {', '.join(f'#{n}' for n in est['unreadable'])}")
+    for number in est.get("transparent") or []:
+        print(f"  {TRANSPARENT_ESTIMATE_LINE.format(number=number)}")
     price = est.get("price") or {}
     low = price.get("low") or {}
     if low:

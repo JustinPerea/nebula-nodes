@@ -10,6 +10,8 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from cinema.color import NODE_MEDIA_SURFACE, seen_on
+
 SIZES = {"small": 512, "medium": 1024, "large": 1568}
 MAX_BYTES = 350_000
 _SHEET_GAP = 8
@@ -61,7 +63,9 @@ def contact_sheet(paths: list[Path], size: str = "medium") -> tuple[bytes, str]:
     tiles: list[Image.Image] = []
     for path in paths:
         with Image.open(path) as image:
-            tile = ImageOps.exif_transpose(image).convert("RGB")
+            # As the person sees it on the node: a transparent frame over the
+            # node's surface, never over the colour hidden under its alpha.
+            tile = seen_on(ImageOps.exif_transpose(image), NODE_MEDIA_SURFACE)
         tile.thumbnail((longest, longest), Image.Resampling.LANCZOS)
         tiles.append(tile)
     if not tiles:

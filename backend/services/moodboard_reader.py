@@ -55,6 +55,7 @@ from __future__ import annotations
 import abc
 import asyncio
 import base64
+import functools
 import io
 import json
 import math
@@ -70,6 +71,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 import httpx
 from PIL import Image, ImageOps
 
+from cinema.color import MOODBOARD_READER_SURFACE, composite_on, is_clear
 from execution.missing_credential import MissingCredentialError
 from handlers.google_gemini import (
     GEMINI_BASE_URL,
@@ -322,6 +324,9 @@ class Target:
     index: int
     image: dict[str, Any]
     path: Path | None
+    # Whether its file is fully transparent: worked out once (clear_targets),
+    # off the event loop, and reused by the estimate and the read.
+    clear: bool | None = None
 
     @property
     def number(self) -> int:
@@ -357,6 +362,67 @@ def select_targets(board: Mapping[str, Any], image_ids: Sequence[str] | None = N
             continue
         targets.append(Target(index, image, resolve(str(image.get("url") or ""))))
     return targets
+
+
+# The trace line for a reference that is never sent: nothing in it is seen.
+CLEAR_LINE = "#{number} is too transparent to add colors."
+CLEAR_WHY = "It’s too transparent to add colors."
+CLEAR_RESULT_LINE = "#{number} is unsorted because it’s too transparent."
+
+
+def clear_targets(targets: Iterable[Target]) -> set[str]:
+    """The ids of the targets whose file is fully transparent
+    (cinema.color.is_clear). They are never sent to a reader, and the
+    estimate and the spend gate leave them out too. Each target's answer is
+    worked out once and kept on it (``Target.clear``). An image the board
+    stores as opaque, or as having no clear pixel
+    (moodboard_analysis.HAS_TRANSPARENCY, HAS_CLEAR_PIXELS), is not clear,
+    with one stat and no decode while its file is the one those facts were
+    read from (``alphaFileStat``); otherwise its file is decoded: call it
+    off the loop."""
+    return {t.id for t in targets if target_is_clear(t)}
+
+
+def target_is_clear(target: Target) -> bool:
+    if target.clear is None:
+        target.clear = target.path is not None and _image_is_clear(target.image, target.path)
+    return target.clear
+
+
+def _image_is_clear(image: Mapping[str, Any], path: Path) -> bool:
+    from services.moodboard_analysis import HAS_CLEAR_PIXELS, HAS_TRANSPARENCY, stored_alpha_facts
+
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    # Stored when the file arrived, and trusted only while the file is the
+    # one they were read from (its stamp matches): no pixel is clear.
+    stored = stored_alpha_facts(image, stat)
+    if stored is not None and (stored[HAS_TRANSPARENCY] is False or stored[HAS_CLEAR_PIXELS] is False):
+        return False
+    return _path_is_clear(path)
+
+
+def _path_is_clear(path: Path) -> bool:
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    from services.moodboard_analysis import file_version
+
+    # Keyed like the stored stamp, so a same-size rewrite with its mtime put
+    # back, or a replace by rename, is read again (review 4 L3).
+    return _file_is_clear(str(path), *file_version(stat))
+
+
+@functools.lru_cache(maxsize=512)
+def _file_is_clear(path: str, mtime_ns: int, size: int, ino: int, ctime_ns: int) -> bool:
+    try:
+        with Image.open(path) as image:
+            return is_clear(image)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return False  # left to the read, which says it couldn't open it
 
 
 def numbers_text(numbers: Iterable[int]) -> str:
@@ -640,7 +706,8 @@ def estimate(board: Mapping[str, Any], entry: Mapping[str, Any], *, image_ids: S
     day = today or date.today()
     if targets is None:
         targets = select_targets(board, image_ids)
-    readable = [t for t in targets if t.path is not None]
+    clear = clear_targets(targets)
+    readable = [t for t in targets if t.path is not None and t.id not in clear]
     row_low = price_row(entry, day)
     row_next = price_row(entry, day + timedelta(days=1))
     row_high = max((r for r in (row_low, row_next) if r), default=None,
@@ -706,6 +773,8 @@ def estimate(board: Mapping[str, Any], entry: Mapping[str, Any], *, image_ids: S
         "count": len(readable),
         "targets": len(targets),
         "unreadable": [t.number for t in targets if t.path is None],
+        # Fully transparent: never sent, so not priced. Only when there are any.
+        **({"transparent": [t.number for t in targets if t.id in clear]} if clear else {}),
         "batches": len(batches),
         "low": round(low_total, 6) if priced and readable else (0.0 if priced else None),
         "high": round(high_total, 6) if priced and readable else (0.0 if priced else None),
@@ -748,7 +817,13 @@ def encode_image(path: Path) -> tuple[str, str]:
     """A reference as JPEG, longest edge 1024 px, base64, in memory. The
     file on disk is never changed."""
     with Image.open(path) as source:
-        image = ImageOps.exif_transpose(source).convert("RGB")
+        # As the person sees it on the board: a transparent reference over
+        # the card's surface, never over the black hidden under its alpha.
+        # An opaque one is exactly as before; a clear one is never sent
+        # (``clear_targets`` leaves it out first).
+        image = composite_on(ImageOps.exif_transpose(source), MOODBOARD_READER_SURFACE)
+        if image is None:
+            raise ValueError(f"{path.name} is too transparent to add colors")
         image.thumbnail((IMAGE_EDGE, IMAGE_EDGE), Image.Resampling.LANCZOS)
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
@@ -1185,9 +1260,11 @@ def read_estimate(source: ReadingSource, board: Mapping[str, Any], targets: Sequ
     only its counts and ``billedTo: "agent"`` (section 5.6.2)."""
     if source.priced:
         return source.estimate(board, targets, today=today)
-    readable = [t for t in targets if t.path is not None]
+    clear = clear_targets(targets)
+    readable = [t for t in targets if t.path is not None and t.id not in clear]
     return {"model": reader_key(source.identity), "reader": dict(source.identity), "count": len(readable),
             "targets": len(targets), "unreadable": [t.number for t in targets if t.path is None],
+            **({"transparent": [t.number for t in targets if t.id in clear]} if clear else {}),
             "batches": len(batches_of(readable)), "billedTo": "agent", "usd": None}
 
 
@@ -1464,10 +1541,17 @@ class MoodboardRead:
     # -- phase 1 --------------------------------------------------------------------------
 
     async def run(self) -> dict[str, Any]:
+        # Worked out off the loop already when the route planned the read;
+        # a target it didn't cover is decoded off the loop here.
+        clear = await asyncio.to_thread(clear_targets, self.targets)
         for target in self.targets:
             if target.path is None:
                 self._fail(target, "its file isn't on this computer")
-        readable = [t for t in self.targets if t.path is not None]
+            elif target.id in clear:
+                # Nothing in it is seen: never sent, and no request for it.
+                self._failed[target.id] = CLEAR_WHY
+                self.trace.add("skip", CLEAR_LINE.format(number=target.number), refs=[target])
+        readable = [t for t in self.targets if t.path is not None and t.id not in clear]
         batches = batches_of(readable)
         await asyncio.gather(*(self._batch(number, batch) for number, batch in enumerate(batches, 1)))
         sorted_result = await self._sort() if self._readings else _Sorted()
@@ -1615,6 +1699,9 @@ class MoodboardRead:
             elif placed["status"] == "unsorted":
                 self.trace.add("result", f"#{target.number} Unsorted: {placed['why']}", refs=[target],
                                phase="sorting", fit=placed["fit"])
+            elif placed.get("why") == CLEAR_WHY:
+                self.trace.add("result", CLEAR_RESULT_LINE.format(number=target.number), refs=[target],
+                               phase="sorting")
             else:
                 self.trace.add("result", f"#{target.number} Unsorted: couldn't read it", refs=[target],
                                phase="sorting")
