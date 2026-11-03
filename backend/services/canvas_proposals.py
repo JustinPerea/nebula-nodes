@@ -809,6 +809,11 @@ class Proposal:
     # Which node it read under each id (main.node_removals.lineage, set when
     # it was made): a delete tags it only when it took that very node.
     lineage: dict[str, str] = field(default_factory=dict)
+    # The proposing request's raw presence session (agent_presence.
+    # presence_session; None for the agent's plain cursor), so the person's
+    # tabs show "Accepted" on that session's cursor (PR #211 r4). Person
+    # side only: never in view(), brief(), REST, the journal or logs.
+    presence_session: str | None = field(default=None, repr=False)
 
     @property
     def references(self) -> set[str]:

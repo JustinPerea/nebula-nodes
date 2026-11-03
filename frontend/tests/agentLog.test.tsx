@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
 const ws = vi.hoisted(() => ({ handlers: [] as Array<(event: unknown) => void> }));
@@ -15,6 +17,7 @@ const { useAgentPresenceStore } = await import('../src/store/agentPresenceStore'
 const { useUIStore } = await import('../src/store/uiStore');
 const { useGraphStore } = await import('../src/store/graphStore');
 const { AgentLog } = await import('../src/components/panels/AgentLog');
+const { AGENT_FALLBACK_COLOR } = await import('../src/lib/agentCursorColor');
 
 function emit(event: unknown) {
   for (const handler of ws.handlers) handler(event);
@@ -74,6 +77,9 @@ describe('agent log store', () => {
     const entries = useAgentLogStore.getState().entries;
     expect(entries).toHaveLength(1);
     expect(entries[0].agent?.color).toBe('#E8825A');
+    // Its cursor takes the same shared fallback (review 8, M9).
+    expect(useAgentPresenceStore.getState().agents['ext:claude-code'].color).toBe(AGENT_FALLBACK_COLOR);
+    expect(AGENT_FALLBACK_COLOR).toBe('#E8825A');
   });
 
   it('keeps the chat’s thinking lines', () => {
@@ -94,7 +100,9 @@ describe('agent log store', () => {
 
 describe('AgentLog panel', () => {
   it('shows actions an MCP agent took while the panel was not mounted, newest first', () => {
-    emit(action('Added Moodboard'));
+    // Each test's action has its own time: the log lists one action once
+    // (agent, session, time and words), and this module outlives a test.
+    emit(action('Added Moodboard', { at: Date.UTC(2026, 9, 20, 14, 5, 30) }));
     emit(action('Analyzed board Dusk dunes', { target: undefined, at: Date.UTC(2026, 9, 20, 14, 6, 0) }));
     showLog();
     openLog();
@@ -125,8 +133,25 @@ describe('AgentLog panel', () => {
     expect(screen.queryByText(/Running graph/)).toBeNull();
   });
 
+  // Review 8: the readable name tone reaches the page. The row carries it
+  // as --agent-log-name-color, and Restraint's name rule paints with it
+  // (the dot keeps the cursor's own shade, --agent-log-source-color).
+  it('paints the name in its readable tone, the dot in the cursor\'s shade (r20, review 8)', () => {
+    emit(action('Checking the prompt', { agent: { id: 'navy', name: 'Navy', color: '#1A1A5E', verified: true } }));
+    showLog();
+    openLog();
+    const entry = useAgentLogStore.getState().entries[0];
+    expect(entry.agent!.ink).not.toBe(entry.agent!.color);
+    const row = screen.getAllByRole('listitem')[0];
+    expect(row.style.getPropertyValue('--agent-log-name-color')).toBe(entry.agent!.ink);
+    expect(row.style.getPropertyValue('--agent-log-source-color')).toBe(entry.agent!.color);
+    const css = readFileSync(resolve(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
+    const rule = css.match(/body\.app-slava-restraint \.agent-log__source \{([^}]*)\}/)![1];
+    expect(rule).toMatch(/(^|;|\s)color:\s*var\(--agent-log-name-color,/);
+  });
+
   it('shows with the chat closed too (Q38: no chat-open gate)', () => {
-    emit(action('Added Moodboard'));
+    emit(action('Added Moodboard', { at: Date.UTC(2026, 9, 20, 14, 7, 0) }));
     showLog(false);
     const { container } = render(<AgentLog />);
     expect(container.querySelector('.agent-log')).not.toBeNull();

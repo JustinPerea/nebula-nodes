@@ -149,6 +149,7 @@ from services.agent_presence import (
     current_request_headers,
     identify as identify_agent,
     parse_target,
+    presence_session,
 )
 from services.canvas_events import (
     MOVE_THRESHOLD_PX,
@@ -161,6 +162,7 @@ from services.canvas_events import (
     param_changes,
     parse_kinds,
 )
+from services.cursor_actions import ACTIONS as CURSOR_ACTIONS, refusal as cursor_action_refusal
 from services.canvas_pins import ANOTHER_PROJECT, CanvasPins, PinError, event_text, pin_left, pin_resolved_summary, pin_summary
 from services.node_removals import RemovalLedger
 from services.agent_notes import AgentNotes, NoteError, note_summary
@@ -4131,6 +4133,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await _send_questions_sync(websocket)
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
+                # Every live cursor, person form, for this tab only (GM -
+                # Design, PR #211 r3): numbers match across tabs because each
+                # shows the backend's. Built here, after the other syncs, so
+                # every cursor event built before it is reflected in it. An
+                # event built before it can still reach this tab after it
+                # (broadcast_raw picks each socket's form at send time); it
+                # carries the same key and number, so nothing doubles.
+                await websocket.send_text(json.dumps({"type": "agentPresenceReplay",
+                                                      "cursors": agent_presence.replay()}))
             else:
                 await websocket.send_text(json.dumps({
                     "type": "personRequired",
@@ -5457,10 +5468,67 @@ def _point(identity: AgentIdentity, **kwargs: Any) -> dict[str, Any]:
     return agent_presence.point(identity, project_id=project_id, **kwargs)
 
 
+def _person_form(event: dict[str, Any], identity: Any, headers: Any, **kwargs: Any) -> dict[str, Any] | None:
+    """agent_presence.person_form, built apart from the agent form, so a
+    failure in the person's copy is logged and never silences the agent form
+    or fails the route (review 1, LOW-1).
+
+    On that failure the person's tabs get the agent form with this session's
+    real number when its cursor is already live (``session_tag``), else
+    nothing for this event (None). Never the bare agent form: a tab reads an
+    event with no session as the plain cursor, number 1, and would drop
+    whichever session holds 1 (review 2, NIT-3)."""
+    try:
+        return agent_presence.person_form(event, identity, session=presence_session(headers), **kwargs)
+    except Exception:  # noqa: BLE001 - decoration: the agent form still goes out
+        logging.getLogger("nebula.presence").exception("person form failed; sending the agent form only")
+    if "target" not in event:
+        return event  # the Agent log only: no cursor, so no number to get wrong
+    try:
+        tag = agent_presence.session_tag(identity, presence_session(headers))
+    except Exception:  # noqa: BLE001 - no number is better than a wrong one
+        tag = None
+    return {**event, "session": tag} if tag else None
+
+
+async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any] | None) -> None:
+    """Send a cursor event: ``person`` (agent_presence.person_form) to the
+    person's canvas sockets and ``event``, the agent form, to every other
+    socket. One form, as before sessions, when the two are the same object:
+    whatever an agent can read stays as it was. With no ``person`` (a
+    failed person form, _person_form), only the other sockets get it."""
+    if person is None:
+        await manager.broadcast_others(event)
+    elif person is event:
+        await manager.broadcast_raw(event)
+    else:
+        await manager.broadcast_raw(person, others=event)
+
+
+def _accepted_person_form(event: dict[str, Any], proposal: Proposal) -> dict[str, Any] | None:
+    """The person tabs' copy of the "Accepted" click: on the cursor of the
+    session that proposed it (GM - Design, PR #211 r9 item 1). The request
+    is the person's, so the session is the one recorded on the proposal when
+    it was made (``Proposal.presence_session``, person side only). When that
+    session's cursor has left by now, None: the person's tabs get no click
+    (a cursor coming back for an ended session would be false; the node's
+    run state shows what happened), and agents still get the agent form.
+    The same holds for an agent past the agent memory, whose cursor has no
+    session to tie the click to (GM - Design, PR #211 review 4). On any
+    failure, None too: never the bare agent form, which a tab would draw as
+    the plain cursor."""
+    try:
+        return agent_presence.person_form(event, proposal.agent, session=proposal.presence_session, live_only=True)
+    except Exception:  # noqa: BLE001 - no click is better than a wrong cursor
+        logging.getLogger("nebula.presence").exception("accepted person form failed; agents get the agent form only")
+        return None
+
+
 async def _show_agent(
     target: dict[str, Any],
     *,
     action: str = "click",
+    shows: str | None = None,
     say: str = "",
     origin: dict[str, Any] | None = None,
     did: dict[str, Any] | None = None,
@@ -5478,8 +5546,13 @@ async def _show_agent(
     computes (say, log) inside the guard (_set_params_bubble). Never fails
     the route that called it: presence is decoration on top of an edit that
     already succeeded.
+
+    ``shows`` is what the edit really was on the person's tabs (``type`` for
+    a param edit, ``run``, ``propose``, ``error``); ``action`` stays the
+    value agents read in the snapshot and on /ws, as before.
     """
-    identity = identify_agent(current_request_headers())
+    headers = current_request_headers()
+    identity = identify_agent(headers)
     if identity is None:
         return
     try:
@@ -5494,7 +5567,8 @@ async def _show_agent(
         if log is not None and clean_say(log) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log)
-        await manager.broadcast_raw(event)
+        person = _person_form(event, identity, headers, shown=shows)
+        await _broadcast_presence(event, person)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
         pass
 
@@ -6055,15 +6129,18 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
     """Point the calling agent's cursor at a node, a port, or a canvas spot.
 
     Body: {target?: {nodeId, handle?} | {x, y}, from?: same shape,
-    action?: move|click|drag|look, say?: text}. The caller must identify
-    itself (agent token or X-Nebula-Agent).
+    action?: one of agent_presence.ACTIONS (move, look, think, type, click,
+    drag, run, propose, wait, error), say?: text}. The caller must identify
+    itself (agent token or X-Nebula-Agent). Any other action is a 422 that
+    lists the valid ones.
 
     With `say` and no target, the line shows where the agent's cursor
     already is, without moving it; an agent with no cursor yet gets one at
     the middle of the person's view (when the browser reported one), else
     at (0, 0). `placed` says which: cursor, view or origin.
     """
-    identity = identify_agent(current_request_headers())
+    headers = current_request_headers()
+    identity = identify_agent(headers)
     if identity is None:
         raise HTTPException(
             status_code=400,
@@ -6082,6 +6159,8 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             target = parse_target(body.get("target"), cli_graph.nodes)
         origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
         action = body.get("action") or "move"
+        if not isinstance(action, str) or action not in CURSOR_ACTIONS:
+            raise PresenceError(cursor_action_refusal(action))
         event = _point(
             identity,
             target=target,
@@ -6094,7 +6173,10 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
         )
     except PresenceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    await manager.broadcast_raw(event)
+    # The person's tabs draw this session's own cursor; the response and the
+    # agent form are what they were (a line said in place keeps `target`).
+    person = _person_form(event, identity, headers, in_place=placed != "target")
+    await _broadcast_presence(event, person)
     return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"],
             "placed": placed}
 
@@ -7232,8 +7314,12 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         )
         target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
         node = target.get("nodeId")
-        await manager.broadcast_raw(_point(identity, target=target, action="click", say=reply,
-                                           did=_did("Replied on", node) if node else {"verb": "Replied"}))
+        event = _point(identity, target=target, action="click", say=reply,
+                       did=_did("Replied on", node) if node else {"verb": "Replied"})
+        # The resolving request's own session's cursor on the person's tabs,
+        # kept for the replay (PR #211 review 3, MEDIUM-1); agents read the
+        # agent form, as before.
+        await _broadcast_presence(event, _person_form(event, identity, current_request_headers()))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
         pass
     return {"pin": pin}
@@ -8074,6 +8160,9 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         raise _proposal_http_error(exc) from exc
     # The canvas it was made on, in the step that made it (review 20 L-3).
     proposal.canvas_revision = _canvas_revision()
+    # Which of the agent's cursors proposed it, for the "Accepted" click on
+    # the person's tabs only (_accepted_person_form; never in a view).
+    proposal.presence_session = presence_session(headers)
     # Which node it reads under each id, so only a delete of that very node tags it (second review).
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
@@ -8122,7 +8211,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     else:
         target = None
     if target is not None:
-        await _show_agent(target, action="click", say=spec.note,
+        await _show_agent(target, action="click", shows="propose", say=spec.note,
                           did=_did("Proposed", target.get("nodeId")))
     # Nodes of the run that can't run here, so the agent can say so or pick
     # another model before the person accepts (the canvas shows it too), and
@@ -8416,7 +8505,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         try:
             event = _point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted",
                            did=_did("Proposed", focus))
-            await manager.broadcast_raw(event)
+            await _broadcast_presence(event, _accepted_person_form(event, proposal))
         except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
             pass
     return {
@@ -13562,7 +13651,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     # review 1 N2): a failure there never turns this saved PUT into a 500.
     # An empty change says nothing and logs nothing: the cursor only moves
     # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
-    await _show_agent({"nodeId": node_id}, words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
+    await _show_agent({"nodeId": node_id}, shows="type" if keys else None,
+                      words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
                       did=_did("Changed", node_id) if keys else None)
     return updated
 
@@ -14653,7 +14743,10 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
-        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus))
+        # A param value change is typing, as through PUT (GM - Design, PR
+        # #211 r2): the person's tabs show `type`; agents still read `click`.
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
+                          shows="type" if verb == "Changed" else None)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
@@ -18269,7 +18362,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
         )
         if target:
-            await _show_agent({"nodeId": target}, say=f"Running {_quoted(_node_label(target))}", did=_did("Ran", target))
+            await _show_agent({"nodeId": target}, shows="run", say=f"Running {_quoted(_node_label(target))}",
+                              did=_did("Ran", target))
         else:
             # The whole canvas has no one node to point at: the Agent log only.
             await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -18308,7 +18402,7 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
     if first is not None:
         # The cursor quotes the node like every other bubble; the log keeps its line.
         bubble = f"{_quoted(_node_label(first))} can't run." + (f" {person[first]}" if person.get(first) else "")
-        await _show_agent({"nodeId": first}, say=bubble, did=_did("Tried to run", first))
+        await _show_agent({"nodeId": first}, shows="error", say=bubble, did=_did("Tried to run", first))
     response = {
         "runId": run_id,
         "targetNodeId": target,

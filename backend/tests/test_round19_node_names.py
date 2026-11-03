@@ -103,7 +103,7 @@ def client(monkeypatch):
 
     sent: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         sent.append(data)
 
     monkeypatch.setattr(main_module, "cli_graph", CLIGraph())

@@ -56,7 +56,7 @@ def sent(monkeypatch) -> list[dict]:
 
     messages: list[dict] = []
 
-    async def capture(data):
+    async def capture(data, **_kw):
         messages.append(data)
 
     async def ignore(data):

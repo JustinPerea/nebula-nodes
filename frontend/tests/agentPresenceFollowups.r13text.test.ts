@@ -4,8 +4,14 @@
 // tests/test_pin_text_r13.py), and a cut never leaves half an escape code.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { fitNote, noteLength, pinDisplayText, textLength } from '../src/lib/canvasPins';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { fitNote, noteLength, pinDisplayText, pinTextIsLoaded, pinTextReady, textLength } from '../src/lib/canvasPins';
+
+// Every case here needs the lazy Unicode data in (see r12text).
+beforeAll(async () => {
+  await pinTextReady;
+  expect(pinTextIsLoaded()).toBe(true);
+});
 
 const tags = (spec: string) => Array.from(spec).map((c) => String.fromCodePoint(0xe0000 + c.codePointAt(0)!)).join('');
 const FLAG = '\u{1F3F4}';
