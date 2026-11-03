@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from handlers.qc_base import optional_reference, qc_mode, qc_outputs, required_video
-from services.qc_common import clamp_score, evenly_spaced_points, extract_frames, open_rgb
+from services.qc_common import clamp_score, evenly_spaced_points, extract_frames, open_rgb, open_seen
 from services import qc_jev
 from services.qc_metrics import camera_geometry_metrics
 from services.vision_llm import call_vision_llm
@@ -109,7 +109,9 @@ async def handle_qc_camera_geometry(
     with tempfile.TemporaryDirectory(prefix="nebula-qc-camera-") as temp:
         paths = await extract_frames(source, evenly_spaced_points(5), Path(temp))
         frames = [open_rgb(path) for path in paths]
-        reference = open_rgb(reference_path) if reference_path else None
+        # The reference keeps its alpha, so a transparent one is measured and
+        # sent to Jev as it shows on the node (services/qc_common.open_seen).
+        reference = open_seen(reference_path) if reference_path else None
         findings = camera_geometry_metrics(frames, reference=reference, opencv=mode == "opencv")
         findings["expected_angle"] = expected_angle or None
         if mode == "vision-llm":
