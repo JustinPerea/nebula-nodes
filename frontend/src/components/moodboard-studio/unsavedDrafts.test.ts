@@ -305,13 +305,80 @@ describe('a saved board\'s kept edit', () => {
     expect(window.sessionStorage.getItem(EDITS)).toBeNull();
   });
 
-  it('drops a stored edit that is old or not shaped as one', () => {
+  it('drops a stored edit not shaped as one', () => {
     const good = { board: 'g1', fields: { name: 'Dusk' }, base: {}, ops: [], at: Date.now() };
-    for (const bad of [{ ...good, at: Date.now() - 2 * 24 * 60 * 60 * 1000 }, { ...good, board: 5 }, { ...good, fields: { evil: 1 } },
-      { ...good, ops: [{ op: 'nope' }] }, { ...good, fieldEditedAt: { name: 'x' } }, { ...good, base: null }]) {
+    for (const bad of [{ ...good, board: 5 }, { ...good, fields: { evil: 1 } }, { ...good, at: 'now' },
+      { ...good, ops: [{ op: 'nope' }] }, { ...good, fieldEditedAt: { name: 'x' } }, { ...good, base: null },
+      // Round 6l: each op's meta, by index.
+      { ...good, opMeta: [null] }, { ...good, opMeta: 'x' },
+      { ...good, ops: [{ op: 'weight', image: 'i1', value: 0.2 }], opMeta: [{ at: 'then' }] },
+      { ...good, ops: [{ op: 'restore', slices: [] }], opMeta: [{ at: 1, version: 'v3' }] }]) {
       window.sessionStorage.setItem(EDITS, JSON.stringify([bad]));
       expect(takeKeptEdit('g1')).toBeNull();
     }
+    window.sessionStorage.setItem(EDITS, JSON.stringify([{ ...good, ops: [{ op: 'weight', image: 'i1', value: 0.2 }], opMeta: [null] }]));
+    expect(takeKeptEdit('g1')).toMatchObject({ opMeta: [null] });
+  });
+
+  // Round 6l (GM r21 expiry): a kept edit lives as long as its board, or its project, can be restored.
+  it('keeps an edit of any age, and every board\'s, with no cap', () => {
+    const old = { board: 'g1', fields: { name: 'Dusk' }, base: {}, ops: [], at: Date.now() - 30 * 24 * 60 * 60 * 1000 };
+    window.sessionStorage.setItem(EDITS, JSON.stringify([old]));
+    expect(keptEditsWaiting().map((it) => it.board)).toEqual(['g1']);
+    expect(takeKeptEdit('g1')).toMatchObject({ board: 'g1', fields: { name: 'Dusk' } });
+    // Twelve boards' edits, held by this page: all twelve kept (the cap of ten would have dropped the oldest two silently).
+    const entries = Object.fromEntries(Array.from({ length: 12 }, (_, index) => [JSON.stringify(['moodboard', 'global', `b${index}`]),
+      saved({ name: `Dusk ${index}` }, { savedId: `b${index}` })]));
+    set(entries);
+    expect(edits().map((it) => it.board)).toEqual(Array.from({ length: 12 }, (_, index) => `b${index}`));
+    expect(unsavedWouldBeLost()).toBe(false);
+  });
+
+  // Round 6l (review 10 MEDIUM-1, GM r21 Q1): each queued image change keeps when it was made and what it changed from.
+  it('records each op\'s time and the value it changed from; a later op on the same thing keeps the first from-value', () => {
+    vi.useFakeTimers({ now: 1_000, toFake: ['Date'] });
+    try {
+      set({ [g1Key]: saved() });
+      const first = { op: 'weight', image: 'i1', value: 0.2 } as MoodboardOp;
+      const draftOf = () => useAssetStudioDraftStore.getState().entries[g1Key].draft as Record<string, unknown> & { images: Array<Record<string, unknown>> };
+      useAssetStudioDraftStore.getState().edit(g1Key, (draft) => ({ ...(draft as object), images: [{ ...img('i1', river), weight: 0.2 }], pendingOps: [first] }));
+      vi.setSystemTime(2_000);
+      const second = { op: 'weight', image: 'i1', value: 0.3 } as MoodboardOp;
+      const aside = { op: 'setAside', image: 'i1', value: true } as MoodboardOp;
+      const note = { op: 'note', image: 'i1', privateNote: 'liked' } as MoodboardOp;
+      const place = { op: 'place', placement: 'c-i1', x: 40, y: 50 } as MoodboardOp;
+      const cover = { op: 'cover', image: 'i1' } as MoodboardOp;
+      const undo = { op: 'restore', slices: [{ image: 'i1' }] } as MoodboardOp;
+      useAssetStudioDraftStore.getState().edit(g1Key, (draft) => ({ ...(draft as object), coverImageId: null,
+        images: [{ ...draftOf().images[0], weight: 0.3, excluded: true, privateNote: 'liked' }], pendingOps: [first, second, aside, note, place, cover, undo] }));
+      const [stored] = edits();
+      expect(stored.ops).toHaveLength(7);
+      expect(stored.opMeta).toEqual([
+        { at: 1_000, from: 1 },
+        { at: 2_000, from: 1 },
+        { at: 2_000, from: false },
+        { at: 2_000, from: { privateNote: '' } },
+        { at: 2_000, from: { x: 0, y: 0 } },
+        { at: 2_000, from: null },
+        { at: 2_000, version: 3 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an op the queue replaced (a slider\'s second step) hands its from-value on: the board\'s, not the first step\'s (live 6l)', () => {
+    set({ [g1Key]: saved() });
+    const step = (value: number) => {
+      const op = { op: 'weight', image: 'i1', value } as MoodboardOp;
+      useAssetStudioDraftStore.getState().edit(g1Key, (draft) => ({ ...(draft as object), images: [{ ...img('i1', river), weight: value }],
+        pendingOps: [...((draft as { pendingOps?: MoodboardOp[] }).pendingOps ?? []).filter((it) => it.op !== 'weight'), op] }));
+    };
+    step(0.95);
+    step(0.9);
+    const [stored] = edits();
+    expect(stored.ops).toEqual([{ op: 'weight', image: 'i1', value: 0.9 }]);
+    expect(stored.opMeta).toEqual([expect.objectContaining({ from: 1 })]);
   });
 
   it('asks before unload only when its write failed', () => {

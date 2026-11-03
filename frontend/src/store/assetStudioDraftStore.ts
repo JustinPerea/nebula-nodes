@@ -54,6 +54,10 @@ export interface AssetStudioDraftEntry<D = unknown> {
   /** A neutral line of the Studio's own about this draft (round 6g: "Kept
    * the name “Rivers” from the board."); the next edit clears it. */
   notice?: StudioNotice | null;
+  /** The failed save (`saveError`) found the saved board deleted (round 6l,
+   * GM r21 Q3): in Recently deleted ('trashed', deleted then, for the rail's
+   * order) or gone for good ('purged'). Any other line patched in clears it. */
+  saveGone?: { kind: 'trashed' | 'purged'; deletedAt?: string } | null;
 }
 
 /** One create of an unsaved asset: its number, the queued ops it held, and the fields it sent. */
@@ -136,6 +140,7 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     if (!state.entries[key]) return {};
     const next = { ...state.entries[key], ...patch };
     if ('saveError' in patch && !('retry' in patch)) { next.retry = null; next.retryStep = null; }
+    if ('saveError' in patch && !('saveGone' in patch)) next.saveGone = null;
     return { entries: { ...state.entries, [key]: next } };
   }),
   edit: (key, update) => set((state) => {
@@ -144,7 +149,7 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
     if (!entry) return {};
     const draft = update(entry.draft);
     return { entries: { ...state.entries, [key]: { ...entry, draft, fieldEditedAt: editedAt(entry.draft, draft, entry.fieldEditedAt),
-      revision: entry.revision + 1, dirty: true, saveError: null, retry: null, retryStep: null, notice: null,
+      revision: entry.revision + 1, dirty: true, saveError: null, retry: null, retryStep: null, notice: null, saveGone: null,
       saveState: entry.pendingSaveId ? 'saving' : 'draft' } } };
   }),
   reset: (key, draft) => set((state) => {

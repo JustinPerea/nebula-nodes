@@ -50,8 +50,8 @@ function deletedLine(item: TrashedItem): string {
 }
 
 /** Two-step button for the one action that can't be undone. */
-function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
-  label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void;
+function ConfirmInline({ label, confirmLabel, prompt, title, busy, onConfirm }: {
+  label: string; confirmLabel: string; prompt: string; title?: string; busy: boolean; onConfirm: () => void;
 }) {
   const [armed, setArmed] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -65,7 +65,7 @@ function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm }: {
     <span className="asset-trash__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      <span className="asset-trash__confirm-prompt">{prompt}</span>
+      <span className="asset-trash__confirm-prompt" title={title}>{prompt}</span>
       <button type="button" className="asset-trash__button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="asset-trash__button asset-trash__button--danger" disabled={busy}
         onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
@@ -85,15 +85,23 @@ export interface RecentlyDeletedAssetsProps {
   /** A new `n` opens the list (a Studio line's Restore for several boards, round 6j), and focus goes to the
    *  Restore button of the first of `focus` it lists, with the keyboard ring only when `keyboard` (round 6k, GM r19 3). */
   openRequest?: TrashOpenRequest;
+  /** The list starts open (a Studio's several-board Restore, kept open across a remount: round 6l, review 10 NIT-3). */
+  defaultOpen?: boolean;
+  /** What deleting these items for good would also lose (a Studio's unsaved edits, GM r21 Q2): a sentence the
+   *  confirm adds, with the full names in its title; null when nothing. */
+  atStake?: (items: readonly TrashedItem[]) => { text: string; title: string } | null;
+  /** Items deleted for good from this list (its Delete forever or Empty, once it succeeded). */
+  onPurged?: (ids: readonly string[]) => void;
 }
 
 export interface TrashOpenRequest { n: number; focus?: readonly string[]; keyboard?: boolean }
 
-export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged, openRequest }: RecentlyDeletedAssetsProps) {
+export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged, openRequest, defaultOpen = false, atStake,
+  onPurged }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
   // Which tab and project `items` came from.
   const [itemsFor, setItemsFor] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   // A request from outside opens the list: a new one, not one made before this list mounted.
   const [seenRequest, setSeenRequest] = useState(openRequest?.n);
   const [focusWanted, setFocusWanted] = useState<TrashOpenRequest | null>(null);
@@ -119,6 +127,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
   const projectId = scope === 'project' ? openProjectId : null;
   const noProject = scope === 'project' && !projectId;
   const where = `${scope}:${projectId ?? ''}`;
+  // A refusal is about the list it came from: another tab or project's list doesn't show it (review 10 NIT-2).
+  const [actErrorFor, setActErrorFor] = useState(where);
+  if (actErrorFor !== where) {
+    setActErrorFor(where);
+    if (actError) setActError(null);
+  }
 
   // The ids last listed for this scope, to tell when the list changed.
   const listed = useRef<{ where: string; ids: string } | null>(null);
@@ -190,11 +204,14 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
           <ChevronRight aria-hidden="true" />Recently deleted
           <span className="asset-trash__count" aria-hidden="true">{items.length}</span>
         </button>
-        {open && items.length > 0 && (
-          <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy}
-            prompt={items.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${items.length} ${noun.many} for good?`}
-            onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
-        )}
+        {open && items.length > 0 && (() => {
+          const shown = items;
+          const lost = atStake?.(shown) ?? null;
+          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${shown.length} ${noun.many} for good?`;
+          return <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} prompt={lost ? `${ask} ${lost.text}` : ask} title={lost?.title}
+            onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, shown),
+              () => onPurged?.(shown.map((item) => item.id)))} />;
+        })()}
       </div>
       {error && <p className="asset-trash__error" role="alert">{error}</p>}
       {open && (
@@ -217,8 +234,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
                     onClick={() => void act(() => restoreTrashed(kind, item.id), () => onRestored?.(item))}>
                     <RotateCcw aria-hidden="true" />Restore
                   </button>
-                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone."
-                    busy={busy} onConfirm={() => void act(() => purgeTrashed(kind, item.id))} />
+                  {(() => {
+                    const lost = atStake?.([item]) ?? null;
+                    return <ConfirmInline label="Delete forever" confirmLabel="Delete forever"
+                      prompt={lost ? `This can’t be undone. ${lost.text}` : 'This can’t be undone.'} title={lost?.title}
+                      busy={busy} onConfirm={() => void act(() => purgeTrashed(kind, item.id), () => onPurged?.([item.id]))} />;
+                  })()}
                 </span>
               </li>
             ))}

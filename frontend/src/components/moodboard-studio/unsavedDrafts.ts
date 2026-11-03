@@ -172,6 +172,7 @@ export function keepUnsavedDrafts(): void {
 export function resetUnsavedDrafts(): void {
   written.clear();
   writtenEdits.clear();
+  seenDrafts.clear();
   lastWriteFailed = false;
   lastEditsWriteFailed = false;
 }
@@ -202,9 +203,116 @@ export interface KeptEdit {
   base: Record<string, unknown>;
   fieldEditedAt?: Record<string, number>;
   ops: MoodboardOp[];
+  /** Each op's KeptOpMeta, by index (null: not known, as for a record from before round 6l). */
+  opMeta?: Array<KeptOpMeta | null>;
   at: number;
 }
 const EDITS_KEY = 'nebula:moodboard-kept-edits';
+
+/**
+ * When a queued op was made and what it changed from (round 6l, review 10
+ * MEDIUM-1, GM r21 Q1), so a kept image change replays by the same rule as a
+ * board field: the board still holding `from` takes it; one that changed the
+ * image since keeps its own change unless the op came later (`at` against
+ * the board's `updatedAt`). `from` is the image's value before the person's
+ * first unsent change of it (its weight, set-aside, notes or private note,
+ * a card's spot, or the board's cover); a `restore` (an Undo) records the
+ * board `version` it was made against instead, and replays only on that
+ * version.
+ */
+export interface KeptOpMeta { at: number; from?: unknown; version?: number }
+const opMeta = new WeakMap<MoodboardOp, KeptOpMeta>();
+
+/** The meta of `op`, a queued op this page saw made (or a kept one a load put back). */
+export function keptOpMeta(op: MoodboardOp): KeptOpMeta | undefined {
+  return opMeta.get(op);
+}
+
+/** A kept op a load put back in a draft keeps the time and from-value it was made with (a second reload replays it by them). */
+export function rememberKeptOpMeta(op: MoodboardOp, meta: KeptOpMeta | null | undefined): void {
+  if (meta) opMeta.set(op, meta);
+}
+
+type ImageLike = { id?: unknown; weight?: unknown; excluded?: unknown; notes?: unknown; privateNote?: unknown;
+  placements?: Array<{ id?: unknown; x?: unknown; y?: unknown }> };
+type DraftLike = { images?: ImageLike[]; coverImageId?: unknown; version?: unknown; pendingOps?: MoodboardOp[] };
+
+/** What `op` sets, as one key per thing it changes (two ops with the same key change the same thing), or null for an add, a remove or an Undo. */
+export function opTarget(op: MoodboardOp): string | null {
+  switch (op.op) {
+    case 'weight': return `weight:${op.image}`;
+    case 'setAside': return `aside:${op.image}`;
+    case 'note': return `note:${op.image}:${'notes' in op ? 'notes' : ''}:${'privateNote' in op ? 'private' : ''}`;
+    case 'place': return `place:${op.placement}`;
+    case 'cover': return 'cover';
+    default: return null;
+  }
+}
+
+/** The value `op`'s target has on `board` (a draft or a board as read), or undefined when the board has no such image or card. */
+export function valueOnBoard(op: MoodboardOp, board: DraftLike): unknown {
+  const image = 'image' in op ? board.images?.find((it) => it.id === op.image) : undefined;
+  switch (op.op) {
+    case 'weight': return image ? image.weight : undefined;
+    case 'setAside': return image ? Boolean(image.excluded) : undefined;
+    case 'note': return image ? {
+      ...('notes' in op ? { notes: typeof image.notes === 'string' ? image.notes : '' } : {}),
+      ...('privateNote' in op ? { privateNote: typeof image.privateNote === 'string' ? image.privateNote : '' } : {}),
+    } : undefined;
+    case 'place': {
+      const card = board.images?.flatMap((it) => it.placements ?? []).find((it) => it.id === op.placement);
+      return card ? { x: card.x, y: card.y } : undefined;
+    }
+    case 'cover': return board.coverImageId ?? null;
+    default: return undefined;
+  }
+}
+
+/** The value `op` sets, in valueOnBoard's form. */
+export function valueOfOp(op: MoodboardOp): unknown {
+  switch (op.op) {
+    case 'weight': return op.value;
+    case 'setAside': return Boolean(op.value);
+    case 'note': return { ...('notes' in op ? { notes: op.notes ?? '' } : {}), ...('privateNote' in op ? { privateNote: op.privateNote ?? '' } : {}) };
+    case 'place': return { x: op.x, y: op.y };
+    case 'cover': return op.image;
+    default: return undefined;
+  }
+}
+
+/** The drafts this page last saw, by key: what an op that just appeared changed from. */
+const seenDrafts = new Map<string, DraftLike>();
+
+/** Stamp each queued op that just appeared in a board's draft: now, and its target's value in the draft before it
+ *  (an earlier unsent op on the same target already holds the first from-value, which the board still has; so does
+ *  one the queue just replaced: queueOps keeps one op per target, so a slider's second step replaces its first). */
+function stampNewOps(entries: Record<string, AssetStudioDraftEntry>): void {
+  for (const [key, entry] of Object.entries(entries)) {
+    if (!isBoardKey(key)) continue;
+    const draft = entry.draft as DraftLike;
+    const before = seenDrafts.get(key);
+    const queued = draft.pendingOps ?? [];
+    const replaced = (before?.pendingOps ?? []).filter((op) => !queued.includes(op));
+    const firstFrom = (ops: readonly MoodboardOp[], target: string) => ops.slice().reverse()
+      .find((it) => opTarget(it) === target && opMeta.get(it) && 'from' in opMeta.get(it)!);
+    queued.forEach((op, index) => {
+      if (opMeta.has(op)) return;
+      const at = Date.now();
+      if (op.op === 'restore') {
+        opMeta.set(op, typeof draft.version === 'number' ? { at, version: draft.version } : { at });
+        return;
+      }
+      const target = opTarget(op);
+      if (!target) { opMeta.set(op, { at }); return; }
+      const earlier = firstFrom(queued.slice(0, index), target) ?? firstFrom(replaced, target);
+      if (earlier) { opMeta.set(op, { at, from: opMeta.get(earlier)!.from }); return; }
+      const from = before ? valueOnBoard(op, before) : undefined;
+      opMeta.set(op, from === undefined ? { at } : { at, from });
+    });
+    seenDrafts.set(key, draft);
+  }
+  for (const key of [...seenDrafts.keys()]) if (!entries[key]) seenDrafts.delete(key);
+}
 
 /** Whether `key` is a moodboard draft key (of a saved or an unsaved board). */
 const isBoardKey = (key: string) => {
@@ -231,29 +339,36 @@ export function keptEditOf(key: string, entry: AssetStudioDraftEntry | undefined
   if (!ops.length && !Object.keys(fields).length) return null;
   const nameOf = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
   const name = nameOf(base.name) || nameOf(draft.name);
-  return { board: entry.savedId, ...(name ? { name } : {}), fields, base: from, fieldEditedAt: entry.fieldEditedAt, ops, at: Date.now() };
+  return { board: entry.savedId, ...(name ? { name } : {}), fields, base: from, fieldEditedAt: entry.fieldEditedAt, ops,
+    opMeta: ops.map((op) => opMeta.get(op) ?? null), at: Date.now() };
 }
 
 function readEdits(): KeptEdit[] {
   try {
     const parsed = JSON.parse(window.sessionStorage.getItem(EDITS_KEY) ?? '[]') as unknown;
     if (!Array.isArray(parsed)) return [];
-    const now = Date.now();
     return parsed.filter((it): it is KeptEdit => isRecord(it) && typeof it.board === 'string' && isRecord(it.fields) && isRecord(it.base)
       && (it.name === undefined || typeof it.name === 'string')
       && Object.keys(it.fields).every((field) => (BOARD_FIELD_KEYS as readonly string[]).includes(field))
       && (it.fieldEditedAt === undefined || (isRecord(it.fieldEditedAt) && Object.values(it.fieldEditedAt).every((at) => typeof at === 'number')))
       && Array.isArray(it.ops) && it.ops.every(isOpShape)
-      && typeof it.at === 'number' && now - it.at < UNSAVED_MAX_AGE);
+      && (it.opMeta === undefined || (Array.isArray(it.opMeta) && it.opMeta.length === it.ops.length && it.opMeta.every(isOpMeta)))
+      // No age limit (round 6l, GM r21): a kept edit lives as long as its board, or its project, can be restored.
+      && typeof it.at === 'number');
   } catch { return []; }
 }
+
+const isOpMeta = (meta: unknown) => meta === null || (isRecord(meta) && typeof meta.at === 'number'
+  && (meta.version === undefined || typeof meta.version === 'number'));
 
 /** Set when the last write of the kept edits threw: then (only then) the page asks before it unloads. */
 let lastEditsWriteFailed = false;
 
 function writeEdits(list: KeptEdit[]): void {
   try {
-    if (list.length) window.sessionStorage.setItem(EDITS_KEY, JSON.stringify(list.slice(-UNSAVED_CAP)));
+    // No cap either (round 6l): dropping the oldest would lose an edit silently. A write the storage
+    // refuses sets the flag, and the page warns before it unloads.
+    if (list.length) window.sessionStorage.setItem(EDITS_KEY, JSON.stringify(list));
     else window.sessionStorage.removeItem(EDITS_KEY);
     lastEditsWriteFailed = false;
   } catch {
@@ -266,6 +381,7 @@ const writtenEdits = new Map<string, { entry: AssetStudioDraftEntry; board: stri
 
 /** Keep each saved board's kept edit in step with the store. A kept edit this page doesn't hold stays until its board's load takes it. */
 function syncEdits(entries: Record<string, AssetStudioDraftEntry>): void {
+  stampNewOps(entries);
   let changed = false;
   for (const [key, entry] of Object.entries(entries)) {
     if (!isBoardKey(key) || isUnsavedBoardKey(key)) continue;
@@ -295,6 +411,12 @@ function syncEdits(entries: Record<string, AssetStudioDraftEntry>): void {
 export function keptEditsWaiting(): KeptEdit[] {
   const held = new Set([...writtenEdits.values()].map((it) => it.board));
   return readEdits().filter((it) => !held.has(it.board));
+}
+
+/** The boards with a kept edit in this tab: waiting from an earlier page load, or held in a draft here (round 6l: a Delete
+ *  forever or Empty that takes one says so first, GM r21 Q2). */
+export function keptEditBoards(): Set<string> {
+  return new Set([...readEdits().map((it) => it.board), ...[...writtenEdits.values()].map((it) => it.board)]);
 }
 
 /** Forget the kept edit for `board` an earlier page load left (its board is gone for good, and the person has been told). */

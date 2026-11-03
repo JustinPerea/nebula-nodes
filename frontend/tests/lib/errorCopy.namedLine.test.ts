@@ -103,6 +103,17 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },
   // GM r29 Q1 (round 20): the retrying line, the same form in the present tense.
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_AND_TRYING}`', why: "GM's own line over GM's fixed suffix (GM r29 Q1)" },
+  // PR #210 (review 10 NIT-5, round 6l): the board save lines are built around a constant opening.
+  { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`${NOT_SAVED_OPENING}${line.cause}. ${line.step}`',
+    why: "GM r16's board save lines: the cause and the step are GM's fixed pairs (SAVE_LINES), never a server line" },
+  { file: 'components/moodboard-studio/boardSaveLine.ts',
+    text: "`${LOST_ADD_OPENING}${what} because the board hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
+    why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },
+  // Seen once constant openings were read (round 6l): two older lines, each a fixed heading over a fixed tail.
+  { file: 'lib/cinemaMotion.ts', text: '`${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}`',
+    why: 'the fixed "Couldn\'t confirm the video connection." over the fixed "Nebula didn\'t respond."' },
+  { file: 'lib/graphFile.ts', text: '`${SAVE_GRAPH} ${graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES)}`',
+    why: 'the fixed "Couldn\'t save the graph." over graphSizeLine\'s fixed size sentences, never a line of its own' },
     // The Agent log's raw save line: agents read the backend's own detail,
     // with the status and code (GM #198 r12 answer 1, round 13).
   { file: 'store/graphStore.ts', text: "`Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`",
@@ -134,10 +145,28 @@ function handBuilt(text: string): string[] {
   const failureSentence = new RegExp(`^${FAILURE}[^]*\\.\\s*$`);
   const isFailureLiteral = (node: ts.Node) => (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
     && new RegExp(`^${FAILURE}`).test(node.text);
+  // Review 10 NIT-5 (round 6l): a line built around a constant opening (`${NOT_SAVED_OPENING}${cause}. ${step}`)
+  // is read with the opening's text in place, so it is seen like a literal one: a string constant
+  // declared at the file's top level, opening the template, stands for its text. (A constant later
+  // in the line stays a slot: a fixed tail, such as `${RUN_LOCK_REASON}`, is what the reviewed entries name.)
+  const constants = new Map<string, string>();
+  for (const statement of file.statements) {
+    if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const value = declaration.initializer;
+      if (ts.isIdentifier(declaration.name) && value && (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))) {
+        constants.set(declaration.name.text, value.text);
+      }
+    }
+  }
+  const slotOf = (node: ts.TemplateExpression, index: number) => {
+    const { expression } = node.templateSpans[index];
+    return index === 0 && node.head.text === '' && ts.isIdentifier(expression) ? constants.get(expression.text) ?? SLOT : SLOT;
+  };
   const hits: string[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isTemplateExpression(node)) {
-      const shape = node.head.text + node.templateSpans.map((span) => SLOT + span.literal.text).join('');
+      const shape = node.head.text + node.templateSpans.map((span, index) => slotOf(node, index) + span.literal.text).join('');
       const first = node.templateSpans[0];
       const headingFirst = node.head.text === '' && /heading/i.test(first.expression.getText(file)) && /^ \S/.test(first.literal.text + (node.templateSpans[1] ? SLOT : ''));
       if (sentenceThenSlot.test(shape) || headingFirst) hits.push(node.getText(file));
@@ -167,6 +196,10 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt("const a = \"Couldn’t save the board. \" + reason;")).toHaveLength(1);
     expect(handBuilt("const a = [\"Couldn’t save the board.\", reason].join(' ');")).toHaveLength(1);
     expect(handBuilt('const a = `Nebula can\'t read ${name}. ${tail}`;')).toHaveLength(1);
+    // A constant opening (review 10 NIT-5): seen as its text.
+    expect(handBuilt('const OPENING = \'Nebula couldn’t save the board because \';\nconst a = `${OPENING}${cause}. ${step}`;')).toHaveLength(1);
+    expect(handBuilt('const OPENING = \'Nebula couldn’t add \';\nconst a = `${OPENING}${what} because it failed. ${tail}`;')).toHaveLength(1);
+    expect(handBuilt('const OPENING = \'Kept \';\nconst a = `${OPENING}${what}. ${tail}`;')).toHaveLength(0);
     // Not a heading-plus-reason: an interpolation inside the one sentence.
     expect(handBuilt('const a = `Couldn\'t upload ${name}.`;')).toHaveLength(0);
     expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);

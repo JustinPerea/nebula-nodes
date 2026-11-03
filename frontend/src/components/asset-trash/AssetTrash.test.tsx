@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { TrashedItem } from '../../lib/trash';
 
 const trash = vi.hoisted(() => ({
@@ -236,6 +236,82 @@ describe('RecentlyDeletedAssets', () => {
       { kind: 'character', scope: 'project', projectId: 'p1' },
       [expect.objectContaining({ id: 'b1' }), expect.objectContaining({ id: 'b2' })],
     ));
+  });
+});
+
+// Round 6l: what a Studio's kept edits put at stake (GM r21 Q2), and the review 10 fixes.
+describe('RecentlyDeletedAssets, round 6l', () => {
+  const lostToo = (items: readonly TrashedItem[]) => {
+    const kept = items.filter((item) => item.id === 'b1' || item.id === 'b2').map((item) => `“${item.name}”`);
+    return kept.length ? { text: `Your unsaved ${kept.length === 1 ? 'change' : 'changes'} to ${kept.join(' and ')} will be lost too.`, title: kept.join(' and ') } : null;
+  };
+
+  it('Delete forever: the confirm adds what it loses too; once done, it reports the id', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b9', name: 'Other' })]);
+    const onPurged = vi.fn();
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" atStake={lostToo} onPurged={onPurged} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' })[0]);
+    const group = screen.getByRole('group', { name: 'This can’t be undone. Your unsaved change to “Rivers” will be lost too.' });
+    expect(group.querySelector('.asset-trash__confirm-prompt')?.getAttribute('title')).toBe('“Rivers”');
+    fireEvent.click(within(group).getByRole('button', { name: 'Delete forever' }));
+    await waitFor(() => expect(onPurged).toHaveBeenCalledWith(['b1']));
+    // Another row with nothing at stake: the confirm as before.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' })[1]);
+    expect(screen.getByRole('group', { name: 'This can’t be undone.' })).toBeTruthy();
+  });
+
+  it('Empty: the confirm names what it loses; a refused one reports nothing', async () => {
+    trash.fetchTrash.mockResolvedValue([board({ id: 'b1', name: 'Rivers' }), board({ id: 'b2', name: 'Harbor' }), board({ id: 'b9', name: 'Other' })]);
+    trash.emptyTrash.mockRejectedValueOnce(new RequestFailedError("Couldn't empty Recently deleted.", 500, { detail: 'boom' }));
+    const onPurged = vi.fn();
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" atStake={lostToo} onPurged={onPurged} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    expect(screen.getByRole('group', { name: 'Delete all 3 boards for good? Your unsaved changes to “Rivers” and “Harbor” will be lost too.' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    await screen.findByRole('alert');
+    expect(onPurged).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    await waitFor(() => expect(onPurged).toHaveBeenCalledWith(['b1', 'b2', 'b9']));
+  });
+
+  it('starts open when asked to (a Studio\'s several-board Restore, review 10 NIT-3)', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" defaultOpen />);
+    expect((await screen.findByRole('button', { name: /Recently deleted/ })).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Warm editorial')).toBeTruthy();
+  });
+
+  it('a refusal goes with a scope or project switch (review 10 NIT-2)', async () => {
+    trash.fetchTrash.mockResolvedValue([board()]);
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await screen.findByRole('alert');
+    view.rerender(<RecentlyDeletedAssets kind="moodboard" scope="project" />);
+    await screen.findByRole('button', { name: /Recently deleted/ });
+    expect(screen.queryByRole('alert')).toBeNull();
+    // A project switch too.
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore Warm editorial' }));
+    await screen.findByRole('alert');
+    act(() => { publishOpenProject({ id: 'p2', name: 'Other project' }); });
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('an action\'s refusal shows over a later failed load (V16)', async () => {
+    trash.fetchTrash.mockResolvedValueOnce([board()]).mockRejectedValue(new RequestFailedError("Couldn't load Recently deleted.", 500, { detail: 'x' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2));
+    await new Promise((done) => setTimeout(done, 30));
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).not.toContain('load');
   });
 });
 

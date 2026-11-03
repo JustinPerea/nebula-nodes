@@ -48,7 +48,19 @@ const SAVE_LINES = {
 
 type SaveLineKind = keyof typeof SAVE_LINES;
 
-/** Which of GM's lines a failed board save gets, from its status and fields. */
+/**
+ * Whether a failed save found its board deleted (round 6l, GM r21 Q3): a 404
+ * whose `code` is "in_trash" is in Recently deleted ('trashed', the r18
+ * neutral line with Restore); any other 404 is gone for good ('purged', the
+ * red line). Never "didn’t accept this save. Try again.": Retry can't work.
+ */
+export function boardGoneKind(error: unknown): 'trashed' | 'purged' | null {
+  if (!(error instanceof RequestFailedError) || error.status !== 404) return null;
+  const detail = error.detail as { code?: unknown } | null | undefined;
+  return error.code === 'in_trash' || (typeof detail === 'object' && detail?.code === 'in_trash') ? 'trashed' : 'purged';
+}
+
+/** Which of GM's lines a failed board save gets, from its status and fields (a 404 is boardGoneKind's). */
 function saveLineKind(error: unknown): SaveLineKind {
   if (isNoAnswer(error)) return 'noAnswer';
   if (error instanceof MoodboardVersionConflict) return 'changed';
@@ -65,19 +77,24 @@ function saveLineKind(error: unknown): SaveLineKind {
   return 'refused';
 }
 
-/** The line and the header's offer for a board save that failed. */
-export function boardSaveLine(error: unknown): BoardSaveLine {
+/** The line and the header's offer for a board save that failed. A save that found its board deleted says
+ *  the deleted-board line for `name` (the board's saved name), with no Retry: it can never work (GM r21 Q3). */
+export function boardSaveLine(error: unknown, name = ''): BoardSaveLine {
+  const gone = boardGoneKind(error);
+  if (gone) return { failure: { heading: '', reason: deletedBoardsLine([name], gone).text }, retry: 'reload' };
   const line = SAVE_LINES[saveLineKind(error)];
   return { failure: { heading: '', reason: `${NOT_SAVED_OPENING}${line.cause}. ${line.step}` }, retry: line.retry };
 }
 
 /** The line alone (boardSaveLine's failure). */
-export function boardSaveFailure(error: unknown): FailureCopy {
-  return boardSaveLine(error).failure;
+export function boardSaveFailure(error: unknown, name = ''): FailureCopy {
+  return boardSaveLine(error, name).failure;
 }
 
 /** The clause after "because" for a board's save that failed. */
 export function boardSaveCause(error: unknown): string {
+  const gone = boardGoneKind(error);
+  if (gone) return gone === 'trashed' ? 'the board was deleted' : 'the board was deleted somewhere else';
   return SAVE_LINES[saveLineKind(error)].cause;
 }
 
@@ -137,7 +154,7 @@ export function isLostAddLine(failure: FailureCopy | string | null | undefined):
 const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
   name: 'name', notes: 'notes', mode: 'mode', strength: 'strength', direction: 'direction', avoid: 'avoid list',
   pinnedColors: 'pinned colors', briefOverride: 'brief', clashMode: 'clash setting', colorChoices: 'color choices',
-  sendNotes: 'notes setting', analysis: 'analysis',
+  sendNotes: 'notes setting', analysis: 'analysis', cover: 'cover',
 };
 
 /**
@@ -166,14 +183,49 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
 
 /**
  * The confirmation once the boards a deleted-board line named are restored
- * and their kept edits saved (round 6k, GM r19 2 and 3), named by the same
- * rule: "Restored “Dusk” and saved your change."; "Restored “Rivers” and
- * “Harbor” and saved your changes."; "Restored 4 boards and saved your
- * changes."
+ * (round 6l, GM r20 A, r21 Q6), named by the names the line and the list
+ * showed, in two sentences; the second counts the boards whose kept edit was
+ * sent and saved, and goes when none was (nothing left to send: the board
+ * kept every change, and its "Kept …" line follows). A plain Restore from
+ * Recently deleted, with no kept edit, is the first sentence alone.
+ * - "Restored “Rivers”. Your change is saved."
+ * - "Restored “Rivers” and “Harbor”. Your changes are saved."
+ * - "Restored 4 boards. Your changes are saved."
+ * - "Restored “Rivers”."
  */
-export function restoredBoardsLine(names: readonly string[]): { text: string; title: string } {
+export function restoredBoardsLine(names: readonly string[], saved: number): { text: string; title: string } {
+  const { what, title } = namedBoards(names);
+  // Each form spelled out whole.
+  const text = saved === 0 ? `Restored ${what}.`
+    : saved === 1 ? `Restored ${what}. Your change is saved.`
+      : `Restored ${what}. Your changes are saved.`;
+  return { text, title };
+}
+
+/**
+ * The line for a kept edit whose board's project is in Recently deleted
+ * (round 6l, GM r21 Q8): the board can't be reached until the project is
+ * back. One line per board, neutral, with "Restore project".
+ */
+export function projectDeletedLine(name: string): { text: string; title: string } {
+  const { what, title } = namedBoards([name]);
+  return { text: `Nebula couldn’t save your change to ${what} because its project was deleted. Restore the project to keep the change.`, title };
+}
+
+/** A kept Undo that was dropped because the board changed after it (round 6l, GM r21 Q1): neutral, no button. */
+export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the board changed after it.';
+
+/**
+ * The sentence a Delete forever or Empty confirm gains when boards in it
+ * hold kept edits (round 6l, GM r21 Q2), or null when none does:
+ * "Your unsaved change to “Rivers” will be lost too."; "Your unsaved changes
+ * to “Rivers” and “Harbor” will be lost too."; "Your unsaved changes to 4
+ * boards will be lost too."
+ */
+export function lostTooLine(names: readonly string[]): { text: string; title: string } | null {
+  if (!names.length) return null;
   const { one, what, title } = namedBoards(names);
-  return { text: one ? `Restored ${what} and saved your change.` : `Restored ${what} and saved your changes.`, title };
+  return { text: one ? `Your unsaved change to ${what} will be lost too.` : `Your unsaved changes to ${what} will be lost too.`, title };
 }
 
 /** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name. */
@@ -186,6 +238,10 @@ function namedBoards(names: readonly string[]): { one: boolean; what: string; ti
 /** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
 export const KEPT_NAME_MAX = 40;
 
+/** An image a "Kept …" line names (round 6l, GM r21 Q1): by the label the board shows for it (its private
+ *  note, "A label for you"), else by its number on the board ("image 3"). */
+export type KeptImage = { label: string } | { n: number };
+
 /**
  * The neutral line when the board kept its own later change over a draft
  * edit (a repeated create, round 6g; a kept edit replayed after a reload,
@@ -196,13 +252,30 @@ export const KEPT_NAME_MAX = 40;
  * board."). Several fields go without values, joined with "and" ("Kept the
  * name and notes from the board."), and from four a count ("Kept 4 changes
  * from the board."). GM r16, r17.
+ *
+ * Round 6l (GM r21 Q1): a kept image change the board changed later is named
+ * per image, one item each, "the changes to “sunset.jpg”" (the label clipped
+ * past KEPT_NAME_MAX, the full one in the title), or "the changes to image
+ * 3" for an image with no label. With images, each item takes its own "the"
+ * ("Kept the name “Rivers” and the changes to “sunset.jpg” from the
+ * board."); the cover is a board field ("the cover"). From four items, the
+ * count.
  */
-export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}): StudioNotice | null {
-  if (!fields.length) return null;
-  if (fields.length > MOST_NAMED) return `Kept ${fields.length} changes from the board.`;
-  if (fields.length === 1 && fields[0] === 'name') {
-    const name = (board.name ?? '').trim();
-    if (name) return { text: `Kept the name “${clipGraphemes(name, KEPT_NAME_MAX)}” from the board.`, title: name };
+export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}, images: readonly KeptImage[] = []): StudioNotice | null {
+  const count = fields.length + images.length;
+  if (!count) return null;
+  if (count > MOST_NAMED) return `Kept ${count} changes from the board.`;
+  const name = (board.name ?? '').trim();
+  const showName = fields.length === 1 && fields[0] === 'name' && Boolean(name);
+  const clip = (text: string) => clipGraphemes(text, KEPT_NAME_MAX);
+  if (!images.length) {
+    if (showName) return { text: `Kept the name “${clip(name)}” from the board.`, title: name };
+    return `Kept the ${joinWithAnd(fields.map((field) => KEPT_FIELD_NAMES[field] ?? field))} from the board.`;
   }
-  return `Kept the ${joinWithAnd(fields.map((field) => KEPT_FIELD_NAMES[field] ?? field))} from the board.`;
+  const items = [
+    ...(showName ? [`the name “${clip(name)}”`] : fields.map((field) => `the ${KEPT_FIELD_NAMES[field] ?? field}`)),
+    ...images.map((image) => ('label' in image ? `the changes to “${clip(image.label)}”` : `the changes to image ${image.n}`)),
+  ];
+  const full = [...(showName ? [`“${name}”`] : []), ...images.map((image) => ('label' in image ? `“${image.label}”` : `image ${image.n}`))];
+  return { text: `Kept ${joinWithAnd(items)} from the board.`, title: joinWithAnd(full) };
 }

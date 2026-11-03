@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ConnectionLostError, RequestFailedError } from '../../lib/errorCopy';
 import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
-import { boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, joinWithAnd,
-  keptFromBoardLine, lostAddLine } from './boardSaveLine';
+import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine,
+  isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
   new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
@@ -38,7 +38,6 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
     ['a conflict the rebase gave up on', new MoodboardVersionConflict({ version: 3 } as Moodboard), LINES.changed, 'reload'],
     ['a 409 version_conflict with no board', failed(409, { detail: 'Version 2 is behind 3', code: 'version_conflict' }), LINES.changed, 'reload'],
     ['422', failed(422, { detail: 'name must be a string' }), LINES.refused, 'save'],
-    ['404 in the trash', failed(404, { detail: 'Moodboard x is in Recently deleted', code: 'in_trash' }), LINES.refused, 'save'],
     ['any other 409', failed(409, { detail: 'locked' }), LINES.refused, 'save'],
     ['an error that is not a request', new Error('anything'), LINES.refused, 'save'],
   ])('%s', (_label, error, reason, retry) => {
@@ -64,7 +63,7 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
 
   // GM r16: backend wording never reaches the person.
   it('never renders the server\'s own detail or reason, for any status or code (ratchet)', () => {
-    const known = new Set(Object.values(LINES));
+    const known = new Set([...Object.values(LINES), deletedBoardsLine([''], 'trashed').text, deletedBoardsLine([''], 'purged').text]);
     const codes = [null, 'version_conflict', 'request_id_scope', 'in_trash', 'person_required', 'agent_refused', 'project_store', 'brief_override_protected', 'other'];
     for (let status = 400; status < 600; status += 1) {
       for (const code of codes) {
@@ -78,6 +77,47 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
       }
     }
     expect(JSON.stringify(boardSaveLine(new Error('SENTINEL-MESSAGE')))).not.toMatch(/SENTINEL/);
+  });
+});
+
+// Round 6l (review 10 live MEDIUM-2, GM r21 Q3): a save that finds its board deleted says the deleted-board line,
+// never "didn’t accept this save. Try again.", and no Retry (it can't work).
+describe('a save that found its board deleted (GM r21 Q3)', () => {
+  const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted. Restore it to keep the change.';
+  const PURGED = 'Nebula couldn’t save your change to “Rivers” because the board was deleted somewhere else.';
+
+  it('in Recently deleted: the r18 line with its Restore step; gone for good: the red line; no Retry either way', () => {
+    const inTrash = failed(404, { detail: { code: 'in_trash', trashed: { deletedAt: '2026-11-03T10:00:00Z' } } });
+    expect(boardGoneKind(inTrash)).toBe('trashed');
+    expect(boardSaveLine(inTrash, 'Rivers')).toEqual({ failure: { heading: '', reason: TRASHED }, retry: 'reload' });
+    expect(boardGoneKind(failed(404, { code: 'in_trash' }))).toBe('trashed');
+    const purged = failed(404, { detail: 'Moodboard not found' });
+    expect(boardGoneKind(purged)).toBe('purged');
+    expect(boardSaveLine(purged, 'Rivers')).toEqual({ failure: { heading: '', reason: PURGED }, retry: 'reload' });
+    expect(boardSaveFailure(purged, ' Rivers ')).toEqual({ heading: '', reason: PURGED });
+    expect(boardSaveCause(inTrash)).toBe('the board was deleted');
+    expect(boardSaveCause(purged)).toBe('the board was deleted somewhere else');
+    // Neither is a save line ("Not saved" for the trashed one comes from the Studio's gone state).
+    expect(isBoardNotSavedLine(boardSaveFailure(inTrash, 'Rivers'))).toBe(false);
+  });
+
+  it('no 404, in the trash or gone, ever maps to "refused", whatever its code or words', () => {
+    const codes = [null, 'in_trash', 'not_found', 'version_conflict', 'request_id_scope', 'other'];
+    const details = [undefined, 'SENTINEL', { code: 'in_trash' }, { code: 'other' }, { code: 'in_trash', trashed: {} }];
+    for (const code of codes) {
+      for (const detail of details) {
+        const error = failed(404, { code, detail });
+        const line = boardSaveLine(error, 'Rivers');
+        expect(line.failure.reason).not.toBe(LINES.refused);
+        expect(line.failure.reason).not.toMatch(/didn’t accept|Try again|SENTINEL/);
+        expect(line.retry).toBe('reload');
+        expect([TRASHED, PURGED]).toContain(line.failure.reason);
+        expect(boardGoneKind(error)).toBe(code === 'in_trash' || (typeof detail === 'object' && detail.code === 'in_trash') ? 'trashed' : 'purged');
+      }
+    }
+    // Only a 404 is a deleted board.
+    for (const status of [400, 403, 409, 410, 422, 500]) expect(boardGoneKind(failed(status, { code: 'in_trash' }))).toBeNull();
+    expect(boardGoneKind(new Error('in_trash'))).toBeNull();
   });
 });
 
@@ -173,15 +213,51 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
   });
 });
 
-describe('a Restore\'s confirmation (round 6k, GM r19 2, 3)', () => {
-  it('names the boards by the same rule: one, then up to three with "and", then a count; clipped, with full names in the title', () => {
-    expect(restoredBoardsLine(['Dusk'])).toEqual({ text: 'Restored “Dusk” and saved your change.', title: '“Dusk”' });
-    expect(restoredBoardsLine(['Rivers', 'Harbor']).text).toBe('Restored “Rivers” and “Harbor” and saved your changes.');
-    expect(restoredBoardsLine(['Rivers', 'Harbor', 'Sea']).text).toBe('Restored “Rivers”, “Harbor” and “Sea” and saved your changes.');
-    expect(restoredBoardsLine(['a', 'b', 'c', 'd'])).toEqual({ text: 'Restored 4 boards and saved your changes.', title: '“a”, “b”, “c” and “d”' });
+describe('a Restore\'s confirmation (round 6l, GM r20 A, r21 Q6)', () => {
+  it('names the boards in two sentences, the second by how many were saved', () => {
+    expect(restoredBoardsLine(['Rivers'], 1)).toEqual({ text: 'Restored “Rivers”. Your change is saved.', title: '“Rivers”' });
+    expect(restoredBoardsLine(['Rivers', 'Harbor'], 2).text).toBe('Restored “Rivers” and “Harbor”. Your changes are saved.');
+    expect(restoredBoardsLine(['Rivers', 'Harbor', 'Sea'], 3).text).toBe('Restored “Rivers”, “Harbor” and “Sea”. Your changes are saved.');
+    expect(restoredBoardsLine(['a', 'b', 'c', 'd'], 4)).toEqual({ text: 'Restored 4 boards. Your changes are saved.', title: '“a”, “b”, “c” and “d”' });
+  });
+
+  it('a plain Restore, or one with nothing left to send, is the first sentence alone', () => {
+    expect(restoredBoardsLine(['Rivers'], 0)).toEqual({ text: 'Restored “Rivers”.', title: '“Rivers”' });
+    expect(restoredBoardsLine(['Rivers', 'Harbor'], 0).text).toBe('Restored “Rivers” and “Harbor”.');
+    // One of two saved: the second sentence counts the saves.
+    expect(restoredBoardsLine(['Rivers', 'Harbor'], 1).text).toBe('Restored “Rivers” and “Harbor”. Your change is saved.');
+  });
+
+  it('clips past 40 characters with the full names in the title; a blank name is Untitled', () => {
     const long = 'An exceptionally long board name that keeps going well past forty';
-    expect(restoredBoardsLine([long])).toEqual({ text: `Restored “${long.slice(0, 39)}…” and saved your change.`, title: `“${long}”` });
-    expect(restoredBoardsLine([' ']).text).toBe('Restored “Untitled” and saved your change.');
+    expect(restoredBoardsLine([long], 1)).toEqual({ text: `Restored “${long.slice(0, 39)}…”. Your change is saved.`, title: `“${long}”` });
+    expect(restoredBoardsLine([' '], 0).text).toBe('Restored “Untitled”.');
+  });
+});
+
+describe('a kept edit whose board\'s project was deleted (GM r21 Q8)', () => {
+  it('names the board, one line each', () => {
+    expect(projectDeletedLine('Rivers')).toEqual({ title: '“Rivers”',
+      text: 'Nebula couldn’t save your change to “Rivers” because its project was deleted. Restore the project to keep the change.' });
+    const long = 'An exceptionally long board name that keeps going well past forty';
+    expect(projectDeletedLine(long).text).toContain(`“${long.slice(0, 39)}…”`);
+    expect(projectDeletedLine(long).title).toBe(`“${long}”`);
+  });
+});
+
+describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
+  it('adds one sentence: one, up to three, then a count', () => {
+    expect(lostTooLine([])).toBeNull();
+    expect(lostTooLine(['Rivers'])).toEqual({ text: 'Your unsaved change to “Rivers” will be lost too.', title: '“Rivers”' });
+    expect(lostTooLine(['Rivers', 'Harbor'])?.text).toBe('Your unsaved changes to “Rivers” and “Harbor” will be lost too.');
+    expect(lostTooLine(['Rivers', 'Harbor', 'Sea'])?.text).toBe('Your unsaved changes to “Rivers”, “Harbor” and “Sea” will be lost too.');
+    expect(lostTooLine(['a', 'b', 'c', 'd'])).toEqual({ text: 'Your unsaved changes to 4 boards will be lost too.', title: '“a”, “b”, “c” and “d”' });
+  });
+});
+
+describe('a dropped Undo (GM r21 Q1)', () => {
+  it('has its own neutral line', () => {
+    expect(UNDO_DROPPED_LINE).toBe('Nebula couldn’t apply your Undo because the board changed after it.');
   });
 });
 
@@ -214,5 +290,27 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
     expect(keptFromBoardLine(['direction', 'avoid', 'pinnedColors'])).toBe('Kept the direction, avoid list and pinned colors from the board.');
     expect(keptFromBoardLine(['briefOverride', 'clashMode', 'colorChoices'])).toBe('Kept the brief, clash setting and color choices from the board.');
     expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the notes setting and strength from the board.');
+  });
+
+  // Round 6l (GM r21 Q1): kept image changes, one item per image.
+  it('names each image by its label, else its number, and joins them with the board fields', () => {
+    expect(keptFromBoardLine([], {}, [{ label: 'sunset.jpg' }])).toEqual({ text: 'Kept the changes to “sunset.jpg” from the board.', title: '“sunset.jpg”' });
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ label: 'sunset.jpg' }])).toEqual({
+      text: 'Kept the name “Rivers” and the changes to “sunset.jpg” from the board.', title: '“Rivers” and “sunset.jpg”' });
+    expect(keptFromBoardLine([], {}, [{ n: 3 }])).toEqual({ text: 'Kept the changes to image 3 from the board.', title: 'image 3' });
+    expect((keptFromBoardLine(['name', 'notes'], { name: 'Rivers' }, [{ n: 2 }]) as { text: string }).text)
+      .toBe('Kept the name, the notes and the changes to image 2 from the board.');
+    expect((keptFromBoardLine([], {}, [{ label: 'a' }, { n: 2 }, { label: 'c' }]) as { text: string }).text)
+      .toBe('Kept the changes to “a”, the changes to image 2 and the changes to “c” from the board.');
+    expect(keptFromBoardLine(['name'], { name: 'Rivers' }, [{ label: 'a' }, { n: 2 }, { label: 'c' }])).toBe('Kept 4 changes from the board.');
+    expect(keptFromBoardLine([], {}, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }])).toBe('Kept 4 changes from the board.');
+  });
+
+  it('the cover is a board item; a label is clipped past 40 with the full one in the title', () => {
+    expect(keptFromBoardLine(['cover'])).toBe('Kept the cover from the board.');
+    expect(keptFromBoardLine(['name', 'cover'])).toBe('Kept the name and cover from the board.');
+    expect((keptFromBoardLine(['cover'], {}, [{ n: 1 }]) as { text: string }).text).toBe('Kept the cover and the changes to image 1 from the board.');
+    const long = 'A label for this reference that keeps going well past forty';
+    expect(keptFromBoardLine([], {}, [{ label: long }])).toEqual({ text: `Kept the changes to “${long.slice(0, 39)}…” from the board.`, title: `“${long}”` });
   });
 });

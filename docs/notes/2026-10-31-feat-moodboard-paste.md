@@ -768,6 +768,98 @@ Main hadn't moved past 062fb370, so nothing to merge. GM signed off 6j's design,
     - Restoring Rivers there left the one-board line for Harbor. Restoring Harbor ended with "Restored “Dusk” and “Port” and saved your changes."
   - No request left the lane. Shots: scratchpad `paste/shots6k/` (5), each opened at 1000 px, no md5 repeats.
 
+## Round 6l (GM r20, GM r21, review 10)
+
+GM signed off 6k with three fixes (r20) and answered review 10's questions (r21).
+
+Main had moved to bee7ebe0 (#208's colour extract and #220's pins), so it is merged, staged and not committed. Two conflicts:
+- `backend/main.py`, the startup hook: it now prunes the create request-id records (this branch) and stamps transparency in the background (#208).
+- `backend/main.py`, the create route: `create_or_repeat` (this branch) now runs in a worker thread, as #208 made `create` do, since a new image's file is decoded there. The store's `_create` calls `_warm_new_files` after the merge, so the request-id path decodes too.
+- `focusRingCss.test.ts`: the placeholder's entries (this branch) and #208's palette line are both kept.
+`MoodboardStudioView.tsx` merged cleanly (#208's `AnalysisOutdated` and the hold spacer).
+
+- **r20 A, r21 Q6: the confirmation.**
+  - It names boards by their saved names, the names the line and Recently deleted showed (`restoredBoardsLine(names, saved)`).
+  - The second sentence counts the boards whose kept edit was sent: 1 gives "Your change is saved.", 2+ gives "Your changes are saved.", and 0 leaves it out ("Restored “Rivers”."). A plain Restore from Recently deleted, or one with nothing left to send, says the first sentence alone; a Kept line from the replay follows it.
+  - `restoring` holds `{ id, name, sent }`, and the load path marks `sent` when it sends.
+- **r20 B: the order.** The line sorts its boards as Recently deleted does, newest deleted first (`newestFirst` on `deletedAt`), in one place (`trashedShown`), so the several-board focus asks for the top row first.
+- **r20 C: the orange outline.** Live, with the pointer resting on the line's Restore after focus moved to the rail:
+  - Its border and text are amber (`rgb(245, 158, 11)`), from `.moodboard-studio-toolbar__button:hover`.
+  - It isn't `:focus`, `:focus-visible` or `:active`. With the pointer moved away it is the resting style again.
+  - So it's the toolbar buttons' hover, as intended. Nothing changed; one shot.
+- **r21 Q1, review MEDIUM-1: kept image changes.**
+  - `stampNewOps` (in `syncEdits`) records each new queued op's time and the value its target had in the draft before it, kept beside the ops as `opMeta`. An op on a target an earlier unsent op holds inherits that op's from-value. A kept Undo (`restore`) records `draft.version`.
+  - On replay (`replayKeptEdit`), per op:
+    - The board already has the op's value: skipped.
+    - The board still has the from-value, or the op is later than the board's `updatedAt`: replayed.
+    - Otherwise dropped, and named in the Kept line.
+  - Names: "the changes to “<label>”" or "the changes to image N", and "the cover".
+    - What the board shows: no file name anywhere. The side panel says "Reference #N" and the List view "#N". The one per-image label is the Private note ("A label for you, like Liked"), so the line uses it when set, else "image N" by board position.
+    - Labels are clipped at 40 with the full label in the title. Items join the board fields' items with "and", no serial comma, names up to 3, a count from 4. One name field alone still shows its value.
+  - A kept Undo replays only when `board.version` equals the version it was made on. Otherwise `undoDropped` shows "Nebula couldn’t apply your Undo because the board changed after it." (neutral, status, no button), which goes on a board change.
+  - Undos aren't queued in `pendingOps` today (a failed Undo uses the toolbar's Retry), so this guards the record's shape.
+- **r21 Q2, review live MEDIUM-1: Delete forever and Empty.**
+  - `RecentlyDeletedAssets` takes `atStake(items)` and `onPurged(ids)`.
+  - The confirm adds `lostTooLine(names)`: "Your unsaved change to “Rivers” will be lost too." / "Your unsaved changes to “Rivers” and “Harbor” will be lost too." / "Your unsaved changes to 4 boards will be lost too."
+  - After the purge succeeds, `forgetEdits` drops those kept edits, clears them from the line at once, takes them out of `restoring`, and reloads the open board if it was one. No red line follows.
+  - The rail's `onTrashChanged` re-checks the line (`recheckGone`), as do ws events: a stored-asset change for a waiting id, and a projects change or reconnect while edits wait.
+- **r21 Q3, review live MEDIUM-2: the tab holding the edit.**
+  - `failBoardSave` and `keepFailedAway` pass the saved name and call `markGone`, which sets the draft entry's `saveGone` (`trashed` with `deletedAt`, or `purged`).
+  - Trashed: the board joins the line as `heldTrashed` (the r18 line with Restore, the same string as after a reload). The header's Retry is hidden, and the chip stays "Not saved". Restore restores it, then `resumeHeld` sends the held draft, and the confirmation follows once saved.
+  - Purged: the red line.
+  - `boardSaveLine` maps a 404 that is in_trash, or plain, to the deleted-board line with `retry: 'reload'`; tests pin that neither is ever "refused".
+- **r21 Q4.** The not-found line is hidden while the red line names the open board, and back once it is dismissed or cleared.
+- **r21 Q5.** Restore records the route. If the person opened another board meanwhile, they stay there: the line drops the board, the confirmation names it ("Restored “Rivers”."), and the rail lists it.
+- **r21 Q7.**
+  - After a single Restore, `railFocus` asks the rail to focus the board's row (`button[data-board-id]`), with `focusVisible` only from the keyboard.
+  - The red line's × calls `focusAfterLine`: the next enabled button in the notices after it, else `main` (given `tabindex=-1`), with no ring. The red line is usually last, so in practice that's `main`.
+- **r21 Q8: a project in Recently deleted.**
+  - Where a project is restored today: Project home's Recently deleted (`projectStore.restore`, `POST /api/projects/{id}/restore`).
+  - The lookup reads `listProjects().trash` for ready boards in a project. A trashed project's boards still read as ready, as checked live.
+  - The line: "Nebula couldn’t save your change to “Shore” because its project was deleted. Restore the project to keep the change." The Studio can call that route in place, unchanged (not person-gated), so the line has "Restore project".
+  - It restores the project without opening it, then `replayAway` replays the kept edit into that board's draft and sends it.
+  - Nothing confirms it: the line goes. That's a question for GM. A failure shows "Couldn't restore the project." in red, and the line stays.
+- **r21 expiry.** The day was `UNSAVED_MAX_AGE`, shared with unsaved new-board drafts: a kept edit was dropped a day after its last write. A cap of 10 (`slice(-10)`) also dropped the oldest silently.
+  - Both are gone for kept edits. A kept edit now lives while its board or project can be restored (Recently deleted keeps 30 days). After that, the lookup finds the board gone and the red line shows.
+  - No hard cap stays. A failed write still sets `lastEditsWriteFailed`, and the unload warning covers it.
+  - Still on a day:
+    - Unsaved new-board drafts (`UNSAVED_MAX_AGE`, cap 10): they have no board to restore.
+    - `boardAdds.ts`'s adds on their way and waiting sends (`PENDING_MAX_AGE`, cap 50). A waiting send older than a day, for a board whose kept edit lives on, is still dropped silently. That is outside this brief; flagged.
+- **Review no-ruling fixes.**
+  - Purged while the trashed line is up: the re-check turns it red.
+  - A purged board's edit is dropped once its red line has mounted (`DropOnShow`), never before (logic LOW-1).
+  - `role=status` lines mount empty and get their text a frame later (`LiveText`), so they're announced (NIT-4).
+  - A refusal in Recently deleted clears when its scope or project changes (`where`).
+  - The several-board list stays open across a remount while boards are left (`keepTrashOpen`, NIT-3).
+  - The namedLine ratchet reads a top-level string constant that opens a template as its text (NIT-5). It then flagged the two board save lines (listed: GM's fixed pairs) and two older lines, `cinemaMotion` and `graphFile` (fixed heading over fixed tail, reviewed and listed).
+  - Tests for V15, B1/B2 (the backend's empty shown list), V8, V17, V20, V16 and V4.
+- **Found live and fixed.** `queueOps` keeps one op per target, so a slider's second step replaces the first. The new op took its from-value from the draft before it: the first step's 0.95, not the board's 1. Then an agent's unrelated change would have dropped it. `stampNewOps` now inherits the from-value of an op the queue just replaced.
+- **Tests.**
+  - `boardSaveLine.test.ts` +10: confirmations, the image items, `lostTooLine`, `projectDeletedLine`, and gone 404s never refused.
+  - `unsavedDrafts.test.ts` +4: op meta, the replaced op, any age and no cap, and shape checks.
+  - Paste +28, one replacing a 6k test: B order, `LiveText`, K1, label and field, the replay rule, Undo dropped or replayed, Q2 Delete forever, Empty, count and partial batch, NIT-3, purged while up, a restore 404, V8, V17, V20, K2, Q3 trashed, purged and a red line arriving mid-restore, Q5, Q7 rail focus and ×, and Q8 restore, failure and silence.
+  - `AssetTrash.test.tsx` +5. `tests/lib/trash.empty.test.ts` (new, 2). The ratchet's own cases. Backend `test_asset_trash.py` +1 (an empty shown list deletes nothing).
+- **Mutants:** 66 (scratchpad `paste/mutate-r6l.py`), all killed.
+  - On the first pass two survived. One was a redundant second sort (removed). The other was a restore reading the lines from its render, now covered by a test where a red line comes up while the held Restore is out.
+  - One mutant didn't compile and was fixed and re-run.
+  - The live fix has its own mutant (U8).
+- **Gates.**
+  - Before the merge: tsc 0, lint 0, focused vitest over 155 files 2742 of 2742, the build budget 447,743 B raw, isolated pytest over 23 backend files 948 passed.
+  - On the merge: tsc 0, lint 0, the build budget 447,881 B raw (dist deleted), isolated pytest over 31 backend files (main's moodboard and colour tests added) 1104 passed.
+  - Focused vitest over 157 files gave 2760 of 2764. The 4 were 5 s timeouts at a load average of 26 from other sessions (three Paste tests and `readOnlyCues`); the two files re-run gave 309 of 309.
+- **Live (8797/5797, the installed Chrome with a throwaway profile, a fresh home and token per scenario, canary first, 1440):** 45 of 45 over 4 scenarios, before the merge and again on it. The shots are from the run on the merge.
+  - Q1: Rivers' image 2 has the private note "sunset.jpg". With saves failing, a rename to Dusk and two Weight steps from the keyboard (0.9, from 1) were kept. An agent then renamed the board Tide and set the weight to 0.5. The reload showed "Kept the name “Tide” and the changes to “sunset.jpg” from the board.", titled "“Tide” and “sunset.jpg”". Nothing was sent over the agent's values.
+  - Q2 and C:
+    - Two kept, both deleted: "…to “Harbor” and “Rivers”…". The line's Restore, pressed with the pointer, focused the rail's "Restore Harbor" with no ring.
+    - C measured as above.
+    - Delete forever on Harbor: "This can’t be undone. Your unsaved change to “Harbor” will be lost too." On confirm the line became Rivers alone, with no red line at any point, and Harbor's edit went. Empty's confirm named Rivers.
+    - Restore Rivers: "Restored “Rivers”. Your change is saved."
+  - Q3:
+    - Deleted while open, then renamed: the r18 line with Restore, no Retry, "Not saved", never "refused". Restore gave "Restored “Rivers”. Your change is saved.", the board was Dusk, and focus was on the rail row with no ring.
+    - Deleted for good while open, then renamed: the red line, no "Moodboard not found".
+  - Q8: the project line with "Restore project". Pressing it restored Coast (the open project stays the same) and replayed Shore's rename (Cliff); the line went and the edit was spent.
+  - No request left the lane. Shots: scratchpad `paste/shots6l/` (5), each opened at 1000 px, no md5 repeats.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -791,6 +883,7 @@ Main hadn't moved past 062fb370, so nothing to merge. GM signed off 6j's design,
 - Round 6i: `unsavedDrafts.ts` (`keptEditOf`, `syncEdits`, `takeKeptEdit`, `replayKeptFields`), `MoodboardStudioView.tsx` (`replayKeptEdit`, the load's replay, the lost add's chip, the notice's title), `boardSaveLine.ts` (the signed-out step, `KEPT_NAME_MAX`, the one name's value), `store/assetStudioDraftStore.ts` (`StudioNotice`), and their tests.
 - Round 6j: `boardSaveLine.ts` (`deletedBoardsLine`), `unsavedDrafts.ts` (the kept edit's `name`, `keptEditsWaiting`, `dropKeptEdit`), `MoodboardStudioView.tsx` (the lookup, the two lines, Restore, `trashRequest`), `asset-trash/AssetTrash.tsx` (`openRequest`), `styles/moodboard-studio.css` (the Restore line), and their tests; `tests/test_moodboard_create_request_id.py` (the broadcast stand-in's `**_`).
 - Round 6k: `boardSaveLine.ts` (`restoredBoardsLine`, `namedBoards`), `MoodboardStudioView.tsx` (the open board's one line, the red line's × and board-change clear, `restoring` and the confirmation, `boardRestored`, `openBoard`, the keyboard flag and focus ids), `asset-trash/AssetTrash.tsx` (`TrashOpenRequest`, the focus, load and action lines apart), `styles/moodboard-studio.css` (the ×), and their tests.
+- Round 6l: `boardSaveLine.ts` (`boardGoneKind`, the gone save line, `restoredBoardsLine`'s two sentences, `projectDeletedLine`, `UNDO_DROPPED_LINE`, `lostTooLine`, `keptFromBoardLine`'s image items), `unsavedDrafts.ts` (`opMeta`, `stampNewOps`, `opTarget`, `valueOnBoard`, `valueOfOp`, `keptEditBoards`, no day or cap for kept edits), `store/assetStudioDraftStore.ts` (`saveGone`), `MoodboardStudioView.tsx` (the per-op replay, `undoDropped`, `markGone` and the held line, `LiveText`, `DropOnShow`, `focusAfterLine`, `railFocus`, the re-checks, `forgetEdits`, `unsavedAtStake`, the project line and `restoreGoneProject`), `asset-trash/AssetTrash.tsx` (`defaultOpen`, `atStake`, `onPurged`, the refusal cleared on `where`), and their tests; `tests/lib/trash.empty.test.ts` (new), `tests/lib/errorCopy.namedLine.test.ts` (a constant opening read as its text), backend `tests/test_asset_trash.py`.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs
