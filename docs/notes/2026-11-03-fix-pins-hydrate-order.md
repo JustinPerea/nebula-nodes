@@ -87,3 +87,23 @@ in the frontend sends computed text: submit sends the raw note.
 - `tests/pinComposer.textLoadedRefit.test.tsx`: the counter goes from
   "27 left" to "29 left" and the kept note from `葛 ❤` to the full form, with
   nothing typed. The old PinComposer fails on both.
+
+## GM's sign-off conditions (pinned in the refit test)
+
+`tests/pinComposer.textLoadedRefit.test.tsx` now runs the full flow twice: at
+30 or fewer left (27 -> 29), and with the counter revealed by a note_too_long
+refusal (77 -> 79). Each run gets fresh modules (`vi.resetModules` and
+`vi.doMock`), so the chunk can fail and then load again. In each run:
+- the field keeps focus, its 3-7 selection and its text;
+- the polite region stays empty. PromptDialog speaks only when "N left" goes
+  down past 30, 10 or 0, and the fallbacks never count fewer characters than
+  the data, so a refit only raises the count.
+
+Mutations, each failing both runs:
+- the dialog remounted on the refit;
+- the caret moved to the end on a redraw;
+- the value reset;
+- focus moved away;
+- an announcement on any count change;
+- an announcement whenever the counter shows;
+- no refit at all.
