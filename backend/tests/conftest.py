@@ -129,6 +129,30 @@ def pytest_runtest_teardown(item, nextitem):
             f"services.settings.SETTINGS_PATH is {module.SETTINGS_PATH} after {item.nodeid}; "
             f"restore it to {_TEST_SETTINGS_PATH} (reload with NEBULA_SETTINGS_PATH set)"
         )
+    _assert_no_canvas_socket_left(item, sys.modules.get("main"))
+
+
+def _assert_no_canvas_socket_left(item, main_module) -> None:
+    """Fail the test that leaves a canvas socket registered in main.manager.
+
+    The manager lives for the process, so a socket a test's /ws handler never
+    removed made every later test see an open canvas: `nebula apply --arrange`
+    then said "The open canvas lays out…" (the CI flake of 2026-11-02, after
+    test_canvas_pins' websocket test). The handler now leaves the manager on
+    every exit (main.websocket_endpoint's finally); this keeps it that way.
+    The leftovers are cleared first so only the leaking test fails."""
+    manager = getattr(main_module, "manager", None)
+    if manager is None:
+        return
+    left = len(manager.active_connections) + len(manager.browser_connections)
+    if not left:
+        return
+    manager.active_connections.clear()
+    manager.browser_connections.clear()
+    raise AssertionError(
+        f"{item.nodeid} left {left} canvas socket(s) registered in main.manager; "
+        "a /ws handler must call manager.disconnect on every exit (close a test's sockets "
+        "with `with client.websocket_connect(...)`)")
 
 
 @pytest.fixture(autouse=True)
