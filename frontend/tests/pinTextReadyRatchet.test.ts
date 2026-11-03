@@ -69,6 +69,21 @@ const testFiles = (dir: string): string[] => readdirSync(dir).flatMap((name) => 
 const isCanvasPins = (node: ts.Node | undefined): boolean => !!node && ts.isStringLiteralLike(node) && SPECIFIER.test(node.text);
 const calleeName = (call: ts.CallExpression): string => (ts.isPropertyAccessExpression(call.expression)
   ? call.expression.name.text : ts.isIdentifier(call.expression) ? call.expression.text : '');
+const isDynamicCanvasPins = (node: ts.Node): boolean => ts.isCallExpression(node)
+  && node.expression.kind === ts.SyntaxKind.ImportKeyword && isCanvasPins(node.arguments[0]);
+const PARSE_OPTIONS: ts.CreateSourceFileOptions = { languageVersion: ts.ScriptTarget.Latest };
+/**
+ * The repo scan's prefilter: only a file that could name canvasPins is
+ * parsed. Every form the check reads needs the specifier as a string literal
+ * matching SPECIFIER: import, export, import(), vi.importActual,
+ * vi.importMock, require, vi.mock and vi.doMock. Its raw text holds
+ * "canvasPins" unless an escape spells part of it ('canvas\u0050ins',
+ * '\x63anvasPins', a line continuation). So a file with any such escape is
+ * parsed too. A specifier built at run time (concatenation, a variable, a
+ * template with ${…}) isn't a literal, and the check can't see it either way.
+ */
+const mayNameCanvasPins = (source: string): boolean => source.includes('canvasPins')
+  || /\\(?:u\{?[0-9a-fA-F]|x[0-9a-fA-F]|[0-7]|\r?\n)/.test(source);
 const unwrap = (node: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node);
 
 /** Every comment in the file, by the scanner's comment ranges around each node: never text inside a string or template. */
@@ -97,12 +112,15 @@ function declaredName(node: ts.Node): string | null {
 
 /** What a test file's source brings in from canvasPins, whether it waits, and whether a full mock or an opt-out exempts it. */
 function readFile(source: string, fileName = 'case.test.tsx') {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  // No parent pointers (the walk goes top-down) and one shared options object:
+  // the repo scan parses each candidate file once (#220 CI, run 41622069111).
+  const file = ts.createSourceFile(fileName, source, PARSE_OPTIONS, false, fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const names = new Set<string>();
   let fullMock = false;
   // Local names bound to canvasPins' own pinTextReady or pinTextSettling, and how often each name is declared at all.
   const waitBindings = new Map<string, string>();
   const declarations = new Map<string, number>();
+  const destructured = new Set<ts.Node>();
   const bindWait = (exported: string, local: string) => { if (WAITS.has(exported)) waitBindings.set(local, exported); };
 
   const collect = (node: ts.Node) => {
@@ -125,18 +143,19 @@ function readFile(source: string, fileName = 'case.test.tsx') {
       if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) names.add(ALL);
       else for (const element of node.exportClause.elements) names.add((element.propertyName ?? element.name).text);
     }
-    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && isCanvasPins(node.arguments[0])) {
-      // `const { a, b: c } = await import(…)` takes its names; any other use takes them all.
-      const awaited = ts.isAwaitExpression(node.parent) ? node.parent : null;
-      const variable = awaited && ts.isVariableDeclaration(awaited.parent) ? awaited.parent : null;
-      if (variable && ts.isObjectBindingPattern(variable.name) && variable.name.elements.every((e) => !e.dotDotDotToken)) {
-        for (const element of variable.name.elements) {
-          const key = element.propertyName ?? element.name;
-          names.add(ts.isIdentifier(key) ? key.text : ALL);
-          if (ts.isIdentifier(key) && ts.isIdentifier(element.name)) bindWait(key.text, element.name.text);
-        }
-      } else names.add(ALL);
+    // `const { a, b: c } = await import(…)` takes its names, read from the
+    // declaration down (no parent pointers); any other `import(…)` takes them all.
+    if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer
+      && ts.isAwaitExpression(node.initializer) && isDynamicCanvasPins(node.initializer.expression)
+      && node.name.elements.every((e) => !e.dotDotDotToken)) {
+      destructured.add(node.initializer.expression);
+      for (const element of node.name.elements) {
+        const key = element.propertyName ?? element.name;
+        names.add(ts.isIdentifier(key) ? key.text : ALL);
+        if (ts.isIdentifier(key) && ts.isIdentifier(element.name)) bindWait(key.text, element.name.text);
+      }
     }
+    if (isDynamicCanvasPins(node) && !destructured.has(node)) names.add(ALL);
     // #220 review 1 LOW-1: vitest's and CommonJS's other ways to the module take every rule.
     if (ts.isCallExpression(node) && ['importActual', 'importMock', 'require'].includes(calleeName(node)) && isCanvasPins(node.arguments[0])) {
       names.add(ALL);
@@ -188,7 +207,7 @@ function readFile(source: string, fileName = 'case.test.tsx') {
   return { rules, waits, fullMock, optedOut, racing: rules.length > 0 && !waits && !fullMock && !optedOut };
 }
 
-const racing = (source: string, fileName?: string) => readFile(source, fileName).racing;
+const racing = (source: string, fileName?: string) => mayNameCanvasPins(source) && readFile(source, fileName).racing;
 const LIB = "'../src/lib/canvasPins'";
 
 describe('the ratchet reads every import form (mutation cases: each must be caught)', () => {
@@ -216,6 +235,10 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
     ['vi.importActual', `const real = await vi.importActual<typeof import(${LIB})>(${LIB});\nreal.pinDisplayText('a');`],
     ['vi.importMock', `const mocked = await vi.importMock(${LIB});`],
     ['require', `const pins = require(${LIB});`],
+    // #220 CI: escapes that spell the specifier get past a plain "canvasPins" search; the prefilter parses them.
+    ['a unicode escape in the specifier', "import { pinDisplayText } from '../src/lib/canvas\\u0050ins';"],
+    ['a hex escape in the specifier', "import { pinDisplayText } from '../src/lib/\\x63anvasPins';"],
+    ['a line continuation in the specifier', "import { pinDisplayText } from '../src/lib/canvas\\\nPins';"],
     // #220 review 1 NIT-1.
     ['pinTextSettling awaited but not called', `import { pinDisplayText, pinTextSettling } from ${LIB};\nawait pinTextSettling;`],
     ['pins.pinTextSettling awaited but not called', `import * as pins from ${LIB};\nawait pins.pinTextSettling;`],
@@ -230,6 +253,10 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
   ];
   it.each(caught)('%s', (_, source) => {
     expect(racing(source)).toBe(true);
+  });
+  it('the prefilter lets every caught form through: what it skips the check could never flag', () => {
+    expect(caught.filter(([, source]) => !mayNameCanvasPins(source)).map(([name]) => name)).toEqual([]);
+    expect(mayNameCanvasPins("import { render } from '@testing-library/react';")).toBe(false);
   });
 
   const passes: Array<[string, string]> = [
@@ -258,7 +285,10 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
 });
 
 describe('tests of the pin text rules wait for the Unicode data', () => {
-  it('every test file that brings in a rule waits on pinTextReady or pinTextSettling', () => {
+  // #220 CI: this timed out at vitest's default 5 s on a loaded runner when it
+  // parsed every test file (about 1-2 s locally, over 7.5 s in CI). The
+  // prefilter is the fix; the explicit timeout is only a backstop.
+  it('every test file that brings in a rule waits on pinTextReady or pinTextSettling', { timeout: 20_000 }, () => {
     const files = [...testFiles(TESTS), ...testFiles(SRC)];
     expect(files.length).toBeGreaterThan(100);
     const found = files.filter((path) => path !== __filename && racing(readFileSync(path, 'utf8'), path))
