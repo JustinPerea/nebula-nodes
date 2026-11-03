@@ -359,13 +359,11 @@ describe('the give-way order (GM r5-r7)', () => {
     const high = placeNoticeStack({ ...base, card, floating: { top: 120, bottom: 300, left: 65, right: 403 } });
     expect(high.topLine).toBe(300 + FLOAT_GAP_PX);
     expect(high.lift).toBe(0);
-    // GM r11: under it first, its body giving way to header and 2 rows and
-    // then its header, held at its top edge; before above it, even with
-    // room there.
+    // GM r12: a side with no give before one with give: with 376 px free
+    // above it, the card goes there and the log keeps its body.
     const low = placeNoticeStack({ ...base, card, floating: { top: 500, bottom: 760, left: 65, right: 403 } });
-    expect(low).toMatchObject({ float: 'under', lift: 0, squeeze: LIVE.logSpare, collapse: true, hold: 'top', underFade: false });
-    expect(low.topLine).toBe(760 + FLOAT_GAP_PX - LIVE.logSpare - LIVE.logCollapse);
-    // Not even its header's room under it: above it, with no give.
+    expect(low).toMatchObject({ float: 'above', lift: 900 - 500 + FLOAT_GAP_PX - LIVE.regionBottom, squeeze: 0, collapse: false, hold: null, keepPlan: false });
+    // Lower still, the same.
     const lower = placeNoticeStack({ ...base, card, floating: { top: 560, bottom: 800, left: 65, right: 403 } });
     expect(lower).toMatchObject({ float: 'above', lift: 900 - 560 + FLOAT_GAP_PX - LIVE.regionBottom, squeeze: 0, collapse: false, hold: null });
     const aside = placeNoticeStack({ ...base, card, floating: { top: 500, bottom: 760, left: 600, right: 900 } });
@@ -383,10 +381,14 @@ describe('the give-way order (GM r5-r7)', () => {
       floating: { top: 300, bottom: 480, left: 65, right: 403 },
     };
     const place = placeNoticeStack(m);
-    const short = KEEP + 40 - (300 - FLOAT_GAP_PX - LIVE.topLine);
-    expect(place).toMatchObject({ mode: 'pill', aboveLog: false, squeeze: short, collapse: false, underFade: false });
+    // GM r12: the first pass keeps the note whole: header, footer, note and
+    // kept lines and the pill need 89 + 158 + 40, 111 more than the 176
+    // above it: past its body's 89 it collapses (47).
+    const short = 89 + 158 + 40 - (300 - FLOAT_GAP_PX - LIVE.topLine);
+    expect(short).toBeGreaterThan(LIVE.logSpare);
+    expect(place).toMatchObject({ float: 'above', mode: 'pill', aboveLog: false, squeeze: LIVE.logSpare, collapse: true, keepPlan: false, underFade: false, hold: 'bottom' });
     // The stack's line comes down with the log's top, by the give.
-    expect(place.lift).toBe(640 - 300 + FLOAT_GAP_PX - LIVE.regionBottom - short);
+    expect(place.lift).toBe(640 - 300 + FLOAT_GAP_PX - LIVE.regionBottom - LIVE.logSpare - LIVE.logCollapse);
     // Under it, it never gives (it is held at its bottom edge).
     const under = placeNoticeStack({ ...m, viewportH: 900, floating: { top: 120, bottom: 300, left: 65, right: 403 } });
     expect(under).toMatchObject({ squeeze: 0, collapse: false, topLine: 300 + FLOAT_GAP_PX });
@@ -459,10 +461,31 @@ describe('the give-way order (GM r5-r7)', () => {
   it('GM r9 2: with no 400 px beside it, the side of it, under or above, that holds the card; the log never moves', () => {
     // 1024x640, the log at x 300-640: 228 px on its left, 360 on its right.
     const base: StackMeasure = { ...at(640, 2), viewportW: 1024, logClearance: 0, logTop: 0, column: { left: 212, right: 812 } };
+    // GM r12: the note whole first, the log giving only what that needs:
+    // under it 16 px, above it 81.
     const high = placeNoticeStack({ ...base, floating: { top: 100, bottom: 280, left: 300, right: 640 } });
-    expect(high).toMatchObject({ float: 'under', inset: null, squeeze: 0, topLine: 280 + FLOAT_GAP_PX, underFade: false });
+    expect(high).toMatchObject({ float: 'under', inset: null, squeeze: 16, collapse: false, topLine: 280 + FLOAT_GAP_PX - 16, keepPlan: false, hold: 'top' });
     const low = placeNoticeStack({ ...base, floating: { top: 330, bottom: 510, left: 300, right: 640 } });
-    expect(low).toMatchObject({ float: 'above', inset: null, underFade: false });
+    expect(low).toMatchObject({ float: 'above', inset: null, squeeze: 81, collapse: false, keepPlan: false, hold: 'bottom' });
+  });
+
+  it('GM r12: two passes, the note whole first, each beside, under, above, then under and above with give', () => {
+    const base = { ...LIVE, logClearance: 0, logTop: 0, card: { ...LIVE_CARD } };
+    // Room both sides with no give: under first.
+    expect(placeNoticeStack({ ...base, viewportH: 1000, column: { left: 64, right: 404 }, floating: { top: 380, bottom: 560, left: 65, right: 403 } }))
+      .toMatchObject({ float: 'under', squeeze: 0, collapse: false, keepPlan: false });
+    // Beside it, exactly the note's room: 444 - 81 - 116 = 247 = 89 + 158
+    // (a pixel less, and under it with its give would keep the note whole).
+    const wide = { ...base, viewportW: 1024, column: { left: 64, right: 664 } };
+    expect(placeNoticeStack({ ...wide, viewportH: 444, floating: { top: 60, bottom: 200, left: 65, right: 405 } }))
+      .toMatchObject({ float: 'right', squeeze: 0, keepPlan: false });
+    // As much room on either side of it: its left.
+    const both = placeNoticeStack({ ...base, viewportW: 1400, viewportH: 900, column: { left: 400, right: 1000 }, floating: { top: 300, bottom: 480, left: 554, right: 894 } });
+    expect(both.float).toBe('left');
+    // No note-whole step: pass 2 takes the first that keeps the kept lines,
+    // under it with no give (200 px), before above it with its 20 (230).
+    const second = placeNoticeStack({ ...base, viewportH: 640, logSpare: 20, logCollapse: 0, column: { left: 64, right: 404 }, floating: { top: 334, bottom: 351, left: 65, right: 403 } });
+    expect(second).toMatchObject({ float: 'under', squeeze: 0, collapse: false, keepPlan: true, underFade: false });
   });
 
   it('a floating log with no room on either side: a named shortfall on the side with more room, never across the log (GM r11)', () => {
@@ -647,6 +670,9 @@ const EXPECTED_R11_WIDE = [18, 53, 0, 0];
 const EXPECTED_R10_768 = 18;
 /** The whole grid's floating cells (252), by step (GM r11). */
 const EXPECTED_R11_ALL = [90, 162, 0, 0];
+/** GM r12: the whole grid's floating cells by step, per log width, and their notes [whole, clipped]. */
+const EXPECTED_R12_STEPS = { own: [54, 72, 0, 0], wide: [36, 90, 0, 0] };
+const EXPECTED_R12_NOTES = { own: [110, 16], wide: [102, 24], r3fOwn: [55, 16], r3fWide: [47, 24] };
 
 /** The live card's line boxes (round 3h, 340 px), unscrolled, as LIVE_CARD
  * places its kept lines (4 px lower: the 3e model's note margin). */
@@ -682,6 +708,8 @@ describe('the grid', () => {
   const SIDE: Record<string, string> = {};
   /** The width each cell's card took beside a log in its narrow layout. */
   const NARROWED: Record<string, number> = {};
+  /** Each floating cell: its note whole (pass 1, GM r12) or clipped. */
+  const NOTE: Record<string, 'whole' | 'clipped'> = {};
   const cells = SIZES.flatMap(([w, h]) => LOGS.flatMap((log) => COUNTS.flatMap((count) => [false, true].flatMap((banner) => (count ? [false, true] : [false]).map((undo) => {
     const regionLeft = 64;
     const column = { left: regionLeft, right: regionLeft + Math.min(600, w - regionLeft - 16) };
@@ -785,6 +813,7 @@ describe('the grid', () => {
     // never across it.
     if (floating) SIDE[name] = place.float ?? 'none';
     if (place.narrow) NARROWED[name] = place.narrow;
+    if (floating) NOTE[name] = place.keepPlan ? 'clipped' : 'whole';
     if (floating && (place.float === 'left' || place.float === 'right')) {
       const float = m.floating!;
       const inset = place.inset!;
@@ -832,6 +861,21 @@ describe('the grid', () => {
     const count = (names: string[]) => [1, 2, 3, 4].map((n) => names.filter((name) => step(name) === n).length);
     const all = Object.keys(SIDE);
     expect(all).toHaveLength(252);
+    const notes = (names: string[]) => ['whole', 'clipped'].map((kind) => names.filter((name) => NOTE[name] === kind).length);
+    const r3f = R3F_FLOATING_SHORT; const r3fWide = r3f.map((name) => name.replace(' floating', ' floating wide'));
+    const ownAll = all.filter((name) => !name.includes(' wide')); const wideAll = all.filter((name) => name.includes(' wide'));
+    const by = (names: string[]) => [1, 2, 3, 4].map((n) => names.filter((name) => step(name) === n).length);
+    // GM r12, two passes: the note whole first, then the kept lines only.
+    // [beside, under, above, short] per log width, and how many end with
+    // the note whole and how many clipped on a line boundary.
+    expect({ own: by(ownAll), wide: by(wideAll) }).toEqual(EXPECTED_R12_STEPS);
+    expect({ own: notes(ownAll), wide: notes(wideAll), r3fOwn: notes(r3f), r3fWide: notes(r3fWide) }).toEqual(EXPECTED_R12_NOTES);
+    // The note clipped: 420x560 with notices (out of scope), and the wide
+    // log's 768x600 cells whose Undo notice stays whole, with no give left.
+    expect(all.filter((name) => NOTE[name] === 'clipped')).toEqual(all.filter((name) => /^420x560 floating (wide )?[1-4]( |$)|^768x600 floating wide [1-4] (banner )?undo$/.test(name)));
+    // 768x600 at the log's own width: beside it, the note whole.
+    expect(all.filter((name) => /^768x600 floating \d/.test(name)).every((name) => step(name) === 1 && NOTE[name] === 'whole')).toBe(true);
+    expect([step('768x600 floating wide 0'), NOTE['768x600 floating wide 0']]).toEqual([2, 'whole']);
     expect([1, 2, 3, 4].map((n) => all.filter((name) => step(name) === n).length)).toEqual(EXPECTED_R11_ALL);
     // With the log at its own width.
     const own = R3F_FLOATING_SHORT;
@@ -1510,7 +1554,7 @@ describe('GM r10 (round 3h)', () => {
     expect(placeNoticeStack({ ...docked, card: { ...docked.card, probes: [tall(356)] } })).toMatchObject({ narrow: 356, keepPlan: true });
     // Beside a floating log on the column's right: the left side, narrow, the same.
     const floatingRight: StackMeasure = {
-      ...m(), viewportW: 800, logClearance: 0, logTop: 0, floating: { top: 180, bottom: 360, left: 420, right: 760 },
+      ...m(), viewportW: 800, logClearance: 0, logTop: 0, floating: { top: 120, bottom: 560, left: 420, right: 760 },
       column: { left: 64, right: 664 }, card: { ...m().card!, probes: [tall(348)] },
     };
     expect(placeNoticeStack(floatingRight)).toMatchObject({ float: 'left', narrow: 348, keepPlan: true });

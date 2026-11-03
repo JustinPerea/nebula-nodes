@@ -141,6 +141,8 @@ describe('the person\'s collapse wins over the card\'s give (uiStore)', () => {
     act(() => ui().holdAgentLogForCard(true, true));
     expect(header().getAttribute('aria-expanded')).toBe('false');
     expect(header().getAttribute('aria-description')).toBe(LOG_CARD_FOLD_DESCRIPTION);
+    // GM r12's words: why it folded.
+    expect(LOG_CARD_FOLD_DESCRIPTION).toBe('Folded to make room for the proposal card. It reopens when the card closes.');
     act(() => ui().holdAgentLogForCard(false, false));
     expect(header().getAttribute('aria-expanded')).toBe('true');
     expect(header().hasAttribute('aria-description')).toBe(false);

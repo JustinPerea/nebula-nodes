@@ -53,13 +53,15 @@ import { setNoticeMore } from './noticeMore';
  *    of it (r1's rule, `besideRoom`, the docked log's own test): the region
  *    stops short of the log on that side (`inset`), the more room first.
  *    Down to the card's narrow layout (GM r10, `besideCard`).
- * 2. Else under it (GM r11), its body giving way first when the card would
- *    fall short there (steps 3-4: header and 2 rows, then its header), held
- *    at its top edge, so its bottom comes up.
- * 3. Else above it, with the same give, held at its bottom edge.
- * 4. Else a named shortfall on the side with more room, the plan line
- *    first. A step counts only when the card's header, kept lines and
- *    footer show there; the card never crosses the log.
+ * 2. Under it, then above it, with no give; then under it with its body
+ *    giving way (steps 3-4: header and 2 rows, then its header), held at
+ *    its top edge so its bottom comes up; then above it with the same give,
+ *    held at its bottom edge (GM r11).
+ * GM r12: steps 1-2 run twice, first for the whole card with its note
+ * whole, then for its kept lines only, the note clipped on a line
+ * boundary; the log gives only what the winning step needs.
+ * 3. Else a named shortfall where the body has the most room, the plan line
+ *    first. The card never crosses the log.
  * A change of side, or of the inset, glides (`stepChanged`).
  *
  * Steps 3 and 4 are the docked log's when the stack sits above it, and a
@@ -250,7 +252,7 @@ export type LogHold = 'top' | 'bottom';
 export const LOG_HOLD_ATTR = 'data-agent-log-hold';
 /** The log header's accessible description while the card has folded it
  * (GM r11): the fold is the card's, never the person's collapse. */
-export const LOG_CARD_FOLD_DESCRIPTION = 'Folded for the proposal card. It reopens when the card closes.';
+export const LOG_CARD_FOLD_DESCRIPTION = 'Folded to make room for the proposal card. It reopens when the card closes.';
 
 export type FloatSide = 'left' | 'right' | 'under' | 'above';
 
@@ -399,54 +401,74 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const collapseGive = Math.max(0, Math.floor(m.logCollapse ?? 0));
   let gives = aboveLog;
 
-  // A floating log in the card's column (GM r4 6, r7, r9). 1: beside it,
-  // with at least BESIDE_LOG_MIN_W on one side (r1's rule): the region stops
-  // short of it there. 2: under it when the stack fits between its foot and
-  // the stack's line; else above it, the log giving way at its bottom edge
-  // as the docked one does; when neither fits, the side with more room, and
-  // under it the stack's top then crosses the log's body, never its header.
-  // 3: step 5 on that side.
+  // A floating log in the card's column (GM r9-r12), the log never moving.
+  // Two passes (GM r12): first the whole card with its note whole, then its
+  // kept lines only, the note clipped on a line boundary. Each tries, in
+  // order: beside it (400 px, or the card's narrow layout, GM r10); under it
+  // with no give; above it with no give; under it, its body giving way
+  // (header and 2 rows, then its header), held at its top edge; above it
+  // with the same give, held at its bottom edge. Neither pass: a named
+  // shortfall where the body has the most room. The card never crosses the
+  // log, and the log gives only what the step needs.
   const float = docked ? null : m.floating;
   let floatSide: FloatSide | null = null;
   let inset: StackPlace['inset'] = null;
+  // The body the step keeps whole: the kept lines (pass 2, and the docked
+  // log), or the note and the kept lines (pass 1).
+  let keepLevel = floors.min;
   if (float && m.column && float.left < m.column.right && float.right > m.column.left
       && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
+    const line0 = m.viewportH - m.regionBottom - base;
+    const rows = compact.rows;
+    const give = spare + collapseGive;
     const regionRight = Math.max(m.gutter, m.logClearance);
     const leftRoom = besideRoom(m, m.regionLeft, m.viewportW - float.left + FLOAT_GAP_PX);
     const rightRoom = besideRoom(m, Math.max(m.regionLeft, float.right + FLOAT_GAP_PX), m.logClearance);
     // Each side as the docked log's (besideCard): 400 px, or the card's
     // narrow layout with every never-covered part in the window (GM r10).
-    const leftCard = besideCard(m, leftRoom, compact.rows);
-    const rightCard = besideCard(m, rightRoom, compact.rows);
-    if (leftCard || rightCard) {
-      floatSide = leftCard && (!rightCard || leftRoom >= rightRoom) ? 'left' : 'right';
-      const chosen = (floatSide === 'left' ? leftCard : rightCard)!;
-      if (chosen !== m.card) { card = chosen; narrow = Math.floor(floatSide === 'left' ? leftRoom : rightRoom); floors = bodyFloors(card); }
-      inset = floatSide === 'left'
+    const leftCard = besideCard(m, leftRoom, rows);
+    const rightCard = besideCard(m, rightRoom, rows);
+    const side: 'left' | 'right' | null = leftCard || rightCard
+      ? (leftCard && (!rightCard || leftRoom >= rightRoom) ? 'left' : 'right') : null;
+    const sideCard = side === 'left' ? leftCard : side === 'right' ? rightCard : null;
+    type Step = { at: 'beside' | 'under' | 'above'; give: boolean };
+    const STEPS: Step[] = [
+      { at: 'beside', give: false }, { at: 'under', give: false }, { at: 'above', give: false },
+      { at: 'under', give: true }, { at: 'above', give: true },
+    ];
+    const under0 = line0 - (float.bottom + FLOAT_GAP_PX);
+    const over0 = float.top - FLOAT_GAP_PX - topLine;
+    const cardAt = (step: Step) => (step.at === 'beside' ? sideCard : card);
+    // The card's body there: the room less its header, footer and notices.
+    const bodyAt = (step: Step) => {
+      const at = cardAt(step);
+      if (!at) return Number.NEGATIVE_INFINITY;
+      const room = step.at === 'beside' ? line0 - topLine : (step.at === 'under' ? under0 : over0) + (step.give ? give : 0);
+      return room - at.chrome - rows;
+    };
+    let pick: { step: Step; level: 'full' | 'min' } | null = null;
+    for (const level of ['full', 'min'] as const) {
+      const step = STEPS.find((each) => cardAt(each) && bodyAt(each) >= bodyFloors(cardAt(each)!)[level]);
+      if (step) { pick = { step, level }; break; }
+    }
+    // Neither pass: where the body has the most room (beside, or a side of
+    // it with all its give), the plan line first.
+    const step = pick?.step ?? [STEPS[0], STEPS[3], STEPS[4]].reduce((best, each) => (bodyAt(each) > bodyAt(best) ? each : best));
+    if (step.at === 'beside') {
+      floatSide = side;
+      if (sideCard !== m.card) { card = sideCard!; narrow = Math.floor(side === 'left' ? leftRoom : rightRoom); floors = bodyFloors(card); }
+      inset = side === 'left'
         ? { left: Math.floor(m.regionLeft), right: Math.ceil(m.viewportW - float.left + FLOAT_GAP_PX) }
         : { left: Math.ceil(float.right + FLOAT_GAP_PX), right: Math.floor(regionRight) };
-    }
-  }
-  // GM r11: 2, under it, the log's body giving way first (header and 2
-  // rows, then its header), held at its top edge; 3, above it with the same
-  // give, held at its bottom edge; 4, a named shortfall on the side with
-  // more room. A step counts only when the card's header, kept lines and
-  // footer show there; the card never crosses the log.
-  if (float && !floatSide && m.column && float.left < m.column.right && float.right > m.column.left
-      && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
-    const line0 = m.viewportH - m.regionBottom - base;
-    const needs = card.chrome + floors.min + compact.rows;
-    const give = spare + collapseGive;
-    const under = line0 - (float.bottom + FLOAT_GAP_PX) + give;
-    const over = float.top - FLOAT_GAP_PX - topLine + give;
-    if (under >= needs || (over < needs && under >= over)) {
-      topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
-      floatSide = 'under';
     } else {
-      base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
-      floatSide = 'above';
+      if (step.at === 'under') topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
+      else base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
+      floatSide = step.at;
+      // The log may give; a step won with no give leaves nothing short, so
+      // it gives nothing there (place(): only what the kept body needs).
+      gives = true;
     }
-    gives = true;
+    keepLevel = pick?.level === 'full' ? floors.full : floors.min;
   }
 
   // The room from the stack's line up to the top line.
@@ -455,7 +477,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const logCollapse = gives ? collapseGive : 0;
   const place = ({ mode, fold, rows, more, host }: Rows, expanded = false): StackPlace => {
     const cap = Math.floor(room - rows);
-    const keep = card.chrome + floors.min;
+    const keep = card.chrome + keepLevel;
     const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body);
     // Step 3: the log's body gives way, down to its floor; step 4: it
     // collapses to its header.
@@ -497,7 +519,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     }, true);
   }
   // Steps 1 and 2: the first way the kept lines fit with no give.
-  const fits = ladder.find((rows) => room - rows.rows - card.chrome >= floors.min);
+  const fits = ladder.find((rows) => room - rows.rows - card.chrome >= keepLevel);
   // Then the log gives way, and last the kept lines.
   return place(fits ?? compact);
 }

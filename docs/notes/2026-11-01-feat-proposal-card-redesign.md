@@ -634,3 +634,69 @@ A step counts only when the card's header, kept lines (`floors.min`) and footer 
 | 18, 800×640, log at 200–540 × 330–510 | Short under it even with its give, so the card goes above it. The log gave 40 px with its bottom held at 510 (top 371). |
 | 19, 800×540, log at 200–540 × 190 | The card under the log, which is collapsed to its header for it (`aria-description` set), its top at 190. |
 | 20a / 20b | The card withdrawn: the log reopens on the spring (frame 1 at 94 px, frame 2 at 180), with its top at 190 in every one of 345 frames. |
+
+## Round 3j (GM - Design's r12, 2026-11-03)
+
+origin/main was still at 062fb370, so there was nothing to merge.
+
+**A two-pass search for a floating log** (`placeNoticeStack`).
+- **Pass 1:** the whole card, with its note whole (`floors.full`).
+- **Pass 2:** the kept lines only (`floors.min`), the note clipped on a line boundary.
+- **The five steps**, the same in both passes and in this order:
+  1. beside the log (400 px, or the card's narrow layout);
+  2. under it with no give;
+  3. above it with no give;
+  4. under it with give;
+  5. above it with give.
+- Give means down to header and 2 rows, then the header alone.
+- If neither pass fits, the shortfall goes where the body has the most room: beside, or a side with all of its give.
+- **The log gives only what the winning step needs.** The step's level (`keepLevel`) feeds both the squeeze (`keep`) and the notice ladder (`fits`). So a pass-1 win folds notices and takes give until the note is whole, and no further.
+- Held edges, the person's collapse winning, and the reopen spring are unchanged from 3i.
+- The 900 px case (log at 500–760, 376 px free above) now goes above the log with no give, and the note is whole. The other floating unit tests now give for the whole note:
+  - 640 high with the log at 300–480: the log collapses;
+  - 1024×640: the log gives 16 px under it, or 81 px above it.
+
+**Fold description:** "Folded to make room for the proposal card. It reopens when the card closes." A log the person collapsed gets none.
+
+**The "<agent> proposes 1 change on the canvas · Review" popup is outside #216.**
+- It's the Updates corner's drop card, in `frontend/src/components/agent-notes/AgentNotesCorner.tsx`:
+  - arrivals are queued to drop at :450–469;
+  - the drop card is set at :512.
+- That file isn't in `git diff 062fb370...HEAD`. The Update it shows is posted by `backend/main.py` `_post_canvas_update` (:9347), with text from `backend/services/canvas_proposals.py:1557` `update_text`. Neither the posting nor the corner changed in #216.
+- Left as is, for the coordinator to log as a follow-up.
+
+**The grid** (252 floating cells, 126 at each log width).
+
+| | Beside | Under | Above | Short | Note whole | Note clipped |
+|---|---|---|---|---|---|---|
+| Log at its own width | 54 | 72 | 0 | 0 | 110 | 16 |
+| Log at the column's width | 36 | 90 | 0 | 0 | 102 | 24 |
+| Round 3f's 71, own width | 36 | 35 | 0 | 0 | 55 | 16 |
+| Round 3f's 71, column width | 18 | 53 | 0 | 0 | 47 | 24 |
+
+- **Where the note is still clipped (40 cells):** 420×560 with 1–4 notices at either width (32, out of scope), and the wide log's 768×600 cells with an Undo notice (8). An Undo notice never folds, and by then the log has given all it can.
+- **768×600, log at its own width:** all 18 beside it at the narrow width, note whole.
+- **768×600, log at the column's width:** all 18 under it as it gives way. The 10 without an Undo have the note whole, `768x600 floating wide 0` among them; the 8 with one are clipped.
+- The test pins the counts, the note states and the list of clipped cells.
+
+**Mutation checks (round 3j).**
+- 19 mutants: 17 caught, 4 of them after new pins:
+  - pass 2 taking the first step that keeps the kept lines, rather than the roomiest;
+  - under before above with no give;
+  - beside at exactly the note's room;
+  - the left side winning a tie.
+- 2 were equivalent: a step won with no give leaves nothing short, so whether that branch lets the log give changed nothing. Those two branches are folded into one `gives = true`.
+- Runner: `scratchpad/proposal-card/mut3j/run.py`, results in `out-first.txt` and `out-pins.txt`.
+
+**Checks (round 3j).**
+- tsc 0 and lint 0.
+- Focused vitest on the explicit 163-file list (its length printed first, and checked to be non-empty, with every file present): 3331 passed.
+- The backend is unchanged.
+- Entry: 464,049 B raw, 143,916 B gzip.
+
+**Live (round 3j).** Restraint. Isolated backend on 8798, Vite on 5798, isolated home. Installed Chrome with a throwaway profile, removed afterwards. Canaries blocked. Shots are in `scratchpad/proposal-card/shots3j/`, and every md5 is distinct.
+
+| Shot | Result |
+|---|---|
+| 13b, 800×640, log at 200–540 × 192 | The card under the log, which gave 57 px with its top held at 192 (bottom 315). The note is whole (unscrolled) above the plan and ⚠ lines, and the pill shows "2 notices". |
+| 18, 800×640, log at 200–540 × 330–510 | The card above the log, which gave 65 px with its bottom held at 510 (top 396). The note is whole. |
