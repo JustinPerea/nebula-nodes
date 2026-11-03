@@ -579,8 +579,8 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
 def reanalyze(asset_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
         raise gone(None, "asset not found", "reference", "references", "assets")
-    records.requeue(store, asset_id, actor=actor.id)
-    return {"queued": True}
+    # A too-transparent reference isn't requeued: the answer is its state (GM r6 on #208).
+    return records.reanalyze(store, asset_id, actor=actor.id)
 
 
 class StaleIn(BaseModel):
@@ -591,9 +591,10 @@ class StaleIn(BaseModel):
 def reanalyze_stale(body: StaleIn, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     ids = records.stale_asset_ids(store, prompt_version=PROMPT_VERSION, model_id=MODEL_ID,
                                   collection_id=body.collection_id)
-    for asset_id in ids:
-        records.requeue(store, asset_id, actor=actor.id)
-    return {"queued": len(ids)}
+    # As the detail's Re-analyze: a too-transparent reference with an older
+    # ok analysis stays as it is, since a new prompt can't change that
+    # (review 4 N1 on #208). "queued" counts only what was requeued.
+    return {"queued": sum(1 for asset_id in ids if records.reanalyze(store, asset_id, actor=actor.id)["queued"])}
 
 
 @router.delete("/assets/{asset_id}")

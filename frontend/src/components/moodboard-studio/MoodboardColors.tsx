@@ -80,11 +80,26 @@ function BoardColor({ color, leftOut }: { color: MoodboardColor; leftOut?: strin
   );
 }
 
-/** The note under the board swatches for an analysis without sources. */
+/** The note under the board swatches for an analysis without sources.
+ *  None when the analysis is out of date (``AnalysisOutdated`` says so). */
 export function SourcesOutdated({ analysis }: { analysis: MoodboardAnalysis }) {
+  if (analysis.outdated) return null;
   if (hasSources(analysis) || ((analysis.palette ?? []).length === 0 && (analysis.accents ?? []).length === 0)) return null;
   return (
     <div className="moodboard-colors__hint">Analyze again to see which images each color comes from.</div>
+  );
+}
+
+/** Why a saved analysis is out of date, as the backend says it (one made
+ *  before alpha counted, on a board with transparent images), or the older
+ *  analyzer's note for a version 1 analysis. */
+export function AnalysisOutdated({ analysis }: { analysis: MoodboardAnalysis }) {
+  if (analysis.outdated) return <div className="moodboard-analysis__outdated">{analysis.outdated}</div>;
+  if (analysis.version >= 2) return null;
+  return (
+    <div className="moodboard-analysis__outdated">
+      Made by the older analyzer, which ignored image weights and dropped small accent colors. Analyze again to update it.
+    </div>
   );
 }
 
