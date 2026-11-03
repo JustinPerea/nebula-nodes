@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AGENT_SAY_MAX_CHARS,
@@ -56,6 +58,17 @@ describe('default say lines', () => {
       expect(line.endsWith('.')).toBe(false);
       expect(line).not.toMatch(/["']/);
     }
+  });
+
+  it('the module writes no straight apostrophe or straight double quote in its lines (GM r56 item E)', () => {
+    // The code with its comments taken out: the lines' own text, and code.
+    const code = readFileSync(resolve(__dirname, '../src/lib/agentCursorSays.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    // An apostrophe inside a word (Couldn't) and a straight double quote anywhere.
+    expect(code).not.toMatch(/[A-Za-z]'[A-Za-z]/);
+    expect(code).not.toContain('"');
+    expect(code).toContain('Couldn\u2019t');
   });
 
   it('long names are cut in the middle so the line fits the say cap', () => {

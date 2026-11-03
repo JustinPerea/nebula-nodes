@@ -196,8 +196,9 @@ describe('each action draws its own look (Phase 2, spec §2)', () => {
     expect(document.querySelector('.agent-cursor__dashed')).not.toBeNull();
     const mark = document.querySelector(`.agent-cursor__mark--${action}`)!;
     expect(mark).not.toBeNull();
-    // wait carries the pin's glyph; propose's ghost-card outline is the box itself.
-    expect(mark.querySelector('svg') !== null).toBe(action === 'wait');
+    // wait carries the pin's glyph, propose a check in its ghost card (GM r56 item C).
+    expect(mark.querySelector('svg')).not.toBeNull();
+    expect(mark.querySelector('svg')!.classList.contains(action === 'wait' ? 'lucide-sticky-note' : 'lucide-check')).toBe(true);
   });
 
   it.each(['move', 'click', 'look', 'think', 'run'])('%s leaves the mark slot empty', (action) => {
@@ -3518,5 +3519,116 @@ describe('default say lines and their hold, in the layer (GM r54)', () => {
     flush();
     expect(document.querySelector('.agent-cursor__say .agent-cursor__say-caret')).not.toBeNull();
     expect(document.querySelector('.agent-cursor__field-mark')).toBeNull();
+  });
+});
+
+
+/**
+ * GM r56 (2026-11-03): think's breath raised (A), the mark slot right of the
+ * arrow (C), the dashed halo grown from the tip (D) and the say pills' quotes
+ * read from the DOM (E).
+ */
+describe('GM r56: think, mark slot, dashed halo, quotes', () => {
+  const layerVar = (name: string) => (document.querySelector('.agent-cursor-layer') as HTMLElement).style.getPropertyValue(name);
+  const cssText = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
+  const STROKE_HALF = 1.4 / 2;
+  const DASHED_HALF = 1.5 / 2;
+  /** The arrow's outline as drawn by an SVG transform of the form the layer writes. */
+  const transformed = (transform: string) => {
+    const nums = transform.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const [tx, ty, k, bx, by] = nums;
+    return ARROW_POINTS.map((p) => ({ x: tx + k * (p.x + bx), y: ty + k * (p.y + by) }));
+  };
+  const ARROW_POINTS = [
+    { x: 1.5, y: 1.5 }, { x: 1.5, y: 17.5 }, { x: 6, y: 13.3 }, { x: 9.1, y: 20.1 },
+    { x: 11.9, y: 18.9 }, { x: 8.9, y: 12.3 }, { x: 14.7, y: 12.1 },
+  ];
+  /** The distance from a segment to an axis-aligned box (0 when they meet). */
+  const segToBox = (a: { x: number; y: number }, b: { x: number; y: number }, box: { left: number; top: number; right: number; bottom: number }) => {
+    let best = Infinity;
+    for (let i = 0; i <= 200; i += 1) {
+      const t = i / 200;
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      best = Math.min(best, Math.hypot(Math.max(0, box.left - x, x - box.right), Math.max(0, box.top - y, y - box.bottom)));
+    }
+    return best;
+  };
+  const outlineToBox = (pts: { x: number; y: number }[], box: { left: number; top: number; right: number; bottom: number }) =>
+    Math.min(...pts.map((p, i) => segToBox(p, pts[(i + 1) % pts.length], box)));
+
+  it('A: think breathes from 55% to 25% and scale 1 to 1.15, the loop still 2.2 s', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'think' }));
+    flush();
+    expect(cursors()[0].dataset.expr).toBe('think');
+    expect(layerVar('--agent-cursor-breath-from')).toBe('0.55');
+    expect(layerVar('--agent-cursor-breath-opacity')).toBe('0.25');
+    expect(layerVar('--agent-cursor-breath-scale')).toBe('1.15');
+    expect(layerVar('--agent-cursor-breath')).toMatch(/^1100ms linear\(/);
+    // The keyframes start from the breath's own opacity, not the resting halo's 30%.
+    const frames = /@keyframes agent-cursor-breathe \{([\s\S]*?)\n\}/.exec(cssText)![1];
+    expect(frames).toMatch(/from \{[^}]*opacity: var\(--agent-cursor-breath-from\)/);
+    expect(frames).toMatch(/to \{[^}]*opacity: var\(--agent-cursor-breath-opacity\)/);
+  });
+
+  it('D: the dashed halo grows from the tip: nothing paints above or left of it', () => {
+    render(<AgentCursorLayer />);
+    send(event({ action: 'propose' }));
+    flush();
+    const grown = transformed(document.querySelector('.agent-cursor__dashed')!.getAttribute('transform')!);
+    expect(grown[0].x).toBeCloseTo(1.5, 9);
+    expect(grown[0].y).toBeCloseTo(1.5, 9);
+    for (const p of grown) {
+      expect(p.x).toBeGreaterThanOrEqual(1.5 - 1e-9);
+      expect(p.y).toBeGreaterThanOrEqual(1.5 - 1e-9);
+    }
+    // Grown by 1.45 (the spec's dashed halo), so it still reads as a halo.
+    expect(Math.max(...grown.map((p) => p.y))).toBeCloseTo(1.5 + 18.6 * 1.45, 6);
+  });
+
+  it.each(['propose', 'wait'])('C: %s’s mark sits right of the arrow, level with the tip, 2 px clear of the arrow, the dashed halo and the pills', (action) => {
+    render(<AgentCursorLayer />);
+    send(event({ action }));
+    flush();
+    const left = parseFloat(layerVar('--agent-cursor-mark-left'));
+    const top = parseFloat(layerVar('--agent-cursor-mark-top'));
+    const size = parseFloat(layerVar('--agent-cursor-mark-box'));
+    expect(cssText).toMatch(/\.agent-cursor__mark \{[^}]*left: var\(--agent-cursor-mark-left\);\s*top: var\(--agent-cursor-mark-top\);/);
+    const mark = { left, top, right: left + size, bottom: top + size };
+    expect(top).toBe(1.5);
+    expect(left).toBeGreaterThan(Math.max(...ARROW_POINTS.map((p) => p.x)) + STROKE_HALF);
+    expect(outlineToBox(ARROW_POINTS, mark) - STROKE_HALF).toBeGreaterThanOrEqual(2);
+    const grown = transformed(document.querySelector('.agent-cursor__dashed')!.getAttribute('transform')!);
+    expect(outlineToBox(grown, mark) - DASHED_HALF).toBeGreaterThanOrEqual(2);
+    // Its own pills: the name (ring included) and the say under it, and the
+    // say alone in the name's place (the label lifted, data-label 'say').
+    for (const say of [false, true]) {
+      for (const p of cursorShape({ x: 0, y: 0 }, say).pills) {
+        const gap = Math.hypot(Math.max(0, p.core.left - mark.right, mark.left - p.core.right), Math.max(0, p.core.top - mark.bottom, mark.top - p.core.bottom)) - p.radius;
+        expect(gap).toBeGreaterThanOrEqual(2);
+      }
+    }
+    // Inside the cursor's painted bounds, so the column spacing is unchanged.
+    const bounds = cursorShape({ x: 0, y: 0 }, true).bounds;
+    expect(mark.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(mark.right).toBeLessThanOrEqual(bounds.right);
+  });
+
+  it('E: the say pills carry curly quotes and a curly apostrophe in the DOM, never straight ones', () => {
+    const next = new Map(lookup as Map<string, object>);
+    next.set('n1', { ...(lookup.get('n1') as object), data: { label: 'Brief' } });
+    next.set('n2', { ...(lookup.get('n2') as object), data: { label: 'FLUX.2' } });
+    lookupRef.current = next;
+    render(<AgentCursorLayer />);
+    const seen: string[] = [];
+    send(event({ action: 'look' }));
+    flush();
+    seen.push(document.querySelector('.agent-cursor__say')!.textContent!);
+    send(event({ action: 'error', target: { nodeId: 'n2' }, did: { verb: 'Ran', nodeId: 'n2', label: 'FLUX.2', secondsAgo: 2 } }));
+    flush();
+    seen.push(document.querySelector('.agent-cursor__say')!.textContent!);
+    expect(seen).toEqual(['Looking at “Brief”', 'Couldn’t run “FLUX.2”']);
+    for (const text of seen) expect(text).not.toMatch(/["']/);
   });
 });

@@ -41,9 +41,13 @@ export const AGENT_CURSOR_LEAN_SPRING: TuningSpring = { stiffness: 180, damping:
  *  in the agent colour at 30% opacity, under the arrow." */
 export const AGENT_CURSOR_HALO = { blur: 3, opacity: 0.3 } as const;
 
-/** §1 "Mark slot, at the lower right of the tip, offset (14, 14) px, 12 px box."
- *  Build: the box is centred on that offset. */
-export const AGENT_CURSOR_MARK = { offsetPx: 14, boxPx: 12 } as const;
+/** The mark slot (propose, wait), GM r56 item C: right of the arrow, its top
+ *  level with the tip, at least clearPx from the arrow, the dashed halo
+ *  (both strokes included) and its own pills. 21 px is the nearest whole
+ *  px that keeps the grown dashed halo 2 px off (agentCursorLayer's mark
+ *  clearance test measures it). Replaces §1's (14, 14) offset, whose box
+ *  touched the pill's top-left corner. */
+export const AGENT_CURSOR_MARK = { leftPx: 21, topPx: 1.5, boxPx: 12, clearPx: 2 } as const;
 
 /** §2 "A held state shows for at least 0.4 s, so a short tool call still registers." */
 export const AGENT_CURSOR_MIN_HOLD_MS = 400;
@@ -53,10 +57,11 @@ export const AGENT_CURSOR_MIN_HOLD_MS = 400;
  *  and its opacity. */
 export const AGENT_CURSOR_LOOK = { dimOpacity: 0.18, arcDeg: 90, sweepMs: 1400, radiusPx: 13, strokePx: 3, arcOpacity: 0.9 } as const;
 
-/** §2 think: "the halo breathes, scale 1 → 1.12 and opacity 30% → 14%, on a
- *  spring-sampled loop of about 2.2 s (t), while held". Each half of the loop
- *  runs the build's breath spring stretched to half the loop. */
-export const AGENT_CURSOR_THINK = { scale: 1.12, fromOpacity: 0.3, toOpacity: 0.14, loopMs: 2200 } as const;
+/** §2 think: "the halo breathes ... on a spring-sampled loop of about 2.2 s
+ *  (t), while held". GM r56 item A raised it from 1 → 1.12, 30% → 14%
+ *  (invisible at 1440) to scale 1 → 1.15, opacity 55% → 25%. Each half of
+ *  the loop runs the build's breath spring stretched to half the loop. */
+export const AGENT_CURSOR_THINK = { scale: 1.15, fromOpacity: 0.55, toOpacity: 0.25, loopMs: 2200 } as const;
 /** Build: the curve of each half breath (critically damped). */
 export const AGENT_CURSOR_THINK_SPRING: TuningSpring = { stiffness: 40, damping: 12.6, mass: 1 };
 

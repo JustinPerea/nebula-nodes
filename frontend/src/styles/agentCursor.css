@@ -130,10 +130,10 @@
 
 .agent-cursor__mark {
   position: absolute;
-  /* Over the say pill's left padding, never its text (the pill's text starts 9 px in). */
-  z-index: 1;
+  /* Right of the arrow, level with its tip, 2 px clear of the arrow, the
+     dashed halo and the pills (GM r56 item C). */
   left: var(--agent-cursor-mark-left);
-  top: var(--agent-cursor-mark-left);
+  top: var(--agent-cursor-mark-top);
   width: var(--agent-cursor-mark-box);
   height: var(--agent-cursor-mark-box);
   display: flex;
@@ -141,12 +141,15 @@
   justify-content: center;
 }
 
-/* propose: the ghost card's outline (ProposalLayer's dashed card). */
+/* propose: the ghost card's outline (ProposalLayer's dashed card) with a
+   check inside: it waits for the person's OK. The outline alone read as an
+   empty box at 1440 (GM r56 item C). */
 .agent-cursor__mark--propose {
   box-sizing: border-box;
   border: 1.5px dashed var(--agent-color);
   border-radius: 3px;
   background: rgb(26 26 28 / 0.85);
+  color: var(--agent-color);
 }
 
 /* wait: the pin's badge (PinLayer's look), at mark size. */
@@ -371,7 +374,7 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
 @keyframes agent-cursor-breathe {
   from {
     transform: scale(1);
-    opacity: var(--agent-cursor-halo-opacity);
+    opacity: var(--agent-cursor-breath-from);
   }
   to {
     transform: scale(var(--agent-cursor-breath-scale));
@@ -472,5 +475,9 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   .agent-cursor__field-mark[data-blink='true'],
   .agent-cursor__say-caret[data-blink='true'] {
     animation: none;
+  }
+  /* think's still frame: the breath's full halo, so it differs from rest. */
+  .agent-cursor[data-expr='think'] .agent-cursor__halo {
+    opacity: var(--agent-cursor-breath-from);
   }
 }

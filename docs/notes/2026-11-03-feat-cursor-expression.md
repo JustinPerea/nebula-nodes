@@ -102,8 +102,8 @@ The layer passes them to CSS as custom properties (`cursorSpringVars`), so a ret
 
 - **The red is `--sr-danger-ink`, not `--sr-danger`.** In Slava, the bare `--sr-danger` alias is the orange accent. The destructive-colour ratchet (`agentPresenceFollowups.ratchet.test.ts`) refuses it there, and it also refuses a raw red.
 - **The lean stays as built** (14° × tanh…): GM's prototype peaks are 6°, 12° and 14°. GM r49 says "10°". The two disagree, so this is flagged, not changed.
-- **The mark slot overlaps the pills' left padding.** At (14, 14) from the tip, the 12 px box overlaps the name and say pills' left padding, which start at (15, 17). It paints above them (`z-index: 1`) and never over their text, because the text starts 9 px in.
-- **The dashed halo reaches about 4 px above the tip.** It is the arrow grown 1.45× about its middle. The column step's arrow-top clearance doesn't count it, so GM may want a smaller grow.
+- **The mark slot overlapped the pills' left padding** (round 1). At (14, 14) from the tip, the 12 px box overlapped the name and say pills' left padding, which start at (15, 17). Round 2 moved it (GM r56 item C, below).
+- **The dashed halo reached about 4 px above the tip** (round 1), grown 1.45× about the arrow's middle. Round 2 grows it from the tip (GM r56 item D, below).
 - **Default lines change the layout.** A cursor that acts with no say now has a say pill (look, think and so on), so column steps take the say step. Four layer tests used `look` as an act with no visual. They now use `click`, because look draws and says.
 - **The wire.** It is solid, 2 flow units wide like an edge, with the lag spring at k 900 / c 55. The first try, k 140 / c 19, left the end about 130 px behind at full speed, which looked detached.
 - **The type caret.** It is drawn in flow coordinates beside the cursor (`FieldMark`), so it rides with its node and zooms with the card's text. It is measured with a mirror of the field at the state's start and on each keystroke (the node's data changing), never per frame.
@@ -129,3 +129,26 @@ The layer passes them to CSS as custom properties (`cursorSpringVars`), so a ret
 - Five cursors (three thinking, two looking): 181 frames in 3 s, p95 16.7 ms, none over 20 ms. A 2 s trace showed Paint at 1.2 ms in total. `will-change` is `auto` on every resting cursor.
 - The driver cycled look, think, type, run, propose, wait and error.
 - The network guard's log held canaries only.
+
+## Round 2 (GM r56)
+
+Built on 8fac8507 (round 1 plus #219 r3b). The carry preview and `StackEntry.last` from r3b are untouched.
+
+- **A. Think breathes harder.** `AGENT_CURSOR_THINK` is now scale 1 → 1.15 and opacity 55% → 25%, on the same 2.2 s loop. The keyframes start from a new `--agent-cursor-breath-from` (0.55), not the resting halo's 30%. Live, the halo's computed opacity ran 0.25–0.53 and its scale 1.01–1.15 on both the darkest session shade (#b8265f) and the lightest (#ffd9e2). It is still a soft change at 1×, because the halo is a 3 px blur of a 20 px arrow; GM tunes from the filmstrips. Under reduced motion, think's still frame now holds the halo at 55%, so it no longer matches rest.
+- **B. Stacking.** The layer already paints under the chrome. It renders in React Flow's viewport, inside the `.react-flow` wrapper, which React Flow pins at `z-index: 0` inline (Slava's sheet asks for 1; the inline style wins). The Agent log (11), toolbar (10), Inspector (11, or 12 in Slava), Updates corner (46), tabs (100, or 10 in Slava), rail and launchers (12) and panels (10) are all `position: fixed` at the app root. `tests/agentCursorStacking.test.ts` pins each link: the layer inside `<ViewportPortal>` with no portal of its own, the mount inside `<ReactFlow>` and the chrome outside `Canvas`, React Flow's inline `zIndex: 0` that the app's own style can't override, nothing that makes `.canvas-wrapper` a stacking context, and every chrome surface fixed at a z-index above the canvas's highest in both skins.
+  - In round 1's shot, "Claude · 3" sat just below the collapsed Agent log bar, not over it.
+  - A cursor under the Agent log's glass shows through as a faint blur, because the glass is translucent (rgba(22, 22, 24, 0.66) with a backdrop blur). The cursor itself is never painted over the log. Phase 3's edge chips will cover it.
+  - **The missing fifth cursor.** The round-1 script spaced the five session cursors 180 flow px apart at zoom 1.1, so the last two landed at screen x 1520 and 1718, past the 1440 edge. GM's count of four was the main cursor plus three sessions. The round-2 script places every cursor on screen.
+- **C. Mark slot.** `AGENT_CURSOR_MARK` is now `{ leftPx: 21, topPx: 1.5, boxPx: 12, clearPx: 2 }`. The box is right of the arrow, its top level with the tip. 21 px is the nearest whole px that keeps the grown dashed halo 2 px clear (strokes included). Live it measured 6.3 px clear of the arrow's box and 3.5 px above the say pill. The box stays inside the cursor's painted bounds, so the column spacing doesn't change.
+  - **Propose's box was empty because it had no glyph.** The dashed outline was meant to be the ghost card on its own, and at 1440 that read as an empty box. It now holds a check (lucide `Check`, 8 px, stroke 3) in the agent colour: it waits for an OK.
+- **D. Dashed halo from the tip.** `DASHED_GROW` scales about the tip (1.5, 1.5), so nothing paints above or left of it.
+- **E. Quotes.** The DOM text of the live say pills is U+201C/U+201D and U+2019 ("Looking at “Brief”", "Couldn’t change “FLUX.2”"). No straight quote reaches a pill. There is no shared frontend apostrophe check to extend (each copy test pins its own lines), so `agentCursorSays.test.ts` now scans the module's code, with comments removed, for a straight apostrophe inside a word and for any straight double quote. A layer test reads the pills' textContent for the code points.
+
+### Checks (round 2)
+
+- tsc, `npm run lint` (eslint plus both style guards) are clean.
+- vitest on an explicit list of 132 files (every test that names the cursor, the presence store, the deferred chunks, the Agent log, Updates or the shared sheets): 2,358 passed.
+- 18 round-2 mutations, all killed. They covered A (three tuning values and the keyframe), B (the Agent log at z 0, the Inspector under the canvas, a lifted canvas wrapper, `.react-flow` above the chrome, a fixed layer, an absolute Updates corner), C (the old offset, 2 px too close to the dashed halo, below the tip, the CSS top var, no propose glyph), D (grown about the middle) and E (two straight apostrophes).
+- `npm run build`: the budget passed at an entry of 447,816 bytes raw (unchanged), and the dev-only check passed.
+- The backend wasn't touched in round 2.
+- Live on 8966/5966: propose and wait crops, think filmstrips on the darkest and lightest shades, five cursors all on screen, and one under the open Agent log (`elementFromPoint` there returns the log's entry). The eight files have distinct md5s.

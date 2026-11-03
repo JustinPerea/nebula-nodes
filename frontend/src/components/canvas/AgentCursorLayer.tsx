@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getBezierPath, Position, useStore, useStoreApi, ViewportPortal, type Node } from '@xyflow/react';
-import { StickyNote } from 'lucide-react';
+import { Check, StickyNote } from 'lucide-react';
 import type { NodeData } from '../../types';
 import {
   AGENT_CURSOR_IDLE_MS,
@@ -56,6 +56,7 @@ import {
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
   AGENT_CURSOR_ARROW_PATH,
+  AGENT_CURSOR_ARROW_TIP,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
   AGENT_CURSOR_NAME_FONT,
@@ -99,7 +100,6 @@ function cursorSpringVars(): Record<`--${string}`, string> {
   const turn = stepCurve(AGENT_CURSOR_RING_SPRING);
   const breath = thinkCurve();
   const fade = springLinear(springFromStiffness(AGENT_CURSOR_FADE_SPRING.stiffness, AGENT_CURSOR_FADE_SPRING.damping));
-  const markLeft = 1.5 + AGENT_CURSOR_MARK.offsetPx - AGENT_CURSOR_MARK.boxPx / 2;
   springVars = {
     '--agent-cursor-soft': `${soft.durationMs}ms ${soft.easing}`,
     '--agent-cursor-ring': `${ring.durationMs}ms ${ring.easing}`,
@@ -116,6 +116,7 @@ function cursorSpringVars(): Record<`--${string}`, string> {
     '--agent-cursor-sweep-stroke': `${AGENT_CURSOR_LOOK.strokePx}px`,
     '--agent-cursor-sweep-opacity': String(AGENT_CURSOR_LOOK.arcOpacity),
     '--agent-cursor-breath': `${Math.round(AGENT_CURSOR_THINK.loopMs / 2)}ms ${breath.easing}`,
+    '--agent-cursor-breath-from': String(AGENT_CURSOR_THINK.fromOpacity),
     '--agent-cursor-breath-scale': String(AGENT_CURSOR_THINK.scale),
     '--agent-cursor-breath-opacity': String(AGENT_CURSOR_THINK.toOpacity),
     '--agent-cursor-orbit': `${AGENT_CURSOR_RUN.orbitMs}ms ${turn.easing}`,
@@ -123,7 +124,8 @@ function cursorSpringVars(): Record<`--${string}`, string> {
     '--agent-cursor-dashed-stroke': `${AGENT_CURSOR_DASHED.strokePx}px`,
     '--agent-cursor-dashed-dash': `${AGENT_CURSOR_DASHED.dashPx} ${AGENT_CURSOR_DASHED.gapPx}`,
     '--agent-cursor-dashed-opacity': String(AGENT_CURSOR_DASHED.opacity),
-    '--agent-cursor-mark-left': `${markLeft}px`,
+    '--agent-cursor-mark-left': `${AGENT_CURSOR_MARK.leftPx}px`,
+    '--agent-cursor-mark-top': `${AGENT_CURSOR_MARK.topPx}px`,
     '--agent-cursor-mark-box': `${AGENT_CURSOR_MARK.boxPx}px`,
     '--agent-cursor-shake': `${shake.durationMs}ms ${shake.easing}`,
     '--agent-cursor-shake-px': `${AGENT_CURSOR_ERROR.shakePx}px`,
@@ -139,8 +141,10 @@ function cursorSpringVars(): Record<`--${string}`, string> {
 const ARROW_MIDDLE = { x: 8, y: 11 } as const;
 /** An arc of `deg` degrees on a circle drawn with pathLength 360. */
 const arcDash = (deg: number) => `${deg} ${360 - deg}`;
-/** The dashed halo: the arrow grown about its middle (propose, wait). */
-const DASHED_GROW = `translate(${ARROW_MIDDLE.x} ${ARROW_MIDDLE.y}) scale(${AGENT_CURSOR_DASHED.grow}) translate(${-ARROW_MIDDLE.x} ${-ARROW_MIDDLE.y})`;
+/** The dashed halo: the arrow grown about its tip (propose, wait), so
+ *  nothing paints above or left of the tip and the column spacing holds
+ *  (GM r56 item D). */
+const DASHED_GROW = `translate(${AGENT_CURSOR_ARROW_TIP.x} ${AGENT_CURSOR_ARROW_TIP.y}) scale(${AGENT_CURSOR_DASHED.grow}) translate(${-AGENT_CURSOR_ARROW_TIP.x} ${-AGENT_CURSOR_ARROW_TIP.y})`;
 
 /** The node lookup as the say lines read it: each node's card title. */
 type NodeLabels = Map<string, { data?: { label?: unknown } } | undefined>;
@@ -1707,6 +1711,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
         </svg>
         {(fx === 'propose' || fx === 'wait') && (
           <span className={`agent-cursor__mark agent-cursor__mark--${fx}`} aria-hidden="true">
+            {fx === 'propose' && <Check size={8} strokeWidth={3} aria-hidden="true" />}
             {fx === 'wait' && <StickyNote size={8} strokeWidth={2.5} aria-hidden="true" />}
           </span>
         )}
