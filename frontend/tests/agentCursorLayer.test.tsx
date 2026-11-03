@@ -3060,6 +3060,110 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
+  // GM r65: the head-to-bottom move, in the d/e-at-344 case. a heads the
+  // column in the band (327), then joins d's chain one unit on (328) and
+  // goes to the bottom, past both members, as they close up under nothing.
+  // One glide on the layout spring for all three: they start on the same
+  // frame, keep pace (no member reaches its slot ahead of the others) and
+  // settle on the same frame. Under reduced motion it is one frame.
+  const headToBottom = () => {
+    intoColumn();
+    dragHeld('n2', { x: 400, y: 283 }); // a's target at 327: the band
+    settle(800);
+    expect(where()).toEqual({ a: { x: 500, y: 327 }, d: { x: 500, y: 327 + S }, e: { x: 500, y: 327 + 2 * S } });
+    const before = where();
+    dragFrames('n2', [{ x: 400, y: 284 }], () => {}); // 328: in d's chain
+    return before;
+  };
+  it('the head-to-bottom move is one glide for the carry and both members: same first frame, same pace, same last frame (r65)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      const from = headToBottom();
+      const to = { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } };
+      const ys = [where()];
+      for (let i = 0; i < 120; i += 1) { frame(); ys.push(where()); }
+      expect(where()).toEqual(to);
+      const keys = ['a', 'd', 'e'] as const;
+      // Progress along its own move, 0 at the start, 1 on its slot.
+      const progress = (k: typeof keys[number], w: Record<string, { y: number }>) => (w[k].y - from[k].y) / (to[k].y - from[k].y);
+      const first = (k: typeof keys[number]) => ys.findIndex((w) => Math.abs(w[k].y - from[k].y) > 1e-6);
+      const settled = (k: typeof keys[number]) => ys.findIndex((w, i) => ys.slice(i).every((v) => v[k].y === to[k].y));
+      expect(new Set(keys.map(first)).size).toBe(1);
+      expect(first('a')).toBeLessThanOrEqual(1);
+      expect(new Set(keys.map(settled)).size).toBe(1);
+      // A glide, not a jump: many frames between, and each lands from
+      // within the rest distance (0.2 px), not pulled onto its slot early.
+      expect(settled('a') - first('a')).toBeGreaterThan(8);
+      for (const k of keys) expect(Math.abs(ys[settled(k) - 1][k].y - to[k].y)).toBeLessThan(0.2);
+      for (const w of ys) {
+        const p = keys.map((k) => progress(k, w));
+        // Same pace: nobody ahead of the others by more than a pixel's worth.
+        expect(Math.max(...p) - Math.min(...p)).toBeLessThan(1 / 25 + 1e-9);
+        // Nobody on its slot while another is still off its own.
+        const on = keys.map((k) => w[k].y === to[k].y);
+        expect(on.every(Boolean) || !on.some(Boolean)).toBe(true);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('under reduced motion the head-to-bottom move is instant: one frame, all three (r65)', () => {
+    fakeTimers();
+    try {
+      reduceMotion(true);
+      render(<AgentCursorLayer />);
+      headToBottom();
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+      for (let i = 0; i < 30; i += 1) { frame(); expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } }); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r65: wobbling across the 16 boundary follows the hand, with no
+  // hysteresis. a's target goes back and forth over 328 (16 from d), with
+  // steps that stay on one side in between. Each crossing is exactly one
+  // move (one unbroken run of frames for the members); a step that crosses
+  // nothing moves no member; and once a move settles, nothing moves.
+  it('a wobble across the 16 boundary: each crossing is one move, nothing moves between crossings, no hysteresis (r65)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      dragHeld('n2', { x: 400, y: 283 });
+      settle(800);
+      const steps = [329, 327, 329, 331, 329, 327, 325, 327, 329, 327, 328, 327];
+      let aT = 327;
+      for (const next of steps) {
+        const crosses = (aT >= 328) !== (next >= 328);
+        dragFrames('n2', [{ x: 400, y: next - 44 }], () => {});
+        const ys = [where()];
+        for (let i = 0; i < 90; i += 1) { frame(); ys.push(where()); }
+        // Runs of frames in which a member moved.
+        let runs = 0;
+        let moving = false;
+        for (let i = 1; i < ys.length; i += 1) {
+          const now = ['d', 'e'].some((k) => ys[i][k].y !== ys[i - 1][k].y);
+          if (now && !moving) runs += 1;
+          moving = now;
+        }
+        expect(runs, `${aT} -> ${next}`).toBe(crosses ? 1 : 0);
+        // Settled by the end: the last 20 frames still.
+        for (let i = ys.length - 20; i < ys.length; i += 1) expect(ys[i]).toEqual(ys[ys.length - 1]);
+        // Where the hand is says where a is: the bottom in d's chain, else the head.
+        const w = ys[ys.length - 1];
+        expect(w, `${aT} -> ${next}`).toEqual(next >= 328
+          ? { d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } }
+          : { a: { x: 500, y: next }, d: { x: 500, y: next + S }, e: { x: 500, y: next + 2 * S } });
+        aT = next;
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // Round 3b's band test, updated to r62: it encoded the literal bottom slot
   // in the band (d and e never moved). As the newest arrival, a carry from
   // above aims more than 16 over d and e, so the insert puts it at the head
@@ -3142,12 +3246,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       send(event({ ...session('f', 2), target: { x: 500, y: 300 }, since: 1500 }));
       flush();
       expect(where()).toEqual({ a: { x: 500, y: 290 }, f: { x: 500, y: 290 + S }, d: { x: 500, y: 380 } });
-      // 4 down: f comes no closer to d than a step, so no join, no swap.
-      dragHeld('n2', { x: 400, y: 250 }, 4);
-      settle(800);
-      expect(where()).toEqual({ a: { x: 500, y: 294 }, f: { x: 500, y: 294 + S }, d: { x: 500, y: 380 } });
       // 10 down: f meets d; a, carried, is laid out as the newest arrival.
-      dragHeld('n2', { x: 400, y: 256 }, 6);
+      // (4 down makes no join: the test above.)
+      dragHeld('n2', { x: 400, y: 256 });
       settle(800);
       expect(where()).toEqual({ f: { x: 500, y: 300 }, a: { x: 500, y: 300 + S }, d: { x: 500, y: 300 + 2 * S } });
       drop('n2');
@@ -3160,6 +3261,39 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       for (let i = 1; i < path.length; i += 1) expect(Math.abs(path[i].a - path[i - 1].a)).toBeLessThan(20);
       // The hold runs out with no arrival: nothing moves again.
       for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // GM r65 (round 3c's join check, approved): a carry can't make the join
+  // it previews. a and f share a chain (aimed at 290 and 300); a 4 px drag
+  // pushes f to 4 px short of a step above d. As the newest arrival a would
+  // go under f and push f onto d, a join made by the preview itself. Read at
+  // a's own arrival there is no join, so nothing swaps, mid-drag or at the drop.
+  it('a 4 px drag of a chained pair makes no join of its own: nothing swaps (r65)', () => {
+    fakeTimers();
+    try {
+      n2At({ x: 400, y: 246 }); // a's target (500, 290)
+      render(<AgentCursorLayer />);
+      send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
+      flush();
+      send(event({ ...session('d', 1), target: { x: 500, y: 380 }, since: 1000 }));
+      flush();
+      send(event({ ...session('f', 2), target: { x: 500, y: 300 }, since: 1500 }));
+      flush();
+      const path: Record<string, { x: number; y: number }>[] = [];
+      dragFrames('n2', [1, 2, 3, 4].map((dy) => ({ x: 400, y: 246 + dy })), () => path.push(where()));
+      settle(800);
+      const held = { a: { x: 500, y: 294 }, f: { x: 500, y: 294 + S }, d: { x: 500, y: 380 } };
+      expect(where()).toEqual(held);
+      // a heads on every frame, f a step under it, d never moves.
+      for (const w of path) {
+        expect(w.a.y).toBeLessThan(w.f.y);
+        expect(w.d).toEqual({ x: 500, y: 380 });
+      }
+      drop('n2');
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(held); }
     } finally {
       vi.useRealTimers();
     }

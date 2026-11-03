@@ -601,6 +601,38 @@ class CursorField {
     this.settleCarries();
   }
 
+  private gates = new Map<string, boolean | undefined>();
+  private gatesAt = -Infinity;
+
+  /**
+   * One glide, one landing (GM - Design, #219 r65): the cursors gliding on
+   * the land spring in this cursor's column come to rest on the same frame,
+   * the frame after every one of them is within the rest distance and
+   * speed. Before that none rests, so a member with a short way to go never
+   * sits on its slot while another is still on its way. Read once per
+   * column per frame, before any of them steps in it (all of one frame's
+   * steps share `time`). Undefined (rest on its own) for a cursor gliding
+   * alone. A member whose loop stopped (its node gone) doesn't hold the rest.
+   */
+  restGate(key: string, zoom: number, time: number): boolean | undefined {
+    if (time !== this.gatesAt) {
+      this.gates.clear();
+      this.gatesAt = time;
+    }
+    const laid = this.layout(zoom);
+    const column = laid.get(key)?.column;
+    if (column === undefined) return undefined;
+    if (this.gates.has(column)) return this.gates.get(column);
+    const gliding = [...laid].filter(([k, spot]) => {
+      const m = this.motions.get(k);
+      const stepped = this.steppedAt.get(k);
+      return spot.column === column && m?.landing && !m.plan && stepped !== undefined && time - stepped < 100;
+    }).map(([k]) => this.motions.get(k)!);
+    const gate = gliding.length < 2 ? undefined : gliding.every((m) => m.nearRest === true);
+    this.gates.set(column, gate);
+    return gate;
+  }
+
   /** The layer unmounted: no timer outlives it. */
   dispose(): void {
     if (this.carryTimer !== null) clearTimeout(this.carryTimer);
@@ -1271,7 +1303,8 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
       const fromY = m.pos.y;
       const restAt = onPixels(goal);
       const restOffset = { x: restAt.x - goal.x, y: restAt.y - goal.y };
-      const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer, carrier, dragged, restOffset, shifted });
+      const restGate = field.restGate(cursor.key, z, time);
+      const result = stepMotion(m, goal, dt, { zoom: z, reduced, opacityTarget: opacityTarget(), pointer, carrier, dragged, restOffset, shifted, restGate });
       let arrivedNow = false;
       // A flight, a landing, or a ride carried by its node.
       if (m.plan || m.landing || m.pos.x !== fromX || m.pos.y !== fromY) movedSinceBoxes = true;

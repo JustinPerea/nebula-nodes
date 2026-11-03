@@ -266,6 +266,31 @@ insert slot (§2e). Kept for the record.
   head, a's arrival-order slot too, so it now asserts nothing moves. The
   glide moved to its own test, in the geometry where the orders differ.
 
+## 2f. Round 3d (GM - Design r65)
+
+GM kept head-then-bottom and the join check at the carry's own arrival, and
+asked for the move to be pinned.
+
+- **One glide, one landing.** In the d/e-at-344 case a passes both members in
+  one move. All three start gliding on the same frame and keep pace (the land
+  spring is linear, so their progress matches). But rest was decided per
+  cursor, at 0.2 px: d and e (25 px to go) came to rest on frame 19, and a
+  (101 px) only on frame 30. Now `CursorField.restGate` holds every cursor
+  gliding in one column off its rest until all of them are within the rest
+  distance and speed. Then they all land on the same frame (`stepMotion`'s
+  `restGate`, `CursorMotion.nearRest`). It is read once per column per
+  frame, before any of them steps, and a member whose loop stopped doesn't
+  hold it. It applies to every column glide (says, joins, leaves), not just
+  carries. Under reduced motion the move is one frame, as before.
+- **Wobble.** Back and forth across 328 (16 from d), with steps in between
+  that stay on one side: each crossing is one unbroken run of member frames,
+  a step that crosses nothing moves no member, and the slot always follows
+  where the hand is. Hysteresis on the preview set alone can't show, because
+  the band and chain range both lay the carry out as the newest arrival. The
+  slot comes from the insert, and hysteresis there is caught.
+- **The 4 px swap** is its own test now ("a 4 px drag of a chained pair makes
+  no join of its own").
+
 ## 3. Low findings
 
 - **LOW-1 (since creep).** `_same_spot` compares a new target with the slot's

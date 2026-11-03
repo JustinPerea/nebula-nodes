@@ -157,6 +157,11 @@ export interface CursorMotion {
   chase: number;
   held: boolean;
   stillFor: number;
+  /** Its landing ended its last step within the rest distance and speed:
+   *  it would come to rest now. The layer's column gate reads it, so the
+   *  cursors one layout change sets gliding come to rest on one frame
+   *  (GM - Design, #219 r65). */
+  nearRest?: boolean;
 }
 
 export interface StepResult {
@@ -388,7 +393,7 @@ export function isMoving(m: CursorMotion, zoom: number): boolean {
 
 /** One fixed step. Mutates the motion in place: no allocation per step. */
 function substep(
-  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point,
+  m: CursorMotion, live: Point, h: number, zoom: number, opacityTarget: number, rest: Point, mayRest = true,
 ): { handedOff: boolean; arrived: boolean } {
   let handedOff = false;
   const plan = m.plan;
@@ -443,8 +448,10 @@ function substep(
     // Settled onto the target, still or moving (speed relative to it): on a
     // moving one the tip rides from here, at 0 px.
     const targetMoving = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX;
-    if (Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
-      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX) {
+    m.nearRest = Math.hypot(m.vel.x - m.liveVel.x, m.vel.y - m.liveVel.y) * zoom < REST_SPEED_PX
+      && Math.hypot(m.pos.x - aimX, m.pos.y - aimY) * zoom < REST_DISTANCE_PX;
+    if (m.nearRest && mayRest) {
+      m.nearRest = false;
       m.pos.x = aimX;
       m.pos.y = aimY;
       m.vel.x = 0;
@@ -510,6 +517,12 @@ export function stepMotion(
      *  tip kinematically (GM - Design, PR #211 review 6, item 4). Default:
      *  any move of the spot on its carrier is a re-layout. */
     shifted?: boolean;
+    /** The cursors gliding in its column come to rest together (the layer's
+     *  CursorField.restGate, GM - Design #219 r65): false holds its landing
+     *  on the spring past its own rest; true lands it on its spot this frame
+     *  (each of them is within the rest distance and speed). Default: it
+     *  rests on its own. */
+    restGate?: boolean;
   },
 ): StepResult {
   const { zoom, reduced, opacityTarget } = opts;
@@ -631,11 +644,19 @@ export function stepMotion(
       at.x = glideFrom.x + (live.x - glideFrom.x) * f;
       at.y = glideFrom.y + (live.y - glideFrom.y) * f;
     }
-    const step = substep(m, at, h, zoom, opacityTarget, rest);
+    const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate === undefined);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
   }
   m.carry = Math.max(0, m.carry);
+  if (opts.restGate === true && m.landing && !m.plan) {
+    // The column's glide is over: it lands on its spot with the others.
+    m.pos = { x: live.x + rest.x, y: live.y + rest.y };
+    m.vel = { x: 0, y: 0 };
+    m.landing = null;
+    m.nearRest = false;
+    m.attached = Math.hypot(m.liveVel.x, m.liveVel.y) * zoom >= REST_SPEED_PX && !m.awaiting ? { x: 0, y: 0 } : null;
+  }
   const atRest = settled(m, opacityTarget);
   if (atRest) {
     m.lean = { x: 0, v: 0 };
