@@ -369,6 +369,29 @@ def test_websocket_sends_pins_after_graph_sync(api):
     assert message["type"] == "canvasPins" and message["pins"][0]["text"] == "hello"
 
 
+def test_a_canvas_closed_mid_handshake_is_no_longer_counted_as_open(api, monkeypatch):
+    """The socket leaves the manager on every exit, not only on a clean
+    WebSocketDisconnect. The tab here closes while the handler is still between
+    its opening sends, so the handler is cancelled; it used to stay counted and
+    canvas_open() told agents a canvas was open (CI flake of 2026-11-02)."""
+    import anyio
+
+    import main as main_module
+
+    client, *_ = api
+
+    async def still_settling() -> None:
+        await anyio.sleep_forever()
+
+    monkeypatch.setattr(main_module, "_settle_proposal_updates", still_settling)
+    with client.websocket_connect("/ws", headers=PERSON) as ws:
+        assert ws.receive_json()["type"] == "graphSync"
+        assert ws.receive_json()["type"] == "canvasPins"
+        assert main_module.manager.canvas_open()
+    assert main_module.manager.active_connections == []
+    assert not main_module.manager.canvas_open()
+
+
 def test_only_a_person_hello_makes_a_browser_socket(api, monkeypatch):
     import main as main_module
 
