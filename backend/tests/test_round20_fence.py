@@ -383,8 +383,6 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("DELETE", "/api/canvas/questions/{set_id}"): "an agent's questions; no graph",
     ("POST", "/api/canvas/questions/{set_id}/answer"): "the person's answers; no graph",
     ("POST", "/api/canvas/questions/{set_id}/dismiss"): "the person's answers; no graph",
-    ("POST", "/api/agent/channel"): "a channel listener's heartbeat (memory only); no graph",
-    ("DELETE", "/api/agent/channel"): "a channel listener stops (memory only); no graph",
     ("POST", "/api/canvas/thread/messages"): "the person's Message box thread on the project record; no graph",
     ("POST", "/api/agent/thread/accepted"): "a message's state in the thread; no graph",
     ("POST", "/api/agent/thread/held"): "a message's state in the thread; no graph",
@@ -893,3 +891,19 @@ async def test_L3_cinema_merges_and_recovery_params_check_the_runs_canvas(api):
         await asyncio.gather(holder, return_exceptions=True)
     assert api.graph.nodes["n1"]["params"]["scene"]["shots"][0] == {"id": "s1", "output": {"status": "AG"}}
     assert api.graph.nodes["n1"]["outputs"] == {}
+
+
+def test_allowlist_has_no_repeated_route():
+    """A dict literal silently keeps the last of two equal keys, so two
+    branches adding the same route merge without a conflict and one reason
+    is lost. Read the literal itself and refuse a repeat."""
+    import ast
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        target = node.target if isinstance(node, ast.AnnAssign) else None
+        if isinstance(target, ast.Name) and target.id == "ALLOWLIST" and isinstance(node.value, ast.Dict):
+            keys = [ast.literal_eval(k) for k in node.value.keys]
+            repeats = sorted({k for k in keys if keys.count(k) > 1})
+            assert repeats == [], f"routes listed twice in ALLOWLIST: {repeats}"
+            return
+    raise AssertionError("ALLOWLIST literal not found")
