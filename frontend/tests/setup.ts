@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { takeBareLines, watchBareLines } from './helpers/bareLines';
+import { stopWatchingBareLines, takeBareLines, watchBareLines } from './helpers/bareLines';
 
 // JSDOM does not implement document.elementsFromPoint. Define a no-op stub so
 // vi.spyOn can intercept it in tests that mock the return value. Guarded so
@@ -121,4 +121,7 @@ if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
       + '(render it through <LineText>, components/LineText.tsx; review 8 LOW-1):\n'
       + found.map((text) => `  ${text}`).join('\n'));
   });
+  // Round 18h (review 16 NIT-2): disconnected before jsdom's teardown, so no change after it runs
+  // the walk on a document that is gone.
+  afterAll(() => stopWatchingBareLines());
 }

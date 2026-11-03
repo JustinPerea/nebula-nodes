@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   antigravityAction,
   createPersonalAgent,
@@ -161,7 +161,10 @@ export function PersonalAgentsSection() {
   // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away the focused row moves focus
   // to the section's line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
-  const handover = useFocusHandover(demoted, () => sectionRef.current,
+  // Round 18h (review 16 MEDIUM-1): work in flight disables the row's buttons in place, which
+  // drops focus to the page in Chrome; it goes to the heading and back once the work answers.
+  const handoverChange = useMemo(() => ({ demoted, busy }), [demoted, busy]);
+  const handover = useFocusHandover(handoverChange, () => sectionRef.current,
     () => document.getElementById('settings-personal-agents-heading'));
 
   // Follow a download or sign-in while it runs.

@@ -89,9 +89,9 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
               onClick={() => onOpen(row)}
             >
               {row.media === 'video' ? (
-                <CommonsMedia video className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} muted preload="metadata" />
+                <CommonsMedia inControl video className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} muted preload="metadata" />
               ) : (
-                <CommonsMedia className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} alt={row.summary ?? ''} loading="lazy" />
+                <CommonsMedia inControl className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} alt={row.summary ?? ''} loading="lazy" />
               )}
               <span className="commons-tile__badges">
                 {row.analysis_state !== 'ready' && (

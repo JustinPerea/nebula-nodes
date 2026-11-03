@@ -14,10 +14,14 @@ type Props = {
   muted?: boolean;
   controls?: boolean;
   preload?: string;
+  /** Round 18h (GM r38 3a): the media sits inside a control (a grid tile, a keyframe tab). Its
+   * line then has no Try again button, since a button can't go inside a button; the tile is the
+   * control, and opening it reads the media again. */
+  inControl?: boolean;
 };
 
 /** Media elements cannot send the Commons bearer header themselves. */
-export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props) {
+export function CommonsMedia({ path, video, alt = '', loading, inControl = false, ...props }: Props) {
   const [media, setMedia] = useState<{ path: string; url?: string }>();
   // PR #204 round 9: a not-connected line clears on the promote, and the file loads again.
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export function CommonsMedia({ path, video, alt = '', loading, ...props }: Props
   // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
   const shownError = useOfflineFirstBecause(error);
   // Round 18 (GM r28 1): its load's line in the one Commons line style (a span: it sits in a tile).
-  if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} /> : null;
+  if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} onRetry={inControl ? undefined : loadAgain} /> : null;
   return video ? <video {...props} src={current?.url} /> :
     <img {...props} src={current?.url} alt={alt} loading={loading} />;
 }

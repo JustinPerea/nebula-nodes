@@ -11,7 +11,7 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
-import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
@@ -94,6 +94,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', 'commons.evaluation-load', loadAgain);
+  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
   const [path, setPath] = useState(resumed?.path ?? '');
   const [index, setIndex] = useState(0);
   const [review, setReview] = useState(false);
@@ -206,7 +208,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       {batch && <button className="commons-button" disabled={busy || dirty} onClick={() => setReview(!review)}>
         {review ? 'Keep labeling' : `Review batch · ${count} / 15`}</button>}
     </header>
-    <CommonsErrorLine line={error} />
+    <CommonsErrorLine line={error} onRetry={loadAgain} />
     {notice && <p role="status" className="commons-notice"><LineText text={notice} /></p>}
     {!batch ? <form className="evaluation-setup" onSubmit={(e) => {
       e.preventDefault();

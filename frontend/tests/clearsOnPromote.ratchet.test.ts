@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { callersOf, gatedRoutes, socketRefusalGaps } from './personGatedCallers';
 
 /**
@@ -336,6 +336,16 @@ const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'
 const RECOGNISES = /PERSON_REQUIRED_CODE|['"]person_required['"]|personRequiredCopy\(|reportPersonRequired\(|saysPersonRequired\(|isPersonRefusal\(/;
 
 describe('GM, PR #204: a line whose only reason was this tab clears on the promote', () => {
+  // The two scans every round-5 test shares, once, outside any one test's
+  // limit: the backend's gate routes (tests/personGateRoutes.py, ~4 s of
+  // Python CPU) and the parsed frontend (callersOf builds it). They used to
+  // run inside the first round-5 test, whose 30 s limit a busy machine passed
+  // (CI-flake fix of 2026-11-02). The tests keep their 30 s for their own work.
+  beforeAll(() => {
+    const routes = gatedRoutes();
+    if (routes.length > 0) callersOf(routes[0]);
+  }, 180_000);
+
   it('every backend function behind the person gate, in all four forms, is listed, and only those', () => {
     const found = gatedFunctions();
     expect(found.length).toBeGreaterThan(40);

@@ -539,16 +539,31 @@ function CommonsViewBody({ view }: {
   // list is read again; that read failing is a load's failure (its neutral line, the last good
   // list kept), never the action's.
   // Round 18f (review 15 MEDIUM-1 of the logic lens): it says whether it read the list.
+  // Round 18h (review 16 LOW-2): collection reads are numbered as they are sent, and an answer
+  // older than one already applied (or than a failed newer read, whose write was merged in) is
+  // dropped: the latest read wins, whatever order they answer in.
+  const collectionsSent = useRef(0);
+  const collectionsApplied = useRef(0);
+  const freshCollections = (seq: number) => {
+    if (seq < collectionsApplied.current) return false;
+    collectionsApplied.current = seq;
+    return true;
+  };
   const loadCollections = useCallback(async (): Promise<boolean> => {
     loadStarted('collections');
+    const seq = ++collectionsSent.current;
     try {
-      const list = (await commonsApi.collections()).filter((c) => c.kind !== 'system');
+      const all = await commonsApi.collections();
+      // An older read answering late: a newer one already says what the list is.
+      if (!freshCollections(seq)) return true;
+      const list = all.filter((c) => c.kind !== 'system');
       setCollections(list);
       setTarget((current) => current || list[0]?.id || '');
       noteAnswered('collections', true);
       loadsClear('collections');
       return true;
     } catch (e) {
+      freshCollections(seq);
       loadFailed('collections', e, "Couldn’t load the collections.");
       return false;
     }
@@ -557,9 +572,10 @@ function CommonsViewBody({ view }: {
   useEffect(() => {
     let cancelled = false;
     loadStarted('collections');
+    const seq = ++collectionsSent.current;
     commonsApi.collections().then(
       (all) => {
-        if (cancelled) return;
+        if (cancelled || !freshCollections(seq)) return;
         const list = all.filter((c) => c.kind !== 'system');
         setCollections(list);
         setTarget((current) => current || list[0]?.id || '');
@@ -568,6 +584,7 @@ function CommonsViewBody({ view }: {
       },
       (e: unknown) => {
         if (cancelled) return;
+        freshCollections(seq);
         loadFailed('collections', e, "Couldn’t load the collections.");
       },
     );
@@ -626,6 +643,10 @@ function CommonsViewBody({ view }: {
     };
   }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, loadAbandoned, noteAnswered, view]);
 
+  // Round 18h (review 16 LOW-2): what Add to shows and what Add sends are one value by
+  // construction: the target when the list has it, else the list's first (what a select shows
+  // for a value it has no option for), else none.
+  const chosen = collections.some((c) => c.id === target) ? target : collections[0]?.id ?? '';
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {
       setTarget(value);
@@ -653,7 +674,7 @@ function CommonsViewBody({ view }: {
     // Round 18c (GM r30 2): with the collections not loaded, Add is disabled and does nothing; no
     // line asks the person to pick what Nebula couldn't list.
     if (collectionsNotLoaded) return null;
-    if (target) return target;
+    if (chosen) return chosen;
     setError('Pick or create a collection first.');
     return null;
   };
@@ -822,7 +843,7 @@ function CommonsViewBody({ view }: {
           onFocus={() => foldFocus.onFocus('more')} onBlur={foldFocus.onBlur} />
         <label className="commons-field commons-field--inline">
           Add to
-          <select value={collectionsNotLoaded || addLock.locked ? '' : target}
+          <select value={collectionsNotLoaded || addLock.locked ? '' : chosen}
             onChange={(event) => { if (!collectionsNotLoaded && !addLock.locked) void chooseTarget(event.target.value); }}
             {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_TO_NOT_LOADED, 'data-not-loaded': '' } : {})}
             // Round 18c (GM r30 2): loaded with none, "No collections" in the disabled look; the

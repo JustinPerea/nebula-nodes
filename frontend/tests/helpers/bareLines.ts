@@ -30,7 +30,7 @@ const NOTICE = '.person-required, .person-required__announce';
 const AGENT_TEXT = '.agent-note-card__text[data-agent-text], .agent-notes-entry__text[data-agent-text]';
 const ANCHOR = '[data-line-anchor]';
 const KEY = Symbol.for('nebula.tests.bareLines');
-type Store = { bare: string[]; watching: boolean };
+type Store = { bare: string[]; watching: boolean; observer?: MutationObserver };
 const store = (): Store => {
   const holder = globalThis as unknown as Record<symbol, Store>;
   holder[KEY] ??= { bare: [], watching: false };
@@ -89,8 +89,17 @@ export function watchBareLines(): void {
   const state = store();
   if (state.watching) return;
   state.watching = true;
-  new MutationObserver(() => { state.bare.push(...bareLinesIn()); })
-    .observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['title', 'aria-label'] });
+  // Round 18h (review 16 NIT-2): a change after jsdom's teardown has no document to walk.
+  state.observer = new MutationObserver(() => { if (typeof document !== 'undefined') state.bare.push(...bareLinesIn()); });
+  state.observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['title', 'aria-label'] });
+}
+
+/** Stops watching (the file's last test is done, before jsdom's teardown). */
+export function stopWatchingBareLines(): void {
+  const state = store();
+  state.observer?.disconnect();
+  state.observer = undefined;
+  state.watching = false;
 }
 
 /** The bare lines seen since the last call, once each; clears them. */

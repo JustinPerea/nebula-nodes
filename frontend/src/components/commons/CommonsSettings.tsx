@@ -7,7 +7,7 @@ import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection'
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
-import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { COMMONS_OFF_COPY, loadFailedCause, savedReadBackLine } from '../../lib/errorCopy';
 import { isPersonRefusal } from '../../lib/clearsOnPromote';
@@ -82,6 +82,15 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   /** The message's tooltip: a linked folder's full path (GM r33). */
   const [messageTitle, setMessageTitle] = useState<string | undefined>(undefined);
+  // Round 18h (review 16 LOW-1): each notice shown is numbered, so a late read-back renames only
+  // the notice it wrote, never a newer one (a Re-analyze's count shown meanwhile).
+  const messageSeq = useRef(0);
+  const showMessage = useCallback((text: string, title?: string) => {
+    messageSeq.current += 1;
+    setMessage(text);
+    setMessageTitle(title);
+    return messageSeq.current;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
   // yet.") only once they were read: before that, or when the load failed, nothing was. Round 18b
@@ -90,6 +99,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
+  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
 
   const load = useCallback(async (): Promise<FolderLink[]> => {
     const [f, s, c] = await Promise.all([commonsApi.folders(), commonsApi.settings(), commonsApi.candidates()]);
@@ -130,10 +141,10 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       return false;
     }
     setError(null);
-    if (done) { setMessage(done); setMessageTitle(doneTitle); }
+    const shown = done ? showMessage(done, doneTitle) : null;
     try {
       const read = await load();
-      readBack?.(result, read);
+      if (shown === messageSeq.current) readBack?.(result, read);
     } catch (e) {
       // Round 18d (review 14 LOW-1, GM r32 3): the write landed and only reading it back failed.
       // A load's failure, neutral, in GM's words, with no "Try again" that would send the write
@@ -146,7 +157,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     // The write committed even if its read-back failed.
     onChanged();
     return true;
-  }, [load, onChanged, line]);
+  }, [load, onChanged, line, showMessage]);
 
   const exportZip = async () => {
     try {
@@ -176,7 +187,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
-      <CommonsErrorLine line={error} />
+      <CommonsErrorLine line={error} onRetry={loadAgain} />
       {message && <p className="commons-notice" role="status" title={messageTitle}>{message}</p>}
 
       <section className="commons-detail__section" aria-label="Linked folders">
@@ -200,8 +211,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path, (link, read) => {
               const row = read.find((folder) => folder.id === link?.id);
               if (!row) return;
-              setMessage(linkedFolderNotice(row.path));
-              setMessageTitle(row.path);
+              showMessage(linkedFolderNotice(row.path), row.path);
             }).then((saved) => {
               if (saved) setLinkPath((current) => current === submittedPath ? '' : current);
             }).finally(() => {
@@ -282,8 +292,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
-              setMessageTitle(undefined);
-              setMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
+              showMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
             })}
           >
             Re-analyze stale
@@ -292,8 +301,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
-              setMessageTitle(undefined);
-              setMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
+              showMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
             })}
           >
             Import moodboards

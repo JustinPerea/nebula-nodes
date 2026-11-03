@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { failureMessage, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { failureMessage, isLoadLine, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 
 /** The heading the request itself carries (lib/commonsApi: each call names itself). */
@@ -61,6 +62,19 @@ export function useCommonsLine<T extends string | null>(
     if (options.reload && reloadKey && reload) retryOnPromote(error, reloadKey, reload); // clears-on-promote: commons.reload-retry
   }, [setLine, register, reloadKey, reload]);
   return useMemo(() => ({ show, keep }), [show, keep]);
+}
+
+/**
+ * PR #204 round 18h (GM r38 3c): a pane's load line reads again quietly on reconnect, as the page
+ * row does (useOfflineHiddenNotice): it hid while Nebula was offline, and back online it goes in
+ * the same update as "online" while the load reads again, so a stale "didn’t respond" never shows;
+ * it comes back only if the load fails again. An action's line is left alone.
+ */
+export function useLoadLineQuietOnReconnect(line: string | null | undefined, clear: () => void, again: () => void) {
+  useOfflineHiddenNotice(line && isLoadLine(line) ? line : null, () => {
+    clear();
+    again();
+  });
 }
 
 /** A load's epoch: a dependency of the load's effect, bumped to run it again (on the promote). */

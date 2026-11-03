@@ -3087,3 +3087,122 @@ GM r36 on #204 (18f's design signed off): two small notes.
   - Nothing reached a blocked host.
 - Shots (`fu3r/shots-r18g`): M off then 500, R off opens into Commons, T Tab after the heading.
   md5 `uniq -d` empty; each opened.
+
+## Round 18h
+
+Review 16 (the commons-reconnect logic lens and the focus-ring live lens) and GM r37 and r38.
+
+### Copy (GM r37, r38 1)
+- `lib/assetProposalReview.ts`, Review on a Commons proposal while the Commons is off: "Commons is
+  turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to
+  review this proposal."
+  - It now shows both when the tab loaded with the Commons off and when its Commons calls have
+    heard since that it is off (`commonsOffNow()`). The live check found the second case opening
+    the Commons' off view instead.
+- `backend/commons/review.py`, Agent review with no call budget: "Agent review is off on this
+  Nebula. Start Nebula with NEBULA_COMMONS_REVIEW_CALL_BUDGET set to a call budget, then try
+  again."
+- No test pinned either line. The 10-22 notes quote the old ones as history and stay unchanged.
+- Ratchets so person copy never puts a NEBULA_ flag in parens:
+  - `frontend/tests/flagParensCopy.ratchet.test.ts` covers strings, templates and JSX text in src;
+  - `backend/tests/test_flag_parens_copy.py` covers every string constant except docstrings.
+
+### Disabled or inert focus counts as gone (review 16 MEDIUM-1, GM r38 2 and 3e, LOW-2)
+- `hooks/useFocusHandover.ts`:
+  - `focusGone()` covers left the page, `:disabled`, or under `[inert]`.
+  - A control disabled in place hands focus to the heading at once. The line is heard through
+    its polite region; the studio row opens after its 1 s delay.
+  - The control is kept as `origin`, and the next change hands focus back to it once it is
+    enabled. That happens only while focus is still where the hook put it.
+- LOW-2: focus never waits on `<body>`. The heading holds focus at once, and a line that arrives
+  within the 30 frames still takes it from there.
+- Settings uses the same rule:
+  - AgentSpendSection's change key adds `pending`, since a save disables the limits;
+  - PersonalAgentsSection's adds `busy`.
+
+### Races (review 16 logic LOW-1, LOW-2)
+- CommonsSettings numbers its notices (`showMessage`). A link's late read-back renames only the
+  notice it wrote.
+- CommonsView numbers its collection reads. An answer older than one already applied, or older
+  than a failed newer read (whose write was merged in), is dropped.
+  - Add to and Add share one value, `chosen`: the target when the list has it, else the list's
+    first.
+
+### Try again (GM r38 3a, 3b, 3c, 3f)
+- Every Commons load line ending "Try again." has the button, including the loaded-state lines:
+  - Agent review (its 5 s poll stays, and the button reads at once);
+  - Blind labeling;
+  - Settings;
+  - the detail;
+  - the stage media.
+- `tests/commonsRetryButton.ratchet.test.tsx`: every `<CommonsErrorLine>` passes `onRetry`, with
+  three exceptions:
+  - the off view's line, which never ends "Try again.";
+  - CommonsCloseBatch's, an action's line, where a button would send the close again;
+  - media inside a tile or keyframe tab (`inControl`), since a button can't go inside a button.
+- After a Try again whose re-read fails for another reason, RetryButton's hand-off focuses the new
+  line's button in the same row. It goes to the heading only when there is none.
+- A pane's load line reads again quietly on reconnect (`useLoadLineQuietOnReconnect`), in
+  Settings, the detail, Blind labeling and Agent review.
+- The ring covers "Try again" only:
+  - `outline-offset: 0` and a 2 px end margin;
+  - it outranks commons-evaluation.css's 3 px offset in the panes. The live check caught that
+    offset.
+
+### Rings (GM r37, r38 3d)
+- noticeLeave's last fallback (the canvas or a screen's `<main>`) gets `data-focus-start` until it
+  blurs, so no ring draws there. The provider row keeps its `:focus-visible` ring.
+- Dialogs and panels focused on open: every one rings only on `:focus-visible`, and none rings on
+  plain `:focus`.
+  - Live: Updates opened by pointer has no ring; opened from the keyboard it has the 2 px token
+    ring.
+  - Not reached live, since each needs generated outputs, a scene, unsaved labels or a size
+    limit: ResultComparison, Lightbox, ModelPicker, ChatModelPicker, ProjectSizePanel,
+    SceneUnsavedMark, CommonsLeavePopover, Mesh/WorldPreview. The CSS audit found only
+    `:focus-visible` rings on them.
+- `focusRingCss.test.ts` changes:
+  - It scans the syntax tree in .ts and .tsx (`tests/helpers/tabIndexSites.ts`), so it finds
+    `"-1"`, `{ -1 }`, `cond ? -1 : undefined`, spreads, `.tabIndex =` and `setAttribute`.
+  - KEEPS_RING is counted per file.
+  - What counts as covered is read from the rule's own `:is()` list.
+  - Roving tab stops (0 or -1) keep their ring.
+
+### Capability (review 16 logic LOW-4)
+- `useCommonsCapability` asks again on reconnect and on a boot-id change
+  (`subscribeBackendRestart`), and still doesn't poll.
+- It also asks while the tab is without the Commons. A canvas tab that loaded with it off learns
+  that it is on, and the entry appears without a reload.
+
+### Tests and the observer
+- `tests/helpers/bareLines.ts`: the observer is disconnected in `afterAll`, and its callback
+  checks for `document`. The teardown trace is gone from the gate.
+- New test files:
+  - `presenceRound18h.disabledHandover`, `.settingsHandover`, `.commonsRaces` (PA, PB, PB2, PC,
+    PF, H8);
+  - `.paneLines`, `.commons` (N12, N20, N21, N22);
+  - `.capabilityRestart` (PD, PE, N8, N9, N13);
+  - `.noticeLeaveStart`, `.commonsOffReview`;
+  - `commonsRetryButton.ratchet` (N5, N6, N7), `flagParensCopy.ratchet`.
+
+### Gates
+- tsc and eslint: clean. `person_gate.py` is byte-identical to main.
+- vitest, 2 workers, 444 files (18g's list plus every test that names the changed modules):
+  5,839 of 5,839, with no teardown trace. After the late fixes, 77 files: 897 of 897.
+- Backend: `test_flag_parens_copy`, `test_commons_review` and `test_commons_dispatch_review`, 16
+  of 16.
+- Build budget: 471,273 B raw / 145,248 B gzip (18g: 471,025).
+- Mutations: 42 run, 40 killed. Two equivalent mutants survive:
+  - N19: the page row's button with an action line. `retryStem` already refuses action lines.
+  - N21: `off` dropped from the handover key object. Its memo deps still list `offNow`, so the
+    key changes identity anyway. N21b, which drops it from the deps too, is killed (6 tests).
+- Live at 1440 (8951/5951, guarded launcher, canaries first, real restarts): 15 of 15.
+  - Offline with the Folder path field focused: the field went to the heading with no ring, then
+    back to the field on reconnect. Focus was never on `<body>`.
+  - A loaded-state Try again: the ring ends at the full stop (509.47 vs 509.47).
+  - A second failure keeps focus on the new Try again.
+  - A restart turning the Commons off: 0 ms on `<body>`.
+  - GM's Commons-off line on an Update's Review.
+  - Updates: pointer opens with no ring, keyboard opens with a ring.
+  - Nothing reached a blocked host.
+- Shots (`fu3r/shots-r18h`): H1, H2, B, E, F1, F2. The md5 `uniq -d` check is empty, and each was
+  opened.

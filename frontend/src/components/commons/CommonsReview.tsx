@@ -11,7 +11,7 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
-import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
@@ -40,6 +40,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', 'commons.review-load', loadAgain);
+  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
   const [index, setIndex] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
@@ -167,7 +169,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
       {batch?.state === 'open' && !running && batch.attempts < batch.call_budget && batch.items.some((i) => i.status === 'pending') &&
         <button className="commons-button" disabled={dirty || !!saving || readOnly} {...offlineMark(readOnly)} onClick={() => void generate()}>Generate remaining grades</button>}
     </div></header>
-    <CommonsErrorLine line={error} />
+    <CommonsErrorLine line={error} onRetry={loadAgain} />
     {!batch && <p>Prepare the reference set in Blind labeling first.</p>}
     {batch && item && <div className="evaluation-workspace">
       <nav aria-label="References to review">{batch.items.map((ref, n) => <button key={ref.position} disabled={dirty || !!saving || generating}

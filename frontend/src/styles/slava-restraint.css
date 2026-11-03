@@ -362,6 +362,13 @@ body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-li
   outline: none !important;
 }
 
+/* PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take it,
+ * focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops to
+ * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that. */
+body.app-slava-restraint [data-focus-start]:focus-visible {
+  outline: none !important;
+}
+
 /* A canvas node with keyboard focus (Tab onto the card). React Flow clears
  * the wrapper's outline (.react-flow__node.selectable:focus-visible), and the
  * wrapper's box isn't the card's, so the ring goes on the drawn card. It is

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isBackendOffline, subscribeBackendConnection } from '../lib/backendConnection';
+import { isBackendOffline, subscribeBackendConnection, subscribeBackendRestart } from '../lib/backendConnection';
 import { fetchCommonsCapability } from '../lib/commonsCapability';
 import { markCommonsOpening } from '../lib/commonsOpening';
 import { noteCommonsAnswered, noteCommonsOff } from '../lib/commonsOff';
@@ -65,21 +65,34 @@ export function useCommonsCapability(): void {
 
   // Round 18f (GM r35 5): a tab that opened with the Commons off asks again on reconnect (the
   // backend may have restarted with it on). No polling: only when Nebula comes back.
+  // Round 18h (review 16 logic LOW-4): and when the backend's boot id changes, a restart health
+  // never saw as offline. And a tab without the Commons (a canvas tab that loaded while it was
+  // off) asks the same way, so its Commons entry appears without a reload.
+  const asking = offShown || !enabled;
   useEffect(() => {
-    if (!offShown) return undefined;
+    if (!asking) return undefined;
     let cancelled = false;
+    const ask = () => {
+      void fetchCommonsCapability().then((answer) => {
+        if (cancelled || answer !== 'on') return;
+        if (useUIStore.getState().commonsOffShown) {
+          void openCommonsFromOff();
+          return;
+        }
+        noteCommonsAnswered();
+        useUIStore.getState().setCommonsEnabled(true);
+      });
+    };
     let wasOffline = isBackendOffline();
-    const stop = subscribeBackendConnection(() => {
+    const stopConnection = subscribeBackendConnection(() => {
       const now = isBackendOffline();
       const back = wasOffline && !now;
       wasOffline = now;
-      if (!back) return;
-      void fetchCommonsCapability().then((answer) => {
-        if (!cancelled && answer === 'on') void openCommonsFromOff();
-      });
+      if (back) ask();
     });
-    return () => { cancelled = true; stop(); };
-  }, [offShown]);
+    const stopRestart = subscribeBackendRestart(ask);
+    return () => { cancelled = true; stopConnection(); stopRestart(); };
+  }, [asking]);
 
   // The off view goes with its route: a hash edit or Back away from #commons leaves it.
   useEffect(() => {

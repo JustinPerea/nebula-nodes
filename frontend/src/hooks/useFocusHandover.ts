@@ -87,6 +87,19 @@ interface Focused {
   /** Focus was handed here (a line or the heading) in place of the control `key` names: a later
    * change may move it on, to that control once it is back, or to a line that came meanwhile. */
   handed?: boolean;
+  /** Round 18h (review 16 MEDIUM-1, GM r38 2): the control that was disabled (or went inert) in
+   * place while it had focus. Focus went to the heading; once it is enabled again, and focus is
+   * still where the hook put it, it goes back to this very element. */
+  origin?: HTMLElement;
+}
+
+/**
+ * Round 18h (review 16 MEDIUM-1): a focused control is gone when it left the page, and also when
+ * it was disabled or went inert in place (offline disables Commons' fields). Chrome's focus fixup
+ * drops such focus to <body> without a blur the person can follow, so the hook moves it on.
+ */
+export function focusGone(element: HTMLElement): boolean {
+  return !element.isConnected || element.matches(':disabled') || element.closest('[inert]') !== null;
 }
 
 const LINE = `[${FOCUS_LINE_ATTR}]`;
@@ -103,6 +116,9 @@ function sameKey(scope: HTMLElement, key: string): HTMLElement[] {
  * the line.
  */
 function cameBack(was: Focused, scope: HTMLElement): HTMLElement | undefined {
+  // Round 18h: the control disabled in place is the one to come back to, once it is enabled. If
+  // it left meanwhile (a promote remounted it), its look-alike at its place is, as below.
+  if (was.origin?.isConnected) return focusGone(was.origin) || !scope.contains(was.origin) ? undefined : was.origin;
   if (!was.key) return undefined;
   const now = sameKey(scope, was.key);
   if (now.length !== was.count) return undefined;
@@ -177,28 +193,58 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
     if (!was) return undefined;
     // Round 14: a handed-over focus still on what it was handed to may move on (offline hid Add's
     // line and focus went to the heading; back online, the line again; on the promote, the field).
-    const stillHanded = () => was.handed === true && document.activeElement === was.element;
-    if (was.element.isConnected && !stillHanded()) return undefined;
+    // Round 18h: what the hook put focus on last, while it is still there.
+    const handedNow = () => {
+      const at = last.current;
+      return at?.handed === true && document.activeElement === at.element;
+    };
+    if (!focusGone(was.element) && !(was.handed === true && handedNow())) return undefined;
+    // Disabled or inert in place (not removed): the control is still there, so no line stands in
+    // for it; focus goes to the heading at once and the line, if any, is heard through its polite
+    // region. It comes back to the control when the control is enabled again.
+    const inPlace = was.element.isConnected && !was.handed;
+    const origin = was.origin ?? (inPlace ? was.element : undefined);
     let frame = 0;
     let id = 0;
-    const lost = () => !document.activeElement || document.activeElement === document.body || stillHanded();
+    // The heading this run put focus on while it waits for a line: still "lost" to it.
+    let held: HTMLElement | null = null;
+    const lost = () => {
+      const active = document.activeElement as HTMLElement | null;
+      return !active || active === document.body || focusGone(active) || handedNow() || (held !== null && active === held);
+    };
+    // Hand focus to `target` and remember it was handed, keeping the control's own key: the
+    // promote brings the control back, and focus goes back to it. What is there now isn't it.
+    const hand = (target: HTMLElement, scope: HTMLElement) => {
+      if (target !== document.activeElement) target.focus({ preventScroll: true });
+      last.current = was.key || origin
+        ? { ...snapshot(target, was.key, was.pane), key: was.key, path: was.path, there: was.there, ordinal: was.ordinal,
+          count: was.count, handed: true, origin }
+        : snapshot(target, keyOf(target, scope));
+    };
     const attempt = () => {
       if (!lost()) return; // focus went somewhere on its own: leave it
       const scope = root();
       if (!scope) return;
       const same = cameBack(was, scope);
-      const line = nearestLine(was, scope);
-      // The line can arrive a moment later (a held read answers on the next tick): wait for it.
-      const target = same ?? line ?? (frame >= FRAMES ? heading() : null);
-      if (target) {
-        if (target !== document.activeElement) target.focus({ preventScroll: true });
-        // Keep the control's own key: the promote brings it back, and focus goes back to it. What
-        // is there now isn't it.
-        last.current = same ? snapshot(same, keyOf(same, scope))
-          : was.key ? { ...snapshot(target, was.key, was.pane), path: was.path, there: was.there, ordinal: was.ordinal,
-            count: was.count, handed: true } : snapshot(target, keyOf(target, scope));
+      if (same) {
+        if (same !== document.activeElement) same.focus({ preventScroll: true });
+        last.current = snapshot(same, keyOf(same, scope));
         return;
       }
+      const line = inPlace || origin ? null : nearestLine(was, scope);
+      if (line) {
+        hand(line, scope);
+        return;
+      }
+      // Round 18h (review 16 LOW-2): focus never waits on <body>. The heading holds it at once;
+      // a line that arrives a moment later (a held read answers on the next tick) still takes it
+      // from there, until FRAMES have passed.
+      const head = heading();
+      if (head && document.activeElement !== head) {
+        hand(head, scope);
+        held = head;
+      }
+      if (head && (inPlace || origin || frame >= FRAMES)) return;
       frame += 1;
       id = requestAnimationFrame(attempt);
     };

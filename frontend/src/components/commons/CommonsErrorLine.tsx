@@ -7,7 +7,10 @@ import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useBackendOffline } from '../../lib/useBackendOffline';
 
 /** Round 18f (GM r35 4): a load line's "Try again". Once a read succeeds its line goes, and focus
- * on it goes to the page's heading "Commons" rather than dropping to the page (GM r19 2's rule). */
+ * on it goes to the page's heading "Commons" rather than dropping to the page (GM r19 2's rule).
+ * Round 18h (GM r38 3b, review 16 NIT-1): when the read fails again for another reason, the new
+ * line (the page row keys its lines by their words, so it is a new element) has its own Try
+ * again: focus goes there, and to the heading only when the new line has none. */
 function RetryButton({ onRetry }: { onRetry: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
@@ -17,7 +20,17 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
       if (!button || document.activeElement !== button) return;
       const heading = button.closest('.commons-view')?.querySelector<HTMLElement>('[data-workspace-heading]')
         ?? document.querySelector<HTMLElement>('.commons-view [data-workspace-heading]');
-      queueMicrotask(() => { if (heading?.isConnected && (!document.activeElement || document.activeElement === document.body)) heading.focus({ preventScroll: true }); });
+      // The row the line sat in (the page row, or a pane's), and the buttons there now: a new one
+      // after the commit is the new line's.
+      const row = button.closest<HTMLElement>('.commons-messages') ?? button.closest('[data-line-box]')?.parentElement ?? null;
+      const before = new Set(row ? row.querySelectorAll('.commons-retry') : []);
+      queueMicrotask(() => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        const next = row?.isConnected
+          ? [...row.querySelectorAll<HTMLElement>('.commons-retry')].find((each) => !before.has(each)) : undefined;
+        const target = next ?? heading;
+        if (target?.isConnected) target.focus({ preventScroll: true });
+      });
     };
   }, []);
   return <button ref={ref} type="button" className="commons-retry" onClick={onRetry}>Try again</button>;

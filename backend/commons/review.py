@@ -62,8 +62,8 @@ def _reserve(store, position):
         used, budget = conn.execute('SELECT count(*) FROM assisted_reviews').fetchone()[0], _budget()
         if used >= budget:
             raise ev.EvaluationError('Assisted review call budget reached or disabled.', (
-                'Agent review is off on this Nebula. Start it with a call budget '
-                '(NEBULA_COMMONS_REVIEW_CALL_BUDGET), then try again.' if budget == 0 else
+                'Agent review is off on this Nebula. Start Nebula with NEBULA_COMMONS_REVIEW_CALL_BUDGET '
+                'set to a call budget, then try again.' if budget == 0 else
                 f'Agent review can grade {budget} references, and it has graded {used}. '
                 'Restart Nebula with a larger call budget to grade more.'))
         if conn.execute("SELECT 1 FROM assisted_reviews WHERE status='running'").fetchone():

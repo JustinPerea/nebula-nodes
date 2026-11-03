@@ -105,7 +105,10 @@ export function AgentSpendSection() {
   // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
   // focus to the section's line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
-  const handover = useFocusHandover(outside.held, () => sectionRef.current,
+  // Round 18h (review 16 MEDIUM-1): a save disables the limits in place, which drops focus to the
+  // page in Chrome; it goes to the heading and back to the field once the save answers.
+  const handoverChange = useMemo(() => ({ held: outside.held, pending }), [outside.held, pending]);
+  const handover = useFocusHandover(handoverChange, () => sectionRef.current,
     () => document.getElementById('settings-agent-spend-heading'));
   // PR #204 round 10 (GM r15, r17 item 1): every limit is PUT /api/settings, the person's alone,
   // so they lock as a group, with one line under the heading.

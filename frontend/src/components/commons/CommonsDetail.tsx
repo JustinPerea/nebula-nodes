@@ -17,7 +17,7 @@ import { ANALYSIS_FAILED, analysisFailureReason } from '../../lib/commonsAnalysi
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { CommonsErrorLine } from './CommonsErrorLine';
-import { useCommonsLine, useReloadEpoch } from './useCommonsLine';
+import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 
 interface Props {
@@ -178,6 +178,8 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   // PR #204 round 9: a not-connected line clears on the promote, and the reference loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.detail-load', loadAgain);
+  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
   // Offline comes first (GM r23 3): the not-loaded state's line goes through CommonsErrorLine,
   // which hides a because line while offline.
 
@@ -324,7 +326,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <button type="button" className="commons-button" onClick={onClose} aria-label="Close detail">Close</button>
       </div>
 
-      <CommonsErrorLine line={error} />
+      <CommonsErrorLine line={error} onRetry={loadAgain} />
 
       {/* Round 16 (L4): offline the reference is read-only like the canvas.
           Everything below Close is a write, so one fieldset disables it all;
@@ -377,7 +379,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
                   className={`commons-keyframe${f === frame ? ' commons-keyframe--active' : ''}`}
                   onClick={() => setFrameIndex(i)}
                 >
-                  <CommonsMedia path={f.blob_url} alt="" loading="lazy" />
+                  <CommonsMedia inControl path={f.blob_url} alt="" loading="lazy" />
                   <span>{formatTime(f.t)}</span>
                 </button>
               ))}
