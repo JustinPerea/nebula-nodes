@@ -5,6 +5,7 @@
  *  When nothing comes out it says why, when it knows (GM - Design,
  *  2026-10-24): "If the two cases can't be told apart, use only the
  *  heading. Don't guess the reason." */
+import { CONNECTION_LOST_SHORT_COPY, headedLine } from './errorCopy';
 import { quoted } from './quoted';
 
 /** Why an image gave no colours: the browser couldn't decode it, no pixel
@@ -24,3 +25,13 @@ export function paletteNotice(fileName: string, reason: PaletteFailure): string 
   const line = REASONS[reason];
   return line ? `${heading}\n${line}` : heading;
 }
+
+/** The status line once a palette lands (GM r18 4 on #208): the real count. */
+export function paletteStatus(count: number): string {
+  return `Extracted ${count} ${count === 1 ? 'color' : 'colors'}.`;
+}
+
+/** When the extraction itself can't load (its chunk, from Nebula's server):
+ *  the app's load failure, as the mask painter says it, never "Couldn't find
+ *  colors in" a file that was never read (review 7 L3). */
+export const PALETTE_LOAD_FAILED = headedLine("Couldn't load Extract from reference.", CONNECTION_LOST_SHORT_COPY);

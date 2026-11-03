@@ -99,6 +99,16 @@ function holdsPalette(popover: HTMLElement | null): boolean {
   return Boolean(popover?.querySelector('.inspector__palette'));
 }
 
+/** How long the layout spring may run after a swatch-count change (its
+ *  360 ms in panels.css, and a frame or two to settle). */
+export const PALETTE_RESIZE_MS = 400;
+
+/** The swatches the body shows, or null without a palette. */
+function swatchCount(popover: HTMLElement | null): number | null {
+  if (!holdsPalette(popover)) return null;
+  return popover!.querySelectorAll('.inspector__palette-row').length;
+}
+
 /**
  * `panelNeed`: the height the panel would need to show its whole body, or
  * null when not yet known. Within one spare line over 300 px, the panel takes
@@ -233,12 +243,21 @@ export function NodeInspectorPopover() {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
+  // Review 7 M2: the layout spring runs only while a swatch-count change
+  // settles; a pan, zoom, drag or resize moves the panel with its node at once.
+  const [paletteResizing, setPaletteResizing] = useState(false);
+  const swatchesRef = useRef<{ nodeId: string; count: number | null } | null>(null);
+  const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (resizeTimer.current) clearTimeout(resizeTimer.current);
+  }, []);
 
   useLayoutEffect(() => {
     if (!pinned) pinnedPreferenceRef.current = null;
     // Closed: the next open measures afresh (at 300 px, before any spare line).
     if (!visible || !selectedNodeId) {
       frameRef.current = null;
+      swatchesRef.current = null;
       return;
     }
 
@@ -284,6 +303,19 @@ export function NodeInspectorPopover() {
           const onScreen = shownHeight === null ? null : Math.min(shownHeight, popoverRef.current?.offsetHeight || shownHeight);
           const panelNeed = onScreen !== null && overflow !== null ? onScreen + overflow : null;
           const nextFrame = measurePopoverFrame(selectedNodeId, anchor, panelNeed, holdsPalette(popoverRef.current));
+          // A new count on the same node springs the size it brings, in the
+          // same render as that size; the first look at a node doesn't.
+          const count = swatchCount(popoverRef.current);
+          const seen = swatchesRef.current;
+          if (seen?.nodeId === selectedNodeId && seen.count !== null && count !== null && count !== seen.count) {
+            if (resizeTimer.current) clearTimeout(resizeTimer.current);
+            resizeTimer.current = setTimeout(() => {
+              resizeTimer.current = null;
+              setPaletteResizing(false);
+            }, PALETTE_RESIZE_MS);
+            setPaletteResizing(true);
+          }
+          swatchesRef.current = { nodeId: selectedNodeId, count };
           if (!frameEquals(frameRef.current, nextFrame)) {
             frameRef.current = nextFrame;
             setFrame(nextFrame);
@@ -355,6 +387,7 @@ export function NodeInspectorPopover() {
       ref={popoverRef}
       className={`node-inspector-popover${pinned ? ' node-inspector-popover--pinned' : ''}`}
       data-placement={frame.placement}
+      data-palette-resizing={paletteResizing && !pinned ? '' : undefined}
       hidden={Boolean(frame.suspended)}
       inert={Boolean(frame.suspended)}
       style={frame.style}

@@ -186,14 +186,17 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
 
 /* GM r16 on #208: when a new palette changes the swatch count, the floating
    Inspector grows or shrinks on the layout spring (a sampled spring, as
-   asset-move.css's), not in one jump. */
-.node-inspector-popover:not(.node-inspector-popover--pinned):has(.inspector__palette) {
+   asset-move.css's), not in one jump. Only then (review 7 M2): the popover
+   carries data-palette-resizing while a swatch-count change settles
+   (NodeInspectorPopover.tsx), and otherwise moves with its node at once on
+   a pan, zoom, drag or resize. */
+.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
   --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
   transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-inspector-popover:not(.node-inspector-popover--pinned):has(.inspector__palette) {
+  .node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
     transition: none;
   }
 }
@@ -691,6 +694,18 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover {
 
 body:not(.app-slava-restraint) .inspector__palette-pending {
   color: #888;
+}
+
+/* GM r18 4 on #208: Extract's status region, always mounted and read by a
+   screen reader, never seen (the visible line is the same words). Out of the
+   stack's flow, so it adds no gap. */
+.inspector__palette-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .inspector__checkbox-row {

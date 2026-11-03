@@ -1804,6 +1804,12 @@ palette rows). **45 killed, 6 survive.**
   #bbb together; diff150 drops #dddddd (gap 20 opaque, gap 0 by area);
   three-rb loses #3c23aa by area. Guard: anime-cel must not go to 15
   swatches. The detector's list above is the starting point.
+  Round 8c adds GM r18's fixture: a 60 px #333333 bar with ±6 uniform
+  noise on 1000 x 600 is a big cluster and shows #383838 (ΔE00 1.61,
+  borderline visible); with ±5 on 2400 x 1440 it shows #313233 (0.90).
+- **Extract wraps at 1440 x 1400** (GM r17): "Extract from reference"
+  goes to two lines; it must stay on one (the button grows, or the row
+  stacks).
 
 ## Round 8b (base 1de1cfd4): Extract in a worker, its loading line, core 40
 
@@ -1974,3 +1980,194 @@ core 40 and the per-colour naming. **28 killed.**
   the canary first (blocked: 8000, 5173, 8840, the internet; reached: the
   lane): shots in `shots8b/`, no md5 repeats, each opened.
 - No backend file changed.
+
+## Round 8c (base 5d35550d, main merged at 47e0df21): review 7 and GM r17, r18
+
+### M1: an edit made while Extract works stays
+
+The palette landed through the click's closure, which spread the node's
+params as they were at the click, so Strength or Method changed meanwhile
+(by the person or an agent) went back. It now writes only the palette over
+the node's params as they are when it lands (`writeParamNow`: the store
+read at that moment, then `snapParamDefaults` and the provider snap, as any
+edit). Tests: the person's Strength typed under the line, and an agent's
+`updateNodeData` mid-extract, both survive; the stale-spread mutant fails
+them. Live: Strength typed to 0.3 under the line stays 0.3 after the
+palette lands, at 1440 x 900 and x 1400.
+
+**The same pattern elsewhere in the Inspector (reported, not changed):**
+- The file param's upload (`param.type === 'file'`, the `/api/uploads`
+  `.then`) writes `{ ...activeNodeData.params, [key]: filePath, _previewUrl
+  … }` from the pick's render after the upload's await: an edit made while
+  a file uploads is reverted, and that write skips the provider snap. The
+  same `writeParamNow`-style fix applies (several keys).
+- The mask painter's `onSave` calls `onParamChange` from the modal; the
+  Inspector re-renders it with a fresh closure on every store change, so
+  it reads current params unless the modal holds an old `onSave`. Low risk;
+  not reproduced.
+- Replicate's schema fetch goes through a store action by node id (fresh).
+
+### M2 and L4: the spring only for a swatch-count change
+
+The layout spring was on `top` and `height` whenever a palette showed, so
+the floating Inspector trailed its node on every pan, zoom, drag and resize.
+Now the popover carries `data-palette-resizing` for 400 ms
+(`PALETTE_RESIZE_MS`) from the frame the swatch count changes on the same
+node, set in the same render as the height that count brings; panels.css
+keys the spring (and its reduced-motion override) on it. Tests: a move
+springs nothing, a count change springs for 400 ms, the same count with
+new colours doesn't; a CSS test pins the one rule, its selector and the
+reduced-motion `transition: none`. Live at 1440 x 1400: a 360 px pan moves
+the panel 209 px with 0 frames off its target (review 7: up to 40 px), a
+node drag 134 px with 0 off (was 89 px), and a 2 → 7 swatch change springs
+for 24 frames. At 1440 x 900 the panel is held between the top and bottom
+limits, so it doesn't move; 0 frames off.
+
+### While extracting (GM r17, r18 1-3, review 7 L1)
+
+The state lives in `usePaletteExtracts`, keyed `nodeId:paramKey` (L1: the
+Inspector is one long-lived instance; one node's extract showed on another).
+- For 300 ms nothing changes: Add and Extract stay live (GM r18 2), so a
+  quick extract changes nothing on screen. A second pick in that window
+  is a later Extract and wins.
+- At 300 ms the line replaces the Add / Extract row (they grey together,
+  under it) and the old swatches' ×, hex and colour fields go read-only:
+  the ×'s and colour well's existing disabled looks, and for the hex field
+  a new rule in disabled-buttons.css with the ghost look (label and edge in
+  the shared grey, unfilled). Strength, Method and Palette Source stay live.
+- Once shown, the line stays at least 400 ms (`PALETTE_LINE_MIN_MS`); a
+  palette ready sooner waits, and lands with the row in one render. The
+  line and the new swatches never show together. Live, 8K PNG: the line
+  from 311-323 ms, the palette ready before 700 ms, landed at 707-715 ms;
+  in every frame, the line with the old swatches or the row with the new,
+  never both, never neither.
+- An Inspector closed while a palette waits out the 400 ms lands it at
+  once on unmount (tested).
+
+### The status region (GM r18 4)
+
+`<span class="inspector__palette-status" role="status" aria-live="polite">`,
+always mounted, visually hidden, last in the palette stack (the Add row
+stays right after the last swatch). It reads "Extracting colors…" when the
+line shows, "Extracted 5 colors." (real count, "1 color") at the end, and
+a failure's own line on one line ("Couldn't find colors in “x.png”.
+Nebula can't read this image. Try a PNG or JPEG."). The visible line is
+`aria-hidden`, so it isn't read twice. Live: '', "Extracting colors…",
+"Extracted 5 colors.".
+
+### The pixel read off the main thread (GM r18 5)
+
+The worker reads the picked file itself: `createImageBitmap(file,
+{ imageOrientation: 'from-image', colorSpaceConversion: 'default',
+premultiplyAlpha: 'default' })`, then the same two draws as the page (96 px
+first, then up to 4096) on an `OffscreenCanvas` with `colorSpace: 'srgb'`,
+read with `colorSpace: 'srgb'` (`readPaletteJobOffscreen`, sharing `jobFrom`
+with the page's read). The worker says at ready whether it can read files.
+
+**It is not byte-identical for every format**, measured in the installed
+Chrome 156 (93 files: `bytes8c*.json`):
+- Identical, bytes and palette: every PNG up to 8 bits a channel (sRGB, no
+  profile, Display P3 and Adobe RGB profiles, gamma and cHRM chunks,
+  palette with tRNS, interlaced, grey, alpha, 8K with alpha), GIF, BMP
+  (24- and 32-bit).
+- Not identical: JPEG (the page's `<img>` is drawn from its YUV planes, the
+  bitmap from RGB: 1-2 levels on the 96 px read; up to 4 with a Display P3
+  profile), WebP (1-2 levels), 16-bit PNG with an ICC profile (up to 14).
+  The palettes move with them: j-grad-3840 #aa596c to #a8596e;
+  w-pheme_ref_3q gets different swatches (#362e2b, #1c1718 to #312925,
+  #253e68). No option combination fixes it (premultiply none / premultiply,
+  willReadFrequently, `createImageBitmap(img)`, WebCodecs `ImageDecoder`:
+  all differ). The page's own read isn't stable either: drawing the same
+  `<img>` a second time gives another 96 px read (up to 169 levels on
+  WebP), which is why the page draws the 96 px first.
+
+So the worker reads only what it reads the same (`offscreenReadsSame`, from
+the first 32 bytes): PNG up to 8 bits (16-bit PNGs without a profile read
+the same too, but are left to the page to keep the check simple), GIF, BMP.
+Anything else it hands back unread and the page reads it as in 8b and
+transfers the pixels. **For GM:** JPEG and WebP keep the page read and its
+main-thread task (8K JPEG: 64-73 ms longest task). Moving them too means
+accepting their 1-4 level differences (and palettes that move with them);
+the table above is the evidence.
+
+**Proof:**
+- The 514-job Node check, adapted: each job is sent as a *file* to the real
+  `paletteWorker` module in a Node worker thread, whose `createImageBitmap`
+  and `OffscreenCanvas` stand-ins give back the pixels Chrome read; the
+  worker's own read (sizes, order, the 96 px reuse) feeds `runPaletteJob`.
+  514 jobs, 0 different, 1,018 pixel reads in the worker (none fell back).
+- Chrome, the 16 images through the real client (`paletteOfFile` against
+  the page's `extractPaletteFromImage`): 16 of 16 identical; 15 read in the
+  worker, minimal-line-art.webp on the page.
+- Main-thread longest task, 8b (page read, worker palette) → 8c, median of
+  3, Chrome 156 at 1x: 4K PNG 65 → 0 ms; 8K PNG 236 → 0 ms; 8K PNG with
+  alpha 69 → 0 ms; 8K JPEG 73 → 64 ms (still the page read). Total time
+  about the same (8K PNG 428 → 363 ms).
+- Dragging (panning) the canvas through an 8K extract, live: PNG longest
+  frame 17 ms, 0 over 50 ms, p95 17 ms; the 8K JPEG (page read) 50-83 ms,
+  2 over 50.
+
+### Worker robustness (OK'd by GM)
+
+- A slow start (not ready in 3 s) lets that worker go and does its work on
+  the page; the next Extract tries one new worker, and only a second slow
+  start keeps the page for the session.
+- A ready worker that doesn't answer a job in 30 s (`JOB_DEADLINE_MS`,
+  about 20 times the 8K run) is let go, and the job is done on the page from
+  the picked file; so is a worker that fails mid-job (8b answered "other").
+  Nothing new shows: the line stays until the page has the palette.
+- A failed chunk load (L3) says "Couldn't load Extract from reference.
+  Nebula's server isn't answering. Make sure it's running." (the mask
+  painter's wording, through `headedLine`; **new copy, for GM to confirm**),
+  in the notice and the status region, never "Couldn't find colors in".
+
+### Hand-off gaps (review 7 L2)
+
+Each of the 11 survivors is pinned: every waiting job sent at ready; the
+ready timer cleared at ready (a job longer than 3 s keeps its worker);
+3000 and 30,000 literally; a clone error computes on the page; the extract
+key carries the node; and the naming's boundaries, now small exported
+helpers with no change in output (`coreColour`, `mine`, `claimOf`,
+`footprintStep`; the 514 jobs give the same palettes before and after):
+a core of 40 pixels is a core and 39 isn't, 40 nearest pixels are used and
+39 aren't, a pixel just inside ΔE00 5 of another swatch is claimed and the
+next one out isn't (under 7), and every footprint pixel is read up to 4 MP.
+
+### Mutants, round 8c
+
+45 on the new code (`mutate8c.py`), each against the 8 palette test files:
+44 killed on the first pass. The survivor, an answered job's deadline left
+running (it would let a working worker go 30 s later), is now pinned ("forgets
+an answered job's deadline") and killed: **45 of 45**. They cover review 7's
+11 survivors; the deadline, slow-start retry (none, endless, and for a
+deadline too), the reads flag, an unread file, the file fallback; the worker
+module; the format gate (16-bit, JPEG, none), the bitmap options, the sRGB
+canvas, the read order, the bitmap's close; the stale spread (M1); the line's
+300 / 400 ms and its hold; the read-only swatches; Add or Extract greying at
+once; landing on close; the status region (unmounted, no count, silent, read
+twice); the load-failure copy; and the spring (every move, 4 s, in CSS always,
+no reduced-motion override).
+
+### Gates, round 8c
+
+- `tsc -b --noEmit` and `npm run lint` (inline styles, Slava CSS scope): clean.
+- **Vitest** `--maxWorkers=2`, from an explicit array of 198 files (round
+  8b's 149 and every test that reads the Inspector, the palette, the popover,
+  `panels.css` or `disabled-buttons.css`, plus the three new files): 2953 of
+  2953. A first pass caught `errorCopy.namedLine`'s ratchet on the hand-built
+  load-failure line; it now goes through `headedLine`.
+- **Build budget:** 444,705 bytes raw, the base's to the byte; the worker is
+  19.6 kB and its client 20.9 kB, both loaded on first Extract.
+- **Live** on 8792/5792, the backend only through `serve_isolated.py` (its
+  canary ok), Chrome 156 installed with a throwaway profile: shots in
+  `shots8c/` (12, no md5 repeats, each opened).
+- No backend file changed.
+
+### Harness
+
+Puppeteer drives the installed Chrome (156) with a throwaway profile made
+per run under the lane's scratch folder and deleted on close
+(`common8c.mjs`). Canary first on every run (8000, 5173, 8840 and the
+internet blocked; the lane reached); the only off-lane requests were the
+canaries. Wheel scrolling on this canvas zooms in the iso settings; pans
+use the middle button.

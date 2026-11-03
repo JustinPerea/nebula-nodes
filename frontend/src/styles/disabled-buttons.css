@@ -184,6 +184,19 @@
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
 }
 
+/* The Inspector palette's hex fields, read-only while "Extracting colors…"
+   shows (GM r17 on #208) or while the canvas is locked: the ghost look the
+   Add / Extract row has, the label and edge in the shared grey, unfilled. */
+.inspector__palette-hex:disabled,
+.inspector__palette-hex:disabled:hover {
+  background: transparent !important;
+  border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-text-fill-color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55));
+  cursor: default;
+  opacity: 1 !important;
+}
+
 /* The Projects cover picker's image buttons, disabled while a change saves
    (review 4 N-7): the image-only look, as the variations. Their edge is
    transparent at rest, so it stays so (never brighter disabled); the pinned

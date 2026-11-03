@@ -18,6 +18,13 @@ import {
   MERGE_DELTA_E,
   medianPixel,
   mostPopulated,
+  claimOf,
+  CLAIM_DELTA_E,
+  coreColour,
+  CORE_MIN,
+  footprintStep,
+  FOOTPRINT_SAMPLE,
+  mine,
   paletteFromImageData,
   paletteFromPixels,
   READ_MAX_DIM,
@@ -1031,3 +1038,54 @@ describe('a band is named by its median pixel, counted by colour (round 8b)', ()
   });
 });
 
+
+// Review 7 L2 (round 8c): the naming's boundaries, each pinned at its edge.
+describe("the full image's naming, at its boundaries", () => {
+  it('reads a core of exactly 40 pixels as a core, and of 39 as noise', () => {
+    expect(CORE_MIN).toBe(40);
+    const own = (core: number) => [
+      { rgb: [12, 12, 12], weight: core, inside: true },
+      { rgb: [200, 200, 200], weight: 1000, inside: false },
+    ];
+    expect(coreColour(own(40))).toEqual([12, 12, 12]);
+    expect(coreColour(own(39))).toEqual([200, 200, 200]);
+    expect(coreColour([{ rgb: [200, 200, 200], weight: 1000, inside: false }])).toBeUndefined();
+  });
+
+  it("takes a swatch's nearest pixels from 40 of them, and its unclaimed ones below that", () => {
+    const pixels = (count: number) => ({
+      near: { list: [{ rgb: [1, 1, 1], weight: count, inside: false }], count },
+      own: { list: [{ rgb: [2, 2, 2], weight: count + 5, inside: false }], count: count + 5 },
+    });
+    expect(mine(pixels(40)).list[0].rgb).toEqual([1, 1, 1]);
+    expect(mine(pixels(39)).list[0].rgb).toEqual([2, 2, 2]);
+  });
+
+  it(`lets another swatch claim a pixel within ${CLAIM_DELTA_E} of it, and no further`, () => {
+    expect(CLAIM_DELTA_E).toBe(5);
+    const refs = [[60, 60, 60], [200, 60, 60]];
+    // Walk from the other swatch's colour toward this one's: nearer the other all the way.
+    let inside: number[] | null = null;
+    let outside: number[] | null = null;
+    for (let r = 200; r > 131; r--) {
+      const rgb = [r, 60, 60];
+      if (deltaE00(rgb, refs[1]) < CLAIM_DELTA_E) inside = rgb;
+      else { outside = rgb; break; }
+    }
+    expect(inside && outside).toBeTruthy();
+    expect(deltaE00(outside!, refs[1])).toBeLessThan(7);
+    expect(claimOf(inside!, refs, 0)).toBe(1);
+    expect(claimOf(outside!, refs, 0)).toBe(-1);
+    expect(claimOf([70, 60, 60], refs, 0)).toBe(-2);
+  });
+
+  it('reads every pixel of a footprint up to 4 MP, then every 2nd, 3rd...', () => {
+    expect(FOOTPRINT_SAMPLE).toBe(1_000_000);
+    expect(footprintStep(1)).toBe(1);
+    expect(footprintStep(1_500_000)).toBe(1);
+    expect(footprintStep(3_999_999)).toBe(1);
+    expect(footprintStep(4_000_000)).toBe(2);
+    expect(footprintStep(8_999_999)).toBe(2);
+    expect(footprintStep(9_000_000)).toBe(3);
+  });
+});

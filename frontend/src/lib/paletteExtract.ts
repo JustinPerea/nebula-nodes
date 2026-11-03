@@ -201,6 +201,13 @@ export type SourceImage = { data: Uint8ClampedArray; width: number; height: numb
 /** A footprint bigger than this many pixels is read on an even sample. */
 export const FOOTPRINT_SAMPLE = 1_000_000;
 
+/** Every ``step``-th pixel across and down of a footprint of ``area``
+ *  full-resolution pixels, so about ``FOOTPRINT_SAMPLE`` at most are read:
+ *  all of one up to 4 MP (step 1 until the area is 4 times the sample). */
+export function footprintStep(area: number): number {
+  return Math.max(1, Math.floor(Math.sqrt(area / FOOTPRINT_SAMPLE)));
+}
+
 /** One evidence pixel: its colour, its weight (alpha), and whether it lies
  *  inside a flat area rather than on an edge. */
 export type EvidenceCell = { rgb: number[]; weight: number; inside: boolean };
@@ -291,6 +298,23 @@ export function mergeNearColors(
  *  it. */
 export const CLAIM_DELTA_E = 5;
 
+/** Whose a full-resolution pixel ``rgb`` under swatch ``s``'s footprint
+ *  is: -2 its own (nearest its colour of all ``refs``), another swatch's
+ *  index when nearer that one and within ``CLAIM_DELTA_E`` of it, -1
+ *  nobody's (nearer another, not within). */
+export function claimOf(rgb: number[], refs: number[][], s: number): number {
+  let best = s;
+  let bestDist = Infinity;
+  for (let i = 0; i < refs.length; i++) {
+    const d = (rgb[0] - refs[i][0]) ** 2 + (rgb[1] - refs[i][1]) ** 2 + (rgb[2] - refs[i][2]) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best === s ? -2 : deltaE00(rgb, refs[best]) < CLAIM_DELTA_E ? best : -1;
+}
+
 /** The pixels of swatch ``s``'s footprint nearest its colour of all
  *  ``refs`` (every swatch's colour; ``near``), and those no other swatch
  *  claims (``CLAIM_DELTA_E``; ``own``, a superset): a thin line whose
@@ -317,16 +341,7 @@ function ownPixels(
     const key = (r << 16) | (g << 8) | b;
     let by = claimer.get(key);
     if (by === undefined) {
-      let best = s;
-      let bestDist = Infinity;
-      for (let i = 0; i < refs.length; i++) {
-        const d = (r - refs[i][0]) ** 2 + (g - refs[i][1]) ** 2 + (b - refs[i][2]) ** 2;
-        if (d < bestDist) {
-          bestDist = d;
-          best = i;
-        }
-      }
-      by = best === s ? -2 : deltaE00([r, g, b], refs[best]) < CLAIM_DELTA_E ? best : -1;
+      by = claimOf([r, g, b], refs, s);
       claimer.set(key, by);
     }
     if (by >= 0) {
@@ -350,9 +365,9 @@ function ownPixels(
 }
 
 /** A colour of a footprint and how many of its pixels have it. */
-type FullPixel = { rgb: number[]; weight: number; inside: boolean };
+export type FullPixel = { rgb: number[]; weight: number; inside: boolean };
 /** Pixels by colour (``list``), ``count`` of them in all. */
-type FullPixels = { list: FullPixel[]; count: number };
+export type FullPixels = { list: FullPixel[]; count: number };
 
 /** Whether swatch ``s`` has a solid core of its own at full resolution: a
  *  pixel of its own (``ownPixels``) inside a flat area. A pure antialiased
@@ -391,8 +406,20 @@ export function medianPixel<T extends { weight: number }>(list: T[], count: numb
 /** A swatch's own pixels: those nearest its colour, unless hardly any is
  *  (a thin line whose evidence colour is a mix of it and its neighbours),
  *  and then those no other swatch claims. */
-function mine({ near, own }: { near: FullPixels; own: FullPixels }): FullPixels {
+export function mine({ near, own }: { near: FullPixels; own: FullPixels }): FullPixels {
   return near.count >= CORE_MIN ? near : own;
+}
+
+/** A swatch's colour from its own pixels' core (those inside a flat area
+ *  at full resolution): the core's most populated colour when it holds
+ *  ``CORE_MIN`` pixels or more; all its own pixels' when it holds fewer (a
+ *  few repeated pixels are noise); undefined with no core at all. */
+export function coreColour(own: FullPixel[]): number[] | null | undefined {
+  const core = own.filter((p) => p.inside);
+  const coreCount = core.reduce((sum, p) => sum + p.weight, 0);
+  if (coreCount >= CORE_MIN) return mostPopulated(core);
+  if (coreCount > 0) return mostPopulated(own.map((p) => ({ ...p, inside: false })));
+  return undefined;
 }
 
 /** GM r13 on #208: the evidence (256 px) decides which colours exist; the
@@ -442,10 +469,8 @@ function nameAtFullResolution(out: Swatch[], threshold: number, evidence: EdgeEv
     // noise that happened to repeat, and the swatch is read from all its
     // own pixels instead.
     const own = mine(pixels).list;
-    const core = own.filter((p) => p.inside);
-    const coreCount = core.reduce((sum, p) => sum + p.weight, 0);
-    if (coreCount >= CORE_MIN) return mostPopulated(core);
-    if (coreCount > 0) return mostPopulated(own.map((p) => ({ ...p, inside: false })));
+    const fromCore = coreColour(own);
+    if (fromCore !== undefined) return fromCore;
     if (c.black || !small) return mostPopulated(own) ?? c.rgb;
     return null;
   });
@@ -1146,7 +1171,7 @@ function footprintReader(
       const cy = (i - cx) / width;
       area += (xs[cx + 1] - xs[cx]) * (ys[cy + 1] - ys[cy]);
     }
-    const step = Math.max(1, Math.floor(Math.sqrt(area / FOOTPRINT_SAMPLE)));
+    const step = footprintStep(area);
     for (const i of at) {
       const cx = i % width;
       const cy = (i - cx) / width;
@@ -1500,10 +1525,95 @@ function readPixels(img: HTMLImageElement, w: number, h: number): Uint8ClampedAr
   return data;
 }
 
-/** The size ``img`` is drawn at for a longest edge of at most ``maxDim``. */
-function fitted(img: HTMLImageElement, maxDim: number): [number, number] {
-  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-  return [Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale))];
+/** The size an image ``width`` x ``height`` is drawn at for a longest edge
+ *  of at most ``maxDim``. */
+function fitted(width: number, height: number, maxDim: number): [number, number] {
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  return [Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale))];
+}
+
+/** A decoded image's job: ``draw(w, h)`` reads it at that size. The 96 px
+ *  downscale is drawn first, as Extract always drew it: Chrome downscales
+ *  an image it has already drawn at full size differently (studio-product
+ *  came back #e1dfdc and #ac9261, not #e2e0de and #b29b6d), so the
+ *  full-size read comes second. */
+function jobFrom(
+  width: number,
+  height: number,
+  draw: (w: number, h: number) => Uint8ClampedArray | null,
+  k: number,
+): PaletteJob | null {
+  const [sw, sh] = fitted(width, height, CLUSTER_MAX_DIM);
+  const small = draw(sw, sh);
+  const [w, h] = fitted(width, height, READ_MAX_DIM);
+  const data = sw === w && sh === h ? small : draw(w, h);
+  if (!small || !data) return null;
+  return { data, width: w, height: h, k, small: { data: small, width: sw } };
+}
+
+/** How the worker decodes the picked file (round 8c, GM r18 5): set out in
+ *  full, not left to defaults, so the pixels are the ones the page's
+ *  ``<img>`` and canvas give (``readPaletteJob``). The image is turned as
+ *  its EXIF says, as an ``<img>`` is; converted to sRGB from any embedded
+ *  profile, as an ``<img>`` drawn on an sRGB canvas is; and kept in the
+ *  browser's own (premultiplied) form, as an ``<img>`` is, so drawing it
+ *  doesn't premultiply it a second time with different rounding. */
+export const BITMAP_OPTIONS: ImageBitmapOptions = {
+  imageOrientation: 'from-image',
+  colorSpaceConversion: 'default',
+  premultiplyAlpha: 'default',
+};
+
+/** Whether the worker's read gives the page's pixels byte for byte, from
+ *  the file's first bytes. Measured in Chrome 156 (round 8c notes): PNG up
+ *  to 8 bits a channel (any profile, gamma, palette, interlace, alpha, up to
+ *  8K), GIF and BMP read the same. JPEG and WebP don't: Chrome's ``<img>``
+ *  draws them from their YUV planes, the bitmap from RGB, 1-2 levels apart
+ *  (up to 4 with a Display P3 profile), and so do 16-bit PNGs with a
+ *  profile (up to 14): those stay on the page. */
+export function offscreenReadsSame(head: Uint8Array): boolean {
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  // The signature, then IHDR first (its bit depth at byte 24).
+  if (png.every((byte, i) => head[i] === byte)) {
+    const ihdr = String.fromCharCode(head[12], head[13], head[14], head[15]);
+    return ihdr === 'IHDR' && head.length > 24 && head[24] <= 8;
+  }
+  const ascii = String.fromCharCode(...head.subarray(0, 4));
+  return ascii === 'GIF8' || ascii.startsWith('BM');
+}
+
+/** The worker's read: the same job as ``readPaletteJob``, with no DOM
+ *  (``createImageBitmap`` and an sRGB ``OffscreenCanvas``), or null where
+ *  it doesn't read the same pixels (``offscreenReadsSame``) or can't read
+ *  the file (no OffscreenCanvas, a file it can't decode): the page then
+ *  reads it, and says why when it can't either. */
+export async function readPaletteJobOffscreen(file: Blob, k = 6): Promise<PaletteJob | null> {
+  if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas !== 'function') return null;
+  try {
+    if (!offscreenReadsSame(new Uint8Array(await file.slice(0, 32).arrayBuffer()))) return null;
+  } catch {
+    return null;
+  }
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, BITMAP_OPTIONS);
+  } catch {
+    return null;
+  }
+  try {
+    if (!bitmap.width || !bitmap.height) return null;
+    return jobFrom(bitmap.width, bitmap.height, (w, h) => {
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      return ctx.getImageData(0, 0, w, h, { colorSpace: 'srgb' }).data;
+    }, k);
+  } catch {
+    return null;
+  } finally {
+    bitmap.close();
+  }
 }
 
 /** The pixels Extract reads from one image, ready for ``runPaletteJob``:
@@ -1544,16 +1654,7 @@ export async function readPaletteJob(file: Blob, k = 6): Promise<PaletteJob | Ex
     if (!img) return { ok: false, reason: 'decode' };
     // Decoded but with no size (an SVG without one): not a decode failure.
     if (!img.width || !img.height) return { ok: false, reason: 'other' };
-    // The 96 px downscale is drawn first, as Extract always drew it: Chrome
-    // downscales an image it has already drawn at full size differently
-    // (studio-product came back #e1dfdc and #ac9261, not #e2e0de and
-    // #b29b6d), so the full-size read comes second.
-    const [sw, sh] = fitted(img, CLUSTER_MAX_DIM);
-    const small = readPixels(img, sw, sh);
-    const [w, h] = fitted(img, READ_MAX_DIM);
-    const data = sw === w && sh === h ? small : readPixels(img, w, h);
-    if (!small || !data) return { ok: false, reason: 'other' };
-    return { data, width: w, height: h, k, small: { data: small, width: sw } };
+    return jobFrom(img.width, img.height, (w, h) => readPixels(img, w, h), k) ?? { ok: false, reason: 'other' };
   } catch {
     return { ok: false, reason: 'other' };
   } finally {

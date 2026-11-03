@@ -34,7 +34,8 @@ import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
-import { paletteNotice } from '../../lib/paletteNotice';
+import { PALETTE_LOAD_FAILED, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
+import { usePaletteExtracts } from './usePaletteExtracts';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
 
@@ -50,9 +51,9 @@ type InspectorProps = {
 
 /** Normalize arbitrary user/text input into a `#rrggbb` hex string. Returns
  *  null when the input can't be coerced to a valid 6-digit hex. */
-/** How long an Extract runs before "Extracting colors…" shows (#204's one
- *  loading look: nothing for a quick one). */
-export const PALETTE_PENDING_DELAY_MS = 300;
+// How long an Extract runs before "Extracting colors…" shows, and how long
+// the line then stays (usePaletteExtracts).
+export { PALETTE_LINE_MIN_MS, PALETTE_PENDING_DELAY_MS } from './usePaletteExtracts';
 
 function normalizeHex(input: string): string | null {
   let v = input.trim().toLowerCase();
@@ -107,21 +108,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // Replicate schema fetch state
   const [schemaLoading, setSchemaLoading] = useState(false);
 
-  // Palette extraction in-flight state, keyed by param key (a node may have
-  // more than one 'palette' control). Null/absent = idle.
-  const [paletteExtracting, setPaletteExtracting] = useState<Record<string, boolean>>({});
-  // GM r16 on #208 (#204's one loading look): "Extracting colors…" shows
-  // only once an extract has run PALETTE_PENDING_DELAY_MS; a quick one never
-  // flashes it. Keyed like paletteExtracting.
-  const [palettePendingShown, setPalettePendingShown] = useState<Record<string, boolean>>({});
-  const palettePendingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
-    const timers = palettePendingTimers.current;
-    return () => {
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
-    };
-  }, []);
+  // Extract from reference, per palette control on each node (a node may
+  // have more than one 'palette' control): the line, its timing, and the
+  // status region (usePaletteExtracts).
+  const paletteExtracts = usePaletteExtracts();
 
   // Quiver Arrow dynamic model list (cached for the session). Loaded on
   // first selection of any Quiver node so the `model` enum reflects
@@ -412,6 +402,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
     });
   }
 
+  // One param written over the node's params as they are now, not as this
+  // render saw them: for a write that lands after an await (Extract's
+  // palette), so an edit made meanwhile, by the person or an agent, stays
+  // (review 7 M1). The node's own definition and provider snap, as any edit.
+  function writeParamNow(nodeId: string, key: string, value: unknown) {
+    const current = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.params;
+    if (!current) return;
+    const next = { ...current, [key]: value };
+    const snap = definition ? snapParamDefaults(definition, current, next) : { params: next };
+    writeEdit(snap.params, key);
+  }
+
   function clearParam(key: string) {
     setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
@@ -662,8 +664,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
       const swatches: string[] = Array.isArray(raw)
         ? raw.filter((s): s is string => typeof s === 'string')
         : [];
-      const extracting = Boolean(paletteExtracting[param.key]);
-      const pendingShown = extracting && Boolean(palettePendingShown[param.key]);
+      const extractKey = `${activeNode.id}:${param.key}`;
+      // GM r17/r18 on #208: nothing changes for a quick extract; once the
+      // line shows, the old swatches are read-only (Strength and Method
+      // stay live) and the Add / Extract row waits under the line.
+      const { shown: pendingShown, status: extractStatus } = paletteExtracts.view(extractKey);
 
       const writeSwatches = (next: string[]) => onParamChange(param.key, next);
 
@@ -681,7 +686,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       type="color"
                       className="inspector__palette-color"
                       value={safeHex}
-                      disabled={readOnly} {...lock.mark}
+                      disabled={readOnly || pendingShown} {...lock.mark}
                       aria-label={`Swatch ${idx + 1} color`}
                       onChange={(e) => {
                         const next = [...swatches];
@@ -693,7 +698,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       type="text"
                       className="inspector__field inspector__palette-hex"
                       value={hex}
-                      disabled={readOnly} {...lock.mark}
+                      disabled={readOnly || pendingShown} {...lock.mark}
                       spellCheck={false}
                       aria-label={`Swatch ${idx + 1} hex`}
                       onChange={(e) => {
@@ -717,7 +722,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
                       // lock's own tooltip, the follow reason first, then
                       // offline's verb; "Remove swatch" when live.
-                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches' })}
+                      {...lock.act({ title: 'Remove swatch', offline: 'remove swatches', disabled: pendingShown })}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
                     >
                       <X
@@ -736,7 +741,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           {pendingShown ? (
             // GM r16 on #208: one plain line in the Add / Extract row's place;
             // the swatches above stay until the new palette replaces them.
-            <p className="inspector__palette-pending" role="status">Extracting colors…</p>
+            <p className="inspector__palette-pending" aria-hidden="true">Extracting colors…</p>
           ) : (
           <div className="inspector__palette-actions">
             <button
@@ -744,8 +749,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               className="inspector__action-button"
               // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
               // reason, not "Add a swatch", while it can't add.
-              // GM r16 on #208: Add waits with Extract until the palette lands.
-              {...lock.act({ title: 'Add a swatch', offline: 'add swatches', disabled: extracting })}
+              // While the line shows, Add waits under it with Extract.
+              {...lock.act({ title: 'Add a swatch', offline: 'add swatches' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
               <Plus
@@ -773,7 +778,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 type="file"
                 accept="image/*"
                 className="inspector__file-input"
-                disabled={extracting || readOnly}
+                disabled={readOnly}
                 {...lock.mark}
                 onChange={(e) => {
                   // Fix round 7 of PR #200 (review 7 N-2): refused here too, so
@@ -785,48 +790,46 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   // Reset the input so the same file can be picked again later.
                   e.target.value = '';
                   const paramKey = param.key;
-                  const extractKey = `${activeNode.id}:${paramKey}`;
-                  setPaletteExtracting((prev) => ({ ...prev, [paramKey]: true }));
-                  const timers = palettePendingTimers.current;
-                  const timer = timers.get(paramKey);
-                  if (timer) clearTimeout(timer);
-                  timers.set(paramKey, setTimeout(() => {
-                    timers.delete(paramKey);
-                    setPalettePendingShown((prev) => ({ ...prev, [paramKey]: true }));
-                  }, PALETTE_PENDING_DELAY_MS));
+                  const nodeId = activeNode.id;
                   const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
                   // The colours come from the picked file itself, so nothing
-                  // is uploaded (it was stored in output/ only to be read
-                  // back). A file the browser can't decode says so below.
-                  void (async () => {
-                    // GM: "Couldn't find colors in {filename}." over why,
-                    // when Nebula can tell; the heading alone otherwise. A
-                    // later Extract for this control wins: this one's
-                    // result is dropped (null) and the later one clears the line.
-                    // The extraction loads only when it's used: the
-                    // Inspector's first load stays as small as it was.
-                    const extracted = await import('../../lib/paletteWorkerClient')
-                      .then(({ extractPaletteLatest }) => extractPaletteLatest(extractKey, file))
-                      .catch(() => ({ ok: false as const, reason: 'other' as const }));
-                    if (extracted === null) return;
-                    if (extracted.ok && extracted.colors.length > 0) writeSwatches(extracted.colors);
-                    else notify(paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason));
-                    const pendingTimer = timers.get(paramKey);
-                    if (pendingTimer) clearTimeout(pendingTimer);
-                    timers.delete(paramKey);
-                    const without = (prev: Record<string, boolean>) => {
-                      const next = { ...prev };
-                      delete next[paramKey];
-                      return next;
-                    };
-                    setPaletteExtracting(without);
-                    setPalettePendingShown(without);
-                  })();
+                  // is uploaded. A later Extract for this control wins: this
+                  // one's result is dropped (null). The extraction loads only
+                  // when it's used, so the Inspector's first load stays as
+                  // small as it was; a load that fails says so, never that
+                  // the image has no colours (review 7 L3).
+                  paletteExtracts.start(
+                    extractKey,
+                    () => import('../../lib/paletteWorkerClient').then(
+                      ({ extractPaletteLatest }) => extractPaletteLatest(extractKey, file)
+                        .catch(() => ({ ok: false as const, reason: 'other' as const })),
+                      () => 'unloaded' as const,
+                    ),
+                    (extracted) => {
+                      if (extracted === 'unloaded') {
+                        notify(PALETTE_LOAD_FAILED);
+                        return PALETTE_LOAD_FAILED;
+                      }
+                      if (extracted.ok && extracted.colors.length > 0) {
+                        // Only the palette, over the node's params as they
+                        // are when it lands (review 7 M1).
+                        writeParamNow(nodeId, paramKey, extracted.colors);
+                        return paletteStatus(extracted.colors.length);
+                      }
+                      const text = paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason);
+                      notify(text);
+                      return text.replace('\n', ' ');
+                    },
+                  );
                 }}
               />
             </label>
           </div>
           )}
+          {/* GM r18 4 on #208: always mounted, so a screen reader hears each
+              change: "Extracting colors…", then "Extracted N colors." or the
+              failure's own line. The visible line is the same words. */}
+          <span className="inspector__palette-status" role="status" aria-live="polite">{extractStatus}</span>
         </div>
       );
     }

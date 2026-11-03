@@ -189,10 +189,63 @@ describe('the floating Inspector takes the whole palette before its body scrolls
     }
   });
 
+  it('springs only while a swatch-count change settles, never on a move (review 7 M2)', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      contentHeight = 420;
+      open(1400);
+      const popover = () => document.querySelector<HTMLDivElement>('.node-inspector-popover')!;
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+      // The node moves (a pan, a drag): the panel follows at once.
+      const anchor = document.querySelector<HTMLElement>('[data-node-inspector-anchor="n1"]')!;
+      anchor.getBoundingClientRect = () => new DOMRect(500, 320, 300, 200);
+      frames(2);
+      expect(bounds().top).not.toBe(192);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+      // Two more swatches land: the spring runs with the height they bring.
+      contentHeight = 500;
+      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10) } }));
+      frames(1);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
+      expect(bounds().height).toBe(500 + CHROME);
+      act(() => { vi.advanceTimersByTime(399); });
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(true);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+      // The same count again (new colours, same swatches): no spring.
+      act(() => useGraphStore.getState().updateNodeData('n1', { params: { palette: hexes(10).reverse() } }));
+      frames(2);
+      expect(popover().hasAttribute('data-palette-resizing')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps 300 px and the spare-line rule for a body with no palette', () => {
     useGraphStore.setState({ nodes: [{ ...colorNode([]), data: { ...colorNode([]).data, definitionId: 'text-input', label: 'Text Input', params: {} } }] });
     contentHeight = 420;
     open(900);
     expect(bounds().height).toBe(300);
+  });
+});
+
+describe("the layout spring's CSS (review 7 L4)", () => {
+  const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const reduced = [...css.matchAll(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)].map((m) => m[1]).join('\n');
+  const outside = css.replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
+  const rules = (text: string) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
+
+  it('springs the floating popover only while data-palette-resizing is on, never the docked one', () => {
+    const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.body));
+    expect(moving).toHaveLength(1);
+    expect(moving[0].selector).toBe('.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned)');
+    expect(moving[0].body).toMatch(/transition:\s*height var\(--inspector-layout-spring\), top var\(--inspector-layout-spring\)/);
+    expect(moving[0].body).toMatch(/--inspector-layout-spring:\s*360ms linear\(/);
+  });
+
+  it('turns it off for reduced motion', () => {
+    const off = rules(reduced).filter((r) => r.selector === '.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned)');
+    expect(off).toHaveLength(1);
+    expect(off[0].body).toMatch(/transition:\s*none/);
   });
 });

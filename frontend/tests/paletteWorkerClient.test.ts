@@ -6,16 +6,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Round 8b (GM r16 on #208): Extract works out the palette in a worker. The
 // worker runs the same pure runPaletteJob on pixels the page read, so the
 // result must be the same as on the page, byte for byte.
-const reads = vi.hoisted(() => ({ next: [] as ((value: unknown) => void)[] }));
+const reads = vi.hoisted(() => ({ next: [] as ((value: unknown) => void)[], page: [] as Blob[] }));
+// The page's own read and extract (an <img> and a canvas: none in Node).
+// ``extractPaletteFromImage`` is the page doing it all, the fallback.
 vi.mock('../src/lib/paletteExtract', async (original) => ({
   ...await original<typeof import('../src/lib/paletteExtract')>(),
   readPaletteJob: vi.fn(() => new Promise((done) => { reads.next.push(done); })),
+  extractPaletteFromImage: vi.fn(async (file: Blob) => { reads.page.push(file); return { ok: true, colors: ['#0a9e0a'] }; }),
 }));
 
 import { runPaletteJob, type PaletteJob, type PaletteResult } from '../src/lib/paletteExtract';
 import {
   computePalette,
   extractPaletteLatest,
+  JOB_DEADLINE_MS,
+  paletteOfFile,
   resetPaletteWorkerForTests,
   transferOf,
   WORKER_READY_MS,
@@ -28,26 +33,46 @@ vi.setConfig({ testTimeout: 120_000 });
 
 /** A worker in this process: the message crosses by structured clone, with
  *  its transfer list, as it does between threads. */
+type FakeOptions = {
+  ready?: boolean;
+  crash?: boolean;
+  /** Says it reads files itself (round 8c), and answers a file so. */
+  reads?: boolean;
+  file?: (id: number) => PaletteReply | null;
+  /** Answers a job this many ms late; null: never. */
+  delay?: number | null;
+  /** postMessage throws (a clone error), before any transfer. */
+  cloneError?: boolean;
+};
+const FILE_RESULT: PaletteResult = { ok: true, colors: ['#f11e00'] };
 class FakeWorker implements PaletteWorkerLike {
   static made = 0;
   onmessage: ((event: MessageEvent<PaletteReply>) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   transfers: Transferable[][] = [];
+  files: Blob[] = [];
   terminated = false;
-  constructor(private readonly options: { ready?: boolean; crash?: boolean } = {}) {
+  constructor(private readonly options: FakeOptions = {}) {
     FakeWorker.made++;
-    if (options.ready !== false) setTimeout(() => this.reply({ ready: true }), 0);
+    if (options.ready !== false) setTimeout(() => this.reply({ ready: true, reads: options.reads === true }), 0);
   }
   reply(data: PaletteReply) {
     this.onmessage?.({ data } as MessageEvent<PaletteReply>);
   }
   postMessage(message: PaletteRequest, transfer: Transferable[]) {
+    if (this.options.cloneError) throw new DOMException('could not be cloned', 'DataCloneError');
     this.transfers.push(transfer);
-    const { id, job } = structuredClone(message, { transfer });
+    const sent = structuredClone(message, { transfer });
+    const { delay = 0 } = this.options;
+    if (delay === null) return;
     setTimeout(() => {
       if (this.options.crash) this.onerror?.(new Event('error'));
-      else this.reply({ id, result: runPaletteJob(job) });
-    }, 0);
+      else if ('file' in sent) {
+        this.files.push(sent.file);
+        const answer = this.options.file ? this.options.file(sent.id) : { id: sent.id, result: FILE_RESULT };
+        if (answer) this.reply(answer);
+      } else this.reply({ id: sent.id, result: runPaletteJob(sent.job) });
+    }, delay);
   }
   terminate() {
     this.terminated = true;
@@ -78,7 +103,7 @@ const copy = (job: PaletteJob): PaletteJob => {
 };
 
 let worker: FakeWorker | null = null;
-function useWorker(options: { ready?: boolean; crash?: boolean } = {}) {
+function useWorker(options: FakeOptions = {}) {
   FakeWorker.made = 0;
   resetPaletteWorkerForTests(() => (worker = new FakeWorker(options)));
 }
@@ -87,6 +112,7 @@ afterEach(() => {
   vi.useRealTimers();
   worker = null;
   reads.next.length = 0;
+  reads.page.length = 0;
   resetPaletteWorkerForTests();
 });
 
@@ -208,13 +234,159 @@ describe('the worker module (round 8b)', () => {
     try {
       vi.resetModules();
       await import('../src/lib/paletteWorker');
-      expect(posted).toEqual([{ ready: true }]);
+      // Node has no OffscreenCanvas: it says it can't read files.
+      expect(posted).toEqual([{ ready: true, reads: false }]);
       scope.onmessage!({ data: { id: 7, job: opaqueJob() } } as MessageEvent<PaletteRequest>);
       expect(posted[1]).toEqual({ id: 7, result: runPaletteJob(opaqueJob()) });
       scope.onmessage!({ data: { id: 8, job: { ...opaqueJob(), data: null } } } as unknown as MessageEvent<PaletteRequest>);
       expect(posted[2]).toEqual({ id: 8, result: { ok: false, reason: 'other' } });
+      // A file it can't read goes back unread, for the page to read.
+      scope.onmessage!({ data: { id: 9, file: new Blob([new Uint8Array(8)]), k: 6 } } as MessageEvent<PaletteRequest>);
+      await vi.waitFor(() => expect(posted[3]).toEqual({ id: 9, unread: true }));
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('the hand-off holds (review 7 L2, round 8c)', () => {
+  it("pins GM's start-up limit and the job deadline", () => {
+    expect(WORKER_READY_MS).toBe(3000);
+    expect(JOB_DEADLINE_MS).toBe(30_000);
+  });
+
+  it('sends every job that waited for ready, not only the first', async () => {
+    useWorker({ ready: false });
+    const a = computePalette(opaqueJob());
+    const b = computePalette(clearJob());
+    worker!.reply({ ready: true });
+    const direct = [runPaletteJob(opaqueJob()), runPaletteJob(clearJob())];
+    expect([await a, await b]).toEqual(direct);
+    expect(worker!.transfers).toHaveLength(2);
+  });
+
+  it('lets a ready worker take longer than the start-up limit', async () => {
+    vi.useFakeTimers();
+    useWorker({ delay: WORKER_READY_MS + 500 });
+    const done = computePalette(opaqueJob());
+    await vi.advanceTimersByTimeAsync(WORKER_READY_MS + 1000);
+    expect(await done).toEqual(runPaletteJob(opaqueJob()));
+    expect(worker!.terminated).toBe(false);
+  });
+
+  it("forgets an answered job's deadline: the worker stays after 30 s and takes the next job", async () => {
+    vi.useFakeTimers();
+    useWorker();
+    const first = computePalette(opaqueJob());
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await first).toEqual(runPaletteJob(opaqueJob()));
+    const made = worker!;
+    await vi.advanceTimersByTimeAsync(JOB_DEADLINE_MS + 1000);
+    expect(made.terminated).toBe(false);
+    const job = opaqueJob();
+    const second = computePalette(job);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await second).toEqual(runPaletteJob(opaqueJob()));
+    expect(job.data.byteLength).toBe(0);
+    expect(FakeWorker.made).toBe(1);
+  });
+
+  it('works out a job its worker could not take (a clone error) on the page', async () => {
+    useWorker({ cloneError: true });
+    expect(await computePalette(opaqueJob())).toEqual(runPaletteJob(opaqueJob()));
+  });
+
+  it('tries a new worker once after a slow start, and keeps the page after a second', async () => {
+    vi.useFakeTimers();
+    useWorker({ ready: false });
+    const first = computePalette(opaqueJob());
+    await vi.advanceTimersByTimeAsync(WORKER_READY_MS);
+    expect(await first).toEqual(runPaletteJob(opaqueJob()));
+    expect(FakeWorker.made).toBe(1);
+    // The next Extract starts a second worker, and it is slow too.
+    const second = computePalette(opaqueJob());
+    expect(FakeWorker.made).toBe(2);
+    await vi.advanceTimersByTimeAsync(WORKER_READY_MS);
+    expect(await second).toEqual(runPaletteJob(opaqueJob()));
+    expect(await computePalette(opaqueJob())).toEqual(runPaletteJob(opaqueJob()));
+    expect(FakeWorker.made).toBe(2);
+  });
+
+  it('a slow start then a ready worker: the second worker does the work', async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    FakeWorker.made = 0;
+    resetPaletteWorkerForTests(() => (worker = new FakeWorker({ ready: ++n > 1 })));
+    const first = computePalette(opaqueJob());
+    await vi.advanceTimersByTimeAsync(WORKER_READY_MS);
+    await first;
+    const job = opaqueJob();
+    const second = computePalette(job);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await second).toEqual(runPaletteJob(opaqueJob()));
+    expect(job.data.byteLength).toBe(0);
+  });
+});
+
+describe('the worker reads the file itself (GM r18 5, round 8c)', () => {
+  const file = () => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+
+  it('sends the file, not pixels, to a worker that reads files; the page reads nothing', async () => {
+    useWorker({ reads: true });
+    const picked = file();
+    expect(await paletteOfFile(picked)).toEqual(FILE_RESULT);
+    expect(worker!.files).toHaveLength(1);
+    expect(worker!.transfers).toEqual([[]]);
+    expect(reads.next).toHaveLength(0);
+    expect(reads.page).toHaveLength(0);
+  });
+
+  it('reads on the page and sends the pixels when the worker can\'t read files', async () => {
+    useWorker({ reads: false });
+    const done = paletteOfFile(file());
+    await vi.waitFor(() => expect(reads.next).toHaveLength(1));
+    reads.next[0](opaqueJob());
+    expect(await done).toEqual(runPaletteJob(opaqueJob()));
+    expect(worker!.files).toHaveLength(0);
+    expect(worker!.transfers).toHaveLength(1);
+  });
+
+  it('reads a file the worker hands back unread on the page, and sends its pixels', async () => {
+    useWorker({ reads: true, file: (id) => ({ id, unread: true }) });
+    const done = paletteOfFile(file());
+    await vi.waitFor(() => expect(reads.next).toHaveLength(1));
+    reads.next[0](opaqueJob());
+    expect(await done).toEqual(runPaletteJob(opaqueJob()));
+    expect(worker!.transfers.at(-1)!.length).toBeGreaterThan(0);
+  });
+
+  it("gives the page's own failure for a file neither can read", async () => {
+    useWorker({ reads: true, file: (id) => ({ id, unread: true }) });
+    const done = paletteOfFile(file());
+    await vi.waitFor(() => expect(reads.next).toHaveLength(1));
+    reads.next[0]({ ok: false, reason: 'decode' });
+    expect(await done).toEqual({ ok: false, reason: 'decode' });
+  });
+
+  it(`does the file on the page when a ready worker doesn't answer in ${JOB_DEADLINE_MS} ms, and keeps the page after`, async () => {
+    vi.useFakeTimers();
+    useWorker({ reads: true, file: () => null });
+    const picked = file();
+    const done = paletteOfFile(picked);
+    const made = worker!;
+    await vi.advanceTimersByTimeAsync(JOB_DEADLINE_MS - 1);
+    expect(reads.page).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await done).toEqual({ ok: true, colors: ['#0a9e0a'] });
+    expect(reads.page).toEqual([picked]);
+    expect(made.terminated).toBe(true);
+    expect(await paletteOfFile(file())).toEqual({ ok: true, colors: ['#0a9e0a'] });
+    expect(FakeWorker.made).toBe(1);
+  });
+
+  it('does the file on the page when the worker fails mid-job (the file is still here)', async () => {
+    useWorker({ reads: true, crash: true });
+    expect(await paletteOfFile(file())).toEqual({ ok: true, colors: ['#0a9e0a'] });
+    expect(reads.page).toHaveLength(1);
   });
 });
