@@ -105,9 +105,12 @@ however far it goes.
 While a node moves, the tab runs the same chain test on the live positions.
 That means the person's drag, or any carry it sees.
 
-- **The preview.** A carried cursor whose chain would change is drawn last in
-  the column it is passing: a display-only place after every landed cursor,
-  plus its own `since`. So two cursors on one node keep their order (rule
+- **The preview.** A carried cursor whose chain would change is laid out as
+  the newest arrival (r24 insert) in the column it is passing: a display-only
+  arrival after every landed cursor, plus its own `since`. That isn't the
+  literal bottom slot: the insert puts it above a member aimed more than 16
+  below its target, which is what the backend does at the drop, so nothing
+  moves there (GM r52). So two cursors on one node keep their order (rule
   101). When the chain is back to the one it had (dragged back), the cursor
   is back in its old slot.
   - `CursorField.carriedFrom` holds each carried cursor's target from before
@@ -130,11 +133,10 @@ That means the person's drag, or any carry it sees.
 - **Other tabs.** There is no live drag stream: a tab sends node positions
   only at the drop (PUT /api/graph/layout). Other tabs see the move in that
   sync, so the preview runs only in the dragging tab.
-- **One band remains.** On the way in, the dragged cursor's arrow can meet a
-  member's label while their targets are still over 16 apart. In that band
-  the column joins in this tab only, with the earlier arrival first: an
-  overlap join is no arrival (r24 Q2). Once the targets come within 16, the
-  preview puts the carried cursor last.
+- **The overlap band.** On the way in, the dragged cursor's arrow can meet a
+  member's label while their targets are still over 16 apart. Round 3 left
+  the carry heading the column there, then dropped it to the bottom once the
+  targets came within 16. Round 3b (below) draws it last in that band too.
 
 ## 2c. Copy: an apply's say (r47)
 
@@ -145,6 +147,54 @@ and 1 connection, moved 1 node". It goes in the person form only
 (`_show_agent(person_say=...)`), so it also reaches the Agent log and the
 replay. Agents still read the summary ("moved 1") word for word, in the reply,
 in `publish_action` and in the agent form's `say`.
+
+## 2d. Round 3b: the overlap band (GM - Design r52 Q1)
+
+- **Mid-drag.** A carried cursor on a node being dragged that joins a column
+  by overlap alone is drawn at the column's bottom. Overlap alone means its
+  chain is unchanged but its column has a member it didn't have before the
+  carry. `layout()` lays the column out once with each such carry at the
+  bottom, compares that with the layout at the pre-carry targets, and keeps
+  the bottom slot only for the carries that joined something new. A carry
+  that already shared a column with a cursor on another node keeps its slot,
+  so a small drag swaps nothing.
+- **Why "last" means the bottom here.** A carry coming from above aims more
+  than 16 above the members, so the stable insert (r24 Q1) puts it on top
+  whatever its arrival is. A later arrival alone wouldn't help. So
+  `StackEntry.last` puts it after the inserted members (`deStackLayout`),
+  and folding still goes by arrival. While it is set, the carry can sit
+  further below its target than the insert allows. That's display only and
+  lasts only while the drag does.
+- **The drop.** Inside the band the backend counts no arrival (r24), so the
+  overlap preview ends at the drop: the drop bumps the layout, and the
+  cursor glides once on the layout spring to its arrival-order slot. A chain
+  preview still waits for `agentPresenceArrival`, as in round 3.
+- **Intended, not a residual (GM r52).** A chain preview is laid out as the
+  newest arrival (r24 insert), so a member aimed more than 16 below the carry
+  sits under it. That matches the backend's order at the drop, so nothing
+  moves there. Only the overlap-band case uses the literal bottom slot, with
+  its one accepted glide at the drop. Don't "fix" this to the bottom slot.
+- **Tests** (`agentCursorLayer.test.tsx`, round 4e block):
+  - "a drag through the overlap band into a column keeps the carry last,
+    with no flip" checks every frame from 284 down through the band
+    (304-327) into the chain: d and e never move, a only goes down, and
+    once a is under e it stays under.
+  - "a drop inside the overlap band glides once to the backend's arrival
+    order" drops at 314 and checks:
+    - the glide starts at the drop;
+    - no frame steps more than 20 px;
+    - a changes direction at most once (the spring's overshoot);
+    - a ends at the top with d and e under it;
+    - nothing moves through the 1.5 s hold.
+- **Mutations.** Each variant below fails the tests listed with it.
+  - No overlap preview: both new tests.
+  - `last` ignored in `deStackLayout`: both new tests.
+  - Last by arrival only, not the bottom: both new tests.
+  - Overlap preview kept past the drop: the drop test, and "a carry with no
+    backend arrival is no arrival".
+  - No relayout at the drop: the drop test.
+  - Every dragged carry drawn last, with no join check: "B rides n1 with C
+    ... a small drag swaps nothing" and "(0, 19): 2 px clear ...".
 
 ## 3. Low findings
 

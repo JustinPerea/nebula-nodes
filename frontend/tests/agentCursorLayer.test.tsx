@@ -3097,6 +3097,107 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
+  // GM r52 Q1: on the way in, a's arrow meets d's label while their targets
+  // are still over 16 apart (a's target 304 to 327, d's 344): the column
+  // joins by overlap alone. During the drag the carry is drawn last there
+  // too, so it never heads the column and then drops to the bottom.
+  const dragFrames = (id: string, path: { x: number; y: number }[], each: () => void) => {
+    const node = lookupRef.current.get(id) as Entry;
+    for (const p of path) {
+      const next = new Map(lookupRef.current) as Map<string, Entry>;
+      next.set(id, { ...node, dragging: true, internals: { ...node.internals, positionAbsolute: p } });
+      lookupRef.current = next as never;
+      notifyStore();
+      frame();
+      each();
+    }
+  };
+
+  it('a drag through the overlap band into a column keeps the carry last, with no flip (r52 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      // Above the column, clear of it: a's target at 284.
+      dragHeld('n2', { x: 400, y: 240 });
+      settle(800);
+      expect(where()).toEqual({ a: { x: 500, y: 284 }, d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S } });
+      // Down 2 px a frame through the band (304 to 327) and into the chain
+      // (328 on), every frame checked.
+      const path = Array.from({ length: 30 }, (_, i) => ({ x: 400, y: 242 + 2 * i }));
+      let prevA = where().a.y;
+      let under = false;
+      const check = () => {
+        const w = where();
+        // The column's members never move for it: a never heads it.
+        expect(w.d).toEqual({ x: 500, y: 344 });
+        expect(w.e).toEqual({ x: 500, y: 344 + S });
+        // a only ever goes down, and once under e it stays under.
+        expect(w.a.y).toBeGreaterThanOrEqual(prevA - 1e-9);
+        if (under) expect(w.a.y).toBeGreaterThan(w.e.y);
+        under ||= w.a.y > w.e.y;
+        prevA = w.a.y;
+      };
+      dragFrames('n2', path, check);
+      expect(under).toBe(true);
+      for (let i = 0; i < 60; i += 1) {
+        frame();
+        const w = where();
+        expect(w.d).toEqual({ x: 500, y: 344 });
+        expect(w.e).toEqual({ x: 500, y: 344 + S });
+        expect(w.a.y).toBeGreaterThan(w.e.y);
+      }
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a drop inside the overlap band glides once to the backend\'s arrival order, on the layout spring (r52 Q1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      intoColumn();
+      // a's target at 314: 30 above d's, so its chain is unchanged, and the
+      // backend sends no arrival for the drop (r24).
+      dragHeld('n2', { x: 400, y: 270 });
+      settle(800);
+      expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
+      drop('n2');
+      const path: { a: number; d: number; e: number }[] = [];
+      for (let i = 0; i < 200; i += 1) {
+        frame();
+        const w = where();
+        path.push({ a: w.a.y, d: w.d.y, e: w.e.y });
+      }
+      // a arrived first (500): it heads the column on its own target, d and
+      // e under it at their steps.
+      const order = { a: { x: 500, y: 314 }, d: { x: 500, y: 314 + S }, e: { x: 500, y: 314 + 2 * S } };
+      expect(where()).toEqual(order);
+      // It starts at the drop: no wait for an arrival that won't come.
+      expect(path[20].a).toBeLessThan(344 + 2 * S - 40);
+      // A glide, not a jump: many frames between, none over 20 px.
+      expect(path.filter((p) => p.a < 344 + 2 * S - 1 && p.a > 315).length).toBeGreaterThan(8);
+      for (let i = 1; i < path.length; i += 1) {
+        for (const k of ['a', 'd', 'e'] as const) expect(Math.abs(path[i][k] - path[i - 1][k])).toBeLessThan(20);
+      }
+      // Once: a heads up the whole way, past its slot by at most the
+      // spring's overshoot, and never down the column again.
+      let turns = 0;
+      for (let i = 2; i < path.length; i += 1) {
+        const v0 = path[i - 1].a - path[i - 2].a;
+        const v1 = path[i].a - path[i - 1].a;
+        if (Math.abs(v1) > 1e-6 && Math.abs(v0) > 1e-6 && Math.sign(v0) !== Math.sign(v1)) turns += 1;
+      }
+      expect(turns).toBeLessThanOrEqual(1);
+      expect(Math.max(...path.map((p) => p.a))).toBeLessThanOrEqual(344 + 2 * S + 1e-9);
+      // The preview's hold runs out with no arrival: nothing moves again.
+      for (let t = 0; t < CARRY_PREVIEW_HOLD_MS + 1000; t += 1000 / 60) { frame(); expect(where()).toEqual(order); }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a carry with no backend arrival is no arrival: the cursor keeps its place (r24 Q2)', () => {
     render(<AgentCursorLayer />);
     // e on n1 arrived first; a came later to a point just clear under it.
