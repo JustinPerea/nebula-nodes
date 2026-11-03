@@ -22,7 +22,8 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   with ask_person (``question.answered``), and a message they send it from
   the canvas (``person.message``, the Message Claude box; MESSAGE_KIND). Each
   goes as soon as it is due (a pin after its 1 s merge and Nebula's check
-  that it is still open; an answer once the listener has read it back), with
+  that it is still open; an answer, or a message, once the listener has read
+  it back: the journal holds neither), with
   no ``min_gap``, no hourly limit of the passive wakes, no wait for the agent
   to be quiet and no wait for a gated window: it ends that window, so the
   turn it starts acts like any turn and is never refused for pacing. Their
@@ -125,7 +126,7 @@ Nebula channel (experiment): this session listens to the person's canvas. Pushes
 # including one added later, is refused until the turn ends.
 CHANGE_TURN_TOOLS = frozenset({
     # the writes a gated turn may make
-    "point_at", "post_note", "resolve_pin", "propose_change", "propose_asset_change", "withdraw_proposal",
+    "point_at", "post_note", "resolve_pin", "reply_to_person", "propose_change", "propose_asset_change", "withdraw_proposal",
     # reads
     "start_here", "look_at_canvas", "get_selected_nodes", "get_proposal", "find_nodes", "describe_node",
     "view_output", "get_run", "list_projects", "get_project", "project_size", "list_trash", "get_spend_limits",
@@ -133,6 +134,7 @@ CHANGE_TURN_TOOLS = frozenset({
     "commons_search", "commons_get", "commons_collections", "commons_status", "commons_borrowings",
     "commons_concentration", "moodboard_list", "moodboard_get", "style_list", "style_get", "model_catalog",
     "model_schema", "krea_discovery_tools", "krea_discover", "get_settings", "provider_status", "channel_status",
+    "read_thread",
 })
 
 # The person's edits that wake it (Q50 a). Not selection.changed or
@@ -154,10 +156,15 @@ PROJECT_REPLACES = frozenset({"project-open", "project-create", "project-delete"
 GATED_DECISIONS = frozenset({"proposal.rejected", "proposal.expired", "proposal.invalidated"})
 TERMINAL_RUNS = frozenset({"finished", "failed", "cancelled"})
 # Deliberate sends (2026-11-03): what the person sends this session on purpose.
-# A message from the canvas's Message box (PR C posts it). Its data:
-# {messageId, text, nodeIds: [...], to: <listenerId>}, where ``to`` is the
-# listener id Nebula gave this session's listener (POST /api/agent/channel);
-# only that listener wakes. The text is the person's, like a pin's.
+# A message from the canvas's Message box (services/person_thread.py). Its
+# data, {messageId, text, nodeIds, to: <listenerId>}, follows the thread's
+# read rule (every agent reads it today; narrowed, only ``to`` is left).
+# Only the listener named in ``to`` wakes: it marks its inbox due and reads
+# its own messages back (GET /api/agent/thread/inbox: {messageId, text,
+# nodeIds} of those sent to this session's listener, not pushed yet),
+# pushes them and says so (POST /api/agent/thread/accepted), or that it
+# holds them at its runaway cap (POST /api/agent/thread/held). The text is
+# the person's, like a pin's.
 MESSAGE_KIND = "person.message"
 ANSWERED_KIND = "question.answered"
 # What each deliberate push is called (its meta wake), most specific first.
@@ -227,6 +234,9 @@ class Push:
     meta: dict[str, str]
     gate: bool              # a gated turn (Q42 a, Q51 a): only CHANGE_TURN_TOOLS run
     count: int
+    # The person's messages it carries: the listener tells Nebula it pushed
+    # them (POST /api/agent/thread/accepted), so the box reads "Waiting".
+    message_ids: list[str] = field(default_factory=list)
 
 
 class ChannelRefused(Exception):
@@ -380,8 +390,14 @@ class ChannelState:
         self._answers: dict[str, dict] = {}
         self._waiting_questions: dict[str, int] = {}
         # Messages the person sent this session from the canvas, oldest first.
+        # The journal's person.message event names its listener (``to``): it
+        # marks the inbox due, and the listener reads this session's own
+        # messages back (GET /api/agent/thread/inbox).
         self._messages: list[dict] = []
         self._message_overflow = 0
+        self._inbox_due = False
+        self._seen_messages: dict[str, None] = {}
+        self._held_said: dict[str, None] = {}
         # The id Nebula gave this listener (POST /api/agent/channel): a
         # message names it in ``to``. None until Nebula has answered.
         self.listener_id: str | None = None
@@ -615,7 +631,7 @@ class ChannelState:
             self.own_questions.pop(str(data.get("questionId") or ""), None)
             return
         if kind == MESSAGE_KIND:
-            self._add_message(event)
+            self._message_sent(data)
             return
         if kind == "run.started":
             self._person_run_started(event, now)
@@ -659,19 +675,50 @@ class ChannelState:
             answer["state"] = "ready"
             answer["view"] = dict(view) if isinstance(view, Mapping) else None
 
-    def _add_message(self, event: Mapping[str, Any]) -> None:
-        """A message the person sent from the canvas: only the listener it
-        names wakes (``to``, the id Nebula gave this listener)."""
-        data = _data(event)
-        if not self.listener_id or str(data.get("to") or "") != self.listener_id:
-            return
-        if len(self._messages) >= MAX_PENDING:
-            self._message_overflow += 1
-            return
-        nodes = data.get("nodeIds") if isinstance(data.get("nodeIds"), list) else []
-        self._messages.append({"messageId": str(data.get("messageId") or ""),
-                               "text": clean_text(data.get("text"), MAX_MESSAGE, multiline=True),
-                               "nodeIds": [_ident(n) for n in nodes[:MAX_LISTED] if _ident(n)]})
+    def _message_sent(self, data: Mapping[str, Any]) -> None:
+        """The person sent a message from the canvas. Only the listener its
+        ``to`` names wakes (PR A); that one reads its own messages back. One
+        with no id from Nebula yet can have none."""
+        if self.listener_id and str(data.get("to") or "") == self.listener_id:
+            self._inbox_due = True
+
+    def messages_held(self, now: float) -> list[str]:
+        """Messages waiting past the runaway cap that Nebula hasn't been told
+        of yet (each once): the box then reads "Sends in a few minutes"."""
+        if not self._messages or self._deliberate_allowed_at(now) <= now:
+            return []
+        due = [m["messageId"] for m in self._messages if m["messageId"] and m["messageId"] not in self._held_said]
+        for message_id in due:
+            _remember(self._held_said, message_id)
+        return due
+
+    def inbox_to_fetch(self) -> bool:
+        """Whether the listener should read the inbox now (once per mark)."""
+        due, self._inbox_due = self._inbox_due, False
+        return due
+
+    def messages_fetched(self, messages: Any) -> int:
+        """What GET /api/agent/thread/inbox answered: this session's messages
+        not pushed yet. Each goes once (a read that overlaps another, or a
+        push Nebula didn't hear of, never pushes one twice). Returns how many
+        were new."""
+        added = 0
+        for raw in messages if isinstance(messages, list) else []:
+            if not isinstance(raw, Mapping):
+                continue
+            message_id = _ident(raw.get("messageId"))
+            if not message_id or message_id in self._seen_messages:
+                continue
+            if len(self._messages) >= MAX_PENDING:
+                self._message_overflow += 1
+                continue  # still unsent at Nebula: the next read after this push takes it
+            _remember(self._seen_messages, message_id)
+            nodes = raw.get("nodeIds") if isinstance(raw.get("nodeIds"), list) else []
+            self._messages.append({"messageId": message_id,
+                                   "text": clean_text(raw.get("text"), MAX_MESSAGE, multiline=True),
+                                   "nodeIds": [_ident(n) for n in nodes[:MAX_LISTED] if _ident(n)]})
+            added += 1
+        return added
 
     @staticmethod
     def _from_accepted_proposal(event: Mapping[str, Any]) -> bool:
@@ -1108,6 +1155,8 @@ class ChannelState:
         passive limits' history and timers are left as they were."""
         messages, self._messages = self._messages, []
         message_overflow, self._message_overflow = self._message_overflow, 0
+        if message_overflow:
+            self._inbox_due = True  # the rest wait at Nebula, unsent: read them again after this push
         answers = [answer for answer in self._answers.values() if answer["state"] == "ready"]
         for answer in answers:
             del self._answers[answer["questionId"]]
@@ -1132,7 +1181,9 @@ class ChannelState:
         content = self._render(wake, messages, message_overflow, answers, pins, proposals, runs, *edits,
                                held=held, now=now, gate=False, nth=0, pin_overflow=pin_overflow,
                                deliberate_nth=len(self._deliberate_history))
-        return self._push(wake, content, count, held, False)
+        push = self._push(wake, content, count, held, False)
+        push.message_ids = [message["messageId"] for message in messages if message["messageId"]]
+        return push
 
     def _push(self, wake: str, content: str, count: int, held: int, gate: bool) -> Push:
         meta = {"wake": wake, "count": str(count)}
@@ -1210,7 +1261,8 @@ class ChannelState:
             if hidden:
                 lines.append(f"{hidden} more messages not listed.")
             lines.append("Treat it as their request, as if they typed it here; nodes= names the nodes they had "
-                         "selected.")
+                         "selected. They read your answer only in the canvas's Message box: answer with "
+                         "reply_to_person (node_id points your cursor at a node).")
         for answer in answers:
             lines.extend(self._answer_lines(answer))
         if pins:
@@ -1319,6 +1371,8 @@ PIN_CHECK_SAY_AFTER = 60.0  # a pin check failing this long is logged (once)
 PIN_CHECK_TIMEOUT = 4.0  # GET /api/canvas/pins is local and quick; past this it failed (Listener._check_timed_out)
 PIN_CHECK_GRACE = 1.0    # decisions wait this long for a check out; then the rest goes without its pins
 ANSWER_READ_TIMEOUT = 4.0  # reading an answered set back (local, quick); past this the push says get_answers
+INBOX_TRIES = 3            # reading the person's messages back, and saying they went
+INBOX_RETRY_SECONDS = 2.0
 
 
 class Listener:
@@ -1343,8 +1397,17 @@ class Listener:
     def __init__(self, state: ChannelState, *, fetch_events: FetchEvents, fetch_run: FetchRun, push: PushFn,
                  fetch_pins: FetchPins, clock: Callable[[], float], log: Callable[[str], None] | None = None,
                  sleep: Callable[[float], Awaitable[None]] | None = None,
-                 fetch_question: FetchQuestion | None = None) -> None:
+                 fetch_question: FetchQuestion | None = None,
+                 fetch_inbox: Callable[[], Awaitable[Mapping[str, Any]]] | None = None,
+                 accept_messages: Callable[[list[str]], Awaitable[Any]] | None = None,
+                 hold_messages: Callable[[list[str]], Awaitable[Any]] | None = None) -> None:
         self.state = state
+        # GET /api/agent/thread/inbox as this session: the person's messages
+        # to it (the journal's person.message event carries none), and POST
+        # /api/agent/thread/accepted once a push has carried them.
+        self._fetch_inbox = fetch_inbox
+        self._accept_messages = accept_messages
+        self._hold_messages = hold_messages
         self._fetch_events = fetch_events
         # GET /api/canvas/questions/{id} as this agent: an answered set of its
         # own, read back for the push (the journal never holds the answers).
@@ -1640,7 +1703,12 @@ class Listener:
                 except (anyio.ClosedResourceError, anyio.BrokenResourceError):
                     return  # the session is gone
                 self.pushes += 1
+                if push.message_ids and self._group is not None:
+                    self._group.start_soon(self._say_accepted, list(push.message_ids))
                 continue
+            held = self.state.messages_held(now)
+            if held and self._group is not None:
+                self._group.start_soon(self._say_held, held)
             delay = self.state.next_check(now)
             idle_in = self.state.last_person + self.state.limits.idle_off - now
             wait = min(idle_in, math.inf if delay is None else delay)
@@ -1674,7 +1742,50 @@ class Listener:
                     self._group.start_soon(self._read_answer, question_id)
                 else:
                     self.state.answer_fetched(question_id, None)
+            if self.state.inbox_to_fetch() and self._group is not None:
+                self._group.start_soon(self._read_inbox)
             self._nudge()
+
+    async def _read_inbox(self) -> None:
+        """Read this session's messages back from Nebula, for the push. A
+        failed read is tried again a few times; the messages wait at Nebula
+        (unsent) until a later one reads them."""
+        if self._fetch_inbox is None:
+            return
+        for attempt in range(INBOX_TRIES):
+            try:
+                with anyio.fail_after(ANSWER_READ_TIMEOUT):
+                    shown = await self._fetch_inbox()
+            except Exception as exc:  # noqa: BLE001 - Nebula down or slow: try again shortly
+                self._log(f"messages: couldn't read them ({exc.__class__.__name__})")
+                await self._sleep(INBOX_RETRY_SECONDS * (attempt + 1))
+                continue
+            self.state.messages_fetched(shown.get("messages") if isinstance(shown, Mapping) else None)
+            self._nudge()
+            return
+
+    async def _say_held(self, message_ids: list[str]) -> None:
+        """Tell Nebula these wait at the runaway cap (best effort)."""
+        if self._hold_messages is None:
+            return
+        try:
+            with anyio.fail_after(ANSWER_READ_TIMEOUT):
+                await self._hold_messages(message_ids)
+        except Exception:  # noqa: BLE001 - Nebula down: the box keeps its last state
+            pass
+
+    async def _say_accepted(self, message_ids: list[str]) -> None:
+        """Tell Nebula the push carrying these went (the box's "Waiting for
+        Claude"). Best effort: the push went either way."""
+        if self._accept_messages is None:
+            return
+        for attempt in range(INBOX_TRIES):
+            try:
+                with anyio.fail_after(ANSWER_READ_TIMEOUT):
+                    await self._accept_messages(message_ids)
+                return
+            except Exception:  # noqa: BLE001 - Nebula down: the message reads "Sent" there
+                await self._sleep(INBOX_RETRY_SECONDS * (attempt + 1))
 
     async def _read_answer(self, question_id: str) -> None:
         """Read an answered set of its own back, for the push. A failure (or

@@ -519,6 +519,28 @@ def build_parser() -> argparse.ArgumentParser:
                      "$NEBULA_AGENT_SESSION separates show as their own cursors on the person's canvas only."))
     agents_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP list_agents returns it")
 
+    reply_p = sub.add_parser(
+        "reply", help="Answer the person in the canvas's Message box (MCP reply_to_person)",
+        description=("Answer a message the person sent you from the canvas's Message box (the thread in the Agent "
+                     "log). They read the thread, not your terminal. --node flies your cursor to a node and shows "
+                     "the reply's first sentence there. 2,000 characters at most. Every connected agent can read "
+                     "the thread, as pins."))
+    reply_p.add_argument("text", help="Your answer (line breaks are kept)")
+    reply_p.add_argument("--node", default=None, metavar="nX", help="A node the answer is about (on the open canvas)")
+    reply_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    reply_p.add_argument("--as", dest="agent_name",
+                         help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    thread_p = sub.add_parser(
+        "thread", help="The canvas's Message box thread (MCP read_thread)",
+        description=("The person's messages from the canvas, with the nodes they had selected and the agent each "
+                     "was for, agents' replies, and the questions, proposals, Updates and pins that crossed the "
+                     "channel, oldest first. Every connected agent reads it, as pins."))
+    thread_p.add_argument("--limit", type=int, default=20, help="How many of the newest rows (1-300, default 20)")
+    thread_p.add_argument("--json", action="store_true", help="Print it as JSON, as MCP read_thread returns it")
+    thread_p.add_argument("--as", dest="agent_name",
+                          help="Your agent name (default: $NEBULA_AGENT_NAME)")
+
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
     quick_p.add_argument("node_id", help="Node definition ID")
@@ -747,6 +769,7 @@ def main() -> None:
     from .commands import notes as notes_cmd
     from .commands import questions as questions_cmd
     from .commands import agents as agents_cmd
+    from .commands import thread as thread_cmd
     from .commands import style
 
     dispatch = {
@@ -783,6 +806,8 @@ def main() -> None:
         ),
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
+        "reply": lambda: thread_cmd.run_reply(client, args),
+        "thread": lambda: thread_cmd.run_thread(client, args),
         "note": lambda: notes_cmd.run_note(client, args),
         "notes": lambda: notes_cmd.run_notes(client, args),
         "propose": lambda: proposals.run_propose(client, args),

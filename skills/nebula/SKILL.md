@@ -850,7 +850,18 @@ nebula point --say "Reading your board"   # no target: said where your cursor is
 nebula point n4 --action propose          # what you are doing there (below)
 nebula note "n4 and n7 use different seeds; I'll match them" --node n4 --node n7
 nebula notes --unread          # your updates the person hasn't opened
+nebula reply "Done. Warmed the palette on the hero shot." --node n4   # answer in the Message box
+nebula thread                  # the Message box thread: the person's messages and agents' replies
 ```
+
+**The Message box.** The person can message a Claude Code session that
+listens through the Nebula channel (`nebula mcp connect claude-code
+--channel`) from the composer in the canvas's Agent log. Such a message
+arrives as a channel push with `wake="message"`. Answer it with `nebula
+reply "<text>"` (MCP `reply_to_person`), not only in your terminal: the
+person reads the thread, not your terminal. `--node` flies your cursor to
+the node the answer is about and shows its first sentence there. `nebula
+thread` reads the thread; every connected agent can read it, as pins.
 
 `--action` on `nebula point` says what you are doing at your cursor: `move`
 (going there, the default), `look` (reading), `think`, `type` (a prompt or a

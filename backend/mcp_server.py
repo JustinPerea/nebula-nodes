@@ -1054,6 +1054,41 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     return {"thisServer": this, "projectId": seen.get("projectId"), "listeners": seen.get("listeners") or []}
 
 
+# -- the Message box's thread (services/person_thread.py) ---------------------------
+
+@_tool(annotations=_EDIT)
+def reply_to_person(text: str, node_id: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """Answer the person in the canvas's Message box (the thread in the
+    Agent log). Use it for every answer to a message they sent you from the
+    canvas (a push with wake="message"): they read the thread, not this
+    terminal.
+
+    `text` is your answer, 2,000 characters at most; line breaks are kept.
+    `node_id` (optional) is a node your answer is about: your cursor flies
+    there and shows the answer's first sentence (140 characters at most) for
+    a moment; the whole answer stays in the thread. A pin's answer goes in
+    resolve_pin, and something you noticed that should last goes in
+    post_note. Every agent connected to Nebula can read the thread (as
+    pins), so don't put anything there you wouldn't pin."""
+    body: dict[str, Any] = {"text": text}
+    if node_id:
+        body["nodeId"] = node_id
+    return _canvas_call("POST", "/api/canvas/thread/replies", ctx, json=body)
+
+
+@_tool(annotations=_READ)
+def read_thread(limit: int = 20, ctx: Context | None = None) -> dict[str, Any]:
+    """The canvas's Message box thread in the open project, oldest first:
+    the person's messages (`kind` "message", `from` "person", with the
+    `nodeIds` they had selected), agents' replies (`agent` says whose), and
+    the questions, proposals, Updates and pins that crossed the channel.
+    Every connected agent reads it, as pins. `state` on a message: "sent"
+    (not pushed yet), "held" (its listener holds it at 200 messages an
+    hour) or "accepted" (its listener pushed it). `limit` is the newest rows
+    to return (1-300)."""
+    return _canvas_call("GET", "/api/canvas/thread", ctx, params={"limit": max(1, min(int(limit), 300))})
+
+
 # -- outside the graph: project covers and asset proposals (U16) -------------------
 # Same routes as the Projects screen and Moodboard Studio; get_proposal and
 # withdraw_proposal take these proposals' ids (pa_...) too.
@@ -3123,9 +3158,23 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
         return await _channel_fetch(f"/api/canvas/questions/{quote(question_id, safe='')}", {},
                                     mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
 
+    async def fetch_inbox() -> dict[str, Any]:
+        # This session's own messages from the canvas's Message box: the
+        # journal's person.message carries none (every agent reads it).
+        return await _channel_fetch("/api/agent/thread/inbox", {}, mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
+
+    async def accept_messages(message_ids: list[str]) -> dict[str, Any]:
+        return await _channel_fetch("/api/agent/thread/accepted", {}, mcp_channel.ANSWER_READ_TIMEOUT,
+                                    agent["name"], method="POST", json_body={"messageIds": message_ids})
+
+    async def hold_messages(message_ids: list[str]) -> dict[str, Any]:
+        return await _channel_fetch("/api/agent/thread/held", {}, mcp_channel.ANSWER_READ_TIMEOUT,
+                                    agent["name"], method="POST", json_body={"messageIds": message_ids})
+
     state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock,
-                                    fetch_pins=fetch_pins, fetch_question=fetch_question)
+                                    fetch_pins=fetch_pins, fetch_question=fetch_question, fetch_inbox=fetch_inbox,
+                                    accept_messages=accept_messages, hold_messages=hold_messages)
     started = {"beats": False}
 
     async def listen() -> None:

@@ -224,6 +224,7 @@ from services.agent_presence import request_headers_scope
 # The Agents panel (Q125 item 2): each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services import channel_listeners
+from services import person_thread
 from services import pending_nodes
 from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
 from services.local_guard import host_allowed
@@ -338,6 +339,10 @@ agent_questions = QuestionBook(store=lambda: project_store)
 agent_status = AgentStatusBook()
 # Which --channel listeners are around (services/channel_listeners.py). Memory only.
 channel_book = channel_listeners.ListenerBook()
+# The Message box's thread (services/person_thread.py): kept on the project
+# record; the send cap is memory only.
+thread_book = person_thread.PersonThread(lambda: project_store)
+thread_send_cap = person_thread.SendCap()
 # The runs agents started, while they go (Q125 item 3): the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
@@ -4086,6 +4091,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # Who listens to the canvas (channel readiness), person form (before
                 # the pins and the replay, which stay the last syncs).
                 await websocket.send_text(json.dumps(_channel_listeners_message()))
+                # The Message box's thread, person form (services/person_thread.py).
+                await websocket.send_text(json.dumps(await asyncio.to_thread(_thread_sync_message)))
                 # Now the person's canvas: their pins with registered variants kept.
                 await websocket.send_text(json.dumps(_pins_message(person=True)))
                 # Every live cursor, person form, for this tab only (GM -
@@ -6445,6 +6452,273 @@ async def read_channel_listeners() -> dict[str, Any]:
     return {key: value for key, value in message.items() if key != "type"}
 
 
+# ---------- The Message box's thread (services/person_thread.py) ----------
+#
+# GM r50: the person messages a listening Claude Code session from the
+# Agent log; it answers with reply_to_person. Rows are kept per project. The
+# person reads every row (the personThread message, GET /api/canvas/thread).
+# Every connected agent reads the whole thread too, as pins (Justin,
+# 2026-11-03): the journal's person.message and thread.replied, and the read
+# tool. The rule is one switch, person_thread.AGENTS_READ_WHOLE_THREAD. Only
+# the listener named in `to` wakes, and it reads its messages back from the
+# inbox route.
+
+def _thread_session(identity: AgentIdentity, session: str | None) -> dict[str, Any]:
+    """The cursor key and number of an agent's session, person form only."""
+    try:
+        tag = agent_presence.session_tag(identity, session or None)
+        key = agent_presence.session_key(identity.id, session or "")
+    except Exception:  # noqa: BLE001 - a row without a shade still reads
+        return {"key": None, "ordinal": None}
+    return {"key": key, "ordinal": tag["ordinal"] if tag else None}
+
+
+def _thread_message(change: str, project_id: str | None, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"type": "personThread", "change": change, "projectId": project_id,
+            "rows": [person_thread.person_view(row) for row in rows]}
+
+
+def _thread_sync_message() -> dict[str, Any]:
+    try:
+        project_id, rows = thread_book.rows()
+    except ProjectStoreError:
+        project_id, rows = _workspace_context()["activeProjectId"], []
+    return _thread_message("sync", project_id, rows)
+
+
+async def _broadcast_thread(project_id: str | None, rows: list[dict[str, Any]]) -> None:
+    """New or changed rows, to the person's tabs only (never an agent socket)."""
+    if not rows:
+        return
+    try:
+        await manager.broadcast_browser(_thread_message("rows", project_id, rows))
+    except Exception:  # noqa: BLE001 - a tab that missed it reads the thread on its next hello
+        pass
+
+
+def _listening(identity: AgentIdentity, session: str | None) -> channel_listeners.Listener | None:
+    """This agent session's listener entry, while it listens."""
+    for entry in channel_book.for_agent(identity.id):
+        if entry.session == (session or "") and entry.state == "listening":
+            return entry
+    return None
+
+
+async def _thread_ref(kind: str, fields: dict[str, Any], *, identity: AgentIdentity | None = None,
+                      headers: Mapping[str, str] | None = None, project_id: str | None = None) -> None:
+    """A row that points at something kept elsewhere (a question, a
+    proposal, an Update, a pin), added only when it crosses the channel: an
+    agent's while that session listens, the person's while any session
+    listens. Decoration: never fails the route that called it."""
+    try:
+        if identity is not None:
+            session = presence_session(headers)
+            if _listening(identity, session) is None:
+                return
+            fields = {**fields, "agent": identity.as_dict(), "session": _thread_session(identity, session)}
+        elif not any(entry.state == "listening" for entry in channel_book.entries()):
+            return
+        project_id, row = await asyncio.to_thread(thread_book.add_row, kind, fields, project_id=project_id)
+    except Exception:  # noqa: BLE001 - the thread is decoration on a write that already succeeded
+        return
+    await _broadcast_thread(project_id, [row])
+
+
+def _thread_refusal(exc: person_thread.ThreadError) -> JSONResponse:
+    content: dict[str, Any] = {"detail": exc.detail}
+    if exc.code:
+        content["code"] = exc.code
+    if exc.person:
+        content["person"] = exc.person
+    return JSONResponse(status_code=exc.status, content=content)
+
+
+def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[str]:
+    return [entry.listener_id for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
+
+
+@app.get("/api/canvas/thread")
+async def read_person_thread(limit: int = 50) -> Any:
+    """The open project's thread, newest last, at most ``limit`` (1-300).
+    The person reads every row; a connected agent reads every row too, in
+    the agents' form (person_thread.for_agent under the one switch)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    limit = max(1, min(int(limit), person_thread.MAX_ROWS))
+    try:
+        if identity is not None:
+            project_id, rows = await asyncio.to_thread(thread_book.for_agent, identity.id, limit=limit)
+            return {"projectId": project_id, "rows": rows}
+        require_person(headers)
+        project_id, rows = await asyncio.to_thread(thread_book.rows)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"projectId": project_id, "rows": [person_thread.person_view(row) for row in rows[-limit:]]}
+
+
+@app.post("/api/canvas/thread/messages", status_code=201)
+async def send_person_message(body: Any = Body(None)) -> Any:
+    """The person messages one listening session: {text, to: <listenerId>,
+    nodeIds?, clientId?}. Only the person can. The listener named in ``to``
+    wakes at once (PR A's deliberate send). Refused only when that listener
+    is gone or stopped (409 listener_stopped, with the person's line). Past
+    SEND_CAP messages to that listener in an hour it is accepted and held
+    (GM r55): the row reads ``held`` until the listener pushes it."""
+    require_person(current_request_headers())
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {text, to, nodeIds?, clientId?}")
+    unknown = sorted(set(body) - {"text", "to", "nodeIds", "clientId"})
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown field {unknown[0][:40]!r}")
+    client_id = body.get("clientId")
+    if client_id is not None and (not isinstance(client_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",
+                                                                                      client_id)):
+        raise HTTPException(status_code=422, detail="clientId must be up to 64 letters, digits, - or _")
+    try:
+        text = person_thread.clean_message(body.get("text"))
+        node_ids = [node_id for node_id in person_thread.clean_node_ids(body.get("nodeIds"))
+                    if node_id in cli_graph.nodes]
+        listener = channel_book.by_listener_id(str(body.get("to") or ""))
+        if listener is None or listener.state != "listening":
+            raise person_thread.ThreadError(409, "That session isn't listening any more",
+                                            person_thread.STOPPED_CODE, person_thread.STOPPED_LINE)
+        held = thread_send_cap.full(listener.listener_id)
+        to = {"listenerId": listener.listener_id, "agent": listener.agent.as_dict(),
+              "session": _channel_person_view(listener).get("session")}
+        project_id, row, new = await asyncio.to_thread(thread_book.add_message, text=text, node_ids=node_ids,
+                                                       to=to, client_id=client_id, held=held)
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if new:
+        thread_send_cap.take(listener.listener_id)
+        # Its data follows the thread's read rule (person_thread.message_event_data).
+        # Only the listener named in `to` wakes; it reads the message back
+        # from its inbox (GET /api/agent/thread/inbox).
+        _journal(person_thread.MESSAGE_EVENT, actor=dict(_PERSON_ACTOR), data=person_thread.message_event_data(row),
+                 summary="sent a message", project_id=project_id)
+        await _broadcast_thread(project_id, [row])
+    return {"projectId": project_id, "row": person_thread.person_view(row)}
+
+
+@app.get("/api/agent/thread/inbox")
+async def read_thread_inbox() -> dict[str, Any]:
+    """A --channel listener reads the messages sent to its own session that
+    it hasn't pushed yet (answered for this agent session only)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Only an agent's channel listener reads its messages")
+    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    try:
+        project_id, messages = await asyncio.to_thread(thread_book.inbox, listener_ids)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"projectId": project_id, "messages": messages}
+
+
+@app.post("/api/agent/thread/accepted")
+async def accept_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
+    """The listener pushed these messages to its session: {messageIds}. The
+    person's box then reads "Waiting for Claude" (Nebula saw the push go,
+    never that Claude read it)."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports this")
+    ids = body.get("messageIds") if isinstance(body, dict) else None
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
+        raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
+    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    try:
+        project_id, rows = await asyncio.to_thread(thread_book.accept, ids, listener_ids)
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)  # type: ignore[return-value]
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await _broadcast_thread(project_id, rows)
+    return {"accepted": [row["id"] for row in rows]}
+
+
+@app.post("/api/agent/thread/held")
+async def hold_thread_messages(body: Any = Body(None)) -> dict[str, Any]:
+    """The listener holds these messages at its runaway cap (200 deliberate
+    sends an hour): {messageIds}. The person's box reads "Sends in a few
+    minutes because you’ve sent 200 this hour." until it pushes them."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Only an agent's channel listener reports this")
+    ids = body.get("messageIds") if isinstance(body, dict) else None
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids) or len(ids) > 100:
+        raise HTTPException(status_code=422, detail="Send {messageIds: [...]} (at most 100)")
+    listener_ids = _thread_listener_ids(identity, presence_session(headers))
+    try:
+        project_id, rows = await asyncio.to_thread(thread_book.hold, ids, listener_ids)
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)  # type: ignore[return-value]
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await _broadcast_thread(project_id, rows)
+    return {"held": [row["id"] for row in rows]}
+
+
+@app.post("/api/canvas/thread/replies", status_code=201)
+async def reply_to_person(body: Any = Body(None)) -> Any:
+    """An agent answers the person in the thread: {text, nodeId?}. With a
+    node, its cursor flies there and says the reply's first sentence (140
+    characters at most), on the person's tabs only. The person can't post
+    here: they send messages."""
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="The person sends messages; replies are an agent's")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Send {text, nodeId?}")
+    unknown = sorted(set(body) - {"text", "nodeId"})
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown field {unknown[0][:40]!r}: a reply takes text and "
+                                                    "nodeId")
+    node_id = body.get("nodeId")
+    if node_id is not None and (not isinstance(node_id, str) or node_id not in cli_graph.nodes):
+        raise HTTPException(status_code=422, detail=f"No node {str(node_id)[:40]!r} on the canvas: read it again "
+                                                    "(look_at_canvas), or reply without node_id")
+    session = presence_session(headers)
+    try:
+        text = person_thread.clean_reply(body.get("text"))
+        fields = {"text": text, "nodeId": node_id, "agent": identity.as_dict(),
+                  "session": _thread_session(identity, session)}
+        project_id, row = await asyncio.to_thread(thread_book.add_row, "reply", fields)
+    except person_thread.ThreadError as exc:
+        return _thread_refusal(exc)
+    except ProjectStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    data = person_thread.reply_event_data(row)
+    if data is not None:
+        _journal(person_thread.REPLY_EVENT, node_id=node_id, data=data, summary="replied to the person",
+                 project_id=project_id)
+    await _broadcast_thread(project_id, [row])
+    if node_id is not None:
+        try:
+            # The first sentence goes on the person's tabs; on the agents'
+            # form (and what look_at_canvas and the roster keep) only while
+            # the thread is open to every agent (person_thread's one rule).
+            shared = person_thread.say_reaches_agents()
+            event = _point(identity, target={"nodeId": node_id}, action="move",
+                           say=person_thread.first_sentence(text) if shared else "",
+                           did=_did("Replied on", node_id))
+            person = _person_form(event, identity, headers)
+            if person is not None:
+                person = {**person, "say": person_thread.first_sentence(text)}
+            await _broadcast_presence(event, person)
+        except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
+            pass
+    return {"projectId": project_id, "reply": person_thread.agent_view(row)}
+
+
 @app.post("/api/canvas/view")
 async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
     """The browser's latest viewport, node bounds and run states (never persisted)."""
@@ -7303,6 +7577,8 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
         project_id=project_id,
     )
     await _broadcast_pins()
+    await _thread_ref("pin", {"pinId": pin["id"], "text": pin.get("text") or "", "nodeId": anchor.get("nodeId")},
+                      project_id=project_id)
     return {"pin": pin}
 
 
@@ -7353,6 +7629,8 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         project_id=project_id,
     )
     await _broadcast_pins()
+    await _thread_ref("pinReply", {"pinId": pin_id, "text": reply, "nodeId": anchor.get("nodeId")},
+                      identity=identity, headers=current_request_headers(), project_id=project_id)
     try:
         target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
             pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
@@ -7486,6 +7764,8 @@ async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
                                                 note=result["note"], unread=result["unread"],
                                                 removed=result["removed"]))
+    await _thread_ref("note", {"noteId": result["note"].get("id")}, identity=identity,
+                      headers=current_request_headers(), project_id=result["projectId"])
     return result
 
 
@@ -8246,6 +8526,8 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
         })
     except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
         pass
+    await _thread_ref("proposal", {"proposalId": proposal.id, "nodeId": first_reference}, identity=identity,
+                      headers=headers, project_id=proposal.project_id)
     if first_reference is not None:
         target: dict[str, Any] = {"nodeId": first_reference}
     elif spec.nodes:
@@ -8782,6 +9064,9 @@ async def create_agent_questions(body: dict[str, Any]) -> Any:
                                              "answerKey": question_set.answer_key})
         except Exception:  # noqa: BLE001 - a browser that missed it gets questionsSync on reconnect
             pass
+        await _thread_ref("question", {"questionId": question_set.id,
+                                       "questions": [q.as_dict() for q in question_set.spec.questions]},
+                          identity=identity, headers=headers, project_id=question_set.project_id)
     return {"questions": _question_view(question_set), **({"dropped": dropped} if dropped else {})}
 
 
@@ -17353,6 +17638,13 @@ async def _broadcast_projects_changed(change: str, project_id: str | None = None
         await manager.broadcast_raw({"type": "projectsChanged", "change": change, "projectId": project_id})
     except Exception:  # noqa: BLE001 - the catalog is saved; a tab lists it again on its next visit to Projects
         pass
+    if change in ("opened", "created"):
+        # Another project is open: the person's tabs get its Message box thread
+        # (person_thread rows are kept per project).
+        try:
+            await manager.broadcast_browser(await asyncio.to_thread(_thread_sync_message))
+        except Exception:  # noqa: BLE001 - a tab reads the thread on its next hello
+            pass
 
 
 _PROJECT_SUMMARIES = {

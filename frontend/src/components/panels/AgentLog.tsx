@@ -4,6 +4,9 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
+import { usePersonThreadStore } from '../../store/personThreadStore';
+import { AgentLogEntryRow } from './AgentLogEntryRow';
+import { MessageComposer, MessagePreview, MessageThread } from './MessageBox';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   clamp,
@@ -118,6 +121,9 @@ export function AgentLog() {
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
   const entries = useAgentLogStore((s) => s.entries);
+  // The Message box (GM - Design r50): the thread with the terminal Claude
+  // lives in the log, its composer at the foot, expanded or not.
+  const threadCount = usePersonThreadStore((s) => s.rows.length);
   const [position, setPosition] = useState<Position | null>(readInitialPosition);
   const logRef = useRef<HTMLDivElement | null>(null);
 
@@ -201,6 +207,23 @@ export function AgentLog() {
       document.body.classList.remove('agent-log-enabled', 'agent-log-reserved', 'agent-log-open', 'agent-log-empty');
     };
   }, [visible, open, entries.length, hiddenNotice]);
+
+  // The log's height follows what's in it (the preview, the composer and
+  // its lines; expanded, the thread up to 50vh), so the docked chat and the
+  // canvas controls above it read the measured height (--agent-log-h).
+  useEffect(() => {
+    const log = logRef.current;
+    const body = document.body;
+    if (!visible || !log) return undefined;
+    const measure = () => body.style.setProperty('--agent-log-h', `${Math.ceil(log.offsetHeight)}px`);
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(log);
+    return () => {
+      observer?.disconnect();
+      body.style.removeProperty('--agent-log-h');
+    };
+  }, [visible]);
 
   // A position saved before the log showed with the chat closed (or in a
   // bigger window) can sit on the launcher or past the edge; once the log
@@ -427,7 +450,7 @@ export function AgentLog() {
     <div
       ref={logRef}
       className={
-        'agent-log'
+        'agent-log agent-log--messaging'
         + (open ? ' agent-log--open' : '')
         + (entries.length === 0 ? ' agent-log--empty' : '')
         + (isExecuting ? ' agent-log--executing' : '')
@@ -487,7 +510,7 @@ export function AgentLog() {
           <EyeOff size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>
       </div>
-      {open && (
+      {open ? (threadCount > 0 ? <MessageThread entries={entries} /> : (
         <ScrollFade className="agent-log__body">
           {entries.length === 0 ? (
             <div className="agent-log__empty">
@@ -497,30 +520,12 @@ export function AgentLog() {
             </div>
           ) : (
             <ul className="agent-log__list" aria-live="polite">
-              {entries.slice().reverse().map((e) => (
-                <li
-                  key={e.id}
-                  className={`agent-log__entry agent-log__entry--${e.source}`}
-                  data-source={e.source}
-                  data-agent={e.agent?.id}
-                  style={e.agent ? { ['--agent-log-source-color' as string]: e.agent.color, ['--agent-log-name-color' as string]: e.agent.ink ?? e.agent.color } : undefined}
-                >
-                  <span className="agent-log__entry-marker" aria-hidden="true" />
-                  <span className="agent-log__time">
-                    {new Date(e.ts).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </span>
-                  <span className="agent-log__source" title={e.agent?.name}>{e.agent?.name ?? e.source}</span>
-                  <span className="agent-log__msg">{e.message}</span>
-                </li>
-              ))}
+              {entries.slice().reverse().map((e) => <AgentLogEntryRow key={e.id} entry={e} />)}
             </ul>
           )}
         </ScrollFade>
-      )}
+      )) : <MessagePreview />}
+      <MessageComposer expanded={open} />
     </div>
   );
 }

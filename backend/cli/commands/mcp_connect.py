@@ -34,7 +34,10 @@ session-only config ~/.nebula-listen.mcp.json (mode 600) with one
 `--channel`, and prints the command that starts Claude Code with it. Same
 token handling as above (the config names the token file); with no token
 given it reuses the token file the config already names, so running it again
-is safe. It never touches Claude Code's own config. `nebula mcp disconnect
+is safe, and on the first run the token file Claude Code's saved `nebula`
+server names (the plain connect wrote it), so the bare command the canvas's
+Message box copies works once Claude Code is connected. The token itself is
+never on argv, printed, or in the clipboard. It never touches Claude Code's own config. `nebula mcp disconnect
 claude-code --channel` removes it.
 """
 from __future__ import annotations
@@ -358,6 +361,36 @@ def _listen_token_file(data: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+CLAUDE_CODE_CONFIG = ".claude.json"
+
+
+def saved_claude_code_token_file(home: Path | None = None) -> str | None:
+    """The token file Claude Code's saved `nebula` server names, if any.
+
+    The first `--channel` run, with no token given and no listen config yet
+    (the Message box copies the bare command): the plain `nebula mcp
+    connect claude-code` already wrote `--scope user` into ~/.claude.json,
+    naming the same app's token file. Only that file's path is read here,
+    never a token: a saved entry that holds the token itself (a config made
+    before token files) is not reused. The token is then read from the file
+    with the MCP server's own strict reader, as --token-file is."""
+    home = home if home is not None else Path(os.path.expanduser("~"))
+    path = home / CLAUDE_CODE_CONFIG
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 64 * 1024 * 1024:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    servers = data.get("mcpServers") if isinstance(data, dict) else None
+    entry = servers.get(SERVER_NAME) if isinstance(servers, dict) else None
+    env = entry.get("env") if isinstance(entry, dict) else None
+    value = env.get(TOKEN_FILE_ENV) if isinstance(env, dict) else None
+    if not isinstance(value, str) or not value.strip() or value == agent_connect.TOKEN_FILE_PLACEHOLDER:
+        return None
+    return os.path.abspath(os.path.expanduser(value.strip()))
+
+
 def _address(args: Any, status: dict[str, Any] | None) -> tuple[str | None, str | None]:
     """(url, url file): where the client finds Nebula from now on, as Nebula
     says. Its backend-url file for the desktop app (a new port each launch),
@@ -388,6 +421,10 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
         if token is None and not print_only and again:
             # Running it again: the token file the config already names.
             token, token_file = _read_app_token_file(again), again
+        saved = saved_claude_code_token_file(home) if token is None and not print_only else None
+        if saved:
+            # The first run: the token file Claude Code's saved nebula server names.
+            token, token_file = _read_app_token_file(saved), saved
     except TokenSourceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PALETTE_CANT_RUN } from '../src/lib/paletteNotice';
+import { SERVER_FAILED_LINE } from '../src/lib/personThread';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
 // GM r23 on #208: a line shown with a [Try again] button ends in "Try
@@ -7,6 +8,7 @@ import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 // line; a new line shown beside Try again adds its row here.
 const ROWS: [where: string, line: string][] = [
   ["the Inspector palette's can't-run line (#208)", PALETTE_CANT_RUN],
+  ["the Message box's send that the server didn't answer (GM r50)", SERVER_FAILED_LINE],
 ];
 
 describe('every line shown with Try again ends in "Try again."', () => {

@@ -34,6 +34,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'App',
     items: [
       { keys: ['Mod', 'K'], label: 'Search commands and nodes' },
+      { keys: ['/'], label: 'Message Claude' },
       { keys: ['Mod', 'S'], label: 'Save graph to a file' },
       { keys: ['Mod', 'O'], label: 'Load graph from a file' },
       { keys: ['?'], label: 'Show these shortcuts' },

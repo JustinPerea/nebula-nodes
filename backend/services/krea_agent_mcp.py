@@ -68,6 +68,8 @@ NEBULA_MCP_TOOLS = (
     "load_graph_file",
     # Whether the person's canvas can reach this session through the Nebula channel.
     "channel_status",
+    # The Message box's thread: answer the person there, and read your own rows.
+    "reply_to_person", "read_thread",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.

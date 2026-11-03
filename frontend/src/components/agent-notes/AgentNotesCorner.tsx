@@ -40,6 +40,7 @@ import './agentNotes.css';
 import { failureMessage, writtenLine } from '../../lib/errorCopy';
 import { reportPersonRequired } from '../../lib/personSession';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
+import { UPDATES_OPEN_EVENT } from '../../lib/personThread';
 
 /** The answer form (Q125 item 1): its own chunk, loaded once a question is open. */
 const loadQuestionsForm = () => import('./AgentQuestionsForm');
@@ -593,6 +594,12 @@ export function AgentNotesCorner({ sections, agents = null }: {
   useEffect(() => {
     openListRef.current = openList;
   });
+  // The Message box's "Claude left a note in Updates" row: Show opens the list.
+  useEffect(() => {
+    const show = () => { if (!openRef.current) openListRef.current(); };
+    window.addEventListener(UPDATES_OPEN_EVENT, show);
+    return () => window.removeEventListener(UPDATES_OPEN_EVENT, show);
+  }, []);
 
   // A click outside closes the list.
   useEffect(() => {

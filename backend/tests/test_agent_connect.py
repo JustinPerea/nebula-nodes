@@ -1082,6 +1082,36 @@ def test_channel_is_claude_code_only_and_needs_a_token(tmp_path, monkeypatch, cl
     assert "Claude Code only" in err and "no token" in err
 
 
+def test_channel_first_run_reuses_the_token_file_claude_codes_saved_server_names(tmp_path, cli_env, monkeypatch,
+                                                                               capsys):
+    # The Message box copies the bare command. Claude Code is connected (the
+    # plain connect wrote ~/.claude.json naming the token file); no listen
+    # config yet, no token given: it works, and the token goes nowhere.
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    (tmp_path / ".claude.json").write_text(json.dumps({"numStartups": 3, "mcpServers": {
+        "nebula": {"type": "stdio", "command": "python", "args": ["mcp_server.py"],
+                   "env": {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": cli_env.file}}}}))
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
+    entry = json.loads(_listen(tmp_path).read_text())["mcpServers"]["nebula-listen"]
+    assert entry["env"]["NEBULA_APP_TOKEN_FILE"] == cli_env.file and TOKEN not in _listen(tmp_path).read_text()
+    assert cli_env.checked == [TOKEN]  # checked with Nebula, as --token-file is
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err and "--dangerously-load-development-channels" in out.out
+
+
+def test_channel_first_run_never_reuses_a_token_held_in_claude_codes_config(tmp_path, cli_env, monkeypatch, capsys):
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"nebula": {"env": {"NEBULA_APP_TOKEN": TOKEN}}}}))
+    assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1
+    assert not _listen(tmp_path).exists()
+    err = capsys.readouterr().err
+    assert "no token" in err and TOKEN not in err
+    for bad in ("{not json", json.dumps([1]), json.dumps({"mcpServers": {"nebula": {"env": {
+            "NEBULA_APP_TOKEN_FILE": "/PASTE/THE/TOKEN/FILE/PATH/FROM/SETTINGS.token"}}}})):
+        (tmp_path / ".claude.json").write_text(bad)
+        assert mcp_connect.saved_claude_code_token_file(tmp_path) is None
+
+
 def test_channel_connect_writes_nothing_when_nebula_cant_be_reached(tmp_path, cli_env, monkeypatch, capsys):
     monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: None)
     assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 1

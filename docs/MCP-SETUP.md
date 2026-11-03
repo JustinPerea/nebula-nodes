@@ -874,7 +874,14 @@ It takes the token the same way `nebula mcp connect` does (`--token-file`,
 server, plus `--channel`. It names your token file, never the token, and
 prints no token. Running it again is safe: with no token given it reuses the
 token file the config already names, and an unchanged config isn't
-rewritten. It never touches Claude Code's own config. `--print` shows the
+rewritten. On the first run with no token given (the canvas's Message box
+copies the bare `nebula mcp connect claude-code --channel`), it reads the
+token file path that Claude Code's saved `nebula` server names in
+`~/.claude.json` (what the plain `nebula mcp connect claude-code` wrote), then
+the token from that file with the same strict reader. Only a token file is
+reused, never a token held in that config, and the token never goes on argv,
+in the output or in the clipboard. With neither, it says to connect Claude
+Code first. It never writes Claude Code's own config. `--print` shows the
 config and the command without writing; `nebula mcp disconnect claude-code
 --channel` removes it. What it writes, if you'd rather write it by hand:
 
@@ -1146,10 +1153,50 @@ or on a Team org with Channels off, still reads "listening".
   open project.
 - An agent: `GET /api/canvas/channel` returns only its own entries, without
   `session`; MCP `channel_status` adds `thisServer` (whether this server
-  runs with `--channel`, and its listener's state). A message to a session
-  is a `person.message` journal event, `data: {messageId, text, nodeIds,
-  to: <listenerId>}`, from the person: the Message box (PR C) posts it, and
-  only the listener named in `to` wakes.
+  runs with `--channel`, and its listener's state).
+
+**The Message box.** The person messages a listening session from the
+canvas: the composer at the foot of the Agent log (`/` focuses it). Its
+thread is kept with the project (`backend/services/person_thread.py`), so a
+reload and every tab show the same rows.
+
+- Sending is the person's alone: `POST /api/canvas/thread/messages` `{text
+  (2,000 characters at most, lines kept), to: <listenerId>, nodeIds?,
+  clientId?}`, with the person token. It goes to the listening session that
+  was active most recently, or the one the person picks. Refused only with
+  `409 listener_stopped` (the person's line in `person`) when that listener
+  is gone or stopped. The 201st message to one listener in a rolling hour is
+  accepted and **held**, never refused (GM r55): the listener holds a
+  deliberate send past its runaway cap. The row's `state` is `held` while
+  Nebula knows it waits: the route marks it when that listener already had
+  200 messages this hour, and the listener reports any other it holds
+  (`POST /api/agent/thread/held`; pins and answers count toward its cap
+  too). The box reads "Sends in a few minutes because you’ve sent 200 this
+  hour." until it goes.
+- The journal gets a `person.message` event, `data: {messageId, text,
+  nodeIds, to: <listenerId>}`. Only the listener named in `to` wakes: it
+  reads its messages back (`GET /api/agent/thread/inbox`, answered for that
+  agent session only), pushes them at once (wake `message`, a deliberate
+  send) and then says so (`POST /api/agent/thread/accepted`), which the box
+  shows as "Waiting for Claude". Nebula never claims Claude read a message.
+- Claude answers with **MCP `reply_to_person(text, node_id?)`** or **`nebula
+  reply "<text>" [--node nX]`** (2,000 characters). With a node, its cursor
+  flies there and shows the reply's first sentence (140 characters). Only
+  agents reply. A reply is journaled as `thread.replied` (`data: {replyId,
+  text, nodeId}`). The person's tabs get each row in a `personThread` socket
+  message (`change: "sync"` after a verified hello, `"rows"` after).
+- **Who reads what** (Justin, 2026-11-03): every connected agent reads the
+  thread, the same as pins: the person's messages and every agent's replies,
+  in the journal and through **MCP `read_thread(limit?)`**, **`nebula
+  thread`** or `GET /api/canvas/thread` (a message names the agent it was
+  for in `toAgent`; cursor keys and listener ids are the person's form only).
+  The rule is one switch, `person_thread.AGENTS_READ_WHOLE_THREAD`: turned
+  off, the read tool, the journal events and the cursor's say narrow at once
+  to the person plus each row's own agent.
+- While a session listens, its `ask_person` questions, proposals, Updates and
+  pin replies, and the person's new pins, also add a row to the thread that
+  points at them (the card stays the only place to Accept; a question is
+  never a spend approval).
 
 **Stop** by restarting Claude Code without the flag.
 

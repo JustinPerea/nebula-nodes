@@ -100,7 +100,10 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .message-box__send,
+  .message-box__show,
+  .message-box__option
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
   .selection-toolbar__button,
@@ -127,7 +130,10 @@
   .proposal-bar__button,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
-  .cinema-upload__remove
+  .cinema-upload__remove,
+  .message-box__send,
+  .message-box__show,
+  .message-box__option
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;

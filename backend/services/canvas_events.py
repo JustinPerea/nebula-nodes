@@ -147,6 +147,15 @@ EVENT_KINDS = frozenset({
     # A paid start Nebula holds (World Labs recovery checkpoints and starts it
     # couldn't confirm) and its clearing: data {hold, change, runId, ...}.
     "provider.hold",
+    # The person sent a message from the canvas's Message box
+    # (services/person_thread.py): data {messageId, text, nodeIds, to:
+    # <listenerId>} while every agent reads the thread (Justin, 2026-11-03,
+    # as pins; person_thread.message_event_data is the one rule). Only the
+    # listener named in `to` wakes.
+    "person.message",
+    # An agent answered the person there (reply_to_person / `nebula reply`):
+    # data {replyId, text, nodeId}, under the same rule.
+    "thread.replied",
 })
 EVENT_GROUPS = frozenset(kind.split(".", 1)[0] for kind in EVENT_KINDS)
 
