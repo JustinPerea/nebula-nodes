@@ -204,17 +204,24 @@ class CursorField {
    *  is now (`nodeAt`, its drawn position), read this frame. */
   report(key: string, target: Point, zoom: number, node: string | null = null, seq = 0, nodeAt: Point | null = null, rank = 0, known = false, dragging = false): void {
     this.purge();
+    let changed = false;
     if (node !== null) {
-      if (dragging) this.draggedNodes.add(node);
-      else if (this.draggedNodes.delete(node)) {
+      if (dragging) {
+        if (!this.draggedNodes.has(node)) {
+          this.draggedNodes.add(node);
+          this.version += 1;
+        }
+      } else if (this.draggedNodes.delete(node)) {
         // The drop: the backend's arrival follows its write, so the wait
-        // for it starts here.
+        // for it starts here. An overlap join's preview ends now: the
+        // backend counts no arrival for it (r52 Q1).
+        this.version += 1;
+        changed = true;
         this.lastCarryAt = performance.now();
         this.settleCarries();
       }
     }
     let before = this.targets.get(key);
-    let changed = false;
     if (before && (before.rank !== rank || before.known !== known)) {
       // The backend's word on a carry, if one was previewed: it governs now.
       this.carriedFrom.delete(key);
@@ -335,10 +342,11 @@ class CursorField {
       // A carry the backend would count as an arrival: last in its column
       // for now, in its own order among the cursors one node carries (r47).
       const preview = this.previewed();
-      const entries = [...this.targets].map(([k, v]) => ({
+      const entries = (later: ReadonlySet<string>, bottom: ReadonlySet<string> = new Set(), was = false) => [...this.targets].map(([k, v]) => ({
         key: k,
-        target: v.target,
-        since: v.since !== Infinity ? (preview.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
+        target: was ? this.carriedFrom.get(k) ?? v.target : v.target,
+        since: v.since !== Infinity ? (later.has(k) || bottom.has(k) ? CARRY_PREVIEW + v.since : v.since) : UNLANDED + order.get(k)!,
+        last: bottom.has(k) && v.since !== Infinity,
         // A backend arrival never ties (it strictly increases), and when
         // two did, the key breaks it in every tab alike; this tab's landing
         // order only for events with no backend arrival (review 9, LOW-2).
@@ -347,7 +355,33 @@ class CursorField {
         nameW: v.nameW,
         sayW: v.sayW,
       }));
-      spots = deStackLayout(entries, zoom);
+      // During a live drag, a carried cursor that joins a column by overlap
+      // alone (arrow meets label, targets still over 16 apart) is drawn last
+      // too, so passing through that band on the way in never flips it from
+      // top to bottom. Display only, and it ends at the drop: the backend
+      // counts no arrival for it, so it glides once to its arrival-order
+      // slot (GM - Design, #219 r52 Q1).
+      const dragged = [...this.carriedFrom.keys()].filter((k) => {
+        const node = this.targets.get(k)?.node;
+        return !preview.has(k) && node != null && this.draggedNodes.has(node);
+      });
+      if (dragged.length === 0) {
+        spots = deStackLayout(entries(preview), zoom);
+      } else {
+        // Read each one's column with it drawn last, against its column
+        // before the carry: any new member is a join.
+        const probed = deStackLayout(entries(preview, new Set(dragged)), zoom);
+        const before = deStackLayout(entries(new Set(), new Set(), true), zoom);
+        const members = (spots: Map<string, StackSpot>, k: string) =>
+          [...spots].filter(([, s]) => s.column === spots.get(k)!.column).map(([o]) => o);
+        const joined = dragged.filter((k) => {
+          const had = new Set(members(before, k));
+          return members(probed, k).some((o) => !had.has(o));
+        });
+        spots = joined.length === dragged.length
+          ? probed
+          : deStackLayout(entries(preview, new Set(joined)), zoom);
+      }
     }
     // A cursor no longer folded opens out of its count cursor (hold).
     for (const [k, spot] of spots) {

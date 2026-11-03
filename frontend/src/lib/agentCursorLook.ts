@@ -123,6 +123,11 @@ interface StackEntry {
   /** Its pills' widths in screen px (labelWidths); a default when unknown. */
   nameW?: number;
   sayW?: number;
+  /** Drawn at the bottom of its column, under the stable insert: a carry
+   *  that joins a column by overlap during a live drag (GM - Design, #219
+   *  r52 Q1). Display only; it may sit further below its target than the
+   *  insert allows. Folding still goes by arrival. */
+  last?: boolean;
 }
 
 /** Pill widths assumed when a caller doesn't know them. */
@@ -512,11 +517,17 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
       // target. Cursors aimed near one point keep arrival order (GM - Design,
       // #219 r24 Q1).
       const order: number[] = [];
+      const bottom: number[] = [];
       for (const m of shown) {
+        if (ordered[m].last) {
+          bottom.push(m); // after every inserted member, in arrival order (r52 Q1)
+          continue;
+        }
         const at = order.findIndex((o) => targets[o].y > targets[m].y + radiusPx + 1e-9);
         if (at === -1) order.push(m);
         else order.splice(at, 0, m);
       }
+      order.push(...bottom);
       const x = targets[head].x;
       let prev: number | null = null;
       const place = (m: number, tip: Point) => {
