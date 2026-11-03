@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix round 5 (review 5; GM's r6 and r7 rulings), the store side:
@@ -30,6 +30,9 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 const store = await import('../../src/store/graphStore');
+
+// Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
+afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
 // GM r28 item 2 (round 19): the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
@@ -602,5 +605,29 @@ describe('N1: a wire-only Delete during the tab\'s run says why', () => {
     useGraphStore.getState().deleteSelected();
     expect(notice()).toBe("Couldn’t delete the connection. Wait for the active run to finish.");
     expect(useGraphStore.getState().edges).toHaveLength(1);
+  });
+});
+
+// PR #221 review 1 MEDIUM-1: a save answered 404 keeps the scene's unsaved
+// edits for a delete undone (GM r20 answer 3), with no delete in sight. Every
+// test here reuses n1 on one canvas, so without the afterEach reset the next
+// test's fresh n1 took A's typing back and PUT it (["s1:gone","s2:b"]).
+// A runs before B (shuffle off); B fails with the reset removed.
+describe('a 404’s kept edits stay in their own test', { shuffle: false }, () => {
+  it('A: a save answered 404 keeps the typing for n1', async () => {
+    const h = harness({ first: () => json({ detail: "That node isn't on the canvas anymore." }, 404) });
+    typeIn('s1', 'gone');
+    await sleep(20);
+    h.release();
+    await vi.waitFor(() => expect(said).toEqual(["“Opening” was deleted, so your changes to it can’t be saved."]), { timeout: 3000, interval: 5 });
+    expect(h.puts).toEqual([['s1:gone', 's2:b']]);
+  });
+
+  it('B: the next test’s n1 takes nothing back and sends nothing', async () => {
+    const h = harness();
+    await sleep(300);
+    expect(h.puts).toEqual([]);
+    expect(brief()).toEqual(['s1:a', 's2:b']);
+    expect(unsaved()).toBeNull();
   });
 });
