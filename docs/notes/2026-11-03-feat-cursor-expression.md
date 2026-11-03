@@ -152,3 +152,37 @@ Built on 8fac8507 (round 1 plus #219 r3b). The carry preview and `StackEntry.las
 - `npm run build`: the budget passed at an entry of 447,816 bytes raw (unchanged), and the dev-only check passed.
 - The backend wasn't touched in round 2.
 - Live on 8966/5966: propose and wait crops, think filmstrips on the darkest and lightest shades, five cursors all on screen, and one under the open Agent log (`elementFromPoint` there returns the log's entry). The eight files have distinct md5s.
+
+## Round 3 (GM r58)
+
+GM signed off round 2's design, with one tune to think. Built on bf178acd.
+
+- **The tune.** Think swings between a trough and a peak:
+  - Trough: the resting halo's 3 px blur, scale 1, opacity 20%.
+  - Peak: a 5 px blur, scale 1.25, opacity 60%.
+  - The loop is still 2.2 s. Every value is in `AGENT_CURSOR_THINK` (agentCursorTuning.ts), and the trough's blur is `AGENT_CURSOR_HALO.blur`. Under reduced motion, the still frame holds the peak.
+- **How the blur breathes.** The halo's blur is one SVG `feGaussianBlur`, shared by the halo and the danger flash. Animating its `stdDeviation` would blur every path that uses it, and a CSS keyframe can't reach the attribute. So think's halo alone gets a CSS `filter: blur()`, which overrides the `filter` attribute on that path only, and the keyframes animate it from the trough to the peak.
+  - Every other halo keeps the SVG filter at 3 px. Live, during an error, the halo and the danger flash both read `url(#agent-cursor-halo-…)` with `stdDeviation` 3.
+  - A layer test checks that only think's rule, the two keyframes and the reduced-motion still frame use a CSS blur.
+- **The scale's anchor.** The halo has `transform-box: fill-box; transform-origin: center`, the centre of the arrow's box. Chrome computes it as 6.6 px 9.3 px into that box, which is (8.1, 10.8) from the cursor's origin. A tip-anchored scale is a mutation the tests catch.
+- **Measured live** (Chrome, 1440, a frame every 100 ms for 3 s, 30 frames per shade). The two blur values are Chrome's computed filter. "Reach" counts pixels at least 6 levels above the background dots.
+  - Dark shade (#b8265f), trough: opacity 0.204, blur 3.02 px, scale 1.002. The glow reaches 2 px above the tip and 1 px left of the arrow, with a glow energy of 1,897.
+  - Dark shade, peak: opacity 0.60, blur 5.00 px, scale 1.25. The glow reaches 5 px above the tip and 8 px left, with an energy of 5,053 (2.7× the trough).
+  - Light shade (#ffd9e2), trough: opacity 0.204, blur 3.02 px, scale 1.002. The glow reaches 2 px above the tip and 3 px left, with an energy of 2,299.
+  - Light shade, peak: opacity 0.60, blur 5.00 px, scale 1.25. The glow reaches 9 px above the tip and 11 px left, with an energy of 9,236 (4.0× the trough).
+  - Under reduced motion: opacity 0.6, `blur(5px)`, `matrix(1.25, …)`, and no animation.
+  - The light shade's peak reaches further above the tip than GM's "about 3 px" at this threshold. A pale glow stays above the threshold further out. GM's final tune can trim it.
+
+### Checks (round 3)
+
+- tsc and `npm run lint` are clean.
+- vitest on the same explicit list of 132 files: 2,359 passed.
+- 11 round-3 mutations, all killed:
+  - each of the six tuning values;
+  - the keyframe's peak blur removed;
+  - think's rule without its blur;
+  - the scale anchored at the tip;
+  - the reduced-motion still frame at the trough;
+  - a CSS blur on every halo.
+- `npm run build`: the budget passed at an entry of 447,816 bytes raw (unchanged), and the dev-only check passed.
+- The `?cursorStates=1` driver still plays think. Its sequence wasn't touched.

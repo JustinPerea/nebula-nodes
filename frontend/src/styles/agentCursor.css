@@ -101,8 +101,12 @@
   animation: agent-cursor-turn var(--agent-cursor-sweep) both;
 }
 
-/* think: the halo breathes while held, a spring each way. */
+/* think: the halo breathes while held, a spring each way: its opacity, its
+   scale about the arrow's centre (the halo's fill-box centre) and its blur
+   (GM r58). The blur is a CSS blur() on think's halo alone, in place of the
+   shared SVG filter, so the danger flash and every other halo keep 3 px. */
 .agent-cursor[data-expr='think'] .agent-cursor__halo {
+  filter: blur(var(--agent-cursor-breath-trough-blur));
   animation: agent-cursor-breathe var(--agent-cursor-breath) infinite alternate;
 }
 
@@ -374,11 +378,13 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
 @keyframes agent-cursor-breathe {
   from {
     transform: scale(1);
-    opacity: var(--agent-cursor-breath-from);
+    opacity: var(--agent-cursor-breath-trough-opacity);
+    filter: blur(var(--agent-cursor-breath-trough-blur));
   }
   to {
     transform: scale(var(--agent-cursor-breath-scale));
-    opacity: var(--agent-cursor-breath-opacity);
+    opacity: var(--agent-cursor-breath-peak-opacity);
+    filter: blur(var(--agent-cursor-breath-peak-blur));
   }
 }
 
@@ -476,8 +482,10 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   .agent-cursor__say-caret[data-blink='true'] {
     animation: none;
   }
-  /* think's still frame: the breath's full halo, so it differs from rest. */
+  /* think's still frame: the breath's peak (GM r58), so it differs from rest. */
   .agent-cursor[data-expr='think'] .agent-cursor__halo {
-    opacity: var(--agent-cursor-breath-from);
+    transform: scale(var(--agent-cursor-breath-scale));
+    opacity: var(--agent-cursor-breath-peak-opacity);
+    filter: blur(var(--agent-cursor-breath-peak-blur));
   }
 }

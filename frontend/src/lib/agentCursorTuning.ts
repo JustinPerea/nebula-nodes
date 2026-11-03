@@ -58,10 +58,21 @@ export const AGENT_CURSOR_MIN_HOLD_MS = 400;
 export const AGENT_CURSOR_LOOK = { dimOpacity: 0.18, arcDeg: 90, sweepMs: 1400, radiusPx: 13, strokePx: 3, arcOpacity: 0.9 } as const;
 
 /** §2 think: "the halo breathes ... on a spring-sampled loop of about 2.2 s
- *  (t), while held". GM r56 item A raised it from 1 → 1.12, 30% → 14%
- *  (invisible at 1440) to scale 1 → 1.15, opacity 55% → 25%. Each half of
- *  the loop runs the build's breath spring stretched to half the loop. */
-export const AGENT_CURSOR_THINK = { scale: 1.15, fromOpacity: 0.55, toOpacity: 0.25, loopMs: 2200 } as const;
+ *  (t), while held". GM r58 (after r56's 1 → 1.15, 55% → 25% still read flat
+ *  at 4×): the glow swings between a trough (the resting halo's 3 px blur,
+ *  scale 1, 20%) and a peak (5 px blur, scale 1.25, 60%), the scale anchored
+ *  at the arrow's centre so the glow grows evenly; it may reach about 3 px
+ *  above the tip (the 2 px floor covers painted shapes, not the blur). The
+ *  reduced-motion still frame holds the peak. Each half of the loop runs the
+ *  build's breath spring stretched to half the loop. */
+export const AGENT_CURSOR_THINK = {
+  troughOpacity: 0.2,
+  peakOpacity: 0.6,
+  troughBlurPx: AGENT_CURSOR_HALO.blur,
+  peakBlurPx: 5,
+  peakScale: 1.25,
+  loopMs: 2200,
+} as const;
 /** Build: the curve of each half breath (critically damped). */
 export const AGENT_CURSOR_THINK_SPRING: TuningSpring = { stiffness: 40, damping: 12.6, mass: 1 };
 

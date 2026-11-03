@@ -3557,19 +3557,39 @@ describe('GM r56: think, mark slot, dashed halo, quotes', () => {
   const outlineToBox = (pts: { x: number; y: number }[], box: { left: number; top: number; right: number; bottom: number }) =>
     Math.min(...pts.map((p, i) => segToBox(p, pts[(i + 1) % pts.length], box)));
 
-  it('A: think breathes from 55% to 25% and scale 1 to 1.15, the loop still 2.2 s', () => {
+  it('A (r58): think breathes between a trough (3 px blur, scale 1, 20%) and a peak (5 px, 1.25, 60%) on a 2.2 s loop', () => {
     render(<AgentCursorLayer />);
     send(event({ action: 'think' }));
     flush();
     expect(cursors()[0].dataset.expr).toBe('think');
-    expect(layerVar('--agent-cursor-breath-from')).toBe('0.55');
-    expect(layerVar('--agent-cursor-breath-opacity')).toBe('0.25');
-    expect(layerVar('--agent-cursor-breath-scale')).toBe('1.15');
+    expect(layerVar('--agent-cursor-breath-trough-opacity')).toBe('0.2');
+    expect(layerVar('--agent-cursor-breath-peak-opacity')).toBe('0.6');
+    expect(layerVar('--agent-cursor-breath-trough-blur')).toBe('3px');
+    expect(layerVar('--agent-cursor-breath-peak-blur')).toBe('5px');
+    expect(layerVar('--agent-cursor-breath-scale')).toBe('1.25');
     expect(layerVar('--agent-cursor-breath')).toMatch(/^1100ms linear\(/);
-    // The keyframes start from the breath's own opacity, not the resting halo's 30%.
+    // The trough's blur is the resting halo's, so the breath starts where rest is.
+    expect(document.querySelector(document.querySelector('.agent-cursor__halo')!.getAttribute('filter')!.slice(4, -1))!
+      .querySelector('feGaussianBlur')!.getAttribute('stdDeviation')).toBe('3');
     const frames = /@keyframes agent-cursor-breathe \{([\s\S]*?)\n\}/.exec(cssText)![1];
-    expect(frames).toMatch(/from \{[^}]*opacity: var\(--agent-cursor-breath-from\)/);
-    expect(frames).toMatch(/to \{[^}]*opacity: var\(--agent-cursor-breath-opacity\)/);
+    expect(frames).toMatch(/from \{\s*transform: scale\(1\);\s*opacity: var\(--agent-cursor-breath-trough-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-trough-blur\)\);\s*\}/);
+    expect(frames).toMatch(/to \{\s*transform: scale\(var\(--agent-cursor-breath-scale\)\);\s*opacity: var\(--agent-cursor-breath-peak-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-peak-blur\)\);\s*\}/);
+  });
+
+  it('A (r58): the breath is think\'s halo alone: the scale grows about the arrow\'s centre and no other halo path blurs in CSS', () => {
+    // The halo scales about its fill box's centre: the arrow's middle, not the tip.
+    expect(cssText).toMatch(/\.agent-cursor__halo \{[^}]*transform-box: fill-box;\s*transform-origin: center;/);
+    // Only think's halo rule and the keyframes (and the reduced still) use a CSS blur.
+    const blurRules = [...cssText.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^{}]*filter: blur\(/g)].map((m) => m[1].trim());
+    expect(blurRules).toEqual([
+      ".agent-cursor[data-expr='think'] .agent-cursor__halo",
+      'from',
+      'to',
+      ".agent-cursor[data-expr='think'] .agent-cursor__halo",
+    ]);
+    // The reduced-motion still frame holds the peak.
+    const reduced = cssText.slice(cssText.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.agent-cursor\[data-expr='think'\] \.agent-cursor__halo \{\s*transform: scale\(var\(--agent-cursor-breath-scale\)\);\s*opacity: var\(--agent-cursor-breath-peak-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-peak-blur\)\);/);
   });
 
   it('D: the dashed halo grows from the tip: nothing paints above or left of it', () => {
