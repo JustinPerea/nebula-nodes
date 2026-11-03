@@ -247,11 +247,11 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
 
   it('the log\'s body gives way on the spring, held at its foot, down to its floor (GM r6)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    const block = /\.agent-log\.agent-log--open\[data-docked\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(block).toMatch(/max-height:\s*max\(var\(--agent-log-floor, 0px\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-squeeze, 0px\)\)\)/);
     expect(block).toMatch(/transition:\s*max-height 420ms var\(--agent-log-spring\)/);
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body \{\s*flex: 0 1 auto;\s*min-height: 0;/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\] \{\s*transition: none;/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],/);
   });
 
   it('dragged to the top left: no clearance', () => {

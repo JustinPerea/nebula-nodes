@@ -7,7 +7,7 @@
  *   noticeRegion.css). While that leaves at least BESIDE_LOG_MIN_W, the stack
  *   sits beside the log. Below it, the whole stack goes above the log: the
  *   region stops clearing the log (`data-above-log`) and the stack is lifted
- *   over the log's top edge (`--notice-stack-lift`). The log never moves (its body may give, step 4).
+ *   over the log's top edge (`--notice-stack-lift`). The log never moves (it may give way, steps 3-4).
  * - A log dragged off the dock that sits in the card's column is cleared too
  *   (GM r4 6): the card stays under it when there is room, else above it.
  * - The room is the stack's line up to the top line (the app's top bars, the
@@ -16,37 +16,46 @@
  * Never covered (GM r5): the docked log's header and its collapse control;
  * the card's header, its plan line and its footer ("Accept never shows
  * without the line saying what runs and what it costs"). Notices never
- * overlap each other. The give-way order, as the room runs out:
+ * overlap each other. The give-way order, as the room runs out (GM r7: the
+ * plan line goes last, after every notice and the log):
  *
  * 0. `under`: the card on top, the notices under it, while the card's body
- *    keeps its note and plan line whole (`bodyFloors().full`).
- * 1. GM r5 1, notices over the body's foot while the plan line stays clear:
- *    that holds exactly the room of step 0 (the notices and their gaps come
- *    out of the same column either way), so with the plan line as the floor
- *    it is never the better place and the order goes on to step 2.
- * 2. `above`: the notices move above the card, over the canvas, under the
- *    top line, in the same column, the newest nearest the card. The card sits
- *    on the stack's line and its body keeps at least its plan line; the note
- *    scrolls behind its fade (`keepPlan`: the region scrolls the body so the
- *    plan line shows).
- * 3. `folded`: no room above for them all: the older notices fold into one
- *    row, "1 more notice" / "2 more notices", which unfolds on click; the
- *    newest stays whole with its Undo. Unfolded, the stack is step 2's.
- * 4. GM r6: only when even header, kept lines, footer and step 3's rows
- *    can't fit, the docked log's body gives way: it shrinks on the layout
- *    spring (`squeeze`, written as --agent-log-squeeze), down to its floor of
- *    header and 2 rows (AgentLog's --agent-log-floor), its header moving down
- *    with its top, whole and clear. It grows back when the card leaves.
- * 5. Only below that floor does the card's body go under its kept lines,
- *    down to one line, the plan line scrolling behind the fade
- *    (`underFade`). Past that the window is too short for header, one line
- *    and footer: the card's foot comes down over the log by the rest
- *    (`over`; the grid test lists those cells with their numbers).
+ *    keeps its note and plan line whole (`bodyFloors().full`). (GM r5's
+ *    "notices over the body's foot" holds exactly this room, so it is never
+ *    the better place and isn't built.)
+ * 1. `above`: the notices move above the card, over the canvas, under the
+ *    top line, the newest nearest the card; the card's body keeps at least
+ *    its kept lines, the note behind its fade (`keepPlan`).
+ *    `folded`: no room above for them all: the older notices fold into one
+ *    row, "1 more notice" / "2 more notices", which unfolds on click
+ *    ("Show less"); the newest stays whole.
+ * 2. `pill` (GM r7): every notice without an Undo folds into the one row,
+ *    "1 notice" / "4 notices". A notice with an Undo (or Redo) never folds,
+ *    here or in step 1.
+ * 3. GM r6: the log's body gives way, on the layout spring (`squeeze`,
+ *    written as --agent-log-squeeze), down to its floor of header and 2 rows
+ *    (AgentLog's --agent-log-floor), held at its bottom edge so its header
+ *    comes down whole. It grows back when the card leaves.
+ * 4. GM r7: the log collapses to its header (`collapse`; the region asks
+ *    uiStore, which reopens it when the card leaves, but never undoes a
+ *    collapse the person made, and never collapses it again over the
+ *    person's own reopening while the card shows).
+ * 5. Only then does the card's body go under its kept lines (`underFade`),
+ *    down to one line: the plan line stays whole first, the ⚠ line next in
+ *    the scroll. Past that the window is too short for header, one line and
+ *    footer: the card's foot comes down over the log by the rest (`over`;
+ *    the grid test lists those cells with their numbers).
+ *
+ * Steps 3 and 4 are the docked log's when the stack sits above it, and a
+ * floating log's in the card's column when the stack sits above it (GM r7:
+ * "it gives way the same way", anchored at its bottom edge; where the person
+ * put it never changes).
  *
  * The kept lines (`KEEP_ATTR`): the plan line, and the first not-ready ⚠
  * row when there is one (GM r6). The body shows whole lines: the region
  * scrolls the last kept line to sit just over the bottom fade, so a line cut
- * by either edge is one under a fade.
+ * by either edge is one under a fade; under its kept lines, the plan line
+ * sits just under the top fade.
  *
  * A move between steps glides on the layout spring (glideStack): no jump.
  */
@@ -81,10 +90,19 @@ export const MORE_ATTR = 'data-notice-more';
 export const MORE_SHOWN_ATTR = 'data-notice-more-shown';
 /** The unfolded row's words (as the note's Show all / Show less). */
 export const SHOW_LESS = 'Show less';
-/** On the root: how far the docked log's body gives way (layouts.css). */
+/** On the root: how far the log's body gives way (layouts.css). */
 export const LOG_SQUEEZE_VAR = '--agent-log-squeeze';
+/** A notice that offers Undo or Redo marks itself so (else its button's
+ * words are read): it never folds (GM r7). */
+export const UNDO_ATTR = 'data-notice-undo';
+/** On the root, from AgentLog: what the log's collapse to its header frees
+ * beyond its floor, while it may collapse (GM r7). */
+export const LOG_COLLAPSE_VAR = '--agent-log-collapse';
 
-export type StackMode = 'under' | 'above' | 'folded';
+export type StackMode = 'under' | 'above' | 'folded' | 'pill';
+/** The steps where the notices stand above the card, which goes to the
+ * stack's end (noticeRegion.css lists each; the rules test reads it). */
+export const ABOVE_MODES: readonly StackMode[] = ['above', 'folded', 'pill'];
 
 export interface CardMeasure {
   /** The card's fixed rows (header, footer, borders) and its body's full height. */
@@ -100,6 +118,10 @@ export interface CardMeasure {
   /** The kept lines (the plan line, and the first ⚠ row), in the body's
    * content: the first one's top and the last one's foot, unscrolled. */
   plan?: { top: number; bottom: number } | null;
+  /** The plan line alone (the first kept line), unscrolled. */
+  first?: { top: number; bottom: number } | null;
+  /** Which notices offer Undo or Redo, top to bottom: they never fold. */
+  undo?: boolean[];
 }
 
 export interface StackMeasure {
@@ -116,9 +138,12 @@ export interface StackMeasure {
   logTop: number;
   /** noticeTopLimit(TOP_GUTTER): the line the stack's top stays under. */
   topLine: number;
-  /** How far a docked, open log's body may give way: its height less its
-   * floor of header and 2 rows (0 for a closed or floating log). */
+  /** How far the open log's body may give way: its height less its floor
+   * of header and 2 rows (0 for a closed log); and how much more its
+   * collapse to its header frees (0 when it may not collapse: closed, or
+   * reopened by the person while the card shows). Docked, or floating. */
   logSpare?: number;
+  logCollapse?: number;
   /** The card, when one shows. */
   card: CardMeasure | null;
   /** An undocked Agent log's box (window coordinates), when one shows. */
@@ -135,18 +160,21 @@ export interface StackPlace {
   cap: number | null;
   /** The give-way step, or null with no card. */
   mode: StackMode | null;
-  /** How many older notices are folded into the "more" row. */
+  /** How many notices are folded into the "more" row, and which. */
   folded: number;
+  fold: boolean[];
   /** The "more" row's count, 0 while it is hidden. */
   more: number;
   /** The person unfolded the row: it shows, aria-expanded. */
   expanded: boolean;
   /** The body is shorter than note and plan line: scroll the plan line in. */
   keepPlan: boolean;
-  /** Step 4: how far the docked log's body gives way. */
+  /** Step 3: how far the log's body gives way; step 4: it collapses. */
   squeeze: number;
+  collapse: boolean;
   /** Step 5: the body is shorter than its kept lines (they scroll behind
-   * the fade), and how far the card's foot then crosses the log's line. */
+   * the fade, the plan line kept first), and how far the card's foot then
+   * crosses the log's line. */
   underFade: boolean;
   over: number;
   /** The line the stack's top stays under (a floating log's foot may lower it). */
@@ -158,19 +186,27 @@ const ONE_LINE_PX = 20;
 /** The body heights the card keeps: `full` shows the note and the plan line
  * whole; `min` the plan line alone, the note scrolled behind the top fade
  * (GM r5 2). With no plan line, the old minimum and one line. */
-export function bodyFloors(card: CardMeasure): { full: number; min: number } {
+export function bodyFloors(card: CardMeasure): { full: number; min: number; one: number } {
   const body = card.body;
   const line = Math.min(card.line ?? ONE_LINE_PX, body);
   const least = Math.min(MIN_BODY_PX, body);
-  if (!card.plan) return { full: least, min: line };
+  if (!card.plan) return { full: least, min: line, one: line };
   const full = Math.min(body, Math.max(least, card.plan.bottom + FADE_PX));
   const min = Math.min(full, card.plan.bottom - card.plan.top + 2 * FADE_PX);
-  return { full, min };
+  // The plan line alone, whole between the two fades (step 5's floor).
+  const first = card.first ?? card.plan;
+  const one = Math.min(min, first.bottom - first.top + 2 * FADE_PX);
+  return { full, min, one };
 }
 
-/** The "N more notices" row's words. */
+/** The "N more notices" row's words (step 1: the newest shows). */
 export function moreLabel(count: number): string {
   return count === 1 ? '1 more notice' : `${count} more notices`;
+}
+
+/** The pill's words (step 2: every notice without an Undo folded). */
+export function pillLabel(count: number): string {
+  return count === 1 ? '1 notice' : `${count} notices`;
 }
 
 function sum(values: number[]): number {
@@ -182,77 +218,110 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
   const beside = m.viewportW - Math.max(m.gutter, m.logClearance) - m.regionLeft;
   const aboveLog = docked && beside < BESIDE_LOG_MIN_W;
   let base = aboveLog ? Math.max(0, Math.ceil(m.logTop - m.regionBottom)) : 0;
-  const none = { folded: 0, more: 0, expanded: false, keepPlan: false, squeeze: 0, underFade: false, over: 0 };
+  const none = { folded: 0, fold: [], more: 0, expanded: false, keepPlan: false, squeeze: 0, collapse: false, underFade: false, over: 0 };
   if (!m.card) return { aboveLog, lift: base, cap: null, mode: null, ...none };
   const card = m.card;
   const gap = card.gap ?? 8;
   const items = card.items ?? [];
   const count = items.length;
+  const undo = items.map((_, index) => Boolean(card.undo?.[index]));
   // Each notice and the gap over it.
   const below = sum(items) + gap * count;
-  // Step 3's rows: the "more" row and the newest, each with its gap.
-  const foldable = count >= 2;
-  const foldedRows = foldable ? MORE_ROW_PX + gap + items[count - 1] + gap : below;
+  // The ways the notices can stand above the card, least folded first.
+  type Rows = { mode: StackMode; fold: boolean[]; rows: number; more: number };
+  const rowsOf = (mode: StackMode, fold: boolean[]): Rows => {
+    const more = fold.filter(Boolean).length;
+    const shown = items.reduce((total, h, index) => total + (fold[index] ? 0 : h + gap), 0);
+    return { mode, fold, more, rows: shown + (more ? MORE_ROW_PX + gap : 0) };
+  };
+  const ladder: Rows[] = [rowsOf('above', items.map(() => false))];
+  // Step 1: the older ones without an Undo fold under "N more notices".
+  const older = items.map((_, index) => index < count - 1 && !undo[index]);
+  // Step 2: every one without an Undo, the newest too: "N notices". When
+  // the newest offers Undo the two are one fold, and it is the pill: every
+  // notice that can fold is in it.
+  const all = items.map((_, index) => !undo[index]);
+  const pill = all.filter(Boolean).length;
+  if (older.some(Boolean) && older.filter(Boolean).length < pill) ladder.push(rowsOf('folded', older));
+  if (pill) ladder.push(rowsOf('pill', all));
+  const compact = ladder[ladder.length - 1];
   const floors = bodyFloors(card);
   let topLine = m.topLine;
+  // Steps 3 and 4 give the room of the log the stack sits above.
+  const spare = Math.max(0, Math.floor(m.logSpare ?? 0));
+  const collapseGive = Math.max(0, Math.floor(m.logCollapse ?? 0));
+  let gives = aboveLog;
 
-  // A floating log in the card's column (GM r4 6): under it when the stack
-  // fits between its foot and the stack's line, else above it when it fits
-  // there. When neither fits, under it: the stack's top then crosses the
-  // log's body, never its header (the stack above it would come down over it).
+  // A floating log in the card's column (GM r4 6, r7): under it when the
+  // stack fits between its foot and the stack's line; else above it, the log
+  // giving way at its bottom edge as the docked one does; when neither
+  // fits, the side with more room, and under it the stack's top then
+  // crosses the log's body, never its header.
   const float = docked ? null : m.floating;
   if (float && m.column && float.left < m.column.right && float.right > m.column.left
       && float.bottom > topLine && float.top < m.viewportH - m.regionBottom - base) {
     const line0 = m.viewportH - m.regionBottom - base;
-    const needs = card.chrome + floors.min + foldedRows;
+    const needs = card.chrome + floors.min + compact.rows;
     const under = line0 - (float.bottom + FLOAT_GAP_PX);
-    const over = float.top - FLOAT_GAP_PX - topLine;
-    if (under >= needs || over < needs) {
+    const over = float.top - FLOAT_GAP_PX - topLine + spare + collapseGive;
+    const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body) + compact.rows;
+    if (under >= needs || (over < needs && (under >= over || over < least))) {
       topLine = Math.max(topLine, Math.ceil(float.bottom + FLOAT_GAP_PX));
     } else {
       base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
+      gives = true;
     }
   }
 
   // The room from the stack's line up to the top line.
   const room = m.viewportH - m.regionBottom - base - topLine;
-  // Only a docked log the stack sits above gives way.
-  const logSpare = aboveLog ? Math.max(0, Math.floor(m.logSpare ?? 0)) : 0;
-  const place = (mode: StackMode, rows: number, more = 0, expanded = false): StackPlace => {
+  const logSpare = gives ? spare : 0;
+  const logCollapse = gives ? collapseGive : 0;
+  const place = ({ mode, fold, rows, more }: Rows, expanded = false): StackPlace => {
     const cap = Math.floor(room - rows);
     const keep = card.chrome + floors.min;
     const least = card.chrome + Math.min(card.line ?? ONE_LINE_PX, card.body);
-    // Step 4: the log's body gives way, down to its floor.
-    const squeeze = Math.min(Math.max(0, Math.ceil(keep - cap)), logSpare);
-    const room4 = cap + squeeze;
+    // Step 3: the log's body gives way, down to its floor; step 4: it
+    // collapses to its header.
+    const short = Math.max(0, Math.ceil(keep - cap));
+    const squeeze = Math.min(short, logSpare);
+    const collapse = short > logSpare && logCollapse > 0;
+    const give = squeeze + (collapse ? logCollapse : 0);
+    const room4 = cap + give;
     // Step 5: the body under its kept lines, down to one line; then the foot.
     const over = Math.max(0, Math.ceil(least - room4));
-    const lift = Math.max(0, base - squeeze - over);
-    // The squeeze only ever brings the room up to the kept lines, so the
-    // room is the body's height; the body never goes under one line.
+    const lift = Math.max(0, base - give - over);
     const height = Math.max(room4, least);
     return {
-      aboveLog, lift, cap: height, mode, topLine, squeeze, over: Math.max(0, base - squeeze - lift),
+      aboveLog, lift, cap: height, mode, topLine, squeeze, collapse, over: Math.max(0, base - give - lift),
       underFade: height - card.chrome < floors.min,
-      folded: mode === 'folded' ? count - 1 : 0, more, expanded,
+      folded: more, fold, more, expanded,
       keepPlan: height - card.chrome < floors.full,
     };
   };
 
   // Step 0: the notices under the card, note and plan line whole.
-  if (count === 0) return place('under', 0);
-  if (room - below - card.chrome >= floors.full) return place('under', below);
-  // Step 2: above the card, its body down to the plan line.
-  if (room - below - card.chrome >= floors.min || !foldable) return place('above', below);
-  // Step 3: the older ones fold into one row; unfolded, step 2 with the row.
-  if (options.expanded) return place('above', MORE_ROW_PX + gap + below, count - 1, true);
-  return place('folded', foldedRows, count - 1);
+  if (count === 0) return place({ mode: 'under', fold: [], rows: 0, more: 0 });
+  if (room - below - card.chrome >= floors.full) return place({ mode: 'under', fold: items.map(() => false), rows: below, more: 0 });
+  // Unfolded by the person: all of them above, the row on top ("Show less").
+  if (options.expanded && compact.more) {
+    return place({ mode: 'above', fold: items.map(() => false), rows: MORE_ROW_PX + gap + below, more: compact.more }, true);
+  }
+  // Steps 1 and 2: the first way the kept lines fit with no give.
+  const fits = ladder.find((rows) => room - rows.rows - card.chrome >= floors.min);
+  // Then the log gives way, and last the kept lines.
+  return place(fits ?? compact);
 }
 
 /** Where everything lands (window y), for the placement's invariants: the
  * card's header, plan line and footer, and each row in the stack. */
 export interface StackGeometry {
-  card: { top: number; headBottom: number; plan: { top: number; bottom: number } | null; footTop: number; bottom: number } | null;
+  card: {
+    top: number; headBottom: number; footTop: number; bottom: number;
+    /** The kept lines' span, and the plan line alone, where they show. */
+    plan: { top: number; bottom: number } | null;
+    first: { top: number; bottom: number } | null;
+  } | null;
   rows: Array<{ top: number; bottom: number; kind: 'notice' | 'more' }>;
   /** The stack's line: the log's top edge (above a docked log) or the region's. */
   line: number;
@@ -269,7 +338,7 @@ export function stackGeometry(m: StackMeasure, place: StackPlace): StackGeometry
   // The rows outside the card, top to bottom.
   const shown: Array<{ h: number; kind: 'notice' | 'more' }> = [];
   if (place.more) shown.push({ h: MORE_ROW_PX, kind: 'more' });
-  items.forEach((h, index) => { if (index >= place.folded) shown.push({ h, kind: 'notice' }); });
+  items.forEach((h, index) => { if (!place.fold[index]) shown.push({ h, kind: 'notice' }); });
   const rows: StackGeometry['rows'] = [];
   let cardBottom: number;
   if (place.mode === 'under') {
@@ -285,15 +354,27 @@ export function stackGeometry(m: StackMeasure, place: StackPlace): StackGeometry
   const headBottom = top + card.chrome - foot;
   const visible = height - card.chrome;
   let plan: { top: number; bottom: number } | null = null;
+  let first: { top: number; bottom: number } | null = null;
   if (card.plan) {
     const tall = card.plan.bottom - card.plan.top;
-    // Unscrolled while it fits with the fade under it; else scrolled in (keepPlan).
-    const bottom = card.plan.bottom + (card.plan.bottom < card.body ? FADE_PX : 0) <= visible
-      ? headBottom + card.plan.bottom
-      : headBottom + visible - FADE_PX;
-    plan = { top: bottom - tall, bottom };
+    const one = card.first ?? card.plan;
+    let shift: number;
+    if (place.underFade) {
+      // Step 5: the plan line just under the top fade (or centred when even
+      // it can't clear both), the ⚠ line next in the scroll.
+      const offset = Math.max(0, Math.min(FADE_PX, (visible - (one.bottom - one.top)) / 2));
+      shift = headBottom + offset - one.top;
+    } else if (card.plan.bottom + (card.plan.bottom < card.body ? FADE_PX : 0) <= visible) {
+      // Unscrolled while it fits with the fade under it.
+      shift = headBottom;
+    } else {
+      // Scrolled in (keepPlan): the last kept line's foot over the bottom fade.
+      shift = headBottom + visible - FADE_PX - card.plan.bottom;
+    }
+    plan = { top: card.plan.top + shift, bottom: card.plan.top + shift + tall };
+    first = { top: one.top + shift, bottom: one.bottom + shift };
   }
-  return { card: { top, headBottom, plan, footTop: cardBottom - foot, bottom: cardBottom }, rows, line };
+  return { card: { top, headBottom, plan, first, footTop: cardBottom - foot, bottom: cardBottom }, rows, line };
 }
 
 /** Whether a new place is a layout switch (GM r4; review 2 MEDIUM-1): the
@@ -309,7 +390,7 @@ export function stackJumps(prev: { place: StackPlace; logTop: number; floatTop: 
 /** Whether the give-way step changed: the order, the fold or the row. */
 export function stepChanged(prev: StackPlace | null, next: StackPlace): boolean {
   if (!prev) return false;
-  return prev.mode !== next.mode || prev.folded !== next.folded || prev.more !== next.more;
+  return prev.mode !== next.mode || prev.folded !== next.folded || prev.more !== next.more || prev.collapse !== next.collapse;
 }
 
 function px(value: string): number {
@@ -320,6 +401,12 @@ function px(value: string): number {
 /** The notices in the stack, top to bottom (the card is not one). */
 function noticeItems(stack: HTMLElement): HTMLElement[] {
   return [...stack.querySelectorAll<HTMLElement>('[data-notice-slot] > *')].filter((item) => !item.hasAttribute(SHRINK_ATTR));
+}
+
+/** A notice that offers Undo or Redo (GM r7: it never folds). */
+export function offersUndo(item: HTMLElement): boolean {
+  if (item.hasAttribute(UNDO_ATTR) || item.querySelector(`[${UNDO_ATTR}]`)) return true;
+  return [...item.querySelectorAll('button')].some((button) => /^(Undo|Redo)\b/.test((button.textContent ?? '').trim()));
 }
 
 function scrollerOf(card: HTMLElement): HTMLElement | null {
@@ -347,13 +434,13 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
     const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
     const kept = [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)];
     let plan: CardMeasure['plan'] = null;
+    let first: CardMeasure['first'] = null;
     if (kept.length) {
       const from = scroller.getBoundingClientRect().top;
       const boxes = kept.map((element) => element.getBoundingClientRect());
-      plan = {
-        top: Math.round((Math.min(...boxes.map((b) => b.top)) - from) / scale + scroller.scrollTop),
-        bottom: Math.round((Math.max(...boxes.map((b) => b.bottom)) - from) / scale + scroller.scrollTop),
-      };
+      const at = (y: number) => Math.round((y - from) / scale + scroller.scrollTop);
+      plan = { top: at(Math.min(...boxes.map((b) => b.top))), bottom: at(Math.max(...boxes.map((b) => b.bottom))) };
+      first = { top: at(boxes[0].top), bottom: at(boxes[0].bottom) };
     }
     shrink = {
       chrome: Math.max(0, card.offsetHeight - body.offsetHeight),
@@ -361,8 +448,10 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
       foot: foot ? Math.max(0, Math.round((cardRect.bottom - foot.getBoundingClientRect().top) / scale)) : 0,
       line: px(getComputedStyle(scroller).lineHeight) || ONE_LINE_PX,
       items: noticeItems(stack).map((item) => item.offsetHeight),
+      undo: noticeItems(stack).map(offersUndo),
       gap: px(getComputedStyle(stack).rowGap) || 8,
       plan,
+      first,
     };
     column = { left: cardRect.left, right: cardRect.right };
   }
@@ -378,8 +467,10 @@ export function measureNoticeStack(region: HTMLElement, stack: HTMLElement, topL
     logClearance: px(root.getPropertyValue('--agent-log-clearance')),
     logTop: px(root.getPropertyValue('--agent-log-top')),
     topLine,
-    // AgentLog writes the docked log's height without any give, and its floor.
+    // AgentLog writes the log's height without any give, its floor, and what
+    // its collapse frees while it may collapse.
     logSpare: Math.max(0, px(root.getPropertyValue('--agent-log-natural-h')) - px(root.getPropertyValue('--agent-log-floor'))),
+    logCollapse: px(root.getPropertyValue(LOG_COLLAPSE_VAR)),
     card: shrink,
     floating: floatBottom > 0 ? {
       top: floatTop, bottom: floatBottom,
@@ -470,7 +561,7 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   // A folded notice is inert too: no focus (the dialogs' focus order skips
   // it, lib/modalFocus.ts) and nothing a screen reader walks into.
   items.forEach((item, index) => {
-    if (index < place.folded) {
+    if (place.fold[index]) {
       item.setAttribute(FOLD_ATTR, '');
       item.setAttribute('inert', '');
       resting.delete(item);
@@ -483,7 +574,7 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   else region.removeAttribute(MORE_SHOWN_ATTR);
   if (more) {
     more.hidden = !place.more;
-    more.textContent = !place.more ? '' : place.expanded ? SHOW_LESS : moreLabel(place.more);
+    more.textContent = !place.more ? '' : place.expanded ? SHOW_LESS : place.mode === 'pill' ? pillLabel(place.more) : moreLabel(place.more);
     more.setAttribute('aria-expanded', String(place.expanded));
   }
   // The spring is off for this frame: read the layout so the jump lands now.
@@ -492,13 +583,23 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   const scroller = card ? scrollerOf(card) : null;
   const kept = card ? [...card.querySelectorAll<HTMLElement>(`[${KEEP_ATTR}]`)] : [];
   if (place.keepPlan && scroller && kept.length) {
-    // The last kept line's foot just over the bottom fade: whole, and any
-    // line the edge cuts sits under a fade (GM r6).
-    const foot = Math.max(...kept.map((element) => element.getBoundingClientRect().bottom));
-    const short = foot - (scroller.getBoundingClientRect().bottom - FADE_PX);
-    if (short > 0) scroller.scrollTop += Math.ceil(short);
+    const view = scroller.getBoundingClientRect();
+    if (place.underFade) {
+      // Step 5 (GM r7): the plan line first, just under the top fade, the
+      // ⚠ line next in the scroll.
+      const line = kept[0].getBoundingClientRect();
+      const offset = Math.max(0, Math.min(FADE_PX, (view.height - line.height) / 2));
+      scroller.scrollTop += Math.round(line.top - (view.top + offset));
+    } else {
+      // The last kept line's foot just over the bottom fade: whole, and any
+      // line the edge cuts sits under a fade (GM r6).
+      const foot = Math.max(...kept.map((element) => element.getBoundingClientRect().bottom));
+      const short = foot - (view.bottom - FADE_PX);
+      if (short > 0) scroller.scrollTop += Math.ceil(short);
+    }
   }
-  // Step 4: the docked log's body gives way by the squeeze, or grows back.
+  // Step 3: the log's body gives way by the squeeze, or grows back (step 4,
+  // the collapse, is the region's ask of uiStore).
   const root = document.documentElement;
   const squeeze = place.squeeze > 0 ? `${place.squeeze}px` : '';
   if (root.style.getPropertyValue(LOG_SQUEEZE_VAR) !== squeeze) {

@@ -103,13 +103,14 @@
 /* The give-way steps (GM - Design, PR #216 r5; lib/noticeStackPlace.ts).
    Step 2: with no room under the card for its note and plan line, the
    notices move above it, the newest nearest it: the card goes to the
-   stack's end, on its line. Step 3: no room above for them all, the older
-   ones fold into one row ("2 more notices") over the newest. A folded notice
+   stack's end, on its line. Then, no room above for them all, the older
+   ones fold into one row ("2 more notices") over the newest; then every
+   notice without an Undo folds into it ("4 notices", GM r7). A folded notice
    stays mounted (its timers and hold go on) but takes no room, no clicks and
    no focus. A move between steps glides from where each row was (Web
    Animations, on the stack's spring), never a jump; reduced motion lands
    it at once. */
-.notice-region:is([data-notice-mode='above'], [data-notice-mode='folded']) .notice-region__slot > [data-notice-shrinks] {
+.notice-region:is([data-notice-mode='above'], [data-notice-mode='folded'], [data-notice-mode='pill']) .notice-region__slot > [data-notice-shrinks] {
   order: 1;
 }
 

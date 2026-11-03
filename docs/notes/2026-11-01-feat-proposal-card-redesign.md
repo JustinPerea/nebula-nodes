@@ -329,3 +329,69 @@ Measured on main: the card's left edge is at x = −58 at 900 px, −178 at 760 
 | 05, frames 1–3 | The card withdrawn: the log springs back from 91 to 180 px in about 200 ms (top 389 → 357 → 300), the notices glide down. |
 
 - Found while live: proposals left open by earlier crashed driver runs kept a card on screen after a withdraw; the driver now withdraws every open proposal first. The harness's intermittent "Promise was collected" in the offline scene needed one or two reruns.
+
+## Round 3e (GM - Design's r7, 2026-11-02)
+
+**The give-way order, as GM r7 sets it: the plan line goes last.** `placeNoticeStack` stays pure; at short heights:
+1. The notices go under the card, then above it, then the older ones fold under "N more notices" (as built).
+2. **New: the pill.** Every notice without an Undo folds into the one row, "1 notice" / "4 notices" (`pillLabel`, mode `pill`). A notice that offers Undo or Redo never folds, in this step or the last (`offersUndo`: its `data-notice-undo` mark, or a button reading "Undo"/"Redo"; the measure reads it per notice as `card.undo`). When the newest offers Undo, steps 1 and 2 are the same fold, and it is the pill: everything that can fold is in it, the Undo notice whole under it.
+3. The log's body gives way to header + 2 rows (as built).
+4. **New: the log collapses to its header** (`collapse`). The region asks uiStore (`holdAgentLogForCard(want, card)`), which tracks who collapsed it in `agentLogCardHold`:
+   - `card`: the card collapsed it. It reopens when the card leaves, or once the card no longer needs the room.
+   - A collapse the person makes is theirs. It's never reopened for the card, and a log they collapsed gives nothing (AgentLog writes `--agent-log-collapse: 0px`).
+   - `refused`: the person reopened it over the card's collapse (the header, or "See all actions"). The card doesn't collapse it again while it shows; step 5 follows instead. That's reset when the card leaves.
+   - While the card holds the log collapsed, AgentLog keeps writing the open log's natural height, floor and top line, so the region's measure, and the stack, don't move.
+   - What the collapse frees is the floor's whole px less the closed log's `--agent-h-closed` (44): 47 px live.
+5. Only then does the card's body go under its kept lines. The plan line stays whole first, just under the top fade (or centred when even it can't clear both fades), and the ⚠ line comes next in the scroll. Before r7 the last kept line was pinned over the bottom fade, which is why shot 02 showed the ⚠ line and not the plan line.
+
+**The floating log gives way the same way (GM r7).** When the stack sits above a floating log in the card's column, the log's body shrinks to header + 2 rows, then collapses, held at its bottom edge, and grows back when the card leaves. Where the person put it is never changed:
+- A log pinned by its bottom edge (`data-floating="bottom"`) shrinks with no move.
+- A log pinned by its top edge (`data-floating="top"`) is moved down by what it gives (CSS `translate`, on the same spring), so its bottom edge stays put.
+- AgentLog writes the floating box with no give (`--agent-log-float-top` = its bottom less its natural height).
+- Choosing a side: under the log when the stack fits there; else above it with the give when that fits; else the side with more room. Under the log, the stack may cross the log's body, never its header (round 3c's last resort).
+- Under the log there's nothing to give, since its bottom edge stays.
+
+**Found live, fixed with a check:** the card stayed on top in the new `pill` step, because noticeRegion.css listed only `above` and `folded` for the card's `order: 1`. `ABOVE_MODES` (noticeStackPlace.ts) now lists every step that stands the notices above the card, and the rules test checks that the CSS selector names exactly those.
+
+**The grid** now has 378 cells: 7 sizes × log open, closed or floating × 0–4 notices × the banner on or off, plus every count of 1–4 again with the newest notice offering Undo. Every cell holds the never-covered rules. SHORT lists, by name with numbers, each cell where even every step leaves the body short of its kept lines (97 px); PLAN_SHORT lists those where even the plan line alone (65 px) can't show whole.
+- **GM's cells, 420×560, the docked log, the banner, 2–4 notices (no Undo): still 12 px short.** The numbers:
+  - 78 px from the top line (the two-line banner, 214) to the log's line;
+  - plus the log's give, 89 + 47;
+  - less the card's header and footer (89) and the pill row (40), leaves a body of 85 px against the 97 the kept lines need.
+  - The plan line shows whole, and the ⚠ line's last 12 px sit under the bottom fade. Live shot 06 matches: plan 305–338, ⚠ 344–370, fade from 358.
+- **The same window with 1 notice** is also 85 px. **The closed log** behaves the same (85), since a collapsed log is a closed one.
+- **With an Undo notice that stays whole, the body is shorter:**
+  - 420×560 with the banner: 71 px with 1 notice, 31 px with 2–4. At 31 px the plan line isn't whole; it's listed in PLAN_SHORT.
+  - 768×600 with the banner and 2–4 notices: 86 px.
+- **Floating logs: 77 cells short, 62 of them past the plan line too.** These are the grid's logs left mid-column at 30% of the height (420×560, 420×640, 420×760, 768×600, 1024×640). Since the log's bottom edge stays where the person put it, only the room above it grows. At 420×560 that's 44 px + 136 of give above it, against 123 under it. The card alone needs 186, and the pill 40 more.
+
+  **For GM:** holding the kept lines there would mean moving the log or letting its bottom edge rise. Both go against "its position stays the person's".
+
+**Not this PR, flagged for GM:** with no card, notices sit on the region's line even over a floating log the person dragged into the band (shot 09: "Saved the board…" over the log's body). That's how it was before; the floating clearance only runs with a card.
+
+**Checks (round 3e).**
+- tsc 0 and lint 0.
+- Focused vitest, `--maxWorkers=2`, the round 3d list with the new `tests/proposalLogGive.round3e.test.tsx` (focusRingCss and the copy sweep among them): 160 files, 3148 passed.
+- Backend unchanged; pytest not rerun.
+- Entry: 453,444 B raw, 139,570 B gzip.
+- Mutation checks: 37 run, 32 caught at first. The 5 that survived are now pinned, and caught:
+  - an older Undo notice kept whole in step 1;
+  - the pill when the newest offers Undo and step 1 has the room;
+  - the plan line from the body's top when even it can't clear the fades;
+  - "See all actions" as the person's reopening;
+  - a bottom-pinned floating log.
+
+  Runner `scratchpad/proposal-card/mut3e/run.py`; results in `out-first.txt` and `out-pins.txt`.
+- **Live** (Restraint; isolated backend on 8798, Vite on 5798; the installed Chrome with a throwaway profile, removed after; canaries blocked; nothing accepted or run; offline by blocking `/api/health`). Shots are in `scratchpad/proposal-card/shots3e/`, and `md5 | uniq -d` is empty:
+
+| Shot | Result |
+|---|---|
+| 02, 768×600, offline, 4 notices | The pill "4 notices" (199–231). Card 239–395, plan line 289–305 and ⚠ line 311–324 both whole over the bottom fade (footer 341). The log gives 63 (header 404–441). |
+| 06, 420×560, offline, 3 notices | The pill "3 notices" (214–246). The log collapsed to its header for the card (436–480, `agentLogCardHold: 'card'`). Card 254–428, plan line 305–338 whole, the ⚠ line 12 px under the fade. |
+| 07, 420×640, the pill with an Undo notice | "3 notices" (116–148), then "Deleted “Photo 2”. Undo" whole (156–202), then the card 210–396 with both kept lines whole. The log gives 24. |
+| 08, 1024×640, a floating log in the column | Pinned by its top at 330, bottom 510. It gives 24: 355–510, bottom edge unmoved. "2 notices" over the card (190–346), both kept lines whole. |
+| 09, frames 1–3 | The card withdrawn: the log springs back 355 → 340 → 330, its bottom at 510 (the spring slowed to a tenth via CDP for frames 1–2). Its bottom dips 3 px in the spring's overshoot, since `translate` overshoots and `max-height` can't. |
+
+- Also live, with no shot:
+  - The log the card collapsed at 420×560 (shot 06) reopened by itself once the window grew to 420×640 and the card no longer needed the room (`hold: 'none'`, open).
+  - Collapsed by hand at 420×560, the card arrived (step 1, "2 more notices") and left, and the log stayed collapsed (`open: false`, `--agent-log-collapse: 0px`).

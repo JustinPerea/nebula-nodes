@@ -4,6 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
+import { LOG_COLLAPSE_VAR } from '../../lib/noticeStackPlace';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   clamp,
@@ -32,20 +33,26 @@ function chatLauncherRect(): Rect | null {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
 }
 
-/** The log's layout size, ignoring the transform its entry spring applies. */
+/** A length token's px, read off a probe since it may be a clamp(). */
+const heightProbes = new Map<string, HTMLDivElement>();
+function probeHeight(token: string): number {
+  let probe = heightProbes.get(token);
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText = `position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:var(${token})`;
+    heightProbes.set(token, probe);
+  }
+  if (!probe.isConnected) document.body.appendChild(probe);
+  return probe.offsetHeight;
+}
+
 /** The open log's height with no give: the person's resize (inline), else
- * the state's --agent-log-h, read off a probe since it is a clamp(). */
-let heightProbe: HTMLDivElement | null = null;
+ * the state's --agent-log-h. */
 function naturalLogHeight(log: HTMLElement): number {
   const inline = Number.parseFloat(log.style.height);
   if (Number.isFinite(inline) && inline > 0) return inline;
-  if (!heightProbe) {
-    heightProbe = document.createElement('div');
-    heightProbe.setAttribute('aria-hidden', 'true');
-    heightProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:var(--agent-log-h)';
-  }
-  if (!heightProbe.isConnected) document.body.appendChild(heightProbe);
-  return Math.min(heightProbe.offsetHeight, window.innerHeight * 0.8);
+  return Math.min(probeHeight('--agent-log-h'), window.innerHeight * 0.8);
 }
 
 /** The floor it gives way to (GM r6): its header and 2 rows of the body,
@@ -144,6 +151,11 @@ export function AgentLog() {
   // when the log unmounts (leaving the canvas), as its local state did.
   const open = useUIStore((s) => s.agentLogOpen);
   const setOpen = useUIStore((s) => s.setAgentLogOpen);
+  // Collapsed for the proposal card (GM r7 step 4), or reopened over that by
+  // the person: the region's measure stays the open log's while the card
+  // holds it, and its collapse is offered only while it may collapse.
+  const cardHold = useUIStore((s) => s.agentLogCardHold);
+  const openSize = useRef<{ natural: number; floor: number } | null>(null);
   useEffect(() => () => useUIStore.getState().setAgentLogOpen(false), []);
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
@@ -281,29 +293,47 @@ export function AgentLog() {
     const set = (name: string, value: string) => {
       if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
     };
-    const DOCK = ['--agent-log-clearance', '--agent-log-top', '--agent-log-natural-h', '--agent-log-floor'];
+    const DOCK = ['--agent-log-clearance', '--agent-log-top'];
+    const GIVE = ['--agent-log-natural-h', '--agent-log-floor', LOG_COLLAPSE_VAR];
     const FLOAT = ['--agent-log-float-top', '--agent-log-float-bottom', '--agent-log-float-left', '--agent-log-float-right'];
     if (!visible || !log) {
-      clear([...DOCK, ...FLOAT]);
+      clear([...DOCK, ...GIVE, ...FLOAT]);
       return undefined;
     }
     const measure = () => {
       const rect = log.getBoundingClientRect();
       const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
+      // The height it has with no give, and its floor of header and 2 rows:
+      // the open log's own, kept while the card holds it collapsed (GM r7);
+      // a log the person collapsed is its header and gives nothing.
+      const held = !open && cardHold === 'card' && openSize.current;
+      if (open) {
+        const natural = naturalLogHeight(log) || rect.height;
+        openSize.current = { natural, floor: Math.min(natural, logFloor(log)) };
+      }
+      const { natural, floor } = open || held ? openSize.current! : { natural: rect.height, floor: rect.height };
+      // Its collapse to the header frees the rest, while it may collapse.
+      // (At its floor it is the floor's whole px tall, as layouts.css draws it.)
+      const collapse = (open && cardHold !== 'refused') || held ? Math.max(0, Math.ceil(floor) - Math.ceil(probeHeight('--agent-h-closed'))) : 0;
+      set('--agent-log-natural-h', `${Math.ceil(natural)}px`);
+      set('--agent-log-floor', `${Math.ceil(floor)}px`);
+      set(LOG_COLLAPSE_VAR, `${collapse}px`);
       if (docked) {
         clear(FLOAT);
         log.dataset.docked = 'true';
-        const natural = open ? naturalLogHeight(log) || rect.height : rect.height;
+        delete log.dataset.floating;
         set('--agent-log-clearance', `${Math.ceil(window.innerWidth - rect.left + AGENT_LOG_GAP_PX)}px`);
         set('--agent-log-top', `${Math.ceil(window.innerHeight - (rect.bottom - natural) + AGENT_LOG_GAP_PX)}px`);
-        set('--agent-log-natural-h', `${Math.ceil(natural)}px`);
-        set('--agent-log-floor', `${Math.ceil(open ? Math.min(natural, logFloor(log)) : natural)}px`);
       } else {
         delete log.dataset.docked;
         clear(DOCK);
+        // A floating log gives way held at its bottom edge too (GM r7): one
+        // pinned by its top edge is moved down by what it gives.
+        log.dataset.floating = position?.anchorY === 'bottom' && typeof position.offsetY === 'number' ? 'bottom' : 'top';
         if (rect.width > 0 && rect.height > 0) {
-          root.style.setProperty('--agent-log-float-top', `${Math.floor(rect.top)}px`);
+          // Its box with no give: the bottom edge stays where it is.
+          root.style.setProperty('--agent-log-float-top', `${Math.floor(rect.bottom - natural)}px`);
           root.style.setProperty('--agent-log-float-bottom', `${Math.ceil(rect.bottom)}px`);
           root.style.setProperty('--agent-log-float-left', `${Math.floor(rect.left)}px`);
           root.style.setProperty('--agent-log-float-right', `${Math.ceil(rect.right)}px`);
@@ -319,9 +349,9 @@ export function AgentLog() {
     return () => {
       observer?.disconnect();
       window.removeEventListener('resize', measure);
-      clear([...DOCK, ...FLOAT]);
+      clear([...DOCK, ...GIVE, ...FLOAT]);
     };
-  }, [visible, open, position]);
+  }, [visible, open, position, cardHold]);
 
   // The notice leaves after a few seconds unless it is hovered or focused;
   // Settings > Preferences stays the way back after that.
@@ -422,6 +452,8 @@ export function AgentLog() {
       justDraggedRef.current = false;
       return;
     }
+    // The person's own toggle: a collapse they make is never undone for the
+    // card, and their reopening over the card's collapse holds (uiStore).
     setOpen(!open);
   }
 
@@ -501,6 +533,7 @@ export function AgentLog() {
       }
       style={containerStyle}
       data-status={statusLabel}
+      {...(cardHold === 'card' && !open ? { 'data-card-collapsed': '' } : {})}
     >
       <div
         className="agent-log__drag-row"

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { RegionNotices } from './canvas/DeferredCanvasOverlays';
 import { NOTICE_SLOTS, setNoticeSlot, type NoticeSlot } from '../lib/noticeSlots';
 import { keepNoticeFocus, noticeKeys } from '../lib/modalFocus';
+import { useUIStore } from '../store/uiStore';
 import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
 import {
   MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
@@ -84,6 +85,9 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       // a give-way step glides from where each row was (GM r5).
       applyNoticeStack(region, stack, next.place, stackJumps(last, next), stepChanged(last?.place ?? null, next.place));
       last = next;
+      // Step 4 (GM r7): the log collapses to its header for the card, and
+      // reopens when the card leaves; uiStore never undoes the person's own.
+      useUIStore.getState().holdAgentLogForCard(next.place.collapse, next.place.mode !== null);
     }
     replace.current = () => {
       expanded.current = !expanded.current;
