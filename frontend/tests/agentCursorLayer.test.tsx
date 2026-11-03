@@ -910,10 +910,10 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     expect(where().aaaaaaaaaaaa).toEqual({ x: 320, y: 300 });
   });
 
-  it('a node dragged slowly under a landed cursor carries no stamp: the cursor already there keeps the spot (review 2, L2)', () => {
+  it('a node dragged slowly under a landed cursor: the tab keeps both places until the backend\'s arrival, then the carried one steps aside (review 2, L2; r24 Q2)', () => {
     render(<AgentCursorLayer />);
-    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
-    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 } };
+    const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, since: 1000 };
+    const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, since: 2000 };
     send(event({ ...A, target: { nodeId: 'n1' } }));
     flush();
     send(event({ ...B, target: { x: 800, y: 344 } }));
@@ -927,14 +927,20 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
       lookupRef.current = next as never;
       notifyStore();
       tickFrames(1);
-      // B never moves: A, carried toward it, is the one arriving (round 4).
-      expect(at(cursors().find((el) => el.dataset.session === 'bbbbbbbbbbbb')!)).toEqual({ x: 800, y: 344 });
     }
     flush();
-    const byKey = Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
-    // B was there first: it keeps (800, 344); A, arriving on the dragged node, steps aside.
-    expect(byKey.bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
-    expect(byKey.aaaaaaaaaaaa).toEqual({ x: 800, y: 344 + S });
+    const spots = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
+    // The tab never decides a carry is an arrival: A keeps its earlier
+    // arrival, and heads the column it was carried into.
+    expect(spots().aaaaaaaaaaaa).toEqual({ x: 800, y: 344 });
+    expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 + S });
+    // The drop's write reaches the backend: A's target chain changed, so it
+    // arrives now, in every tab (agentPresenceArrival). B, there before it,
+    // takes the spot back, and A steps aside.
+    act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'aaaaaaaaaaaa', ordinal: 1, since: 3000 }]); });
+    flush();
+    expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
+    expect(spots().aaaaaaaaaaaa).toEqual({ x: 800, y: 344 + S });
   });
 });
 
@@ -2569,7 +2575,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
 
   // Review 8 / GM r21: a merge lays the joined column out in arrival
   // order; a cursor that changes slot glides there, nothing jumps.
-  it('P3 live: the earlier column heads the merge, the later cursors glide under it, nothing jumps (r21)', () => {
+  it('P3 live: in the merge the later cursor aimed higher stays on top, the earlier one on its own target, the count glides under it, nothing jumps (r21, r24 Q1)', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 386);
     blocker('b', 2, 300, 300);
@@ -2582,23 +2588,26 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       path.push(where());
     }
     flush();
-    expect(where()).toMatchObject({ a: { x: 300, y: 386 }, b: { x: 300, y: 386 + S }, c: { x: 300, y: 386 + 2 * S } });
+    // a and b are the two earliest, drawn in full: b aims 86 px higher, so
+    // it goes in above a and stays on its target; a stays on its own; c is
+    // the count, one step under a.
+    expect(where()).toMatchObject({ b: { x: 300, y: 300 }, a: { x: 300, y: 386 }, c: { x: 300, y: 386 + S } });
     expect(byKey('c').dataset.count).toBe('2');
     expect(byKey('d').dataset.collapsed).toBe('true');
-    // A 128 px glide on the land spring peaks near 15 px a frame; a jump
-    // (the column floor snapping b under a, the bug) is 128 px in one frame
-    // and a step that changes far faster than the spring accelerates.
+    // An 86 px glide on the land spring stays well under 20 px a frame; a
+    // jump is 86 px in one frame and a step that changes far faster than the
+    // spring accelerates.
     const step = (k: string, i: number) => path[i][k].y - path[i - 1][k].y;
     for (let i = 1; i < path.length; i += 1) {
       for (const k of ['a', 'b', 'c']) {
         expect(Math.abs(step(k, i))).toBeLessThan(20);
         if (i > 1) expect(Math.abs(step(k, i) - step(k, i - 1))).toBeLessThan(8);
       }
-      // b and c glide together, a step apart.
-      expect(Math.abs(step('b', i) - step('c', i))).toBeLessThan(1);
+      expect(path[i].a.y).toBe(386);
+      expect(path[i].b.y).toBe(300);
     }
-    // b glides the 128 px down over many frames.
-    expect(path.filter((w) => w.b.y > 301 && w.b.y < 386 + S - 1).length).toBeGreaterThan(8);
+    // c glides the 86 px down over many frames.
+    expect(path.filter((w) => w.c.y > 300 + S + 1 && w.c.y < 386 + S - 1).length).toBeGreaterThan(8);
   });
 
   // GM r21 Q2: "earliest" is the backend's arrival order, so a reload (a
@@ -2842,7 +2851,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   };
 
-  it('a cursor carried by its node onto a column past its arrival radius comes after it at once, in this tab (r23 item 2, arrivesNow)', () => {
+  it('a cursor carried by its node onto a column keeps its place in this tab until the backend\'s arrival, then comes after the column (r24 Q2)', () => {
     render(<AgentCursorLayer />);
     send(event({ ...session('a', 3), target: { nodeId: 'n2' }, since: 500 }));
     flush();
@@ -2860,15 +2869,16 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     pane.transform = [0, 0, 1];
     notifyStore();
     flush();
-    // Before the backend's arrival comes: a is under d and e, not their head.
-    expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
-    // The backend's arrival (later than both) agrees: nothing moves.
+    // No arrival of the tab's own: a still holds its backend arrival (500),
+    // the earliest, so it heads the column it was carried into.
+    expect(where()).toEqual({ a: { x: 500, y: 344 }, d: { x: 500, y: 344 + S }, e: { x: 500, y: 344 + 2 * S } });
+    // The backend saw its target chain change: a arrives now, in every tab.
     act(() => { useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: 'a'.repeat(12), ordinal: 3, since: 9000 }]); });
     flush();
     expect(where()).toEqual({ d: { x: 500, y: 344 }, e: { x: 500, y: 344 + S }, a: { x: 500, y: 344 + 2 * S } });
   });
 
-  it('a carry within the arrival radius is no arrival: the cursor keeps its place, as the backend counts it', () => {
+  it('a carry with no backend arrival is no arrival: the cursor keeps its place (r24 Q2)', () => {
     render(<AgentCursorLayer />);
     // e on n1 arrived first; a came later to a point just clear under it.
     send(event({ ...session('e', 3), target: { nodeId: 'n1' }, since: 500 }));
@@ -2876,8 +2886,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     send(event({ ...session('a', 1), target: { x: 500, y: 394 }, since: 1000 }));
     flush();
     expect(where()).toEqual({ e: { x: 500, y: 344 }, a: { x: 500, y: 394 } });
-    // n1 dropped 12 px lower: e now meets a, but a 12 px carry is no
-    // arrival: e still heads, and a steps under it.
+    // n1 dropped 12 px lower: e now meets a. The arrow joins the column in
+    // this tab only (overlap joins are the tab's), and the backend's chain
+    // (targets 38 px apart) didn't change: no arrival. e still heads, and a
+    // steps under it.
     dragNode('n1', { x: 400, y: 312 });
     flush();
     expect(where()).toEqual({ e: { x: 500, y: 356 }, a: { x: 500, y: 356 + S } });
@@ -2959,6 +2971,40 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
         }
       }
       expect(shownAt).toBeGreaterThan(30);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a say capped with a still cursor on its left and one that never stops on its right goes to the log, never back to waiting (#219 review 1, NIT-1)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      blocker('a', 1, 300, 300);
+      blocker('f', 3, 150, 318); // still, across the left say's row
+      blocker('e', 2, 400, 318);
+      send(event({ ...session('e', 2), target: { x: 470, y: 318 } }));
+      frame();
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const a = byKey('a');
+      let flip = true;
+      let loggedAt = -1;
+      const states: string[] = [];
+      for (let i = 0; i < 150; i += 1) {
+        if (i % 6 === 5) {
+          flip = !flip;
+          send(event({ ...session('e', 2), target: { x: flip ? 470 : 400, y: 318 } }));
+        }
+        frame();
+        expect(painted(a)).toBe(false);
+        states.push(a.dataset.sayWait ?? '-');
+        if (loggedAt < 0 && a.dataset.sayWait === 'log') loggedAt = i;
+      }
+      // Held at the cap, then the Agent log once the cap is up again, while
+      // e still moves; with the bounce it went back to waiting and the cap
+      // started over, so it never got there.
+      expect(loggedAt, states.join('')).toBeGreaterThan(0);
+      expect(loggedAt).toBeLessThan(100);
     } finally {
       vi.useRealTimers();
     }

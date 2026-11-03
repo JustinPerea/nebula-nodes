@@ -26,7 +26,6 @@ import {
 } from '../../lib/agentCursorPlanner';
 import { placedByPerson } from '../../lib/personNodeMoves';
 import {
-  AGENT_CURSOR_ARRIVAL_RADIUS,
   AGENT_CURSOR_ARROW_PATH,
   AGENT_CURSOR_HOVER_SLOP_PX as HOVER_SLOP_PX,
   AGENT_CURSOR_NAME_FIRST_SIGHT_MS,
@@ -46,7 +45,6 @@ import {
   paintOrder,
   pillEdge,
   sessionFill,
-  targetsMeet,
   type StackSpot,
 } from '../../lib/agentCursorLook';
 import { cursorLabel } from '../../lib/agentCursorLabel';
@@ -97,13 +95,6 @@ interface FieldEntry {
   /** Ties in `since` with no backend arrival (an older event): this tab's
    *  landing order. */
   landedSeq: number;
-  /** Where it arrived (its target when it landed), not moved by a carry: a
-   *  carry is an arrival only past AGENT_CURSOR_ARRIVAL_RADIUS from here,
-   *  as the backend counts it (agent_presence.carry_nodes). */
-  anchor?: Point | null;
-  /** Carried onto a cursor its node doesn't carry: it arrives after every
-   *  cursor already there, whatever its backend arrival (review 2, L2). */
-  arrivesNow?: boolean;
   /** The spot it was stamped at. */
   at: Point | null;
   /** The node its event anchors to, and that event (seq): the same pair on
@@ -204,9 +195,9 @@ class CursorField {
     let changed = false;
     if (before && (before.rank !== rank || before.known !== known)) {
       // The backend's arrival moved (it went somewhere new, or a node move
-      // carried it past its radius: agentPresenceArrival): its place in the
+      // changed its target chain: agentPresenceArrival): its place in the
       // column follows it, in every tab alike.
-      before = { ...before, rank, known, since: before.since === Infinity ? Infinity : rank, arrivesNow: false };
+      before = { ...before, rank, known, since: before.since === Infinity ? Infinity : rank };
       this.targets.set(key, before);
       this.version += 1;
       changed = true;
@@ -216,11 +207,7 @@ class CursorField {
         this.targets.set(key, { ...before, node, seq, nodeAt });
       }
     } else {
-      // Carried only when its node itself moved: a node measured or resized
-      // (after a reload, the graph measures its nodes after the replay)
-      // moves the point on it, and that is no carry (live r4i).
-      const carried = Boolean(before?.nodeAt && nodeAt && !samePoint(before.nodeAt, nodeAt));
-      this.place(key, before, target, zoom, node, seq, rank, carried, known);
+      this.place(key, before, target, zoom, node, seq, rank, known);
       this.targets.set(key, { ...this.targets.get(key)!, nodeAt });
       changed = true;
     }
@@ -235,7 +222,7 @@ class CursorField {
         const dx = nodeAt.x - o.nodeAt.x;
         const dy = nodeAt.y - o.nodeAt.y;
         if (dx === 0 && dy === 0) continue;
-        this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq, o.rank, true);
+        this.place(other, o, { x: o.target.x + dx, y: o.target.y + dy }, zoom, o.node, o.seq, o.rank);
         this.targets.set(other, { ...this.targets.get(other)!, nodeAt });
         changed = true;
       }
@@ -243,30 +230,21 @@ class CursorField {
     if (changed) for (const [other, wake] of this.wakers) if (other !== key) wake();
   }
 
-  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, carried = false, known = before?.known ?? false): void {
+  private place(key: string, before: FieldEntry | undefined, target: Point, zoom: number, node: string | null, seq: number, rank = before?.rank ?? 0, known = before?.known ?? false): void {
     this.version += 1;
     const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) * zoom <= AGENT_CURSOR_STACK.radiusPx;
     if (before && node !== null && before.node === node && before.seq === seq) {
-      // Carried by its node with no event of its own (a person's drag, a
-      // sync): it keeps its stamp, so the cursors one node carries keep
-      // their order all the way (GM - Design, PR #211 r9 item 3). Unless the
-      // node carries it onto a cursor the node doesn't carry (near enough to
-      // join its column: targetsMeet): that one was there first, so this one
-      // arrives now and is stamped on landing (review 2, L2).
-      const as = (o: FieldEntry, at: Point) => ({ key: '', since: 0, target: at, say: o.say, nameW: o.nameW, sayW: o.sayW });
-      // A node measured or resized (not moved) carries nothing: it keeps
-      // its place, the backend's arrival (r21).
-      // And only past the arrival radius from where it arrived, as the
-      // backend counts a carry (agent_presence.carry_nodes): this tab then
-      // agrees with the arrival the backend sends every tab (r23 item 2).
-      const far = !before.anchor || Math.hypot(target.x - before.anchor.x, target.y - before.anchor.y) > AGENT_CURSOR_ARRIVAL_RADIUS;
-      const meets = carried && far && [...this.targets].some(([other, o]) => other !== key && o.node !== node
-        && targetsMeet(as(o, o.target), as(before, target), zoom) && !targetsMeet(as(o, o.target), as(before, before.target), zoom));
+      // Carried by its node with no event of its own (a person's drag, an
+      // agent's move, an undo, a node measured): it keeps its place, so the
+      // cursors one node carries keep their order all the way (GM - Design,
+      // PR #211 r9 item 3). Whether a carry makes it arrive now is never
+      // this tab's call: the backend decides from its target chain
+      // (agent_presence.carry_nodes) and tells every tab
+      // (agentPresenceArrival, the rank change in report), so live tabs and
+      // a reload agree (#219 r24 Q2).
       const dx = target.x - before.target.x;
       const dy = target.y - before.target.y;
-      this.targets.set(key, meets
-        ? { target, since: Infinity, rank: before.rank, known: before.known, landedSeq: 0, arrivesNow: true, at: null, node, seq, say: before.say, nameW: before.nameW, sayW: before.sayW }
-        : { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
+      this.targets.set(key, { ...before, target, at: before.at && { x: before.at.x + dx, y: before.at.y + dy } });
       return;
     }
     // Its target moved by an event of its own, not carried: the cursors
@@ -292,16 +270,9 @@ class CursorField {
   landed(key: string): void {
     const entry = this.targets.get(key);
     if (!entry || entry.since !== Infinity) return;
-    // Its place: the backend's arrival (the same in every tab and after a
-    // reload, r21); one carried onto a cursor already there comes after it.
-    let since = entry.rank;
-    if (entry.arrivesNow) {
-      // After every cursor already there: half a millisecond past the
-      // latest, never a tie (the backend's own arrival, sent to every tab,
-      // replaces it, and is later still).
-      for (const [other, o] of this.targets) if (other !== key && o.since !== Infinity) since = Math.max(since, o.since + 0.5);
-    }
-    this.targets.set(key, { ...entry, since, landedSeq: (this.arrivals += 1), arrivesNow: false, at: { ...entry.target }, anchor: { ...entry.target } });
+    // Its place: the backend's arrival, the same in every tab and after a
+    // reload (r21).
+    this.targets.set(key, { ...entry, since: entry.rank, landedSeq: (this.arrivals += 1), at: { ...entry.target } });
     this.version += 1;
   }
 
@@ -627,6 +598,11 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   // SAY_WAIT_MAX_MS shows in the Agent log only until the room clears.
   const sayState = useRef<SayState>('none');
   const sayWaitSince = useRef<number | null>(null);
+  // The say is held by the cap's strict check (a cursor in the way on both
+  // sides, moving ones included): from there it shows only on a side that
+  // is strictly clear, or goes to the Agent log when the cap is up, and
+  // never back to waiting (#219 review 1, NIT-1).
+  const capHold = useRef(false);
   const sayWasShown = useRef(false);
   const sayText = useRef<string | null>(null);
   // In a full column: folded into the count cursor, or the count cursor
@@ -730,6 +706,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
   const setSay = useRef<(state: SayState) => void>(() => {});
   setSay.current = (state: SayState) => {
     sayState.current = state;
+    capHold.current = false;
     if (state === 'none' || state === 'right' || state === 'left') sayWaitSince.current = null;
     const el = cursorRef.current;
     if (el) {
@@ -772,6 +749,15 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     const z = zoomRef.current;
     const since = sayWaitSince.current;
     const capped = capNow || (since !== null && performance.now() - since > SAY_WAIT_MAX_MS);
+    if (state === 'hold' && capHold.current) {
+      // A moving cursor is still in the way here: the loose check below
+      // would send it back to waiting each frame, and the cap would start
+      // over, every SAY_WAIT_MAX_MS while the cursor kept moving.
+      if (!field.sayRoom(cursor.key, 'right', m.pos, z, true).foreign) setSay.current('right');
+      else if (!field.sayRoom(cursor.key, 'left', m.pos, z, true).foreign) setSay.current('left');
+      else if (capped) setSay.current('log');
+      return;
+    }
     const right = field.sayRoom(cursor.key, 'right', m.pos, z);
     const left = right.foreign ? field.sayRoom(cursor.key, 'left', m.pos, z) : null;
     const blocked = right.foreign && left!.foreign;
@@ -814,6 +800,7 @@ function AgentCursorView({ cursor, zoom, peers, field, fontVersion = 0, leaving 
     }
     sayWaitSince.current = performance.now();
     setSay.current('hold');
+    capHold.current = true;
   };
   // A say that replaces one still drawn: does its side still have room?
   const sayFits = useRef<() => boolean>(() => false);
