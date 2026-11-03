@@ -212,6 +212,27 @@ export function projectDeletedLine(name: string): { text: string; title: string 
   return { text: `Nebula couldn’t save your change to ${what} because its project was deleted. Restore the project to keep the change.`, title };
 }
 
+/**
+ * The confirmation once Restore project's replayed edits are saved (round
+ * 6n, GM r71), naming the project and, as the purged line does, the boards
+ * whose kept edit was sent and saved (one; up to three joined; then a
+ * count). With none saved (the boards kept every change), the first
+ * sentence alone.
+ * - "Restored “Coast”. Your change to “Rivers” is saved."
+ * - "Restored “Coast”. Your changes to “Rivers” and “Tide” are saved."
+ * - "Restored “Coast”. Your changes to 4 boards are saved."
+ * - "Restored “Coast”."
+ */
+export function projectRestoredLine(project: string, saved: readonly string[]): { text: string; title: string } {
+  const { what, title } = namedBoards([project]);
+  if (!saved.length) return { text: `Restored ${what}.`, title };
+  const kept = namedBoards(saved);
+  // Each form spelled out whole.
+  const text = kept.one ? `Restored ${what}. Your change to ${kept.what} is saved.`
+    : `Restored ${what}. Your changes to ${kept.what} are saved.`;
+  return { text, title: `${title}: ${kept.title}` };
+}
+
 /** Why a Restore project failed (round 6m, GM r53 Q1): the server isn't answering, the project was deleted for good,
  *  or anything else. A project another tab restored first isn't a failure. */
 export type ProjectRestoreFailure = 'noAnswer' | 'purged' | 'refused';

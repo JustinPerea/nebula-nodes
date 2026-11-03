@@ -903,6 +903,22 @@ GM passed 6l's Q2 confirm, the Q3 in-tab line, the Q8 line and the C hover answe
   - Q8: Shore's kept rename in project Coast, Coast in Recently deleted. Restore project, pressed with the pointer: Coast restored (not opened), Shore renamed Cliff, the line gone, then "Restored “Coast”. Your change is saved." in the confirmation slot (neutral, status). Focus on `<main>`, no ring.
   - No request left the lane. Shots: scratchpad `paste/shots6m/` (2), each opened at 1000 px, distinct md5s.
 
+## Round 6n (GM r71)
+
+GM signed off 6m's design after one string change, with no reshoot: every Restore project line names the board(s) as well as the project. The 30-day correction, the 404 re-read, the waiting send living with a kept edit and the apostrophe ratchet were approved as built.
+
+- **The success line** (`projectRestoredLine`, new in `boardSaveLine.ts`) names the project, then the boards whose replayed edit was sent and saved, by the names rule the purged line uses (`namedBoards`): one name; two or three joined with "and"; from four, a count.
+  - "Restored “Coast”. Your change to “Rivers” is saved." / "…Your changes to “Rivers” and “Tide” are saved." / "…Your changes to “Rivers”, “Tide” and “Harbor” are saved." / "…Your changes to 4 boards are saved."
+  - With nothing saved (the boards kept every change), "Restored “Coast”." alone, as before.
+  - The title is the project's full name, then every board's: "“Coast”: “Rivers” and “Tide”", as the purged line's is.
+  - `MoodboardStudioView.tsx`'s `projectRestoring` now holds each sending board's id and name, not ids only. A board whose draft is gone before its save lands isn't named, as it wasn't counted before.
+- **The purged line** was already as GM wrote it ("Your change to “Rivers” can’t be kept."); unchanged, with its three-name count now tested.
+- **Left as they are:** the straight headings "Couldn't restore the board." and "Couldn't load Recently deleted." stay here and go on the app-wide copy PR's list.
+- **MCP and CLI.** Nothing new: these lines are the tab's own state.
+- **Tests.** `boardSaveLine.test.ts`: success for 1, 2, 3, 4 and 5 boards, none, a clipped name and a blank one (1 new test); purged gains 3 and 5. Paste: the five single-board confirmations now expect the board's name; +3: two boards restored with their project (both named, the title too), two boards whose project was deleted for good (both named), and a board whose draft goes before its save lands (not named).
+- **Mutants:** 8, all killed: the success line dropping the board, one and several swapped, four named instead of counted, the title losing the boards, the Studio back on the old line, the Studio naming only the first board, the Studio naming a board whose draft is gone, and the purged line counting three.
+- **Gates.** tsc -b --noEmit 0; lint 0; the build budget 447,881 B raw, 138,303 B gzip (raw unchanged; the Studio is deferred; dist deleted); focused vitest over 198 files (every test that reads src/ or styles/ from disk included): 3738 of 3738; `person_gate.py` byte-identical to origin/main. No backend change, so no pytest this round.
+
 ## Files
 
 - `frontend/src/lib/boardPlacement.ts` (new) and its test.
@@ -928,6 +944,7 @@ GM passed 6l's Q2 confirm, the Q3 in-tab line, the Q8 line and the C hover answe
 - Round 6k: `boardSaveLine.ts` (`restoredBoardsLine`, `namedBoards`), `MoodboardStudioView.tsx` (the open board's one line, the red line's × and board-change clear, `restoring` and the confirmation, `boardRestored`, `openBoard`, the keyboard flag and focus ids), `asset-trash/AssetTrash.tsx` (`TrashOpenRequest`, the focus, load and action lines apart), `styles/moodboard-studio.css` (the ×), and their tests.
 - Round 6l: `boardSaveLine.ts` (`boardGoneKind`, the gone save line, `restoredBoardsLine`'s two sentences, `projectDeletedLine`, `UNDO_DROPPED_LINE`, `lostTooLine`, `keptFromBoardLine`'s image items), `unsavedDrafts.ts` (`opMeta`, `stampNewOps`, `opTarget`, `valueOnBoard`, `valueOfOp`, `keptEditBoards`, no day or cap for kept edits), `store/assetStudioDraftStore.ts` (`saveGone`), `MoodboardStudioView.tsx` (the per-op replay, `undoDropped`, `markGone` and the held line, `LiveText`, `DropOnShow`, `focusAfterLine`, `railFocus`, the re-checks, `forgetEdits`, `unsavedAtStake`, the project line and `restoreGoneProject`), `asset-trash/AssetTrash.tsx` (`defaultOpen`, `atStake`, `onPurged`, the refusal cleared on `where`), and their tests; `tests/lib/trash.empty.test.ts` (new), `tests/lib/errorCopy.namedLine.test.ts` (a constant opening read as its text), backend `tests/test_asset_trash.py`.
 - Round 6m: `boardSaveLine.ts` (`KeptImage` as `{ n }`, `projectRestoreFailure`, `projectRestoreFailedLine`), `MoodboardStudioView.tsx` (Reference #N, `ProjectGoneBoard.projectName`, `restoreGoneProject`'s outcomes, `projectRestoring`, `projectFailures`, `projectsPurged`, the × focus, `replayAway`'s `sends`), `boardAdds.ts` (`keepWaitingWhile`), `unsavedDrafts.ts` (its registration), and their tests; `tests/lib/errorCopy.namedLine.test.ts` (the straight-apostrophe ratchet) with `tests/lib/straightApostrophes.baseline.json` (new), `tests/tryAgainLines.ratchet.test.ts`.
+- Round 6n: `boardSaveLine.ts` (`projectRestoredLine`), `MoodboardStudioView.tsx` (`projectRestoring`'s boards), and their tests.
 - Round 6: `boardAdds.ts` (board refs, re-filing, the per-board backstop, the reload record), `boardPlaceholder.ts` (`placeholderSpokenName`), `pasteImages.ts` (`reloadLostLine`), `MoodboardStudioView.tsx` (`saveAway`, `landAway`, `keepUnsaved`, the return effects), `BoardCanvas.tsx` (Fit, the spoken name, the band, the focus fallback), `outsideChipText.ts`, `OutsideChip.tsx`, `lib/boardPlacement.ts` (`band`), and their tests; `BoardCanvas.fitFollow.test.tsx` and `tests/components/AssetStudioDrafts.test.tsx` updated.
 
 ## Docs

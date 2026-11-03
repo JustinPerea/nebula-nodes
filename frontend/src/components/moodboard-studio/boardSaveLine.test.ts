@@ -4,7 +4,7 @@ import { MoodboardVersionConflict } from '../../lib/moodboardEdits';
 import type { Moodboard } from '../../types';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveCause, boardSaveFailure, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine,
   isCreateIdRefusal, joinWithAnd, keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectRestoreFailedLine,
-  projectRestoreFailure } from './boardSaveLine';
+  projectRestoreFailure, projectRestoredLine } from './boardSaveLine';
 
 const failed = (status: number, options: ConstructorParameters<typeof RequestFailedError>[2] = {}) =>
   new RequestFailedError("Couldn't save the board.", status, { reason: 'x', ...options });
@@ -260,11 +260,35 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
       text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your change to “Rivers” can’t be kept.' });
     expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Harbor']).text)
       .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers” and “Harbor” can’t be kept.');
+    expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Harbor', 'Tide']).text)
+      .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers”, “Harbor” and “Tide” can’t be kept.');
     expect(projectRestoreFailedLine('Shore', 'purged', ['a', 'b', 'c', 'd']).text)
       .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 4 boards can’t be kept.');
+    expect(projectRestoreFailedLine('Shore', 'purged', ['a', 'b', 'c', 'd', 'e']).text)
+      .toBe('Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 5 boards can’t be kept.');
     const long = 'An exceptionally long project name that keeps going past forty';
     expect(projectRestoreFailedLine(long, 'noAnswer').text).toContain(`“${long.slice(0, 39)}…”`);
     expect(projectRestoreFailedLine(long, 'noAnswer').title).toBe(`“${long}”`);
+  });
+
+  // Round 6n (GM r71): the success line names the boards as well as the project, by the same names rule.
+  it('restored: names the project and the boards whose change is saved, one, up to three, then a count', () => {
+    expect(projectRestoredLine('Coast', ['Rivers'])).toEqual({ title: '“Coast”: “Rivers”',
+      text: 'Restored “Coast”. Your change to “Rivers” is saved.' });
+    expect(projectRestoredLine('Coast', ['Rivers', 'Tide'])).toEqual({ title: '“Coast”: “Rivers” and “Tide”',
+      text: 'Restored “Coast”. Your changes to “Rivers” and “Tide” are saved.' });
+    expect(projectRestoredLine('Coast', ['Rivers', 'Tide', 'Harbor']).text)
+      .toBe('Restored “Coast”. Your changes to “Rivers”, “Tide” and “Harbor” are saved.');
+    expect(projectRestoredLine('Coast', ['a', 'b', 'c', 'd'])).toEqual({ title: '“Coast”: “a”, “b”, “c” and “d”',
+      text: 'Restored “Coast”. Your changes to 4 boards are saved.' });
+    expect(projectRestoredLine('Coast', ['a', 'b', 'c', 'd', 'e']).text).toBe('Restored “Coast”. Your changes to 5 boards are saved.');
+    // Nothing saved (the boards kept every change): the project alone.
+    expect(projectRestoredLine('Coast', [])).toEqual({ title: '“Coast”', text: 'Restored “Coast”.' });
+    // Each name clipped as the other lines clip it; a blank one is "Untitled".
+    const long = 'An exceptionally long board name that keeps going well past forty';
+    expect(projectRestoredLine('Coast', [long])).toEqual({ title: `“Coast”: “${long}”`,
+      text: `Restored “Coast”. Your change to “${long.slice(0, 39)}…” is saved.` });
+    expect(projectRestoredLine(' ', [' ']).text).toBe('Restored “Untitled”. Your change to “Untitled” is saved.');
   });
 
   it('which failure, from the kind and status, never the words', () => {

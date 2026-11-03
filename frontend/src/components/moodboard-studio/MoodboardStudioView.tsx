@@ -21,7 +21,7 @@ import { isOfflineRefusal, probeOffline, waitUntilOnline } from '../../lib/backe
 import { useBackendOffline } from '../../lib/useBackendOffline';
 import { placeholderLabel } from './boardPlaceholder';
 import { UNDO_DROPPED_LINE, boardGoneKind, boardSaveLine, deletedBoardsLine, restoredBoardsLine, isBoardNotSavedLine, isCreateIdRefusal, isLostAddLine,
-  keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectRestoreFailedLine, projectRestoreFailure,
+  keptFromBoardLine, lostAddLine, lostTooLine, projectDeletedLine, projectRestoreFailedLine, projectRestoreFailure, projectRestoredLine,
   type KeptImage, type ProjectRestoreFailure } from './boardSaveLine';
 import { dropKeptEdit, keepUnsavedDrafts, keptEditBoards, keptEditsWaiting, opTarget, rememberKeptOpMeta, replayKeptFields, takeKeptEdit,
   valueOfOp, valueOnBoard, type KeptEdit } from './unsavedDrafts';
@@ -2278,21 +2278,22 @@ export function MoodboardStudioView() {
   // Bumped by a Restore here, so the rail lists the board again (GM r21 Q5: it shows there even when it didn't open).
   const [restores, setRestores] = useState(0);
   const [restoredLine, setRestoredLine] = useState<{ text: string; title: string; at: string | null } | null>(null);
-  // Restore project (round 6m, GM r53 Q1): a project restored here whose boards' replayed edits are on their way (`ids`),
-  // confirmed by the project's name in the same slot once they're saved; a neutral failure per project, kept with its
+  // Restore project (round 6m, GM r53 Q1): a project restored here whose boards' replayed edits are on their way (`boards`),
+  // confirmed in the same slot once they're saved, by the project's name and the saved boards' (round 6n, GM r71); a neutral failure per project, kept with its
   // line (Try again); and the red line for a project deleted for good, with its boards, until its ×.
-  const [projectRestoring, setProjectRestoring] = useState<{ name: string; ids: string[]; at: string | null } | null>(null);
+  const [projectRestoring, setProjectRestoring] = useState<{ name: string; boards: Array<{ id: string; name: string }>; at: string | null } | null>(null);
   const [projectFailures, setProjectFailures] = useState<Record<string, Exclude<ProjectRestoreFailure, 'purged'>>>({});
   const [projectsPurged, setProjectsPurged] = useState<Array<{ projectId: string; name: string; boards: ProjectGoneBoard[] }>>([]);
   const [dismissFocus, setDismissFocus] = useState<{ projectId: string; keyboard: boolean } | null>(null);
   // Read only while a Restore waits on its boards' saves.
   const draftEntries = useAssetStudioDraftStore((state) => (restoring || projectRestoring ? state.entries : null));
   if (projectRestoring && draftEntries) {
-    const entries = projectRestoring.ids.map((id) => Object.values(draftEntries).find((entry) => entry.savedId === id && entry.loaded));
+    const entries = projectRestoring.boards.map(({ id }) => Object.values(draftEntries).find((entry) => entry.savedId === id && entry.loaded));
     // Dirty until its save lands, as for a board's Restore; a draft no longer here isn't counted as saved.
     if (!entries.some((entry) => entry?.dirty)) {
       setProjectRestoring(null);
-      setRestoredLine({ ...restoredBoardsLine([projectRestoring.name], entries.filter(Boolean).length), at: projectRestoring.at });
+      const saved = projectRestoring.boards.filter((_, index) => entries[index]).map((it) => it.name);
+      setRestoredLine({ ...projectRestoredLine(projectRestoring.name, saved), at: projectRestoring.at });
     }
   }
   if (restoring && draftEntries) {
@@ -2436,8 +2437,9 @@ export function MoodboardStudioView() {
    * Restore project (GM r21 Q8; round 6m, GM r53 Q1): the project comes back through its own route (who may call it
    * unchanged), and each of its boards' kept edits replays on it where it is, without opening it.
    * - Restored, here or by another tab first (a 409, or a 404 with the project listed again): the line goes, focus
-   *   moves to the next notice control or <main> (never body), and the confirmation names the project once the
-   *   replayed edits are saved ("Restored “Shore”. Your change is saved."; with nothing replayed, "Restored “Shore”.").
+   *   moves to the next notice control or <main> (never body), and the confirmation names the project and the boards
+   *   once their replayed edits are saved ("Restored “Shore”. Your change to “Rivers” is saved."; with nothing
+   *   replayed, "Restored “Shore”."; round 6n, GM r71).
    * - Deleted for good (a 404, the project in neither list): the red line with its ×, the kept edits dropped once it
    *   has shown, focus on its ×.
    * - Otherwise the line stays, saying why, with Try again.
@@ -2474,7 +2476,8 @@ export function MoodboardStudioView() {
     const at = routeNow()?.id ?? null;
     const replays = await Promise.all(boards.map((it) => replayAway(it.id)));
     if (!mounted.current) return;
-    setProjectRestoring({ name: board.projectName, ids: boards.filter((_, index) => replays[index]?.sends).map((it) => it.id), at });
+    setProjectRestoring({ name: board.projectName, at,
+      boards: boards.filter((_, index) => replays[index]?.sends).map((it) => ({ id: it.id, name: it.name })) });
     recheckGone();
   };
   // A project deleted for good: focus on its red line's × once it shows (the button pressed is gone).

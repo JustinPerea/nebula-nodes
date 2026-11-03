@@ -5976,7 +5976,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(sent).toEqual([['pb1', expect.objectContaining({ notes: 'mine', projectId: 'p9' })]]), { timeout: 3000 });
       expect(screen.queryByText(LINE)).toBeNull();
       // Round 6m (GM r53 Q1): confirmed by the project's name in a board Restore's slot, once the edit is saved.
-      const confirmed = await screen.findByText('Restored “Old project”. Your change is saved.', {}, { timeout: 3000 });
+      const confirmed = await screen.findByText('Restored “Old project”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
       expect(confirmed.closest('[data-restored]')).not.toBeNull();
       // The person stays where they were.
       expect(useUIStore.getState().moodboardEditorId).toBe('g1');
@@ -6023,7 +6023,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await new Promise((done) => setTimeout(done, 700));
       expect(screen.queryByText(/^Restored /)).toBeNull();
       act(() => { land(); });
-      await screen.findByText('Restored “Shore”. Your change is saved.', {}, { timeout: 3000 });
+      await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
       expect(sent).toEqual([expect.objectContaining({ notes: 'mine' })]);
       expect(screen.queryByText(LINE)).toBeNull();
       expect(document.activeElement).not.toBe(document.body);
@@ -6054,7 +6054,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
         });
         await openStudio();
         await pressRestoreProject();
-        await screen.findByText('Restored “Shore”. Your change is saved.', {}, { timeout: 3000 });
+        await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
         expect(sent).toEqual([expect.objectContaining({ notes: 'mine' })]);
         expect(screen.queryByText(SHORE_REFUSED)).toBeNull();
       }
@@ -6078,7 +6078,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(stored().map((it) => it.board)).toEqual(['pb1']);
       // Try again restores it.
       fireEvent.click(button);
-      await screen.findByText('Restored “Shore”. Your change is saved.', {}, { timeout: 3000 });
+      await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
       expect(projects.restore).toHaveBeenCalledTimes(2);
       expect(sent).toHaveLength(1);
       expect(screen.queryByText(SHORE_NO_ANSWER)).toBeNull();
@@ -6137,6 +6137,76 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       } finally {
         watch.disconnect();
       }
+    });
+
+    // Round 6n (GM r71): two boards in one Restore project, named by the names rule, on success and when purged.
+    /** pb1 ("Rivers") and pb2 ("Tide") in project p9 ("Shore"), both with a kept edit; each save recorded by id. */
+    const shoreBoards = () => {
+      const boards: Record<string, Moodboard> = { pb1: inShore(), pb2: inShore({ id: 'pb2', name: 'Tide' }) };
+      lookups({ pb1: { status: 'ready', asset: clone(boards.pb1) }, pb2: { status: 'ready', asset: clone(boards.pb2) } });
+      projects.list.mockResolvedValue({ projects: [{ id: 'p1', name: 'Project' }], trash: [{ id: 'p9', name: 'Shore' }] });
+      const fetchBoard = api.fetchMoodboard.getMockImplementation()!;
+      api.fetchMoodboard.mockImplementation(async (id: string) => (id in boards ? clone(boards[id]) : fetchBoard(id)));
+      const put = api.updateMoodboard.getMockImplementation()!;
+      const sent: string[] = [];
+      api.updateMoodboard.mockImplementation(async (id: string, body: Record<string, unknown>) => {
+        if (!(id in boards)) return put(id, body);
+        sent.push(id);
+        return { ...clone(boards[id]), ...body, version: boards[id].version + 1 };
+      });
+      return sent;
+    };
+    const TIDE_LINE = 'Nebula couldn’t save your change to “Tide” because its project was deleted. Restore the project to keep the change.';
+
+    it('two boards restored with their project: the confirmation names both (GM r71)', async () => {
+      seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
+      const sent = shoreBoards();
+      await openStudio();
+      await screen.findByText(TIDE_LINE);
+      await pressRestoreProject();
+      const done = await screen.findByText('Restored “Shore”. Your changes to “Rivers” and “Tide” are saved.', {}, { timeout: 3000 });
+      expect(done.closest('[data-restored]')?.getAttribute('title')).toBe('“Shore”: “Rivers” and “Tide”');
+      expect([...sent].sort()).toEqual(['pb1', 'pb2']);
+      expect(screen.queryByText(TIDE_LINE)).toBeNull();
+    });
+
+    it('a board whose draft goes before its save lands is not named as saved (GM r71)', async () => {
+      seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
+      shoreBoards();
+      // Both replayed saves are held, to drop Tide's draft while they're out.
+      const put = api.updateMoodboard.getMockImplementation()!;
+      const held: Array<() => void> = [];
+      api.updateMoodboard.mockImplementation((...args: Parameters<typeof put>) => new Promise((done) => { held.push(() => done(put(...args))); }));
+      await openStudio();
+      await screen.findByText(TIDE_LINE);
+      await pressRestoreProject();
+      const tide = () => Object.entries(useAssetStudioDraftStore.getState().entries).find(([, entry]) => entry.savedId === 'pb2');
+      await waitFor(() => expect(tide()).toBeTruthy(), { timeout: 3000 });
+      await waitFor(() => expect(held.length).toBeGreaterThan(0), { timeout: 3000 });
+      act(() => {
+        useAssetStudioDraftStore.setState((state) => ({
+          entries: Object.fromEntries(Object.entries(state.entries).filter(([, entry]) => entry.savedId !== 'pb2')) }));
+      });
+      act(() => { for (const land of held.splice(0)) land(); });
+      await screen.findByText('Restored “Shore”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
+      expect(screen.queryByText(/“Tide” (is|are) saved/)).toBeNull();
+    });
+
+    it('two boards whose project was deleted for good: the red line names both (GM r71)', async () => {
+      seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
+      const sent = shoreBoards();
+      projects.restore.mockImplementation(async () => {
+        projects.list.mockResolvedValue({ projects: [{ id: 'p1', name: 'Project' }], trash: [] });
+        throw new RequestFailedError("Couldn't restore the project.", 404, { detail: 'gone' });
+      });
+      await openStudio();
+      await screen.findByText(TIDE_LINE);
+      await pressRestoreProject();
+      const failed = await screen.findByText(
+        'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers” and “Tide” can’t be kept.');
+      expect(failed.closest('[data-gone]')?.getAttribute('title')).toBe('“Shore”: “Rivers” and “Tide”');
+      expect(sent).toEqual([]);
+      await waitFor(() => expect(stored()).toEqual([]));
     });
 
     it('a board in an open project, or when the project list doesn\'t answer, says nothing', async () => {
