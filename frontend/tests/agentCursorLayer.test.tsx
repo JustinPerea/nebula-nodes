@@ -2565,4 +2565,236 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       vi.useRealTimers();
     }
   });
+
+
+  // Review 8 / GM r21: a merge lays the joined column out in arrival
+  // order; a cursor that changes slot glides there, nothing jumps.
+  it('P3 live: the earlier column heads the merge, the later cursors glide under it, nothing jumps (r21)', () => {
+    render(<AgentCursorLayer />);
+    blocker('a', 1, 300, 386);
+    blocker('b', 2, 300, 300);
+    blocker('c', 3, 300, 300);
+    expect(where()).toMatchObject({ a: { x: 300, y: 386 }, b: { x: 300, y: 300 }, c: { x: 300, y: 300 + S } });
+    send(event({ ...session('d', 4), target: { x: 300, y: 300 } }));
+    const path: Record<string, { x: number; y: number }>[] = [];
+    for (let i = 0; i < 150; i += 1) {
+      tickFrames(1);
+      path.push(where());
+    }
+    flush();
+    expect(where()).toMatchObject({ a: { x: 300, y: 386 }, b: { x: 300, y: 386 + S }, c: { x: 300, y: 386 + 2 * S } });
+    expect(byKey('c').dataset.count).toBe('2');
+    expect(byKey('d').dataset.collapsed).toBe('true');
+    // A 128 px glide on the land spring peaks near 15 px a frame; a jump
+    // (the column floor snapping b under a, the bug) is 128 px in one frame
+    // and a step that changes far faster than the spring accelerates.
+    const step = (k: string, i: number) => path[i][k].y - path[i - 1][k].y;
+    for (let i = 1; i < path.length; i += 1) {
+      for (const k of ['a', 'b', 'c']) {
+        expect(Math.abs(step(k, i))).toBeLessThan(20);
+        if (i > 1) expect(Math.abs(step(k, i) - step(k, i - 1))).toBeLessThan(8);
+      }
+      // b and c glide together, a step apart.
+      expect(Math.abs(step('b', i) - step('c', i))).toBeLessThan(1);
+    }
+    // b glides the 128 px down over many frames.
+    expect(path.filter((w) => w.b.y > 301 && w.b.y < 386 + S - 1).length).toBeGreaterThan(8);
+  });
+
+  // GM r21 Q2: "earliest" is the backend's arrival order, so a reload (a
+  // replay, oldest last event first) draws the same two in full.
+  it('after a reload the same two cursors are drawn in full: the backend\'s arrival order, not who spoke last (r21)', () => {
+    const arrive = (k: string, o: number, since: number, extra: Partial<AgentPresenceEvent> = {}) =>
+      event({ ...session(k, o), target: { nodeId: 'n1' }, since, ...extra });
+    const first = render(<AgentCursorLayer />);
+    for (const [k, o] of [['a', 1], ['b', 2], ['c', 3], ['d', 4]] as const) {
+      send(arrive(k, o, 1000 * o));
+      flush();
+    }
+    // The head goes on speaking; its arrival doesn't change.
+    send(arrive('a', 1, 1000, { say: 'Head still talking' }));
+    flush();
+    const shape = () => cursors().filter((el) => el.dataset.leaving !== 'true').map((el) => [el.dataset.session!.slice(0, 1), el.dataset.count ?? (el.dataset.collapsed ? 'folded' : 'full')]).sort();
+    const live = shape();
+    expect(live).toEqual([['a', 'full'], ['b', 'full'], ['c', '2'], ['d', 'folded']]);
+    first.unmount();
+    act(() => { useAgentPresenceStore.getState().clear(); });
+    // A fresh tab: the replay comes oldest last event first, so the head,
+    // which spoke last, comes last; its arrival is still the earliest.
+    render(<AgentCursorLayer />);
+    const replayed = (k: string, o: number, ago: number, extra: Partial<AgentPresenceEvent> = {}) =>
+      ({ ...arrive(k, o, 1000 * o, extra), replay: true, secondsAgo: ago });
+    act(() => {
+      useAgentPresenceStore.getState().replay([replayed('b', 2, 8), replayed('c', 3, 7), replayed('d', 4, 6), replayed('a', 1, 0.5, { say: 'Head still talking' })] as never);
+    });
+    flush();
+    expect(shape()).toEqual(live);
+    expect(where().a.y).toBeLessThan(where().b.y);
+    expect(painted(byKey('a'))).toBe(true);
+  });
+
+  // Review 8, MEDIUM-2: the count cursor's own member leaves. It exits as
+  // the count ("3 more", grey), and the new count waits unseen until it is
+  // gone: never more than three shown.
+  it('five in a column, the count cursor\'s member leaves: it exits as "3 more", the new count waits, at most 3 shown on every frame (review 8)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b', 'c', 'd', 'e']);
+    const c = byKey('c');
+    expect(c.dataset.count).toBe('3');
+    act(() => {
+      const st = useAgentPresenceStore;
+      const agents = { ...st.getState().agents };
+      for (const k of Object.keys(agents)) if (agents[k].session?.key === 'c'.repeat(12)) delete agents[k];
+      st.setState({ agents });
+    });
+    let exitFrames = 0;
+    for (let i = 0; i < 120; i += 1) {
+      tickFrames(1);
+      const shown = cursors().filter((el) => Number(el.style.opacity) > 0.05);
+      expect(shown.length).toBeLessThanOrEqual(3);
+      const leaving = cursors().find((el) => el.dataset.session === 'c'.repeat(12));
+      if (leaving && Number(leaving.style.opacity) > 0.05) {
+        exitFrames += 1;
+        // Still the count: its pill, its grey, its number.
+        expect(leaving.dataset.count).toBe('3');
+        expect(leaving.querySelector('.agent-cursor__name')!.textContent).toBe('3 more');
+        expect(leaving.style.getPropertyValue('--agent-color')).toBe('#52525b');
+      }
+    }
+    flush();
+    expect(exitFrames).toBeGreaterThan(2);
+    const d = byKey('d');
+    expect(d.dataset.count).toBe('2');
+    expect(d.querySelector('.agent-cursor__name')!.textContent).toBe('2 more');
+    expect(Number(d.style.opacity)).toBe(1);
+    expect(byKey('e').dataset.collapsed).toBe('true');
+    expect(cursors().find((el) => el.dataset.session === 'c'.repeat(12))).toBeUndefined();
+  });
+
+  // Review 8, LOW-2 V2 (r18): the count cursor never draws a say of its own.
+  // Review 8, V32: a cursor flying through the say's room makes the say
+  // wait for it (it passes), not move aside as for a column at rest there.
+  it('a flyer in the say\'s room makes it wait, then it shows on its own side; never moved left for a flyer (review 8 V32)', () => {
+    render(<AgentCursorLayer />);
+    blocker('a', 1, 300, 300);
+    blocker('e', 2, 400, 318);
+    // e takes off along the say's row, out of its way; a speaks as it goes.
+    send(event({ ...session('e', 2), target: { x: 470, y: 318 } }));
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    tickFrames(1);
+    const a = byKey('a');
+    expect(a.dataset.sayWait).toBe('true');
+    // Only a flyer's arrow counts (r17 item 3): once its arrow is past,
+    // the say shows on the right while its name pill passes by.
+    for (let i = 0; i < 40; i += 1) {
+      tickFrames(1);
+      expect(a.dataset.saySide).toBeUndefined();
+    }
+    expect(anyMeet()).toBe(false);
+    expect(painted(a)).toBe(true);
+  });
+
+  // Review 8, V5 and V6: another column on the right, and the cursor
+  // below still a say step short (it waits on both sides). The say never
+  // shows on the left until the one below has glided clear; capped at
+  // once (reduced motion), it takes the left, never the right over the
+  // other column.
+  it('right side taken, the cursor below still gliding: the left say waits for the glide (review 8 V5)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b'], { x: 300, y: 300 });
+    blocker('e', 3, 400, 318);
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    const a = byKey('a');
+    let shownAt = -1;
+    for (let i = 0; i < 90; i += 1) {
+      tickFrames(1);
+      const w = where();
+      if (painted(a)) {
+        if (shownAt < 0) shownAt = i;
+        expect(a.dataset.saySide).toBe('left');
+        expect(w.b.y - w.a.y).toBeGreaterThanOrEqual(SS - 0.01);
+      }
+      expect(anyMeet()).toBe(false);
+    }
+    expect(shownAt).toBeGreaterThan(4);
+  });
+
+  it('right side taken, capped at once (reduced motion): the say takes the left, never the right over the other column (review 8 V6)', () => {
+    reduceMotion(true);
+    render(<AgentCursorLayer />);
+    column(['a', 'b'], { x: 300, y: 300 });
+    blocker('e', 3, 400, 318);
+    send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+    tickFrames(1);
+    const a = byKey('a');
+    expect(painted(a)).toBe(true);
+    expect(a.dataset.saySide).toBe('left');
+    tickFrames(2);
+    expect(a.dataset.saySide).toBe('left');
+    expect(anyMeet()).toBe(false);
+  });
+
+  // Review 8, V9: blocked again after a wait began, the say holds afresh:
+  // its 600 ms cap counts from the new hold, not from the first wait.
+  it('a say blocked again after its wait began holds a full 600 ms before the log (review 8 V9)', () => {
+    fakeTimers();
+    try {
+      render(<AgentCursorLayer />);
+      column(['a', 'b'], { x: 300, y: 300 });
+      blocker('e', 3, 400, 318);
+      blocker('f', 4, 150, 322);
+      send(event({ ...session('a', 1), target: { x: 300, y: 300 }, say: 'Checking the prompt' }));
+      const a = byKey('a');
+      for (let i = 0; i < 32; i += 1) frame();
+      expect(a.dataset.sayWait).toBe('true');
+      // e goes: the wait begins (the column glides) ...
+      send(event({ ...session('e', 3), target: { nodeId: 'n2' } }));
+      for (let i = 0; i < 3; i += 1) frame();
+      // ... and a third column comes to rest in the way on the right again.
+      blocker('g', 5, 400, 318);
+      const reblocked = performance.now();
+      let loggedAt = -1;
+      for (let i = 0; i < 90 && loggedAt < 0; i += 1) {
+        frame();
+        expect(painted(a)).toBe(false);
+        if (a.dataset.sayWait === 'log') loggedAt = performance.now() - reblocked;
+      }
+      expect(loggedAt).toBeGreaterThan(600);
+      expect(loggedAt).toBeLessThan(700);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Live r4i: after a reload the graph measures its nodes after the replay.
+  // A cursor on a node moves from the node's corner into its header then;
+  // that is no carry, so it keeps the backend's arrival and heads the column.
+  it('a node measured after the replay keeps its cursor\'s backend arrival: no carry, it heads the column (live r4i)', () => {
+    const unmeasured = new Map(lookupRef.current) as Map<string, Entry & { measured?: unknown }>;
+    const n1 = unmeasured.get('n1')!;
+    unmeasured.set('n1', { ...n1, measured: undefined });
+    lookupRef.current = unmeasured as never;
+    render(<AgentCursorLayer />);
+    send(event({ ...session('d', 1), agent: { id: 'pair', name: 'Pair', color: '#FF9F43', verified: true }, target: { nodeId: 'n1' }, since: 1000 }));
+    send(event({ ...session('a', 1), target: { x: 500, y: 344 }, since: 2000 }));
+    send(event({ ...session('b', 2), target: { x: 500, y: 344 }, since: 3000 }));
+    flush();
+    expect(where().d).toEqual({ x: 400, y: 300 });
+    lookupRef.current = new Map(lookupRef.current).set('n1', n1) as never;
+    notifyStore();
+    flush();
+    expect(where()).toEqual({ d: { x: 500, y: 344 }, a: { x: 500, y: 344 + S }, b: { x: 500, y: 344 + 2 * S } });
+  });
+
+  it('the count cursor never draws its own say; its member\'s say is in the log only (r18, review 8 V2)', () => {
+    render(<AgentCursorLayer />);
+    column(['a', 'b', 'c', 'd']);
+    const said = event({ ...session('c', 3), target: { nodeId: 'n1' }, say: 'Counting along' });
+    send(said);
+    flush();
+    const c = byKey('c');
+    expect(c.dataset.count).toBe('2');
+    expect(c.querySelector('.agent-cursor__say')).toBeNull();
+    expect(agentActionEntry(said)!.message).toBe('Counting along');
+  });
 });

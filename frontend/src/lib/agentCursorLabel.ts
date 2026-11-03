@@ -22,6 +22,12 @@ export function cleanSession(raw: unknown): AgentPresenceSession | null {
   return { key, ordinal };
 }
 
+/** Narration stays beside the cursor this long after the agent's last event,
+ * then fades (GM - Design, round 19: "fades out about 3 s after the agent's
+ * last event"). Here, not in agentPresenceStore, so the Agent log (loaded
+ * with the app) can tell a replayed say that is still current. */
+export const AGENT_SAY_MS = 3_000;
+
 /** A chat title in a cursor's name is cut to this many characters. */
 export const AGENT_CURSOR_TITLE_CHARS = 20;
 

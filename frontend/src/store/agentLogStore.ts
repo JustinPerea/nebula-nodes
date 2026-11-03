@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { wsClient, type AgentPresenceEvent } from '../lib/wsClient';
 import { normalizeAgentEventSource, type AgentEventSource } from '../lib/agentEvents';
-import { cleanSession, cursorLabel } from '../lib/agentCursorLabel';
-import { agentLogTones } from '../lib/agentCursorColor';
+import { AGENT_SAY_MS, cleanSession, cursorLabel } from '../lib/agentCursorLabel';
+import { AGENT_FALLBACK_COLOR, agentLogTones } from '../lib/agentCursorColor';
 
 /** The Agent log keeps this many entries, oldest dropped first. Memory only. */
 export const AGENT_LOG_MAX_ENTRIES = 50;
@@ -25,7 +25,6 @@ interface AgentLogState {
 }
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
-const FALLBACK_COLOR = '#E8825A';
 let entrySeq = 0;
 
 export const useAgentLogStore = create<AgentLogState>((set) => ({
@@ -54,7 +53,7 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
   const message = (typeof event.log === 'string' ? event.log.trim() : '') || said;
   if (!message) return null;
   const session = cleanSession(event.session);
-  const tones = agentLogTones(SAFE_COLOR.test(agent.color) ? agent.color : FALLBACK_COLOR, session);
+  const tones = agentLogTones(SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR, session);
   return {
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,
     source: 'agent',
@@ -71,10 +70,37 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
 // Fed at load, not by the panel: AgentLog mounts on the main canvas only,
 // and an agent working while the person is in a Studio still shows up when
 // they come back.
-wsClient.subscribe((event) => {
-  if (event.type !== 'agentPresence') return;
+//
+// A replay (a tab that just connected, or reconnected) adds a cursor's say
+// that is still current, so a say this tab can't show on the canvas (a
+// folded member's, or one held for room) still reaches the log (GM - Design,
+// PR #211 r21). Each action is listed once: a live event and its replay
+// are the same action (agent, session, time and words).
+const listed = new Set<string>();
+const LISTED_MAX = 4 * AGENT_LOG_MAX_ENTRIES;
+
+/** Lists one action, once. */
+export function listAgentAction(event: AgentPresenceEvent): void {
   const entry = agentActionEntry(event);
-  if (entry) useAgentLogStore.getState().add(entry);
+  if (!entry) return;
+  const id = `${event.agent?.id}|${cleanSession(event.session)?.key ?? ''}|${event.at}|${entry.message}`;
+  if (listed.has(id)) return;
+  listed.add(id);
+  if (listed.size > LISTED_MAX) listed.delete(listed.values().next().value as string);
+  useAgentLogStore.getState().add(entry);
+}
+
+/** A replayed cursor's say, still current: its line, unless already listed. */
+export function listReplayedSay(cursor: AgentPresenceEvent & { secondsAgo?: number }): void {
+  const said = typeof cursor.say === 'string' ? cursor.say.trim() : '';
+  const age = typeof cursor.secondsAgo === 'number' && Number.isFinite(cursor.secondsAgo) ? cursor.secondsAgo * 1000 : Infinity;
+  if (!said || age >= AGENT_SAY_MS) return;
+  listAgentAction(cursor);
+}
+
+wsClient.subscribe((event) => {
+  if (event.type === 'agentPresence') listAgentAction(event);
+  else if (event.type === 'agentPresenceReplay') for (const cursor of event.cursors) listReplayedSay(cursor);
 });
 
 // The in-app chat's thinking lines (ChatPanel), and any other component's

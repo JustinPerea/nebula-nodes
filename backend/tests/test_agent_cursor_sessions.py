@@ -339,7 +339,9 @@ def test_the_no_session_cursor_takes_part_and_carries_its_number_to_the_person()
     person = alone.person_form(event, AGENT, session=None)
     assert person is not event
     assert person["session"] == {"key": alone.session_key(AGENT.id, ""), "ordinal": 1}
-    assert {k: v for k, v in person.items() if k != "session"} == event
+    # And when its cursor came there (r21): person-only, for the stack order.
+    assert person["since"] == int(clock.now * 1000)
+    assert {k: v for k, v in person.items() if k not in ("session", "since")} == event
     assert json.dumps(event) == before  # the agent form, byte for byte
 
     presence = AgentPresence(clock)
@@ -514,6 +516,7 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
     (plain,) = _presence_frames(api.person_socket)
     plain = json.loads(plain)
     assert plain.pop("session")["ordinal"] == 1
+    assert isinstance(plain.pop("since"), int)  # its arrival, person-only (r21)
     assert json.dumps(plain) == expected
 
     def reads(headers: dict) -> list[str]:
@@ -531,15 +534,17 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
         (person,) = _presence_frames(api.person_socket)
         form = json.loads(person)
         session_field = form.pop("session")
+        assert isinstance(form.pop("since"), int)
         assert json.dumps(form) == expected
         assert set(session_field) == {"key", "ordinal"}
         assert next(iter(session.values())) not in person  # never the raw id
         # What agents read is the same, from either session.
         assert reads({**CLAUDE, **session}) == before == reads(CLAUDE)
 
-    # Nothing an agent reads names a session or its number anywhere.
+    # Nothing an agent reads names a session or its number anywhere, or a
+    # cursor's arrival (r21).
     for text in [*reads(CLAUDE), *_presence_frames(api.listener)]:
-        assert '"session"' not in text and '"ordinal"' not in text
+        assert '"session"' not in text and '"ordinal"' not in text and '"since"' not in text
 
 
 def test_decision_4_the_start_bundle_is_the_same_with_session_headers(sockets):
@@ -625,6 +630,8 @@ def test_an_edit_with_no_session_reaches_the_person_with_its_number_and_agents_u
     assert "session" not in json.loads(agent_frame)
     person = json.loads(person_frame)
     assert person.pop("session")["ordinal"] == 1
+    assert isinstance(person.pop("since"), int)
+    assert "since" not in json.loads(agent_frame)
     assert json.dumps(person) == agent_frame
 
 
@@ -1095,3 +1102,39 @@ def test_the_replay_puts_a_cursor_whose_node_went_where_the_node_was():
     presence.forget_node("n1")
     (cursor,) = presence.replay()
     assert cursor["target"] == {"x": 120.0, "y": 210.0}
+
+
+# -- arrival order (GM - Design, PR #211 r21) --------------------------------
+
+def test_each_cursor_carries_when_it_came_to_where_it_is_and_the_replay_keeps_it():
+    """Every tab stacks a column by the backend's arrival order, so the same
+    cursors are drawn in full before and after a reload, and in every tab.
+    A cursor's arrival moves only when it goes somewhere new: the same node,
+    or a point within ARRIVAL_RADIUS, keeps it."""
+    from services.agent_presence import ARRIVAL_RADIUS
+
+    clock = Clock()
+    presence = AgentPresence(clock)
+
+    def form(raw, target, say=""):
+        return presence.person_form(_event(presence, target, say=say), AGENT, session=raw)
+
+    first = form("s1", {"nodeId": "n1"})
+    clock.now += 2
+    second = form("s2", {"nodeId": "n1"})
+    assert (first["since"], second["since"]) == (5_000_000, 5_002_000)
+    # Talking on the same node, or a nudge within the radius, keeps it.
+    clock.now += 3
+    assert form("s1", {"nodeId": "n1"}, say="Still here")["since"] == 5_000_000
+    form("s3", {"x": 10, "y": 10})
+    clock.now += 1
+    assert form("s3", {"x": 10 + ARRIVAL_RADIUS, "y": 10})["since"] == 5_005_000
+    # Somewhere new: it arrives now.
+    clock.now += 1
+    assert form("s3", {"x": 10 + 3 * ARRIVAL_RADIUS, "y": 10})["since"] == 5_007_000
+    assert form("s1", {"nodeId": "n2"})["since"] == 5_007_000
+    # The replay (a reload, another tab) carries the same arrivals.
+    replayed = {c["session"]["ordinal"]: c["since"] for c in presence.replay()}
+    assert replayed == {1: 5_007_000, 2: 5_002_000, 3: 5_007_000}
+    # The agent form never carries it.
+    assert "since" not in _event(presence)

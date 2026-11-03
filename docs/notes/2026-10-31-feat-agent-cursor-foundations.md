@@ -882,3 +882,78 @@ GM r20 (signing off 4g): the Agent log's colour matches the cursor's shade, for 
 - **Related tests:** the log, label, cursor, session and planner files, plus the new one: 634 passed. The 39 files that read the changed stylesheets, the look module or the log: 696 passed.
 - **Build budget.** Pass: 447,007 B raw and 137,923 gzip. That's 2,654 B more, for the colour maths now in the entry with the log, still under 512,000 B. The cursor chunk went down to 33,328 B.
 - **Live at 1440, Restraint, on 8780 and 5780.** Four Pair sessions, apart on the canvas, each with a log line. Every row's dot computed equal to its cursor's fill: `#ff9f43`, `#dd7f16`, `#ffcea7` and `#b46500`. "Pair · 4" is the stepped row: its dot is `#b46500` (4.38:1) and its name text `#b76808` (4.56:1). The shots have no md5 duplicates, and I opened each one.
+
+## Round 4i
+
+GM r21 ruled on review 8. Merged origin/main first (#217; merge commit 747d19cc).
+
+### Joins first, then arrival order (MEDIUM-1)
+
+- `deStackLayout` now works in two phases. It resolves every join first: target within 16 px, a name or arrow meeting another, and columns whose drawn cursors meet, repeated until nothing meets. Joins come in arrival order against the prefix as laid out then, so a column growing down is what pulls the next one in. Then each final column is laid out in arrival order:
+  - the head on its own target;
+  - the next one a step under it;
+  - the third arrival as the count cursor, in the last slot;
+  - every later arrival folded into it.
+  
+  The union-find root is the earliest arrival, which makes it the head.
+- `StackSpot.column` is the head's key. The fuzz is now a property test grouped by that real column. Every column has at most 3 slots, the count is only in the last slot, and only the 2 earliest arrivals are full. Review 8's strip probe ran 1,500 rounds: more than 300 merged and more than 300 had a count.
+- P1 (5 zoom gaps), P3 and ex4 are tests. The old "(0,60,0,0)" expectation changed to arrival order: `[0, S, 2S, 2S]`.
+- **Nothing jumps.** A merge can put a cursor under a member it is drawn above (P3 live: b sat 128 px above its new slot). The column floor (`field.hold`) used to snap it under that member in one frame. A cursor drawn above its above-member is now marked `crossing` and isn't floored until it comes to rest, so it glides there on the land spring. The test checks every per-frame step for a spring curve (no step jump over 8 px) and that b and c move together.
+
+### "Earliest" is the backend's arrival (LOW-1 + Q2)
+
+- The backend keeps `since` per session slot: when it came to where it is now. A move within 16 px (`ARRIVAL_RADIUS`), or to the same node, keeps it. It goes out in the person form and the replay as `since` (ms). Agents never get it: agent reads stay key for key as on main, and the cursor POST response is unchanged. Backend tests pin both sides.
+- The store keeps `AgentCursor.arrivedAt`: the event's `since`, else the previous one for the same target, else `at`. The layer stamps a landed cursor with it (`rank`), so a reload, a reconnect and every tab put the same two in full. A cursor carried onto a column by a person's drag still comes after the cursors already there (review 2, L2).
+- **Live find.** After a reload the graph measures its nodes after the replay. A cursor aimed at a node moved from the node's corner into its header then, and was read as "carried onto" the column, so it went last. Now only a node that moved (`nodeAt` changed) carries; a node measured or resized doesn't. There's a test.
+- **The log, exactly once.** The log store lists an action once, keyed by agent, session, time and words. A replay adds a cursor's say that is still current (under 3 s old), so a say the canvas never drew (a folded member's, or one held for room) reaches the log after a reload. The new `tests/agentLogReplay.test.ts` covers four cases:
+  - live then a reconnect replay: one line;
+  - a reload: once from the replay, never twice;
+  - stale or ageless replays: none;
+  - two sessions with the same words: two lines.
+  
+  The cursor layer never writes to the log. Two older `agentLog.test.tsx` tests repeated an identical action across tests, so they now use their own times.
+
+### The leaving count cursor (MEDIUM-2)
+
+- A leaving count cursor latches its count look ("3 more", grey) for its whole exit (`exitFold`). The count that takes its slot stays unseen (`field.exitingCounts`) until that exit ends, so no frame shows more than 3 in a column.
+- The tick now sets `countingRef` with the fold, in the same frame. Before, the new count's first frame read a stale value and faded in at 0.06 next to the exiting one.
+- The 5-member "c leaves" case is a test. "a leaves" is kept as approved.
+
+### Colour (M7-M9, NIT-1, NIT-2)
+
+- **One fallback.** `AGENT_FALLBACK_COLOR` (`#E8825A`) in `agentCursorColor.ts`, used by both stores.
+- **Invalid colours.** `readableTone` and `agentLogTones` return the shared fallback's tones for any colour that isn't `#rrggbb`, never the input.
+- **The surface.** `AGENT_LOG_SURFACE` is `compositeOver(--sr-glass, --sr-canvas)`: the alpha stored in 8 bits (0.66 → 168) and each channel rounded, as Chrome paints it, giving `#0e0e10`. The test derives it from the stylesheet with the same function.
+- **The name ink is pinned.** `AgentLog.tsx` must set `--agent-log-name-color` to the entry's `ink`, and Restraint's `.agent-log__source` must paint `var(--agent-log-name-color, …)`.
+
+### Mutants (re-run on the final code)
+
+The run covers 12 cursor and log files; each mutant ran alone.
+
+- **Killed (23 of 28):**
+  - layout: L2, L3, L4, L7, L8, L9, plus L10 (no `seq` tie-break), L11 (no repeat join) and L12 (members at their own x);
+  - say tree: V2, V5, V6, V9, V23, V32;
+  - new code: no `crossing`, no `countingRef` in the tick, no exit hold, every node move as a carry, `arrivedAt` = `at`;
+  - colour: M7, M8, M9.
+- **Survived (5), all near-equivalent:**
+  - L5 and L6, folded members joining or meeting: a folded member is drawn at its slot's tip, so whatever it meets, the drawn slot meets too.
+  - V3, folded cursors counted in `sayRoom`: same reason, they sit on their slot's tip.
+  - V33, a member above counted as foreign rather than wait: a say sits on its own name row, and the member above is a full step up, so it never meets the say.
+  - V12, the floor's velocity copy: the floor is applied again every frame while the member above moves, so position doesn't depend on it.
+- **Tests added for this:** P1/P3/ex4, the property test, the P3 live glide, the reload, "c leaves", V2, V5, V6, V9, V32, L8/L9 (a folded member's `above` and `sig`), the measured node, the AgentLog ink pin, the fallback and the surface.
+- **A V32 finding (by design, for GM):** with a flyer passing along a say's row, the say waits while the flyer's arrow is in its room. Then it shows while the flyer's name pill passes under it, for about 15 frames. r17 item 3 counts only a flyer's arrow.
+
+### Checks (round 4i)
+
+- `tsc -b` exit 0; `npm run lint` exit 0, with no warnings.
+  - The tick reads `arrivedAt` through a ref, which cleared one exhaustive-deps warning.
+- **Vitest** (`--maxWorkers=2`, explicit list): every cursor, log and presence file plus every test that reads `src/` or `styles/`. 119 files, 1,991 passed. The layer (148) and look (69) files, alone with the shard stripped, also pass, as does every other cursor and log file alone.
+- **Backend** (isolated HOME and settings): the 11 cursor and presence files pass, 284 tests; each cursor file alone passes too.
+- **Build budget.** Pass: entry 447,653 B raw and 138,188 B gzip (+646 B). The cursor chunk is 34,680 B.
+- **Live** at 1440, Restraint, on 8780 and 5780, with installed Chrome and a throwaway profile. Five Pair sessions:
+  - two at A, one 86 px under A, then two more at A;
+  - merged into one column: Pair, Pair · 2, then "3 more" last;
+  - the two latest speakers spoke, then the page reloaded: Pair and Pair · 2 still full;
+  - Pair · 3 (the count's own member) left: it exited as "3 more", grey, while the new "2 more" waited unseen. At most 3 in the column on every frame.
+  
+  The five shots have distinct md5s, and I opened each one.

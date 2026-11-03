@@ -34,9 +34,11 @@ import {
   AGENT_CURSOR_SAY_LEFT_GAP_PX,
   countLabel,
   cursorShape,
+  cursorsMeet,
   sayPillBox,
   targetsMeet,
   pillEdge,
+  type StackSpot,
 } from '../src/lib/agentCursorLook';
 
 /** GM - Design's agent cursor spec, §1 (the name's ink) and §4 (names, say, several agents). */
@@ -46,6 +48,46 @@ const CLAUDE = '#E8825A';
 const CODEX = '#5B9DFF';
 const PALETTE = ['#3FC1A5', '#F2C14E', '#FF6B9A', '#7AD3FF', '#C3E86B', '#FF9F43'];
 const BUILT_IN = [CLAUDE, CODEX, ...PALETTE];
+
+/**
+ * GM r21's property for every final column of a layout: at most
+ * AGENT_CURSOR_COLUMN_DRAWN slots; the head (earliest arrival) on its own
+ * target; full cursors only for the two earliest arrivals; the third
+ * arrival is the count cursor, in the last slot, standing for every later
+ * arrival; nothing else is drawn in a column of four or more.
+ */
+function expectColumnsCapped(list: readonly { key: string; target: { x: number; y: number }; since: number }[], laid: Map<string, StackSpot>) {
+  const columns = new Map<string, { key: string; since: number }[]>();
+  for (const e of list) {
+    const id = laid.get(e.key)!.column!;
+    expect(id).toBeDefined();
+    if (!columns.has(id)) columns.set(id, []);
+    columns.get(id)!.push(e);
+  }
+  for (const [id, members] of columns) {
+    members.sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : 1));
+    expect(id).toBe(members[0].key);
+    const head = list.find((e) => e.key === id)!;
+    expect(laid.get(id)!.at).toEqual(head.target);
+    const drawn = members.filter((m) => !laid.get(m.key)!.collapsedInto);
+    expect(drawn.length).toBeLessThanOrEqual(AGENT_CURSOR_COLUMN_DRAWN);
+    const ys = drawn.map((m) => laid.get(m.key)!.at.y);
+    // Drawn top to bottom in arrival order.
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i]).toBeGreaterThan(ys[i - 1]);
+    if (members.length > AGENT_CURSOR_COLUMN_DRAWN) {
+      const slot = members[AGENT_CURSOR_COLUMN_DRAWN - 1];
+      expect(drawn.map((m) => m.key)).toEqual(members.slice(0, AGENT_CURSOR_COLUMN_DRAWN).map((m) => m.key));
+      expect(laid.get(slot.key)!.group).toEqual(members.slice(AGENT_CURSOR_COLUMN_DRAWN - 1).map((m) => m.key));
+      for (const m of members.slice(AGENT_CURSOR_COLUMN_DRAWN)) expect(laid.get(m.key)!.collapsedInto).toBe(slot.key);
+    } else {
+      for (const m of members) {
+        expect(laid.get(m.key)!.group).toBeUndefined();
+        expect(laid.get(m.key)!.collapsedInto).toBeUndefined();
+      }
+    }
+  }
+  return columns;
+}
 
 function seeded(seed: number) {
   let s = seed >>> 0;
@@ -566,9 +608,107 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
   it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in and steps on past it', () => {
     const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 60, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)], 1);
     // b is past a's label (60 > 42), so it rests on its target; c would land
-    // at 42, over b's arrow: it goes under b. The column has three now, so d
-    // folds into c's count cursor (GM r17 item 1).
-    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + S }]);
+    // at 42, over b's arrow, so b's column joins a's. The joined column is
+    // laid out in arrival order (GM r21): a, then b a step under it, then c
+    // in the last slot, with d folded into its count cursor.
+    expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }, { x: 0, y: 2 * S }]);
+  });
+
+  // Review 8, MEDIUM-1: joins first, then each final column in arrival
+  // order, the count in the last slot (GM r21).
+  it.each([86, 88, 90, 95, 100])('P1: two columns of two (the second at %s px) merge when a fifth comes: arrival order, the count last', (by) => {
+    const list = [entry('A1', 0, 0, 1), entry('A2', 0, 0, 2), entry('B1', 0, by, 3), entry('B2', 0, by, 4), entry('C', 0, 0, 5)];
+    const laid = deStackLayout(list, 1);
+    expectColumnsCapped(list, laid);
+    expect(laid.get('A1')!.at).toEqual({ x: 0, y: 0 });
+    expect(laid.get('A2')!.at).toEqual({ x: 0, y: S });
+    expect(laid.get('B1')!.at).toEqual({ x: 0, y: 2 * S });
+    expect(laid.get('B1')!.group).toEqual(['B1', 'B2', 'C']);
+    expect(laid.get('B2')!.collapsedInto).toBe('B1');
+    expect(laid.get('C')!.collapsedInto).toBe('B1');
+  });
+
+  // Review 8, L8 and L9: a folded member is drawn as its slot, so its spot
+  // has the slot's members above it; and its spot changes (sig) whenever
+  // its slot does, so the layer re-aims it at its new count cursor.
+  it('a folded member has its slot\'s members above it, and a new slot gives it a new spot (L8, L9)', () => {
+    const five = ['a', 'b', 'c', 'd', 'e'].map((k, i) => entry(k, 0, 0, i + 1));
+    const laid = deStackLayout(five, 1);
+    expect(laid.get('c')!.group).toEqual(['c', 'd', 'e']);
+    for (const k of ['d', 'e']) {
+      expect(laid.get(k)!.above).toEqual(laid.get('c')!.above);
+      expect(laid.get(k)!.above).toEqual(['a', 'b']);
+      expect(laid.get(k)!.sig).not.toBe(laid.get('c')!.sig);
+    }
+    // c leaves: d is the count now, e folds into it at the same point.
+    const after = deStackLayout(five.filter((e) => e.key !== 'c'), 1);
+    expect(after.get('d')!.group).toEqual(['d', 'e']);
+    expect(after.get('e')!.collapsedInto).toBe('d');
+    expect(after.get('e')!.at).toEqual(laid.get('e')!.at);
+    expect(after.get('e')!.above).toEqual(['a', 'b']);
+    expect(after.get('e')!.sig).not.toBe(laid.get('e')!.sig);
+  });
+
+  it('P3: an earlier cursor whose column is joined keeps its place as the earliest arrival, never folded', () => {
+    const list = [entry('B1', 0, 86, 1), entry('A1', 0, 0, 2), entry('A2', 0, 0, 3), entry('C', 0, 0, 4)];
+    const laid = deStackLayout(list, 1);
+    expectColumnsCapped(list, laid);
+    // B1 came first: it heads the joined column on its own target, A1 under
+    // it, and A2 is the count for itself and C.
+    expect(laid.get('B1')!.at).toEqual({ x: 0, y: 86 });
+    expect(laid.get('B1')!.collapsedInto).toBeUndefined();
+    expect(laid.get('B1')!.group).toBeUndefined();
+    expect(laid.get('A1')!.at).toEqual({ x: 0, y: 86 + S });
+    expect(laid.get('A2')!.group).toEqual(['A2', 'C']);
+    // Before C came, the two columns were apart: A1 and A2 on their own.
+    const two = deStackLayout(list.slice(0, 3), 1);
+    expect(two.get('A1')!.at).toEqual({ x: 0, y: 0 });
+    expect(two.get('A1')!.column).toBe('A1');
+  });
+
+  it('property (review 8\'s fuzz): 1,500 sets of 4 to 8 in a narrow strip at zooms 0.25 to 3, merging often: every column capped, the count last, full only for the two earliest', () => {
+    const rand = seeded(8811);
+    let merged = 0;
+    let counted = 0;
+    for (let round = 0; round < 1500; round += 1) {
+      const zoom = [0.25, 0.5, 0.8, 1, 1.5, 2, 3][Math.floor(rand() * 7)];
+      const count = 4 + Math.floor(rand() * 5);
+      const list = Array.from({ length: count }, (_, i) => entry(
+        String.fromCharCode(97 + i),
+        (Math.floor(rand() * 3) * 4) / zoom,
+        (rand() * 220) / zoom,
+        i + 1,
+        rand() < 0.3,
+      ));
+      const laid = deStackLayout(list, zoom);
+      const columns = expectColumnsCapped(list, laid);
+      for (const members of columns.values()) {
+        if (members.length > AGENT_CURSOR_COLUMN_DRAWN) counted += 1;
+        // A column of members whose own targets are far apart: a merge.
+        const ys = members.map((m) => list.find((e) => e.key === m.key)!.target.y * zoom);
+        if (Math.max(...ys) - Math.min(...ys) > 60) merged += 1;
+      }
+      // Nothing drawn meets across columns, arrows and names.
+      const drawn = list.filter((e) => !laid.get(e.key)!.collapsedInto);
+      const shapes = drawn.map((e) => ({ col: laid.get(e.key)!.column, shape: cursorShape({ x: laid.get(e.key)!.at.x * zoom, y: laid.get(e.key)!.at.y * zoom }, false, e.nameW) }));
+      for (let i = 0; i < shapes.length; i += 1) {
+        for (let j = i + 1; j < shapes.length; j += 1) {
+          if (shapes[i].col !== shapes[j].col) expect(cursorsMeet(shapes[i].shape, shapes[j].shape)).toBe(false);
+        }
+      }
+    }
+    expect(merged).toBeGreaterThan(300);
+    expect(counted).toBeGreaterThan(300);
+  }, 120_000);
+
+  it('ex4 (review 8\'s fuzz): the head of a joined stack is never the count cursor', () => {
+    const rows = [['a', 8, 93.6], ['b', 0, 205.7], ['c', 0, 194.2], ['d', 4, 211.3], ['e', 4, 97.1], ['f', 4, 129.6]] as const;
+    const list = rows.map(([k, x, y], i) => entry(k, x, y, i + 1));
+    const laid = deStackLayout(list, 1);
+    const columns = expectColumnsCapped(list, laid);
+    for (const members of columns.values()) {
+      if (members.length > 1) expect(laid.get(members[0].key)!.group).toBeUndefined();
+    }
   });
 
   it('a target on another cursor\'s name pill, to the right, joins that column', () => {
@@ -616,7 +756,9 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
       const laid = deStackLayout(list, zoom);
       // Folded cursors aren't drawn: their count cursor is.
       const drawn = list.filter((e) => !laid.get(e.key)!.collapsedInto);
-      const head = (key: string) => laid.get(key)!.above[0] ?? key;
+      // Grouped by the layout's real column (review 8: `above[0]` split a
+      // merged column in two).
+      const head = (key: string) => laid.get(key)!.column!;
       const screen = drawn.map((e) => ({ key: e.key, at: { x: laid.get(e.key)!.at.x * zoom, y: laid.get(e.key)!.at.y * zoom }, say: Boolean(e.say) }));
       for (let i = 0; i < screen.length; i += 1) {
         for (let j = i + 1; j < screen.length; j += 1) {
@@ -633,14 +775,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
           pairs += 1;
         }
       }
-      for (const e of drawn) {
-        // Never above its own target.
-        expect(laid.get(e.key)!.at.y).toBeGreaterThanOrEqual(e.target.y - 1e-9);
-      }
-      // At most three drawn per column.
-      const perHead = new Map<string, number>();
-      for (const e of drawn) perHead.set(head(e.key), (perHead.get(head(e.key)) ?? 0) + 1);
-      for (const n of perHead.values()) expect(n).toBeLessThanOrEqual(AGENT_CURSOR_COLUMN_DRAWN);
+      expectColumnsCapped(list, laid);
     }
     expect(pairs).toBeGreaterThan(300);
     expect(columnPairs).toBeGreaterThan(100);

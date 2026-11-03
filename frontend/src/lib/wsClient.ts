@@ -79,6 +79,11 @@ export interface AgentPresenceEvent {
    * only). Every cursor event a person tab gets carries it, the agent's plain
    * cursor's too; the agents' form never does. */
   session?: AgentPresenceSession;
+  /** Person tabs only: backend wall-clock ms when this cursor came to where
+   * it is (a move to the same node, or a nudge, keeps it). Columns stack by
+   * it, so every tab, before and after a reload, draws the same cursors in
+   * full (GM - Design, PR #211 r21). */
+  since?: number;
 }
 
 /** Person tabs only, right after a verified hello: every live cursor, so a

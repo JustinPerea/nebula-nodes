@@ -3,14 +3,14 @@ import { AGENT_CURSOR_ACTIONS, type AgentCursorAction } from '../lib/agentPresen
 import type { AgentCursorAnchor, AgentPresenceEvent, AgentPresenceSession } from '../lib/wsClient';
 import { attachPresenceSink } from './agentPresenceFeed';
 import { cleanSession } from '../lib/agentCursorLabel';
+import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
 
 /** Cursors dim after this long without news, and disappear after AGENT_CURSOR_EXPIRE_MS. */
 export const AGENT_CURSOR_IDLE_MS = 20_000;
 export const AGENT_CURSOR_EXPIRE_MS = 120_000;
-/** Narration stays beside the cursor this long after the agent's last event,
- * then fades (GM - Design, round 19: "fades out about 3 s after the agent's
- * last event"). */
-export const AGENT_SAY_MS = 3_000;
+// Narration's 3 s (GM - Design, round 19) lives with the cursor's label, which
+// the Agent log shares.
+export { AGENT_SAY_MS } from '../lib/agentCursorLabel';
 /** The bubble's fade: the length of --agent-cursor-say-fade in agentCursor.css. */
 export const AGENT_SAY_FADE_MS = 320;
 /** Live cursors one agent can have at once, one per session (the backend's
@@ -43,6 +43,10 @@ export interface AgentCursor {
   replayed: boolean;
   /** The project open when it happened. */
   projectId: string | null;
+  /** When it came to where it is, in the backend's clock (its `since`, else
+   *  the event's `at`): the column order, the same in every tab and after a
+   *  reload (GM - Design, PR #211 r21). */
+  arrivedAt: number;
 }
 
 export interface AgentCursorDid {
@@ -117,6 +121,15 @@ function isAnchor(value: unknown): value is AgentCursorAnchor {
   return Number.isFinite(anchor.x) && Number.isFinite(anchor.y);
 }
 
+/** When a cursor came to where it is: the backend's `since` (person tabs),
+ *  else, for an event without one, the arrival it had while its target
+ *  stays the same, else the event's own time. */
+function arrivalOf(event: AgentPresenceEvent, previous: AgentCursor | undefined): number {
+  if (typeof event.since === 'number' && Number.isFinite(event.since)) return event.since;
+  if (previous && JSON.stringify(previous.target) === JSON.stringify(event.target)) return previous.arrivedAt;
+  return Number.isFinite(event.at) ? event.at : 0;
+}
+
 /** `agents` with one event applied (a new object), or `agents` itself when
  *  the event has no cursor. */
 function withEvent(
@@ -161,7 +174,7 @@ function withEvent(
     key,
     session,
     name: agent.name,
-    color: SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
+    color: SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR,
     verified: Boolean(agent.verified),
     target,
     from: !replayed && isAnchor(event.from) ? event.from : undefined,
@@ -172,6 +185,7 @@ function withEvent(
     did: cleanDid(event.did, now),
     projectId: typeof event.projectId === 'string' ? event.projectId : null,
     replayed,
+    arrivedAt: arrivalOf(event, previous),
   };
   return next;
 }

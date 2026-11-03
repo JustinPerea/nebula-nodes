@@ -74,8 +74,8 @@ def test_a_pin_reply_lands_on_the_resolving_sessions_own_cursor_and_is_replayed(
     assert person_frame["session"] == mine["session"]
     assert person_frame["say"] == "Warmed" and person_frame["target"] == {"nodeId": node}
     # Agents read the agent form exactly, with no session.
-    assert "session" not in agent_frame
-    assert {k: v for k, v in person_frame.items() if k != "session"} == agent_frame
+    assert "session" not in agent_frame and "since" not in agent_frame
+    assert {k: v for k, v in person_frame.items() if k not in ("session", "since")} == agent_frame
 
     # A tab opened later shows the same cursors: the reply is in the replay,
     # under the same key, and no cursor is there twice.
@@ -126,8 +126,8 @@ def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(socket
     (agent_frame,) = _frames(api.listener)
     assert person_frame["say"] == "Accepted" and person_frame["action"] == "click"
     assert person_frame["session"] == proposing["session"]
-    assert "session" not in agent_frame
-    assert {k: v for k, v in person_frame.items() if k != "session"} == agent_frame
+    assert "session" not in agent_frame and "since" not in agent_frame
+    assert {k: v for k, v in person_frame.items() if k not in ("session", "since")} == agent_frame
     replayed = [c for c in _replay(api, person) if c["session"]["key"] == proposing["session"]["key"]]
     assert [c["say"] for c in replayed] == ["Accepted"]
     assert len(_replay(api, person)) == 2

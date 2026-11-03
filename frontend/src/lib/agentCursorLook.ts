@@ -110,8 +110,11 @@ export function labelLayout(nameShown: boolean, sayShown: boolean): LabelLayout 
 interface StackEntry {
   key: string;
   target: Point;
-  /** When this cursor came to its spot: earlier ones keep their place (GM - Design, PR #211 r2). */
+  /** When this cursor came to its spot: earlier ones keep their place (GM - Design, PR #211 r2),
+   *  in the backend's arrival order (r21). */
   since: number;
+  /** Ties in `since` are broken by this (the tab's own landing order). */
+  seq?: number;
   /** Its say pill shows (or is fading out): its label block is name plus say. */
   say?: boolean;
   /** Its pills' widths in screen px (labelWidths); a default when unknown. */
@@ -362,14 +365,16 @@ export function stackStepPx(earlierSay: boolean): number {
  *  members it is stacked under (with their says), so a change in it is a
  *  change of layout (a say, a join, a leave), and anything else moving the
  *  spot is a ride (a node carried, a zoom). `above` lists those members.
- *  In a column of four or more, the third slot stands for the rest: its
- *  cursor's spot carries `group` (itself and the later arrivals folded into
- *  it, in arrival order), and each folded cursor's carries `collapsedInto`,
- *  that slot's key (GM - Design, PR #211 r17 item 1). */
+ *  `column` is the column's id: its head's key (its earliest arrival). In a
+ *  column of four or more, the third slot stands for the rest: its cursor's
+ *  spot carries `group` (itself and the later arrivals folded into it, in
+ *  arrival order), and each folded cursor's carries `collapsedInto`, that
+ *  slot's key (GM - Design, PR #211 r17 item 1, r21). */
 export interface StackSpot {
   at: Point;
   sig: string;
   above: readonly string[];
+  column?: string;
   group?: readonly string[];
   collapsedInto?: string;
 }
@@ -385,115 +390,125 @@ export function countLabel(count: number): string {
 
 /**
  * Where each cursor lands so no arrow sits beside or over a name or arrow
- * that isn't its own (GM - Design, PR #211 r14, review 6 and r17). Cursors
- * are placed in the order they came to their spots. A cursor joins a column
- * when its target is within 16 screen px of a member's target, or when its
- * arrow and name at its own target would come within clearPx of any placed
- * cursor's arrow or name: it lands straight below the column, never to the
- * right, a stackStepPx under the lowest member's label block (say included,
- * in its own column). A say pill never makes a join and never moves another
- * column (r17 item 2): where a say has no room, it moves aside or waits
- * (AgentCursorLayer). Should the spot meet another placed cursor, that
- * cursor's column joins this one and it steps on below it. Joining on
- * targets is transitive, so near and identical targets make one column,
- * ordered by arrival. A column draws its first AGENT_CURSOR_COLUMN_DRAWN − 1
- * members in full; with more than AGENT_CURSOR_COLUMN_DRAWN, every later
- * arrival folds into the last slot (StackSpot.group), so no cursor rests
- * more than two steps below its column's head. Only live cursors are passed
- * in: a leaving one doesn't count. Targets and results are in flow
- * coordinates; every distance and step is in screen px at `zoom`.
+ * that isn't its own (GM - Design, PR #211 r14, review 6, r17 and r21).
+ *
+ * First every join is resolved: a cursor joins another's column when its
+ * target is within 16 screen px of that cursor's target, or when its arrow
+ * and name at its own target come within clearPx of an earlier cursor's
+ * arrow or name where that one is drawn; and two columns join when any of
+ * their drawn cursors meet. A say pill never makes a join (r17 item 2).
+ * Joins are transitive, and resolved again until no drawn cursor meets
+ * another column, so near and identical targets make one column.
+ *
+ * Then each final column is laid out in arrival order (r21): its earliest
+ * arrival, the head, on its own target; each next one straight below the
+ * one before, a stackStepPx under its label block (say included). With more
+ * than AGENT_CURSOR_COLUMN_DRAWN members, the first two are drawn in full,
+ * the third arrival is the count cursor in the last slot, and every later
+ * arrival folds into it (StackSpot.group). A cursor that changes slot when
+ * columns merge or split glides there on the layout spring (its `sig`
+ * changes). Only live cursors are passed in: a leaving one doesn't count.
+ * Arrival is `since`, then `seq`, then the key. Targets and results are in
+ * flow coordinates; every distance and step is in screen px at `zoom`.
  */
 export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
   const { radiusPx } = AGENT_CURSOR_STACK;
-  const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  interface Placed {
-    key: string; tip: Point; target: Point; say: boolean; shape: CursorShape; column: number; sig: string; above: string[];
-    group: string[] | null;
-    /** Folded into this slot's count cursor, or null. */
-    folded: string | null;
-  }
-  const placed: Placed[] = [];
-  // Each column's x (its head's), its members in arrival order, and its
-  // count slot once it has one; a merged column points on.
-  const columns: { x: number; members: Placed[]; slot: Placed | null; into: number | null }[] = [];
-  const root = (c: number): number => {
-    let at = c;
-    while (columns[at].into !== null) at = columns[at].into!;
-    return at;
+  const ordered = [...cursors].sort((a, b) => a.since - b.since || (a.seq ?? 0) - (b.seq ?? 0)
+    || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const n = ordered.length;
+  const targets = ordered.map((c) => ({ x: c.target.x * zoom, y: c.target.y * zoom }));
+  const nameW = ordered.map((c) => c.nameW ?? DEFAULT_NAME_W);
+  const says = ordered.map((c) => Boolean(c.say));
+  // Arrow and name only: a say pill never makes a join (r17 item 2).
+  const own = targets.map((t, i) => cursorShape(t, false, nameW[i]));
+  const parent = ordered.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+    return i;
   };
-  const result = new Map<string, StackSpot>();
-  for (const cursor of ordered) {
-    const say = Boolean(cursor.say);
-    const nameW = cursor.nameW ?? DEFAULT_NAME_W;
-    const target = { x: cursor.target.x * zoom, y: cursor.target.y * zoom };
-    // Arrow and name only: a say pill never makes a join (r17 item 2).
-    const own = cursorShape(target, false, nameW);
-    const hit = new Set<number>();
-    for (const p of placed) {
-      if (Math.hypot(p.target.x - target.x, p.target.y - target.y) <= radiusPx + 1e-9 || (!p.folded && cursorsMeet(own, p.shape))) {
-        hit.add(root(p.column));
-      }
+  const union = (i: number, j: number): boolean => {
+    const a = find(i);
+    const b = find(j);
+    if (a === b) return false;
+    // The root is the earlier arrival: it is the column's head.
+    if (a < b) parent[b] = a;
+    else parent[a] = b;
+    return true;
+  };
+  interface Laid { tip: Point; shape: CursorShape | null; sig: string; above: string[]; slot: number | null; group: number[] | null; column: number }
+  // The first `count` arrivals, laid out in their columns.
+  const lay = (count: number): Laid[] => {
+    const out: Laid[] = new Array(count);
+    const columns = new Map<number, number[]>();
+    for (let i = 0; i < count; i += 1) {
+      const r = find(i);
+      if (!columns.has(r)) columns.set(r, []);
+      columns.get(r)!.push(i); // in arrival order: i ascends
     }
-    let entry: Placed;
-    if (hit.size === 0) {
-      entry = { key: cursor.key, tip: target, target, say, shape: own, column: columns.length, sig: '', above: [], group: null, folded: null };
-      columns.push({ x: target.x, members: [entry], slot: null, into: null });
-    } else {
-      // The oldest column it meets takes it; any other column its spot
-      // then meets joins that one (below), so it goes under that one too.
-      const first = Math.min(...hit);
-      const join = (c: number) => {
-        columns[first].members.push(...columns[c].members);
-        columns[first].slot ??= columns[c].slot;
-        columns[c].members = [];
-        columns[c].into = first;
-      };
-      const x = columns[first].x;
-      for (;;) {
-        const column = columns[first];
-        const drawn = column.members.filter((m) => !m.folded);
-        if (column.slot || drawn.length >= AGENT_CURSOR_COLUMN_DRAWN) {
-          // The column is full: this one folds into its last slot, which
-          // becomes (or stays) the count cursor.
-          const slot = column.slot ?? drawn[AGENT_CURSOR_COLUMN_DRAWN - 1];
-          column.slot = slot;
-          slot.group ??= [slot.key];
-          slot.group.push(cursor.key);
-          entry = {
-            key: cursor.key, tip: slot.tip, target, say: false, shape: slot.shape, column: first,
-            sig: `${slot.sig}#${slot.key}`, above: slot.above, group: null, folded: slot.key,
-          };
-          column.members.push(entry);
-          break;
-        }
-        let under = drawn[0];
-        for (const m of drawn) {
-          if (m.tip.y + stackStepPx(m.say) > under.tip.y + stackStepPx(under.say)) under = m;
-        }
-        const tip = { x, y: under.tip.y + stackStepPx(under.say) };
-        const shape = cursorShape(tip, false, nameW);
-        const meets = placed.find((p) => !p.folded && root(p.column) !== first && cursorsMeet(shape, p.shape));
-        if (meets) {
-          join(root(meets.column));
-          continue;
-        }
-        const head = drawn[0];
-        entry = {
-          key: cursor.key, tip, target, say, shape, column: first,
-          sig: `${under.sig || head.key}>${under.key}${under.say ? '+' : ''}`,
-          above: [...under.above, under.key], group: null, folded: null,
+    for (const [head, members] of columns) {
+      const full = members.length > AGENT_CURSOR_COLUMN_DRAWN;
+      const drawn = members.slice(0, AGENT_CURSOR_COLUMN_DRAWN);
+      const x = targets[head].x;
+      let prev: number | null = null;
+      for (const m of drawn) {
+        const tip = prev === null ? targets[m] : { x, y: out[prev].tip.y + stackStepPx(says[prev]) };
+        out[m] = {
+          tip,
+          shape: cursorShape(tip, false, nameW[m]),
+          sig: prev === null ? '' : `${out[prev].sig || ordered[head].key}>${ordered[prev].key}${says[prev] ? '+' : ''}`,
+          above: prev === null ? [] : [...out[prev].above, ordered[prev].key],
+          slot: null,
+          group: null,
+          column: head,
         };
-        column.members.push(entry);
-        break;
+        prev = m;
+      }
+      if (full) {
+        const slot = drawn[drawn.length - 1];
+        out[slot].group = members.slice(AGENT_CURSOR_COLUMN_DRAWN - 1);
+        for (const m of members.slice(AGENT_CURSOR_COLUMN_DRAWN)) {
+          out[m] = {
+            tip: out[slot].tip, shape: null, sig: `${out[slot].sig}#${ordered[slot].key}`,
+            above: out[slot].above, slot, group: null, column: head,
+          };
+        }
       }
     }
-    placed.push(entry);
+    return out;
+  };
+  // Joins, resolved in arrival order as each cursor comes (the earlier ones
+  // laid out as they are then): its target near an earlier one's, or its
+  // arrow and name at its target meeting an earlier one where it is drawn.
+  // Then, while any drawn cursor meets another column, those columns join.
+  let laid: Laid[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const before = lay(i);
+    for (let j = 0; j < i; j += 1) {
+      const near = Math.hypot(targets[i].x - targets[j].x, targets[i].y - targets[j].y) <= radiusPx + 1e-9;
+      const sj = before[j].shape; // null when folded: drawn as its slot
+      if (near || (sj && cursorsMeet(own[i], sj))) union(i, j);
+    }
+    laid = lay(i + 1);
+    for (let round = 0; round <= i + 1; round += 1) {
+      let joined = false;
+      for (let a = 0; a <= i; a += 1) {
+        for (let c = a + 1; c <= i; c += 1) {
+          const sa = laid[a].shape;
+          const sc = laid[c].shape;
+          if (sa && sc && find(a) !== find(c) && cursorsMeet(sa, sc)) joined = union(a, c) || joined;
+        }
+      }
+      if (!joined) break;
+      laid = lay(i + 1);
+    }
   }
-  for (const p of placed) {
-    const spot: StackSpot = { at: { x: p.tip.x / zoom, y: p.tip.y / zoom }, sig: p.sig, above: p.above };
-    if (p.group) spot.group = [...p.group];
-    if (p.folded) spot.collapsedInto = p.folded;
-    result.set(p.key, spot);
+  const result = new Map<string, StackSpot>();
+  for (let i = 0; i < n; i += 1) {
+    const p = laid[i];
+    const spot: StackSpot = { at: { x: p.tip.x / zoom, y: p.tip.y / zoom }, sig: p.sig, above: p.above, column: ordered[p.column].key };
+    if (p.group) spot.group = p.group.map((k) => ordered[k].key);
+    if (p.slot !== null) spot.collapsedInto = ordered[p.slot].key;
+    result.set(ordered[i].key, spot);
   }
   return result;
 }

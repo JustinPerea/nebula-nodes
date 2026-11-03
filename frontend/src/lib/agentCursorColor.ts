@@ -17,6 +17,11 @@ export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const
  */
 export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, clampGap: 0.07 } as const;
 
+/** The colour of an agent whose own colour is missing or not a #rrggbb hex:
+ *  its cursor, its Agent log line and the log's name tone all use it, so
+ *  they never disagree (review 8). */
+export const AGENT_FALLBACK_COLOR = '#E8825A';
+
 // sRGB ↔ OKLab (Björn Ottosson's published matrices).
 type Rgb = [number, number, number];
 
@@ -176,10 +181,12 @@ export function contrastRatio(a: string, b: string): number {
  * as far as sRGB needs). GM - Design, PR #211 r20: the Agent log's name
  * text, whose dot keeps the cursor's own shade.
  */
-export function readableTone(fill: string, surface: string, minContrast = 4.5): string {
+export function readableTone(rawFill: string, surface: string, minContrast = 4.5): string {
+  // A colour that is not #rrggbb has no hue to keep: the shared fallback
+  // stands in for it, never the input itself (review 8, NIT-2).
+  const fill = parseHex(rawFill) ? rawFill : AGENT_FALLBACK_COLOR;
   if (contrastRatio(fill, surface) >= minContrast) return fill;
-  const base = hexToOklch(fill);
-  if (!base) return fill;
+  const base = hexToOklch(fill)!;
   for (let k = 1; k <= 200; k += 1) {
     for (const L of [base.l + k * 0.005, base.l - k * 0.005]) {
       if (L < 0 || L > 1) continue;
@@ -191,12 +198,25 @@ export function readableTone(fill: string, surface: string, minContrast = 4.5): 
 }
 
 /**
- * The Agent log's surface behind its rows: Restraint's panel glass
- * (--sr-glass, rgba(22, 22, 24, 0.66)) over the black canvas (--sr-canvas).
- * Restraint is the app's one appearance (lib/skins). A test re-derives it
- * from the stylesheet.
+ * One colour `over` another as Chrome paints it: the alpha is stored in
+ * 8 bits (0.66 → 168/255) and each channel blends and rounds in 8 bits.
+ * Blending with the exact alpha gives #0f0f10 for Restraint's log surface;
+ * Chrome paints #0e0e10 (review 8, NIT-1).
  */
-export const AGENT_LOG_SURFACE = '#0f0f10';
+export function compositeOver(over: { rgb: readonly number[]; alpha: number }, under: readonly number[]): string {
+  const a = Math.round(over.alpha * 255);
+  const rgb = over.rgb.map((c, k) => Math.round((c * a + under[k] * (255 - a)) / 255));
+  return `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The Agent log's surface behind its rows: Restraint's panel glass
+ * (--sr-glass, rgba(22, 22, 24, 0.66)) over the black canvas (--sr-canvas),
+ * as Chrome paints it (compositeOver): #0e0e10. Restraint is the app's one
+ * appearance (lib/skins). A test re-derives it from the stylesheet with the
+ * same compositeOver, so the two cannot drift.
+ */
+export const AGENT_LOG_SURFACE = compositeOver({ rgb: [22, 22, 24], alpha: 0.66 }, [0, 0, 0]);
 
 /**
  * An Agent log line's colours for a cursor (GM - Design, PR #211 r20): the
@@ -206,6 +226,6 @@ export const AGENT_LOG_SURFACE = '#0f0f10';
  * same hue (readableTone).
  */
 export function agentLogTones(color: string, session: SessionLike | null, surface = AGENT_LOG_SURFACE): { dot: string; name: string } {
-  const dot = sessionFill(color, session);
+  const dot = sessionFill(parseHex(color) ? color : AGENT_FALLBACK_COLOR, session);
   return { dot, name: readableTone(dot, surface) };
 }

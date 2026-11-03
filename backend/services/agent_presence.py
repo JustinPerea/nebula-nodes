@@ -327,6 +327,30 @@ class _SessionSlot:
     # The latest person form sent for it: what a person tab that connects
     # later is shown (replay), so every tab draws the same live cursors.
     event: dict[str, Any] | None = None
+    # When its cursor came to where it is (clock seconds): the backend's
+    # arrival order, which every tab stacks by, before and after a reload
+    # (GM - Design, PR #211 r21). A move to the same node, or within
+    # ARRIVAL_RADIUS of a point, keeps it.
+    since: float = 0.0
+
+
+# A cursor's new target within this many flow px of its last point keeps its
+# arrival (_SessionSlot.since): the tab's stack radius at zoom 1
+# (AGENT_CURSOR_STACK.radiusPx), so a nudge never sends it to the back.
+ARRIVAL_RADIUS = 16.0
+
+
+def _same_spot(before: dict[str, Any] | None, after: dict[str, Any]) -> bool:
+    """Whether ``after`` keeps a cursor where ``before`` put it, for its
+    arrival order: the same node, or two points ARRIVAL_RADIUS apart or less."""
+    if before is None:
+        return False
+    if "nodeId" in before or "nodeId" in after:
+        return before.get("nodeId") is not None and before.get("nodeId") == after.get("nodeId")
+    try:
+        return math.hypot(float(after["x"]) - float(before["x"]), float(after["y"]) - float(before["y"])) <= ARRIVAL_RADIUS
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def _forget_in_event(slot: _SessionSlot, gone: Callable[[dict[str, Any]], bool]) -> None:
@@ -586,8 +610,11 @@ class AgentPresence:
             elif raw or len(self._slots.get(identity.id) or {}) > 1:
                 # A session's first words: not on another session's cursor.
                 person["target"] = self._view_middle()[0]
+        if not _same_spot(slot.target, person["target"]):
+            slot.since = now
         slot.target = dict(person["target"])
         person["session"] = {"key": slot.key, "ordinal": slot.ordinal}
+        person["since"] = int(slot.since * 1000)
         slot.event = person
         return person
 
@@ -612,6 +639,7 @@ class AgentPresence:
                 cursor = {key: value for key, value in slot.event.items() if key != "from"}
                 cursor["target"] = dict(slot.target)
                 cursor["session"] = {"key": slot.key, "ordinal": slot.ordinal}
+                cursor["since"] = int(slot.since * 1000)
                 if isinstance(cursor.get("did"), dict):
                     did = cursor["did"]
                     cursor["did"] = {**did, "secondsAgo": round(float(did.get("secondsAgo") or 0) + age, 1)}
