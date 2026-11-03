@@ -89,6 +89,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services.input_file_name import PARAM as INPUT_FILE_NAME_PARAM, file_name_param
+from services.file_param_preview import follow_file_params
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services import agent_start, input_sizes, node_categories, node_lookup, node_names
 from services import scene_keys
@@ -2268,6 +2269,25 @@ def _output_url_from_ref(value: str) -> str | None:
     if rel is None:
         return None
     return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
+
+
+def _file_preview_url(value: Any) -> str | None:
+    """The served URL of a file Nebula holds (in its output folder), for a
+    file param's preview; None when it holds no such file."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        path = _output_path_from_ref(value)
+        url = _output_url_from_ref(value)
+    except Exception:  # a protected or unreadable path makes no preview
+        return None
+    return url if url and path is not None and path.is_file() else None
+
+
+def _follow_file_params(definition_id: str, before: Mapping[str, Any],
+                        update: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """services/file_param_preview.follow_file_params for this node's definition."""
+    return follow_file_params(node_registry.get(definition_id), before, update, _file_preview_url)
 
 
 def _output_file_time(url: str) -> float | None:
@@ -7679,7 +7699,10 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
-            candidate.update_params(change.node_id, update)
+            # GM r46 Q2 on #222: the preview and name follow a file param
+            # an agent sets (services/file_param_preview.py).
+            update, dropped = _follow_file_params(definition_id, node.get("params") or {}, update)
+            candidate.update_params(change.node_id, update, drop=dropped)
     names = spec.names
     raw_nodes = [
         {
@@ -13429,6 +13452,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
+        # GM r46 Q2 on #222: a file param set without its preview fields
+        # (an agent's `nebula set`, a script) takes the new file's preview
+        # and name, or clears them (services/file_param_preview.py).
+        params, dropped = _follow_file_params(str(node.get("definitionId") or ""), params_before, params)
         if models is not None and node.get("definitionId") == current_definition:
             # Universal nodes carry no recovery checkpoint or Cinema scene.
             full, reason = universal_ports.agent_update(current_definition, params_before, params, models)
@@ -13440,17 +13467,17 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             _drop_outputs_off_ports(cli_graph, node_id, full)
             cli_graph.set_params(node_id, full)
         else:
-            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
+            _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params), drop=dropped))
             if not _is_person_request():
                 grown = cli_graph.clone()
-                grown.update_params(node_id, copy.deepcopy(params))
+                grown.update_params(node_id, copy.deepcopy(params), drop=dropped)
                 _refuse_agent_growth_past_save_limit(grown)
             _author_cinema_scene(cli_graph, node_id, node, params)
             recovery_update = _keep_recovery_checkpoint(node, params)
             if recovery_update:
                 candidate = cli_graph.clone()
                 try:
-                    candidate.update_params(node_id, params)
+                    candidate.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
                 _commit_graph_candidate_with_recoveries(
@@ -13460,7 +13487,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 )
             else:
                 try:
-                    cli_graph.update_params(node_id, params)
+                    cli_graph.update_params(node_id, params, drop=dropped)
                 except ValueError:
                     raise _scene_write_gone(node_id)
     # Journaled before any await, so it names the project the change was made

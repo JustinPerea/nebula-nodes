@@ -74,8 +74,10 @@ describe("the Inspector's file control", () => {
     await choose(container, new File([new Uint8Array(8)], 'quarterly-report-final-version-2026.pdf', { type: 'application/pdf' }));
     await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params._fileName)
       .toEqual({ file: 'abc.pdf', name: 'quarterly-report-final-version-2026.pdf' }));
-    expect(container.querySelector('.inspector__file-button span')?.textContent)
-      .toBe('quarterly-report-final-version-2026.pdf');
+    // Cut in the middle so the extension stays (GM r46 on #222); whole in its title.
+    const name = container.querySelector('.inspector__file-button span');
+    expect(name?.textContent).toBe('quarterly-report-final-….pdf');
+    expect(name?.getAttribute('title')).toBe('quarterly-report-final-version-2026.pdf');
   });
 
   it('says so when the upload fails', async () => {

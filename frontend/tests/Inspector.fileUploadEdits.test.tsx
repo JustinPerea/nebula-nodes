@@ -25,6 +25,7 @@ vi.mock('../src/components/DeferredPanels', async (original) => ({
 }));
 
 import { Inspector } from '../src/components/panels/Inspector';
+import { resetPaletteExtractsForTests } from '../src/components/panels/usePaletteExtracts';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { getProjectContext, setProjectContext } from '../src/lib/projectContext';
 import { useGraphStore } from '../src/store/graphStore';
@@ -38,6 +39,7 @@ const initialProject = getProjectContext();
 /** Each /api/uploads call waits until the test answers it. */
 let uploads: { name: string; answer: (filePath: string) => void; fail: () => void }[] = [];
 beforeEach(() => {
+  resetPaletteExtractsForTests();
   uploads = [];
   api.fetch.mockReset();
   api.fetch.mockImplementation((path: string, init?: RequestInit) => {
@@ -198,10 +200,10 @@ describe('a file upload into a file param', () => {
   });
 
   it('takes one undo step, which puts back the params from before it landed', async () => {
-    const { container } = show();
-    await pick(container);
     // Past the store's 500 ms merge of one node's edits into one step.
     await act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+    const { container } = show();
+    await pick(container);
     const before = useGraphStore.getState().undoStack.length;
     uploads[0].answer('/out/chat-uploads/abc.png');
     await settle();

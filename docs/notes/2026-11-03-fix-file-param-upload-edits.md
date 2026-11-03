@@ -84,24 +84,73 @@ the check fails on `src/components/panels/Inspector.tsx:1054 (then)
 
 ## MCP parity
 
-Agents can set file params today. `describe_node image-input` lists `filePath`
-(type `file`). MCP `edit_canvas` params and `nebula set n1 filePath=…` both
-applied, checked on an isolated backend. Both refuse `_previewUrl` and `_fileName`
-as internal params.
+Agents can set file params: MCP `edit_canvas` params and `nebula set n1 filePath=…`
+both apply (checked on an isolated backend), and both refuse `_previewUrl` and
+`_fileName` as internal params.
 
-Last writer wins on the file param in both orders:
+Round 1 found a gap: when an agent set the file after a person's upload,
+`_previewUrl` kept the person's image while a run read the agent's file. Round 2
+fixes it on the backend (see below), so last writer wins on the file, its preview
+and its name, in both orders.
 
-- The agent writes first, then the upload lands: the upload's `filePath`,
-  `_previewUrl` and `_fileName` all land together, consistently (tested).
-- The upload lands first, then the agent writes: the agent's `filePath` wins (it is
-  what a run reads). But `_previewUrl` keeps the person's upload, because the agent
-  can't write it and the PUT and apply routes don't re-derive it.
-  - Live result: n1 had `filePath` = blue and `_previewUrl` = orange.
-  - So the card and Inspector preview show the old image while a run uses the
-    agent's file.
-  - `_fileName` is guarded (`inputFileName` matches it to the stored file), but
-    `_previewUrl` isn't.
+## Round 2 (GM r46)
 
-That gap is not caused by this change, and it is a backend fix (re-derive or clear
-`_previewUrl` when an agent changes a file param). It is not built here, and it
-should be its own PR.
+- **In-flight row.** The upload now runs on usePaletteExtracts' `startPaletteExtract`,
+  the same per project, graph and node store as Extract's palette. So it shares the
+  #204 timing: "Uploading “name”…" replaces the file's name once the upload has run
+  300 ms, and stays at least 400 ms. The control stays enabled and points
+  `aria-describedby` at the row. Nothing is announced on a pick; the status region
+  stays empty. The name is cut in the middle (`middleTruncate`), and the newest
+  pick's name shows.
+- **Dropped-upload line.** This reuses the palette's dropped-note mechanism
+  (`paletteDropNote` / `setPaletteDropNote`, keyed by project, node and param, and
+  shown once through `shownPaletteNotes`). The keys are per param, so a file param's
+  note never meets a palette's. The names stayed "palette" so this PR doesn't move
+  the palette code another builder is changing; renaming them is a follow-up.
+  - A project switch, a graph replace, or an agent's follow switch drops the upload.
+    The line is GM's wording, under the param, with no button, and it clears on the
+    next pick.
+  - A deleted or redefined node hears nothing, and a newer pick is silent.
+  - The input's value is now emptied after each pick, so choosing the same file
+    again, as the line asks, fires a change.
+- **Graph generation.** `canvasGeneration()` reads `canvasReplacementRevision`, which
+  moves in four places only:
+  - `loadProjectGraph`: a project opened or switched;
+  - `loadGraph`: Load graph or an import;
+  - `replaceCanvasByClear`: a clear, the tab's own or an agent's, or a sync naming
+    another canvas;
+  - a graphSync marked `graphReplaced`: an agent's load or restore. A test runs the person's param edit, a node move, another
+  node's edit, a node added and one removed, and an agent's `edit_canvas` graphSync.
+  The generation stays the same and the upload lands. An agent clear bumps it, and
+  the upload is dropped with the line.
+- **Orphans.** A dropped upload's file stays in `output/chat-uploads/<sha256>.<ext>`
+  on purpose:
+  - Nothing lists that folder: no picker, the assets panel (characters, moodboards,
+    styles), MCP, the CLI or run history. There is no listing route.
+  - The archive route skips that folder.
+  - Storage is content-addressed (`/api/uploads` dedups by hash). The same bytes can
+    be another node's file, a moodboard image, a Character view or a Style ref, in
+    this or any other project. Deleting it on a drop could break those.
+- **Preview follows the file (backend).** `services/file_param_preview.py`
+  `follow_file_params` runs on every partial params write: the PUT node route
+  (canvas pushes and `nebula set`) and `_stage_proposal` (`/api/graph/apply`,
+  `edit_canvas`, accepted proposals).
+  - When it changes a definition's `file` param and leaves `_previewUrl` out, the
+    preview becomes the new file's `/api/outputs` URL if Nebula holds that file, and
+    is cleared otherwise.
+  - A changed `filePath` that leaves `_fileName` out drops the old name, so the card
+    and look_at_canvas show the path's own name and never a stale one.
+  - The canvas's own upload sends all three fields and is kept as sent.
+  - `CLIGraph.update_params` takes `drop` for the keys that go.
+- **Frontend.** The name row shows the name cut in the middle, with the full name
+  as its title.
+  - With a file but no preview, a quiet "No preview" sits under the name, and the
+    frame collapses.
+  - `FilePreviewFrame` uses a grid row from 1fr to 0fr on the layout spring and keeps
+    the last image inside while it closes. A frame that never had an image isn't
+    drawn. Under reduced motion it jumps.
+  - The spring curve is the popover's, defined again on the frame. A test keeps the
+    two equal, because moving it to `:root` broke the palette's own CSS test.
+- **Agent-set names.** For an agent's own upload, the path's base name is the stored
+  hash (`777fcd…png`), as GM's base-name rule gives. The name the agent uploaded it
+  with is on its own Image Input, not on this node.
