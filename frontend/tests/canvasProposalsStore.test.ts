@@ -121,6 +121,30 @@ describe('canvas proposals store', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('expired');
   });
 
+  it('a re-send of a card closed here on its expiry, before the backend\'s sweep, never brings it back (review 3 NIT-2)', () => {
+    vi.useFakeTimers();
+    try {
+      const late = proposal('p_late', { expiresAt: 5000 });
+      emit({ type: 'proposalOpened', proposal: late, acceptKey: 'key-late' });
+      useCanvasProposalsStore.getState().pruneExpired(6000);
+      // A rename re-sends it while it leaves, and again once it has gone.
+      emit({ type: 'proposalOpened', proposal: { ...late, note: 'renamed' }, acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late.closing).toBe('expired');
+      vi.advanceTimersByTime(PROPOSAL_EXIT_MS + 10);
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      emit({ type: 'proposalOpened', proposal: late, acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      // A sync that still lists it open does not either.
+      useCanvasProposalsStore.getState().sync([{ ...late, acceptKey: 'key-late' }]);
+      expect(useCanvasProposalsStore.getState().proposals.p_late).toBeUndefined();
+      // Another proposal (another expiry) opens as ever.
+      emit({ type: 'proposalOpened', proposal: proposal('p_late'), acceptKey: 'key-late' });
+      expect(useCanvasProposalsStore.getState().proposals.p_late.closing).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('accepts with the key and dragged positions, adopts, then runs one target', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     useCanvasProposalsStore.getState().moveGhost('p_a', '+up', { x: 900, y: -40 });

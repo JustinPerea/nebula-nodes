@@ -7,7 +7,7 @@ import { useUIStore } from '../store/uiStore';
 import { setNoticeMore, setNoticeMoreToggle } from '../lib/noticeMore';
 import { BANNER_SHOWN_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../lib/bottomBar';
 import {
-  MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
+  LOG_HELD_ATTR, MORE_ATTR, TOP_GUTTER, applyNoticeStack, measureNoticeStack, placeNoticeStack, stackJumps, stepChanged, type StackPlace,
 } from '../lib/noticeStackPlace';
 import '../styles/noticeRegion.css';
 
@@ -70,8 +70,15 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       resized.observe(element);
     };
     let last: { place: StackPlace; logTop: number; floatTop: number } | null = null;
+    // GM r57 Q1: while the person holds a floating log in a drag, it rises
+    // above the card and the stack holds still (no glide, no chasing); at
+    // the drop it places once, on the layout spring.
+    let held = false;
     function place() {
       if (!region || !stack) return;
+      if (document.documentElement.hasAttribute(LOG_HELD_ATTR)) { held = true; return; }
+      const dropped = held;
+      held = false;
       // A top bar mounted since (the selection toolbar's panel) joins the watch.
       document.querySelectorAll(`[${TOP_BAR_ATTR}]`).forEach(watch);
       stack.querySelectorAll('[data-notice-shrinks], [data-notice-shrinks] [data-notice-shrink-body] > *').forEach(watch);
@@ -84,7 +91,9 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       // A layout switch (above the log or back, the log moved) lands with no
       // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4);
       // a give-way step glides from where each row was (GM r5).
-      applyNoticeStack(region, stack, next.place, stackJumps(last, next), stepChanged(last?.place ?? null, next.place));
+      // Review 3 MEDIUM-3: once a glide ends, it places again from where the
+      // rows came to rest (a notice left showing as the card goes).
+      applyNoticeStack(region, stack, next.place, stackJumps(last, next), dropped || stepChanged(last?.place ?? null, next.place), place);
       last = next;
       // Step 4 (GM r7): the log collapses to its header for the card, and
       // reopens when the card leaves; uiStore never undoes the person's own.
@@ -102,7 +111,7 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
     // The log and the bottom bar write their lines on the root; the offline
     // banner marks it while it shows.
     const rootVars = typeof MutationObserver === 'function' ? new MutationObserver(() => place()) : null;
-    rootVars?.observe(document.documentElement, { attributes: true, attributeFilter: ['style', BANNER_SHOWN_ATTR] });
+    rootVars?.observe(document.documentElement, { attributes: true, attributeFilter: ['style', BANNER_SHOWN_ATTR, LOG_HELD_ATTR] });
     // An item arriving in or leaving a slot (not the text changing inside one).
     const items = typeof MutationObserver === 'function'
       ? new MutationObserver((records) => {

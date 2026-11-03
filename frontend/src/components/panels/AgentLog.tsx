@@ -4,7 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
-import { LOG_CARD_FOLD_DESCRIPTION, LOG_COLLAPSE_VAR, LOG_HOLD_ATTR } from '../../lib/noticeStackPlace';
+import { LOG_CARD_FOLD_DESCRIPTION, LOG_COLLAPSE_VAR, LOG_HELD_ATTR, LOG_HOLD_ATTR } from '../../lib/noticeStackPlace';
 import {
   AGENT_LOG_HIDDEN_NOTICE_MS,
   clamp,
@@ -155,8 +155,13 @@ export function AgentLog() {
   // the person: the region's measure stays the open log's while the card
   // holds it, and its collapse is offered only while it may collapse.
   const cardHold = useUIStore((s) => s.agentLogCardHold);
+  const cardFolded = cardHold === 'card' && !open;
   const openSize = useRef<{ natural: number; floor: number } | null>(null);
-  useEffect(() => () => useUIStore.getState().setAgentLogOpen(false), []);
+  useEffect(() => () => {
+    useUIStore.getState().setAgentLogOpen(false);
+    // Unmounted mid-drag: the hold goes with it.
+    document.documentElement.removeAttribute(LOG_HELD_ATTR);
+  }, []);
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
   const entries = useAgentLogStore((s) => s.entries);
@@ -429,6 +434,10 @@ export function AgentLog() {
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
       if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      // GM r57 Q1: the person's hand wins. While held, the log rises above
+      // the proposal card and the card holds still; it places once at the
+      // drop (NoticeRegion).
+      if (!d.moved) document.documentElement.setAttribute(LOG_HELD_ATTR, '');
       d.moved = true;
       const left = clamp(d.originLeft + dx, 0, Math.max(0, window.innerWidth - d.width));
       const top = clamp(d.originTop + dy, 0, Math.max(0, window.innerHeight - d.height));
@@ -445,6 +454,7 @@ export function AgentLog() {
     function onUp() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      document.documentElement.removeAttribute(LOG_HELD_ATTR);
       const d = dragRef.current;
       if (d?.moved) {
         // Tell the click handler that fires next to bail out.
@@ -543,7 +553,7 @@ export function AgentLog() {
       }
       style={containerStyle}
       data-status={statusLabel}
-      {...(cardHold === 'card' && !open ? { 'data-card-collapsed': '' } : {})}
+      {...(cardFolded ? { 'data-card-collapsed': '' } : {})}
     >
       <div
         className="agent-log__drag-row"
@@ -555,12 +565,14 @@ export function AgentLog() {
           type="button"
           className="agent-log__header"
           onClick={handleToggleClick}
-          title={open ? 'Collapse agent log' : 'Expand agent log'}
+          // GM r57 Q5: folded for the card, a sighted person reads why too;
+          // after their own collapse it is "Expand agent log" again.
+          title={open ? 'Collapse agent log' : cardFolded ? LOG_CARD_FOLD_DESCRIPTION : 'Expand agent log'}
           aria-expanded={open}
           // GM r11: folded for the proposal card is not the person's collapse,
           // and doesn't read as one to a screen reader or an agent reading
           // the accessibility tree.
-          {...(cardHold === 'card' && !open ? { 'aria-description': LOG_CARD_FOLD_DESCRIPTION } : {})}
+          {...(cardFolded ? { 'aria-description': LOG_CARD_FOLD_DESCRIPTION } : {})}
         >
           <span className="agent-log__title">
             <Activity

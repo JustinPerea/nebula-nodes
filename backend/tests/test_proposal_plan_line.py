@@ -294,6 +294,10 @@ def test_a_name_in_quotes_is_quoted_once():
     """Review 1 N1."""
     view = _view(params=[{**KREA, "title": "“Hero”"}])
     assert plan_line(view) == "Changes “Hero” · nothing runs until you choose"
+    # Review 3 NIT-3: only quotes that wrap a name come off; its own
+    # apostrophe stays, as on the card (cardQuoted).
+    assert plan_line(_view(params=[{**KREA, "title": "Artists'"}])) == "Changes “Artists'” · nothing runs until you choose"
+    assert plan_line(_view(params=[{**KREA, "title": "'90s look"}])) == "Changes “'90s look” · nothing runs until you choose"
 
 
 def test_a_name_with_and_in_it_keeps_the_groups_comma():

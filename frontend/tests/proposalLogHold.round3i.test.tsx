@@ -138,9 +138,12 @@ describe('the person\'s collapse wins over the card\'s give (uiStore)', () => {
     const { container } = render(<AgentLog />);
     const header = () => container.querySelector<HTMLElement>('.agent-log__header')!;
     expect(header().hasAttribute('aria-description')).toBe(false);
+    expect(header().getAttribute('title')).toBe('Collapse agent log');
     act(() => ui().holdAgentLogForCard(true, true));
     expect(header().getAttribute('aria-expanded')).toBe('false');
     expect(header().getAttribute('aria-description')).toBe(LOG_CARD_FOLD_DESCRIPTION);
+    // GM r57 Q5: the tooltip says why too, the same words exactly.
+    expect(header().getAttribute('title')).toBe('Folded to make room for the proposal card. It reopens when the card closes.');
     // GM r12's words: why it folded.
     expect(LOG_CARD_FOLD_DESCRIPTION).toBe('Folded to make room for the proposal card. It reopens when the card closes.');
     act(() => ui().holdAgentLogForCard(false, false));
@@ -149,6 +152,19 @@ describe('the person\'s collapse wins over the card\'s give (uiStore)', () => {
     act(() => ui().setAgentLogOpen(false));
     expect(header().getAttribute('aria-expanded')).toBe('false');
     expect(header().hasAttribute('aria-description')).toBe(false);
+    // After the person's own collapse: "Expand agent log".
+    expect(header().getAttribute('title')).toBe('Expand agent log');
+    // The person reopens it over the card's fold, then collapses it again
+    // while the card still shows: their collapse, not the card's fold.
+    act(() => ui().setAgentLogOpen(true));
+    act(() => ui().holdAgentLogForCard(true, true));
+    act(() => ui().setAgentLogOpen(true));
+    expect(ui().agentLogCardHold).toBe('refused');
+    act(() => ui().setAgentLogOpen(false));
+    expect(ui()).toMatchObject({ agentLogOpen: false, agentLogCardHold: 'refused' });
+    expect(header().getAttribute('title')).toBe('Expand agent log');
+    expect(header().hasAttribute('aria-description')).toBe(false);
+    expect(container.querySelector('.agent-log')!.hasAttribute('data-card-collapsed')).toBe(false);
   });
 });
 

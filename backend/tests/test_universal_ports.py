@@ -987,9 +987,14 @@ def test_names_follow_a_rename_while_the_proposal_is_open(api):
     the node's name now; the note stays as the agent wrote it; the canvas
     hears the new view."""
     _warm_openrouter()
-    _photos, eye, _ask = _two_photos_on_an_eye(api)
+    photos, eye, _ask = _two_photos_on_an_eye(api)
     view = _swap(api, eye, run=[eye]).json()["proposal"]
     assert view["cost"]["notReady"][0]["person"].startswith("“Second take” ")
+    # Review 3 LOW-2: an edit that renames nothing re-sends nothing, the far
+    # ends of the wires Accept removes counted as shown already.
+    api.sent.clear()
+    api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Second take"})
+    assert not [m for m in api.sent if m.get("type") == "proposalOpened"]
     api.sent.clear()
     renamed = api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Final look"})
     assert renamed.status_code == 200, renamed.text
@@ -1009,6 +1014,26 @@ def test_names_follow_a_rename_while_the_proposal_is_open(api):
     # A second sync with no rename sends nothing new.
     api.sent.clear()
     api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Final look"})
+    assert not [m for m in api.sent if m.get("type") == "proposalOpened"]
+    # Review 3 LOW-2: the far end of a wire Accept removes follows a rename
+    # too, on the card (a re-send) and in get_proposal.
+    renamed = api.client.put(f"/api/graph/node/{photos[0]}/label", headers=PERSON, json={"label": "Hero photo"})
+    assert renamed.status_code == 200, renamed.text
+    resent = [m for m in api.sent if m.get("type") == "proposalOpened" and m["proposal"]["id"] == view["id"]]
+    assert resent, "a rename of a removed wire's far end re-sends the card"
+    by_source = {edge["source"]: edge["sourceName"] for edge in resent[-1]["proposal"]["removedEdges"]}
+    assert by_source[photos[0]] == "Hero photo"
+    assert by_source[photos[1]] != "Hero photo"
+    read = api.client.get(f"/api/canvas/proposals/{view['id']}", headers=AGENT).json()["proposal"]
+    assert {edge["source"]: edge["sourceName"] for edge in read["removedEdges"]}[photos[0]] == "Hero photo"
+    assert read["names"][photos[0]] == "Hero photo"
+    assert read["names"][eye] == "Final look"
+    # The plan line and the count are unchanged by it.
+    assert read["plan"].startswith("Changes and runs “Final look”, removes 2 connections")
+    assert read["changeCount"] == view["changeCount"]
+    # Again with no rename: nothing new.
+    api.sent.clear()
+    api.client.put(f"/api/graph/node/{photos[0]}/label", headers=PERSON, json={"label": "Hero photo"})
     assert not [m for m in api.sent if m.get("type") == "proposalOpened"]
 
 

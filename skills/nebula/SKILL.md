@@ -249,7 +249,7 @@ the model, the proposal is refused the same way. Setting the model a node
 already has reads its ports again: the card shows "<model> · inputs updated"
 (`params[].inputsUpdated`) and lists any connection that drops. A proposal's
 node names follow the person's renames while it is open (`plan`, `names`,
-`params[].title`); your `note` stays as you wrote it. Without the provider's key the
+`params[].title`, the names in `removedEdges`); your `note` stays as you wrote it. Without the provider's key the
 node keeps its basic ports, and a connection to any other port is refused with the
 reason (only the person can add a key).
 

@@ -21,11 +21,48 @@ import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD_ATTR, SHRINK_NAME_ATTR } from '../../lib/noticeStackPlace';
+import { useGraphStore } from '../../store/graphStore';
+import { canvasFocusTarget } from '../../lib/noticeFocus';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
 /** Not-ready lines the bar shows before the rest move to the details. */
 const READINESS_LINES = 3;
+
+/** On the canvas while a decision put focus there: no ring (canvasProposals.css). */
+export const QUIET_FOCUS_ATTR = 'data-focus-quiet';
+
+/**
+ * Where focus goes once a proposal decided from the keyboard closes, and no
+ * other proposal's card shows (#216 review 3, GM r57): the Undo notice the
+ * decision raised, else the canvas, with no ring. Never <body>. The notice
+ * can draw a frame after the card goes, so the canvas holds focus until it
+ * does.
+ */
+function focusAfterDecision(noticeBefore: number | null, frames = 3): void {
+  const notice = useGraphStore.getState().undoNotice;
+  const raised = notice && notice.offer && notice.id !== noticeBefore;
+  const row = raised ? document.querySelector<HTMLElement>('[data-notice-slot] .canvas-undo-notice:not([data-leaving])') : null;
+  if (row) {
+    if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '-1');
+    row.focus({ preventScroll: true });
+    return;
+  }
+  const canvas = canvasFocusTarget();
+  // The card's leave may have put focus there already (noticeLeave's ×
+  // rule): it is marked quiet all the same.
+  if (canvas && !canvas.hasAttribute(QUIET_FOCUS_ATTR)) {
+    canvas.setAttribute(QUIET_FOCUS_ATTR, '');
+    canvas.addEventListener('blur', () => canvas.removeAttribute(QUIET_FOCUS_ATTR), { once: true });
+  }
+  if (canvas && document.activeElement !== canvas) canvas.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+  if (raised && frames > 0 && typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      // Only while focus is still where this put it.
+      if (!canvas || document.activeElement === canvas) focusAfterDecision(noticeBefore, frames - 1);
+    });
+  }
+}
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -159,10 +196,30 @@ export function ProposalBar() {
   const [cardMounted, setCardMounted] = useState(false);
   const scrolls = useScrollFades(bodyEl, cardMounted);
   const leaveRef = leave.props.ref;
+  const cardNode = useRef<HTMLDivElement | null>(null);
   const cardRef = useCallback((node: HTMLDivElement | null) => {
     leaveRef(node);
+    cardNode.current = node;
     setCardMounted(node !== null);
   }, [leaveRef]);
+  // #216 review 3 (GM r57): Accept or Reject from the keyboard. Its button
+  // goes disabled while the decision is out, so focus waits on the card's
+  // region; once the proposal closes it goes to the next card's region,
+  // else the Undo notice the decision raised, else the canvas with no ring.
+  // Never <body>. A refused decision leaves it on the card, by its error.
+  const decided = useRef<{ id: string; notice: number | null } | null>(null);
+  useLayoutEffect(() => {
+    const was = decided.current;
+    if (!was) return;
+    const entry = proposals[was.id];
+    if (entry && !entry.closing) {
+      if (!pending[was.id]) decided.current = null;
+      return;
+    }
+    decided.current = null;
+    if (live && cardNode.current) cardNode.current.focus({ preventScroll: true });
+    else focusAfterDecision(was.notice);
+  }, [proposals, pending, live]);
 
   useEffect(() => {
     pruneExpired(now);
@@ -201,6 +258,12 @@ export function ProposalBar() {
     useCanvasProposalsStore.getState().focus(null);
   };
   const settled = () => !guarding.current;
+  // A click with detail 0 is Enter or Space on the button.
+  const byKeyboard = (event: { detail: number }) => {
+    if (event.detail !== 0) return;
+    decided.current = { id: current.view.id, notice: useGraphStore.getState().undoNotice?.id ?? null };
+    cardNode.current?.focus({ preventScroll: true });
+  };
   const changes = current ? proposalChanges(current.view, current.values) : [];
   // One count, the backend's (GM - Design, PR #216 r3): the same number the
   // Update and MCP show, and the panel lists everything it counts.
@@ -448,8 +511,10 @@ export function ProposalBar() {
               className="proposal-bar__button"
               {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
                 title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
-              onClick={() => {
-                if (settled()) void reject(current.view.id);
+              onClick={(event) => {
+                if (!settled()) return;
+                byKeyboard(event);
+                void reject(current.view.id);
               }}
             >
               {pendingKind === 'reject' ? 'Rejecting…' : 'Reject'}
@@ -461,8 +526,10 @@ export function ProposalBar() {
               className="proposal-bar__button proposal-bar__button--primary"
               {...lock.act({ disabled: Boolean(pendingKind) || gateHeld,
                 title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
-              onClick={() => {
-                if (settled()) void accept(current.view.id);
+              onClick={(event) => {
+                if (!settled()) return;
+                byKeyboard(event);
+                void accept(current.view.id);
               }}
             >
               {pendingKind === 'accept' ? 'Accepting…' : acceptLabel(current.view)}

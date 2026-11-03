@@ -96,6 +96,10 @@ describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
     expect(cardQuoted('“Hero”')).toBe('“Hero”');
     expect(cardQuoted('"Hero" ')).toBe('“Hero”');
     expect(cardQuoted("'Hero'")).toBe('“Hero”');
+    // Review 3 NIT-3: only quotes that wrap the name; its own apostrophe stays.
+    expect(cardQuoted("Artists'")).toBe('“Artists\'”');
+    expect(cardQuoted("'90s look")).toBe('“\'90s look”');
+    expect(cardQuoted("“Artists'”")).toBe('“Artists\'”');
     const quoted: ProposalView = {
       ...view(),
       nodes: [{ ...view().nodes[0], name: '“Krea 2”' }],

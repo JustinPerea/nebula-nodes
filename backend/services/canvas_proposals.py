@@ -644,8 +644,12 @@ _QUOTES = "“”\"'‘’"
 
 def _plan_name(name: Any) -> str | None:
     """A node's name for the line, without quotes of its own (review 1 N1:
-    “Hero” never reads ““Hero””). None when it has none."""
-    text = str(name).strip().strip(_QUOTES).strip() if isinstance(name, str) else ""
+    “Hero” never reads ““Hero””). Only quotes that wrap it, at both ends: an
+    apostrophe the name ends in stays ("Artists'", review 3 NIT-3). None
+    when it has none."""
+    text = str(name).strip() if isinstance(name, str) else ""
+    while len(text) >= 2 and text[0] in _QUOTES and text[-1] in _QUOTES:
+        text = text[1:-1].strip()
     return text or None
 
 
@@ -1118,6 +1122,26 @@ class Proposal:
         return self.spec.references
 
     @property
+    def touched(self) -> set[str]:
+        """The existing nodes the card names: those it references, and the far
+        end of each connection Accept removes (review 3 LOW-2: a rename of the
+        photo connected to a swapped node follows on the card too)."""
+        ends = {str(edge.get(key)) for edge in self.removed_edges for key in ("source", "target") if edge.get(key)}
+        return set(self.existing) | ends
+
+    def shown_names(self) -> dict[str, str]:
+        """Each touched node's name as the proposal was made: its title, or
+        the name a removed connection carried for it."""
+        names: dict[str, str] = {}
+        for edge in self.removed_edges:
+            for end, word in (("source", "sourceName"), ("target", "targetName")):
+                if edge.get(end) and edge.get(word):
+                    names[str(edge[end])] = str(edge[word])
+        names.update({node_id: str(row.get("title") or "") for node_id, row in self.existing.items()
+                      if isinstance(row, Mapping)})
+        return names
+
+    @property
     def is_open(self) -> bool:
         return self.status == OPEN
 
@@ -1360,7 +1384,8 @@ class ProposalBook:
 
         definitions = registry.get_all() if registry is not None else {}
         spec = proposal.spec
-        live = {key: value for key, value in (live or {}).items() if key in proposal.existing and value}
+        touched = proposal.touched
+        live = {key: value for key, value in (live or {}).items() if key in touched and value}
 
         def existing_row(node_id: str) -> dict[str, Any]:
             row = dict(proposal.existing.get(node_id) or {})
@@ -1414,6 +1439,8 @@ class ProposalBook:
             node_id: str(existing_row(node_id)["title"]) for node_id, row in sorted(proposal.existing.items())
             if isinstance(row, Mapping) and existing_row(node_id).get("title")}
         node_names.update({node["ref"]: node["name"] for node in nodes if node.get("name")})
+        # The far end of a connection Accept removes, by its name now (review 3 LOW-2).
+        node_names.update({node_id: name for node_id, name in sorted(live.items()) if node_id not in node_names})
         new_ports = {node["ref"]: {port["id"]: port["label"] for port in node["ports"]["inputs"]} for node in nodes}
         edges: list[dict[str, Any]] = []
         for index, edge in enumerate(spec.edges):

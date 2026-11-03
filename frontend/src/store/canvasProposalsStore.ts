@@ -85,6 +85,11 @@ function nextDeferred(state: Pick<CanvasProposalsState, 'deferredQueue'>): Pick<
 
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
 const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Proposals this tab closed on their expiry (pruneExpired), ahead of the
+ * backend's sweep, by id and expiry: a re-send or a sync of one (the same
+ * expiry) never brings its card back. */
+const expiredHere = new Set<string>();
+const expiryKey = (view: Pick<ProposalView, 'id' | 'expiresAt'>) => `${view.id}@${view.expiresAt}`;
 
 function finitePoint(value: unknown): value is Point {
   const point = value as Point | null;
@@ -171,7 +176,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     const proposals: Record<string, ProposalEntry> = {};
     for (const raw of Array.isArray(list) ? list : []) {
       const view = clean(raw);
-      if (view && view.status === 'open' && typeof raw.acceptKey === 'string') {
+      if (view && view.status === 'open' && typeof raw.acceptKey === 'string' && !expiredHere.has(expiryKey(view))) {
         const { acceptKey } = raw;
         const values = cleanValues(raw.personValues);
         delete (view as Partial<ProposalView & { acceptKey: string; personValues: unknown }>).acceptKey;
@@ -189,6 +194,9 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   open: (raw, acceptKey, values) => {
     const view = clean(raw);
     if (!view || typeof acceptKey !== 'string' || !acceptKey) return;
+    // Review 3 NIT-2: a re-send (a rename's) never brings back a card this
+    // tab already closed on its expiry, before the backend's sweep.
+    if (expiredHere.has(expiryKey(view))) return;
     cancelExit(view.id);
     set((state) => ({
       proposals: { ...state.proposals, [view.id]: { view, acceptKey, values: cleanValues(values) } },
@@ -219,7 +227,10 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
 
   pruneExpired: (now = Date.now()) => {
     for (const entry of Object.values(get().proposals)) {
-      if (!entry.closing && entry.view.expiresAt <= now) get().close({ proposalId: entry.view.id, status: 'expired' });
+      if (!entry.closing && entry.view.expiresAt <= now) {
+        expiredHere.add(expiryKey(entry.view));
+        get().close({ proposalId: entry.view.id, status: 'expired' });
+      }
     }
   },
 

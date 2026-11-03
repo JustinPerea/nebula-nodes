@@ -1075,3 +1075,11 @@ body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
   outline: var(--sr-focus-outline, 2px solid #fff);
   outline-offset: var(--sr-focus-offset, 2px);
 }
+
+/* #216 review 3 (GM r57): Accept or Reject decided from the keyboard with no
+   other card or Undo notice to take focus leaves it on the canvas, with no
+   ring (ProposalBar QUIET_FOCUS_ATTR; the mark goes on its blur). */
+.canvas-wrapper[data-focus-quiet]:focus,
+.canvas-wrapper[data-focus-quiet]:focus-visible {
+  outline: none;
+}

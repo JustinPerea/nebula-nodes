@@ -354,13 +354,25 @@ body.agent-log-reserved .project-switch-toast {
   animation: agent-log-in 420ms var(--agent-log-spring) both;
 }
 
-/* Collapsed it is one row, centred: no resize grip, no 80 px floor. */
+/* Collapsed it is one row, centred: no resize grip, no 80 px floor. It is
+   its header's height whatever height the person's native resize left
+   inline, folded for the proposal card or collapsed by the person (#216
+   review 3 MEDIUM-1): the card counts the collapse as freeing all but the
+   header, so a box that kept its height would sit under the card. */
 .agent-log:not(.agent-log--open) {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-height: 0;
+  height: var(--agent-h-closed) !important;
   resize: none;
+}
+
+/* GM r57 Q1: while the person holds it in a drag, the log rises above the
+   notice region (the proposal card), which holds still until the drop
+   (NoticeRegion); at rest the card never crosses it. */
+:root[data-agent-log-held] .agent-log {
+  z-index: calc(var(--sr-layer-notice, 20010) + 1);
 }
 
 @keyframes agent-log-in {
@@ -595,7 +607,12 @@ body:not(.app-slava-restraint) .agent-log__chevron {
   --agent-log-shown-h: clamp(var(--agent-h-closed), calc(var(--agent-log-natural-h, 80vh) - var(--agent-log-give)), var(--agent-log-natural-h, 80vh));
   display: flex;
   flex-direction: column;
-  max-height: var(--agent-log-shown-h);
+  /* Bounded only while a give is in force, the spring back to 0 included
+     (#216 review 3 MEDIUM-2): with none, the person's native resize can
+     make it taller, up to main's 80vh, though --agent-log-natural-h is the
+     height last measured. Any give of 0.01 px or more takes the second term
+     under any window, so the bound is the shown height. */
+  max-height: max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 100000));
   /* The resize floor of 80 px gives way only while it springs back up from
      its header (GM r11), so the reopen starts at the header, not at 80. */
   min-height: min(80px, var(--agent-log-shown-h));

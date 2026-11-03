@@ -829,7 +829,8 @@ def propose_change(
     pays for a single paid run ("Krea 2 on your Krea plan"); and the price
     ("~$0.03", "no list price"). `cost.nodes` entries carry the same `name`,
     `model` and `billedTo`; `edges` carry `sourceName`, `targetName` and
-    `targetLabel`, and `names` maps each node it touches to its name.
+    `targetLabel`, and `names` maps each node it touches to its name (the
+    far end of each connection in `removedEdges` among them).
     A `params` model change that leaves existing connections on ports the
     new model doesn't have isn't refused here: Accept removes them, as the
     canvas's model picker does. `removedEdges` lists them (the same fields

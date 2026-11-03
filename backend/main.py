@@ -7567,12 +7567,13 @@ async def _sweep_proposals() -> None:
 
 def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
     """The names, on the canvas now, of the existing nodes an open proposal
-    touches (GM - Design, PR #216 r4 4: names follow renames live). None for
+    touches, the far ends of the connections it removes among them (GM - Design,
+    PR #216 r4 4: names follow renames live; review 3 LOW-2). None for
     a closed one, or one for a project that isn't open: its ids name nodes
     there, not here."""
     if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
         return {}
-    return {node_id: _node_label(node_id) for node_id in proposal.existing if node_id in cli_graph.nodes}
+    return {node_id: _node_label(node_id) for node_id in sorted(proposal.touched) if node_id in cli_graph.nodes}
 
 
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
@@ -7591,7 +7592,7 @@ async def _follow_renamed_proposals() -> None:
     for proposal in canvas_proposals.open_list():
         live = _proposal_live_names(proposal)
         shown = _proposal_names_sent.get(proposal.id) or {
-            node_id: str(row.get("title") or "") for node_id, row in proposal.existing.items() if node_id in live}
+            node_id: name for node_id, name in proposal.shown_names().items() if node_id in live}
         if live == shown:
             continue
         _proposal_names_sent[proposal.id] = live

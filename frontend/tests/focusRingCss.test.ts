@@ -235,6 +235,10 @@ const NO_OUTLINE: Record<string, string> = {
   // The proposal card's scrolling body: its fade mask would clip its own ring,
   // so the wrapper draws the token ring instead (pinned below).
   'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
+  // #216 review 3 (GM r57): the canvas, given focus by code after a keyboard
+  // Accept or Reject, with no ring; the mark goes on its blur.
+  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus': 'code-moved focus after a decision',
+  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus-visible': 'code-moved focus after a decision',
   // #208 GM r23: the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',

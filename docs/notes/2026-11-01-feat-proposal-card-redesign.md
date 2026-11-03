@@ -571,7 +571,7 @@ origin/main was still at 062fb370, so there was nothing to merge.
 
 A step counts only when the card's header, kept lines (`floors.min`) and footer fit there with the most the log can give: `under` and `over` both include `logSpare + logCollapse`.
 
-**The card never crosses a floating log.** Past one line, a docked log still takes the card's foot over its top edge (`over`). A floating log never does: the stack stands up past the top line instead. No grid cell reaches that point, but the unit test does.
+**The card never crosses a floating log at rest.** (Round 3k: the person's own drag may cross while held, and a shortfall under one line may stand into the log's body, never its header.) Past one line, a docked log still takes the card's foot over its top edge (`over`). A floating log never does. (3i had the stack stand up past the top line instead; round 3k replaces that with GM r57 Q3: never past the top line.)
 
 **The held edge.**
 - Each place carries `hold`: 'top' when the card is under a floating log and the log gives, 'bottom' when the card is above a log, null with no give.
@@ -700,3 +700,89 @@ origin/main was still at 062fb370, so there was nothing to merge.
 |---|---|
 | 13b, 800×640, log at 200–540 × 192 | The card under the log, which gave 57 px with its top held at 192 (bottom 315). The note is whole (unscrolled) above the plan and ⚠ lines, and the pill shows "2 notices". |
 | 18, 800×640, log at 200–540 × 330–510 | The card above the log, which gave 65 px with its bottom held at 510 (top 396). The note is whole. |
+
+## Round 3k (review 3 and GM - Design's r57, 2026-11-03)
+
+origin/main (bee7ebe0) was already in the branch, so there was nothing to merge.
+
+**Review 3's MEDIUMs.**
+- **MEDIUM-1, a collapsed log is its header's height.** `layouts.css` gives `.agent-log:not(.agent-log--open)` `height: var(--agent-h-closed) !important`. That beats the inline height the person's native resize leaves, both for the card's fold and for the person's own collapse. The placement already counted a collapse as freeing all but the header, so a box that kept its height sat under the card.
+- **MEDIUM-2, the person can resize the log taller.** The open log's max-height is now `max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 100000))`. It is bounded by the shown height only while a give is in force, the spring back to 0 included: any give of 0.01 px or more takes the second term under. With no give the bound is main's 80vh.
+- **MEDIUM-3, notices clear a floating log after the card leaves.**
+  - `measureNoticeStack` reads the no-card column from the layout: the region with no inset, the stack centred in it, at the widest visible notice's `offsetWidth`. It no longer reads the boxes the notices draw mid-glide.
+  - `glideStack` calls `onSettled` once every move it started has finished, and the region then places again.
+
+**GM r57 rulings.**
+- **Q1, the person's hand wins.** `AgentLog` sets `data-agent-log-held` on the root once a drag passes the threshold, and removes it at the drop or on unmount. While the attribute is set:
+  - the log rises above the notice region (`z-index: calc(var(--sr-layer-notice, 20010) + 1)`);
+  - `NoticeRegion` skips placing, so the card holds still: no glide, no chasing.
+  
+  The region's root observer watches the attribute. At the drop it places once, and that place always glides.
+- **Q2, no card: notices fold into the pill.** When neither side of a floating log has room, every notice without an Undo folds into the pill, as with a card. "Show all" (`expanded`) still works. The pill's label is the pill's, not "N more".
+- **Q3, a shortfall under one line.** First, above the log, clamped under the top line (the offline banner's). Else under it: the card stands up into the log's body by what one line needs, never into its header (the expand control) and never past the banner. From above, the log's header is its top edge, so "cross the body, not the header" is possible only from below. Order:
+  1. above, if one line fits under the top line;
+  2. under, standing into the body down to the header and the gap;
+  3. above, clamped, the body under one line.
+
+  Three guards keep the stack under the top line:
+  - `bodyAt` caps a step's room at the region's line less the top line;
+  - `place()` limits the give to what the stack can use (`usable`);
+  - under a log, the stack's top is clamped to the top line (`underTop`).
+- **Q4, notices fold first by a docked log.** Beside or above a docked log, or with no log, pass 1 keeps the note whole when the most-folded notices plus the log's give leave room for it. Docked note states:
+  - open log: 71 whole / 55 clipped before, 113 / 13 now;
+  - closed log: 93 / 33 before, 113 / 13 now.
+- **Q5, the tooltip.** While the card has the log folded, the header's title is "Folded to make room for the proposal card. It reopens when the card closes." After the person's own collapse it is "Expand agent log", including a collapse after they reopened it over the card's fold (`refused`).
+
+**LOWs and NITs.**
+- **Focus after a keyboard Accept or Reject.**
+  - While the decision is out, the button is disabled, so focus waits on the card's region.
+  - Once the proposal closes, focus goes to the next card's region, else the Undo notice the decision raised (the notice, `tabindex=-1`, never its Undo button), else the canvas.
+  - On the canvas it carries `data-focus-quiet`, which draws no ring and goes on blur.
+  - A refused decision leaves focus on the card. A mouse click moves no focus.
+  - The canvas wrapper already had `tabIndex=0`; it is unchanged.
+- **The far ends of removed wires follow a rename** (backend).
+  - `Proposal.touched` is the referenced nodes plus both ends of each removed edge. The live-name filter, `_proposal_live_names` and `view()`'s `names` all use it.
+  - `_follow_renamed_proposals` starts from `Proposal.shown_names()`, so an edit that renames nothing sends nothing.
+  - The MCP `propose_change` docstring, docs/MCP-SETUP.md and skills/nebula/SKILL.md now say `names` covers the removed connections' far ends.
+- **LOW-3** is pinned by a uiStore test: a `refused` hold clears only when the card goes.
+- **NIT-2:** a card this tab closed on its expiry never reopens on a re-send or a sync with the same expiry (`expiredHere`, keyed `id@expiresAt`).
+- **NIT-3:** quotes are stripped only when they wrap both ends, so "Artists'" keeps its apostrophe. This applies to the backend's `_plan_name` and the frontend's `cardQuoted`.
+- **NIT-4:** "never crosses" now reads "never at rest". The person's own drag may cross while held, and a Q3 shortfall may stand into the body, never the header. The same wording changed in the 3i section, the PR body and the code comments.
+
+**The grid.**
+- The old floating grid (252 cells) is unchanged: own width 54 / 72 / 0 / 0, column width 36 / 90 / 0 / 0, notes 110 / 16 and 102 / 24.
+- New: 756 floating cells for other logs. That is 6 window sizes × three kinds of log × log tops 0.2 / 0.45 / 0.7 × 0, 1, 2 or 4 notices × banner on or off × Undo or none. The three kinds are a log the person collapsed, a log they reopened over the fold (`refused`), and a log resized to 300 px.
+
+| Log | Beside | Under | Above | Short | None | Note whole | Note clipped |
+|---|---|---|---|---|---|---|---|
+| Collapsed | 147 | 16 | 15 | 39 | 35 | 180 | 72 |
+| Refused | 168 | 28 | 36 | 20 | 0 | 189 | 63 |
+| Resized | 168 | 28 | 56 | 0 | 0 | 216 | 36 |
+
+- In 6 cells the card stands into a log's body, never its header: 420×560, the refused log at 0.45, with 1, 2 or 4 notices and the banner, with and without Undo. The test pins that list.
+- In every cell, nothing goes over the top line or a log's header.
+
+**Mutation checks (round 3k).**
+- 41 mutants, all caught. The first run caught 37. The other 4 were caught after new pins:
+  - the `underTop` clamp and the `usable` limit: a new unit test drags a log up to the top line;
+  - the `refused` collapse's title;
+  - `shown_names` on the first follow: an edit that renames nothing re-sends nothing.
+- Runner: `scratchpad/proposal-card/mut3k/run.py`. Results are in `results-first.json` and `results-pins.json`.
+
+**Checks (round 3k).**
+- tsc 0, and eslint 0 on the 17 changed or new TS files.
+- vitest on an explicit 457-file list, with its length printed and checked to be non-zero: 7,852 of 7,856 passed. The other 4 timed out at 120 s under load (Settings.test.tsx 3, agentPresenceFollowups.ratchet 1); rerun alone, both files pass (75 and 50).
+- Isolated pytest on the named files plus `test_unprivileged_marker`, `test_ci_shard` and `test_connected_copy_sweep`: 1,115 passed. The first run caught "wire" in the new `propose_change` docstring (`test_connected_copy_sweep`); the new backend comments and docstrings now say "connection".
+- `person_gate.py` is byte-identical to origin/main.
+- Entry: 465,860 B raw, 144,702 B gzip.
+
+**Live (round 3k).** Restraint skin. An isolated backend on 8952 through `serve_isolated.py`, with the person token on stdin. Vite on 5952. Installed Chrome with a throwaway profile, removed afterwards. Canaries blocked; `blocked.log` holds only the canaries. Shots are in `scratchpad/proposal-card/shots3k/`, and every md5 is distinct.
+
+| Shot | Result |
+|---|---|
+| k1, 800×540, log at 200–600 × 190, resized to 400×240 with its corner | Folded for the card: the box is 44 px while its inline height stays 240px. `data-card-collapsed` is set, and the title is GM's fold text. The card sits under it at 242–460. |
+| k2, same, after the card is withdrawn | It reopens at 240. The person drags its corner to 340, above the last measured height; max-height is 432 (80vh). |
+| k3, 1440×900, log at 270–870 × 560–820, card beside it at 878–1424 | Mid-drag over the card: `data-agent-log-held` is set, z-index 20011, and the log is on top at the card's centre. The card's box is unchanged frame to frame. |
+| k4, same, two notices, the card withdrawn | The notices glide from beside the log to the centre column, then place again above it: their bottom is at 552, the log's top 560 less the gap. |
+
+- **Why k1 and k2 are 800 wide:** at 1440 the card can't fold a floating log. The log is at most 600 px wide (`max-width`), so one side of it always has at least 372 px, and the card fits beside it at its narrow layout. Every 1440 probe placed it beside.

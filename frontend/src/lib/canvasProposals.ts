@@ -334,11 +334,11 @@ const QUOTE_MARKS = '“”"\'‘’';
  * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
 export function cardQuoted(name: string): string {
   let text = name.trim();
-  let start = 0;
-  let end = text.length;
-  while (start < end && QUOTE_MARKS.includes(text[start])) start += 1;
-  while (end > start && QUOTE_MARKS.includes(text[end - 1])) end -= 1;
-  text = text.slice(start, end).trim();
+  // Only quotes that wrap it, at both ends: an apostrophe the name ends in
+  // stays ("Artists'", review 3 NIT-3), as the backend's plan_name.
+  while (text.length >= 2 && QUOTE_MARKS.includes(text[0]) && QUOTE_MARKS.includes(text[text.length - 1])) {
+    text = text.slice(1, -1).trim();
+  }
   return `“${text || name}”`;
 }
 

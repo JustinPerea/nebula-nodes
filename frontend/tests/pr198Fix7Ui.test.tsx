@@ -250,7 +250,8 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(block).toMatch(/--agent-log-give: var\(--agent-log-squeeze, 0px\);/);
     expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
-    expect(block).toMatch(/max-height:\s*var\(--agent-log-shown-h\)/);
+    // Bounded by the shown height while a give is in force (review 3 MEDIUM-2).
+    expect(block).toMatch(/max-height:\s*max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 100000\)\)/);
     expect(block).toMatch(/transition:\s*--agent-log-give 420ms var\(--agent-log-spring\)/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.agent-log\.agent-log--open\[data-docked\],/);

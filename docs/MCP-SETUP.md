@@ -1780,8 +1780,8 @@ on Accept, as the model picker does: `removedEdges` lists them, the line says
 proposal that clears the model, or names one whose ports Nebula can't read,
 is refused (`unwire` them with `edit_canvas`); setting the model a node
 already has reads its ports again (`params[].inputsUpdated`, "GPT-4o · inputs
-updated" on the card). Names on the card, in `plan` and in get_proposal follow
-the person's renames while the proposal is open; the note stays as written. They can drag ghosts before accepting; the nodes land where they
+updated" on the card). Names on the card, in `plan` and in get_proposal (the
+removed connections' too) follow the person's renames while the proposal is open; the note stays as written. They can drag ghosts before accepting; the nodes land where they
 dropped them. Accept adds everything in one step (one undo) and starts the
 runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
