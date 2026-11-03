@@ -88,7 +88,7 @@ describe("the palette's Extract from reference", () => {
     expect(palette.extract).toHaveBeenCalledWith(picked);
     expect(api.fetch.mock.calls.filter(([path]) => path === '/api/uploads')).toEqual([]);
     // Extracting… ends.
-    expect(container.textContent).toContain('Extract from reference');
+    expect(container.querySelector('input[aria-label="Extract from reference"]')).not.toBeNull();
   });
 
   it("says Nebula can't read an image it can't decode", async () => {
@@ -121,7 +121,7 @@ describe("the palette's Extract from reference", () => {
     await extractFrom(container, png());
     await waitFor(() => expect(swatches()).toEqual(['#112233', '#445566']));
     expect(notice()).toBeNull();
-    expect(container.textContent).toContain('Extract from reference');
+    expect(container.querySelector('input[aria-label="Extract from reference"]')).not.toBeNull();
   });
 });
 

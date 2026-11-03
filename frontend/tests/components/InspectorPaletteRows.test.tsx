@@ -55,8 +55,8 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
       // The Add / Extract row is the list's next sibling: right after the last swatch.
       const actions = list.nextElementSibling!;
       expect(actions.className).toBe('inspector__palette-actions');
-      expect(actions.textContent).toContain('Add');
-      expect(actions.textContent).toContain('Extract from reference');
+      // GM r23: "Add" and "Extract" (the full name on the input).
+      expect(actions.textContent).toBe('AddExtract');
       // No container between a row and the Inspector's body clips it.
       for (let el: Element | null = rows[n - 1]; el && !el.classList.contains('inspector__body'); el = el.parentElement) {
         const style = (el as HTMLElement).style;
@@ -69,7 +69,10 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
   it('gives the palette list and its wrapper no height and no scroll of their own', () => {
     const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8')
       + readFileSync(resolve(__dirname, '../../src/styles/slava-restraint.css'), 'utf8');
-    const rules = [...css.matchAll(/([^{}]*\.inspector__palette(?:-list|-row|-actions)?(?![\w-])[^{}]*)\{([^}]*)\}/g)];
+    // Rules whose subject is the stack, the list, a row or the actions row
+    // (a button inside the row may clip its own label, round 8f).
+    const rules = [...css.matchAll(/([^{}]*)\{([^}]*)\}/g)].filter(([, selector]) => selector.split(',')
+      .some((one) => /\.inspector__palette(?:-list|-row|-actions)?(?![\w-])[^\s>+~]*\s*$/.test(one.trim())));
     expect(rules.length).toBeGreaterThan(0);
     for (const [, , body] of rules) expect(body).not.toMatch(/(^|[;\s])(overflow(-y)?|max-height|height)\s*:/);
   });
@@ -305,6 +308,14 @@ describe("the palette's read-only × and Extract (GM r22, folded)", () => {
       const hovers = rules(css(name)).filter((r) => /\.inspector__palette-remove:hover/.test(r.selector));
       expect(hovers.length).toBeGreaterThan(0);
       for (const hover of hovers) expect(hover.selector).toContain("[aria-disabled='true']");
+    }
+  });
+
+  it('shows no ring on the pending line, which gets focus by code (GM r23)', () => {
+    const panels = rules(css('panels.css'));
+    for (const skin of ['body:not(.app-slava-restraint)', 'body.app-slava-restraint']) {
+      const rule = panels.find((r) => r.selector.split(',').map((s) => s.trim()).includes(`${skin} .inspector__palette-pending:focus`));
+      expect(rule?.body, skin).toMatch(/outline:\s*none/);
     }
   });
 

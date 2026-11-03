@@ -2366,3 +2366,59 @@ each other's smooth scroll (found live at 1024 x 640).
     568 of 600 px mid-spring, then 600 px at once, its gap to the node -8 px
     in both drag frames.
   - Shots in `shots8e/` (10, md5-distinct, each opened).
+
+## Round 8f (base b740fffd): GM r23
+
+- **Offline line**, one cut so "Nebula" isn't said twice: "Nebula couldn’t
+  add the extracted colors because Nebula was offline when they were
+  ready. Extract again once it reconnects." It stays on the node after the
+  reconnect until the next Extract or a swatch edit, as the project line
+  does (a test reconnects and edits).
+- **Focus back to its control:** when the line replaces the row, focus goes
+  to the line (tabindex −1, no ring: `outline: none` on its `:focus` in both
+  skins, allowed in `focusRingCss` as code-moved focus on a line) and the
+  control it came from is kept (`paletteFocus.ts`, `lineFrom`); on landing
+  it goes back there, Add to Add and Extract to Extract.
+- **The can't-run line ends in "Try again." again:** "Nebula couldn’t
+  extract the colors because the server isn’t answering. Try again."
+  Nothing shared on main asserted this (#204's close-line ratchets aren't
+  merged), so `tests/helpers/tryAgainLine.ts` is the shared assert:
+  `endsInTryAgain`, `expectTryAgainLine(line, where)`, and
+  `expectEveryTryAgainLine(root, lineFor)` for a rendered surface (every
+  button labelled Try again, and the line shown with it). The ratchet is
+  `tests/tryAgainLines.ratchet.test.ts`, one row per line; #204 can add its
+  close lines there or call the helper from its own ratchet.
+- **The Extract row fits the Inspector:** the label is "Extract". At the
+  floating Inspector's normal width (260 px) the row has 234 px; less the
+  gap and both buttons' padding and border, each label gets about 102 px,
+  and "Extract from reference" (about 150 px of text plus its icon) can't
+  fit. With an ellipsis it would read "Extract fr…", a cut name on every
+  view, where "Extract" fits whole down to the 228 px minimum. The full name
+  is the input's aria-label ("Extract from reference", which contains the
+  visible word), and the label keeps its title ("Extract a palette from an
+  image"). Both buttons also clip and end in an ellipsis should a label ever
+  outgrow its share (`overflow: hidden` on the buttons, `min-width: 0` and
+  `text-overflow: ellipsis` on their labels), so the row can't overflow.
+  `tests/components/InspectorPaletteRowFit.test.tsx` lays the row out from
+  the app's stylesheets (helpers/cssCascade), both skins, at the 228 px
+  minimum: the buttons' share adds up to the row, the fixed parts and the
+  label fit, and the full name wouldn't. Live in Chrome at 1440: Add
+  843–947 and Extract 953–1077 inside the panel's 831–1089; forced to 228:
+  Add 843–931, Extract 937–1045 inside 831–1057; neither label clipped.
+
+### Gates and checks, round 8f
+
+- tsc and lint clean.
+- **Vitest** `--maxWorkers=2`, 205 files (8e's 203 plus the row-fit test and
+  the Try again ratchet; r6, r7 and focusRingCss were already in): 3040 of
+  3040. The row-fit model was then made exact for content-box sizing (it
+  checked each button against an even split); that file 2 of 2 after.
+- **Build budget:** 447,632 bytes raw (0 added). Backend unchanged, so no
+  pytest.
+- **Mutants:** 10 (the old offline string, the line without "Try again.",
+  focus always back to Extract, the origin not kept, a ring on the line, a
+  looser shared assert, the full label, no ellipsis, buttons not clipped,
+  no full name on the input): 10 killed.
+- **Live**, 8792/5792, backend through `serve_isolated.py`, the installed
+  Chrome on a throwaway profile, canaries blocked, nothing off the lane but
+  the blocked canaries. One shot: `shots8f/01-extract-row-fits-1440x900.png`.

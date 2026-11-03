@@ -356,13 +356,13 @@ describe('N-2: a locked picker uploads nothing from its own onChange', () => {
     await act(async () => { await Promise.resolve(); });
     const before = calls.upload; // what the panel loads as it opens
     act(() => setFollowingSwitch(reason));
-    pick(screen.getByText('Extract from reference').closest('label')!.querySelector('input')!);
+    pick(screen.getByText('Extract').closest('label')!.querySelector('input')!);
     // Long enough for the lazily loaded extraction to have been called.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(calls).toEqual({ upload: before, extract: 0 });
     // Unlocked, the same pick goes through.
     act(() => setFollowingSwitch(null));
-    pick(screen.getByText('Extract from reference').closest('label')!.querySelector('input')!);
+    pick(screen.getByText('Extract').closest('label')!.querySelector('input')!);
     // Round 8b: the extraction loads on first use (a dynamic import).
     await waitFor(() => expect(calls.extract).toBe(1));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });

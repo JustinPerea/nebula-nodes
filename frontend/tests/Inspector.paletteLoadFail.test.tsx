@@ -25,10 +25,11 @@ import { resetPaletteExtractsForTests } from '../src/components/panels/usePalett
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { TRY_AGAIN } from '../src/lib/sceneSaveCopy';
+import { expectEveryTryAgainLine } from './helpers/tryAgainLine';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
-const LINE = 'Nebula couldn’t extract the colors because the server isn’t answering.';
+const LINE = 'Nebula couldn’t extract the colors because the server isn’t answering. Try again.';
 const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 
 beforeEach(() => {
@@ -69,6 +70,9 @@ describe("Extract when its own code can't load (GM r20 on #208)", () => {
     await waitFor(() => expect(line(container)).not.toBeNull());
     expect(line(container)!.textContent).toBe(LINE);
     expect(TRY_AGAIN).toBe('Try again');
+    // GM r23: the line shown with Try again ends in "Try again." (the shared assert).
+    expect(expectEveryTryAgainLine(container, (button) => button.closest('.inspector__palette')
+      ?.querySelector('.inspector__palette-cant-run')?.textContent)).toEqual([LINE]);
     expect(status(container)).toBe(LINE);
     expect(useGraphStore.getState().undoNotice).toBeNull();
     expect(container.textContent).not.toMatch(/Couldn't (find colors|load Extract)/);

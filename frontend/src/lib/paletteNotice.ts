@@ -32,9 +32,10 @@ export function paletteStatus(count: number): string {
 
 /** When Extract can't run at all: its own code (the chunk from Nebula's
  *  server) didn't load. GM r20 on #208, neutral, the because form, beside
- *  Try again. A worker that can't load or start says nothing: the page
+ *  Try again; it ends in "Try again.", which says what the button does
+ *  (GM r23). A worker that can't load or start says nothing: the page
  *  works the palette out instead. */
-export const PALETTE_CANT_RUN = 'Nebula couldn’t extract the colors because the server isn’t answering.';
+export const PALETTE_CANT_RUN = 'Nebula couldn’t extract the colors because the server isn’t answering. Try again.';
 
 /** GM r22 Q1 on #208: a palette that came back after the project changed
  *  (the person's switch or a follow switch), said on its node when the
@@ -43,4 +44,4 @@ export const PALETTE_PROJECT_CHANGED = 'Nebula couldn’t add the extracted colo
 
 /** The same shape when the canvas was locked as it came back: offline, the
  *  lock's own reason and what unlocks it in place of the project clause. */
-export const PALETTE_OFFLINE_DROPPED = 'Nebula couldn’t add the extracted colors because Nebula was offline when they were ready. Extract again when Nebula reconnects.';
+export const PALETTE_OFFLINE_DROPPED = 'Nebula couldn’t add the extracted colors because Nebula was offline when they were ready. Extract again once it reconnects.';

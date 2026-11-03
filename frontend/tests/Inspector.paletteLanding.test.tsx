@@ -34,7 +34,7 @@ import { PALETTE_OFFLINE_DROPPED, PALETTE_PROJECT_CHANGED } from '../src/lib/pal
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
 const PROJECT_LINE = 'Nebula couldn’t add the extracted colors because the project changed before they were ready. Extract again.';
-const OFFLINE_LINE = 'Nebula couldn’t add the extracted colors because Nebula was offline when they were ready. Extract again when Nebula reconnects.';
+const OFFLINE_LINE = 'Nebula couldn’t add the extracted colors because Nebula was offline when they were ready. Extract again once it reconnects.';
 
 const colorNode = (swatches: string[] = [], id = 'n1'): Node<NodeData> => ({ id, type: 'model', position: { x: 0, y: 0 },
   data: { label: 'Cinema Color', definitionId: 'cinema-color', params: { palette: swatches }, state: 'idle', outputs: {} } });
@@ -275,6 +275,13 @@ describe('a palette lands only on the canvas it was made for (review 8 MEDIUM-1,
     expect(note(container)?.textContent).toBe(OFFLINE_LINE);
     expect(status(container)).toBe(OFFLINE_LINE);
     expect(container.textContent).not.toContain('Extracted');
+    // GM r23: it stays after the reconnect, until the next Extract or a
+    // swatch edit, as the project line does.
+    act(() => noteBackendConnection('online'));
+    await wait(10);
+    expect(note(container)?.textContent).toBe(OFFLINE_LINE);
+    act(() => { fireEvent.change(container.querySelector('.inspector__palette-hex')!, { target: { value: '#123456' } }); });
+    expect(note(container)).toBeNull();
   });
 });
 
@@ -343,6 +350,20 @@ describe('focus across an extract (GM r22 Q3)', () => {
     await finish({ ok: true, colors: ['#112233', '#445566', '#778899'] });
     await wait(PALETTE_LINE_MIN_MS);
     expect(document.activeElement).toBe(container.querySelectorAll('.inspector__palette-remove')[0]);
+  });
+
+  it('focus on Add goes to the line while it shows, then back to Add, not Extract (GM r23)', async () => {
+    const { container } = show(['#aaaaaa']);
+    const finish = later();
+    const add = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Add')!;
+    act(() => add().focus());
+    await extractFrom(container);
+    await wait(PALETTE_PENDING_DELAY_MS + 50);
+    expect(document.activeElement).toBe(pending(container));
+    expect(pending(container)!.tabIndex).toBe(-1);
+    await finish({ ok: true, colors: ['#112233'] });
+    await wait(PALETTE_LINE_MIN_MS);
+    expect(document.activeElement).toBe(add());
   });
 
   it('focus on Extract goes to the line while it shows, then back to Extract', async () => {

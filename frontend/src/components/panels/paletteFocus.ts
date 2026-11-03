@@ -9,10 +9,13 @@
  * result may land in an Inspector opened again since (one source of truth
  * per node, usePaletteExtracts).
  */
-type PaletteFocusPlan = { key: string; part: string | null; index: number; count: number };
+type PaletteFocusPlan = { key: string; part: string | null; index: number; count: number; control?: string };
 let paletteFocusPlan: PaletteFocusPlan | null = null;
 /** The palette control a person last focused in (its key and part). */
 let lastPaletteFocus: { key: string; part: string } | null = null;
+/** GM r23: the row control (Add or Extract) focus left for the line, so it
+ *  goes back to that control when the palette lands. */
+let lineFrom: { key: string; part: string } | null = null;
 
 function paletteStackOf(key: string): HTMLElement | null {
   return Array.from(document.querySelectorAll<HTMLElement>('[data-palette-key]'))
@@ -34,7 +37,10 @@ export function planPaletteFocus(key: string, count: number | null, cantRun = fa
     paletteFocusPlan = count > 0
       ? { key, part: swatch, index: count - 1, count }
       : { key, part: null, index: 0, count: 0 };
-  } else if (part === 'pending' || (part === 'try' && !cantRun)) {
+  } else if (part === 'pending') {
+    const control = lineFrom?.key === key ? lineFrom.part : undefined;
+    paletteFocusPlan = { key, part: null, index: 0, count: count ?? -1, control };
+  } else if (part === 'try' && !cantRun) {
     paletteFocusPlan = { key, part: null, index: 0, count: count ?? -1 };
   }
 }
@@ -55,7 +61,8 @@ export function applyPaletteFocus(): void {
         ? (rows === plan.count
           ? stack.querySelector<HTMLElement>(`[data-swatch-part="${plan.part}"][data-swatch-index="${plan.index}"]`)
           : null)
-        : stack.querySelector<HTMLElement>('[data-palette-part="extract"], [data-palette-part="try"]');
+        : (plan.control ? stack.querySelector<HTMLElement>(`[data-palette-part="${plan.control}"]`) : null)
+          ?? stack.querySelector<HTMLElement>('[data-palette-part="extract"], [data-palette-part="try"]');
       if (target) {
         target.focus();
         paletteFocusPlan = null;
@@ -65,7 +72,10 @@ export function applyPaletteFocus(): void {
   const last = lastPaletteFocus;
   if (last && (last.part === 'add' || last.part === 'extract') && document.activeElement === document.body) {
     const line = paletteStackOf(last.key)?.querySelector<HTMLElement>('[data-palette-part="pending"]');
-    if (line) line.focus();
+    if (line) {
+      lineFrom = { key: last.key, part: last.part };
+      line.focus();
+    }
   }
 }
 
@@ -116,5 +126,6 @@ export function scrollPaletteSlot(): void {
 export function resetPaletteFocusForTests(): void {
   paletteFocusPlan = null;
   lastPaletteFocus = null;
+  lineFrom = null;
   paletteScrollKey = null;
 }

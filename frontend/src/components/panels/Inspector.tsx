@@ -969,12 +969,16 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 aria-hidden="true"
                 focusable="false"
               />
-              <span>Extract from reference</span>
+              {/* GM r23 on #208: "Extract" (the full name can't fit the
+                  Inspector's normal width beside Add); the input carries
+                  the full name, the label its title. */}
+              <span className="inspector__palette-extract-label">Extract</span>
               <input
                 type="file"
                 accept="image/*"
                 className="inspector__file-input"
                 data-palette-part="extract"
+                aria-label="Extract from reference"
                 disabled={readOnly}
                 {...lock.mark}
                 onChange={(e) => {

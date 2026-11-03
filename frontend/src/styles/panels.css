@@ -691,8 +691,16 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover:not(:disabled, [
 .inspector__palette-actions .inspector__file-button {
   flex: 1 1 0;
   min-width: 0;
-  /* GM r22 on #208 (folded): Extract from reference stays on one line. */
+  /* GM r22/r23 on #208: Add and Extract share the row's width on one line
+     and never run past it; a label that can't fit ends in an ellipsis. */
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.inspector__palette-actions :is(.inspector__action-button, .inspector__file-button) > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* GM r22 on #208 (folded): Extract is in the Tab order. Its input is
@@ -737,6 +745,13 @@ body.app-slava-restraint .inspector__palette-actions .inspector__file-button:has
 
 body:not(.app-slava-restraint) .inspector__palette-pending {
   color: #888;
+}
+
+/* GM r23 on #208: focus moved to the line by code (from the row it
+   replaced) shows no ring; the line isn't a control. */
+body:not(.app-slava-restraint) .inspector__palette-pending:focus,
+body.app-slava-restraint .inspector__palette-pending:focus {
+  outline: none;
 }
 
 /* GM r20/r22 Q6 on #208: when Extract can't run at all, one neutral line
