@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/backend';
+import { BANNER_SHOWN_ATTR, NOTICE_TOP_LINE_ATTR } from '../lib/bottomBar';
 import {
   noteBackendBootId, noteProbeAnswer, refuseEditWhileOffline, startHealthProbe, subscribeHealthProbeRequests,
 } from '../lib/backendConnection';
@@ -87,13 +88,24 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
 
   const pulse = useOfflinePulse(banner, offline);
 
-  if (!offline || placement === 'studio') return null;
+  // The banner is part of the top line the proposal card stays under (GM -
+  // Design, PR #216 r4 7): it marks the root while it shows, so the notice
+  // region places its stack again (lib/bottomBar.ts noticeTopLimit).
+  const shown = offline && placement !== 'studio';
+  useEffect(() => {
+    if (!shown) return undefined;
+    document.documentElement.setAttribute(BANNER_SHOWN_ATTR, '');
+    return () => document.documentElement.removeAttribute(BANNER_SHOWN_ATTR);
+  }, [shown]);
+
+  if (!shown) return null;
 
   return (
     <div
       ref={banner}
       id={OFFLINE_LINE_ID}
       className="backend-connection backend-connection--offline"
+      {...{ [NOTICE_TOP_LINE_ATTR]: '' }}
       data-placement={placement}
       role="status"
       aria-live="polite"

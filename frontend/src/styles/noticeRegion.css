@@ -40,13 +40,22 @@
   --notice-exit: linear(0, 0.035, 0.116, 0.218, 0.325, 0.428, 0.522, 0.605, 0.677, 0.737, 0.788, 0.83, 0.864, 0.892, 0.914, 0.932, 0.947, 0.958, 0.967, 0.974, 0.98, 0.984, 0.988, 0.991, 1);
   --notice-exit-ms: 294ms;
   position: fixed;
-  left: var(--page-gutter, 16px);
+  /* The left tool rail takes its room as the log does on the right (GM -
+     Design, PR #216 r2 bug 3): WorkspaceRail's footprint plus the gap
+     (workspace-rail.css --notice-left-clearance), the gutter otherwise. */
+  left: max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px));
   /* PR #198 review 6, L7 (GM r9: "Keep clear of the docked log"): the
      Agent log on the right edge takes its width out of the region
      (AgentLog writes --agent-log-clearance), so a wrapped toast never
      covers it; the stack centres in what is left. */
   right: max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px));
-  bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  /* Beside a floating log in the card's column with 400 px there (GM r9),
+     NoticeRegion sets both sides inline so it stops short of the log
+     (lib/noticeStackPlace.ts `inset`). */
+  /* Its bottom edge's height above the window's bottom, once, for the
+     proposal card's own placement too (canvasProposals.css). */
+  --notice-region-bottom: calc(var(--bottom-bar-clearance, calc(var(--sr-space-6, 24px) - var(--notice-gap))) + var(--notice-gap));
+  bottom: var(--notice-region-bottom);
   z-index: var(--sr-layer-notice, 20010);
   display: flex;
   justify-content: center;
@@ -77,7 +86,73 @@
   gap: var(--notice-gap);
   min-width: 0;
   max-width: 100%;
+  /* Lifted as one over a docked Agent log's top edge, never the region (its
+     band stays on the bar's line for the floating panels): NoticeRegion
+     writes it (lib/noticeStackPlace.ts; GM - Design, PR #216 r3). */
+  margin-bottom: var(--notice-stack-lift, 0px);
   pointer-events: none;
+  transition: margin-bottom 420ms var(--notice-spring);
+}
+
+/* A layout switch (the stack going above the log or back, the log docking,
+   moving or being dragged) lands in its frame with no spring; the spring
+   stays for changes inside the stack, a notice coming or going (review 2
+   MEDIUM-1, GM - Design PR #216 r4). NoticeRegion marks the region for two
+   frames (lib/noticeStackPlace.ts JUMP_ATTR). */
+.notice-region[data-notice-jump] .notice-region__stack {
+  transition: none;
+}
+
+/* The give-way steps (GM - Design, PR #216 r5; lib/noticeStackPlace.ts).
+   Step 2: with no room under the card for its note and plan line, the
+   notices move above it, the newest nearest it: the card goes to the
+   stack's end, on its line. Then, no room above for them all, the older
+   ones fold into one row ("2 more notices") over the newest; then every
+   notice without an Undo folds into it ("4 notices", GM r7). A folded notice
+   stays mounted (its timers and hold go on) but takes no room, no clicks and
+   no focus. A move between steps glides from where each row was (Web
+   Animations, on the stack's spring), never a jump; reduced motion lands
+   it at once. */
+.notice-region:is([data-notice-mode='above'], [data-notice-mode='folded'], [data-notice-mode='pill']) .notice-region__slot > [data-notice-shrinks] {
+  order: 1;
+}
+
+.notice-region .notice-region__slot > [data-notice-folded] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The folded notices' one row: one 32 px line, the neutral notice's
+   surface, at the top of the stack; a click (or Enter, Space) unfolds them
+   above the newest and folds them again. */
+.notice-region__more {
+  display: none;
+  box-sizing: border-box;
+  height: 32px;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--notice-neutral-edge);
+  border-radius: var(--sr-radius-pill, 999px);
+  background: var(--notice-neutral-fill);
+  color: var(--notice-neutral-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.notice-region[data-notice-more-shown] .notice-region__more {
+  display: inline-flex;
+}
+
+/* Under 400 px of room beside a docked Agent log, the whole stack sits above
+   the log at the region's full width (the card up to 600 px), card on top,
+   notices under it, never a sliver beside it (GM - Design, PR #216 r3). The
+   log never moves; at short heights its body gives way (GM r6). */
+.notice-region[data-above-log='true'] {
+  right: var(--page-gutter, 16px);
 }
 
 /* A slot per kind of item, in one order (lib/noticeSlots.ts). It draws no box
@@ -197,7 +272,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notice-region {
+  .notice-region,
+  .notice-region__stack {
     transition: none;
   }
 }

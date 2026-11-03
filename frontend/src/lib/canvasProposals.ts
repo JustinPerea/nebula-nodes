@@ -224,34 +224,13 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
   return row.person?.trim() || row.missing;
 }
 
-/** "Adds 1 node · 1 connection · changes n4 · runs up to 1 paid model (fal)". */
-export function proposalSummary(view: ProposalView): string {
-  const parts: string[] = [];
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
-  if (view.nodes.length) parts.push(`Adds ${plural(view.nodes.length, 'node')}`);
-  if (view.edges.length) parts.push(`${parts.length ? '' : 'Adds '}${plural(view.edges.length, 'connection')}`);
-  if (view.params.length) parts.push(`changes ${view.params.map((change) => change.nodeId).join(', ')}`);
-  if (view.run.length) {
-    const { paidRuns, freeRuns, upTo, providers } = view.cost;
-    if (paidRuns > 0) {
-      const who = providers.length ? ` (${providers.join(', ')})` : '';
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
-      const amount = proposalEstimateLabel(view);
-      if (amount) parts.push(amount);
-    } else if (runsNothing(view)) {
-      // Its whole run waits on agents' placeholders, which it skips (GM - Design,
-      // round 4, verbatim), counting the placeholders themselves (review 4, M2).
-      const { count, placeholders, agents } = view.cost.pendingSkipped!;
-      const who = agents.length === 1 && agents[0] ? `${agents[0]} finishes` : 'agents finish';
-      parts.push(`runs nothing until ${who} ${plural(placeholders ?? count, 'node')}`);
-    } else {
-      parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
-    }
-  } else {
-    parts.push('nothing runs until you choose');
-  }
-  const text = parts.join(' · ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
+/** The card's plan line under the note (GM - Design, 2026-11-01): what
+ * Accept changes and runs, by node name; the model and who pays for a single
+ * paid run; the run chip's price. The backend writes it (services/
+ * canvas_proposals.plan_line), so agents read the same words in `nebula
+ * proposal` and MCP. */
+export function proposalPlan(view: ProposalView): string {
+  return view.plan ?? '';
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing
@@ -274,10 +253,11 @@ export function runsNothing(view: ProposalView): boolean {
 /** The primary button's words. "Accept" when accepting runs nothing (GM -
  * Design, round 5, item 3): Accept starts no run for it (it would skip every
  * node: backend main._skip_placeholders), and nothing is queued for when the
- * agent finishes. */
+ * agent finishes. The paid count left the label (GM - Design, 2026-11-01):
+ * the plan line right above it says what's paid. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
-  return view.cost.paidRuns > 0 ? `Accept & run (${view.cost.paidRuns} paid)` : 'Accept & run';
+  return 'Accept and run';
 }
 
 /** "3:05" until the proposal expires. */
@@ -329,11 +309,47 @@ export interface ChangeLine {
   to: string;
 }
 
+/** One wire in the panel: “Prompt” → “Second take” · Prompt, the target's
+ * port muted (GM - Design, PR #216 r2-r3). */
+export interface WireLine {
+  id: string;
+  from: string;
+  to: string;
+  port: string;
+}
+
 export interface ChangeGroup {
   id: string;
   title: string;
-  kind: 'new' | 'edit';
+  /** `wires`: "New connections"; `unwired`: "Removed connections", struck through. */
+  kind: 'new' | 'edit' | 'wires' | 'unwired';
   lines: ChangeLine[];
+  wires?: WireLine[];
+}
+
+const QUOTE_MARKS = '“”"\'‘’';
+
+/** A node's name on the card, in curly quotes once: quotes the name carries
+ * itself come off first (review 2 L4; the plan line's rule, backend
+ * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
+export function cardQuoted(name: string): string {
+  let text = name.trim();
+  // Only quotes that wrap it, at both ends: an apostrophe the name ends in
+  // stays ("Artists'", review 3 NIT-3), as the backend's plan_name.
+  while (text.length >= 2 && QUOTE_MARKS.includes(text[0]) && QUOTE_MARKS.includes(text[text.length - 1])) {
+    text = text.slice(1, -1).trim();
+  }
+  return `“${text || name}”`;
+}
+
+function wireLines(edges: ProposalView['edges'] | undefined, names: Record<string, string>,
+  ports: Record<string, string> = {}): WireLine[] {
+  return (edges ?? []).map((edge) => ({
+    id: `${edge.source}.${edge.sourceHandle}>${edge.target}.${edge.targetHandle}`,
+    from: cardQuoted(edge.sourceName ?? names[edge.source] ?? edge.source),
+    to: cardQuoted(edge.targetName ?? names[edge.target] ?? edge.target),
+    port: edge.targetLabel ?? ports[`${edge.target}.${edge.targetHandle}`] ?? edge.targetHandle,
+  }));
 }
 
 /**
@@ -347,8 +363,9 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const params = values?.nodes[node.ref] ?? node.params ?? {};
     groups.push({
       id: node.ref,
-      // A name the agent gave it (`rename`) shows with the model it is.
-      title: `New ${node.name} (${node.model ? `${node.ref}, ${node.model}` : node.ref})`,
+      // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
+      // the agent gave it (`rename`) shows with the model it is.
+      title: `New ${cardQuoted(node.name)}${node.model ? ` · ${node.model}` : ''}`,
       kind: 'new',
       lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });
@@ -358,12 +375,51 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const entries = Object.entries(exact ?? change.changes);
     groups.push({
       id: change.nodeId,
-      title: change.name,
+      // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
+      // node's id for agents; a backend without `title` falls back to it.
+      title: change.title
+        ? `${cardQuoted(change.title)}${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
+        : change.name,
       kind: 'edit',
-      lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
+      // The same model set again: its inputs are read again, never "X → X"
+      // (GM - Design, PR #216 r4 8: "Krea 2 · inputs updated").
+      lines: entries.map(([key, diff]) => (change.inputsUpdated?.key === key
+        ? { key, to: `${change.inputsUpdated.name} · inputs updated` }
+        : changeLine(key, diff.to, diff.from, true))),
     });
   }
+  // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).
+  // The backend names both ends on each wire; an older view's own names fill in.
+  const names: Record<string, string> = {
+    ...Object.fromEntries(view.params.filter((change) => change.title).map((change) => [change.nodeId, change.title!])),
+    ...Object.fromEntries(view.nodes.map((node) => [node.ref, node.name])),
+    ...view.names,
+  };
+  const ports = Object.fromEntries(view.nodes.flatMap((node) =>
+    (node.ports?.inputs ?? []).map((port) => [`${node.ref}.${port.id}`, port.label])));
+  const made = wireLines(view.edges, names, ports);
+  if (made.length > 0) groups.push({ id: 'wires', title: 'New connections', kind: 'wires', lines: [], wires: made });
+  const removed = wireLines(view.removedEdges, names);
+  if (removed.length > 0) {
+    groups.push({ id: 'unwired', title: 'Removed connections', kind: 'unwired', lines: [], wires: removed });
+  }
   return groups;
+}
+
+/**
+ * How many changes Accept makes: the backend's `changeCount`, the one number
+ * the card, the Update and MCP read (GM - Design, PR #216 r3): each new node,
+ * changed node, new wire and removed wire. An older backend's view without it
+ * counts the panel the same way: one per node group, one per wire line.
+ */
+export function proposalChangeCount(view: ProposalView, groups: ChangeGroup[]): number {
+  if (typeof view.changeCount === 'number') return view.changeCount;
+  return groups.reduce((sum, group) => sum + (group.wires ? group.wires.length : 1), 0);
+}
+
+/** "2 changes", "1 change", for the disclosure row. */
+export function changeCountLabel(count: number): string {
+  return `${count} change${count === 1 ? '' : 's'}`;
 }
 
 /** "value: a → b; seed: 1 → 2" for the ring around a changed node. */

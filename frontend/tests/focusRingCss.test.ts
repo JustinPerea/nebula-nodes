@@ -232,6 +232,13 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // The proposal card's scrolling body: its fade mask would clip its own ring,
+  // so the wrapper draws the token ring instead (pinned below).
+  'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
+  // #216 review 3 (GM r57): the canvas, given focus by code after a keyboard
+  // Accept or Reject, with no ring; the mark goes on its blur.
+  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus': 'code-moved focus after a decision',
+  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus-visible': 'code-moved focus after a decision',
   // #208 GM r23: the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
@@ -270,6 +277,10 @@ describe('every focus rule uses the token (the sweep)', () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it('the proposal card body\'s cleared ring is drawn on its scroll wrapper with the token', () => {
+    expect(tokenRingFor('.proposal-bar__scroll:has(> .proposal-bar__body:focus-visible)')).toBe(true);
   });
 
   it('never clears the outline on focus without putting the token ring back', () => {
