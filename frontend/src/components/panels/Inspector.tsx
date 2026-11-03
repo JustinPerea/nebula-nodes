@@ -34,7 +34,8 @@ import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 import { failureMessage } from '../../lib/errorCopy';
-import { PALETTE_LOAD_FAILED, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
+import { PALETTE_CANT_RUN, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
+import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
 import { usePaletteExtracts } from './usePaletteExtracts';
 import { fileNameParam, inputFileName } from '../../lib/fileName';
 import { refuseCanvasEdit, useCanvasLock } from '../../lib/canvasLock';
@@ -112,6 +113,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // have more than one 'palette' control): the line, its timing, and the
   // status region (usePaletteExtracts).
   const paletteExtracts = usePaletteExtracts();
+  // GM r20 on #208: when Extract can't run at all (its own code didn't
+  // load), the file it was given, kept for Try again; by node:param.
+  const [paletteCantRun, setPaletteCantRun] = useState<Record<string, File>>({});
 
   // Quiver Arrow dynamic model list (cached for the session). Loaded on
   // first selection of any Quiver node so the `model` enum reflects
@@ -414,6 +418,46 @@ export function Inspector({ embedded = false }: InspectorProps) {
     writeEdit(snap.params, key);
   }
 
+  // Extract from reference for one palette control: worked out in the
+  // worker client (lib/paletteWorkerClient), the line and status by
+  // usePaletteExtracts. A later Extract for the control wins (this one's
+  // result is dropped, null). A worker that can't load or start is the
+  // client's business: the page does it, and nothing new shows. Only when
+  // the extraction's own code can't load does a line say so, with Try again
+  // (GM r20 on #208).
+  function extractPalette(nodeId: string, paramKey: string, extractKey: string, file: File) {
+    const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
+    setPaletteCantRun((prev) => {
+      if (!(extractKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[extractKey];
+      return next;
+    });
+    paletteExtracts.start(
+      extractKey,
+      () => import('../../lib/paletteWorkerClient').then(
+        ({ extractPaletteLatest }) => extractPaletteLatest(extractKey, file)
+          .catch(() => ({ ok: false as const, reason: 'other' as const })),
+        () => 'unloaded' as const,
+      ),
+      (extracted) => {
+        if (extracted === 'unloaded') {
+          setPaletteCantRun((prev) => ({ ...prev, [extractKey]: file }));
+          return PALETTE_CANT_RUN;
+        }
+        if (extracted.ok && extracted.colors.length > 0) {
+          // Only the palette, over the node's params as they are when it
+          // lands (review 7 M1).
+          writeParamNow(nodeId, paramKey, extracted.colors);
+          return paletteStatus(extracted.colors.length);
+        }
+        const text = paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason);
+        notify(text);
+        return text.replace('\n', ' ');
+      },
+    );
+  }
+
   function clearParam(key: string) {
     setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
@@ -669,6 +713,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       // line shows, the old swatches are read-only (Strength and Method
       // stay live) and the Add / Extract row waits under the line.
       const { shown: pendingShown, status: extractStatus } = paletteExtracts.view(extractKey);
+      const cantRunFile = paletteCantRun[extractKey];
 
       const writeSwatches = (next: string[]) => onParamChange(param.key, next);
 
@@ -686,6 +731,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       type="color"
                       className="inspector__palette-color"
                       value={safeHex}
+                      // GM r20 on #208: the chip is the content, always at
+                      // its full colour, disabled too; only its edge dims.
+                      style={{ backgroundColor: safeHex }}
                       disabled={readOnly || pendingShown} {...lock.mark}
                       aria-label={`Swatch ${idx + 1} color`}
                       onChange={(e) => {
@@ -789,38 +837,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   if (!file) return;
                   // Reset the input so the same file can be picked again later.
                   e.target.value = '';
-                  const paramKey = param.key;
-                  const nodeId = activeNode.id;
-                  const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
-                  // The colours come from the picked file itself, so nothing
-                  // is uploaded. A later Extract for this control wins: this
-                  // one's result is dropped (null). The extraction loads only
-                  // when it's used, so the Inspector's first load stays as
-                  // small as it was; a load that fails says so, never that
-                  // the image has no colours (review 7 L3).
-                  paletteExtracts.start(
-                    extractKey,
-                    () => import('../../lib/paletteWorkerClient').then(
-                      ({ extractPaletteLatest }) => extractPaletteLatest(extractKey, file)
-                        .catch(() => ({ ok: false as const, reason: 'other' as const })),
-                      () => 'unloaded' as const,
-                    ),
-                    (extracted) => {
-                      if (extracted === 'unloaded') {
-                        notify(PALETTE_LOAD_FAILED);
-                        return PALETTE_LOAD_FAILED;
-                      }
-                      if (extracted.ok && extracted.colors.length > 0) {
-                        // Only the palette, over the node's params as they
-                        // are when it lands (review 7 M1).
-                        writeParamNow(nodeId, paramKey, extracted.colors);
-                        return paletteStatus(extracted.colors.length);
-                      }
-                      const text = paletteNotice(file.name, extracted.ok ? 'other' : extracted.reason);
-                      notify(text);
-                      return text.replace('\n', ' ');
-                    },
-                  );
+                  extractPalette(activeNode.id, param.key, extractKey, file);
                 }}
               />
             </label>
@@ -829,6 +846,21 @@ export function Inspector({ embedded = false }: InspectorProps) {
           {/* GM r18 4 on #208: always mounted, so a screen reader hears each
               change: "Extracting colors…", then "Extracted N colors." or the
               failure's own line. The visible line is the same words. */}
+          {cantRunFile && !pendingShown && (
+            // GM r20 on #208: only when Extract can't run at all; neutral,
+            // the because form, with Try again (the same file).
+            <p className="inspector__palette-cant-run">
+              <span aria-hidden="true">{PALETTE_CANT_RUN}</span>
+              <button
+                type="button"
+                className="inspector__action-button"
+                {...lock.act({ title: undefined, offline: 'extract a palette' })}
+                onClick={() => extractPalette(activeNode.id, param.key, extractKey, cantRunFile)}
+              >
+                {TRY_AGAIN}
+              </button>
+            </p>
+          )}
           <span className="inspector__palette-status" role="status" aria-live="polite">{extractStatus}</span>
         </div>
       );

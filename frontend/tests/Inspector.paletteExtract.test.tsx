@@ -166,6 +166,18 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     untouched(container);
   });
 
+  it('keeps every chip at its full colour while the swatches are read-only (GM r20)', async () => {
+    later();
+    const { container } = show(['#ff285a', '#3759c7']);
+    await extractFrom(container, png());
+    await wait(PALETTE_PENDING_DELAY_MS + 100);
+    expect(pending(container)).not.toBeNull();
+    const chips = colors(container);
+    expect(chips.map((c) => c.disabled)).toEqual([true, true]);
+    expect(chips.map((c) => getComputedStyle(c).backgroundColor)).toEqual(['rgb(255, 40, 90)', 'rgb(55, 89, 199)']);
+    expect(chips.map((c) => getComputedStyle(c).opacity)).not.toContain('0.45');
+  });
+
   it('keeps Strength and Method live under the line (GM r18 1)', async () => {
     later();
     const { container } = show(['#aaaaaa']);

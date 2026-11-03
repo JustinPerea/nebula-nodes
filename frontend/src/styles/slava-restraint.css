@@ -2238,6 +2238,12 @@ body.app-slava-restraint .inspector__palette-hex {
   font-family: var(--sr-mono);
 }
 
+body.app-slava-restraint .inspector__palette-cant-run {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
 body.app-slava-restraint .inspector__palette-pending {
   min-height: var(--sr-control-h-md);
   color: var(--sr-ink-light);

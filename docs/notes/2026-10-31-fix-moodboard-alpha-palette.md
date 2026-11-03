@@ -1807,6 +1807,11 @@ palette rows). **45 killed, 6 survive.**
   Round 8c adds GM r18's fixture: a 60 px #333333 bar with ±6 uniform
   noise on 1000 x 600 is a big cluster and shows #383838 (ΔE00 1.61,
   borderline visible); with ±5 on 2400 x 1440 it shows #313233 (0.90).
+- **JPEG and WebP to the worker** (GM r20 1): they stay on the page's
+  decode, which is what the person sees (8K JPEG: 64 ms longest task, fine).
+  Move them once a decode path in the worker matches the page byte for byte
+  (round 8c's table: createImageBitmap, ImageDecoder and every option
+  differ by 1-4 levels).
 - **Extract wraps at 1440 x 1400** (GM r17): "Extract from reference"
   goes to two lines; it must stay on one (the button grows, or the row
   stacks).
@@ -2171,3 +2176,57 @@ per run under the lane's scratch folder and deleted on close
 internet blocked; the lane reached); the only off-lane requests were the
 canaries. Wheel scrolling on this canvas zooms in the iso settings; pans
 use the middle button.
+
+## Round 8d (base 8c5ef0ea, main merged at 062fb370): GM r20
+
+### The chip keeps its full colour (GM r20 fix 01)
+
+Read-only under the line, the Inspector's colour chips dimmed to 0.45 with
+the rest (#ff285a read dark red). The chip is the content: it now draws its
+own colour (an inline `background-color` inside its 2 px gap,
+`background-clip: content-box`; the native swatch on top is the same
+colour), and its disabled rule keeps `opacity: 1` and no filter; only its
+edge goes to the disabled grey, with the default cursor. The hex field and
+the × dim as before. Cinema's swatches keep the shared 0.45 rule (GM r5);
+the ratchet now marks the Inspector chip `fullColour`. Tests: jsdom, the
+chips' computed backgrounds are their hexes while disabled; live (below),
+the computed background, opacity 1, and a screenshot pixel at each chip's
+centre equal the hex.
+
+### Can't run at all, and nothing else (GM r20 2)
+
+- A worker whose script can't load (onerror), can't be made, or is slow to
+  start: the page works the palette out, and nothing new shows (the client
+  already did; a test now pins the script-load case with a file).
+- Only when the extraction's own code chunk can't load does a line show,
+  under the Add / Extract row: "Nebula couldn’t extract the colors because
+  the server isn’t answering." with [Try again] (`TRY_AGAIN`, the shared
+  label). Neutral (the pending line's grey), no toast; the status region
+  reads the line. Try again extracts the same file again; the line goes as
+  it starts. Round 8c's "Couldn't load Extract from reference. …" is gone
+  (GM: the mask painter's line goes to the wording batch).
+
+### Gates and checks, round 8d
+
+- tsc and lint clean.
+- **Vitest** `--maxWorkers=2`, 201 files (round 8c's 198, the merge's
+  readers of `sceneSaveCopy` and the chip): 3004 of 3005 on the first pass;
+  the one failure was the ratchet's no-label check, which reads the shared
+  `:is(.x):is(:disabled …)` form, so the chip's rule now uses it; that file
+  then 50 of 50.
+- **Build budget:** 447,632 bytes raw, the same as the merge base (main at
+  062fb370 plus 8c) measured alone; this round adds 0 bytes.
+- **Mutants:** 8 on the new branches (the chip dimmed, its own colour
+  removed, a toast for the line, no line, Try again inert, the line kept on
+  retry, a label of its own, a worker load answered as a failure): 8 killed.
+- **Live**, 8792/5792, the backend through `serve_isolated.py` (canary ok),
+  the installed Chrome 156 on a throwaway profile, canaries blocked and
+  nothing else off the lane:
+  - under the line at 1440 x 900 and x 1400, all 7 chips: computed
+    background = the hex, opacity 1, no filter, and the screenshot pixel at
+    each chip's centre = the hex (#ff285a included);
+  - with Extract's chunk refused by the browser: the line and Try again,
+    in the shared grey, the status region reading it, no toast, the
+    swatches kept; Try again with the chunk back lands the palette
+    ("Extracted 7 colors."), the line gone.
+  - Shots in `shots8d/` (4, md5-distinct, each opened).

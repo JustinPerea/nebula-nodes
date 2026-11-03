@@ -384,6 +384,15 @@ describe('the worker reads the file itself (GM r18 5, round 8c)', () => {
     expect(FakeWorker.made).toBe(1);
   });
 
+  it("does the file on the page when the worker's script can't load, saying nothing new (GM r20)", async () => {
+    useWorker({ ready: false, reads: true });
+    const picked = file();
+    const done = paletteOfFile(picked);
+    worker!.onerror?.(new Event('error'));
+    expect(await done).toEqual({ ok: true, colors: ['#0a9e0a'] });
+    expect(reads.page).toEqual([picked]);
+  });
+
   it('does the file on the page when the worker fails mid-job (the file is still here)', async () => {
     useWorker({ reads: true, crash: true });
     expect(await paletteOfFile(file())).toEqual({ ok: true, colors: ['#0a9e0a'] });

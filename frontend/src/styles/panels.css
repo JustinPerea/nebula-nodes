@@ -624,9 +624,12 @@ body:not(.app-slava-restraint) .inspector__palette-empty {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  padding: 0;
+  /* GM r20 on #208: the chip draws its own colour (inline background, inside
+     the 2 px gap), so it is the same full colour enabled or disabled; the
+     native swatch on top is that colour too. */
+  padding: 2px;
   border: none;
-  background: none;
+  background-clip: content-box;
   cursor: pointer;
 }
 
@@ -636,7 +639,7 @@ body:not(.app-slava-restraint) .inspector__palette-color {
 }
 
 .inspector__palette-color::-webkit-color-swatch-wrapper {
-  padding: 2px;
+  padding: 0;
 }
 
 .inspector__palette-color::-webkit-color-swatch {
@@ -693,6 +696,21 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover {
 }
 
 body:not(.app-slava-restraint) .inspector__palette-pending {
+  color: #888;
+}
+
+/* GM r20 on #208: when Extract can't run at all, one neutral line with Try
+   again, under the Add / Extract row. */
+.inspector__palette-cant-run {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-cant-run {
   color: #888;
 }
 
