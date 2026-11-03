@@ -232,6 +232,10 @@ const NO_OUTLINE: Record<string, string> = {
   // The moodboard board's card wrapper: the ring is drawn on the card inside (OWN_RING).
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus': 'ring on the inner card',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
+  // #208 GM r23: the palette's "Extracting colors…" line, given focus by
+  // code when it replaces the row a control had it in; a line, not a control.
+  'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
+  'styles/panels.css::body.app-slava-restraint .inspector__palette-pending:focus': 'code-moved focus on a line',
 };
 
 function focusSelectors(rule: Rule): string[] {

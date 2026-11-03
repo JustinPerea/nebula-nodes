@@ -391,8 +391,13 @@ Commons and `nebula proposal <proposal id> --wait` follows it.
 `concentration` read the rest. Blind labeling and the agent review stay the
 person's alone.
 A reference whose analysis failed carries `last_error` (the reader's text)
-and `last_error_kind` (`unavailable`, `unreadable` or `other`) in
-`nebula commons get <id>`.
+and `last_error_kind` (`unavailable`, `unreadable`, `other`, or
+`transparent`: no pixel of it is seen, so it was never sent and won't be
+retried) in `nebula commons get <id>`; `nebula commons search` rows carry
+`last_error_kind` too. For `transparent`, the state reads
+`analysis_failed`, but the person sees "Not analyzed" (nothing failed:
+"This image is too transparent to analyze.") and there's no re-analyze, so
+don't tell them it failed or offer to retry it.
 
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
@@ -519,6 +524,18 @@ nebula moodboard delete <board>
   `show`, and the colour's share of that image); `--json` has the full
   `sources` (number, id, share, contribution). An older analysis has none
   until you `analyze` again.
+- Colours are what's seen: transparent pixels don't count and partly
+  transparent ones count by their alpha, so a sprite or logo on a clear
+  background gives its own colours, not black, and a thin stroke still
+  counts. An image with no pixel at alpha 16 of 255 (clear or a faint haze)
+  adds none, and the summary says so (`#2 is too transparent to add
+  colors.`). An analysis saved before this that measured an image with
+  clear pixels carries `outdated`, and so does its `brief` ("This brief uses
+  the old colors. The next run analyzes the board again and sends an updated
+  one.", or on a hand-written brief "This brief uses the old colors. The next
+  run sends it with the updated ones."; none at strength 0), since a
+  Moodboard node run analyzes it again; `analyze` again to update both. The vision reader gets a transparent reference as it shows
+  on the board card, and never one too transparent to add colors.
 - `analyze --dry-run` shows what analyzing would give and what would change
   (palette and accents added, removed or reordered; the brief generators get;
   the negatives), and saves nothing, so you can run it without asking. With

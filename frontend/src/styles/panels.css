@@ -184,6 +184,31 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   display: none;
 }
 
+/* GM r16 on #208: when a new palette changes the swatch count, the floating
+   Inspector grows or shrinks on the layout spring (a sampled spring, as
+   asset-move.css's), not in one jump. Only then (review 7 M2): the popover
+   carries data-palette-resizing while a swatch-count change settles
+   (NodeInspectorPopover.tsx), and otherwise moves with its node at once on
+   a pan, zoom, drag or resize. */
+.node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+  --inspector-layout-spring: 360ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  transition: height var(--inspector-layout-spring), top var(--inspector-layout-spring);
+}
+
+/* GM r22 Q5 on #208: rigid wins. With the attribute gone (a pan or drag
+   mid-spring, NodeInspectorPopover.tsx), no property is transitioned, so a
+   running spring is cancelled and the panel is at its end layout at once
+   (a 0s duration alone would let it run on to the same end value). */
+.node-inspector-popover:not([data-palette-resizing]) {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-inspector-popover[data-palette-resizing]:not(.node-inspector-popover--pinned) {
+    transition: none;
+  }
+}
+
 .node-inspector-popover--pinned {
   resize: both;
   overflow: hidden;
@@ -607,9 +632,12 @@ body:not(.app-slava-restraint) .inspector__palette-empty {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  padding: 0;
+  /* GM r20 on #208: the chip draws its own colour (inline background, inside
+     the 2 px gap), so it is the same full colour enabled or disabled; the
+     native swatch on top is that colour too. */
+  padding: 2px;
   border: none;
-  background: none;
+  background-clip: content-box;
   cursor: pointer;
 }
 
@@ -619,7 +647,7 @@ body:not(.app-slava-restraint) .inspector__palette-color {
 }
 
 .inspector__palette-color::-webkit-color-swatch-wrapper {
-  padding: 2px;
+  padding: 0;
 }
 
 .inspector__palette-color::-webkit-color-swatch {
@@ -650,7 +678,7 @@ body:not(.app-slava-restraint) .inspector__palette-remove {
   color: #777;
 }
 
-body:not(.app-slava-restraint) .inspector__palette-remove:hover {
+body:not(.app-slava-restraint) .inspector__palette-remove:hover:not(:disabled, [aria-disabled='true']) {
   color: #ddd; /* GM r12: removing a swatch is an edit, so neutral */
 }
 
@@ -663,6 +691,95 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover {
 .inspector__palette-actions .inspector__file-button {
   flex: 1 1 0;
   min-width: 0;
+  /* GM r22/r23 on #208: Add and Extract share the row's width on one line
+     and never run past it; a label that can't fit ends in an ellipsis. */
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.inspector__palette-actions :is(.inspector__action-button, .inspector__file-button) > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* GM r22 on #208 (folded): Extract is in the Tab order. Its input is
+   visually hidden over the label, not display: none, and the label shows
+   the keyboard ring when the input has it. */
+.inspector__palette-actions .inspector__file-button {
+  position: relative;
+}
+
+.inspector__file-input[data-palette-part='extract'] {
+  display: block;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-actions .inspector__file-button:has(.inspector__file-input:focus-visible) {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 1px;
+}
+
+body.app-slava-restraint .inspector__palette-actions .inspector__file-button:has(.inspector__file-input:focus-visible) {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+/* GM r16 on #208 (#204's one loading look): a plain line in the Add /
+   Extract row's place, its height, no box. */
+.inspector__palette-pending {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 0;
+  font-size: 12px;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-pending {
+  color: #888;
+}
+
+/* GM r23 on #208: focus moved to the line by code (from the row it
+   replaced) shows no ring; the line isn't a control. */
+body:not(.app-slava-restraint) .inspector__palette-pending:focus,
+body.app-slava-restraint .inspector__palette-pending:focus {
+  outline: none;
+}
+
+/* GM r20/r22 Q6 on #208: when Extract can't run at all, one neutral line
+   in the pending line's slot, then the row with Try again where Extract is.
+   GM r22 Q1: a palette dropped while away says so in the same slot, the
+   same look. */
+.inspector__palette-cant-run,
+.inspector__palette-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-cant-run,
+body:not(.app-slava-restraint) .inspector__palette-note {
+  color: #888;
+}
+
+/* GM r18 4 on #208: Extract's status region, always mounted and read by a
+   screen reader, never seen (the visible line is the same words). Out of the
+   stack's flow, so it adds no gap. */
+.inspector__palette-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .inspector__checkbox-row {

@@ -2155,12 +2155,12 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
   // Fix round 4 of PR #200 (review 4 LOW-3, GM round 5 answer 1): a locked
   // colour swatch keeps its hue, dims to 0.45 with the disabled edge, and
   // never changes on hover; a variation (the image is the button) greys.
-  it('LOW-3: locked colour swatches dim to 0.45 with the grey edge and keep their hue; variations stay greyscale', () => {
+  it('LOW-3: locked colour swatches dim to 0.45 (the Inspector chip stays full, GM r20 on #208) with the grey edge and keep their hue; variations stay greyscale', () => {
     const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
     for (const name of Object.keys(NO_LABEL).filter((key) => NO_LABEL[key].swatch)) {
       const rule = shared.find(({ selector }) => new RegExp(`\\.${name}(?![\\w-])`).test(selector) && /:disabled/.test(selector) && /:hover/.test(selector));
       expect(rule, `${name}: one rule, its hover included`).toBeDefined();
-      expect(rule!.body).toMatch(/opacity:\s*0\.45\s*!important/);
+      expect(rule!.body).toMatch(NO_LABEL[name].fullColour ? /opacity:\s*1\s*!important/ : /opacity:\s*0\.45\s*!important/);
       expect(rule!.body).toMatch(/border-color:\s*var\(--sr-disabled-edge/);
       expect(rule!.body).toMatch(/filter:\s*none\s*!important/);
       expect(rule!.body).not.toMatch(/grayscale/);
@@ -2265,7 +2265,7 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
  * same disabled). Each is checked for a disabled look of its own below
  * (noLabelLooks): an image dims (opacity at most the shared grey's 0.55,
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
-const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; edgeKept?: boolean }> = {
+const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; fullColour?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
   'remotion-properties-panel__anchor-button': { image: false, selected: /\.remotion-properties-panel__anchor-button\[data-active='true'\]/ },
   // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
@@ -2274,7 +2274,9 @@ const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch
   // Fix round 4 (review 4 LOW-3; GM round 5 answer 1): colour swatches keep
   // their hue (the colour is the content), dimmed, no selected state.
   'cinema-shared-controls__swatch': { image: false, selected: null, swatch: true },
-  'inspector__palette-color': { image: false, selected: null, swatch: true },
+  // GM r20 on #208: the Inspector palette's chip is the content, always at
+  // its full colour; only its edge greys.
+  'inspector__palette-color': { image: false, selected: null, swatch: true, fullColour: true },
 };
 /** "Clearly dimmer" (GM r1 answer 2), fix round 3 of PR #200 (review 3
  * N-5), set by GM in round 5 (answer 2): the red Delete "clearly above the

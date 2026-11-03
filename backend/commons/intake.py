@@ -43,9 +43,11 @@ _SOURCE_FIELDS = ("url", "page_url", "page_title", "original_path", "original_na
 
 
 def _image_columns(data: bytes, sniffed: media.Sniffed) -> dict[str, Any]:
-    img = media.load_image(data, sniffed.mime)
+    # Alpha kept for the measurement only: a transparent background isn't a
+    # colour. The hash reads the RGB image, as before.
+    img = media.load_image(data, sniffed.mime, keep_alpha=True)
     return {"media": "image", "mime": sniffed.mime, "width": img.width, "height": img.height,
-            "phash": phash(img), "measurements": measure_image(img), "code_version": CODE_VERSION}
+            "phash": phash(img.convert("RGB")), "measurements": measure_image(img), "code_version": CODE_VERSION}
 
 
 def _add_keyframes(store: CommonsStore, video_path: Path, parent_id: str, info: dict,

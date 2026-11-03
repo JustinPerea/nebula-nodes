@@ -14,7 +14,15 @@ const REASONS: Record<string, string> = {
   unavailable: "The analysis service didn't respond.",
   // the model refused or couldn't read the image
   unreadable: "The analyzer couldn't read this image.",
+  // no pixel of it is seen, so it was never sent (GM r5 on #208): neutral, not an error
+  transparent: 'This image is too transparent to analyze.',
 };
+
+/** Kinds that aren't an error: shown in the muted colour, with no Retry
+ *  (the image won't change, so neither would the answer). */
+export function analysisFailureIsNeutral(kind: string | null | undefined): boolean {
+  return kind === 'transparent';
+}
 const OTHER = 'Something went wrong during analysis.';
 
 export function analysisFailureReason(kind: string | null | undefined): string {

@@ -112,7 +112,17 @@ def _read_for_write(path: Path, moodboard_id: str) -> dict[str, Any]:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise KeyError(f"Moodboard {moodboard_id} not found") from None
-    return _migrated(json.loads(text), layout_board=True)
+    return _without_read_only(_migrated(json.loads(text), layout_board=True))
+
+
+def _without_read_only(board: dict[str, Any]) -> dict[str, Any]:
+    """``board`` without what reads add and a file never holds: the saved
+    analysis's ``outdated`` (moodboard_analysis.with_alpha_outdated), worked
+    out again on each read, so a later write never keeps a stale one."""
+    analysis = board.get("analysis")
+    if isinstance(analysis, dict) and "outdated" in analysis:
+        return {**board, "analysis": {k: v for k, v in analysis.items() if k != "outdated"}}
+    return board
 
 
 def _check_base_version(moodboard: dict[str, Any], base_version: Any) -> None:
@@ -206,6 +216,43 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _urls_in(value: Any) -> set[str]:
+    """Every ``url`` string, and each string of a ``urls`` list, anywhere in
+    ``value`` (images, or edit ops: moodboard_edits' ``add`` takes both)."""
+    found: set[str] = set()
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get("url"), str) and item["url"].strip():
+                found.add(item["url"].strip())
+            if isinstance(item.get("urls"), list):
+                found.update(u.strip() for u in item["urls"] if isinstance(u, str) and u.strip())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+    return found
+
+
+def _warm_new_files(path: Path | None, sent: Any) -> None:
+    """Read the transparency of the files ``sent`` adds to the board at
+    ``path`` before its lock is taken, so the write under the lock only
+    stats them (moodboard_analysis.warm_alpha_facts): a slow decode never
+    holds the board. Best effort: the write reads what this misses."""
+    from services.moodboard_analysis import image_alpha_facts
+
+    held: set[str] = set()
+    if path is not None:
+        try:
+            board = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            board = {}
+        images = board.get("images") if isinstance(board, dict) else None
+        held = {str(img.get("url") or "").strip() for img in images or [] if isinstance(img, dict)}
+    for url in sorted(_urls_in(sent) - held):
+        image_alpha_facts(url)
+
+
 def _weight(raw: Any, default: float = 1.0) -> float:
     try:
         weight = float(raw)
@@ -229,6 +276,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
     A new image takes the ``placements`` it asks for (checked; ``placedBy``
     is ``by``), else Nebula places it after the last-added card. ``board``
     gives the frames and the saved analysis (for aspect ratios)."""
+    from services.moodboard_analysis import ALPHA_KEYS, stamp_transparency
     from services.stored_image_refs import StoredImageError, board_image_problem
 
     board = board or {}
@@ -245,6 +293,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
 
     normalized: list[dict[str, Any]] = []
     asked: dict[int, Any] = {}  # index -> the placements a new image asked for
+    arrived: list[int] = []  # indexes of images whose file is new to the board
     for index, raw in enumerate(images or []):
         if not isinstance(raw, dict):
             raise ValueError(f"images[{index}] must be an object")
@@ -261,8 +310,15 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         refused = None if url in held else board_image_problem(url, f"images[{index}].url")
         if refused:
             raise StoredImageError(refused)
+        kept = dict(before or {})
+        if kept.get("url") != url:
+            # A new file: its transparency (and the stat it was read at) is
+            # read below and stored.
+            for key in ALPHA_KEYS:
+                kept.pop(key, None)
+            arrived.append(len(normalized))
         image: dict[str, Any] = {
-            **(before or {}),
+            **kept,
             "id": str(merged.get("id") or uuid4().hex[:12]),
             "url": url,
             "weight": _weight(merged.get("weight", 1.0)),
@@ -298,6 +354,13 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
             # No weight sent: the image weighs what its largest card shows.
             image["weight"] = max(p["weight"] for p in made)
         image["placements"] = made
+
+    # Whether each new image's file has transparency, read once here and
+    # stored with the file's stat, so reads don't decode it while the file
+    # stays as it is (moodboard_analysis.HAS_TRANSPARENCY, ALPHA_STAMP).
+    # The writes decode them before the board lock (_warm_new_files), so
+    # here it is a stat per file.
+    stamp_transparency([normalized[i] for i in arrived])
 
     unplaced = [i for i, image in enumerate(normalized) if "placements" not in image]
     if unplaced:
@@ -423,8 +486,9 @@ def _brief():
 
 def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
-    the startup migration hasn't written them yet), its layout fields and its
-    saved summary counting only the images that steer.
+    the startup migration hasn't written them yet), its layout fields, its
+    saved summary counting only the images that steer, and ``outdated`` on an
+    analysis made before alpha counted when the board has transparent images.
     ``layout_board``: also lay it out in memory (an old board gets the grid;
     services/moodboard_layout.ensure_layout). Nothing is written here."""
     board = _with_cover(_with_layout_fields(_with_image_defaults(board)))
@@ -440,6 +504,13 @@ def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str,
         board = with_steering_count(board)
     except Exception:  # an odd old analysis still opens, as it was saved
         logging.getLogger(__name__).exception("Moodboard %s: summary not recounted", board.get("id"))
+    try:
+        # An analysis from before alpha counted, of a board with transparent
+        # images, says it's out of date (moodboard_analysis.with_alpha_outdated).
+        from services.moodboard_analysis import with_alpha_outdated
+        board = with_alpha_outdated(board)
+    except Exception:  # an odd old analysis still opens, as it was saved
+        logging.getLogger(__name__).exception("Moodboard %s: alpha staleness not checked", board.get("id"))
     if layout_board:
         try:
             board = layout.ensure_layout(board)
@@ -647,7 +718,8 @@ def _normalize_analysis(analysis: dict[str, Any] | None) -> dict[str, Any] | Non
         return None
     if not isinstance(analysis, dict):
         raise ValueError("analysis must be an object")
-    return dict(analysis)
+    # ``outdated`` is worked out on read, never saved (_without_read_only).
+    return {k: v for k, v in analysis.items() if k != "outdated"}
 
 
 class MoodboardStore:
@@ -697,6 +769,7 @@ class MoodboardStore:
             raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
         moodboard_id = uuid4().hex[:12]
         now = _now_iso()
+        _warm_new_files(None, images)
         normalized_images = _normalize_images(images, by=by)
         from services.stored_image_refs import check_board_analysis
         check_board_analysis(analysis)
@@ -834,6 +907,8 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        if "images" in fields:
+            _warm_new_files(path, fields["images"])
         with _board_lock(moodboard_id):
             return self._update(path, by=by, base_version=base_version, fields=fields)
 
@@ -873,6 +948,7 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard {moodboard_id} not found")
+        _warm_new_files(path, ops)
         with _board_lock(moodboard_id):
             moodboard = _read_for_write(path, moodboard_id)
             _check_base_version(moodboard, base_version)
@@ -911,7 +987,7 @@ class MoodboardStore:
             return self._keep_brief_override(path, by=by)
 
     def _keep_brief_override(self, path: Path, *, by: str) -> dict[str, Any]:
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
+        moodboard = _read_for_write(path, path.stem)
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
@@ -1001,6 +1077,62 @@ def migrate_brief_fields() -> dict[str, Any]:
     """
     root = _moodboard_root()
     return _brief().migrate_store(root, root.parent / "moodboard-backups")
+
+
+def stamp_transparency_once() -> dict[str, Any]:
+    """Store ``hasTransparency`` and ``hasClearPixels``, with the stat of the
+    file they were read from (``alphaFileStat``), on the images of boards
+    whose analysis was made before alpha counted
+    (moodboard_analysis.ALPHA_VERSION) and that lack them or whose file has
+    changed since, so a read can tell whether those colours are out of date
+    without decoding an image. On any board, an entry stored with the facts
+    but no stamp (round 3 dev builds), or with the older ``[mtime_ns, size]``
+    stamp (rounds 4-5), is read again once and stamped. Run at
+    startup, off the event loop. The files are decoded before the board
+    lock is taken; under it the board is read again and only the entries
+    still needing it get them. It only writes those keys on image entries
+    (no backup: the board is otherwise unchanged, and its version stays); an
+    unknown file is left as it is. Running it again reads nothing it has
+    read (one stat per image)."""
+    from services.asset_trash import RECORD_SUFFIX
+    from services.moodboard_analysis import ALPHA_VERSION, lacks_alpha_stamp, stamp_transparency, warm_alpha_facts
+
+    def pre_alpha(board: Any) -> bool:
+        analysis = board.get("analysis") if isinstance(board, dict) else None
+        if not isinstance(analysis, dict):
+            return False
+        try:
+            return int(analysis.get("version") or 1) < ALPHA_VERSION
+        except (TypeError, ValueError):
+            return False
+
+    def due(board: Any) -> bool:
+        images = board.get("images") if isinstance(board, dict) else None
+        return pre_alpha(board) or any(lacks_alpha_stamp(img) for img in images or [])
+
+    report: dict[str, Any] = {"saved": [], "skipped": []}
+    root = _moodboard_root()
+    for scope in board_scopes(root):
+        for path in sorted(scope.glob("*.json")):
+            if path.name.endswith(RECORD_SUFFIX) or path.name.endswith(".json.tmp"):
+                continue
+            try:
+                board = json.loads(path.read_text(encoding="utf-8"))
+                if not due(board):
+                    continue
+                warm_alpha_facts(board.get("images"))  # the decodes, outside the lock
+                with _board_lock(path.stem):
+                    board = json.loads(path.read_text(encoding="utf-8"))
+                    if not due(board) or not stamp_transparency(board.get("images")):
+                        continue
+                    _write_json(path, board)
+            except (OSError, json.JSONDecodeError) as exc:
+                report["skipped"].append({"file": str(path), "reason": f"{type(exc).__name__}: {exc}"})
+                continue
+            report["saved"].append(str(path))
+    if report["saved"]:
+        logging.getLogger(__name__).info("Moodboard transparency: stored on %d board(s)", len(report["saved"]))
+    return report
 
 
 def save_colour_checks() -> dict[str, Any]:
