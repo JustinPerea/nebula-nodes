@@ -235,10 +235,6 @@ const NO_OUTLINE: Record<string, string> = {
   // The proposal card's scrolling body: its fade mask would clip its own ring,
   // so the wrapper draws the token ring instead (pinned below).
   'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
-  // #216 review 3 (GM r57): the canvas, given focus by code after a keyboard
-  // Accept or Reject, with no ring; the mark goes on its blur.
-  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus': 'code-moved focus after a decision',
-  'styles/canvasProposals.css::.canvas-wrapper[data-focus-quiet]:focus-visible': 'code-moved focus after a decision',
   // #208 GM r23: the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
@@ -277,6 +273,21 @@ describe('every focus rule uses the token (the sweep)', () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it('#216 round 3l (GM r69 Q2): the canvas draws the token ring inside its edge, on Tab arrival and after a keyboard decision', () => {
+    // It fills the window, so the baseline's ring (outside its box, offset
+    // 2px) was clipped away: Tab arrival showed nothing.
+    for (const selector of ['body.app-slava-restraint .canvas-wrapper:focus-visible', 'body.app-slava-restraint .canvas-wrapper[data-focus-decided]:focus']) {
+      const rule = rules.find((r) => r.selectors.includes(selector));
+      expect(rule, selector).toBeTruthy();
+      expect(decl(rule!, 'outline')).toBe('var(--sr-focus-outline)');
+      expect(decl(rule!, 'outline-offset')).toBe('-2px');
+    }
+    // On the canvas (black), at well over 3:1.
+    expect(contrast(over(canvas, ringColor('--sr-focus-outline')), over(canvas))).toBeGreaterThanOrEqual(3);
+    // Nothing clears the canvas's ring any more (3k's quiet mark).
+    expect(rules.filter((r) => r.selectors.some((sel) => /canvas-wrapper\[data-focus-quiet\]/.test(sel)))).toEqual([]);
   });
 
   it('the proposal card body\'s cleared ring is drawn on its scroll wrapper with the token', () => {

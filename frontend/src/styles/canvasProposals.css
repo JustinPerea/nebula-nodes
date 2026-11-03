@@ -253,6 +253,10 @@
   pointer-events: auto;
   /* The footer's narrow form reads the card's own width. */
   container: proposal-card / inline-size;
+  /* Pinned over the scrolling card when it is capped under its header and
+     footer (GM r69 Q1; noticeRegion.css): the card's own surface, made
+     opaque over the canvas colour so what scrolls under it never shows. */
+  --notice-tight-foot-fill: linear-gradient(var(--sr-glass-strong, rgb(20 20 22 / 0.94)), var(--sr-glass-strong, rgb(20 20 22 / 0.94))), var(--sr-canvas, #000);
   /* Its height cap: the room from the stack's bottom line up to the top
      inset, less the notices under it (NoticeRegion writes it from
      lib/noticeStackPlace.ts; GM - Design, PR #216 r3). The header and footer
@@ -1074,12 +1078,4 @@ body.app-slava-restraint .canvas-undo-notice__close:disabled:hover {
 .scene-unsaved-popover .canvas-undo-notice__action:focus-visible {
   outline: var(--sr-focus-outline, 2px solid #fff);
   outline-offset: var(--sr-focus-offset, 2px);
-}
-
-/* #216 review 3 (GM r57): Accept or Reject decided from the keyboard with no
-   other card or Undo notice to take focus leaves it on the canvas, with no
-   ring (ProposalBar QUIET_FOCUS_ATTR; the mark goes on its blur). */
-.canvas-wrapper[data-focus-quiet]:focus,
-.canvas-wrapper[data-focus-quiet]:focus-visible {
-  outline: none;
 }

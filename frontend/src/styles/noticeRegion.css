@@ -147,6 +147,56 @@
   display: inline-flex;
 }
 
+/* The region's polite line (lib/noticeSay.ts): heard, never seen. */
+.notice-region__say {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+
+/* GM r69 Q1: the card capped under its own header and footer (a short
+   window, the offline banner over it): it never covers the banner, so it
+   scrolls as a whole, its footer (Accept, Reject) pinned at its foot on
+   the card's own surface (lib/noticeStackPlace.ts TIGHT_ATTR). */
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] > * {
+  flex-shrink: 0;
+}
+
+.notice-region__slot > [data-notice-shrinks][data-notice-tight] > [data-notice-shrink-foot] {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--notice-tight-foot-fill, var(--notice-neutral-fill));
+}
+
+/* GM r69 Q4: with no card, the notices the person expanded fit on neither
+   side of a floating log: the stack caps to the side with more room and
+   scrolls, its top row (Show less) and at least one notice in view. */
+.notice-region[data-notice-stack-capped] .notice-region__stack {
+  justify-content: flex-start;
+  max-height: var(--notice-stack-cap);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  pointer-events: auto;
+}
+
+.notice-region[data-notice-stack-capped] .notice-region__stack > *,
+.notice-region[data-notice-stack-capped] .notice-region__slot > * {
+  flex-shrink: 0;
+}
+
 /* Under 400 px of room beside a docked Agent log, the whole stack sits above
    the log at the region's full width (the card up to 600 px), card on top,
    notices under it, never a sliver beside it (GM - Design, PR #216 r3). The

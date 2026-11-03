@@ -40,7 +40,7 @@ vi.mock('../src/store/graphStore', () => {
   return { useGraphStore, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
 
-const { ProposalBar, QUIET_FOCUS_ATTR } = await import('../src/components/canvas/ProposalBar');
+const { ProposalBar, DECISION_FOCUS_ATTR } = await import('../src/components/canvas/ProposalBar');
 const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 
 function proposal(id: string, createdAt: number): ProposalView {
@@ -110,7 +110,7 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_b.closing).toBeUndefined();
   });
 
-  it('the last proposal rejected: the canvas, with no ring; never body', async () => {
+  it('the last proposal rejected: the canvas, with the ring Tab arrival shows (GM r69 Q2); never body', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(200, { status: 'rejected' }));
     render(<ProposalBar />);
@@ -118,10 +118,10 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     const seen = await focusOverTime();
     expect(seen.some((el) => el === document.body || el === null)).toBe(false);
     expect(document.activeElement).toBe(canvas);
-    expect(canvas.hasAttribute(QUIET_FOCUS_ATTR)).toBe(true);
-    // The quiet mark goes with the focus.
+    expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(true);
+    // The mark goes with the focus.
     act(() => { canvas.blur(); });
-    expect(canvas.hasAttribute(QUIET_FOCUS_ATTR)).toBe(false);
+    expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);
   });
 
   it('accepted, and the decision raised an Undo notice: that notice', async () => {
@@ -183,9 +183,12 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     expect(document.activeElement).not.toBe(canvas);
   });
 
-  it('the canvas\'s quiet focus draws no ring (canvasProposals.css)', () => {
-    const css = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).toMatch(/\.canvas-wrapper\[data-focus-quiet\]:focus,\s*\.canvas-wrapper\[data-focus-quiet\]:focus-visible \{\s*outline: none;\s*\}/);
-    expect(QUIET_FOCUS_ATTR).toBe('data-focus-quiet');
+  it('the canvas after a decision shows the ring Tab arrival shows, inside its edge (GM r69 Q2; slava-restraint.css)', () => {
+    const css = readFileSync(resolve(__dirname, '../src/styles/slava-restraint.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/body\.app-slava-restraint \.canvas-wrapper:focus-visible,\s*body\.app-slava-restraint \.canvas-wrapper\[data-focus-decided\]:focus \{\s*outline: var\(--sr-focus-outline\);\s*outline-offset: -2px;\s*\}/);
+    expect(DECISION_FOCUS_ATTR).toBe('data-focus-decided');
+    // 3k's quiet canvas (no ring) is gone.
+    const cards = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
+    expect(cards).not.toMatch(/data-focus-quiet/);
   });
 });

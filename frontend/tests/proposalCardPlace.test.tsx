@@ -1169,7 +1169,9 @@ describe('the jump frame', () => {
   });
 
   it('the region watches its root marks and wires the jump and the glide in', () => {
-    expect(REGION).toMatch(/applyNoticeStack\(region, stack, next\.place, stackJumps\(last, next\), dropped \|\| stepChanged\(last\?\.place \?\? null, next\.place\), place\)/);
+    // Round 3l (GM r69 Q5): a glide's end lets the log's raise go, then places again.
+    expect(REGION).toMatch(/applyNoticeStack\(region, stack, next\.place, stackJumps\(last, next\), dropped \|\| stepChanged\(last\?\.place \?\? null, next\.place\), settled\)/);
+    expect(REGION).toMatch(/function settled\(\) \{\s*settle\(\);\s*place\(\);\s*\}/);
   });
 });
 

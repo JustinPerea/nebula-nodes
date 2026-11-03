@@ -737,7 +737,7 @@ origin/main (bee7ebe0) was already in the branch, so there was nothing to merge.
 - **Focus after a keyboard Accept or Reject.**
   - While the decision is out, the button is disabled, so focus waits on the card's region.
   - Once the proposal closes, focus goes to the next card's region, else the Undo notice the decision raised (the notice, `tabindex=-1`, never its Undo button), else the canvas.
-  - On the canvas it carries `data-focus-quiet`, which draws no ring and goes on blur.
+  - On the canvas it carries `data-focus-quiet`, which draws no ring and goes on blur. (Replaced in round 3l: GM r69 Q2 wants the Tab-arrival ring there; see below.)
   - A refused decision leaves focus on the card. A mouse click moves no focus.
   - The canvas wrapper already had `tabIndex=0`; it is unchanged.
 - **The far ends of removed wires follow a rename** (backend).
@@ -786,3 +786,84 @@ origin/main (bee7ebe0) was already in the branch, so there was nothing to merge.
 | k4, same, two notices, the card withdrawn | The notices glide from beside the log to the centre column, then place again above it: their bottom is at 552, the log's top 560 less the gap. |
 
 - **Why k1 and k2 are 800 wide:** at 1440 the card can't fold a floating log. The log is at most 600 px wide (`max-width`), so one side of it always has at least 372 px, and the card fits beside it at its narrow layout. Every 1440 probe placed it beside.
+
+## Round 3l (review 4's LOWs and GM - Design's r69, 2026-11-03)
+
+Review 4 (both lenses) found no HIGH or MEDIUM. This round folds in its LOWs and the pins for its surviving mutants, under GM's r69 rulings. origin/main is still bee7ebe0.
+
+**1. GM r69 a (logic LOW-1): focus after a keyboard decision only from where it was left.**
+- When the proposal closes, focus moves (next card, the Undo notice, else the canvas) only while it is still on the card or `<body>`. The person put it elsewhere meanwhile (a field, while a big Accept applies): it stays there.
+- Where it was is read in a layout effect declared before the card's `useLeave`, so it is read before the leave moves focus off a leaving card (`decided.home`).
+- Either way, the decision is said in the notice region's new polite line (`lib/noticeSay.ts`, `[data-notice-say]`): "Accepted the proposal from Codex." / "Rejected the proposal from Codex." (`decisionLine` in lib/canvasProposals.ts). It is a visually hidden `aria-live="polite"` line with no `status` role (the region's notices are its statuses, and tests query them by that role). It lives in the region, so a dialog's `inert` never silences it. A mouse decision says nothing, as it moves nothing.
+- The canvas's mark is set only once the canvas has focus (an inert canvas behind a dialog takes none, and keeps no stale mark).
+
+**2. GM r69 b (layout LOW-1, logic LOW-4): the drag hold ends on every lost drop.**
+- `AgentLog`'s drag ends (listeners off, `data-agent-log-held` off) on: the window's `mouseup` (inside or outside the window), window `blur`, `pointercancel`, `lostpointercapture` on the header row, `visibilitychange` to hidden, and a `mousemove` with the primary button up (a release no page event saw).
+- The pointer is captured (`setPointerCapture`) only once the move passes the threshold, never on the press, so a plain click still lands on the header's toggle. It is released at the drop.
+- The drop's click guard (`justDraggedRef`) lets go after its task: with capture, a release over the header clicks the row, not the button, so the guard would otherwise swallow the person's next real click.
+- An unmount mid-drag ends the drag too (it used to leave the window listeners on).
+- Live (1280×800, review 4's repro): mid-drag `held` and the capture are on; a window `blur` drops both; a Codex proposal arriving with no mouseup places at 698–1264 × 522–720, clear of the log at 350–690; the next header click toggles.
+
+**3. GM r69 Q1 (logic LOW-2): the card never covers the offline banner.**
+- In a floating log's shortfall (neither pass, nothing holding one line), above counts only while the card's header and footer fit under the top line (`bodyAt(above) >= 0`). Order:
+  1. above, when it fits and standing into the log's body from under it wouldn't give one line (r57's "above first");
+  2. else under it, standing into its body, never its header;
+  3. when neither side holds even the header and footer, the side with more room.
+- Whatever the side, the card's height is capped at the room between its stack line and the top line (`ceiling`), and under a floating log at what fits under it (its top line already stops short of the header and the banner). Short of its own header and footer, the place is `tight`:
+  - the card gets `data-notice-tight` and scrolls as a whole (noticeRegion.css), its footer `position: sticky; bottom: 0` on an opaque fill (the card's glass over the canvas colour, `--notice-tight-foot-fill`), so Accept and Reject stay in view;
+  - it is scrolled just far enough for its header's line to sit whole above the footer ("Codex proposes … Expires in");
+  - its measure adds what it hides (`scrollHeight - clientHeight`), so the cap never feeds back smaller.
+- `oneLine(STEPS[4]) ||` in the old shortfall test was dead (above is among the roomiest's candidates, so it never holds a line there): review 4's R10 was equivalent, and the line is gone.
+- Tests: review 4's 784×431 cell goes under (242–350); review 3 LOW-1's cell stays above under the banner, and goes under once the banner is a pixel too low for the header and footer; 81 cells at 800×420 with the banner (9 log tops × open / reopened / person-collapsed × 0-2 notices); a seeded sweep of 4,000 short windows, every one (bar the never-fold overflow below) clear of the banner and the log's header, and every capped card with its footer in view.
+- **Left for GM:** when Undo notices (which never fold) leave no room for themselves and the card's footer on either side of a floating log, the notices still stand over the banner (the card stays under it, Accept and Reject in view). Seen once live: 800×420, a collapsed log at 250, "Moved “Hero shot”. Undo · 1 more" over the banner; on a re-run the notices had timed out before the read. The sweep skips those cells by rule.
+- **Also for GM, not changed:** at 800×420 with the log docked, the card's foot comes down over the docked log's top edge and its header (r6's step 5; r57's "never the header" was about a floating log). It never goes past the banner.
+
+**4. GM r69 Q2: the canvas's focus mark.**
+- Checked first: Tab arrival on the canvas showed nothing. The baseline ring is drawn 2 px outside the wrapper's box, and the wrapper fills the window, so it was clipped (`probe-tab-canvas-before`).
+- `slava-restraint.css`: `.canvas-wrapper:focus-visible` and `.canvas-wrapper[data-focus-decided]:focus` draw the token ring at `outline-offset: -2px`, inside the window's edge. A keyboard decision that lands on the canvas marks it `data-focus-decided` (gone on blur), so it shows exactly the Tab-arrival ring. 3k's quiet rule (`data-focus-quiet`, outline none) is removed, and so are its two NO_OUTLINE entries; focusRingCss pins the new rule.
+- Contrast, measured live from the screenshot's pixels: ring #EAEAEA on the canvas #000000, **17.46:1**, for Tab arrival and after the decision alike.
+- The wrapper keeps `tabIndex=0`.
+
+**5. GM r69 Q3 (logic LOW-3): a drag from the dock freezes the card's sides.**
+- `NoticeRegion` keeps the region's sides as last placed. When the hold starts it writes them inline (keeping whatever inline sides it had, an inset or none), so the log leaving the dock (which clears `--agent-log-clearance` at once) moves nothing. At the drop the old inline sides come back and it places once, on the spring.
+- Trace test: docked at 1024×640, the card at 64–652; held, undocked, dragged across 6 frames: the same rect every frame and no glide; the drop glides once to the log's right; its end places again and nothing moves.
+
+**6. GM r69 Q4 (layout LOW-2): the expanded notices with no card.**
+- When the person's expansion ("Show less") fits on neither side of a floating log, the stack caps to the side with more room (`stackCap`; `data-notice-stack-capped` on the region, `--notice-stack-cap` on the stack) and scrolls. The side must hold Show less (when no Undo notice carries it) and one notice.
+- Short of that: under the log, standing into its body as far as one notice needs, never its header (and the gap) and never past the top line.
+- Review 4's cell (1280×560, log 200–354): capped under it at 117 px, its top at the log's foot plus the gap.
+
+**7. GM r69 Q5 (layout NIT-1): the log stays above the card until its glide rests.**
+- At the drop the region sets `data-agent-log-settling` on the root; layouts.css raises the log for it as for the hold. It goes when the drop's glide finishes (`glideStack`'s settle, which then places again), at once when nothing glides (reduced motion, nothing moved, or a newer glide took over and moved nothing), and after 2 × 420 ms if a finish never comes.
+- `applyNoticeStack` now returns how many rows are gliding.
+- Live at 1440×900, real speed, every frame from the drop: 8 frames overlap the card, the log on top in all 8; the raise drops at 430 ms; one rest place.
+
+**8. Review 4 NIT-1's surviving mutants, pinned:** R3 (glideStack settles once), R31 (the no-card measure's Undo host), R16 (focusAfterDecision's retry for an Undo notice drawn a frame later), R17 (a new notice with no Undo isn't the decision's), R18 (a refused decision forgets itself), B2 and B4 (`Proposal.touched` holds both ends; a node's own title wins in `shown_names`; unit tests in `backend/tests/test_proposal_touched_round3l.py`), F8 (uiStore: a collapse over the card's fold is the person's), F2 (under a floating log counts the 8 px gap), F16 (beside is a shortfall candidate). R10 was equivalent (above).
+
+**9. NIT-3:** the open log's max-height multiplier is 10^7: any give of 0.001 px or more takes the bound to the shown height on a window up to 12,500 px tall. Pinned.
+
+**Not done (queued as a follow-up, per the brief):** layout NIT-2 (focus on body after a mouse Accept or Reject) and NIT-3 (after sending a pin note).
+
+**MCP parity:** nothing agents read changed. The hold, the settling raise, the caps and focus are frontend only; no docstring or doc changes.
+
+**Strings written here (for GM):** the polite line only, heard and never seen: "Accepted the proposal from {agent}." and "Rejected the proposal from {agent}."
+
+**Mutation checks (round 3l).** 47 mutants over every fix and pin, run on the covering files only (`scratchpad/pr216r3l/mut/run.py`, `results.json`). 45 caught on the first run. M29 (the no-card shortfall crossing to the log's top, not its header's foot) was caught after a new pin (a log low in the window, its body shorter than one notice). M26 (keeping the frozen inline sides at the drop) was equivalent: the drop's measure lifts inline sides and `setInset` writes its own, so the restore code is gone.
+
+**Checks (round 3l).**
+- tsc 0; eslint 0 on the changed and new TS files.
+- vitest on an explicit 350-file list (length printed, abort at 0): every test file the PR changed, every test that reads `src/` or styles from disk, and every test naming the touched modules. 6,725 of 6,726 passed. The one failure was `pr198Fix6Copy` catching the polite line's `white-space: nowrap` as a notice kept to one line; the declaration is gone (the line is never seen), and that file and the round 3l files re-ran, 139 passed. (A first gate run was stopped: the mutation runner had started on the same sources.)
+- Isolated pytest (`env -u NEBULA_TEST_SHARD`, temp HOME, settings, state and output): test_canvas_proposals, test_mcp_tools, test_proposal_plan_line, test_universal_ports, the new test_proposal_touched_round3l, plus test_unprivileged_marker, test_ci_shard, test_connected_copy_sweep and test_round20_fence: 583 passed.
+- `person_gate.py` is byte-identical to origin/main.
+- Entry: 467,705 B raw, 145,308 B gzip.
+
+**Live (round 3l).** Restraint. `serve_isolated.py` on 8952 with the person token on stdin, Vite on 5952 (`VITE_NEBULA_BACKEND_PORT=8952`), installed Chrome headless with a throwaway profile, 8000-8010 and the other ports blocked; every canary blocked. Shots in `scratchpad/pr216r3l/shots/`, md5s distinct.
+
+| Shot | Result |
+|---|---|
+| q1-800x420-collapsed-log-180 | Offline banner at 150-183; a collapsed log at 180-224 (3k put the card above, over the banner, here). The card under the log at 240-340, clear of both. |
+| q1-800x420-collapsed-log-205-capped | The log at 205-249: no room for the header and footer. The card capped at 75 px under it (265-340), the header line and Accept and Reject in view. |
+| q5-mid-glide-log-over-card | 1440×900, just after the drop (animations slowed through CDP to catch the frame): the log over the card, `data-agent-log-settling` set, z 20011. |
+| q2-keyboard-decision-canvas-ring | A keyboard Reject of the only proposal: the canvas has focus and `data-focus-decided`, the ring inside the window's edge (17.46:1); the polite line says "Rejected the proposal from Codex." |
+| probe-tab-canvas-before / after, q2-tab-arrival-canvas-ring | Tab arrival on the canvas: nothing visible before, the ring after. |
+

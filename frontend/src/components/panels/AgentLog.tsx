@@ -157,9 +157,15 @@ export function AgentLog() {
   const cardHold = useUIStore((s) => s.agentLogCardHold);
   const cardFolded = cardHold === 'card' && !open;
   const openSize = useRef<{ natural: number; floor: number } | null>(null);
+  // The drag in progress ends here (its listeners and the hold), from any
+  // of its ends (round 3l, GM r69 b).
+  const endDragRef = useRef<(() => void) | null>(null);
+  // The pointer that pressed the header, captured once a drag starts.
+  const pointerRef = useRef<number | null>(null);
   useEffect(() => () => {
     useUIStore.getState().setAgentLogOpen(false);
-    // Unmounted mid-drag: the hold goes with it.
+    // Unmounted mid-drag: the drag and its hold go with it.
+    endDragRef.current?.();
     document.documentElement.removeAttribute(LOG_HELD_ATTR);
   }, []);
   // Every agent's actions and the chat's thinking lines, collected while
@@ -416,8 +422,10 @@ export function AgentLog() {
     // Ignore right-click. Allow drag to start anywhere on the row — the
     // click handler later checks justDraggedRef to decide whether to fire.
     if (e.button !== 0) return;
+    endDragRef.current?.();
 
-    const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    const row = e.currentTarget;
+    const rect = (row.parentElement as HTMLElement).getBoundingClientRect();
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -431,13 +439,24 @@ export function AgentLog() {
     function onMove(ev: MouseEvent) {
       const d = dragRef.current;
       if (!d) return;
+      // The button came up where no mouseup reached the page (released over
+      // another app, or a system sheet took the press): this move is the drop.
+      if ((ev.buttons & 1) === 0) { onUp(); return; }
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
       if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       // GM r57 Q1: the person's hand wins. While held, the log rises above
       // the proposal card and the card holds still; it places once at the
       // drop (NoticeRegion).
-      if (!d.moved) document.documentElement.setAttribute(LOG_HELD_ATTR, '');
+      if (!d.moved) {
+        document.documentElement.setAttribute(LOG_HELD_ATTR, '');
+        // Captured from here, so a lost capture ends the hold too; only from
+        // here, so a plain click still lands on the header's toggle.
+        const id = pointerRef.current;
+        if (id !== null && typeof row.setPointerCapture === 'function') {
+          try { row.setPointerCapture(id); } catch { /* the pointer is already up */ }
+        }
+      }
       d.moved = true;
       const left = clamp(d.originLeft + dx, 0, Math.max(0, window.innerWidth - d.width));
       const top = clamp(d.originTop + dy, 0, Math.max(0, window.innerHeight - d.height));
@@ -451,20 +470,45 @@ export function AgentLog() {
       persistPosition(next);
     }
 
+    // Round 3l (GM r69 b): the hold ends on the drop and on every way a
+    // drop can be lost: the window losing focus (Cmd-Tab, a system dialog),
+    // the pointer cancelled or its capture lost, and the page hidden. A lost
+    // hold would stop the card and the notices placing until the next click.
+    function onHidden() {
+      if (document.visibilityState === 'hidden') onUp();
+    }
+
     function onUp() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('blur', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      row.removeEventListener('lostpointercapture', onUp);
+      document.removeEventListener('visibilitychange', onHidden);
+      if (endDragRef.current === onUp) endDragRef.current = null;
       document.documentElement.removeAttribute(LOG_HELD_ATTR);
       const d = dragRef.current;
       if (d?.moved) {
-        // Tell the click handler that fires next to bail out.
+        // Tell the click handler that fires next to bail out. A drop that
+        // brings no click (its release landed off the header) lets go after
+        // this task, so the person's next click on the header still toggles.
         justDraggedRef.current = true;
+        window.setTimeout(() => { justDraggedRef.current = false; }, 0);
+        const id = pointerRef.current;
+        if (id !== null && typeof row.hasPointerCapture === 'function') {
+          try { if (row.hasPointerCapture(id)) row.releasePointerCapture(id); } catch { /* gone */ }
+        }
       }
       dragRef.current = null;
     }
 
+    endDragRef.current = onUp;
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    window.addEventListener('blur', onUp);
+    window.addEventListener('pointercancel', onUp);
+    row.addEventListener('lostpointercapture', onUp);
+    document.addEventListener('visibilitychange', onHidden);
   }
 
   function handleToggleClick() {
@@ -557,6 +601,7 @@ export function AgentLog() {
     >
       <div
         className="agent-log__drag-row"
+        onPointerDown={(event) => { pointerRef.current = event.pointerId; }}
         onMouseDown={handleHeaderMouseDown}
         title="Drag to move"
       >

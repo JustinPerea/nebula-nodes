@@ -370,8 +370,10 @@ body.agent-log-reserved .project-switch-toast {
 
 /* GM r57 Q1: while the person holds it in a drag, the log rises above the
    notice region (the proposal card), which holds still until the drop
-   (NoticeRegion); at rest the card never crosses it. */
-:root[data-agent-log-held] .agent-log {
+   (NoticeRegion); at rest the card never crosses it. GM r69 Q5: it stays
+   above from the drop until the card's glide away from it rests. */
+:root[data-agent-log-held] .agent-log,
+:root[data-agent-log-settling] .agent-log {
   z-index: calc(var(--sr-layer-notice, 20010) + 1);
 }
 
@@ -610,9 +612,12 @@ body:not(.app-slava-restraint) .agent-log__chevron {
   /* Bounded only while a give is in force, the spring back to 0 included
      (#216 review 3 MEDIUM-2): with none, the person's native resize can
      make it taller, up to main's 80vh, though --agent-log-natural-h is the
-     height last measured. Any give of 0.01 px or more takes the second term
-     under any window, so the bound is the shown height. */
-  max-height: max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 100000));
+     height last measured. While a give is in force the second term is
+     under the first: give x 10^7 passes 80vh for any give of 0.001 px or
+     more on a window up to 12,500 px tall (#216 review 4 NIT-3: x 10^5 let
+     the last 0.0x px of the spring through over about 1,625 px), so the
+     bound is the shown height. */
+  max-height: max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 10000000));
   /* The resize floor of 80 px gives way only while it springs back up from
      its header (GM r11), so the reopen starts at the header, not at 80. */
   min-height: min(80px, var(--agent-log-shown-h));

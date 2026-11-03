@@ -115,6 +115,11 @@ export const JUMP_ATTR = 'data-notice-jump';
 export const FOLD_ATTR = 'data-notice-folded';
 /** The "N more notices" row, and the region's mark while it shows. */
 export const MORE_ATTR = 'data-notice-more';
+/** On the card while it is capped under its own header and footer (GM r69
+ * Q1): it scrolls as a whole, its footer pinned (noticeRegion.css). */
+export const TIGHT_ATTR = 'data-notice-tight';
+/** On the region while the stack (no card) is capped and scrolls (GM r69 Q4). */
+export const STACK_CAP_ATTR = 'data-notice-stack-capped';
 export const MORE_SHOWN_ATTR = 'data-notice-more-shown';
 /** The unfolded row's words (as the note's Show all / Show less). */
 export const SHOW_LESS = 'Show less';
@@ -251,6 +256,14 @@ export interface StackPlace {
    * comes up), 'bottom' with the card above a log; null when it gives
    * nothing. */
   hold?: LogHold | null;
+  /** GM r69 Q1: the card is capped under its own header and footer (no
+   * room between the top line and the stack's line for them): the card
+   * scrolls as a whole, its footer (Accept, Reject) pinned in view. */
+  tight?: boolean;
+  /** GM r69 Q4: with no card, the stack's height cap while the person's
+   * expansion fits on neither side of a floating log; it scrolls. Null
+   * when it isn't capped. */
+  stackCap?: number | null;
 }
 
 export type LogHold = 'top' | 'bottom';
@@ -262,6 +275,9 @@ export const LOG_HOLD_ATTR = 'data-agent-log-hold';
  * Q1): it rises above the card (layouts.css) and the stack holds still
  * until the drop (NoticeRegion). */
 export const LOG_HELD_ATTR = 'data-agent-log-held';
+/** On the root from the drop until the card's glide rests (GM r69 Q5): the
+ * log stays above the card it just left, then the stacking drops back. */
+export const LOG_SETTLING_ATTR = 'data-agent-log-settling';
 /** The log header's accessible description while the card has folded it
  * (GM r11): the fold is the card's, never the person's collapse. */
 export const LOG_CARD_FOLD_DESCRIPTION = 'Folded to make room for the proposal card. It reopens when the card closes.';
@@ -386,12 +402,27 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
         shown = options.expanded ? layout(whole, folds) : layout(pill, folds);
         expanded = Boolean(options.expanded);
       }
-      if (float.top < line0 && under < shown.needs && (over >= shown.needs || over > under)) {
+      let stackCap: number | null = null;
+      let above = float.top < line0 && under < shown.needs && (over >= shown.needs || over > under);
+      if (expanded && float.top < line0 && under < shown.needs && over < shown.needs) {
+        // GM r69 Q4: the person's expansion fits on neither side. It caps to
+        // the side with more room and scrolls, at least one notice in view
+        // (its "Show less" row over it when it has one). Short of that, it
+        // stands under the log and up into its body as far as it must, never
+        // its header (the expand control) and never past the top line (the
+        // offline banner's), the same shortfall as the card's (GM r57 Q3).
+        const first = alone.items.find((h) => h > 0) ?? 0;
+        const least = (shown.host < 0 ? MORE_ROW_PX + gap : 0) + first;
+        const crossed = line0 - Math.max(m.topLine, float.top + (m.logHeader ?? CLOSED_HEADER_PX) + FLOAT_GAP_PX);
+        if (Math.max(over, under) >= least) stackCap = Math.floor(Math.max(over, under));
+        else { above = false; stackCap = Math.floor(Math.max(0, under, Math.min(crossed, least))); }
+      }
+      if (above) {
         base = Math.max(base, Math.ceil(m.viewportH - float.top + FLOAT_GAP_PX - m.regionBottom));
       }
       return {
         aboveLog, lift: base, cap: null, mode: null, ...none,
-        folded: shown.fold.filter(Boolean).length, fold: shown.fold, more: shown.more, moreHost: shown.host, expanded,
+        folded: shown.fold.filter(Boolean).length, fold: shown.fold, more: shown.more, moreHost: shown.host, expanded, stackCap,
       };
     }
     return { aboveLog, lift: base, cap: null, mode: null, ...none };
@@ -498,10 +529,13 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     }
     // Neither pass: where the body has the most room (beside, or a side of
     // it with all its give), the plan line first, while that holds one
-    // line. Short even of that (GM r57 Q3): above the log, never past the
+    // line. Short even of that (GM r57 Q3): above the log, clamped under the
     // top line (the offline banner's, which carries the offline status);
-    // else under it, the card standing up into the log's body as far as it
-    // must, never its header (the expand control) and never the banner.
+    // if it doesn't fit there, under it, the card standing up into the
+    // log's body as far as it must, never its header (the expand control)
+    // and never the banner. GM r69 Q1: above "fits" only with its header and
+    // footer whole under the top line (3k let them stand over the banner);
+    // under, past what the body allows, the card is capped (place).
     const oneLine = (step: Step) => bodyAt(step) >= Math.min(cardAt(step)?.line ?? ONE_LINE_PX, cardAt(step)?.body ?? 0);
     const roomiest = [STEPS[0], STEPS[3], STEPS[4]].reduce((best, each) => (bodyAt(each) > bodyAt(best) ? each : best));
     // Under it with all its give, the log is its header and what body it
@@ -510,7 +544,12 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     let step = pick?.step ?? roomiest;
     if (!pick && !oneLine(roomiest)) {
       const crossed = Math.min(bodyAt(STEPS[3]) + body, line0 - topLine - card.chrome - rows);
-      step = oneLine(STEPS[4]) || crossed < Math.min(card.line ?? ONE_LINE_PX, card.body) ? STEPS[4] : STEPS[3];
+      // (Above holds no line here: it is among the roomiest's candidates.)
+      // Where neither side holds even the header and footer, the side with
+      // more room, the card capped there (place).
+      const aboveBody = bodyAt(STEPS[4]);
+      step = aboveBody >= 0 ? (crossed < Math.min(card.line ?? ONE_LINE_PX, card.body) ? STEPS[4] : STEPS[3])
+        : crossed >= 0 || crossed >= aboveBody ? STEPS[3] : STEPS[4];
       shortfall = true;
       if (step === STEPS[3]) crossable = body;
     }
@@ -572,7 +611,15 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
     const cross = underLog && shortfall ? Math.min(crossable, Math.max(0, Math.ceil(least - room4))) : 0;
     const underTop = Math.max(m.topLine, topLine - give - cross);
     const avail = m.viewportH - m.regionBottom - lift - (underLog ? underTop : topLine) - rows;
-    const height = floatingLog ? Math.max(Math.min(room4 + cross, avail), card.chrome) : Math.max(room4, least);
+    // GM r69 Q1: the card never covers the offline banner, wherever it
+    // sits: with no room for its header and footer between the top line and
+    // the stack's line, it is capped there (`tight`), and scrolls as a whole
+    // with Accept and Reject pinned in view (noticeRegion.css).
+    // Under a floating log its top line already stops short of the log's
+    // header and of the banner, so there it is only ever what fits.
+    const ceiling = Math.max(0, Math.floor(m.viewportH - m.regionBottom - lift - rows - m.topLine));
+    const fit = Math.min(room4 + cross, avail);
+    const height = Math.min(ceiling, underLog ? Math.max(0, fit) : floatingLog ? Math.max(fit, card.chrome) : Math.max(room4, least));
     return {
       aboveLog, lift, cap: height, mode, topLine: underLog ? underTop : topLine, squeeze, collapse,
       over: Math.max(0, base - give - lift),
@@ -581,6 +628,7 @@ export function placeNoticeStack(m: StackMeasure, options: { expanded?: boolean 
       folded: more, fold, more, moreHost: host, expanded,
       keepPlan: height - card.chrome < floors.full,
       float: floatSide, inset, narrow,
+      tight: height < card.chrome,
     };
   };
 
@@ -815,7 +863,9 @@ function readCard(card: HTMLElement, body: HTMLElement): Pick<CardMeasure, 'chro
   }
   const lines = textLines(scroller).map((line) => ({ top: (line.top - from) / scale + scroller.scrollTop, bottom: (line.bottom - from) / scale + scroller.scrollTop }));
   return {
-    chrome: Math.max(0, card.offsetHeight - body.offsetHeight),
+    // Capped under its own header and footer (GM r69 Q1), the card scrolls:
+    // what it hides counts too, so the measure never shrinks with the cap.
+    chrome: Math.max(0, card.offsetHeight - body.offsetHeight + Math.max(0, card.scrollHeight - card.clientHeight)),
     body: scroller.scrollHeight,
     foot: foot ? Math.max(0, Math.round((cardRect.bottom - foot.getBoundingClientRect().top) / scale)) : 0,
     line: px(getComputedStyle(scroller).lineHeight) || ONE_LINE_PX,
@@ -1085,9 +1135,10 @@ export function glideStack(elements: Array<{ element: HTMLElement; from: Box | u
 /** Writes a place: the region's mode and lift, the card's cap, the order,
  * the fold and the "more" row, and the plan line scrolled into view. `jump`
  * lands it with no spring for this frame; `glide` (a step change) lands it
- * the same way and springs each row from where it was. */
+ * the same way and springs each row from where it was. Returns how many of
+ * its rows (the card among them) are gliding once it is written. */
 export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place: StackPlace, jump = false, glide = false,
-  onSettled?: () => void): void {
+  onSettled?: () => void): number {
   const card = stack.querySelector<HTMLElement>(`[${SHRINK_ATTR}]`);
   const items = noticeItems(stack);
   const more = stack.querySelector<HTMLElement>(`[${MORE_ATTR}]`);
@@ -1109,6 +1160,26 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
   setInset(region, place.inset ?? null);
   region.style.setProperty('--notice-stack-lift', `${place.lift}px`);
   if (card && place.cap !== null) card.style.setProperty('--notice-card-cap', `${place.cap}px`);
+  if (card) {
+    if (place.tight) {
+      card.setAttribute(TIGHT_ATTR, '');
+      // Who proposes stays readable over the pinned footer: the card scrolls
+      // just far enough for its header's line to sit whole above it.
+      const head = card.querySelector<HTMLElement>(`[${SHRINK_HEAD_ATTR}]`);
+      const foot = card.querySelector<HTMLElement>(`[${SHRINK_FOOT_ATTR}]`);
+      if (head && foot) card.scrollTop = Math.max(0, head.offsetTop + head.offsetHeight - (card.clientHeight - foot.offsetHeight));
+    } else if (card.hasAttribute(TIGHT_ATTR)) { card.removeAttribute(TIGHT_ATTR); card.scrollTop = 0; }
+  }
+  // GM r69 Q4: the person's expansion with no room on either side of a
+  // floating log, capped and scrolling.
+  if (place.stackCap !== null && place.stackCap !== undefined) {
+    region.setAttribute(STACK_CAP_ATTR, '');
+    stack.style.setProperty('--notice-stack-cap', `${place.stackCap}px`);
+  } else if (region.hasAttribute(STACK_CAP_ATTR)) {
+    region.removeAttribute(STACK_CAP_ATTR);
+    stack.style.removeProperty('--notice-stack-cap');
+    stack.scrollTop = 0;
+  }
   if (place.mode) region.dataset.noticeMode = place.mode;
   else delete region.dataset.noticeMode;
   // A folded notice is inert too: no focus (the dialogs' focus order skips
@@ -1175,4 +1246,5 @@ export function applyNoticeStack(region: HTMLElement, stack: HTMLElement, place:
     const easing = getComputedStyle(region).getPropertyValue('--notice-spring').trim() || 'ease-out';
     glideStack(moving.map((element) => ({ element, from: from.get(element), foot: element === card })), easing, onSettled);
   }
+  return moving.filter((element) => gliding.has(element)).length;
 }

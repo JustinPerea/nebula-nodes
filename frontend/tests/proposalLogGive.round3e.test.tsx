@@ -213,7 +213,7 @@ describe('the give, in CSS (GM r7-r8)', () => {
 
   it('a floating log gives way as the docked one, on the spring, down to its floor (one registered length, GM r8)', () => {
     expect(css).toMatch(/@property --agent-log-give \{\s*syntax: '<length>';\s*inherits: false;\s*initial-value: 0px;\s*\}/);
-    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 100000\)\);[^}]*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
+    expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 10000000\)\);[^}]*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating\] \.agent-log__body \{\s*flex: 0 1 auto;\s*min-height: 0;/);
   });
 

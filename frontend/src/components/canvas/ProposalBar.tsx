@@ -6,6 +6,7 @@ import {
   acceptLabel,
   changeCountLabel,
   countdown,
+  decisionLine,
   ghostBoxes,
   notReadyLine,
   proposalChangeCount,
@@ -23,21 +24,23 @@ import { personGateHeld, subscribePersonGate } from '../../lib/personSession';
 import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD_ATTR, SHRINK_NAME_ATTR } from '../../lib/noticeStackPlace';
 import { useGraphStore } from '../../store/graphStore';
 import { canvasFocusTarget } from '../../lib/noticeFocus';
+import { sayPolitely } from '../../lib/noticeSay';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
 /** Not-ready lines the bar shows before the rest move to the details. */
 const READINESS_LINES = 3;
 
-/** On the canvas while a decision put focus there: no ring (canvasProposals.css). */
-export const QUIET_FOCUS_ATTR = 'data-focus-quiet';
+/** On the canvas while a keyboard decision put focus there (GM r69 Q2): it
+ * shows the same ring Tab arrival does (canvas.css); the mark goes on its blur. */
+export const DECISION_FOCUS_ATTR = 'data-focus-decided';
 
 /**
  * Where focus goes once a proposal decided from the keyboard closes, and no
  * other proposal's card shows (#216 review 3, GM r57): the Undo notice the
- * decision raised, else the canvas, with no ring. Never <body>. The notice
- * can draw a frame after the card goes, so the canvas holds focus until it
- * does.
+ * decision raised, else the canvas, with the ring Tab arrival shows (GM r69
+ * Q2). Never <body>. The notice can draw a frame after the card goes, so
+ * the canvas holds focus until it does.
  */
 function focusAfterDecision(noticeBefore: number | null, frames = 3): void {
   const notice = useGraphStore.getState().undoNotice;
@@ -49,13 +52,13 @@ function focusAfterDecision(noticeBefore: number | null, frames = 3): void {
     return;
   }
   const canvas = canvasFocusTarget();
-  // The card's leave may have put focus there already (noticeLeave's ×
-  // rule): it is marked quiet all the same.
-  if (canvas && !canvas.hasAttribute(QUIET_FOCUS_ATTR)) {
-    canvas.setAttribute(QUIET_FOCUS_ATTR, '');
-    canvas.addEventListener('blur', () => canvas.removeAttribute(QUIET_FOCUS_ATTR), { once: true });
+  if (canvas && document.activeElement !== canvas) canvas.focus({ preventScroll: true });
+  // Marked only once it has focus (the card's leave may have put it there
+  // already): an inert canvas (a dialog open) takes none, and keeps no mark.
+  if (canvas && document.activeElement === canvas && !canvas.hasAttribute(DECISION_FOCUS_ATTR)) {
+    canvas.setAttribute(DECISION_FOCUS_ATTR, '');
+    canvas.addEventListener('blur', () => canvas.removeAttribute(DECISION_FOCUS_ATTR), { once: true });
   }
-  if (canvas && document.activeElement !== canvas) canvas.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
   if (raised && frames > 0 && typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => {
       // Only while focus is still where this put it.
@@ -179,6 +182,21 @@ export function ProposalBar() {
     .sort((a, b) => a.view.createdAt - b.view.createdAt || a.view.id.localeCompare(b.view.id));
   const now = useNow(open.length > 0);
   const live = open.find((entry) => entry.view.id === (focusedId ?? selectedId)) ?? open[0];
+  const cardNode = useRef<HTMLDivElement | null>(null);
+  // #216 review 3 (GM r57): Accept or Reject from the keyboard. Its button
+  // goes disabled while the decision is out, so focus waits on the card's
+  // region; once the proposal closes it goes to the next card's region,
+  // else the Undo notice the decision raised, else the canvas. Never
+  // <body>. A refused decision leaves it on the card, by its error.
+  // Round 3l (GM r69 a): only while focus is still on the card or <body>;
+  // put elsewhere meanwhile, it stays there. Read before the card's leave
+  // (useLeave, below) moves focus off it, so this runs first.
+  const decided = useRef<{ id: string; notice: number | null; kind: 'accept' | 'reject'; agent: string; home: boolean } | null>(null);
+  useLayoutEffect(() => {
+    if (!decided.current) return;
+    const active = document.activeElement;
+    decided.current.home = !active || active === document.body || Boolean(cardNode.current?.contains(active));
+  });
   // The bar leaves as it entered, a surface (fix round 7 of PR #200, GM r11
   // answer 2): the last proposal stays drawn, inert, until its scale-out
   // ends. Its inline error line leaves as a row.
@@ -196,18 +214,11 @@ export function ProposalBar() {
   const [cardMounted, setCardMounted] = useState(false);
   const scrolls = useScrollFades(bodyEl, cardMounted);
   const leaveRef = leave.props.ref;
-  const cardNode = useRef<HTMLDivElement | null>(null);
   const cardRef = useCallback((node: HTMLDivElement | null) => {
     leaveRef(node);
     cardNode.current = node;
     setCardMounted(node !== null);
   }, [leaveRef]);
-  // #216 review 3 (GM r57): Accept or Reject from the keyboard. Its button
-  // goes disabled while the decision is out, so focus waits on the card's
-  // region; once the proposal closes it goes to the next card's region,
-  // else the Undo notice the decision raised, else the canvas with no ring.
-  // Never <body>. A refused decision leaves it on the card, by its error.
-  const decided = useRef<{ id: string; notice: number | null } | null>(null);
   useLayoutEffect(() => {
     const was = decided.current;
     if (!was) return;
@@ -217,6 +228,8 @@ export function ProposalBar() {
       return;
     }
     decided.current = null;
+    sayPolitely(decisionLine(was.kind, was.agent));
+    if (!was.home) return;
     if (live && cardNode.current) cardNode.current.focus({ preventScroll: true });
     else focusAfterDecision(was.notice);
   }, [proposals, pending, live]);
@@ -259,9 +272,11 @@ export function ProposalBar() {
   };
   const settled = () => !guarding.current;
   // A click with detail 0 is Enter or Space on the button.
-  const byKeyboard = (event: { detail: number }) => {
+  const byKeyboard = (event: { detail: number }, kind: 'accept' | 'reject') => {
     if (event.detail !== 0) return;
-    decided.current = { id: current.view.id, notice: useGraphStore.getState().undoNotice?.id ?? null };
+    decided.current = {
+      id: current.view.id, notice: useGraphStore.getState().undoNotice?.id ?? null, kind, agent: current.view.agent.name, home: true,
+    };
     cardNode.current?.focus({ preventScroll: true });
   };
   const changes = current ? proposalChanges(current.view, current.values) : [];
@@ -513,7 +528,7 @@ export function ProposalBar() {
                 title: gateHeld ? PROPOSAL_GATE_COPY.reject : undefined })}
               onClick={(event) => {
                 if (!settled()) return;
-                byKeyboard(event);
+                byKeyboard(event, 'reject');
                 void reject(current.view.id);
               }}
             >
@@ -528,7 +543,7 @@ export function ProposalBar() {
                 title: gateHeld ? PROPOSAL_GATE_COPY.accept : undefined })}
               onClick={(event) => {
                 if (!settled()) return;
-                byKeyboard(event);
+                byKeyboard(event, 'accept');
                 void accept(current.view.id);
               }}
             >
